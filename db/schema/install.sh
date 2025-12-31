@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Database Schema Installation Script
 # This script installs the complete task and reporting system schema
 

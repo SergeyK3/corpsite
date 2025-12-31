@@ -6,7 +6,7 @@
 -- Insert sample users (bootstrapping - first user created by system)
 -- The first user will be the system admin
 INSERT INTO users (username, email, full_name, created_by, updated_by) VALUES
-    ('admin', 'admin@hospital.com', 'System Administrator', 1, 1)
+    ('admin', 'admin@hospital.com', 'System Administrator', NULL, NULL)
 ON CONFLICT (username) DO NOTHING;
 
 -- Now insert other users with proper created_by references

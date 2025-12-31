@@ -38,7 +38,13 @@ DECLARE
     current_user_id BIGINT;
 BEGIN
     -- Get current user ID from session variable (set by application)
-    current_user_id := NULLIF(current_setting('app.current_user_id', TRUE), '')::BIGINT;
+    -- Use NULL if not set (e.g., for bootstrap operations or system changes)
+    BEGIN
+        current_user_id := NULLIF(current_setting('app.current_user_id', TRUE), '')::BIGINT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            current_user_id := NULL;
+    END;
     
     IF (TG_OP = 'INSERT') THEN
         INSERT INTO audit_log (
