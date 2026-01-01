@@ -1,2 +1,28 @@
-docs0/
+# Python
 venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Docker
+*.pid
+
+# Project docs (если не версионируются)
+docs0/
+docs/
