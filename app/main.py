@@ -8,7 +8,6 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.meta import router as meta_router
 
-
 app = FastAPI(title="Corpsite MVP")
 app.include_router(meta_router)
 
