@@ -1,21 +1,23 @@
+version: "3.9"
+
 services:
-  db:
+  postgres:
     image: postgres:16
     container_name: corpsite-pg
+    restart: unless-stopped
     environment:
+      POSTGRES_DB: corpsite
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: corpsite
     ports:
       - "5432:5432"
     volumes:
       - corpsite_pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d corpsite"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
-    restart: unless-stopped
+      retries: 5
 
 volumes:
   corpsite_pg_data:
