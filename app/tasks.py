@@ -59,10 +59,10 @@ def _load_assignment_scope_enum_labels(conn) -> Set[str]:
 
 
 def _pick_default_scope(allowed: Set[str]) -> str:
-    if "functional" in allowed:
-        return "functional"
-    if "FUNCTIONAL" in allowed:
-        return "FUNCTIONAL"
+    # Явный предпочтительный дефолт
+    if any(lbl.lower() == "functional" for lbl in allowed):
+        return next(lbl for lbl in allowed if lbl.lower() == "functional")
+    # Иначе — любой первый (стабильно: сортировка)
     return sorted(allowed)[0]
 
 
@@ -70,11 +70,11 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
     """
     Нормализует assignment_scope под РЕАЛЬНЫЙ enum в БД.
 
-    В вашей БД (судя по ошибке) допустимо: {"admin","functional"}.
+    В вашей БД судя по 422: {"admin","functional"}.
     Поэтому:
     - default: functional (если есть), иначе любое допустимое значение
     - принимаем вход в любом регистре
-    - поддерживаем маппинг старых значений ROLE/USER/ANY -> functional/admin
+    - поддерживаем маппинг старых значений ROLE/USER/ANY -> functional/admin (если это возможно)
     """
     allowed = _load_assignment_scope_enum_labels(conn)
     if not allowed:
@@ -92,12 +92,14 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
 
     raw_l = raw.lower()
 
-    # 2) case-insensitive match
+    # 2) match by lower-case equivalence
     for lbl in allowed:
         if lbl.lower() == raw_l:
             return lbl
 
-    # 3) backward-compatible mapping
+    # 3) backward-compatible mapping (если раньше использовались ROLE/USER/ANY)
+    #    Под вашу текущую БД логично:
+    #    ROLE/ANY -> functional, USER -> admin (если admin существует)
     legacy_map = {
         "role": "functional",
         "any": "functional",
@@ -115,49 +117,11 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
     )
 
 
-def _read_task(conn, task_id: int) -> Optional[Dict[str, Any]]:
-    row = conn.execute(
-        text(
-            """
-            SELECT
-                t.task_id,
-                t.period_id,
-                t.regular_task_id,
-                t.title,
-                t.description,
-                t.initiator_user_id,
-                t.executor_role_id,
-                t.assignment_scope,
-                t.status_id,
-                ts.code AS status_code,
-                ts.name_ru AS status_name_ru
-            FROM tasks t
-            LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-            WHERE t.task_id = :task_id
-            """
-        ),
-        {"task_id": task_id},
-    ).mappings().first()
-    return dict(row) if row else None
-
-
-def _can_edit_task(current_user_id: int, current_role_id: int, task: Dict[str, Any]) -> bool:
-    """
-    Правила PATCH:
-    1) Инициатор всегда может редактировать.
-    2) Если assignment_scope == "functional", то редактировать можно по роли:
-       executor_role_id == текущая роль пользователя.
-    3) Если assignment_scope == "admin", то только инициатор.
-    """
-    if int(task["initiator_user_id"]) == int(current_user_id):
-        return True
-
-    scope = str(task.get("assignment_scope") or "").lower()
-    if scope == "functional":
-        return int(task["executor_role_id"]) == int(current_role_id)
-
-    # scope == "admin" (или любое другое) — только инициатор (см. правило выше)
-    return False
+def _scope_label_or_none(allowed: Set[str], wanted_lower: str) -> Optional[str]:
+    for lbl in allowed:
+        if lbl.lower() == wanted_lower:
+            return lbl
+    return None
 
 
 @router.get("")
@@ -169,14 +133,45 @@ def list_tasks(
     offset: int = Query(0, ge=0),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
+    """
+    Выдача задач в рамках роли + ограничение по assignment_scope:
+
+    - functional: видны всем пользователям данной роли
+    - admin: видны только инициатору (initiator_user_id = текущий пользователь)
+    """
     current_user_id = _get_current_user_id(x_user_id)
 
-    where = ["t.executor_role_id = :role_id"]
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
         params["role_id"] = role_id
+        params["current_user_id"] = current_user_id
+
+        # --- assignment_scope filter (по реальному enum)
+        allowed = _load_assignment_scope_enum_labels(conn)
+        if not allowed:
+            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
+
+        functional_lbl = _scope_label_or_none(allowed, "functional")
+        admin_lbl = _scope_label_or_none(allowed, "admin")
+
+        # Базовый фильтр роли
+        where = ["t.executor_role_id = :role_id"]
+
+        # Если есть оба (как у вас) — применяем строгую логику
+        if functional_lbl and admin_lbl:
+            params["functional_scope"] = functional_lbl
+            params["admin_scope"] = admin_lbl
+            where.append(
+                "("
+                "t.assignment_scope = :functional_scope "
+                "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
+                ")"
+            )
+        else:
+            # На случай иной схемы enum: показываем всё в рамках роли (чтобы не “потерять” задачи)
+            pass
 
         if period_id is not None:
             where.append("t.period_id = :period_id")
@@ -237,6 +232,18 @@ def create_task(
     payload: Dict[str, Any],
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
+    """
+    MVP создание задачи (role-based).
+
+    Body (JSON):
+      title: str (required)
+      executor_role_id: int (required)
+      period_id: int (required)  <-- В БД NOT NULL
+      description: str | null
+      regular_task_id: int | null
+      assignment_scope: str | null  (default: functional/admin по enum БД)
+      status_code: str | null  (default IN_PROGRESS)
+    """
     current_user_id = _get_current_user_id(x_user_id)
 
     title = (payload.get("title") or "").strip()
@@ -299,11 +306,34 @@ def create_task(
             raise HTTPException(status_code=500, detail="Failed to create task")
 
         task_id = int(row["task_id"])
-        task = _read_task(conn, task_id)
+
+        task = conn.execute(
+            text(
+                """
+                SELECT
+                    t.task_id,
+                    t.period_id,
+                    t.regular_task_id,
+                    t.title,
+                    t.description,
+                    t.initiator_user_id,
+                    t.executor_role_id,
+                    t.assignment_scope,
+                    t.status_id,
+                    ts.code AS status_code,
+                    ts.name_ru AS status_name_ru
+                FROM tasks t
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                WHERE t.task_id = :task_id
+                """
+            ),
+            {"task_id": task_id},
+        ).mappings().first()
+
         if not task:
             raise HTTPException(status_code=500, detail="Task created but not found")
 
-    return task
+    return dict(task)
 
 
 @router.patch("/{task_id}")
@@ -313,71 +343,90 @@ def patch_task(
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
-    Частичное редактирование задачи:
-      - title
-      - description
-      - assignment_scope
+    Частичное обновление задачи.
+
+    Разрешены поля:
+      - title (не пустой, если передан)
+      - description (можно null)
+      - assignment_scope (нормализуется под enum БД)
     """
     current_user_id = _get_current_user_id(x_user_id)
 
-    # Разрешённые поля PATCH
     allowed_fields = {"title", "description", "assignment_scope"}
-    unknown = [k for k in payload.keys() if k not in allowed_fields]
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown fields: {', '.join(unknown)}")
-
-    if not any(k in payload for k in allowed_fields):
-        raise HTTPException(status_code=422, detail="No fields to update")
-
-    updates: Dict[str, Any] = {}
-
-    if "title" in payload:
-        new_title = (payload.get("title") or "").strip()
-        if not new_title:
-            raise HTTPException(status_code=422, detail="title must be a non-empty string")
-        updates["title"] = new_title
-
-    if "description" in payload:
-        desc = payload.get("description")
-        if desc is None:
-            updates["description"] = None
-        else:
-            updates["description"] = str(desc)
+    incoming_keys = [k for k in payload.keys() if k in allowed_fields]
+    if not incoming_keys:
+        raise HTTPException(status_code=422, detail="Nothing to update")
 
     with engine.begin() as conn:
-        # Проверка прав
-        role_id = _get_user_role_id(conn, current_user_id)
-        task = _read_task(conn, task_id)
-        if not task:
+        # Проверим, что задача существует
+        exists = conn.execute(
+            text("SELECT 1 FROM tasks WHERE task_id = :tid"),
+            {"tid": int(task_id)},
+        ).scalar()
+        if not exists:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        if not _can_edit_task(current_user_id, role_id, task):
-            raise HTTPException(status_code=403, detail="Forbidden")
-
-        if "assignment_scope" in payload:
-            updates["assignment_scope"] = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
-
-        # Сформировать SET-часть
         set_parts = []
-        params: Dict[str, Any] = {"task_id": task_id}
+        params: Dict[str, Any] = {"tid": int(task_id)}
 
-        for i, (k, v) in enumerate(updates.items(), start=1):
-            p = f"p{i}"
-            set_parts.append(f"{k} = :{p}")
-            params[p] = v
+        # title
+        if "title" in payload:
+            title = (payload.get("title") or "").strip()
+            if not title:
+                raise HTTPException(status_code=422, detail="title cannot be empty")
+            set_parts.append("title = :title")
+            params["title"] = title
 
-        # обновим updated_at если колонка есть (у вас она есть по трейсбеку)
-        set_parts.append("updated_at = now()")
+        # description (nullable)
+        if "description" in payload:
+            desc = payload.get("description")
+            params["description"] = None if desc is None else str(desc).strip()
+            set_parts.append("description = :description")
+
+        # assignment_scope
+        if "assignment_scope" in payload:
+            scope = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
+            set_parts.append("assignment_scope = :assignment_scope")
+            params["assignment_scope"] = scope
+
+        if not set_parts:
+            raise HTTPException(status_code=422, detail="Nothing to update")
 
         set_sql = ", ".join(set_parts)
 
         conn.execute(
-            text(f"UPDATE tasks SET {set_sql} WHERE task_id = :task_id"),
+            text(f"UPDATE tasks SET {set_sql} WHERE task_id = :tid"),
             params,
         )
 
-        updated = _read_task(conn, task_id)
-        if not updated:
+        task = conn.execute(
+            text(
+                """
+                SELECT
+                    t.task_id,
+                    t.period_id,
+                    t.regular_task_id,
+                    t.title,
+                    t.description,
+                    t.initiator_user_id,
+                    t.executor_role_id,
+                    t.assignment_scope,
+                    t.status_id,
+                    ts.code AS status_code,
+                    ts.name_ru AS status_name_ru
+                FROM tasks t
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                WHERE t.task_id = :task_id
+                """
+            ),
+            {"task_id": int(task_id)},
+        ).mappings().first()
+
+        if not task:
             raise HTTPException(status_code=500, detail="Task updated but not found")
 
-    return updated
+    # current_user_id сейчас не используется в логике PATCH (MVP).
+    # Оставлен для будущих проверок прав и аудита.
+    _ = current_user_id
+
+    return dict(task)
