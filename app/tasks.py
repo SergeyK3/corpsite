@@ -98,8 +98,6 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
             return lbl
 
     # 3) backward-compatible mapping (если раньше использовались ROLE/USER/ANY)
-    #    Под вашу текущую БД логично:
-    #    ROLE/ANY -> functional, USER -> admin (если admin существует)
     legacy_map = {
         "role": "functional",
         "any": "functional",
@@ -148,7 +146,6 @@ def list_tasks(
         params["role_id"] = role_id
         params["current_user_id"] = current_user_id
 
-        # --- assignment_scope filter (по реальному enum)
         allowed = _load_assignment_scope_enum_labels(conn)
         if not allowed:
             raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
@@ -156,10 +153,8 @@ def list_tasks(
         functional_lbl = _scope_label_or_none(allowed, "functional")
         admin_lbl = _scope_label_or_none(allowed, "admin")
 
-        # Базовый фильтр роли
         where = ["t.executor_role_id = :role_id"]
 
-        # Если есть оба (как у вас) — применяем строгую логику
         if functional_lbl and admin_lbl:
             params["functional_scope"] = functional_lbl
             params["admin_scope"] = admin_lbl
@@ -169,9 +164,6 @@ def list_tasks(
                 "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
                 ")"
             )
-        else:
-            # На случай иной схемы enum: показываем всё в рамках роли (чтобы не “потерять” задачи)
-            pass
 
         if period_id is not None:
             where.append("t.period_id = :period_id")
@@ -345,6 +337,10 @@ def patch_task(
     """
     Частичное обновление задачи.
 
+    Права (MVP, безопасно):
+      - менять может только инициатор задачи
+      - и только в рамках своей роли (executor_role_id == role_id пользователя)
+
     Разрешены поля:
       - title (не пустой, если передан)
       - description (можно null)
@@ -358,18 +354,56 @@ def patch_task(
         raise HTTPException(status_code=422, detail="Nothing to update")
 
     with engine.begin() as conn:
-        # Проверим, что задача существует
-        exists = conn.execute(
-            text("SELECT 1 FROM tasks WHERE task_id = :tid"),
-            {"tid": int(task_id)},
-        ).scalar()
-        if not exists:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        # ВАЖНО: проверка "видимости" задачи делается так же, как в list_tasks.
+        # Если задача не видна текущему пользователю — возвращаем 404.
+        allowed = _load_assignment_scope_enum_labels(conn)
+        if not allowed:
+            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
+
+        functional_lbl = _scope_label_or_none(allowed, "functional")
+        admin_lbl = _scope_label_or_none(allowed, "admin")
+
+        params_vis: Dict[str, Any] = {
+            "tid": int(task_id),
+            "role_id": int(role_id),
+            "current_user_id": int(current_user_id),
+            "functional_scope": functional_lbl,
+            "admin_scope": admin_lbl,
+        }
+
+        vis_sql = """
+            SELECT
+                t.task_id,
+                t.initiator_user_id,
+                t.executor_role_id,
+                t.assignment_scope
+            FROM tasks t
+            WHERE t.task_id = :tid
+              AND t.executor_role_id = :role_id
+        """
+
+        if functional_lbl and admin_lbl:
+            vis_sql += """
+              AND (
+                    t.assignment_scope = :functional_scope
+                    OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)
+              )
+            """
+
+        task_row = conn.execute(text(vis_sql), params_vis).mappings().first()
+
+        if not task_row:
             raise HTTPException(status_code=404, detail="Task not found")
+
+        # Только инициатор может PATCH (и для functional тоже)
+        if int(task_row["initiator_user_id"]) != int(current_user_id):
+            raise HTTPException(status_code=403, detail="Only initiator can update task")
 
         set_parts = []
         params: Dict[str, Any] = {"tid": int(task_id)}
 
-        # title
         if "title" in payload:
             title = (payload.get("title") or "").strip()
             if not title:
@@ -377,13 +411,11 @@ def patch_task(
             set_parts.append("title = :title")
             params["title"] = title
 
-        # description (nullable)
         if "description" in payload:
             desc = payload.get("description")
             params["description"] = None if desc is None else str(desc).strip()
             set_parts.append("description = :description")
 
-        # assignment_scope
         if "assignment_scope" in payload:
             scope = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
             set_parts.append("assignment_scope = :assignment_scope")
@@ -394,10 +426,20 @@ def patch_task(
 
         set_sql = ", ".join(set_parts)
 
-        conn.execute(
-            text(f"UPDATE tasks SET {set_sql} WHERE task_id = :tid"),
+        updated = conn.execute(
+            text(
+                f"""
+                UPDATE tasks
+                SET {set_sql}
+                WHERE task_id = :tid
+                RETURNING task_id
+                """
+            ),
             params,
-        )
+        ).mappings().first()
+
+        if not updated:
+            raise HTTPException(status_code=500, detail="Failed to update task")
 
         task = conn.execute(
             text(
@@ -424,9 +466,5 @@ def patch_task(
 
         if not task:
             raise HTTPException(status_code=500, detail="Task updated but not found")
-
-    # current_user_id сейчас не используется в логике PATCH (MVP).
-    # Оставлен для будущих проверок прав и аудита.
-    _ = current_user_id
 
     return dict(task)
