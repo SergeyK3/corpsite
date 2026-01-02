@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Set
 
-from fastapi import APIRouter, Body, Header, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Query, Header, Path
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -18,14 +18,10 @@ def _get_current_user_id(x_user_id: Optional[int]) -> int:
 
 
 def _get_user_role_id(conn, user_id: int) -> int:
-    row = (
-        conn.execute(
-            text("SELECT user_id, role_id FROM users WHERE user_id = :uid"),
-            {"uid": user_id},
-        )
-        .mappings()
-        .first()
-    )
+    row = conn.execute(
+        text("SELECT user_id, role_id FROM users WHERE user_id = :uid"),
+        {"uid": user_id},
+    ).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
     if row["role_id"] is None:
@@ -34,14 +30,10 @@ def _get_user_role_id(conn, user_id: int) -> int:
 
 
 def _get_status_id_by_code(conn, code: str) -> int:
-    row = (
-        conn.execute(
-            text("SELECT status_id FROM task_statuses WHERE code = :code"),
-            {"code": code},
-        )
-        .mappings()
-        .first()
-    )
+    row = conn.execute(
+        text("SELECT status_id FROM task_statuses WHERE code = :code"),
+        {"code": code},
+    ).mappings().first()
     if not row:
         raise HTTPException(status_code=400, detail=f"Unknown status code: {code}")
     return int(row["status_id"])
@@ -67,12 +59,10 @@ def _load_assignment_scope_enum_labels(conn) -> Set[str]:
 
 
 def _pick_default_scope(allowed: Set[str]) -> str:
-    # Явный предпочтительный дефолт
     if "functional" in allowed:
         return "functional"
     if "FUNCTIONAL" in allowed:
         return "FUNCTIONAL"
-    # Иначе — любой первый (стабильно: сортировка)
     return sorted(allowed)[0]
 
 
@@ -80,11 +70,11 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
     """
     Нормализует assignment_scope под РЕАЛЬНЫЙ enum в БД.
 
-    В вашей БД судя по 422: {"admin","functional"}.
+    В вашей БД (судя по ошибке) допустимо: {"admin","functional"}.
     Поэтому:
     - default: functional (если есть), иначе любое допустимое значение
     - принимаем вход в любом регистре
-    - поддерживаем маппинг старых значений ROLE/USER/ANY -> functional/admin (если это возможно)
+    - поддерживаем маппинг старых значений ROLE/USER/ANY -> functional/admin
     """
     allowed = _load_assignment_scope_enum_labels(conn)
     if not allowed:
@@ -102,14 +92,12 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
 
     raw_l = raw.lower()
 
-    # 2) match by lower-case equivalence
+    # 2) case-insensitive match
     for lbl in allowed:
         if lbl.lower() == raw_l:
             return lbl
 
-    # 3) backward-compatible mapping (если раньше использовались ROLE/USER/ANY)
-    #    Под вашу текущую БД логично:
-    #    ROLE/ANY -> functional, USER -> admin (если admin существует)
+    # 3) backward-compatible mapping
     legacy_map = {
         "role": "functional",
         "any": "functional",
@@ -127,36 +115,49 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
     )
 
 
-def _fetch_task(conn, task_id: int) -> Dict[str, Any]:
-    row = (
-        conn.execute(
-            text(
-                """
-                SELECT
-                    t.task_id,
-                    t.period_id,
-                    t.regular_task_id,
-                    t.title,
-                    t.description,
-                    t.initiator_user_id,
-                    t.executor_role_id,
-                    t.assignment_scope,
-                    t.status_id,
-                    ts.code AS status_code,
-                    ts.name_ru AS status_name_ru
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE t.task_id = :task_id
-                """
-            ),
-            {"task_id": task_id},
-        )
-        .mappings()
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return dict(row)
+def _read_task(conn, task_id: int) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT
+                t.task_id,
+                t.period_id,
+                t.regular_task_id,
+                t.title,
+                t.description,
+                t.initiator_user_id,
+                t.executor_role_id,
+                t.assignment_scope,
+                t.status_id,
+                ts.code AS status_code,
+                ts.name_ru AS status_name_ru
+            FROM tasks t
+            LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+            WHERE t.task_id = :task_id
+            """
+        ),
+        {"task_id": task_id},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _can_edit_task(current_user_id: int, current_role_id: int, task: Dict[str, Any]) -> bool:
+    """
+    Правила PATCH:
+    1) Инициатор всегда может редактировать.
+    2) Если assignment_scope == "functional", то редактировать можно по роли:
+       executor_role_id == текущая роль пользователя.
+    3) Если assignment_scope == "admin", то только инициатор.
+    """
+    if int(task["initiator_user_id"]) == int(current_user_id):
+        return True
+
+    scope = str(task.get("assignment_scope") or "").lower()
+    if scope == "functional":
+        return int(task["executor_role_id"]) == int(current_role_id)
+
+    # scope == "admin" (или любое другое) — только инициатор (см. правило выше)
+    return False
 
 
 @router.get("")
@@ -168,11 +169,6 @@ def list_tasks(
     offset: int = Query(0, ge=0),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    Совместимо с текущей схемой БД:
-    - tasks.executor_role_id
-    - users.role_id
-    """
     current_user_id = _get_current_user_id(x_user_id)
 
     where = ["t.executor_role_id = :role_id"]
@@ -196,70 +192,51 @@ def list_tasks(
 
         where_sql = " AND ".join(where)
 
-        total = (
-            conn.execute(
-                text(
-                    f"""
-                    SELECT COUNT(1)
-                    FROM tasks t
-                    LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                    WHERE {where_sql}
-                    """
-                ),
-                params,
-            ).scalar()
-            or 0
-        )
+        total = conn.execute(
+            text(
+                f"""
+                SELECT COUNT(1)
+                FROM tasks t
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                WHERE {where_sql}
+                """
+            ),
+            params,
+        ).scalar() or 0
 
-        rows = (
-            conn.execute(
-                text(
-                    f"""
-                    SELECT
-                        t.task_id,
-                        t.period_id,
-                        t.regular_task_id,
-                        t.title,
-                        t.description,
-                        t.initiator_user_id,
-                        t.executor_role_id,
-                        t.assignment_scope,
-                        t.status_id,
-                        ts.code AS status_code,
-                        ts.name_ru AS status_name_ru
-                    FROM tasks t
-                    LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                    WHERE {where_sql}
-                    ORDER BY t.task_id DESC
-                    LIMIT :limit OFFSET :offset
-                    """
-                ),
-                params,
-            )
-            .mappings()
-            .all()
-        )
+        rows = conn.execute(
+            text(
+                f"""
+                SELECT
+                    t.task_id,
+                    t.period_id,
+                    t.regular_task_id,
+                    t.title,
+                    t.description,
+                    t.initiator_user_id,
+                    t.executor_role_id,
+                    t.assignment_scope,
+                    t.status_id,
+                    ts.code AS status_code,
+                    ts.name_ru AS status_name_ru
+                FROM tasks t
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                WHERE {where_sql}
+                ORDER BY t.task_id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            params,
+        ).mappings().all()
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": [dict(r) for r in rows]}
 
 
 @router.post("")
 def create_task(
-    payload: Dict[str, Any] = Body(...),
+    payload: Dict[str, Any],
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    MVP создание задачи (role-based).
-
-    Body (JSON):
-      title: str (required)
-      executor_role_id: int (required)
-      period_id: int (required)  <-- В БД NOT NULL
-      description: str | null
-      regular_task_id: int | null
-      assignment_scope: str | null  (default: functional/admin по enum БД)
-      status_code: str | null  (default IN_PROGRESS)
-    """
     current_user_id = _get_current_user_id(x_user_id)
 
     title = (payload.get("title") or "").strip()
@@ -280,102 +257,127 @@ def create_task(
         assignment_scope = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
         status_id = _get_status_id_by_code(conn, status_code)
 
-        row = (
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO tasks (
-                        period_id,
-                        regular_task_id,
-                        title,
-                        description,
-                        initiator_user_id,
-                        executor_role_id,
-                        assignment_scope,
-                        status_id
-                    )
-                    VALUES (
-                        :period_id,
-                        :regular_task_id,
-                        :title,
-                        :description,
-                        :initiator_user_id,
-                        :executor_role_id,
-                        :assignment_scope,
-                        :status_id
-                    )
-                    RETURNING task_id
-                    """
-                ),
-                {
-                    "period_id": int(period_id),
-                    "regular_task_id": payload.get("regular_task_id"),
-                    "title": title,
-                    "description": payload.get("description"),
-                    "initiator_user_id": current_user_id,
-                    "executor_role_id": int(executor_role_id),
-                    "assignment_scope": assignment_scope,
-                    "status_id": status_id,
-                },
-            )
-            .mappings()
-            .first()
-        )
+        row = conn.execute(
+            text(
+                """
+                INSERT INTO tasks (
+                    period_id,
+                    regular_task_id,
+                    title,
+                    description,
+                    initiator_user_id,
+                    executor_role_id,
+                    assignment_scope,
+                    status_id
+                )
+                VALUES (
+                    :period_id,
+                    :regular_task_id,
+                    :title,
+                    :description,
+                    :initiator_user_id,
+                    :executor_role_id,
+                    :assignment_scope,
+                    :status_id
+                )
+                RETURNING task_id
+                """
+            ),
+            {
+                "period_id": int(period_id),
+                "regular_task_id": payload.get("regular_task_id"),
+                "title": title,
+                "description": payload.get("description"),
+                "initiator_user_id": current_user_id,
+                "executor_role_id": int(executor_role_id),
+                "assignment_scope": assignment_scope,
+                "status_id": status_id,
+            },
+        ).mappings().first()
 
         if not row or row.get("task_id") is None:
             raise HTTPException(status_code=500, detail="Failed to create task")
 
-        return _fetch_task(conn, int(row["task_id"]))
+        task_id = int(row["task_id"])
+        task = _read_task(conn, task_id)
+        if not task:
+            raise HTTPException(status_code=500, detail="Task created but not found")
+
+    return task
 
 
 @router.patch("/{task_id}")
-def update_task(
+def patch_task(
+    payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    payload: Dict[str, Any] = Body(...),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
-    Частичное редактирование задачи.
-
-    Body (JSON) - любые из:
-      title: str
-      description: str | null
-      assignment_scope: str | null  (нормализуется под enum БД)
+    Частичное редактирование задачи:
+      - title
+      - description
+      - assignment_scope
     """
-    _ = _get_current_user_id(x_user_id)  # сейчас только проверка наличия заголовка
+    current_user_id = _get_current_user_id(x_user_id)
 
-    updates = []
-    params: Dict[str, Any] = {"task_id": int(task_id)}
+    # Разрешённые поля PATCH
+    allowed_fields = {"title", "description", "assignment_scope"}
+    unknown = [k for k in payload.keys() if k not in allowed_fields]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown fields: {', '.join(unknown)}")
+
+    if not any(k in payload for k in allowed_fields):
+        raise HTTPException(status_code=422, detail="No fields to update")
+
+    updates: Dict[str, Any] = {}
 
     if "title" in payload:
-        title = (payload.get("title") or "").strip()
-        if not title:
-            raise HTTPException(status_code=422, detail="title must be non-empty")
-        updates.append("title = :title")
-        params["title"] = title
+        new_title = (payload.get("title") or "").strip()
+        if not new_title:
+            raise HTTPException(status_code=422, detail="title must be a non-empty string")
+        updates["title"] = new_title
 
     if "description" in payload:
-        # разрешаем null (очистка)
         desc = payload.get("description")
-        if desc is not None:
-            desc = str(desc).strip()
-        updates.append("description = :description")
-        params["description"] = desc
+        if desc is None:
+            updates["description"] = None
+        else:
+            updates["description"] = str(desc)
 
     with engine.begin() as conn:
-        # assignment_scope нужно нормализовать с доступом к БД (enum)
+        # Проверка прав
+        role_id = _get_user_role_id(conn, current_user_id)
+        task = _read_task(conn, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        if not _can_edit_task(current_user_id, role_id, task):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
         if "assignment_scope" in payload:
-            scope = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
-            updates.append("assignment_scope = :assignment_scope")
-            params["assignment_scope"] = scope
+            updates["assignment_scope"] = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
 
-        if not updates:
-            raise HTTPException(status_code=422, detail="No fields to update")
+        # Сформировать SET-часть
+        set_parts = []
+        params: Dict[str, Any] = {"task_id": task_id}
 
-        # убедимся, что задача существует (и заодно возвращаем 404 корректно)
-        _fetch_task(conn, int(task_id))
+        for i, (k, v) in enumerate(updates.items(), start=1):
+            p = f"p{i}"
+            set_parts.append(f"{k} = :{p}")
+            params[p] = v
 
-        set_sql = ", ".join(updates)
-        conn.execute(text(f"UPDATE tasks SET {set_sql} WHERE task_id = :task_id"), params)
+        # обновим updated_at если колонка есть (у вас она есть по трейсбеку)
+        set_parts.append("updated_at = now()")
 
-        return _fetch_task(conn, int(task_id))
+        set_sql = ", ".join(set_parts)
+
+        conn.execute(
+            text(f"UPDATE tasks SET {set_sql} WHERE task_id = :task_id"),
+            params,
+        )
+
+        updated = _read_task(conn, task_id)
+        if not updated:
+            raise HTTPException(status_code=500, detail="Task updated but not found")
+
+    return updated
