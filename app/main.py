@@ -2,15 +2,23 @@ from datetime import date
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.db.engine import engine
 from app.meta import router as meta_router
+from app.tasks import router as tasks_router
 
-app = FastAPI(title="Corpsite MVP")
+
+class UTF8JSONResponse(JSONResponse):
+    media_type = "application/json; charset=utf-8"
+
+
+app = FastAPI(title="Corpsite MVP", default_response_class=UTF8JSONResponse)
 app.include_router(meta_router)
-
+app.include_router(tasks_router)
 
 # -----------------------
 # Models (minimal)
