@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query, Header, Path
 from fastapi import Response
-
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -72,7 +71,7 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
     """
     Нормализует assignment_scope под РЕАЛЬНЫЙ enum в БД.
 
-    В вашей БД судя по 422: {"admin","functional"}.
+    В вашей БД: {"admin","functional"}.
     Поэтому:
     - default: functional (если есть), иначе любое допустимое значение
     - принимаем вход в любом регистре
@@ -99,7 +98,7 @@ def _normalize_assignment_scope(conn, value: Any) -> str:
         if lbl.lower() == raw_l:
             return lbl
 
-    # 3) backward-compatible mapping (если раньше использовались ROLE/USER/ANY)
+    # 3) backward-compatible mapping
     legacy_map = {
         "role": "functional",
         "any": "functional",
@@ -129,6 +128,7 @@ def list_tasks(
     period_id: Optional[int] = Query(None, ge=1),
     status_code: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    include_archived: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
@@ -137,7 +137,11 @@ def list_tasks(
     Выдача задач в рамках роли + ограничение по assignment_scope:
 
     - functional: видны всем пользователям данной роли
-    - admin: видны только инициатору (initiator_user_id = текущий пользователь)
+    - admin: видны только инициатору
+    - ARCHIVED:
+        * по умолчанию скрыты
+        * показываются при include_archived=true
+        * либо при status_code=ARCHIVED
     """
     current_user_id = _get_current_user_id(x_user_id)
 
@@ -157,6 +161,7 @@ def list_tasks(
 
         where = ["t.executor_role_id = :role_id"]
 
+        # Ограничение по assignment_scope
         if functional_lbl and admin_lbl:
             params["functional_scope"] = functional_lbl
             params["admin_scope"] = admin_lbl
@@ -174,6 +179,10 @@ def list_tasks(
         if status_code:
             where.append("ts.code = :status_code")
             params["status_code"] = status_code.strip()
+
+        # По умолчанию архив не показываем (если не задан status_code явно)
+        if (not status_code) and (not include_archived):
+            where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
 
         if search:
             where.append("(t.title ILIKE :q OR COALESCE(t.description,'') ILIKE :q)")
@@ -220,9 +229,11 @@ def list_tasks(
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": [dict(r) for r in rows]}
 
+
 @router.get("/{task_id}")
 def get_task(
     task_id: int = Path(..., ge=1),
+    include_archived: bool = Query(False),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
@@ -232,6 +243,7 @@ def get_task(
       - задача должна быть в рамках роли пользователя
       - functional: доступна всем в роли
       - admin: доступна только инициатору
+      - ARCHIVED: по умолчанию скрыта, показывается при include_archived=true
 
     При любом нарушении — 404 (не раскрываем существование).
     """
@@ -267,6 +279,10 @@ def get_task(
                 "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
                 ")"
             )
+
+        # По умолчанию архив скрыт
+        if not include_archived:
+            where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
 
         where_sql = " AND ".join(where)
 
@@ -310,11 +326,11 @@ def create_task(
     Body (JSON):
       title: str (required)
       executor_role_id: int (required)
-      period_id: int (required)  <-- В БД NOT NULL
+      period_id: int (required)
       description: str | null
       regular_task_id: int | null
-      assignment_scope: str | null  (default: functional/admin по enum БД)
-      status_code: str | null  (default IN_PROGRESS)
+      assignment_scope: str | null
+      status_code: str | null (default IN_PROGRESS)
     """
     current_user_id = _get_current_user_id(x_user_id)
 
@@ -419,7 +435,7 @@ def patch_task(
 
     Права (MVP, безопасно):
       - менять может только инициатор задачи
-      - и только в рамках своей роли (executor_role_id == role_id пользователя)
+      - задача должна быть "видима" (scope) в рамках роли, иначе 404
 
     Разрешены поля:
       - title (не пустой, если передан)
@@ -436,8 +452,6 @@ def patch_task(
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
 
-        # ВАЖНО: проверка "видимости" задачи делается так же, как в list_tasks.
-        # Если задача не видна текущему пользователю — возвращаем 404.
         allowed = _load_assignment_scope_enum_labels(conn)
         if not allowed:
             raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
@@ -473,11 +487,9 @@ def patch_task(
             """
 
         task_row = conn.execute(text(vis_sql), params_vis).mappings().first()
-
         if not task_row:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # Только инициатор может PATCH (и для functional тоже)
         if int(task_row["initiator_user_id"]) != int(current_user_id):
             raise HTTPException(status_code=403, detail="Only initiator can update task")
 
@@ -549,16 +561,17 @@ def patch_task(
 
     return dict(task)
 
+
 @router.delete("/{task_id}", status_code=204)
 def delete_task(
     task_id: int = Path(..., ge=1),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Response:
     """
-    Удаление задачи.
+    Soft delete (финализация): переводим задачу в статус ARCHIVED.
 
     Права (MVP, безопасно):
-      - удалять может только инициатор задачи
+      - архивировать может только инициатор задачи
       - и только в рамках своей роли (executor_role_id == role_id пользователя)
 
     Поведение:
@@ -584,21 +597,27 @@ def delete_task(
         if not task_row:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # 1) защита по роли (как будто не существует)
         if int(task_row["executor_role_id"]) != int(role_id):
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # 2) только инициатор
         if int(task_row["initiator_user_id"]) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
-            # если хотите явно: raise HTTPException(status_code=403, detail="Forbidden")
 
-        deleted = conn.execute(
-            text("DELETE FROM tasks WHERE task_id = :tid RETURNING task_id"),
-            {"tid": int(task_id)},
+        archived_status_id = _get_status_id_by_code(conn, "ARCHIVED")
+
+        updated = conn.execute(
+            text(
+                """
+                UPDATE tasks
+                SET status_id = :archived_status_id
+                WHERE task_id = :tid
+                RETURNING task_id
+                """
+            ),
+            {"archived_status_id": int(archived_status_id), "tid": int(task_id)},
         ).mappings().first()
 
-        if not deleted:
-            raise HTTPException(status_code=500, detail="Failed to delete task")
+        if not updated:
+            raise HTTPException(status_code=500, detail="Failed to archive task")
 
     return Response(status_code=204)
