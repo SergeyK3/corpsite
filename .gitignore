@@ -26,3 +26,6 @@ Thumbs.db
 # Project docs (если не версионируются)
 docs0/
 docs/
+
+# Manual PowerShell scripts (local smoke tests)
+scripts/*.ps1
