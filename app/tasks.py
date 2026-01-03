@@ -1,6 +1,7 @@
 # app/tasks.py
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query, Header, Path
@@ -121,6 +122,46 @@ def _scope_label_or_none(allowed: Set[str], wanted_lower: str) -> Optional[str]:
         if lbl.lower() == wanted_lower:
             return lbl
     return None
+
+
+def _write_task_audit(
+    conn,
+    *,
+    task_id: int,
+    actor_user_id: int,
+    action: str,
+    fields_changed: Optional[Dict[str, Any]] = None,
+    request_body: Optional[Dict[str, Any]] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    v1: простая запись в task_audit_log.
+    Таблица должна существовать в БД.
+    """
+    conn.execute(
+        text(
+            """
+            INSERT INTO task_audit_log (
+                task_id, actor_user_id, action,
+                fields_changed, request_body, meta
+            )
+            VALUES (
+                :task_id, :actor_user_id, :action,
+                CAST(:fields_changed AS jsonb),
+                CAST(:request_body AS jsonb),
+                CAST(:meta AS jsonb)
+            )
+            """
+        ),
+        {
+            "task_id": int(task_id),
+            "actor_user_id": int(actor_user_id),
+            "action": action,
+            "fields_changed": json.dumps(fields_changed) if fields_changed is not None else None,
+            "request_body": json.dumps(request_body) if request_body is not None else None,
+            "meta": json.dumps(meta) if meta is not None else None,
+        },
+    )
 
 
 @router.get("")
@@ -421,6 +462,16 @@ def create_task(
         if not task:
             raise HTTPException(status_code=500, detail="Task created but not found")
 
+        # audit v1
+        _write_task_audit(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(current_user_id),
+            action="CREATE",
+            fields_changed=None,
+            request_body=payload,
+        )
+
     return dict(task)
 
 
@@ -472,7 +523,9 @@ def patch_task(
                 t.task_id,
                 t.initiator_user_id,
                 t.executor_role_id,
-                t.assignment_scope
+                t.assignment_scope,
+                t.title,
+                t.description
             FROM tasks t
             WHERE t.task_id = :tid
               AND t.executor_role_id = :role_id
@@ -492,6 +545,12 @@ def patch_task(
 
         if int(task_row["initiator_user_id"]) != int(current_user_id):
             raise HTTPException(status_code=403, detail="Only initiator can update task")
+
+        before = {
+            "title": task_row.get("title"),
+            "description": task_row.get("description"),
+            "assignment_scope": task_row.get("assignment_scope"),
+        }
 
         set_parts = []
         params: Dict[str, Any] = {"tid": int(task_id)}
@@ -559,6 +618,26 @@ def patch_task(
         if not task:
             raise HTTPException(status_code=500, detail="Task updated but not found")
 
+        after = {
+            "title": task.get("title"),
+            "description": task.get("description"),
+            "assignment_scope": task.get("assignment_scope"),
+        }
+
+        fields_changed: Dict[str, Any] = {}
+        for k in ("title", "description", "assignment_scope"):
+            if before.get(k) != after.get(k):
+                fields_changed[k] = {"from": before.get(k), "to": after.get(k)}
+
+        _write_task_audit(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(current_user_id),
+            action="PATCH",
+            fields_changed=fields_changed,
+            request_body=payload,
+        )
+
     return dict(task)
 
 
@@ -586,8 +665,9 @@ def delete_task(
         task_row = conn.execute(
             text(
                 """
-                SELECT t.task_id, t.initiator_user_id, t.executor_role_id
+                SELECT t.task_id, t.initiator_user_id, t.executor_role_id, ts.code AS status_code
                 FROM tasks t
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
                 WHERE t.task_id = :tid
                 """
             ),
@@ -604,6 +684,7 @@ def delete_task(
             raise HTTPException(status_code=404, detail="Task not found")
 
         archived_status_id = _get_status_id_by_code(conn, "ARCHIVED")
+        before_status = task_row.get("status_code")
 
         updated = conn.execute(
             text(
@@ -619,5 +700,14 @@ def delete_task(
 
         if not updated:
             raise HTTPException(status_code=500, detail="Failed to archive task")
+
+        _write_task_audit(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(current_user_id),
+            action="ARCHIVE",
+            fields_changed={"status_code": {"from": before_status, "to": "ARCHIVED"}},
+            request_body=None,
+        )
 
     return Response(status_code=204)
