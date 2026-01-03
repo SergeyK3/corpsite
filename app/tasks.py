@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query, Header, Path
+from fastapi import Response
+
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -217,6 +219,84 @@ def list_tasks(
         ).mappings().all()
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": [dict(r) for r in rows]}
+
+@router.get("/{task_id}")
+def get_task(
+    task_id: int = Path(..., ge=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    """
+    Получение одной задачи.
+
+    Права доступа (строго):
+      - задача должна быть в рамках роли пользователя
+      - functional: доступна всем в роли
+      - admin: доступна только инициатору
+
+    При любом нарушении — 404 (не раскрываем существование).
+    """
+    current_user_id = _get_current_user_id(x_user_id)
+
+    with engine.begin() as conn:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        allowed = _load_assignment_scope_enum_labels(conn)
+        if not allowed:
+            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
+
+        functional_lbl = _scope_label_or_none(allowed, "functional")
+        admin_lbl = _scope_label_or_none(allowed, "admin")
+
+        params: Dict[str, Any] = {
+            "task_id": int(task_id),
+            "role_id": int(role_id),
+            "current_user_id": int(current_user_id),
+        }
+
+        where = [
+            "t.task_id = :task_id",
+            "t.executor_role_id = :role_id",
+        ]
+
+        if functional_lbl and admin_lbl:
+            params["functional_scope"] = functional_lbl
+            params["admin_scope"] = admin_lbl
+            where.append(
+                "("
+                "t.assignment_scope = :functional_scope "
+                "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
+                ")"
+            )
+
+        where_sql = " AND ".join(where)
+
+        task = conn.execute(
+            text(
+                f"""
+                SELECT
+                    t.task_id,
+                    t.period_id,
+                    t.regular_task_id,
+                    t.title,
+                    t.description,
+                    t.initiator_user_id,
+                    t.executor_role_id,
+                    t.assignment_scope,
+                    t.status_id,
+                    ts.code AS status_code,
+                    ts.name_ru AS status_name_ru
+                FROM tasks t
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                WHERE {where_sql}
+                """
+            ),
+            params,
+        ).mappings().first()
+
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+    return dict(task)
 
 
 @router.post("")
@@ -468,3 +548,57 @@ def patch_task(
             raise HTTPException(status_code=500, detail="Task updated but not found")
 
     return dict(task)
+
+@router.delete("/{task_id}", status_code=204)
+def delete_task(
+    task_id: int = Path(..., ge=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Response:
+    """
+    Удаление задачи.
+
+    Права (MVP, безопасно):
+      - удалять может только инициатор задачи
+      - и только в рамках своей роли (executor_role_id == role_id пользователя)
+
+    Поведение:
+      - 204 No Content при успехе
+      - 404 если нет задачи / чужая роль / не инициатор
+    """
+    current_user_id = _get_current_user_id(x_user_id)
+
+    with engine.begin() as conn:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        task_row = conn.execute(
+            text(
+                """
+                SELECT t.task_id, t.initiator_user_id, t.executor_role_id
+                FROM tasks t
+                WHERE t.task_id = :tid
+                """
+            ),
+            {"tid": int(task_id)},
+        ).mappings().first()
+
+        if not task_row:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # 1) защита по роли (как будто не существует)
+        if int(task_row["executor_role_id"]) != int(role_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # 2) только инициатор
+        if int(task_row["initiator_user_id"]) != int(current_user_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+            # если хотите явно: raise HTTPException(status_code=403, detail="Forbidden")
+
+        deleted = conn.execute(
+            text("DELETE FROM tasks WHERE task_id = :tid RETURNING task_id"),
+            {"tid": int(task_id)},
+        ).mappings().first()
+
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete task")
+
+    return Response(status_code=204)
