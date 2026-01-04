@@ -1,3 +1,4 @@
+# corpsite-bot/src/bot/handlers/tasks.py
 from __future__ import annotations
 
 import logging
@@ -23,9 +24,13 @@ def _get_bound_user_id(tg_user_id: int) -> Optional[int]:
     return BINDINGS.get(tg_user_id)
 
 
-_TITLE_RE = re.compile(r'^title="(.+)"$')
-_DESC_RE = re.compile(r'^desc="(.+)"$')
-_SCOPE_RE = re.compile(r'^scope="(.+)"$')
+# Команда /task <id> <action> ...
+# update-поля парсим из raw text (msg.text), потому что Telegram режет args по пробелам
+# и title="Тест интеграции" превращается в два токена.
+# Ищем пары ключ="значение" в тексте (значение может содержать пробелы)
+_TITLE_KV_RE = re.compile(r'title="([^"]+)"')
+_DESC_KV_RE = re.compile(r'desc="([^"]+)"')
+_SCOPE_KV_RE = re.compile(r'scope="([^"]+)"')
 
 
 def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
@@ -51,26 +56,25 @@ def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
     return task_id, action, rest
 
 
-def _parse_update_payload(rest: list[str]) -> dict[str, str]:
-    # update title="..." desc="..." scope="..."
+def _parse_update_payload_from_text(raw_text: str) -> dict[str, str]:
+    """
+    Telegram дробит args по пробелам, поэтому update-поля парсим из исходного текста.
+    Пример:
+      /task 51 update title="Тест интеграции" desc="Описание" scope="internal"
+    """
     payload: dict[str, str] = {}
-    for token in rest:
-        m = _TITLE_RE.match(token)
-        if m:
-            payload["title"] = m.group(1)
-            continue
 
-        m = _DESC_RE.match(token)
-        if m:
-            payload["description"] = m.group(1)
-            continue
+    m = _TITLE_KV_RE.search(raw_text)
+    if m:
+        payload["title"] = m.group(1).strip()
 
-        m = _SCOPE_RE.match(token)
-        if m:
-            payload["assignment_scope"] = m.group(1)
-            continue
+    m = _DESC_KV_RE.search(raw_text)
+    if m:
+        payload["description"] = m.group(1).strip()
 
-        raise CommandParseError('update принимает только title="..." и/или desc="..." и/или scope="..."')
+    m = _SCOPE_KV_RE.search(raw_text)
+    if m:
+        payload["assignment_scope"] = m.group(1).strip()
 
     if not payload:
         raise CommandParseError('update требует хотя бы одно поле: title="..." или desc="..." или scope="..."')
@@ -97,14 +101,14 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     backend = context.bot_data.get("backend")
     if backend is None:
-        # логи только при ошибке
         log.error('backend dependency is missing in bot_data (expected key "backend")')
         await msg.reply_text("Ошибка конфигурации бота: backend не инициализирован.")
         return
 
     if action == "update":
+        raw_text = msg.text or ""
         try:
-            payload = _parse_update_payload(rest)
+            payload = _parse_update_payload_from_text(raw_text)
         except CommandParseError as e:
             await msg.reply_text(e.message)
             return
@@ -120,7 +124,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         ux = map_http_to_ux(resp.status_code, task_id)
         if ux.ok:
-            changed = []
+            changed: list[str] = []
             if "title" in payload:
                 changed.append("заголовок")
             if "description" in payload:
@@ -137,9 +141,14 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text("Формат: /task <id> report <url>")
             return
 
-        report_url = rest[0]
+        report_link = rest[0]
         try:
-            resp = await backend.submit_report(task_id=task_id, user_id=user_id, report_url=report_url)
+            resp = await backend.submit_report(
+                task_id=task_id,
+                user_id=user_id,
+                report_link=report_link,
+                current_comment="",
+            )
         except Exception:
             log.exception("POST /tasks/{id}/report failed")
             await msg.reply_text(
@@ -154,8 +163,16 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     if action == "approve":
+        if len(rest) != 0:
+            await msg.reply_text("Формат: /task <id> approve")
+            return
+
         try:
-            resp = await backend.approve_report(task_id=task_id, user_id=user_id)
+            resp = await backend.approve_report(
+                task_id=task_id,
+                user_id=user_id,
+                current_comment="",
+            )
         except Exception:
             log.exception("POST /tasks/{id}/approve failed")
             await msg.reply_text(

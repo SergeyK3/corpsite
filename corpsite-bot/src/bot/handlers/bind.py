@@ -20,26 +20,33 @@ async def cmd_bind(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if msg is None:
         return
 
-    admin_ids: set[int] = context.bot_data.get("admin_tg_ids", set())
-    actor_tg_id = msg.from_user.id
+    try:
+        # Диагностика: подтверждаем, что этот handler реально вызван
+        await msg.reply_text("BIND_HANDLER_REACHED")
 
-    if not _is_admin(actor_tg_id, admin_ids):
-        await msg.reply_text("Доступ запрещён.")
-        return
+        admin_ids: set[int] = context.bot_data.get("admin_tg_ids", set())
+        actor_tg_id = msg.from_user.id if msg.from_user else 0
 
-    args = context.args or []
-    if len(args) != 2:
-        await msg.reply_text("Формат: /bind <tg_user_id:int> <user_id:int>")
-        return
+        if not _is_admin(actor_tg_id, admin_ids):
+            await msg.reply_text("Доступ запрещён.")
+            return
 
-    # Жёсткая валидация: Telegram-клиенты иногда “переиспользуют” предыдущие args.
-    # Нам важно не выполнять привязку при любом сомнении.
-    if not args[0].isdigit() or not args[1].isdigit():
-        await msg.reply_text("Формат: /bind <tg_user_id:int> <user_id:int>")
-        return
+        args = context.args or []
+        if len(args) != 2:
+            await msg.reply_text("Формат: /bind <tg_user_id:int> <user_id:int>")
+            return
 
-    tg_user_id = int(args[0])
-    user_id = int(args[1])
+        if (not args[0].isdigit()) or (not args[1].isdigit()):
+            await msg.reply_text("Формат: /bind <tg_user_id:int> <user_id:int>")
+            return
 
-    BINDINGS[tg_user_id] = user_id
-    await msg.reply_text(f"Привязка установлена: tg={tg_user_id} → user_id={user_id}")
+        tg_user_id = int(args[0])
+        user_id = int(args[1])
+
+        BINDINGS[tg_user_id] = user_id
+        await msg.reply_text(f"Привязка установлена: tg={tg_user_id} → user_id={user_id}")
+
+    except Exception as e:
+        # Чтобы не было «молчания» при исключениях в handler
+        await msg.reply_text(f"Ошибка в /bind: {type(e).__name__}: {e}")
+        raise

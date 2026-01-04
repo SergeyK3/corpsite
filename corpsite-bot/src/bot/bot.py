@@ -1,9 +1,13 @@
+# corpsite-bot/src/bot/bot.py
+from __future__ import annotations
+
 import os
 import logging
+from pathlib import Path
 from typing import Set
 
 from dotenv import load_dotenv
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 from .integrations.corpsite_api import CorpsiteAPI
 from .handlers.start import cmd_start
@@ -12,16 +16,19 @@ from .handlers.tasks import cmd_task
 
 
 # -----------------------
-# Env
+# Env (single source of truth)
 # -----------------------
-load_dotenv()
+# bot.py: corpsite-bot/src/bot/bot.py
+# корень монорепы: .../09 Corpsite/
+ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
+load_dotenv(dotenv_path=ROOT_ENV)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 ADMIN_TG_IDS_RAW = os.getenv("ADMIN_TG_IDS", "").strip()
 
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is not set. Put BOT_TOKEN=... into corpsite-bot/.env")
+    raise RuntimeError(f"BOT_TOKEN is not set. Expected in {ROOT_ENV}")
 
 
 def _parse_admin_ids(raw: str) -> Set[int]:
@@ -45,35 +52,43 @@ ADMIN_TG_IDS = _parse_admin_ids(ADMIN_TG_IDS_RAW)
 # Logging
 # -----------------------
 logging.basicConfig(
-    level=logging.ERROR,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-# подавляем шум библиотек
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("telegram").setLevel(logging.ERROR)
-logging.getLogger("telegram.ext").setLevel(logging.ERROR)
 
 log = logging.getLogger("corpsite-bot")
+
+
+# -----------------------
+# Error handler
+# -----------------------
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log.exception("Unhandled error while handling update", exc_info=context.error)
 
 
 # -----------------------
 # Main
 # -----------------------
 def main() -> None:
-    app = Application.builder().token(BOT_TOKEN).build()
+    log.info("Loading env from: %s", ROOT_ENV)
+    log.info("API_BASE_URL=%s", API_BASE_URL)
+    log.info("ADMIN_TG_IDS=%s", sorted(ADMIN_TG_IDS))
 
-    # shared deps
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_error_handler(on_error)
+
     backend = CorpsiteAPI(API_BASE_URL, timeout_s=15.0)
-    app.bot_data["backend"] = backend  # для handlers/tasks.py (cmd_task ожидает "backend")
-    app.bot_data["api"] = backend      # оставляем для совместимости/будущих хендлеров
+    app.bot_data["backend"] = backend  # handlers/tasks.py ожидает "backend"
+    app.bot_data["api"] = backend      # совместимость/будущие хендлеры
     app.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
-    # handlers (MVP)
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("bind", cmd_bind))
     app.add_handler(CommandHandler("task", cmd_task))
 
+    log.info("Bot started. Polling...")
     app.run_polling(drop_pending_updates=True, close_loop=False)
 
 
