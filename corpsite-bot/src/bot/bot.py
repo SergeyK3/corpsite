@@ -7,19 +7,26 @@ from pathlib import Path
 from typing import Set
 
 from dotenv import load_dotenv
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from .integrations.corpsite_api import CorpsiteAPI
 from .handlers.start import cmd_start
 from .handlers.bind import cmd_bind
 from .handlers.tasks import cmd_task
+from .handlers.whoami import cmd_whoami
+from .handlers.unbind import cmd_unbind
 
 
 # -----------------------
 # Env (single source of truth)
 # -----------------------
-# bot.py: corpsite-bot/src/bot/bot.py
-# корень монорепы: .../09 Corpsite/
 ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(dotenv_path=ROOT_ENV)
 
@@ -37,11 +44,8 @@ def _parse_admin_ids(raw: str) -> Set[int]:
     out: Set[int] = set()
     for part in raw.split(","):
         part = part.strip()
-        if not part:
-            continue
-        if not part.isdigit():
-            continue
-        out.add(int(part))
+        if part.isdigit():
+            out.add(int(part))
     return out
 
 
@@ -55,9 +59,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-
 logging.getLogger("httpx").setLevel(logging.ERROR)
-
 log = logging.getLogger("corpsite-bot")
 
 
@@ -66,6 +68,23 @@ log = logging.getLogger("corpsite-bot")
 # -----------------------
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     log.exception("Unhandled error while handling update", exc_info=context.error)
+
+
+# -----------------------
+# Control handlers (verification only)
+# -----------------------
+async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    if msg:
+        await msg.reply_text("pong")
+
+
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    if msg:
+        await msg.reply_text(
+            "Команда не распознана. Доступные: /start, /bind, /unbind, /whoami, /tasks, /ping"
+        )
 
 
 # -----------------------
@@ -80,13 +99,17 @@ def main() -> None:
     app.add_error_handler(on_error)
 
     backend = CorpsiteAPI(API_BASE_URL, timeout_s=15.0)
-    app.bot_data["backend"] = backend  # handlers/tasks.py ожидает "backend"
-    app.bot_data["api"] = backend      # совместимость/будущие хендлеры
+    app.bot_data["backend"] = backend          # handlers/tasks.py ожидает "backend"
     app.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("bind", cmd_bind))
-    app.add_handler(CommandHandler("task", cmd_task))
+    app.add_handler(CommandHandler("unbind", cmd_unbind))
+    app.add_handler(CommandHandler("whoami", cmd_whoami))
+    app.add_handler(CommandHandler("tasks", cmd_task))
+    app.add_handler(CommandHandler("ping", cmd_ping))
+
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     log.info("Bot started. Polling...")
     app.run_polling(drop_pending_updates=True, close_loop=False)
