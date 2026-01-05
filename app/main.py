@@ -1,3 +1,18 @@
+# app/main.py
+from __future__ import annotations
+
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# -----------------------
+# Env (single source of truth)
+# -----------------------
+# app/main.py находится в .../09 Corpsite/app/main.py
+# корневой .env лежит в .../09 Corpsite/.env
+ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(dotenv_path=ROOT_ENV)
+
 from datetime import date
 from typing import Optional, List, Dict, Any
 
@@ -10,6 +25,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.meta import router as meta_router
 from app.tasks import router as tasks_router
+from .tg_bind import router as tg_bind_router
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -19,6 +35,7 @@ class UTF8JSONResponse(JSONResponse):
 app = FastAPI(title="Corpsite MVP", default_response_class=UTF8JSONResponse)
 app.include_router(meta_router)
 app.include_router(tasks_router)
+app.include_router(tg_bind_router)
 
 # -----------------------
 # Models (minimal)
