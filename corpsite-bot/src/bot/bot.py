@@ -79,11 +79,29 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await msg.reply_text("pong")
 
 
+async def cmd_whereami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    if msg is None:
+        return
+
+    chat = update.effective_chat
+    chat_type = getattr(chat, "type", None) or "unknown"
+    chat_id = getattr(chat, "id", None)
+
+    if chat_type == "private":
+        await msg.reply_text(f"Личный чат. chat_id={chat_id}")
+        return
+
+    title = getattr(chat, "title", None)
+    title_part = f' "{title}"' if title else ""
+    await msg.reply_text(f"Групповой чат ({chat_type}){title_part}. chat_id={chat_id}")
+
+
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
     if msg:
         await msg.reply_text(
-            "Команда не распознана. Доступные: /start, /bind, /unbind, /whoami, /tasks, /ping"
+            "Команда не распознана. Доступные: /start, /bind, /unbind, /whoami, /tasks, /ping, /whereami"
         )
 
 
@@ -108,6 +126,7 @@ def main() -> None:
     app.add_handler(CommandHandler("whoami", cmd_whoami))
     app.add_handler(CommandHandler("tasks", cmd_task))
     app.add_handler(CommandHandler("ping", cmd_ping))
+    app.add_handler(CommandHandler("whereami", cmd_whereami))
 
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
