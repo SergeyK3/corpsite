@@ -237,15 +237,95 @@ def _available_actions_by_status(status_code: str) -> list[str]:
     return []
 
 
-def _is_action_allowed(status_code: str, action: str) -> bool:
+def _is_action_allowed_by_status(status_code: str, action: str) -> bool:
     return action in _available_actions_by_status(status_code)
+
+
+def _to_int_or_none(v: Any) -> Optional[int]:
+    try:
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return None
+        return int(v)
+    except Exception:
+        return None
+
+
+def _pick_first_int(d: dict, keys: tuple[str, ...]) -> Optional[int]:
+    for k in keys:
+        if k in d:
+            iv = _to_int_or_none(d.get(k))
+            if iv is not None:
+                return iv
+    return None
+
+
+def _get_executor_user_id(task: dict) -> Optional[int]:
+    # Исполнитель (assignee/executor) — разные возможные ключи
+    return _pick_first_int(
+        task,
+        (
+            "executor_user_id",
+            "assignee_user_id",
+            "assigned_to_user_id",
+            "assigned_user_id",
+            "executor_id",
+            "assignee_id",
+            "assigned_to",
+            "assigned_to_id",
+        ),
+    )
+
+
+def _get_initiator_user_id(task: dict) -> Optional[int]:
+    # Руководитель/инициатор (creator/owner/author/approver) — разные возможные ключи
+    return _pick_first_int(
+        task,
+        (
+            "created_by",
+            "created_by_user_id",
+            "initiator_user_id",
+            "author_user_id",
+            "owner_user_id",
+            "owner_id",
+            "approver_user_id",  # если backend хранит явного согласующего
+        ),
+    )
+
+
+def _is_action_allowed_by_role(*, task: dict, user_id: int, action: str) -> Tuple[bool, str]:
+    """
+    Role-guard:
+      - approve: только инициатор/руководитель (по полям creator/initiator/owner/approver)
+      - update/report: только исполнитель (по полям executor/assignee)
+    Если нужные поля отсутствуют — не блокируем (чтобы не сломать процесс),
+    но статус-guard остаётся.
+    """
+    executor_id = _get_executor_user_id(task)
+    initiator_id = _get_initiator_user_id(task)
+
+    if action == "approve":
+        if initiator_id is None:
+            return True, ""  # нет данных — не блокируем
+        if user_id == initiator_id:
+            return True, ""
+        return False, "Недостаточно прав: approve доступен только руководителю (инициатору задачи)."
+
+    if action in ("update", "report"):
+        if executor_id is None:
+            return True, ""  # нет данных — не блокируем
+        if user_id == executor_id:
+            return True, ""
+        return False, "Недостаточно прав: update/report доступны только исполнителю задачи."
+
+    return True, ""
 
 
 def _fmt_task_line_v1(t: dict) -> Optional[str]:
     tid = _get_task_id(t)
     if tid is None:
         return None
-
     title = _safe_title(t.get("title", ""))
     return f"#{tid}  {title}  {_status_label(_get_status_code(t))}"
 
@@ -306,10 +386,6 @@ async def _fetch_task_for_guard(
     task_id: int,
     user_id: int,
 ) -> Tuple[Optional[dict], Optional[int]]:
-    """
-    Возвращает (task_dict, http_code).
-    Если backend недоступен/ошибка формата — вернёт (None, code_or_None).
-    """
     try:
         raw = await backend.get_task(task_id=task_id, user_id=user_id, include_archived=False)
         ok, http_code, data = _unwrap_backend_result(raw)
@@ -406,20 +482,21 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # ---------------------------
-    # Guard: запрет недопустимых действий по статусу
+    # Guard: получаем актуальную задачу (для статуса + ролей)
     # ---------------------------
     task_for_guard, http_code = await _fetch_task_for_guard(backend, task_id=task_id, user_id=user_id)
     if task_for_guard is None:
-        # если задача недоступна — возвращаем UX по коду (если известен), иначе общий
         if http_code:
             ux = map_http_to_ux(http_code, task_id)
             await msg.reply_text(ux.text)
         else:
-            await msg.reply_text("Не удалось проверить статус задачи. Попробуйте позже.")
+            await msg.reply_text("Не удалось проверить статус/права по задаче. Попробуйте позже.")
         return
 
     current_status = _get_status_code(task_for_guard)
-    if not _is_action_allowed(current_status, action):
+
+    # 1) Guard по статусу
+    if not _is_action_allowed_by_status(current_status, action):
         allowed = _available_actions_by_status(current_status)
         if allowed:
             await msg.reply_text(
@@ -430,6 +507,12 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text(
                 f"Действия недоступны для текущего статуса: {_status_ru(current_status)}."
             )
+        return
+
+    # 2) Guard по ролям (инициатор/исполнитель)
+    ok_role, deny_msg = _is_action_allowed_by_role(task=task_for_guard, user_id=user_id, action=action)
+    if not ok_role:
+        await msg.reply_text(deny_msg)
         return
 
     # ---------------------------
