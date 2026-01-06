@@ -42,8 +42,6 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
 }
 _UNKNOWN_STATUS = ("❓", "Неизвестный статус")
 
-# Если backend отдаёт status_id числом — сюда нужно внести соответствие.
-# Пока оставляем пустым; при первом же неизвестном статусе в лог упадёт фактическое значение.
 STATUS_ID_TO_CODE: dict[int, str] = {
     1: "IN_PROGRESS",
     2: "WAITING_REPORT",
@@ -51,6 +49,7 @@ STATUS_ID_TO_CODE: dict[int, str] = {
     4: "DONE",
     5: "ARCHIVED",
 }
+
 
 def _help_text() -> str:
     return (
@@ -176,32 +175,21 @@ def _get_task_id(t: dict) -> Optional[int]:
 
 
 def _normalize_status_code(raw: Any) -> str:
-    """
-    Приводит любые форматы статуса к строковому коду:
-      - "IN_PROGRESS" -> "IN_PROGRESS"
-      - 1 -> STATUS_ID_TO_CODE[1]
-      - {"id": 1} -> STATUS_ID_TO_CODE[1]
-      - {"code": "DONE"} -> "DONE"
-    """
     if raw is None:
         return ""
 
-    # уже строка-код
     if isinstance(raw, str):
         return raw.strip()
 
-    # число -> карта
     if isinstance(raw, int):
         return STATUS_ID_TO_CODE.get(raw, "")
 
-    # число в строке
-    if isinstance(raw, (float,)):
+    if isinstance(raw, float):
         try:
             return STATUS_ID_TO_CODE.get(int(raw), "")
         except Exception:
             return ""
 
-    # объект/словарь
     if isinstance(raw, dict):
         if "code" in raw and raw["code"] is not None:
             return str(raw["code"]).strip()
@@ -218,17 +206,19 @@ def _normalize_status_code(raw: Any) -> str:
             except Exception:
                 return ""
 
-    # fallback
     return ""
 
 
 def _get_status_code(t: dict) -> str:
     raw = t.get("status_id", t.get("status_code", t.get("status")))
     code = _normalize_status_code(raw)
-
-    # Логируем один раз на задачу, если статус неизвестен — чтобы быстро заполнить STATUS_ID_TO_CODE
     if not code and raw is not None:
-        log.error("Unknown status format/value: raw=%r (type=%s) task_id=%r", raw, type(raw).__name__, t.get("task_id", t.get("id")))
+        log.error(
+            "Unknown status format/value: raw=%r (type=%s) task_id=%r",
+            raw,
+            type(raw).__name__,
+            t.get("task_id", t.get("id")),
+        )
     return code
 
 
@@ -256,23 +246,25 @@ def _fmt_task_view_v1(t: dict) -> str:
     ]
     if desc:
         lines.append(f"Описание: {desc}")
+
+    # Подсказка действий (V1)
+    lines.append("")
+    lines.append("Доступные действия: update / report / approve")
+
     return "\n".join(lines)
 
 
 def _unwrap_backend_result(result: Any) -> Tuple[bool, int, Any]:
-    # A) уже данные
     if isinstance(result, (list, dict)):
         return True, 200, result
 
     status_code = getattr(result, "status_code", None)
 
-    # C) SimpleResponse-like (json как поле)
     if status_code is not None and hasattr(result, "json") and not callable(getattr(result, "json")):
         data = getattr(result, "json")
         code = int(status_code)
         return (code == 200), code, data
 
-    # B) response-like (json как метод)
     json_fn = getattr(result, "json", None)
     if status_code is not None and callable(json_fn):
         try:
