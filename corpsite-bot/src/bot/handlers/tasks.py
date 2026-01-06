@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -42,6 +42,15 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
 }
 _UNKNOWN_STATUS = ("❓", "Неизвестный статус")
 
+# Если backend отдаёт status_id числом — сюда нужно внести соответствие.
+# Пока оставляем пустым; при первом же неизвестном статусе в лог упадёт фактическое значение.
+STATUS_ID_TO_CODE: dict[int, str] = {
+    1: "IN_PROGRESS",
+    2: "WAITING_REPORT",
+    3: "WAITING_APPROVAL",
+    4: "DONE",
+    5: "ARCHIVED",
+}
 
 def _help_text() -> str:
     return (
@@ -57,7 +66,6 @@ def _help_text() -> str:
 
 
 def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
-    # /tasks <id> <action> ...
     if len(args) < 2:
         raise CommandParseError(_help_text())
 
@@ -100,7 +108,6 @@ def _parse_update_payload_from_text(raw_text: str) -> dict[str, object]:
     if m:
         payload["description"] = m.group(1).strip()
 
-    # приоритет: assignment_scope="..." если указали явно
     m = _ASSIGN_SCOPE_KV_RE.search(raw_text)
     if m:
         payload["assignment_scope"] = _normalize_assignment_scope(m.group(1))
@@ -135,13 +142,6 @@ def _resp_body_preview(resp) -> str:
 
 
 def _extract_items(payload: object) -> list[dict]:
-    """
-    Backend может вернуть:
-      - list[task]
-      - {"items": [...], "total": ...}
-      - {"data": [...]} (на будущее)
-      - {"results": [...]} (на будущее)
-    """
     if isinstance(payload, list):
         return [x for x in payload if isinstance(x, dict)]
     if isinstance(payload, dict):
@@ -175,16 +175,64 @@ def _get_task_id(t: dict) -> Optional[int]:
         return None
 
 
+def _normalize_status_code(raw: Any) -> str:
+    """
+    Приводит любые форматы статуса к строковому коду:
+      - "IN_PROGRESS" -> "IN_PROGRESS"
+      - 1 -> STATUS_ID_TO_CODE[1]
+      - {"id": 1} -> STATUS_ID_TO_CODE[1]
+      - {"code": "DONE"} -> "DONE"
+    """
+    if raw is None:
+        return ""
+
+    # уже строка-код
+    if isinstance(raw, str):
+        return raw.strip()
+
+    # число -> карта
+    if isinstance(raw, int):
+        return STATUS_ID_TO_CODE.get(raw, "")
+
+    # число в строке
+    if isinstance(raw, (float,)):
+        try:
+            return STATUS_ID_TO_CODE.get(int(raw), "")
+        except Exception:
+            return ""
+
+    # объект/словарь
+    if isinstance(raw, dict):
+        if "code" in raw and raw["code"] is not None:
+            return str(raw["code"]).strip()
+        if "status" in raw and raw["status"] is not None:
+            return str(raw["status"]).strip()
+        if "id" in raw and raw["id"] is not None:
+            try:
+                return STATUS_ID_TO_CODE.get(int(raw["id"]), "")
+            except Exception:
+                return ""
+        if "status_id" in raw and raw["status_id"] is not None:
+            try:
+                return STATUS_ID_TO_CODE.get(int(raw["status_id"]), "")
+            except Exception:
+                return ""
+
+    # fallback
+    return ""
+
+
 def _get_status_code(t: dict) -> str:
-    # backend у вас местами использует status_id / status_code / status
-    return str(t.get("status_id", t.get("status_code", t.get("status", ""))) or "").strip()
+    raw = t.get("status_id", t.get("status_code", t.get("status")))
+    code = _normalize_status_code(raw)
+
+    # Логируем один раз на задачу, если статус неизвестен — чтобы быстро заполнить STATUS_ID_TO_CODE
+    if not code and raw is not None:
+        log.error("Unknown status format/value: raw=%r (type=%s) task_id=%r", raw, type(raw).__name__, t.get("task_id", t.get("id")))
+    return code
 
 
 def _fmt_task_line_v1(t: dict) -> Optional[str]:
-    """
-    Вариант A (краткий):
-      #<id>  <title>  <icon> <status_ru>
-    """
     tid = _get_task_id(t)
     if tid is None:
         return None
@@ -194,13 +242,6 @@ def _fmt_task_line_v1(t: dict) -> Optional[str]:
 
 
 def _fmt_task_view_v1(t: dict) -> str:
-    """
-    Боевой вывод для /tasks <id>:
-      Задача #123
-      Статус: ⏳ В работе
-      Заголовок: ...
-      Описание: ... (если есть)
-    """
     tid = _get_task_id(t)
     tid_str = str(tid) if tid is not None else str(t.get("task_id", t.get("id", "")))
 
@@ -216,6 +257,32 @@ def _fmt_task_view_v1(t: dict) -> str:
     if desc:
         lines.append(f"Описание: {desc}")
     return "\n".join(lines)
+
+
+def _unwrap_backend_result(result: Any) -> Tuple[bool, int, Any]:
+    # A) уже данные
+    if isinstance(result, (list, dict)):
+        return True, 200, result
+
+    status_code = getattr(result, "status_code", None)
+
+    # C) SimpleResponse-like (json как поле)
+    if status_code is not None and hasattr(result, "json") and not callable(getattr(result, "json")):
+        data = getattr(result, "json")
+        code = int(status_code)
+        return (code == 200), code, data
+
+    # B) response-like (json как метод)
+    json_fn = getattr(result, "json", None)
+    if status_code is not None and callable(json_fn):
+        try:
+            data = result.json()
+        except Exception:
+            return False, int(status_code), None
+        code = int(status_code)
+        return (code == 200), code, data
+
+    return False, 0, None
 
 
 async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -242,24 +309,18 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     args = context.args or []
 
-    # ---------------------------
-    # /tasks, /tasks list  -> list (V1)
-    # ---------------------------
+    # /tasks, /tasks list
     if (not args) or (len(args) == 1 and args[0].strip().lower() == "list"):
         try:
-            resp = await backend.list_tasks(user_id=user_id, limit=_LIST_LIMIT, include_archived=False)
+            raw = await backend.list_tasks(user_id=user_id, limit=_LIST_LIMIT, include_archived=False)
+            ok, http_code, data = _unwrap_backend_result(raw)
         except Exception:
-            log.exception("GET /tasks failed")
+            log.exception("list_tasks failed")
             await msg.reply_text("Не удалось получить список задач. Попробуйте позже.")
             return
 
-        if resp.status_code != 200:
-            await msg.reply_text("Не удалось получить список задач. Попробуйте позже.")
-            return
-
-        try:
-            data = resp.json()
-        except Exception:
+        if not ok or data is None:
+            log.error("list_tasks not ok: http=%s data_type=%s", http_code, type(data).__name__)
             await msg.reply_text("Не удалось получить список задач. Попробуйте позже.")
             return
 
@@ -281,40 +342,26 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await msg.reply_text("\n".join(lines))
         return
 
-    # ---------------------------
-    # /tasks <id>  -> view (V1)
-    # ---------------------------
+    # /tasks <id>
     if len(args) == 1 and args[0].isdigit():
         task_id = int(args[0])
         try:
-            resp = await backend.get_task(task_id=task_id, user_id=user_id, include_archived=False)
+            raw = await backend.get_task(task_id=task_id, user_id=user_id, include_archived=False)
+            ok, http_code, data = _unwrap_backend_result(raw)
         except Exception:
-            log.exception("GET /tasks/{id} failed")
+            log.exception("get_task failed")
             await msg.reply_text("Не удалось получить задачу. Попробуйте позже.")
             return
 
-        if resp.status_code != 200:
-            # Для view можно оставить UX-маппинг, но без технических деталей.
-            ux = map_http_to_ux(resp.status_code, task_id)
+        if not ok or not isinstance(data, dict):
+            ux = map_http_to_ux(http_code if http_code else 500, task_id)
             await msg.reply_text(ux.text)
-            return
-
-        try:
-            data = resp.json()
-        except Exception:
-            await msg.reply_text("Не удалось получить задачу. Попробуйте позже.")
-            return
-
-        if not isinstance(data, dict):
-            await msg.reply_text("Не удалось получить задачу. Попробуйте позже.")
             return
 
         await msg.reply_text(_fmt_task_view_v1(data))
         return
 
-    # ---------------------------
     # /tasks <id> <action> ...
-    # ---------------------------
     try:
         task_id, action, rest = _parse_task_command(args)
     except CommandParseError as e:
