@@ -43,11 +43,12 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
 _UNKNOWN_STATUS = ("❓", "Неизвестный статус")
 
 STATUS_ID_TO_CODE: dict[int, str] = {
-    1: "IN_PROGRESS",
-    2: "WAITING_REPORT",
+    1: "WAITING_REPORT",
+    2: "IN_PROGRESS",
     3: "WAITING_APPROVAL",
     4: "DONE",
     5: "ARCHIVED",
+    8: "INBOX",
 }
 
 
