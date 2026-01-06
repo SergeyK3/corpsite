@@ -262,25 +262,8 @@ def _pick_first_int(d: dict, keys: tuple[str, ...]) -> Optional[int]:
     return None
 
 
-def _get_executor_user_id(task: dict) -> Optional[int]:
-    # Исполнитель (assignee/executor) — разные возможные ключи
-    return _pick_first_int(
-        task,
-        (
-            "executor_user_id",
-            "assignee_user_id",
-            "assigned_to_user_id",
-            "assigned_user_id",
-            "executor_id",
-            "assignee_id",
-            "assigned_to",
-            "assigned_to_id",
-        ),
-    )
-
-
 def _get_initiator_user_id(task: dict) -> Optional[int]:
-    # Руководитель/инициатор (creator/owner/author/approver) — разные возможные ключи
+    # Руководитель/инициатор — разные возможные ключи
     return _pick_first_int(
         task,
         (
@@ -290,33 +273,32 @@ def _get_initiator_user_id(task: dict) -> Optional[int]:
             "author_user_id",
             "owner_user_id",
             "owner_id",
-            "approver_user_id",  # если backend хранит явного согласующего
+            "approver_user_id",
         ),
     )
 
 
 def _is_action_allowed_by_role(*, task: dict, user_id: int, action: str) -> Tuple[bool, str]:
     """
-    Role-guard:
-      - approve: только инициатор/руководитель (по полям creator/initiator/owner/approver)
-      - update/report: только исполнитель (по полям executor/assignee)
-    Если нужные поля отсутствуют — не блокируем (чтобы не сломать процесс),
-    но статус-guard остаётся.
+    Bot-side hint/guard (best-effort):
+      - approve: только инициатор
+      - update/report: только НЕ инициатор
     """
-    executor_id = _get_executor_user_id(task)
     initiator_id = _get_initiator_user_id(task)
 
+    # Если нет данных — не блокируем (чтобы не сломать процесс)
+    if initiator_id is None:
+        return True, ""
+
+    # approve — только инициатор
     if action == "approve":
-        if initiator_id is None:
-            return True, ""  # нет данных — не блокируем
         if user_id == initiator_id:
             return True, ""
         return False, "Недостаточно прав: approve доступен только руководителю (инициатору задачи)."
 
+    # update/report — только не инициатор
     if action in ("update", "report"):
-        if executor_id is None:
-            return True, ""  # нет данных — не блокируем
-        if user_id == executor_id:
+        if user_id != initiator_id:
             return True, ""
         return False, "Недостаточно прав: update/report доступны только исполнителю задачи."
 
@@ -349,6 +331,18 @@ def _fmt_task_view_v1(t: dict) -> str:
         lines.append(f"Описание: {desc}")
 
     actions = _available_actions_by_status(status_code)
+
+    # Фильтруем подсказку по роли (инициатор / не инициатор).
+    # user_id прокидываем в data["_viewer_user_id"] перед вызовом _fmt_task_view_v1().
+    viewer_user_id = t.get("_viewer_user_id")
+    if isinstance(viewer_user_id, int) and actions:
+        filtered: list[str] = []
+        for a in actions:
+            ok_role, _ = _is_action_allowed_by_role(task=t, user_id=viewer_user_id, action=a)
+            if ok_role:
+                filtered.append(a)
+        actions = filtered
+
     if actions:
         lines.append("")
         lines.append(f"Доступные действия: {' / '.join(actions)}")
@@ -471,6 +465,9 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ux = map_http_to_ux(http_code if http_code else 500, task_id)
             await msg.reply_text(ux.text)
             return
+
+        # Для role-aware подсказки действий
+        data["_viewer_user_id"] = user_id
 
         await msg.reply_text(_fmt_task_view_v1(data))
         return
