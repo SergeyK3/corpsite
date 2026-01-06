@@ -222,6 +222,16 @@ def _get_status_code(t: dict) -> str:
     return code
 
 
+def _available_actions_by_status(status_code: str) -> list[str]:
+    if status_code == "IN_PROGRESS":
+        return ["update"]
+    if status_code == "WAITING_REPORT":
+        return ["report"]
+    if status_code == "WAITING_APPROVAL":
+        return ["approve"]
+    return []
+
+
 def _fmt_task_line_v1(t: dict) -> Optional[str]:
     tid = _get_task_id(t)
     if tid is None:
@@ -237,7 +247,8 @@ def _fmt_task_view_v1(t: dict) -> str:
 
     title = _safe_title(t.get("title", ""))
     desc = str(t.get("description", t.get("desc", "")) or "").strip()
-    status_line = _status_label(_get_status_code(t))
+    status_code = _get_status_code(t)
+    status_line = _status_label(status_code)
 
     lines: list[str] = [
         f"Задача #{tid_str}",
@@ -247,9 +258,10 @@ def _fmt_task_view_v1(t: dict) -> str:
     if desc:
         lines.append(f"Описание: {desc}")
 
-    # Подсказка действий (V1)
-    lines.append("")
-    lines.append("Доступные действия: update / report / approve")
+    actions = _available_actions_by_status(status_code)
+    if actions:
+        lines.append("")
+        lines.append(f"Доступные действия: {' / '.join(actions)}")
 
     return "\n".join(lines)
 
@@ -260,11 +272,13 @@ def _unwrap_backend_result(result: Any) -> Tuple[bool, int, Any]:
 
     status_code = getattr(result, "status_code", None)
 
+    # SimpleResponse-like (json как поле)
     if status_code is not None and hasattr(result, "json") and not callable(getattr(result, "json")):
         data = getattr(result, "json")
         code = int(status_code)
         return (code == 200), code, data
 
+    # response-like (json как метод)
     json_fn = getattr(result, "json", None)
     if status_code is not None and callable(json_fn):
         try:
