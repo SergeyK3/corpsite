@@ -166,6 +166,11 @@ def _status_label(status_code: Any) -> str:
     return f"{icon} {ru}"
 
 
+def _status_ru(status_code: str) -> str:
+    icon, ru = _STATUS_MAP.get(status_code, _UNKNOWN_STATUS)
+    return f"{icon} {ru}"
+
+
 def _get_task_id(t: dict) -> Optional[int]:
     raw = t.get("task_id", t.get("id"))
     try:
@@ -232,6 +237,10 @@ def _available_actions_by_status(status_code: str) -> list[str]:
     return []
 
 
+def _is_action_allowed(status_code: str, action: str) -> bool:
+    return action in _available_actions_by_status(status_code)
+
+
 def _fmt_task_line_v1(t: dict) -> Optional[str]:
     tid = _get_task_id(t)
     if tid is None:
@@ -289,6 +298,28 @@ def _unwrap_backend_result(result: Any) -> Tuple[bool, int, Any]:
         return (code == 200), code, data
 
     return False, 0, None
+
+
+async def _fetch_task_for_guard(
+    backend: Any,
+    *,
+    task_id: int,
+    user_id: int,
+) -> Tuple[Optional[dict], Optional[int]]:
+    """
+    Возвращает (task_dict, http_code).
+    Если backend недоступен/ошибка формата — вернёт (None, code_or_None).
+    """
+    try:
+        raw = await backend.get_task(task_id=task_id, user_id=user_id, include_archived=False)
+        ok, http_code, data = _unwrap_backend_result(raw)
+    except Exception:
+        log.exception("get_task (guard) failed")
+        return None, None
+
+    if not ok or not isinstance(data, dict):
+        return None, http_code
+    return data, http_code
 
 
 async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -374,6 +405,36 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await msg.reply_text(e.message)
         return
 
+    # ---------------------------
+    # Guard: запрет недопустимых действий по статусу
+    # ---------------------------
+    task_for_guard, http_code = await _fetch_task_for_guard(backend, task_id=task_id, user_id=user_id)
+    if task_for_guard is None:
+        # если задача недоступна — возвращаем UX по коду (если известен), иначе общий
+        if http_code:
+            ux = map_http_to_ux(http_code, task_id)
+            await msg.reply_text(ux.text)
+        else:
+            await msg.reply_text("Не удалось проверить статус задачи. Попробуйте позже.")
+        return
+
+    current_status = _get_status_code(task_for_guard)
+    if not _is_action_allowed(current_status, action):
+        allowed = _available_actions_by_status(current_status)
+        if allowed:
+            await msg.reply_text(
+                f"Действие недоступно для текущего статуса: {_status_ru(current_status)}.\n"
+                f"Доступные действия: {' / '.join(allowed)}"
+            )
+        else:
+            await msg.reply_text(
+                f"Действия недоступны для текущего статуса: {_status_ru(current_status)}."
+            )
+        return
+
+    # ---------------------------
+    # Allowed actions
+    # ---------------------------
     if action == "update":
         raw_text = msg.text or ""
         try:
