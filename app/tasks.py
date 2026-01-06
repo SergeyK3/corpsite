@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, List
 
 from fastapi import APIRouter, HTTPException, Query, Header, Path
 from fastapi import Response
@@ -12,6 +12,10 @@ from app.db.engine import engine
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
+
+# ---------------------------
+# Helpers: current user
+# ---------------------------
 
 def _get_current_user_id(x_user_id: Optional[int]) -> int:
     if not x_user_id:
@@ -31,6 +35,10 @@ def _get_user_role_id(conn, user_id: int) -> int:
     return int(row["role_id"])
 
 
+# ---------------------------
+# Helpers: statuses & enums
+# ---------------------------
+
 def _get_status_id_by_code(conn, code: str) -> int:
     row = conn.execute(
         text("SELECT status_id FROM task_statuses WHERE code = :code"),
@@ -42,10 +50,6 @@ def _get_status_id_by_code(conn, code: str) -> int:
 
 
 def _load_assignment_scope_enum_labels(conn) -> Set[str]:
-    """
-    Читает реальный набор значений enum assignment_scope_t из Postgres.
-    Например: {"admin","functional"}.
-    """
     rows = conn.execute(
         text(
             """
@@ -61,50 +65,30 @@ def _load_assignment_scope_enum_labels(conn) -> Set[str]:
 
 
 def _pick_default_scope(allowed: Set[str]) -> str:
-    # Явный предпочтительный дефолт
     if any(lbl.lower() == "functional" for lbl in allowed):
         return next(lbl for lbl in allowed if lbl.lower() == "functional")
-    # Иначе — любой первый (стабильно: сортировка)
     return sorted(allowed)[0]
 
 
 def _normalize_assignment_scope(conn, value: Any) -> str:
-    """
-    Нормализует assignment_scope под РЕАЛЬНЫЙ enum в БД.
-
-    В вашей БД: {"admin","functional"}.
-    Поэтому:
-    - default: functional (если есть), иначе любое допустимое значение
-    - принимаем вход в любом регистре
-    - поддерживаем маппинг старых значений ROLE/USER/ANY -> functional/admin (если это возможно)
-    """
     allowed = _load_assignment_scope_enum_labels(conn)
     if not allowed:
         raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
 
-    # default
     if value is None or (isinstance(value, str) and not value.strip()):
         return _pick_default_scope(allowed)
 
     raw = str(value).strip()
 
-    # 1) exact match
     if raw in allowed:
         return raw
 
     raw_l = raw.lower()
-
-    # 2) match by lower-case equivalence
     for lbl in allowed:
         if lbl.lower() == raw_l:
             return lbl
 
-    # 3) backward-compatible mapping
-    legacy_map = {
-        "role": "functional",
-        "any": "functional",
-        "user": "admin",
-    }
+    legacy_map = {"role": "functional", "any": "functional", "user": "admin"}
     if raw_l in legacy_map:
         target = legacy_map[raw_l]
         for lbl in allowed:
@@ -124,6 +108,10 @@ def _scope_label_or_none(allowed: Set[str], wanted_lower: str) -> Optional[str]:
     return None
 
 
+# ---------------------------
+# Audit
+# ---------------------------
+
 def _write_task_audit(
     conn,
     *,
@@ -134,10 +122,6 @@ def _write_task_audit(
     request_body: Optional[Dict[str, Any]] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """
-    v1: простая запись в task_audit_log.
-    Таблица должна существовать в БД.
-    """
     conn.execute(
         text(
             """
@@ -164,6 +148,148 @@ def _write_task_audit(
     )
 
 
+# ---------------------------
+# ACL core
+# ---------------------------
+
+def _is_initiator(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
+    try:
+        return int(task_row["initiator_user_id"]) == int(current_user_id)
+    except Exception:
+        return False
+
+
+def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    try:
+        return int(task_row["executor_role_id"]) == int(current_role_id)
+    except Exception:
+        return False
+
+
+def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    # initiator always can view
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    scope = str(task_row.get("assignment_scope") or "").lower()
+    if scope == "functional":
+        return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
+
+    # admin -> only initiator
+    return False
+
+
+def _ensure_task_visible_or_404(
+    *,
+    current_user_id: int,
+    current_role_id: int,
+    task_row: Optional[Dict[str, Any]],
+    include_archived: bool,
+) -> Dict[str, Any]:
+    if not task_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if not _can_view(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if (not include_archived) and (str(task_row.get("status_code") or "") == "ARCHIVED"):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return task_row
+
+
+def _deny_if_status_not(*, actual_code: str, expected: str) -> None:
+    if (actual_code or "") != expected:
+        raise HTTPException(status_code=409, detail=f"Action not allowed in status: {actual_code or 'UNKNOWN'}")
+
+
+def _deny_if_status_not_in(*, actual_code: str, allowed: Set[str]) -> None:
+    if (actual_code or "") not in allowed:
+        raise HTTPException(status_code=409, detail=f"Action not allowed in status: {actual_code or 'UNKNOWN'}")
+
+
+def _can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    # executor-by-role AND NOT initiator
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return False
+    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
+
+
+def _can_approve(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
+    return _is_initiator(current_user_id=current_user_id, task_row=task_row)
+
+
+def _allowed_actions_for_user(
+    *,
+    task_row: Dict[str, Any],
+    current_user_id: int,
+    current_role_id: int,
+) -> List[str]:
+    code = str(task_row.get("status_code") or "")
+    actions: List[str] = []
+
+    if code == "IN_PROGRESS":
+        if _can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
+            actions.append("update")
+
+    elif code == "WAITING_REPORT":
+        if _can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
+            actions.append("report")
+
+    elif code == "WAITING_APPROVAL":
+        if _can_approve(current_user_id=current_user_id, task_row=task_row):
+            actions.append("approve")
+
+    return actions
+
+
+# ---------------------------
+# DB loaders
+# ---------------------------
+
+def _load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT
+                t.task_id,
+                t.period_id,
+                t.regular_task_id,
+                t.title,
+                t.description,
+                t.initiator_user_id,
+                t.executor_role_id,
+                t.assignment_scope,
+                t.status_id,
+                ts.code AS status_code,
+                ts.name_ru AS status_name_ru
+            FROM tasks t
+            LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+            WHERE t.task_id = :task_id
+            """
+        ),
+        {"task_id": int(task_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _attach_allowed_actions(
+    *,
+    task: Dict[str, Any],
+    current_user_id: int,
+    current_role_id: int,
+) -> Dict[str, Any]:
+    task = dict(task)
+    task["allowed_actions"] = _allowed_actions_for_user(
+        task_row=task, current_user_id=current_user_id, current_role_id=current_role_id
+    )
+    return task
+
+
+# ---------------------------
+# Endpoints
+# ---------------------------
+
 @router.get("")
 def list_tasks(
     period_id: Optional[int] = Query(None, ge=1),
@@ -174,18 +300,7 @@ def list_tasks(
     offset: int = Query(0, ge=0),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    Выдача задач в рамках роли + ограничение по assignment_scope:
-
-    - functional: видны всем пользователям данной роли
-    - admin: видны только инициатору
-    - ARCHIVED:
-        * по умолчанию скрыты
-        * показываются при include_archived=true
-        * либо при status_code=ARCHIVED
-    """
     current_user_id = _get_current_user_id(x_user_id)
-
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
     with engine.begin() as conn:
@@ -202,7 +317,7 @@ def list_tasks(
 
         where = ["t.executor_role_id = :role_id"]
 
-        # Ограничение по assignment_scope
+        # visibility by assignment_scope
         if functional_lbl and admin_lbl:
             params["functional_scope"] = functional_lbl
             params["admin_scope"] = admin_lbl
@@ -221,7 +336,6 @@ def list_tasks(
             where.append("ts.code = :status_code")
             params["status_code"] = status_code.strip()
 
-        # По умолчанию архив не показываем (если не задан status_code явно)
         if (not status_code) and (not include_archived):
             where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
 
@@ -268,7 +382,13 @@ def list_tasks(
             params,
         ).mappings().all()
 
-    return {"total": int(total), "limit": limit, "offset": offset, "items": [dict(r) for r in rows]}
+        items = []
+        for r in rows:
+            t = dict(r)
+            t = _attach_allowed_actions(task=t, current_user_id=current_user_id, current_role_id=role_id)
+            items.append(t)
+
+    return {"total": int(total), "limit": limit, "offset": offset, "items": items}
 
 
 @router.get("/{task_id}")
@@ -277,81 +397,20 @@ def get_task(
     include_archived: bool = Query(False),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    Получение одной задачи.
-
-    Права доступа (строго):
-      - задача должна быть в рамках роли пользователя
-      - functional: доступна всем в роли
-      - admin: доступна только инициатору
-      - ARCHIVED: по умолчанию скрыта, показывается при include_archived=true
-
-    При любом нарушении — 404 (не раскрываем существование).
-    """
     current_user_id = _get_current_user_id(x_user_id)
 
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
 
-        allowed = _load_assignment_scope_enum_labels(conn)
-        if not allowed:
-            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
+        task = _load_task_full(conn, task_id=int(task_id))
+        task = _ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=include_archived,
+        )
 
-        functional_lbl = _scope_label_or_none(allowed, "functional")
-        admin_lbl = _scope_label_or_none(allowed, "admin")
-
-        params: Dict[str, Any] = {
-            "task_id": int(task_id),
-            "role_id": int(role_id),
-            "current_user_id": int(current_user_id),
-        }
-
-        where = [
-            "t.task_id = :task_id",
-            "t.executor_role_id = :role_id",
-        ]
-
-        if functional_lbl and admin_lbl:
-            params["functional_scope"] = functional_lbl
-            params["admin_scope"] = admin_lbl
-            where.append(
-                "("
-                "t.assignment_scope = :functional_scope "
-                "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
-                ")"
-            )
-
-        # По умолчанию архив скрыт
-        if not include_archived:
-            where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
-
-        where_sql = " AND ".join(where)
-
-        task = conn.execute(
-            text(
-                f"""
-                SELECT
-                    t.task_id,
-                    t.period_id,
-                    t.regular_task_id,
-                    t.title,
-                    t.description,
-                    t.initiator_user_id,
-                    t.executor_role_id,
-                    t.assignment_scope,
-                    t.status_id,
-                    ts.code AS status_code,
-                    ts.name_ru AS status_name_ru
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE {where_sql}
-                """
-            ),
-            params,
-        ).mappings().first()
-
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+        task = _attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
 
     return dict(task)
 
@@ -361,18 +420,6 @@ def create_task(
     payload: Dict[str, Any],
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    MVP создание задачи (role-based).
-
-    Body (JSON):
-      title: str (required)
-      executor_role_id: int (required)
-      period_id: int (required)
-      description: str | null
-      regular_task_id: int | null
-      assignment_scope: str | null
-      status_code: str | null (default IN_PROGRESS)
-    """
     current_user_id = _get_current_user_id(x_user_id)
 
     title = (payload.get("title") or "").strip()
@@ -436,33 +483,10 @@ def create_task(
 
         task_id = int(row["task_id"])
 
-        task = conn.execute(
-            text(
-                """
-                SELECT
-                    t.task_id,
-                    t.period_id,
-                    t.regular_task_id,
-                    t.title,
-                    t.description,
-                    t.initiator_user_id,
-                    t.executor_role_id,
-                    t.assignment_scope,
-                    t.status_id,
-                    ts.code AS status_code,
-                    ts.name_ru AS status_name_ru
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE t.task_id = :task_id
-                """
-            ),
-            {"task_id": task_id},
-        ).mappings().first()
-
+        task = _load_task_full(conn, task_id=task_id)
         if not task:
             raise HTTPException(status_code=500, detail="Task created but not found")
 
-        # audit v1
         _write_task_audit(
             conn,
             task_id=int(task_id),
@@ -471,6 +495,10 @@ def create_task(
             fields_changed=None,
             request_body=payload,
         )
+
+        # creator view: role_id needed
+        role_id = _get_user_role_id(conn, current_user_id)
+        task = _attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
 
     return dict(task)
 
@@ -481,18 +509,6 @@ def patch_task(
     task_id: int = Path(..., ge=1),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    Частичное обновление задачи.
-
-    Права (MVP, безопасно):
-      - менять может только инициатор задачи
-      - задача должна быть "видима" (scope) в рамках роли, иначе 404
-
-    Разрешены поля:
-      - title (не пустой, если передан)
-      - description (можно null)
-      - assignment_scope (нормализуется под enum БД)
-    """
     current_user_id = _get_current_user_id(x_user_id)
 
     allowed_fields = {"title", "description", "assignment_scope"}
@@ -503,53 +519,25 @@ def patch_task(
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
 
-        allowed = _load_assignment_scope_enum_labels(conn)
-        if not allowed:
-            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
+        task = _load_task_full(conn, task_id=int(task_id))
+        task = _ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=False,
+        )
 
-        functional_lbl = _scope_label_or_none(allowed, "functional")
-        admin_lbl = _scope_label_or_none(allowed, "admin")
+        # rights
+        if not _can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
+            raise HTTPException(status_code=403, detail="update allowed only for executor (not initiator)")
 
-        params_vis: Dict[str, Any] = {
-            "tid": int(task_id),
-            "role_id": int(role_id),
-            "current_user_id": int(current_user_id),
-            "functional_scope": functional_lbl,
-            "admin_scope": admin_lbl,
-        }
-
-        vis_sql = """
-            SELECT
-                t.task_id,
-                t.initiator_user_id,
-                t.executor_role_id,
-                t.assignment_scope,
-                t.title,
-                t.description
-            FROM tasks t
-            WHERE t.task_id = :tid
-              AND t.executor_role_id = :role_id
-        """
-
-        if functional_lbl and admin_lbl:
-            vis_sql += """
-              AND (
-                    t.assignment_scope = :functional_scope
-                    OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)
-              )
-            """
-
-        task_row = conn.execute(text(vis_sql), params_vis).mappings().first()
-        if not task_row:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        if int(task_row["initiator_user_id"]) != int(current_user_id):
-            raise HTTPException(status_code=403, detail="Only initiator can update task")
+        # status guard
+        _deny_if_status_not_in(actual_code=str(task.get("status_code") or ""), allowed={"IN_PROGRESS"})
 
         before = {
-            "title": task_row.get("title"),
-            "description": task_row.get("description"),
-            "assignment_scope": task_row.get("assignment_scope"),
+            "title": task.get("title"),
+            "description": task.get("description"),
+            "assignment_scope": task.get("assignment_scope"),
         }
 
         set_parts = []
@@ -568,6 +556,7 @@ def patch_task(
             set_parts.append("description = :description")
 
         if "assignment_scope" in payload:
+            # NOTE: если хотите запрещать менять scope исполнителю — просто удалите этот блок
             scope = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
             set_parts.append("assignment_scope = :assignment_scope")
             params["assignment_scope"] = scope
@@ -575,53 +564,25 @@ def patch_task(
         if not set_parts:
             raise HTTPException(status_code=422, detail="Nothing to update")
 
-        set_sql = ", ".join(set_parts)
-
-        updated = conn.execute(
+        conn.execute(
             text(
                 f"""
                 UPDATE tasks
-                SET {set_sql}
+                SET {", ".join(set_parts)}
                 WHERE task_id = :tid
-                RETURNING task_id
                 """
             ),
             params,
-        ).mappings().first()
+        )
 
-        if not updated:
-            raise HTTPException(status_code=500, detail="Failed to update task")
-
-        task = conn.execute(
-            text(
-                """
-                SELECT
-                    t.task_id,
-                    t.period_id,
-                    t.regular_task_id,
-                    t.title,
-                    t.description,
-                    t.initiator_user_id,
-                    t.executor_role_id,
-                    t.assignment_scope,
-                    t.status_id,
-                    ts.code AS status_code,
-                    ts.name_ru AS status_name_ru
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE t.task_id = :task_id
-                """
-            ),
-            {"task_id": int(task_id)},
-        ).mappings().first()
-
-        if not task:
+        after_task = _load_task_full(conn, task_id=int(task_id))
+        if not after_task:
             raise HTTPException(status_code=500, detail="Task updated but not found")
 
         after = {
-            "title": task.get("title"),
-            "description": task.get("description"),
-            "assignment_scope": task.get("assignment_scope"),
+            "title": after_task.get("title"),
+            "description": after_task.get("description"),
+            "assignment_scope": after_task.get("assignment_scope"),
         }
 
         fields_changed: Dict[str, Any] = {}
@@ -638,7 +599,209 @@ def patch_task(
             request_body=payload,
         )
 
-    return dict(task)
+        after_task = _attach_allowed_actions(task=after_task, current_user_id=current_user_id, current_role_id=role_id)
+
+    return dict(after_task)
+
+
+@router.post("/{task_id}/report")
+def submit_report(
+    payload: Dict[str, Any],
+    task_id: int = Path(..., ge=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    current_user_id = _get_current_user_id(x_user_id)
+
+    report_link = (payload.get("report_link") or "").strip()
+    if not report_link:
+        raise HTTPException(status_code=422, detail="report_link is required")
+
+    current_comment = (payload.get("current_comment") or "").strip()
+
+    with engine.begin() as conn:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        task = _load_task_full(conn, task_id=int(task_id))
+        task = _ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=False,
+        )
+
+        if not _can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
+            raise HTTPException(status_code=403, detail="report allowed only for executor (not initiator)")
+
+        _deny_if_status_not(actual_code=str(task.get("status_code") or ""), expected="WAITING_REPORT")
+
+        waiting_approval_id = _get_status_id_by_code(conn, "WAITING_APPROVAL")
+
+        # UPSERT task_reports: 1 report per task
+        conn.execute(
+            text(
+                """
+                INSERT INTO task_reports (task_id, submitted_by, report_link, current_comment, submitted_at, approved_at, approved_by)
+                VALUES (:task_id, :submitted_by, :report_link, :current_comment, now(), NULL, NULL)
+                ON CONFLICT (task_id)
+                DO UPDATE SET
+                    submitted_by = EXCLUDED.submitted_by,
+                    report_link = EXCLUDED.report_link,
+                    current_comment = EXCLUDED.current_comment,
+                    submitted_at = now(),
+                    approved_at = NULL,
+                    approved_by = NULL
+                """
+            ),
+            {
+                "task_id": int(task_id),
+                "submitted_by": int(current_user_id),
+                "report_link": report_link,
+                "current_comment": current_comment,
+            },
+        )
+
+        conn.execute(
+            text(
+                """
+                UPDATE tasks
+                SET status_id = :new_status_id
+                WHERE task_id = :task_id
+                """
+            ),
+            {"new_status_id": int(waiting_approval_id), "task_id": int(task_id)},
+        )
+
+        _write_task_audit(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(current_user_id),
+            action="REPORT_SUBMIT",
+            fields_changed={"status_code": {"from": "WAITING_REPORT", "to": "WAITING_APPROVAL"}},
+            request_body=payload,
+        )
+
+        updated = _load_task_full(conn, task_id=int(task_id))
+        if not updated:
+            raise HTTPException(status_code=500, detail="Task updated but not found")
+
+        updated = _attach_allowed_actions(task=updated, current_user_id=current_user_id, current_role_id=role_id)
+
+    return dict(updated)
+
+
+@router.post("/{task_id}/approve")
+def approve_report(
+    payload: Dict[str, Any],
+    task_id: int = Path(..., ge=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    current_user_id = _get_current_user_id(x_user_id)
+
+    approve = payload.get("approve", True)
+    if not isinstance(approve, bool):
+        raise HTTPException(status_code=422, detail="approve must be boolean")
+
+    current_comment = (payload.get("current_comment") or "").strip()
+
+    with engine.begin() as conn:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        task = _load_task_full(conn, task_id=int(task_id))
+        task = _ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=False,
+        )
+
+        if not _can_approve(current_user_id=current_user_id, task_row=task):
+            raise HTTPException(status_code=403, detail="approve allowed only for initiator")
+
+        _deny_if_status_not(actual_code=str(task.get("status_code") or ""), expected="WAITING_APPROVAL")
+
+        # must exist report row
+        rep = conn.execute(
+            text("SELECT task_id FROM task_reports WHERE task_id = :tid"),
+            {"tid": int(task_id)},
+        ).mappings().first()
+        if not rep:
+            raise HTTPException(status_code=409, detail="No report submitted for this task")
+
+        if approve:
+            done_id = _get_status_id_by_code(conn, "DONE")
+
+            # IMPORTANT: mark report as approved BEFORE setting DONE (DB trigger)
+            conn.execute(
+                text(
+                    """
+                    UPDATE task_reports
+                    SET approved_at = now(),
+                        approved_by = :by,
+                        current_comment = CASE
+                            WHEN :comment = '' THEN current_comment
+                            ELSE :comment
+                        END
+                    WHERE task_id = :tid
+                    """
+                ),
+                {"by": int(current_user_id), "tid": int(task_id), "comment": current_comment},
+            )
+
+            conn.execute(
+                text("UPDATE tasks SET status_id = :sid WHERE task_id = :tid"),
+                {"sid": int(done_id), "tid": int(task_id)},
+            )
+
+            _write_task_audit(
+                conn,
+                task_id=int(task_id),
+                actor_user_id=int(current_user_id),
+                action="APPROVE",
+                fields_changed={"status_code": {"from": "WAITING_APPROVAL", "to": "DONE"}},
+                request_body={"approve": True, "current_comment": current_comment},
+            )
+
+        else:
+            waiting_report_id = _get_status_id_by_code(conn, "WAITING_REPORT")
+
+            # reject: clear approval marks (optional but consistent)
+            conn.execute(
+                text(
+                    """
+                    UPDATE task_reports
+                    SET approved_at = NULL,
+                        approved_by = NULL,
+                        current_comment = CASE
+                            WHEN :comment = '' THEN current_comment
+                            ELSE :comment
+                        END
+                    WHERE task_id = :tid
+                    """
+                ),
+                {"tid": int(task_id), "comment": current_comment},
+            )
+
+            conn.execute(
+                text("UPDATE tasks SET status_id = :sid WHERE task_id = :tid"),
+                {"sid": int(waiting_report_id), "tid": int(task_id)},
+            )
+
+            _write_task_audit(
+                conn,
+                task_id=int(task_id),
+                actor_user_id=int(current_user_id),
+                action="REJECT",
+                fields_changed={"status_code": {"from": "WAITING_APPROVAL", "to": "WAITING_REPORT"}},
+                request_body={"approve": False, "current_comment": current_comment},
+            )
+
+        updated = _load_task_full(conn, task_id=int(task_id))
+        if not updated:
+            raise HTTPException(status_code=500, detail="Task updated but not found")
+
+        updated = _attach_allowed_actions(task=updated, current_user_id=current_user_id, current_role_id=role_id)
+
+    return dict(updated)
 
 
 @router.delete("/{task_id}", status_code=204)
@@ -646,45 +809,24 @@ def delete_task(
     task_id: int = Path(..., ge=1),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Response:
-    """
-    Soft delete (финализация): переводим задачу в статус ARCHIVED.
-
-    Права (MVP, безопасно):
-      - архивировать может только инициатор задачи
-      - и только в рамках своей роли (executor_role_id == role_id пользователя)
-
-    Поведение:
-      - 204 No Content при успехе
-      - 404 если нет задачи / чужая роль / не инициатор
-    """
     current_user_id = _get_current_user_id(x_user_id)
 
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
 
-        task_row = conn.execute(
-            text(
-                """
-                SELECT t.task_id, t.initiator_user_id, t.executor_role_id, ts.code AS status_code
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE t.task_id = :tid
-                """
-            ),
-            {"tid": int(task_id)},
-        ).mappings().first()
+        task = _load_task_full(conn, task_id=int(task_id))
+        task = _ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=True,  # чтобы инициатор мог архивировать и после DONE
+        )
 
-        if not task_row:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        if int(task_row["executor_role_id"]) != int(role_id):
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        if int(task_row["initiator_user_id"]) != int(current_user_id):
+        if not _is_initiator(current_user_id=current_user_id, task_row=task):
             raise HTTPException(status_code=404, detail="Task not found")
 
         archived_status_id = _get_status_id_by_code(conn, "ARCHIVED")
-        before_status = task_row.get("status_code")
+        before_status = task.get("status_code")
 
         updated = conn.execute(
             text(
