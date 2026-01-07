@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Set, List
 
 from fastapi import APIRouter, HTTPException, Query, Header, Path
 from fastapi import Response
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -142,7 +143,7 @@ def _scope_label_or_none(allowed: Set[str], wanted_lower: str) -> Optional[str]:
 
 
 # ---------------------------
-# Audit
+# Audit (with events columns)
 # ---------------------------
 
 def _write_task_audit(
@@ -150,23 +151,46 @@ def _write_task_audit(
     *,
     task_id: int,
     actor_user_id: int,
+    actor_role_id: Optional[int],
     action: str,
     fields_changed: Optional[Dict[str, Any]] = None,
     request_body: Optional[Dict[str, Any]] = None,
     meta: Optional[Dict[str, Any]] = None,
+    # NEW: event columns (A1/A2)
+    event_type: Optional[str] = None,               # REPORT_SUBMITTED / APPROVED / REJECTED
+    event_payload: Optional[Dict[str, Any]] = None, # stored in task_audit_log.payload
 ) -> None:
+    """
+    Writes a single audit row. If event_type is provided, the same row becomes an "event" too.
+    This design matches your schema where actor_user_id/action are NOT NULL.
+    """
     conn.execute(
         text(
             """
             INSERT INTO task_audit_log (
-                task_id, actor_user_id, action,
-                fields_changed, request_body, meta
+                task_id,
+                actor_user_id,
+                action,
+                fields_changed,
+                request_body,
+                meta,
+                -- events columns (added by A1/A2)
+                event_type,
+                actor_id,
+                actor_role,
+                payload
             )
             VALUES (
-                :task_id, :actor_user_id, :action,
+                :task_id,
+                :actor_user_id,
+                :action,
                 CAST(:fields_changed AS jsonb),
                 CAST(:request_body AS jsonb),
-                CAST(:meta AS jsonb)
+                CAST(:meta AS jsonb),
+                CASE WHEN :event_type IS NULL THEN NULL ELSE (:event_type)::task_event_type END,
+                :actor_id,
+                :actor_role,
+                CAST(:payload AS jsonb)
             )
             """
         ),
@@ -177,8 +201,73 @@ def _write_task_audit(
             "fields_changed": json.dumps(fields_changed) if fields_changed is not None else None,
             "request_body": json.dumps(request_body) if request_body is not None else None,
             "meta": json.dumps(meta) if meta is not None else None,
+            "event_type": event_type,
+            # align actor_id with actor_user_id (simple and consistent)
+            "actor_id": int(actor_user_id),
+            # keep actor_role as text; we store role_id as text (or NULL)
+            "actor_role": str(actor_role_id) if actor_role_id is not None else None,
+            "payload": json.dumps(event_payload or {}) if (event_type is not None) else json.dumps({}),
         },
     )
+
+
+# ---------------------------
+# Helper: force event fields on last audit row
+# ---------------------------
+
+def _set_last_audit_event(
+    conn,
+    *,
+    task_id: int,
+    actor_user_id: int,
+    actor_role_id: Optional[int],
+    event_type: str,                   # REPORT_SUBMITTED / APPROVED / REJECTED
+    event_payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Гарантирует заполнение event-полей в последней audit-записи (task_id, actor_user_id).
+    Нужен на случай, если INSERT прошёл без event_type (как у вас в примере с APPROVE).
+    """
+    conn.execute(
+        text(
+            """
+            UPDATE task_audit_log
+            SET
+                event_type = (:event_type)::task_event_type,
+                actor_id = :actor_id,
+                actor_role = :actor_role,
+                payload = CAST(:payload AS jsonb)
+            WHERE audit_id = (
+                SELECT audit_id
+                FROM task_audit_log
+                WHERE task_id = :task_id
+                  AND actor_user_id = :actor_user_id
+                ORDER BY audit_id DESC
+                LIMIT 1
+            )
+            """
+        ),
+        {
+            "task_id": int(task_id),
+            "actor_user_id": int(actor_user_id),
+            "event_type": event_type,
+            "actor_id": int(actor_user_id),
+            "actor_role": str(actor_role_id) if actor_role_id is not None else None,
+            "payload": json.dumps(event_payload or {}),
+        },
+    )
+
+
+# ---------------------------
+# Events API models
+# ---------------------------
+
+class TaskEventOut(BaseModel):
+    event_type: str
+    actor_user_id: Optional[int] = None
+    actor_role_id: Optional[int] = None
+    created_at: str
+    payload: Dict[str, Any] = {}
 
 
 # ---------------------------
@@ -200,11 +289,9 @@ def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool
 
 
 def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    # initiator always can view
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
-    # RBAC v2: supervisor/deputy can view (MVP-wide)
     if _is_supervisor_or_deputy(current_role_id):
         return True
 
@@ -212,7 +299,6 @@ def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str,
     if scope == "functional":
         return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
-    # admin -> only initiator
     return False
 
 
@@ -246,17 +332,14 @@ def _deny_if_status_not_in(*, actual_code: str, allowed: Set[str]) -> None:
 
 
 def _can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    # executor-by-role AND NOT initiator
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return False
     return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
 
 def _can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    # initiator always can approve/reject
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
-    # RBAC v2: supervisor/deputy can approve/reject (MVP-wide)
     if _is_supervisor_or_deputy(current_role_id):
         return True
     return False
@@ -361,9 +444,6 @@ def list_tasks(
 
         where: List[str] = []
 
-        # Visibility:
-        # - supervisors/deputies see all tasks (MVP-wide)
-        # - others: executor_role visibility with assignment_scope constraints
         if _is_supervisor_or_deputy(role_id):
             where.append("1=1")
         else:
@@ -538,16 +618,17 @@ def create_task(
         if not task:
             raise HTTPException(status_code=500, detail="Task created but not found")
 
+        role_id = _get_user_role_id(conn, current_user_id)
         _write_task_audit(
             conn,
             task_id=int(task_id),
             actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
             action="CREATE",
             fields_changed=None,
             request_body=payload,
         )
 
-        role_id = _get_user_role_id(conn, current_user_id)
         task = _attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
 
     return dict(task)
@@ -641,6 +722,7 @@ def patch_task(
             conn,
             task_id=int(task_id),
             actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
             action="PATCH",
             fields_changed=fields_changed,
             request_body=payload,
@@ -750,9 +832,31 @@ def submit_report(
             conn,
             task_id=int(task_id),
             actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
             action="REPORT_SUBMIT",
             fields_changed={"status_code": {"from": "WAITING_REPORT", "to": "WAITING_APPROVAL"}},
             request_body=payload,
+            # EVENT:
+            event_type="REPORT_SUBMITTED",
+            event_payload={
+                "report_link": report_link,
+                "current_comment": current_comment,
+                "status_to": "WAITING_APPROVAL",
+            },
+        )
+
+        # helper: enforce event columns even if insert did not set them
+        _set_last_audit_event(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
+            event_type="REPORT_SUBMITTED",
+            event_payload={
+                "report_link": report_link,
+                "current_comment": current_comment,
+                "status_to": "WAITING_APPROVAL",
+            },
         )
 
         updated = _load_task_full(conn, task_id=int(task_id))
@@ -829,9 +933,28 @@ def approve_report(
                 conn,
                 task_id=int(task_id),
                 actor_user_id=int(current_user_id),
+                actor_role_id=int(role_id),
                 action="APPROVE",
                 fields_changed={"status_code": {"from": "WAITING_APPROVAL", "to": "DONE"}},
                 request_body={"approve": True, "current_comment": current_comment},
+                # EVENT:
+                event_type="APPROVED",
+                event_payload={
+                    "current_comment": current_comment,
+                    "status_to": "DONE",
+                },
+            )
+
+            _set_last_audit_event(
+                conn,
+                task_id=int(task_id),
+                actor_user_id=int(current_user_id),
+                actor_role_id=int(role_id),
+                event_type="APPROVED",
+                event_payload={
+                    "current_comment": current_comment,
+                    "status_to": "DONE",
+                },
             )
 
         else:
@@ -862,9 +985,28 @@ def approve_report(
                 conn,
                 task_id=int(task_id),
                 actor_user_id=int(current_user_id),
+                actor_role_id=int(role_id),
                 action="REJECT",
                 fields_changed={"status_code": {"from": "WAITING_APPROVAL", "to": "WAITING_REPORT"}},
                 request_body={"approve": False, "current_comment": current_comment},
+                # EVENT:
+                event_type="REJECTED",
+                event_payload={
+                    "current_comment": current_comment,
+                    "status_to": "WAITING_REPORT",
+                },
+            )
+
+            _set_last_audit_event(
+                conn,
+                task_id=int(task_id),
+                actor_user_id=int(current_user_id),
+                actor_role_id=int(role_id),
+                event_type="REJECTED",
+                event_payload={
+                    "current_comment": current_comment,
+                    "status_to": "WAITING_REPORT",
+                },
             )
 
         updated = _load_task_full(conn, task_id=int(task_id))
@@ -874,6 +1016,77 @@ def approve_report(
         updated = _attach_allowed_actions(task=updated, current_user_id=current_user_id, current_role_id=role_id)
 
     return dict(updated)
+
+
+# ---------------------------
+# Events endpoint (real: reads event_type)
+# ---------------------------
+
+@router.get("/{task_id}/events", response_model=List[TaskEventOut])
+def get_task_events(
+    task_id: int = Path(..., ge=1),
+    include_archived: bool = Query(False),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> List[Dict[str, Any]]:
+    current_user_id = _get_current_user_id(x_user_id)
+
+    with engine.begin() as conn:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        task = _load_task_full(conn, task_id=int(task_id))
+        _ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=include_archived,
+        )
+
+        rows = conn.execute(
+            text(
+                """
+                SELECT
+                    event_type::text AS event_type,
+                    actor_user_id,
+                    created_at,
+                    actor_role,
+                    payload::text AS payload_text
+                FROM task_audit_log
+                WHERE task_id = :tid
+                  AND event_type IS NOT NULL
+                ORDER BY created_at ASC
+                """
+            ),
+            {"tid": int(task_id)},
+        ).mappings().all()
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        payload: Dict[str, Any] = {}
+        try:
+            if r.get("payload_text"):
+                payload = json.loads(r["payload_text"])
+        except Exception:
+            payload = {}
+
+        actor_role_id: Optional[int] = None
+        try:
+            if r.get("actor_role") is not None:
+                actor_role_id = int(str(r["actor_role"]))
+        except Exception:
+            actor_role_id = None
+
+        created_at = r.get("created_at")
+        out.append(
+            {
+                "event_type": r.get("event_type"),
+                "actor_user_id": r.get("actor_user_id"),
+                "actor_role_id": actor_role_id,
+                "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+                "payload": payload,
+            }
+        )
+
+    return out
 
 
 @router.delete("/{task_id}", status_code=204)
@@ -891,7 +1104,7 @@ def delete_task(
             current_user_id=current_user_id,
             current_role_id=role_id,
             task_row=task,
-            include_archived=True,  # чтобы инициатор мог архивировать и после DONE
+            include_archived=True,
         )
 
         if not _is_initiator(current_user_id=current_user_id, task_row=task):
@@ -919,6 +1132,7 @@ def delete_task(
             conn,
             task_id=int(task_id),
             actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
             action="ARCHIVE",
             fields_changed={"status_code": {"from": before_status, "to": "ARCHIVED"}},
             request_body=None,
