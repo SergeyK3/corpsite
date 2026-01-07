@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, Optional, Set, List
 
 from fastapi import APIRouter, HTTPException, Query, Header, Path
@@ -11,6 +12,38 @@ from sqlalchemy import text
 from app.db.engine import engine
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+# ---------------------------
+# RBAC v2: supervisor/deputy (by role_id sets from env)
+# ---------------------------
+# Set in .env (comma-separated ints), for example:
+# SUPERVISOR_ROLE_IDS=10,11
+# DEPUTY_ROLE_IDS=12
+def _parse_int_set(env_name: str) -> Set[int]:
+    raw = (os.getenv(env_name) or "").strip()
+    if not raw:
+        return set()
+    out: Set[int] = set()
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        try:
+            out.add(int(p))
+        except Exception:
+            # ignore invalid values
+            pass
+    return out
+
+
+SUPERVISOR_ROLE_IDS: Set[int] = _parse_int_set("SUPERVISOR_ROLE_IDS")
+DEPUTY_ROLE_IDS: Set[int] = _parse_int_set("DEPUTY_ROLE_IDS")
+
+
+def _is_supervisor_or_deputy(role_id: int) -> bool:
+    rid = int(role_id)
+    return rid in SUPERVISOR_ROLE_IDS or rid in DEPUTY_ROLE_IDS
 
 
 # ---------------------------
@@ -171,6 +204,10 @@ def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str,
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
+    # RBAC v2: supervisor/deputy can view (MVP-wide)
+    if _is_supervisor_or_deputy(current_role_id):
+        return True
+
     scope = str(task_row.get("assignment_scope") or "").lower()
     if scope == "functional":
         return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
@@ -215,8 +252,14 @@ def _can_report_or_update(*, current_user_id: int, current_role_id: int, task_ro
     return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
 
-def _can_approve(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
-    return _is_initiator(current_user_id=current_user_id, task_row=task_row)
+def _can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    # initiator always can approve/reject
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return True
+    # RBAC v2: supervisor/deputy can approve/reject (MVP-wide)
+    if _is_supervisor_or_deputy(current_role_id):
+        return True
+    return False
 
 
 def _allowed_actions_for_user(
@@ -237,8 +280,9 @@ def _allowed_actions_for_user(
             actions.append("report")
 
     elif code == "WAITING_APPROVAL":
-        if _can_approve(current_user_id=current_user_id, task_row=task_row):
+        if _can_approve(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
             actions.append("approve")
+            actions.append("reject")
 
     return actions
 
@@ -315,18 +359,25 @@ def list_tasks(
         functional_lbl = _scope_label_or_none(allowed, "functional")
         admin_lbl = _scope_label_or_none(allowed, "admin")
 
-        where = ["t.executor_role_id = :role_id"]
+        where: List[str] = []
 
-        # visibility by assignment_scope
-        if functional_lbl and admin_lbl:
-            params["functional_scope"] = functional_lbl
-            params["admin_scope"] = admin_lbl
-            where.append(
-                "("
-                "t.assignment_scope = :functional_scope "
-                "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
-                ")"
-            )
+        # Visibility:
+        # - supervisors/deputies see all tasks (MVP-wide)
+        # - others: executor_role visibility with assignment_scope constraints
+        if _is_supervisor_or_deputy(role_id):
+            where.append("1=1")
+        else:
+            where.append("t.executor_role_id = :role_id")
+
+            if functional_lbl and admin_lbl:
+                params["functional_scope"] = functional_lbl
+                params["admin_scope"] = admin_lbl
+                where.append(
+                    "("
+                    "t.assignment_scope = :functional_scope "
+                    "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
+                    ")"
+                )
 
         if period_id is not None:
             where.append("t.period_id = :period_id")
@@ -343,7 +394,7 @@ def list_tasks(
             where.append("(t.title ILIKE :q OR COALESCE(t.description,'') ILIKE :q)")
             params["q"] = f"%{search}%"
 
-        where_sql = " AND ".join(where)
+        where_sql = " AND ".join(where) if where else "1=1"
 
         total = conn.execute(
             text(
@@ -382,7 +433,7 @@ def list_tasks(
             params,
         ).mappings().all()
 
-        items = []
+        items: List[Dict[str, Any]] = []
         for r in rows:
             t = dict(r)
             t = _attach_allowed_actions(task=t, current_user_id=current_user_id, current_role_id=role_id)
@@ -496,7 +547,6 @@ def create_task(
             request_body=payload,
         )
 
-        # creator view: role_id needed
         role_id = _get_user_role_id(conn, current_user_id)
         task = _attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
 
@@ -527,11 +577,9 @@ def patch_task(
             include_archived=False,
         )
 
-        # rights
         if not _can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise HTTPException(status_code=403, detail="update allowed only for executor (not initiator)")
 
-        # status guard
         _deny_if_status_not_in(actual_code=str(task.get("status_code") or ""), allowed={"IN_PROGRESS"})
 
         before = {
@@ -540,7 +588,7 @@ def patch_task(
             "assignment_scope": task.get("assignment_scope"),
         }
 
-        set_parts = []
+        set_parts: List[str] = []
         params: Dict[str, Any] = {"tid": int(task_id)}
 
         if "title" in payload:
@@ -556,7 +604,6 @@ def patch_task(
             set_parts.append("description = :description")
 
         if "assignment_scope" in payload:
-            # NOTE: если хотите запрещать менять scope исполнителю — просто удалите этот блок
             scope = _normalize_assignment_scope(conn, payload.get("assignment_scope"))
             set_parts.append("assignment_scope = :assignment_scope")
             params["assignment_scope"] = scope
@@ -604,6 +651,35 @@ def patch_task(
     return dict(after_task)
 
 
+# ---------------------------
+# Unified actions endpoint (new)
+# ---------------------------
+
+@router.post("/{task_id}/actions/{action}")
+def task_action(
+    payload: Dict[str, Any],
+    task_id: int = Path(..., ge=1),
+    action: str = Path(..., min_length=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    action_l = (action or "").strip().lower()
+
+    if action_l == "report":
+        return submit_report(payload=payload, task_id=task_id, x_user_id=x_user_id)
+
+    if action_l == "approve":
+        p = dict(payload)
+        p["approve"] = True
+        return approve_report(payload=p, task_id=task_id, x_user_id=x_user_id)
+
+    if action_l == "reject":
+        p = dict(payload)
+        p["approve"] = False
+        return approve_report(payload=p, task_id=task_id, x_user_id=x_user_id)
+
+    raise HTTPException(status_code=422, detail="Unknown action")
+
+
 @router.post("/{task_id}/report")
 def submit_report(
     payload: Dict[str, Any],
@@ -636,7 +712,6 @@ def submit_report(
 
         waiting_approval_id = _get_status_id_by_code(conn, "WAITING_APPROVAL")
 
-        # UPSERT task_reports: 1 report per task
         conn.execute(
             text(
                 """
@@ -714,12 +789,11 @@ def approve_report(
             include_archived=False,
         )
 
-        if not _can_approve(current_user_id=current_user_id, task_row=task):
-            raise HTTPException(status_code=403, detail="approve allowed only for initiator")
+        if not _can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
+            raise HTTPException(status_code=403, detail="approve/reject allowed only for initiator or supervisor/deputy")
 
         _deny_if_status_not(actual_code=str(task.get("status_code") or ""), expected="WAITING_APPROVAL")
 
-        # must exist report row
         rep = conn.execute(
             text("SELECT task_id FROM task_reports WHERE task_id = :tid"),
             {"tid": int(task_id)},
@@ -730,7 +804,6 @@ def approve_report(
         if approve:
             done_id = _get_status_id_by_code(conn, "DONE")
 
-            # IMPORTANT: mark report as approved BEFORE setting DONE (DB trigger)
             conn.execute(
                 text(
                     """
@@ -764,7 +837,6 @@ def approve_report(
         else:
             waiting_report_id = _get_status_id_by_code(conn, "WAITING_REPORT")
 
-            # reject: clear approval marks (optional but consistent)
             conn.execute(
                 text(
                     """
