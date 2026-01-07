@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import logging
 from pathlib import Path
-from typing import Set
+from typing import Set, Optional
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -106,19 +106,49 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 # -----------------------
+# Lifecycle hooks
+# -----------------------
+async def _post_init(application: Application) -> None:
+    """
+    Called once after Application is initialized.
+    We create a single API client and store it in bot_data.
+    """
+    backend = CorpsiteAPI(API_BASE_URL, timeout_s=15.0)
+    application.bot_data["backend"] = backend          # handlers/tasks.py ожидает "backend"
+    application.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
+
+    log.info("Initialized backend client. API_BASE_URL=%s", API_BASE_URL)
+    log.info("ADMIN_TG_IDS=%s", sorted(ADMIN_TG_IDS))
+
+
+async def _post_shutdown(application: Application) -> None:
+    """
+    Called once during shutdown.
+    Close httpx client to avoid resource leaks.
+    """
+    backend: Optional[CorpsiteAPI] = application.bot_data.get("backend")  # type: ignore[assignment]
+    if backend is not None:
+        try:
+            # Требуется метод aclose() в CorpsiteAPI (закрывает httpx.AsyncClient)
+            await backend.aclose()
+        except Exception:
+            log.exception("Failed to close backend client")
+
+
+# -----------------------
 # Main
 # -----------------------
 def main() -> None:
     log.info("Loading env from: %s", ROOT_ENV)
-    log.info("API_BASE_URL=%s", API_BASE_URL)
-    log.info("ADMIN_TG_IDS=%s", sorted(ADMIN_TG_IDS))
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(_post_init)
+        .post_shutdown(_post_shutdown)
+        .build()
+    )
     app.add_error_handler(on_error)
-
-    backend = CorpsiteAPI(API_BASE_URL, timeout_s=15.0)
-    app.bot_data["backend"] = backend          # handlers/tasks.py ожидает "backend"
-    app.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("bind", cmd_bind))

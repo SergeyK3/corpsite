@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional, Any, Tuple
+from typing import Optional, Any, Tuple, List, Dict
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -60,7 +60,8 @@ def _help_text() -> str:
         "/tasks <id>                — показать задачу\n"
         "/tasks <id> update title=\"...\" desc=\"...\" scope=\"functional|admin\"\n"
         "/tasks <id> report <url>\n"
-        "/tasks <id> approve\n\n"
+        "/tasks <id> approve\n"
+        "/tasks <id> reject\n\n"
         "Примечание: scope принимает также internal→functional, external→admin."
     )
 
@@ -76,8 +77,8 @@ def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
 
     action = args[1].lower()
     rest = args[2:]
-    if action not in ("update", "report", "approve"):
-        raise CommandParseError("Неизвестное действие. Допустимо: update/report/approve")
+    if action not in ("update", "report", "approve", "reject"):
+        raise CommandParseError("Неизвестное действие. Допустимо: update/report/approve/reject")
 
     return task_id, action, rest
 
@@ -228,20 +229,6 @@ def _get_status_code(t: dict) -> str:
     return code
 
 
-def _available_actions_by_status(status_code: str) -> list[str]:
-    if status_code == "IN_PROGRESS":
-        return ["update"]
-    if status_code == "WAITING_REPORT":
-        return ["report"]
-    if status_code == "WAITING_APPROVAL":
-        return ["approve"]
-    return []
-
-
-def _is_action_allowed_by_status(status_code: str, action: str) -> bool:
-    return action in _available_actions_by_status(status_code)
-
-
 def _to_int_or_none(v: Any) -> Optional[int]:
     try:
         if v is None:
@@ -281,7 +268,7 @@ def _get_initiator_user_id(task: dict) -> Optional[int]:
 def _is_action_allowed_by_role(*, task: dict, user_id: int, action: str) -> Tuple[bool, str]:
     """
     Bot-side hint/guard (best-effort):
-      - approve: только инициатор
+      - approve/reject: только инициатор
       - update/report: только НЕ инициатор
     """
     initiator_id = _get_initiator_user_id(task)
@@ -290,19 +277,42 @@ def _is_action_allowed_by_role(*, task: dict, user_id: int, action: str) -> Tupl
     if initiator_id is None:
         return True, ""
 
-    # approve — только инициатор
-    if action == "approve":
+    if action in ("approve", "reject"):
         if user_id == initiator_id:
             return True, ""
-        return False, "Недостаточно прав: approve доступен только руководителю (инициатору задачи)."
+        return False, "Недостаточно прав: approve/reject доступны только руководителю (инициатору задачи)."
 
-    # update/report — только не инициатор
     if action in ("update", "report"):
         if user_id != initiator_id:
             return True, ""
         return False, "Недостаточно прав: update/report доступны только исполнителю задачи."
 
     return True, ""
+
+
+def _extract_allowed_actions(task: dict) -> List[str]:
+    """
+    Source of truth: backend field allowed_actions (if present).
+    Fallback: infer from status_code (legacy UX logic).
+    """
+    aa = task.get("allowed_actions")
+    if isinstance(aa, list):
+        out: List[str] = []
+        for x in aa:
+            s = str(x or "").strip().lower()
+            if s in ("update", "report", "approve", "reject"):
+                out.append(s)
+        return out
+
+    # fallback (legacy)
+    status_code = _get_status_code(task)
+    if status_code == "IN_PROGRESS":
+        return ["update"]
+    if status_code == "WAITING_REPORT":
+        return ["report"]
+    if status_code == "WAITING_APPROVAL":
+        return ["approve", "reject"]
+    return []
 
 
 def _fmt_task_line_v1(t: dict) -> Optional[str]:
@@ -330,10 +340,9 @@ def _fmt_task_view_v1(t: dict) -> str:
     if desc:
         lines.append(f"Описание: {desc}")
 
-    actions = _available_actions_by_status(status_code)
+    actions = _extract_allowed_actions(t)
 
     # Фильтруем подсказку по роли (инициатор / не инициатор).
-    # user_id прокидываем в data["_viewer_user_id"] перед вызовом _fmt_task_view_v1().
     viewer_user_id = t.get("_viewer_user_id")
     if isinstance(viewer_user_id, int) and actions:
         filtered: list[str] = []
@@ -360,7 +369,7 @@ def _unwrap_backend_result(result: Any) -> Tuple[bool, int, Any]:
     if status_code is not None and hasattr(result, "json") and not callable(getattr(result, "json")):
         data = getattr(result, "json")
         code = int(status_code)
-        return (code == 200), code, data
+        return (200 <= code < 300), code, data
 
     # response-like (json как метод)
     json_fn = getattr(result, "json", None)
@@ -370,7 +379,7 @@ def _unwrap_backend_result(result: Any) -> Tuple[bool, int, Any]:
         except Exception:
             return False, int(status_code), None
         code = int(status_code)
-        return (code == 200), code, data
+        return (200 <= code < 300), code, data
 
     return False, 0, None
 
@@ -466,9 +475,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text(ux.text)
             return
 
-        # Для role-aware подсказки действий
         data["_viewer_user_id"] = user_id
-
         await msg.reply_text(_fmt_task_view_v1(data))
         return
 
@@ -480,7 +487,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # ---------------------------
-    # Guard: получаем актуальную задачу (для статуса + ролей)
+    # Guard: получаем актуальную задачу (для allowed_actions + роли)
     # ---------------------------
     task_for_guard, http_code = await _fetch_task_for_guard(backend, task_id=task_id, user_id=user_id)
     if task_for_guard is None:
@@ -491,30 +498,29 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text("Не удалось проверить статус/права по задаче. Попробуйте позже.")
         return
 
-    current_status = _get_status_code(task_for_guard)
-
-    # 1) Guard по статусу
-    if not _is_action_allowed_by_status(current_status, action):
-        allowed = _available_actions_by_status(current_status)
-        if allowed:
+    # 1) Guard по allowed_actions (источник истины — backend)
+    allowed_actions = _extract_allowed_actions(task_for_guard)
+    if action not in allowed_actions:
+        status_code = _get_status_code(task_for_guard)
+        if allowed_actions:
             await msg.reply_text(
-                f"Действие недоступно для текущего статуса: {_status_ru(current_status)}.\n"
-                f"Доступные действия: {' / '.join(allowed)}"
+                f"Действие недоступно для текущего статуса: {_status_ru(status_code)}.\n"
+                f"Доступные действия: {' / '.join(allowed_actions)}"
             )
         else:
             await msg.reply_text(
-                f"Действия недоступны для текущего статуса: {_status_ru(current_status)}."
+                f"Действия недоступны для текущего статуса: {_status_ru(status_code)}."
             )
         return
 
-    # 2) Guard по ролям (инициатор/исполнитель)
+    # 2) Guard по ролям (best-effort; окончательное решение на backend)
     ok_role, deny_msg = _is_action_allowed_by_role(task=task_for_guard, user_id=user_id, action=action)
     if not ok_role:
         await msg.reply_text(deny_msg)
         return
 
     # ---------------------------
-    # Allowed actions
+    # Actions
     # ---------------------------
     if action == "update":
         raw_text = msg.text or ""
@@ -556,8 +562,9 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text("Формат: /tasks <id> report <url>")
             return
 
-        report_link = rest[0]
+        report_link = rest[0].strip()
         try:
+            # New contract: POST /tasks/{id}/actions/report
             resp = await backend.submit_report(
                 task_id=task_id,
                 user_id=user_id,
@@ -565,7 +572,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 current_comment="",
             )
         except Exception:
-            log.exception("POST /tasks/{id}/report failed")
+            log.exception("POST /tasks/{id}/actions/report failed")
             await msg.reply_text(
                 "Ошибка запроса к backend (report). Проверьте, что backend запущен и API_BASE_URL корректный."
             )
@@ -583,13 +590,15 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         try:
-            resp = await backend.approve_report(
-                task_id=task_id,
-                user_id=user_id,
-                current_comment="",
-            )
+            # New contract: POST /tasks/{id}/actions/approve
+            # Depending on your CorpsiteAPI, method name can be approve() or approve_report().
+            if hasattr(backend, "approve"):
+                resp = await backend.approve(task_id=task_id, user_id=user_id, current_comment="")
+            else:
+                # fallback, if you kept approve_report() mapped to /actions/approve
+                resp = await backend.approve_report(task_id=task_id, user_id=user_id, current_comment="")
         except Exception:
-            log.exception("POST /tasks/{id}/approve failed")
+            log.exception("POST /tasks/{id}/actions/approve failed")
             await msg.reply_text(
                 "Ошибка запроса к backend (approve). Проверьте, что backend запущен и API_BASE_URL корректный."
             )
@@ -597,4 +606,32 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         ux = map_http_to_ux(resp.status_code, task_id)
         await msg.reply_text(f"Задача #{task_id} принята и завершена." if ux.ok else ux.text)
+        return
+
+    if action == "reject":
+        if len(rest) != 0:
+            await msg.reply_text("Формат: /tasks <id> reject")
+            return
+
+        try:
+            # New contract: POST /tasks/{id}/actions/reject
+            if hasattr(backend, "reject"):
+                resp = await backend.reject(task_id=task_id, user_id=user_id, current_comment="")
+            else:
+                # if you only expose task_action()
+                if hasattr(backend, "task_action"):
+                    resp = await backend.task_action(
+                        task_id=task_id, user_id=user_id, action="reject", payload={"current_comment": ""}
+                    )
+                else:
+                    raise RuntimeError("backend missing reject/task_action method")
+        except Exception:
+            log.exception("POST /tasks/{id}/actions/reject failed")
+            await msg.reply_text(
+                "Ошибка запроса к backend (reject). Проверьте, что backend запущен и API_BASE_URL корректный."
+            )
+            return
+
+        ux = map_http_to_ux(resp.status_code, task_id)
+        await msg.reply_text(f"Задача #{task_id} возвращена на доработку." if ux.ok else ux.text)
         return
