@@ -3,13 +3,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional, Any, Tuple, List, Dict
+from typing import Optional, Any, List, Dict
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..storage.bindings import get_binding
-from ..ux import map_http_to_ux
 
 log = logging.getLogger("corpsite-bot")
 
@@ -28,7 +27,6 @@ _DESC_KV_RE = re.compile(r'desc="([^"]+)"')
 _SCOPE_KV_RE = re.compile(r'scope="([^"]+)"')
 _ASSIGN_SCOPE_KV_RE = re.compile(r'assignment_scope="([^"]+)"')
 
-# UX V1
 _TITLE_MAX_LEN = 80
 _LIST_LIMIT = 20
 
@@ -41,15 +39,6 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
 }
 _UNKNOWN_STATUS = ("❓", "Неизвестный статус")
 
-STATUS_ID_TO_CODE: dict[int, str] = {
-    1: "WAITING_REPORT",
-    2: "IN_PROGRESS",
-    3: "WAITING_APPROVAL",
-    4: "DONE",
-    5: "ARCHIVED",
-    8: "INBOX",
-}
-
 
 def _help_text() -> str:
     return (
@@ -59,27 +48,10 @@ def _help_text() -> str:
         "/tasks <id>                — показать задачу\n"
         "/tasks <id> history        — история событий\n"
         "/tasks <id> update title=\"...\" desc=\"...\" scope=\"functional|admin\"\n"
-        "/tasks <id> report <url>\n"
-        "/tasks <id> approve\n"
-        "/tasks <id> reject\n"
+        "/tasks <id> report <url> [comment]\n"
+        "/tasks <id> approve [comment]\n"
+        "/tasks <id> reject [comment]\n"
     )
-
-
-def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
-    if len(args) < 2:
-        raise CommandParseError(_help_text())
-
-    try:
-        task_id = int(args[0])
-    except ValueError:
-        raise CommandParseError("task_id должен быть числом. Пример: /tasks 123 approve")
-
-    action = args[1].lower()
-    rest = args[2:]
-    if action not in ("update", "report", "approve", "reject"):
-        raise CommandParseError("Неизвестное действие. Допустимо: update/report/approve/reject")
-
-    return task_id, action, rest
 
 
 def _normalize_assignment_scope(value: str) -> str:
@@ -98,7 +70,7 @@ def _parse_update_payload_from_text(raw_text: str) -> dict[str, object]:
         payload["title"] = m.group(1).strip()
     if m := _DESC_KV_RE.search(raw_text):
         payload["description"] = m.group(1).strip()
-    if m := _ASSIGN_SCOPE_KV_RE.search(raw_text) or _SCOPE_KV_RE.search(raw_text):
+    if m := (_ASSIGN_SCOPE_KV_RE.search(raw_text) or _SCOPE_KV_RE.search(raw_text)):
         payload["assignment_scope"] = _normalize_assignment_scope(m.group(1))
 
     if not payload:
@@ -122,18 +94,18 @@ def _status_label(code: Any) -> str:
 def _extract_allowed_actions(task: dict) -> List[str]:
     aa = task.get("allowed_actions")
     if isinstance(aa, list):
-        return [str(a).lower() for a in aa if a in ("update", "report", "approve", "reject")]
+        return [str(a).lower() for a in aa if str(a).lower() in ("update", "report", "approve", "reject")]
     return []
 
 
-def _fmt_task_line_v1(t: dict) -> Optional[str]:
+def _fmt_task_line(t: dict) -> Optional[str]:
     tid = t.get("task_id")
     if not tid:
         return None
     return f"#{tid}  {_safe_title(t.get('title'))}  {_status_label(t.get('status_code'))}"
 
 
-def _fmt_task_view_v1(t: dict) -> str:
+def _fmt_task_view(t: dict) -> str:
     lines = [
         f"Задача #{t.get('task_id')}",
         f"Статус: {_status_label(t.get('status_code'))}",
@@ -147,20 +119,50 @@ def _fmt_task_view_v1(t: dict) -> str:
     return "\n".join(lines)
 
 
+def _fmt_dt_short(iso: str) -> str:
+    # Оставляем как есть (backend отдаёт ISO). Если нужно укоротить — сделаем отдельно.
+    return iso
+
+
 def _fmt_event_line(ev: dict) -> str:
-    ts = ev.get("created_at", "")
-    et = ev.get("event_type", "")
+    ts = _fmt_dt_short(str(ev.get("created_at", "")))
+    et = str(ev.get("event_type", ""))
     actor = ev.get("actor_user_id")
     payload = ev.get("payload") or {}
 
-    line = f"[{ts}] {et}"
-    if actor:
-        line += f" (user {actor})"
-    if payload.get("current_comment"):
-        line += f"\n  💬 {payload['current_comment']}"
-    if payload.get("report_link"):
-        line += f"\n  🔗 {payload['report_link']}"
-    return line
+    # Привычный формат как у вас в /tasks_history:
+    # • 08.01 01:20 REPORT от user1 — link — Комментарий: ...
+    # Но раз backend отдаёт ISO — оставим ISO, чтобы не потерять TZ (можем укоротить позже).
+    parts = [f"• {ts} {et}"]
+    if actor is not None:
+        parts.append(f"от user{actor}")
+
+    link = payload.get("report_link")
+    if link:
+        parts.append(f"— {link}")
+
+    comment = (payload.get("current_comment") or "").strip()
+    if comment:
+        parts.append(f"— Комментарий: {comment}")
+
+    return " ".join(parts)
+
+
+def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
+    if len(args) < 2:
+        raise CommandParseError(_help_text())
+
+    if not args[0].isdigit():
+        raise CommandParseError("task_id должен быть числом. Пример: /tasks 123 approve")
+
+    task_id = int(args[0])
+    action = args[1].lower()
+    rest = args[2:]
+
+    if action not in ("update", "report", "approve", "reject", "history"):
+        raise CommandParseError("Неизвестное действие. Допустимо: update/report/approve/reject/history")
+
+    return task_id, action, rest
 
 
 async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -174,7 +176,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user_id = _get_bound_user_id(tg_user.id)
     if user_id is None:
-        await msg.reply_text("Пользователь не привязан.")
+        await msg.reply_text("Вы не привязаны. Используйте /bind (если вы админ) или обратитесь к администратору.")
         return
 
     backend = context.bot_data.get("backend")
@@ -184,7 +186,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     args = context.args or []
 
-    # /tasks list
+    # /tasks or /tasks list
     if not args or args == ["list"]:
         raw = await backend.list_tasks(user_id=user_id, limit=_LIST_LIMIT)
         items = raw.json.get("items", []) if raw.json else []
@@ -193,64 +195,82 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         lines = ["Ваши задачи:"]
         for t in items:
-            if line := _fmt_task_line_v1(t):
+            line = _fmt_task_line(t)
+            if line:
                 lines.append(line)
         await msg.reply_text("\n".join(lines))
         return
 
-    # /tasks <id>
+    # /tasks <id> (view)
     if len(args) == 1 and args[0].isdigit():
         tid = int(args[0])
         raw = await backend.get_task(task_id=tid, user_id=user_id)
         if raw.status_code != 200 or not raw.json:
-            await msg.reply_text("Задача недоступна.")
+            await msg.reply_text("Задача не найдена или недоступна.")
             return
-        await msg.reply_text(_fmt_task_view_v1(raw.json))
+        await msg.reply_text(_fmt_task_view(raw.json))
         return
 
-    # /tasks <id> history
-    if len(args) == 2 and args[0].isdigit() and args[1].lower() == "history":
-        tid = int(args[0])
-        raw = await backend.get_task_events(task_id=tid, user_id=user_id)
-        if raw.status_code != 200 or not isinstance(raw.json, list):
-            await msg.reply_text("Не удалось получить историю.")
-            return
-        if not raw.json:
-            await msg.reply_text(f"История задачи #{tid} пуста.")
-            return
-        lines = [f"История задачи #{tid}:"]
-        for ev in raw.json:
-            lines.append(_fmt_event_line(ev))
-        await msg.reply_text("\n".join(lines))
-        return
-
-    # /tasks <id> action
+    # /tasks <id> <action> ...
     try:
         task_id, action, rest = _parse_task_command(args)
     except CommandParseError as e:
         await msg.reply_text(e.message)
         return
 
-    if action == "report":
-        if len(rest) != 1:
-            await msg.reply_text("Формат: /tasks <id> report <url>")
+    # history
+    if action == "history":
+        raw = await backend.get_task_events(task_id=task_id, user_id=user_id, include_archived=False)
+        if raw.status_code == 404:
+            await msg.reply_text("Задача не найдена или недоступна.")
             return
-        resp = await backend.submit_report(task_id, user_id, rest[0])
-        await msg.reply_text(
-            "Отчёт отправлен." if resp.status_code < 300 else "Ошибка отправки отчёта."
-        )
+        if raw.status_code != 200 or not isinstance(raw.json, list):
+            await msg.reply_text("Не удалось получить историю.")
+            return
+        if not raw.json:
+            await msg.reply_text(f"История по задаче #{task_id}: событий нет.")
+            return
+
+        lines = [f"История по задаче #{task_id}:"]
+        for ev in raw.json:
+            lines.append(_fmt_event_line(ev))
+        await msg.reply_text("\n".join(lines))
         return
 
-    if action == "approve":
-        resp = await backend.approve(task_id, user_id)
-        await msg.reply_text(
-            "Задача принята." if resp.status_code < 300 else "Ошибка approve."
-        )
+    # update
+    if action == "update":
+        raw_text = (msg.text or "")
+        try:
+            payload = _parse_update_payload_from_text(raw_text)
+        except CommandParseError as e:
+            await msg.reply_text(e.message)
+            return
+
+        resp = await backend.patch_task(task_id=task_id, user_id=user_id, payload=payload)
+        await msg.reply_text("Изменения сохранены." if resp.status_code < 300 else "Ошибка обновления задачи.")
         return
 
-    if action == "reject":
-        resp = await backend.reject(task_id, user_id)
-        await msg.reply_text(
-            "Задача возвращена." if resp.status_code < 300 else "Ошибка reject."
-        )
+    # report: /tasks <id> report <url> [comment...]
+    if action == "report":
+        if len(rest) < 1:
+            await msg.reply_text("Формат: /tasks <id> report <url> [comment]")
+            return
+        url = rest[0]
+        comment = " ".join(rest[1:]).strip()
+        resp = await backend.submit_report(task_id=task_id, user_id=user_id, report_link=url, current_comment=comment)
+        await msg.reply_text("Отчёт отправлен." if resp.status_code < 300 else "Ошибка отправки отчёта.")
+        return
+
+    # approve / reject: используем unified action endpoint (самый устойчивый путь)
+    if action in ("approve", "reject"):
+        comment = " ".join(rest).strip()
+        payload: Dict[str, Any] = {}
+        if comment:
+            payload["current_comment"] = comment
+
+        resp = await backend.task_action(task_id=task_id, user_id=user_id, action=action, payload=payload)
+        if resp.status_code < 300:
+            await msg.reply_text("Задача принята." if action == "approve" else "Задача возвращена.")
+        else:
+            await msg.reply_text("Ошибка approve." if action == "approve" else "Ошибка reject.")
         return

@@ -1,151 +1,193 @@
+# corpsite-bot/src/bot/integrations/corpsite_api.py
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import os
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
-from telegram import Update
-from telegram.ext import ContextTypes
-
-from bot.integrations.corpsite_api import CorpsiteAPI
-from bot.handlers.bind import require_bound_user
+import httpx
 
 
-# -----------------------
-# Helpers
-# -----------------------
+@dataclass
+class APIResponse:
+    status_code: int
+    json: Any = None
+    text: str = ""
 
-def _fmt_event(ev: Dict[str, Any]) -> str:
+
+class CorpsiteAPI:
     """
-    Human-readable event formatter for history.
+    Minimal async API client for Corpsite backend.
+    Uses X-User-Id header for auth/ACL.
     """
-    et = ev.get("event_type", "?")
-    ts = ev.get("created_at", "")
-    actor = ev.get("actor_user_id")
-    payload = ev.get("payload") or {}
 
-    parts = [f"• [{ts}] {et}"]
-    if actor is not None:
-        parts.append(f"(user {actor})")
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        timeout_s: float = 10.0,
+    ) -> None:
+        self.base_url = (base_url or os.getenv("CORPSITE_API_BASE_URL") or "").strip().rstrip("/")
+        if not self.base_url:
+            raise RuntimeError("CORPSITE_API_BASE_URL is not set")
 
-    comment = payload.get("current_comment")
-    if comment:
-        parts.append(f"\n  💬 {comment}")
+        self._client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=httpx.Timeout(timeout_s),
+        )
 
-    link = payload.get("report_link")
-    if link:
-        parts.append(f"\n  🔗 {link}")
-
-    return " ".join(parts)
-
-
-# -----------------------
-# /tasks command
-# -----------------------
-
-async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.effective_message
-    if msg is None:
-        return
-
-    backend: CorpsiteAPI = context.application.bot_data["backend"]  # type: ignore[assignment]
-
-    # Ensure user is bound → gives internal user_id
-    user_id = await require_bound_user(update, context)
-    if user_id is None:
-        return
-
-    args = context.args or []
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     # -----------------------
-    # /tasks  (list)
+    # Low-level request helper
     # -----------------------
-    if not args:
-        resp = await backend.list_tasks(user_id=user_id, limit=20)
-        if resp.status_code != 200 or not resp.json:
-            await msg.reply_text("Не удалось получить список задач.")
-            return
 
-        items = resp.json.get("items", [])
-        if not items:
-            await msg.reply_text("Задач нет.")
-            return
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        user_id: int,
+        params: Optional[Dict[str, Any]] = None,
+        json_body: Optional[Dict[str, Any]] = None,
+    ) -> APIResponse:
+        headers = {"X-User-Id": str(int(user_id))}
 
-        lines: List[str] = ["Ваши задачи:"]
-        for t in items:
-            lines.append(
-                f"#{t['task_id']}  {t['title']}  [{t.get('status_name_ru')}]"
+        try:
+            r = await self._client.request(
+                method=method,
+                url=path,
+                headers=headers,
+                params=params,
+                json=json_body,
             )
+        except Exception as e:
+            return APIResponse(status_code=0, json=None, text=str(e))
 
-        await msg.reply_text("\n".join(lines))
-        return
-
-    # -----------------------
-    # /tasks <id> history
-    # -----------------------
-    if len(args) == 2 and args[1].lower() == "history":
+        parsed: Any = None
         try:
-            task_id = int(args[0])
-        except ValueError:
-            await msg.reply_text("Неверный id задачи.")
-            return
+            if r.content:
+                parsed = r.json()
+        except Exception:
+            parsed = None
 
-        resp = await backend.get_task_events(
-            task_id=task_id,
+        return APIResponse(status_code=r.status_code, json=parsed, text=r.text)
+
+    # -----------------------
+    # Tasks
+    # -----------------------
+
+    async def list_tasks(
+        self,
+        *,
+        user_id: int,
+        period_id: Optional[int] = None,
+        status_code: Optional[str] = None,
+        search: Optional[str] = None,
+        include_archived: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> APIResponse:
+        params: Dict[str, Any] = {
+            "include_archived": bool(include_archived),
+            "limit": int(limit),
+            "offset": int(offset),
+        }
+        if period_id is not None:
+            params["period_id"] = int(period_id)
+        if status_code:
+            params["status_code"] = str(status_code).strip()
+        if search:
+            params["search"] = str(search)
+
+        return await self._request("GET", "/tasks", user_id=user_id, params=params)
+
+    async def get_task(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        include_archived: bool = False,
+    ) -> APIResponse:
+        params = {"include_archived": bool(include_archived)}
+        return await self._request("GET", f"/tasks/{int(task_id)}", user_id=user_id, params=params)
+
+    async def patch_task(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        payload: Dict[str, Any],
+    ) -> APIResponse:
+        return await self._request("PATCH", f"/tasks/{int(task_id)}", user_id=user_id, json_body=payload)
+
+    async def submit_report(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        report_link: str,
+        current_comment: str = "",
+    ) -> APIResponse:
+        body = {"report_link": str(report_link).strip(), "current_comment": str(current_comment or "").strip()}
+        return await self._request("POST", f"/tasks/{int(task_id)}/report", user_id=user_id, json_body=body)
+
+    async def approve_report(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        approve: bool = True,
+        current_comment: str = "",
+    ) -> APIResponse:
+        body = {"approve": bool(approve), "current_comment": str(current_comment or "").strip()}
+        return await self._request("POST", f"/tasks/{int(task_id)}/approve", user_id=user_id, json_body=body)
+
+    async def task_action(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        action: str,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> APIResponse:
+        """
+        Unified actions endpoint:
+          POST /tasks/{task_id}/actions/{action}
+        action: report | approve | reject
+        """
+        action_norm = str(action).strip().lower()
+        return await self._request(
+            "POST",
+            f"/tasks/{int(task_id)}/actions/{action_norm}",
             user_id=user_id,
-            include_archived=False,
+            json_body=(payload or {}),
         )
 
-        if resp.status_code == 404:
-            await msg.reply_text("Задача не найдена или недоступна.")
-            return
-
-        if resp.status_code != 200 or not isinstance(resp.json, list):
-            await msg.reply_text("Не удалось получить историю задачи.")
-            return
-
-        events: List[Dict[str, Any]] = resp.json
-        if not events:
-            await msg.reply_text(f"История задачи #{task_id} пуста.")
-            return
-
-        lines = [f"История задачи #{task_id}:"]
-        for ev in events:
-            lines.append(_fmt_event(ev))
-
-        await msg.reply_text("\n".join(lines))
-        return
-
     # -----------------------
-    # /tasks <id>  (view)
+    # Events / History
     # -----------------------
-    if len(args) == 1:
-        try:
-            task_id = int(args[0])
-        except ValueError:
-            await msg.reply_text("Неверный id задачи.")
-            return
 
-        resp = await backend.get_task(task_id=task_id, user_id=user_id)
-        if resp.status_code != 200 or not resp.json:
-            await msg.reply_text("Задача не найдена или недоступна.")
-            return
+    async def get_task_events(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        include_archived: bool = False,
+        since_audit_id: Optional[int] = None,
+        limit: int = 200,
+    ) -> APIResponse:
+        """
+        Backend:
+          GET /tasks/{task_id}/events?include_archived=&since_audit_id=&limit=
+        Returns: list[ { event_type, actor_user_id, actor_role_id, created_at, payload } ]
+        """
+        params: Dict[str, Any] = {
+            "include_archived": bool(include_archived),
+            "limit": int(limit),
+        }
+        if since_audit_id is not None:
+            params["since_audit_id"] = int(since_audit_id)
 
-        t = resp.json
-        text = (
-            f"Задача #{t['task_id']}\n"
-            f"{t['title']}\n"
-            f"Статус: {t.get('status_name_ru')}\n"
-        )
-
-        actions = t.get("allowed_actions") or []
-        if actions:
-            text += "\nДоступные действия:\n"
-            for a in actions:
-                text += f"• {a}\n"
-
-        await msg.reply_text(text)
-        return
-
-    await msg.reply_text("Использование:\n"
-                         "/tasks\n"
-                         "/tasks <id>\n"
-                         "/tasks <id> history")
+        return await self._request("GET", f"/tasks/{int(task_id)}/events", user_id=user_id, params=params)

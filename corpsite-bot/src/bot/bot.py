@@ -31,7 +31,12 @@ ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(dotenv_path=ROOT_ENV)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# IMPORTANT:
+# CorpsiteAPI по вашей последней версии читает CORPSITE_API_BASE_URL,
+# но мы всё равно прокидываем base_url явно, чтобы не зависеть от имени переменной.
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
 ADMIN_TG_IDS_RAW = os.getenv("ADMIN_TG_IDS", "").strip()
 
 if not BOT_TOKEN:
@@ -101,7 +106,8 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     msg = update.effective_message
     if msg:
         await msg.reply_text(
-            "Команда не распознана. Доступные: /start, /bind, /unbind, /whoami, /tasks, /ping, /whereami"
+            "Команда не распознана. Доступные: "
+            "/start, /bind, /unbind, /whoami, /tasks, /ping, /whereami"
         )
 
 
@@ -113,8 +119,11 @@ async def _post_init(application: Application) -> None:
     Called once after Application is initialized.
     We create a single API client and store it in bot_data.
     """
-    backend = CorpsiteAPI(API_BASE_URL, timeout_s=15.0)
-    application.bot_data["backend"] = backend          # handlers/tasks.py ожидает "backend"
+    # Передаём base_url явно, чтобы не зависеть от CORPSITE_API_BASE_URL внутри клиента.
+    backend = CorpsiteAPI(base_url=API_BASE_URL, timeout_s=15.0)
+
+    # handlers/tasks.py ожидают это имя ключа
+    application.bot_data["backend"] = backend
     application.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
     log.info("Initialized backend client. API_BASE_URL=%s", API_BASE_URL)
@@ -129,7 +138,6 @@ async def _post_shutdown(application: Application) -> None:
     backend: Optional[CorpsiteAPI] = application.bot_data.get("backend")  # type: ignore[assignment]
     if backend is not None:
         try:
-            # Требуется метод aclose() в CorpsiteAPI (закрывает httpx.AsyncClient)
             await backend.aclose()
         except Exception:
             log.exception("Failed to close backend client")
@@ -154,7 +162,10 @@ def main() -> None:
     app.add_handler(CommandHandler("bind", cmd_bind))
     app.add_handler(CommandHandler("unbind", cmd_unbind))
     app.add_handler(CommandHandler("whoami", cmd_whoami))
+
+    # main tasks UX + separate history command
     app.add_handler(CommandHandler("tasks", cmd_task))
+    
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("whereami", cmd_whereami))
 
