@@ -1,228 +1,151 @@
-# corpsite-bot/src/bot/integrations/corpsite_api.py
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Union, List, Literal
+from typing import Any, Dict, List, Optional
 
-import httpx
+from telegram import Update
+from telegram.ext import ContextTypes
 
-
-JsonT = Optional[Union[Dict[str, Any], List[Any]]]
-
-
-@dataclass(frozen=True)
-class SimpleResponse:
-    status_code: int
-    json: JsonT = None
+from bot.integrations.corpsite_api import CorpsiteAPI
+from bot.handlers.bind import require_bound_user
 
 
-class CorpsiteAPI:
+# -----------------------
+# Helpers
+# -----------------------
+
+def _fmt_event(ev: Dict[str, Any]) -> str:
     """
-    Thin async client for Corpsite backend.
-    Auth context is provided via header: X-User-Id.
+    Human-readable event formatter for history.
     """
+    et = ev.get("event_type", "?")
+    ts = ev.get("created_at", "")
+    actor = ev.get("actor_user_id")
+    payload = ev.get("payload") or {}
 
-    def __init__(self, base_url: str, timeout_s: float = 15.0) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.timeout_s = float(timeout_s)
-        self._client = httpx.AsyncClient(timeout=self.timeout_s)
+    parts = [f"• [{ts}] {et}"]
+    if actor is not None:
+        parts.append(f"(user {actor})")
 
-    async def aclose(self) -> None:
-        """
-        IMPORTANT: call on bot shutdown to close underlying HTTP connections.
-        """
-        await self._client.aclose()
+    comment = payload.get("current_comment")
+    if comment:
+        parts.append(f"\n  💬 {comment}")
 
-    async def close(self) -> None:
-        """
-        Alias for aclose() for convenience.
-        """
-        await self.aclose()
+    link = payload.get("report_link")
+    if link:
+        parts.append(f"\n  🔗 {link}")
 
-    def _headers(self, user_id: int) -> Dict[str, str]:
-        return {"X-User-Id": str(int(user_id))}
+    return " ".join(parts)
 
-    @staticmethod
-    def _safe_json(resp: httpx.Response) -> JsonT:
+
+# -----------------------
+# /tasks command
+# -----------------------
+
+async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    if msg is None:
+        return
+
+    backend: CorpsiteAPI = context.application.bot_data["backend"]  # type: ignore[assignment]
+
+    # Ensure user is bound → gives internal user_id
+    user_id = await require_bound_user(update, context)
+    if user_id is None:
+        return
+
+    args = context.args or []
+
+    # -----------------------
+    # /tasks  (list)
+    # -----------------------
+    if not args:
+        resp = await backend.list_tasks(user_id=user_id, limit=20)
+        if resp.status_code != 200 or not resp.json:
+            await msg.reply_text("Не удалось получить список задач.")
+            return
+
+        items = resp.json.get("items", [])
+        if not items:
+            await msg.reply_text("Задач нет.")
+            return
+
+        lines: List[str] = ["Ваши задачи:"]
+        for t in items:
+            lines.append(
+                f"#{t['task_id']}  {t['title']}  [{t.get('status_name_ru')}]"
+            )
+
+        await msg.reply_text("\n".join(lines))
+        return
+
+    # -----------------------
+    # /tasks <id> history
+    # -----------------------
+    if len(args) == 2 and args[1].lower() == "history":
         try:
-            if resp.content:
-                return resp.json()
-        except Exception:
-            pass
-        return None
+            task_id = int(args[0])
+        except ValueError:
+            await msg.reply_text("Неверный id задачи.")
+            return
 
-    # ----------------------------
-    # Tasks: list / get / patch
-    # ----------------------------
+        resp = await backend.get_task_events(
+            task_id=task_id,
+            user_id=user_id,
+            include_archived=False,
+        )
 
-    async def list_tasks(
-        self,
-        user_id: int,
-        limit: int = 20,
-        include_archived: bool = False,
-    ) -> SimpleResponse:
-        """
-        GET /tasks
-        """
-        url = f"{self.base_url}/tasks"
-        params = {
-            "limit": int(limit),
-            "include_archived": str(bool(include_archived)).lower(),
-        }
-        resp = await self._client.get(url, params=params, headers=self._headers(user_id))
-        return SimpleResponse(status_code=resp.status_code, json=self._safe_json(resp))
+        if resp.status_code == 404:
+            await msg.reply_text("Задача не найдена или недоступна.")
+            return
 
-    async def get_task(
-        self,
-        task_id: int,
-        user_id: int,
-        include_archived: bool = False,
-    ) -> SimpleResponse:
-        """
-        GET /tasks/{id}
-        """
-        url = f"{self.base_url}/tasks/{int(task_id)}"
-        params = {"include_archived": str(bool(include_archived)).lower()}
-        resp = await self._client.get(url, params=params, headers=self._headers(user_id))
-        return SimpleResponse(status_code=resp.status_code, json=self._safe_json(resp))
+        if resp.status_code != 200 or not isinstance(resp.json, list):
+            await msg.reply_text("Не удалось получить историю задачи.")
+            return
 
-    async def patch_task(
-        self,
-        task_id: int,
-        user_id: int,
-        payload: Dict[str, Any],
-    ) -> SimpleResponse:
-        """
-        PATCH /tasks/{id}
-        Allowed fields are validated by backend.
-        """
-        url = f"{self.base_url}/tasks/{int(task_id)}"
-        resp = await self._client.patch(url, json=payload, headers=self._headers(user_id))
-        return SimpleResponse(status_code=resp.status_code, json=self._safe_json(resp))
+        events: List[Dict[str, Any]] = resp.json
+        if not events:
+            await msg.reply_text(f"История задачи #{task_id} пуста.")
+            return
 
-    # ----------------------------
-    # Actions (preferred, new)
-    # ----------------------------
+        lines = [f"История задачи #{task_id}:"]
+        for ev in events:
+            lines.append(_fmt_event(ev))
 
-    async def task_action(
-        self,
-        task_id: int,
-        user_id: int,
-        action: Literal["report", "approve", "reject"],
-        payload: Optional[Dict[str, Any]] = None,
-    ) -> SimpleResponse:
-        """
-        POST /tasks/{id}/actions/{action}
-        """
-        url = f"{self.base_url}/tasks/{int(task_id)}/actions/{action}"
-        body = payload or {}
-        resp = await self._client.post(url, json=body, headers=self._headers(user_id))
-        return SimpleResponse(status_code=resp.status_code, json=self._safe_json(resp))
+        await msg.reply_text("\n".join(lines))
+        return
 
-    async def submit_report(
-        self,
-        task_id: int,
-        user_id: int,
-        report_link: str,
-        current_comment: str = "",
-    ) -> SimpleResponse:
-        """
-        POST /tasks/{id}/actions/report
-        Backend determines actor from X-User-Id; do NOT send submitted_by.
-        """
-        body = {
-            "report_link": (report_link or "").strip(),
-            "current_comment": (current_comment or "").strip(),
-        }
-        return await self.task_action(task_id=task_id, user_id=user_id, action="report", payload=body)
+    # -----------------------
+    # /tasks <id>  (view)
+    # -----------------------
+    if len(args) == 1:
+        try:
+            task_id = int(args[0])
+        except ValueError:
+            await msg.reply_text("Неверный id задачи.")
+            return
 
-    async def approve(
-        self,
-        task_id: int,
-        user_id: int,
-        current_comment: str = "",
-    ) -> SimpleResponse:
-        """
-        POST /tasks/{id}/actions/approve
-        Backend determines actor from X-User-Id; do NOT send approved_by.
-        """
-        body = {"current_comment": (current_comment or "").strip()}
-        return await self.task_action(task_id=task_id, user_id=user_id, action="approve", payload=body)
+        resp = await backend.get_task(task_id=task_id, user_id=user_id)
+        if resp.status_code != 200 or not resp.json:
+            await msg.reply_text("Задача не найдена или недоступна.")
+            return
 
-    async def reject(
-        self,
-        task_id: int,
-        user_id: int,
-        current_comment: str = "",
-    ) -> SimpleResponse:
-        """
-        POST /tasks/{id}/actions/reject
-        """
-        body = {"current_comment": (current_comment or "").strip()}
-        return await self.task_action(task_id=task_id, user_id=user_id, action="reject", payload=body)
+        t = resp.json
+        text = (
+            f"Задача #{t['task_id']}\n"
+            f"{t['title']}\n"
+            f"Статус: {t.get('status_name_ru')}\n"
+        )
 
-    # ----------------------------
-    # Compatibility layer for current bot handlers
-    # ----------------------------
+        actions = t.get("allowed_actions") or []
+        if actions:
+            text += "\nДоступные действия:\n"
+            for a in actions:
+                text += f"• {a}\n"
 
-    async def approve_report(
-        self,
-        task_id: int,
-        user_id: int,
-        current_comment: str = "",
-        approve: bool = True,
-    ) -> SimpleResponse:
-        """
-        Compatibility method (used by handlers/tasks.py right now).
+        await msg.reply_text(text)
+        return
 
-        If approve=True -> /actions/approve
-        If approve=False -> /actions/reject
-
-        Note: handler currently calls approve_report(...) without approve flag,
-        so default approve=True matches "approve".
-        """
-        if bool(approve):
-            return await self.approve(task_id=task_id, user_id=user_id, current_comment=current_comment)
-        return await self.reject(task_id=task_id, user_id=user_id, current_comment=current_comment)
-
-    # ----------------------------
-    # Legacy endpoints (keep, optional)
-    # ----------------------------
-
-    async def submit_report_legacy(
-        self,
-        task_id: int,
-        user_id: int,
-        report_link: str,
-        current_comment: str = "",
-    ) -> SimpleResponse:
-        """
-        LEGACY: POST /tasks/{id}/report
-        Оставлено как fallback, но предпочтительно использовать submit_report().
-        """
-        url = f"{self.base_url}/tasks/{int(task_id)}/report"
-        body = {
-            "report_link": (report_link or "").strip(),
-            "current_comment": (current_comment or "").strip(),
-        }
-        resp = await self._client.post(url, json=body, headers=self._headers(user_id))
-        return SimpleResponse(status_code=resp.status_code, json=self._safe_json(resp))
-
-    async def approve_report_legacy(
-        self,
-        task_id: int,
-        user_id: int,
-        approve: bool = True,
-        current_comment: str = "",
-    ) -> SimpleResponse:
-        """
-        LEGACY: POST /tasks/{id}/approve
-        В текущем backend approve/reject лучше вызывать через /actions/*.
-        """
-        url = f"{self.base_url}/tasks/{int(task_id)}/approve"
-        body = {
-            "approve": bool(approve),
-            "current_comment": (current_comment or "").strip(),
-        }
-        resp = await self._client.post(url, json=body, headers=self._headers(user_id))
-        return SimpleResponse(status_code=resp.status_code, json=self._safe_json(resp))
+    await msg.reply_text("Использование:\n"
+                         "/tasks\n"
+                         "/tasks <id>\n"
+                         "/tasks <id> history")

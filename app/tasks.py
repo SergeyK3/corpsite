@@ -156,13 +156,13 @@ def _write_task_audit(
     fields_changed: Optional[Dict[str, Any]] = None,
     request_body: Optional[Dict[str, Any]] = None,
     meta: Optional[Dict[str, Any]] = None,
-    # NEW: event columns (A1/A2)
+    # events columns
     event_type: Optional[str] = None,               # REPORT_SUBMITTED / APPROVED / REJECTED
     event_payload: Optional[Dict[str, Any]] = None, # stored in task_audit_log.payload
 ) -> None:
     """
     Writes a single audit row. If event_type is provided, the same row becomes an "event" too.
-    This design matches your schema where actor_user_id/action are NOT NULL.
+    actor_user_id/action are NOT NULL by schema.
     """
     conn.execute(
         text(
@@ -174,7 +174,6 @@ def _write_task_audit(
                 fields_changed,
                 request_body,
                 meta,
-                -- events columns (added by A1/A2)
                 event_type,
                 actor_id,
                 actor_role,
@@ -202,9 +201,7 @@ def _write_task_audit(
             "request_body": json.dumps(request_body) if request_body is not None else None,
             "meta": json.dumps(meta) if meta is not None else None,
             "event_type": event_type,
-            # align actor_id with actor_user_id (simple and consistent)
             "actor_id": int(actor_user_id),
-            # keep actor_role as text; we store role_id as text (or NULL)
             "actor_role": str(actor_role_id) if actor_role_id is not None else None,
             "payload": json.dumps(event_payload or {}) if (event_type is not None) else json.dumps({}),
         },
@@ -226,7 +223,7 @@ def _set_last_audit_event(
 ) -> None:
     """
     Гарантирует заполнение event-полей в последней audit-записи (task_id, actor_user_id).
-    Нужен на случай, если INSERT прошёл без event_type (как у вас в примере с APPROVE).
+    Использовать сразу после INSERT, если нужно "догарантировать" event_type/payload.
     """
     conn.execute(
         text(
@@ -828,6 +825,12 @@ def submit_report(
             {"new_status_id": int(waiting_approval_id), "task_id": int(task_id)},
         )
 
+        payload_event = {
+            "report_link": report_link,
+            "current_comment": current_comment,
+            "status_to": "WAITING_APPROVAL",
+        }
+
         _write_task_audit(
             conn,
             task_id=int(task_id),
@@ -836,27 +839,18 @@ def submit_report(
             action="REPORT_SUBMIT",
             fields_changed={"status_code": {"from": "WAITING_REPORT", "to": "WAITING_APPROVAL"}},
             request_body=payload,
-            # EVENT:
             event_type="REPORT_SUBMITTED",
-            event_payload={
-                "report_link": report_link,
-                "current_comment": current_comment,
-                "status_to": "WAITING_APPROVAL",
-            },
+            event_payload=payload_event,
         )
 
-        # helper: enforce event columns even if insert did not set them
+        # enforce event columns on last row (safety net)
         _set_last_audit_event(
             conn,
             task_id=int(task_id),
             actor_user_id=int(current_user_id),
             actor_role_id=int(role_id),
             event_type="REPORT_SUBMITTED",
-            event_payload={
-                "report_link": report_link,
-                "current_comment": current_comment,
-                "status_to": "WAITING_APPROVAL",
-            },
+            event_payload=payload_event,
         )
 
         updated = _load_task_full(conn, task_id=int(task_id))
@@ -929,6 +923,8 @@ def approve_report(
                 {"sid": int(done_id), "tid": int(task_id)},
             )
 
+            payload_event = {"current_comment": current_comment, "status_to": "DONE"}
+
             _write_task_audit(
                 conn,
                 task_id=int(task_id),
@@ -937,12 +933,8 @@ def approve_report(
                 action="APPROVE",
                 fields_changed={"status_code": {"from": "WAITING_APPROVAL", "to": "DONE"}},
                 request_body={"approve": True, "current_comment": current_comment},
-                # EVENT:
                 event_type="APPROVED",
-                event_payload={
-                    "current_comment": current_comment,
-                    "status_to": "DONE",
-                },
+                event_payload=payload_event,
             )
 
             _set_last_audit_event(
@@ -951,10 +943,7 @@ def approve_report(
                 actor_user_id=int(current_user_id),
                 actor_role_id=int(role_id),
                 event_type="APPROVED",
-                event_payload={
-                    "current_comment": current_comment,
-                    "status_to": "DONE",
-                },
+                event_payload=payload_event,
             )
 
         else:
@@ -981,6 +970,8 @@ def approve_report(
                 {"sid": int(waiting_report_id), "tid": int(task_id)},
             )
 
+            payload_event = {"current_comment": current_comment, "status_to": "WAITING_REPORT"}
+
             _write_task_audit(
                 conn,
                 task_id=int(task_id),
@@ -989,12 +980,8 @@ def approve_report(
                 action="REJECT",
                 fields_changed={"status_code": {"from": "WAITING_APPROVAL", "to": "WAITING_REPORT"}},
                 request_body={"approve": False, "current_comment": current_comment},
-                # EVENT:
                 event_type="REJECTED",
-                event_payload={
-                    "current_comment": current_comment,
-                    "status_to": "WAITING_REPORT",
-                },
+                event_payload=payload_event,
             )
 
             _set_last_audit_event(
@@ -1003,10 +990,7 @@ def approve_report(
                 actor_user_id=int(current_user_id),
                 actor_role_id=int(role_id),
                 event_type="REJECTED",
-                event_payload={
-                    "current_comment": current_comment,
-                    "status_to": "WAITING_REPORT",
-                },
+                event_payload=payload_event,
             )
 
         updated = _load_task_full(conn, task_id=int(task_id))
@@ -1019,7 +1003,7 @@ def approve_report(
 
 
 # ---------------------------
-# Events endpoint (real: reads event_type)
+# Events endpoint (per-task)
 # ---------------------------
 
 @router.get("/{task_id}/events", response_model=List[TaskEventOut])
@@ -1027,7 +1011,13 @@ def get_task_events(
     task_id: int = Path(..., ge=1),
     include_archived: bool = Query(False),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    since_audit_id: Optional[int] = Query(None, ge=1),
+    limit: int = Query(200, ge=1, le=500),
 ) -> List[Dict[str, Any]]:
+    """
+    Возвращает только event-записи (event_type IS NOT NULL).
+    Для polling используйте since_audit_id (строго >).
+    """
     current_user_id = _get_current_user_id(x_user_id)
 
     with engine.begin() as conn:
@@ -1045,6 +1035,7 @@ def get_task_events(
             text(
                 """
                 SELECT
+                    audit_id,
                     event_type::text AS event_type,
                     actor_user_id,
                     created_at,
@@ -1053,10 +1044,12 @@ def get_task_events(
                 FROM task_audit_log
                 WHERE task_id = :tid
                   AND event_type IS NOT NULL
-                ORDER BY created_at ASC
+                  AND (:since_audit_id IS NULL OR audit_id > :since_audit_id)
+                ORDER BY audit_id ASC
+                LIMIT :limit
                 """
             ),
-            {"tid": int(task_id)},
+            {"tid": int(task_id), "since_audit_id": since_audit_id, "limit": int(limit)},
         ).mappings().all()
 
     out: List[Dict[str, Any]] = []
@@ -1083,6 +1076,8 @@ def get_task_events(
                 "actor_role_id": actor_role_id,
                 "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
                 "payload": payload,
+                # NOTE: response_model не включает audit_id; если нужно для клиента — расширьте модель.
+                # "audit_id": int(r.get("audit_id")) if r.get("audit_id") is not None else None,
             }
         )
 

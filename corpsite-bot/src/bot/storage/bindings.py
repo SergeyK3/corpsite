@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 # Храним рядом с проектом corpsite-bot (не внутри src), чтобы было очевидно и не попадало в package.
 # .../corpsite-bot/bindings.json
@@ -49,8 +49,16 @@ def set_binding(tg_user_id: int, user_id: int) -> None:
     save_bindings()
 
 
-def get_binding(tg_user_id: int) -> int | None:
+def get_binding(tg_user_id: int) -> Optional[int]:
     return BINDINGS.get(int(tg_user_id))
+
+
+def get_all_bindings() -> Dict[int, int]:
+    """
+    Возвращает копию всех привязок: tg_user_id -> user_id.
+    Нужен для polling /events (по всем привязанным пользователям).
+    """
+    return dict(BINDINGS)
 
 
 def delete_binding(tg_user_id: int) -> bool:
