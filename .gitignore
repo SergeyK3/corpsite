@@ -33,3 +33,8 @@ scripts/*.ps1
 bindings.json
 bindings.json.tmp
 
+# Allow ADRs in repo even if docs/ is ignored
+!docs/
+docs/*
+!docs/adr/
+!docs/adr/**
