@@ -18,11 +18,14 @@ from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.db.engine import engine
 from app.meta import router as meta_router
 from app.tasks import router as tasks_router
 from .tg_bind import router as tg_bind_router
+
+from app.errors import raise_error, ErrorCode
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -78,15 +81,26 @@ def create_period(payload: PeriodCreate):
     if payload.date_start > payload.date_end:
         raise HTTPException(status_code=400, detail="date_start must be <= date_end")
 
-    with engine.begin() as conn:
-        row = conn.execute(
-            text("""
-                INSERT INTO reporting_periods (kind, date_start, date_end, label)
-                VALUES ('MONTH', :ds, :de, :label)
-                RETURNING period_id, kind, date_start, date_end, label, is_closed
-            """),
-            {"ds": payload.date_start, "de": payload.date_end, "label": payload.label},
-        ).fetchone()
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(
+                text("""
+                    INSERT INTO reporting_periods (kind, date_start, date_end, label)
+                    VALUES ('MONTH', :ds, :de, :label)
+                    RETURNING period_id, kind, date_start, date_end, label, is_closed
+                """),
+                {"ds": payload.date_start, "de": payload.date_end, "label": payload.label},
+            ).fetchone()
+    except IntegrityError:
+        # 409 по контракту: период уже существует (уникальный индекс/ограничение в БД)
+        raise_error(
+            ErrorCode.PERIODS_CONFLICT_EXISTS,
+            extra={
+                "kind": "MONTH",
+                "date_start": payload.date_start.isoformat(),
+                "date_end": payload.date_end.isoformat(),
+            },
+        )
 
     return PeriodOut(
         period_id=int(row[0]),
@@ -130,10 +144,24 @@ def list_periods():
 @app.post("/periods/{period_id}/generate-tasks")
 def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, Any]:
     with engine.begin() as conn:
+        # до генерации: есть ли уже задачи по периоду
+        existing_before = conn.execute(
+            text("SELECT COUNT(1) FROM tasks WHERE period_id = :pid"),
+            {"pid": int(period_id)},
+        ).scalar() or 0
+
         row = conn.execute(
             text("SELECT generate_monthly_tasks(:pid, :initiator)"),
-            {"pid": period_id, "initiator": payload.initiator_user_id},
+            {"pid": int(period_id), "initiator": payload.initiator_user_id},
         ).fetchone()
 
-    created_count = int(row[0]) if row and row[0] is not None else 0
+        created_count = int(row[0]) if row and row[0] is not None else 0
+
+        # 409 по контракту: задачи уже есть и новых не создали
+        if int(existing_before) > 0 and created_count == 0:
+            raise_error(
+                ErrorCode.PERIODS_CONFLICT_TASKS_ALREADY_GENERATED,
+                extra={"period_id": int(period_id)},
+            )
+
     return {"period_id": period_id, "created_tasks": created_count}

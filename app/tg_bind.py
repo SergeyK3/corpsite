@@ -11,6 +11,7 @@ from typing import Dict, Optional
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from app.errors import raise_error, ErrorCode
 
 router = APIRouter(tags=["tg-bind"])
 
@@ -20,7 +21,7 @@ DEFAULT_TTL_MINUTES = int(os.getenv("TG_BIND_CODE_TTL_MINUTES", "30"))
 
 if not BOT_BIND_TOKEN:
     # Не падаем при импорте, чтобы не ломать dev,
-    # но endpoint /tg/bind/consume будет отдавать 401 всегда.
+    # но endpoint /tg/bind/consume будет отдавать ошибку конфигурации.
     pass
 
 
@@ -55,16 +56,28 @@ _CODES: Dict[str, _BindCodeRecord] = {}
 
 
 def _require_bot_token(x_bot_token: str | None) -> None:
+    # конфигурационная ошибка сервера (не 403/409)
     if not BOT_BIND_TOKEN:
-        raise HTTPException(status_code=401, detail="BOT_BIND_TOKEN is not configured on backend")
+        raise HTTPException(status_code=500, detail="BOT_BIND_TOKEN is not configured on backend")
+
+    # запрет (403) по контракту ошибок
     if not x_bot_token or x_bot_token.strip() != BOT_BIND_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise_error(ErrorCode.TGBIND_FORBIDDEN_CONSUME)
 
 
 def _require_user_id(x_user_id: int | None) -> int:
+    # запрет (403) по контракту ошибок
     if x_user_id is None or x_user_id <= 0:
-        raise HTTPException(status_code=401, detail="X-User-Id header is required")
+        raise_error(ErrorCode.TGBIND_FORBIDDEN_NOT_AUTH)
     return int(x_user_id)
+
+
+def _has_active_code_for_user(user_id: int) -> bool:
+    now = _now_utc()
+    for rec in _CODES.values():
+        if rec.user_id == int(user_id) and rec.used_at is None and rec.expires_at > now:
+            return True
+    return False
 
 
 # ---- schemas ----
@@ -91,6 +104,10 @@ def create_bind_code(x_user_id: int | None = Header(default=None, alias="X-User-
     """
     user_id = _require_user_id(x_user_id)
 
+    # если активный код уже существует — 409 (контракт)
+    if _has_active_code_for_user(user_id):
+        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_EXISTS, extra={"user_id": int(user_id)})
+
     code = _gen_code()
     code_hash = _hash_code(code)
 
@@ -113,17 +130,19 @@ def consume_bind_code(
     code_hash = _hash_code(payload.code.strip().upper())
     rec = _CODES.get(code_hash)
 
-    # Ничего не раскрываем наружу: "не найдено" одинаково для отсутствующих/просроченных/использованных.
-    if rec is None:
-        raise HTTPException(status_code=404, detail="Code not found")
-
     now = _now_utc()
+
+    # Ничего не раскрываем наружу: одинаковая 409 для отсутствующих/просроченных/использованных.
+    if rec is None:
+        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
+
     if rec.used_at is not None:
-        raise HTTPException(status_code=404, detail="Code not found")
+        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
+
     if rec.expires_at <= now:
         # можно удалить, чтобы не копить
         _CODES.pop(code_hash, None)
-        raise HTTPException(status_code=404, detail="Code not found")
+        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
 
     # mark used
     rec.used_at = now

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.errors import raise_error, ErrorCode
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -316,16 +317,6 @@ def _ensure_task_visible_or_404(
         raise HTTPException(status_code=404, detail="Task not found")
 
     return task_row
-
-
-def _deny_if_status_not(*, actual_code: str, expected: str) -> None:
-    if (actual_code or "") != expected:
-        raise HTTPException(status_code=409, detail=f"Action not allowed in status: {actual_code or 'UNKNOWN'}")
-
-
-def _deny_if_status_not_in(*, actual_code: str, allowed: Set[str]) -> None:
-    if (actual_code or "") not in allowed:
-        raise HTTPException(status_code=409, detail=f"Action not allowed in status: {actual_code or 'UNKNOWN'}")
 
 
 def _can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
@@ -656,9 +647,17 @@ def patch_task(
         )
 
         if not _can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
-            raise HTTPException(status_code=403, detail="update allowed only for executor (not initiator)")
+            raise_error(
+                ErrorCode.TASK_FORBIDDEN_PATCH,
+                extra={"task_id": int(task_id)},
+            )
 
-        _deny_if_status_not_in(actual_code=str(task.get("status_code") or ""), allowed={"IN_PROGRESS"})
+        status_code = str(task.get("status_code") or "")
+        if status_code != "IN_PROGRESS":
+            raise_error(
+                ErrorCode.TASK_CONFLICT_PATCH_STATUS,
+                extra={"task_id": int(task_id), "current_status": status_code or "UNKNOWN"},
+            )
 
         before = {
             "title": task.get("title"),
@@ -785,9 +784,24 @@ def submit_report(
         )
 
         if not _can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
-            raise HTTPException(status_code=403, detail="report allowed only for executor (not initiator)")
+            raise_error(
+                ErrorCode.TASK_FORBIDDEN_REPORT,
+                extra={"task_id": int(task_id)},
+            )
 
-        _deny_if_status_not(actual_code=str(task.get("status_code") or ""), expected="WAITING_REPORT")
+        status_code = str(task.get("status_code") or "")
+        if status_code != "WAITING_REPORT":
+            # если задача уже на согласовании/закрыта — это «отчёт уже отправлен»
+            if status_code in {"WAITING_APPROVAL", "DONE", "ARCHIVED"}:
+                raise_error(
+                    ErrorCode.TASK_CONFLICT_REPORT_ALREADY_SENT,
+                    extra={"task_id": int(task_id), "current_status": status_code},
+                )
+            # иначе это общий конфликт «действие недопустимо в статусе»
+            raise_error(
+                ErrorCode.TASK_CONFLICT_ACTION_STATUS,
+                extra={"task_id": int(task_id), "action": "report", "current_status": status_code or "UNKNOWN"},
+            )
 
         waiting_approval_id = _get_status_id_by_code(conn, "WAITING_APPROVAL")
 
@@ -888,16 +902,27 @@ def approve_report(
         )
 
         if not _can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
-            raise HTTPException(status_code=403, detail="approve/reject allowed only for initiator or supervisor/deputy")
+            raise_error(
+                ErrorCode.TASK_FORBIDDEN_APPROVE,
+                extra={"task_id": int(task_id), "action": "approve" if approve else "reject"},
+            )
 
-        _deny_if_status_not(actual_code=str(task.get("status_code") or ""), expected="WAITING_APPROVAL")
+        status_code = str(task.get("status_code") or "")
+        if status_code != "WAITING_APPROVAL":
+            raise_error(
+                ErrorCode.TASK_CONFLICT_APPROVE_NO_REPORT,
+                extra={"task_id": int(task_id), "current_status": status_code or "UNKNOWN"},
+            )
 
         rep = conn.execute(
             text("SELECT task_id FROM task_reports WHERE task_id = :tid"),
             {"tid": int(task_id)},
         ).mappings().first()
         if not rep:
-            raise HTTPException(status_code=409, detail="No report submitted for this task")
+            raise_error(
+                ErrorCode.TASK_CONFLICT_APPROVE_NO_REPORT,
+                extra={"task_id": int(task_id), "current_status": status_code or "UNKNOWN"},
+            )
 
         if approve:
             done_id = _get_status_id_by_code(conn, "DONE")
@@ -1076,8 +1101,6 @@ def get_task_events(
                 "actor_role_id": actor_role_id,
                 "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
                 "payload": payload,
-                # NOTE: response_model не включает audit_id; если нужно для клиента — расширьте модель.
-                # "audit_id": int(r.get("audit_id")) if r.get("audit_id") is not None else None,
             }
         )
 
@@ -1102,6 +1125,7 @@ def delete_task(
             include_archived=True,
         )
 
+        # intentionally "hide" if not initiator (behavior unchanged)
         if not _is_initiator(current_user_id=current_user_id, task_row=task):
             raise HTTPException(status_code=404, detail="Task not found")
 
