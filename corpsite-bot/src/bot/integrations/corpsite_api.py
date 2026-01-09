@@ -1,12 +1,15 @@
 # corpsite-bot/src/bot/integrations/corpsite_api.py
-
 from __future__ import annotations
 
 import os
+import time
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import httpx
+
+log = logging.getLogger("corpsite-bot.api")
 
 
 @dataclass
@@ -14,6 +17,11 @@ class APIResponse:
     status_code: int
     json: Any = None
     text: str = ""
+
+
+def _truthy_env(name: str) -> bool:
+    v = (os.getenv(name) or "").strip().lower()
+    return v in ("1", "true", "yes", "y", "on")
 
 
 class CorpsiteAPI:
@@ -27,21 +35,43 @@ class CorpsiteAPI:
         base_url: Optional[str] = None,
         timeout_s: float = 10.0,
     ) -> None:
-        self.base_url = (base_url or os.getenv("CORPSITE_API_BASE_URL") or "").strip().rstrip("/")
+        # Приоритет:
+        # 1) base_url аргументом (из bot.py)
+        # 2) API_BASE_URL (единый ключ .env в проекте)
+        # 3) CORPSITE_API_BASE_URL (fallback для старых конфигов)
+        env_url = (os.getenv("API_BASE_URL") or os.getenv("CORPSITE_API_BASE_URL") or "").strip()
+        self.base_url = (base_url or env_url).strip().rstrip("/")
         if not self.base_url:
-            raise RuntimeError("CORPSITE_API_BASE_URL is not set")
+            raise RuntimeError("API_BASE_URL (or CORPSITE_API_BASE_URL) is not set")
+
+        # Включается только когда надо, чтобы не шуметь постоянно
+        self._trace = _truthy_env("CORPSITE_HTTP_TRACE")
+
+        # Жёсткие таймауты по фазам (важно для диагностики "висит")
+        ts = float(timeout_s)
+        timeout = httpx.Timeout(
+            timeout=ts,
+            connect=min(5.0, ts),
+            read=ts,
+            write=ts,
+            pool=min(5.0, ts),
+        )
 
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
-            timeout=httpx.Timeout(timeout_s),
+            timeout=timeout,
+            follow_redirects=True,
+        )
+
+        log.info(
+            "CorpsiteAPI initialized. base_url=%s timeout_s=%s trace=%s",
+            self.base_url,
+            ts,
+            self._trace,
         )
 
     async def aclose(self) -> None:
         await self._client.aclose()
-
-    # -----------------------
-    # Low-level request helper
-    # -----------------------
 
     async def _request(
         self,
@@ -53,6 +83,12 @@ class CorpsiteAPI:
         json_body: Optional[Dict[str, Any]] = None,
     ) -> APIResponse:
         headers = {"X-User-Id": str(int(user_id))}
+        t0 = time.perf_counter()
+
+        if self._trace:
+            # не печатаем потенциально длинный json_body полностью
+            j = None if json_body is None else {k: json_body.get(k) for k in list(json_body.keys())[:20]}
+            log.info("HTTP -> %s %s user_id=%s params=%s json_keys=%s", method, path, user_id, params, None if j is None else list(j.keys()))
 
         try:
             r = await self._client.request(
@@ -63,7 +99,11 @@ class CorpsiteAPI:
                 json=json_body,
             )
         except Exception as e:
+            dt = time.perf_counter() - t0
+            log.warning("HTTP !! %s %s user_id=%s failed after %.3fs: %s", method, path, user_id, dt, repr(e))
             return APIResponse(status_code=0, json=None, text=str(e))
+
+        dt = time.perf_counter() - t0
 
         parsed: Any = None
         try:
@@ -71,6 +111,10 @@ class CorpsiteAPI:
                 parsed = r.json()
         except Exception:
             parsed = None
+
+        if self._trace:
+            snippet = (r.text or "")[:300]
+            log.info("HTTP <- %s %s user_id=%s status=%s %.3fs body=%s", method, path, user_id, r.status_code, dt, snippet)
 
         return APIResponse(status_code=r.status_code, json=parsed, text=r.text)
 
@@ -152,11 +196,6 @@ class CorpsiteAPI:
         action: str,
         payload: Optional[Dict[str, Any]] = None,
     ) -> APIResponse:
-        """
-        Unified actions endpoint:
-          POST /tasks/{task_id}/actions/{action}
-        action: report | approve | reject
-        """
         action_norm = str(action).strip().lower()
         return await self._request(
             "POST",
@@ -178,11 +217,6 @@ class CorpsiteAPI:
         since_audit_id: Optional[int] = None,
         limit: int = 200,
     ) -> APIResponse:
-        """
-        Backend:
-          GET /tasks/{task_id}/events?include_archived=&since_audit_id=&limit=
-        Returns: list[ { event_type, actor_user_id, actor_role_id, created_at, payload } ]
-        """
         params: Dict[str, Any] = {
             "include_archived": bool(include_archived),
             "limit": int(limit),
@@ -201,13 +235,6 @@ class CorpsiteAPI:
         since_audit_id: Optional[int] = None,
         event_type: Optional[str] = None,
     ) -> APIResponse:
-        """
-        Backend:
-          GET /tasks/me/events?limit=&offset=&since_audit_id=&event_type=
-        Returns: list[
-          { event_id, task_id, event_type, actor_user_id, actor_role_id, created_at, payload }
-        ]
-        """
         params: Dict[str, Any] = {
             "limit": int(limit),
             "offset": int(offset),

@@ -38,3 +38,5 @@ bindings.json.tmp
 docs/*
 !docs/adr/
 !docs/adr/**
+
+.botdata/
