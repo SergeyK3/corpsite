@@ -5,16 +5,16 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
-# Храним рядом с проектом corpsite-bot (не внутри src), чтобы было очевидно и не попадало в package.
-# .../corpsite-bot/bindings.json
-_BINDINGS_FILE = Path(__file__).resolve().parents[3] / "bindings.json"
+# Хранилище должно совпадать с events_poller / bot.py:
+# <repo_root>/.botdata/bindings.json
+_BINDINGS_FILE = Path(__file__).resolve().parents[4] / ".botdata" / "bindings.json"
 
 BINDINGS: Dict[int, int] = {}
 
 
 def load_bindings() -> None:
     """
-    Загружает bindings из bindings.json (если есть).
+    Загружает bindings из .botdata/bindings.json (если есть).
     Молча стартует с пустыми bindings, если файла нет или он повреждён.
     """
     global BINDINGS
@@ -35,8 +35,10 @@ def load_bindings() -> None:
 
 def save_bindings() -> None:
     """
-    Атомарно сохраняет bindings в bindings.json.
+    Атомарно сохраняет bindings в .botdata/bindings.json.
     """
+    _BINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
     data = {str(k): int(v) for k, v in BINDINGS.items()}
 
     tmp = _BINDINGS_FILE.with_suffix(".json.tmp")
@@ -56,14 +58,13 @@ def get_binding(tg_user_id: int) -> Optional[int]:
 def get_all_bindings() -> Dict[int, int]:
     """
     Возвращает копию всех привязок: tg_user_id -> user_id.
-    Нужен для polling /events (по всем привязанным пользователям).
     """
     return dict(BINDINGS)
 
 
-def delete_binding(tg_user_id: int) -> bool:
+def remove_binding(tg_user_id: int) -> bool:
     """
-    Удаляет привязку. Возвращает True, если привязка была и удалена, иначе False.
+    Удаляет привязку. Возвращает True, если привязка была и удалена.
     """
     tg_user_id = int(tg_user_id)
     if tg_user_id not in BINDINGS:
@@ -73,5 +74,5 @@ def delete_binding(tg_user_id: int) -> bool:
     return True
 
 
-# Автозагрузка при импорте — bot.py менять не нужно
+# Автозагрузка при импорте
 load_bindings()
