@@ -191,3 +191,30 @@ class CorpsiteAPI:
             params["since_audit_id"] = int(since_audit_id)
 
         return await self._request("GET", f"/tasks/{int(task_id)}/events", user_id=user_id, params=params)
+
+    async def get_my_events(
+        self,
+        *,
+        user_id: int,
+        limit: int = 200,
+        offset: int = 0,
+        since_audit_id: Optional[int] = None,
+        event_type: Optional[str] = None,
+    ) -> APIResponse:
+        """
+        Backend:
+          GET /tasks/me/events?limit=&offset=&since_audit_id=&event_type=
+        Returns: list[
+          { event_id, task_id, event_type, actor_user_id, actor_role_id, created_at, payload }
+        ]
+        """
+        params: Dict[str, Any] = {
+            "limit": int(limit),
+            "offset": int(offset),
+        }
+        if since_audit_id is not None:
+            params["since_audit_id"] = int(since_audit_id)
+        if event_type:
+            params["event_type"] = str(event_type).strip()
+
+        return await self._request("GET", "/tasks/me/events", user_id=user_id, params=params)

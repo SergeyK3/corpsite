@@ -23,6 +23,9 @@ from .handlers.tasks import cmd_task
 from .handlers.whoami import cmd_whoami
 from .handlers.unbind import cmd_unbind
 
+# NEW: events polling
+from .events_poller import events_polling_loop, JsonFileStore
+
 
 # -----------------------
 # Env (single source of truth)
@@ -38,6 +41,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 ADMIN_TG_IDS_RAW = os.getenv("ADMIN_TG_IDS", "").strip()
+
+# NEW: polling config + local storage
+POLL_INTERVAL_S = float((os.getenv("EVENTS_POLL_INTERVAL_S", "5") or "5").strip())
+
+DATA_DIR = Path(__file__).resolve().parents[3] / ".botdata"
+BINDINGS_PATH = Path(os.getenv("BINDINGS_PATH", str(DATA_DIR / "bindings.json")))
+EVENTS_STATE_PATH = Path(os.getenv("EVENTS_STATE_PATH", str(DATA_DIR / "events_state.json")))
 
 if not BOT_TOKEN:
     raise RuntimeError(f"BOT_TOKEN is not set. Expected in {ROOT_ENV}")
@@ -129,12 +139,43 @@ async def _post_init(application: Application) -> None:
     log.info("Initialized backend client. API_BASE_URL=%s", API_BASE_URL)
     log.info("ADMIN_TG_IDS=%s", sorted(ADMIN_TG_IDS))
 
+    # NEW: start events polling task
+    bindings_store = JsonFileStore(BINDINGS_PATH)
+    state_store = JsonFileStore(EVENTS_STATE_PATH)
+
+    poll_task = application.create_task(
+        events_polling_loop(
+            application=application,
+            backend=backend,
+            poll_interval_s=POLL_INTERVAL_S,
+            bindings_store=bindings_store,
+            state_store=state_store,
+            per_user_limit=200,
+        )
+    )
+    application.bot_data["events_poll_task"] = poll_task
+
+    log.info(
+        "Events polling enabled. interval=%ss bindings=%s state=%s",
+        POLL_INTERVAL_S,
+        BINDINGS_PATH,
+        EVENTS_STATE_PATH,
+    )
+
 
 async def _post_shutdown(application: Application) -> None:
     """
     Called once during shutdown.
     Close httpx client to avoid resource leaks.
     """
+    # NEW: stop polling task
+    t = application.bot_data.get("events_poll_task")
+    if t is not None:
+        try:
+            t.cancel()
+        except Exception:
+            pass
+
     backend: Optional[CorpsiteAPI] = application.bot_data.get("backend")  # type: ignore[assignment]
     if backend is not None:
         try:
@@ -165,7 +206,7 @@ def main() -> None:
 
     # main tasks UX + separate history command
     app.add_handler(CommandHandler("tasks", cmd_task))
-    
+
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("whereami", cmd_whereami))
 
