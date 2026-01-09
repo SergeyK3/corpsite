@@ -268,6 +268,16 @@ class TaskEventOut(BaseModel):
     payload: Dict[str, Any] = {}
 
 
+class MeEventOut(BaseModel):
+    event_id: int
+    task_id: int
+    event_type: str
+    actor_user_id: Optional[int] = None
+    actor_role_id: Optional[int] = None
+    created_at: str
+    payload: Dict[str, Any] = {}
+
+
 # ---------------------------
 # ACL core
 # ---------------------------
@@ -508,6 +518,134 @@ def list_tasks(
             items.append(t)
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": items}
+
+
+# ---------------------------
+# IMPORTANT: /me/events MUST be defined before "/{task_id}" routes
+# ---------------------------
+
+@router.get("/me/events", response_model=List[MeEventOut])
+def get_my_events(
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    since_audit_id: Optional[int] = Query(None, ge=1),
+    event_type: Optional[str] = Query(None),
+) -> List[Dict[str, Any]]:
+    """
+    Лента событий, релевантных текущему пользователю, из task_audit_log (event_type IS NOT NULL).
+
+    Релевантность:
+    - пользователь может видеть задачу (initiator OR supervisor/deputy OR functional executor-role).
+
+    По умолчанию: самые новые первыми (ORDER BY audit_id DESC).
+    """
+    current_user_id = _get_current_user_id(x_user_id)
+
+    with engine.begin() as conn:
+        role_id = _get_user_role_id(conn, current_user_id)
+
+        allowed = _load_assignment_scope_enum_labels(conn)
+        if not allowed:
+            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
+
+        functional_lbl = _scope_label_or_none(allowed, "functional")
+        admin_lbl = _scope_label_or_none(allowed, "admin")
+
+        is_sup = bool(_is_supervisor_or_deputy(role_id))
+
+        params: Dict[str, Any] = {
+            "uid": int(current_user_id),
+            "rid": int(role_id),
+            "is_sup": is_sup,
+            "limit": int(limit),
+            "offset": int(offset),
+            "since_audit_id": since_audit_id,
+            "event_type": (event_type or "").strip() or None,
+            "functional_scope": functional_lbl,
+            "admin_scope": admin_lbl,
+        }
+
+        if functional_lbl and admin_lbl:
+            scope_guard = """
+            AND (
+                (:is_sup = TRUE)
+                OR (t.initiator_user_id = :uid)
+                OR (
+                    t.executor_role_id = :rid
+                    AND t.assignment_scope = :functional_scope
+                )
+                OR (
+                    t.initiator_user_id = :uid
+                    AND t.assignment_scope = :admin_scope
+                )
+            )
+            """
+        else:
+            scope_guard = """
+            AND (
+                (:is_sup = TRUE)
+                OR (t.initiator_user_id = :uid)
+                OR (t.executor_role_id = :rid)
+            )
+            """
+
+        rows = conn.execute(
+            text(
+                f"""
+                SELECT
+                    a.audit_id AS event_id,
+                    a.task_id,
+                    a.event_type::text AS event_type,
+                    a.actor_user_id,
+                    a.created_at,
+                    a.actor_role,
+                    a.payload::text AS payload_text
+                FROM task_audit_log a
+                JOIN tasks t ON t.task_id = a.task_id
+                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                WHERE a.event_type IS NOT NULL
+                  AND (:event_type IS NULL OR a.event_type::text = :event_type)
+                  AND (:since_audit_id IS NULL OR a.audit_id > :since_audit_id)
+                  {scope_guard}
+                  AND COALESCE(ts.code,'') <> 'ARCHIVED'
+                ORDER BY a.audit_id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            params,
+        ).mappings().all()
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        payload: Dict[str, Any] = {}
+        try:
+            if r.get("payload_text"):
+                payload = json.loads(r["payload_text"])
+        except Exception:
+            payload = {}
+
+        actor_role_id: Optional[int] = None
+        try:
+            if r.get("actor_role") is not None:
+                actor_role_id = int(str(r["actor_role"]))
+        except Exception:
+            actor_role_id = None
+
+        created_at = r.get("created_at")
+        out.append(
+            {
+                "event_id": int(r.get("event_id") or 0),
+                "task_id": int(r.get("task_id") or 0),
+                "event_type": r.get("event_type"),
+                "actor_user_id": r.get("actor_user_id"),
+                "actor_role_id": actor_role_id,
+                "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+                "payload": payload,
+            }
+        )
+
+    return out
 
 
 @router.get("/{task_id}")
@@ -791,13 +929,11 @@ def submit_report(
 
         status_code = str(task.get("status_code") or "")
         if status_code != "WAITING_REPORT":
-            # если задача уже на согласовании/закрыта — это «отчёт уже отправлен»
             if status_code in {"WAITING_APPROVAL", "DONE", "ARCHIVED"}:
                 raise_error(
                     ErrorCode.TASK_CONFLICT_REPORT_ALREADY_SENT,
                     extra={"task_id": int(task_id), "current_status": status_code},
                 )
-            # иначе это общий конфликт «действие недопустимо в статусе»
             raise_error(
                 ErrorCode.TASK_CONFLICT_ACTION_STATUS,
                 extra={"task_id": int(task_id), "action": "report", "current_status": status_code or "UNKNOWN"},
@@ -857,7 +993,6 @@ def submit_report(
             event_payload=payload_event,
         )
 
-        # enforce event columns on last row (safety net)
         _set_last_audit_event(
             conn,
             task_id=int(task_id),
