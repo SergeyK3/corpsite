@@ -355,6 +355,7 @@ def _allowed_actions_for_user(
     if code == "IN_PROGRESS":
         if _can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
             actions.append("update")
+            actions.append("report")  # <-- ИЗМЕНЕНИЕ: report разрешён и в IN_PROGRESS
 
     elif code == "WAITING_REPORT":
         if _can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
@@ -927,8 +928,9 @@ def submit_report(
                 extra={"task_id": int(task_id)},
             )
 
+        # <-- ИЗМЕНЕНИЕ: report разрешён в IN_PROGRESS и WAITING_REPORT
         status_code = str(task.get("status_code") or "")
-        if status_code != "WAITING_REPORT":
+        if status_code not in {"WAITING_REPORT", "IN_PROGRESS"}:
             if status_code in {"WAITING_APPROVAL", "DONE", "ARCHIVED"}:
                 raise_error(
                     ErrorCode.TASK_CONFLICT_REPORT_ALREADY_SENT,
@@ -939,6 +941,7 @@ def submit_report(
                 extra={"task_id": int(task_id), "action": "report", "current_status": status_code or "UNKNOWN"},
             )
 
+        from_status = status_code or "UNKNOWN"
         waiting_approval_id = _get_status_id_by_code(conn, "WAITING_APPROVAL")
 
         conn.execute(
@@ -987,7 +990,7 @@ def submit_report(
             actor_user_id=int(current_user_id),
             actor_role_id=int(role_id),
             action="REPORT_SUBMIT",
-            fields_changed={"status_code": {"from": "WAITING_REPORT", "to": "WAITING_APPROVAL"}},
+            fields_changed={"status_code": {"from": from_status, "to": "WAITING_APPROVAL"}},
             request_body=payload,
             event_type="REPORT_SUBMITTED",
             event_payload=payload_event,
