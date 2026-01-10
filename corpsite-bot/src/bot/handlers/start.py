@@ -1,3 +1,5 @@
+# corpsite-bot/src/bot/handlers/start.py
+
 from __future__ import annotations
 
 from telegram import Update
@@ -12,6 +14,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
         "Corpsite Bot (MVP)\n\n"
         "Команды:\n"
+        "/bind  — self-bind (привязка этого Telegram-аккаунта)\n"
         "/bind <tg_user_id> <user_id>  — (админ) привязка Telegram → user\n\n"
         "Задачи:\n"
         "/tasks                     — список задач\n"

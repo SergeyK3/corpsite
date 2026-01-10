@@ -149,7 +149,12 @@ async def _post_init(application: Application) -> None:
     """
     backend = CorpsiteAPI(base_url=API_BASE_URL, timeout_s=15.0)
 
+    # ВАЖНО: единая регистрация API-клиента для всех хендлеров.
+    # Старый код мог обращаться к "backend", новый self-bind ищет "api"/"corpsite_api".
     application.bot_data["backend"] = backend
+    application.bot_data["api"] = backend
+    application.bot_data["corpsite_api"] = backend
+
     application.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
     bindings_store = JsonFileStore(BINDINGS_PATH)

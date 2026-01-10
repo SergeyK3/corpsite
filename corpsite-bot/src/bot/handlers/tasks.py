@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List, Dict, Tuple
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..storage.bindings import get_binding
+from ..integrations.corpsite_api import CorpsiteAPI
 
 log = logging.getLogger("corpsite-bot")
 
@@ -19,9 +20,73 @@ class CommandParseError(Exception):
     message: str
 
 
-def _get_bound_user_id(tg_user_id: int) -> Optional[int]:
-    return get_binding(tg_user_id)
+# -----------------------
+# Resolve user_id via backend (users.telegram_id)
+# -----------------------
 
+# cache: tg_user_id -> (user_id, expires_at_monotonic)
+_UID_CACHE: dict[int, Tuple[int, float]] = {}
+_UID_CACHE_TTL_S = 600.0  # 10 минут
+
+
+def _get_backend(context: ContextTypes.DEFAULT_TYPE) -> Optional[CorpsiteAPI]:
+    bd = context.bot_data or {}
+    api = bd.get("api") or bd.get("corpsite_api") or bd.get("backend")
+    return api if isinstance(api, CorpsiteAPI) else None
+
+
+def _uid_cache_get(tg_user_id: int) -> Optional[int]:
+    rec = _UID_CACHE.get(int(tg_user_id))
+    if not rec:
+        return None
+    uid, exp = rec
+    if time.monotonic() >= exp:
+        _UID_CACHE.pop(int(tg_user_id), None)
+        return None
+    return int(uid)
+
+
+def _uid_cache_set(tg_user_id: int, user_id: int) -> None:
+    _UID_CACHE[int(tg_user_id)] = (int(user_id), time.monotonic() + _UID_CACHE_TTL_S)
+
+
+async def _resolve_user_id(
+    *,
+    backend: CorpsiteAPI,
+    tg_user_id: int,
+    tg_username: Optional[str],
+) -> tuple[Optional[int], int]:
+    """
+    Returns (user_id or None, status_code)
+    status_code:
+      200/201 ok
+      404 not bound
+      0 backend unreachable
+      other: backend error
+    """
+    cached = _uid_cache_get(tg_user_id)
+    if cached is not None:
+        return cached, 200
+
+    resp = await backend.self_bind(telegram_user_id=int(tg_user_id), telegram_username=tg_username)
+    sc = int(resp.status_code or 0)
+
+    if sc in (200, 201) and isinstance(resp.json, dict):
+        uid = resp.json.get("user_id")
+        try:
+            if uid is not None and int(uid) > 0:
+                _uid_cache_set(tg_user_id, int(uid))
+                return int(uid), sc
+        except Exception:
+            return None, sc
+        return None, sc
+
+    return None, sc
+
+
+# -----------------------
+# Parsing / formatting
+# -----------------------
 
 _TITLE_KV_RE = re.compile(r'title="([^"]+)"')
 _DESC_KV_RE = re.compile(r'desc="([^"]+)"')
@@ -121,7 +186,6 @@ def _fmt_task_view(t: dict) -> str:
 
 
 def _fmt_dt_short(iso: str) -> str:
-    # Оставляем как есть (backend отдаёт ISO). Если нужно укоротить — сделаем отдельно.
     return iso
 
 
@@ -164,10 +228,6 @@ def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
 
 
 def _extract_backend_detail(resp: Any) -> str:
-    """
-    Пытаемся аккуратно вытащить человеко-читаемую причину из ответа backend.
-    Поддерживает варианты detail/message/errors без жёсткой привязки к схеме.
-    """
     try:
         data = getattr(resp, "json", None)
         if isinstance(data, dict):
@@ -175,7 +235,6 @@ def _extract_backend_detail(resp: Any) -> str:
                 v = data.get(k)
                 if isinstance(v, str) and v.strip():
                     return v.strip()
-            # иногда бывают списки ошибок
             errs = data.get("errors")
             if isinstance(errs, list) and errs:
                 head = errs[0]
@@ -196,12 +255,6 @@ def _extract_backend_detail(resp: Any) -> str:
 
 
 def _user_friendly_action_error(action: str, resp: Any) -> str:
-    """
-    Unified 403/404/409 semantics:
-    - 403: нет прав
-    - 404: нет доступа/не найдено
-    - 409: конфликт состояния/валидации
-    """
     sc = int(getattr(resp, "status_code", 0) or 0)
     detail = _extract_backend_detail(resp)
 
@@ -211,7 +264,6 @@ def _user_friendly_action_error(action: str, resp: Any) -> str:
         return "Задача не найдена или недоступна."
     if sc == 409:
         return detail or "Невозможно выполнить действие в текущем статусе задачи."
-    # прочие ошибки
     return detail or "Ошибка выполнения операции."
 
 
@@ -219,6 +271,10 @@ def _looks_like_url(s: str) -> bool:
     s = (s or "").strip().lower()
     return s.startswith("http://") or s.startswith("https://")
 
+
+# -----------------------
+# Handler
+# -----------------------
 
 async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
@@ -229,14 +285,23 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not tg_user:
         return
 
-    user_id = _get_bound_user_id(tg_user.id)
-    if user_id is None:
-        await msg.reply_text("Вы не привязаны. Используйте /bind (если вы админ) или обратитесь к администратору.")
-        return
-
-    backend = context.bot_data.get("backend")
+    backend = _get_backend(context)
     if backend is None:
         await msg.reply_text("Backend не инициализирован.")
+        return
+
+    tg_user_id = int(tg_user.id)
+    tg_username = (tg_user.username or "").strip() or None
+
+    user_id, sc = await _resolve_user_id(backend=backend, tg_user_id=tg_user_id, tg_username=tg_username)
+    if user_id is None:
+        if sc == 404:
+            await msg.reply_text("Вы не привязаны. Используйте /bind.")
+            return
+        if sc == 0:
+            await msg.reply_text("Backend временно недоступен. Попробуйте позже.")
+            return
+        await msg.reply_text("Не удалось определить пользователя. Попробуйте позже.")
         return
 
     args = context.args or []
@@ -308,7 +373,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text(_user_friendly_action_error(action="update", resp=resp))
         return
 
-    # report: используем unified action endpoint (устойчивее, чем отдельный submit_report)
+    # report
     if action == "report":
         if len(rest) < 1:
             await msg.reply_text("Формат: /tasks <id> report <url> [comment]")
@@ -331,7 +396,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text(_user_friendly_action_error(action="report", resp=resp))
         return
 
-    # approve / reject: unified action endpoint
+    # approve / reject
     if action in ("approve", "reject"):
         comment = " ".join(rest).strip()
         payload: Dict[str, Any] = {}

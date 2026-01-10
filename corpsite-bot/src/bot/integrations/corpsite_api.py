@@ -27,7 +27,9 @@ def _truthy_env(name: str) -> bool:
 class CorpsiteAPI:
     """
     Minimal async API client for Corpsite backend.
-    Uses X-User-Id header for auth/ACL.
+
+    - Auth/ACL requests use header: X-User-Id
+    - Bootstrap flows (self-bind / consume bind-code) use custom headers.
     """
 
     def __init__(
@@ -35,19 +37,21 @@ class CorpsiteAPI:
         base_url: Optional[str] = None,
         timeout_s: float = 10.0,
     ) -> None:
-        # Приоритет:
-        # 1) base_url аргументом (из bot.py)
-        # 2) API_BASE_URL (единый ключ .env в проекте)
-        # 3) CORPSITE_API_BASE_URL (fallback для старых конфигов)
+        # Priority:
+        # 1) base_url argument (from bot.py)
+        # 2) API_BASE_URL (.env)
+        # 3) CORPSITE_API_BASE_URL (legacy fallback)
         env_url = (os.getenv("API_BASE_URL") or os.getenv("CORPSITE_API_BASE_URL") or "").strip()
         self.base_url = (base_url or env_url).strip().rstrip("/")
         if not self.base_url:
             raise RuntimeError("API_BASE_URL (or CORPSITE_API_BASE_URL) is not set")
 
-        # Включается только когда надо, чтобы не шуметь постоянно
+        # Token for bind-consume (bot -> backend). Required for POST /tg/bind/consume only.
+        self._bot_bind_token = (os.getenv("BOT_BIND_TOKEN") or "").strip()
+
+        # Enable detailed HTTP logs only when needed.
         self._trace = _truthy_env("CORPSITE_HTTP_TRACE")
 
-        # Жёсткие таймауты по фазам (важно для диагностики "висит")
         ts = float(timeout_s)
         timeout = httpx.Timeout(
             timeout=ts,
@@ -86,7 +90,6 @@ class CorpsiteAPI:
         t0 = time.perf_counter()
 
         if self._trace:
-            # не печатаем потенциально длинный json_body полностью
             j = None if json_body is None else {k: json_body.get(k) for k in list(json_body.keys())[:20]}
             log.info(
                 "HTTP -> %s %s user_id=%s params=%s json_keys=%s",
@@ -121,9 +124,123 @@ class CorpsiteAPI:
 
         if self._trace:
             snippet = (r.text or "")[:300]
-            log.info("HTTP <- %s %s user_id=%s status=%s %.3fs body=%s", method, path, user_id, r.status_code, dt, snippet)
+            log.info(
+                "HTTP <- %s %s user_id=%s status=%s %.3fs body=%s",
+                method,
+                path,
+                user_id,
+                r.status_code,
+                dt,
+                snippet,
+            )
 
         return APIResponse(status_code=r.status_code, json=parsed, text=r.text)
+
+    async def _request_headers(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: Dict[str, str],
+        params: Optional[Dict[str, Any]] = None,
+        json_body: Optional[Dict[str, Any]] = None,
+    ) -> APIResponse:
+        """
+        Low-level request with arbitrary headers (no X-User-Id requirement).
+        Use for bootstrap/auth flows such as self-bind / consume bind-code.
+        """
+        t0 = time.perf_counter()
+
+        if self._trace:
+            j = None if json_body is None else {k: json_body.get(k) for k in list(json_body.keys())[:20]}
+            log.info(
+                "HTTP -> %s %s headers_keys=%s params=%s json_keys=%s",
+                method,
+                path,
+                list(headers.keys()),
+                params,
+                None if j is None else list(j.keys()),
+            )
+
+        try:
+            r = await self._client.request(
+                method=method,
+                url=path,
+                headers=headers,
+                params=params,
+                json=json_body,
+            )
+        except Exception as e:
+            dt = time.perf_counter() - t0
+            log.warning("HTTP !! %s %s failed after %.3fs: %s", method, path, dt, repr(e))
+            return APIResponse(status_code=0, json=None, text=str(e))
+
+        dt = time.perf_counter() - t0
+
+        parsed: Any = None
+        try:
+            if r.content:
+                parsed = r.json()
+        except Exception:
+            parsed = None
+
+        if self._trace:
+            snippet = (r.text or "")[:300]
+            log.info("HTTP <- %s %s status=%s %.3fs body=%s", method, path, r.status_code, dt, snippet)
+
+        return APIResponse(status_code=r.status_code, json=parsed, text=r.text)
+
+    # -----------------------
+    # Diagnostics / Meta
+    # -----------------------
+
+    async def health(self) -> APIResponse:
+        # Expected: {"ok": true} or similar
+        return await self._request_headers("GET", "/health", headers={})
+
+    async def get_task_statuses(self, *, user_id: int) -> APIResponse:
+        return await self._request("GET", "/meta/task-statuses", user_id=user_id)
+
+    # -----------------------
+    # Auth / Bind
+    # -----------------------
+
+    async def self_bind(
+        self,
+        *,
+        telegram_user_id: int,
+        telegram_username: Optional[str] = None,
+    ) -> APIResponse:
+        """
+        POST /auth/self-bind
+        Headers:
+          X-Telegram-User-Id: <int>
+          X-Telegram-Username: <str> (optional)
+        """
+        headers: Dict[str, str] = {"X-Telegram-User-Id": str(int(telegram_user_id))}
+        if telegram_username:
+            headers["X-Telegram-Username"] = str(telegram_username).strip()
+        return await self._request_headers("POST", "/auth/self-bind", headers=headers)
+
+    async def consume_bind_code(
+        self,
+        *,
+        code: str,
+        telegram_user_id: int,
+    ) -> APIResponse:
+        """
+        POST /tg/bind/consume
+        Headers:
+          X-Bot-Token: <BOT_BIND_TOKEN from bot .env>
+        JSON:
+          { "code": "...", "tg_user_id": 123 }
+        """
+        if not self._bot_bind_token:
+            return APIResponse(status_code=0, json=None, text="BOT_BIND_TOKEN is not set in bot environment")
+
+        headers: Dict[str, str] = {"X-Bot-Token": self._bot_bind_token}
+        body = {"code": str(code or "").strip(), "tg_user_id": int(telegram_user_id)}
+        return await self._request_headers("POST", "/tg/bind/consume", headers=headers, json_body=body)
 
     # -----------------------
     # Tasks
@@ -189,8 +306,7 @@ class CorpsiteAPI:
             json_body=(payload or {}),
         )
 
-    # Backward-compatible wrappers:
-    # Важно: теперь они используют unified endpoint /actions/* (как в backend).
+    # Backward-compatible wrappers (keep old bot code working)
     async def submit_report(
         self,
         *,
@@ -215,8 +331,18 @@ class CorpsiteAPI:
     ) -> APIResponse:
         comment = str(current_comment or "").strip()
         if bool(approve):
-            return await self.task_action(task_id=task_id, user_id=user_id, action="approve", payload={"current_comment": comment})
-        return await self.task_action(task_id=task_id, user_id=user_id, action="reject", payload={"current_comment": comment})
+            return await self.task_action(
+                task_id=task_id,
+                user_id=user_id,
+                action="approve",
+                payload={"current_comment": comment},
+            )
+        return await self.task_action(
+            task_id=task_id,
+            user_id=user_id,
+            action="reject",
+            payload={"current_comment": comment},
+        )
 
     # -----------------------
     # Events / History
