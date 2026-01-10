@@ -1,3 +1,4 @@
+# corpsite-bot/src/bot/handlers/tasks.py
 from __future__ import annotations
 
 import logging
@@ -130,9 +131,6 @@ def _fmt_event_line(ev: dict) -> str:
     actor = ev.get("actor_user_id")
     payload = ev.get("payload") or {}
 
-    # Привычный формат как у вас в /tasks_history:
-    # • 08.01 01:20 REPORT от user1 — link — Комментарий: ...
-    # Но раз backend отдаёт ISO — оставим ISO, чтобы не потерять TZ (можем укоротить позже).
     parts = [f"• {ts} {et}"]
     if actor is not None:
         parts.append(f"от user{actor}")
@@ -163,6 +161,63 @@ def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
         raise CommandParseError("Неизвестное действие. Допустимо: update/report/approve/reject/history")
 
     return task_id, action, rest
+
+
+def _extract_backend_detail(resp: Any) -> str:
+    """
+    Пытаемся аккуратно вытащить человеко-читаемую причину из ответа backend.
+    Поддерживает варианты detail/message/errors без жёсткой привязки к схеме.
+    """
+    try:
+        data = getattr(resp, "json", None)
+        if isinstance(data, dict):
+            for k in ("detail", "message", "error"):
+                v = data.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            # иногда бывают списки ошибок
+            errs = data.get("errors")
+            if isinstance(errs, list) and errs:
+                head = errs[0]
+                if isinstance(head, str) and head.strip():
+                    return head.strip()
+                if isinstance(head, dict):
+                    dv = head.get("detail") or head.get("message")
+                    if isinstance(dv, str) and dv.strip():
+                        return dv.strip()
+    except Exception:
+        pass
+
+    try:
+        txt = getattr(resp, "text", "") or ""
+        return txt.strip()
+    except Exception:
+        return ""
+
+
+def _user_friendly_action_error(action: str, resp: Any) -> str:
+    """
+    Unified 403/404/409 semantics:
+    - 403: нет прав
+    - 404: нет доступа/не найдено
+    - 409: конфликт состояния/валидации
+    """
+    sc = int(getattr(resp, "status_code", 0) or 0)
+    detail = _extract_backend_detail(resp)
+
+    if sc == 403:
+        return "Недостаточно прав для этого действия."
+    if sc == 404:
+        return "Задача не найдена или недоступна."
+    if sc == 409:
+        return detail or "Невозможно выполнить действие в текущем статусе задачи."
+    # прочие ошибки
+    return detail or "Ошибка выполнения операции."
+
+
+def _looks_like_url(s: str) -> bool:
+    s = (s or "").strip().lower()
+    return s.startswith("http://") or s.startswith("https://")
 
 
 async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -225,7 +280,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text("Задача не найдена или недоступна.")
             return
         if raw.status_code != 200 or not isinstance(raw.json, list):
-            await msg.reply_text("Не удалось получить историю.")
+            await msg.reply_text(_user_friendly_action_error(action="history", resp=raw))
             return
         if not raw.json:
             await msg.reply_text(f"История по задаче #{task_id}: событий нет.")
@@ -247,21 +302,36 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         resp = await backend.patch_task(task_id=task_id, user_id=user_id, payload=payload)
-        await msg.reply_text("Изменения сохранены." if resp.status_code < 300 else "Ошибка обновления задачи.")
+        if resp.status_code < 300:
+            await msg.reply_text("Изменения сохранены.")
+        else:
+            await msg.reply_text(_user_friendly_action_error(action="update", resp=resp))
         return
 
-    # report: /tasks <id> report <url> [comment...]
+    # report: используем unified action endpoint (устойчивее, чем отдельный submit_report)
     if action == "report":
         if len(rest) < 1:
             await msg.reply_text("Формат: /tasks <id> report <url> [comment]")
             return
-        url = rest[0]
+
+        url = rest[0].strip()
+        if not _looks_like_url(url):
+            await msg.reply_text("Некорректная ссылка. Ожидается URL, начинающийся с http:// или https://")
+            return
+
         comment = " ".join(rest[1:]).strip()
-        resp = await backend.submit_report(task_id=task_id, user_id=user_id, report_link=url, current_comment=comment)
-        await msg.reply_text("Отчёт отправлен." if resp.status_code < 300 else "Ошибка отправки отчёта.")
+        payload: Dict[str, Any] = {"report_link": url}
+        if comment:
+            payload["current_comment"] = comment
+
+        resp = await backend.task_action(task_id=task_id, user_id=user_id, action="report", payload=payload)
+        if resp.status_code < 300:
+            await msg.reply_text("Отчёт отправлен.")
+        else:
+            await msg.reply_text(_user_friendly_action_error(action="report", resp=resp))
         return
 
-    # approve / reject: используем unified action endpoint (самый устойчивый путь)
+    # approve / reject: unified action endpoint
     if action in ("approve", "reject"):
         comment = " ".join(rest).strip()
         payload: Dict[str, Any] = {}
@@ -272,5 +342,5 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if resp.status_code < 300:
             await msg.reply_text("Задача принята." if action == "approve" else "Задача возвращена.")
         else:
-            await msg.reply_text("Ошибка approve." if action == "approve" else "Ошибка reject.")
+            await msg.reply_text(_user_friendly_action_error(action=action, resp=resp))
         return

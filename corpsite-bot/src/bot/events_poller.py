@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
@@ -14,6 +15,11 @@ from .events_renderer import render_event
 from .integrations.corpsite_api import CorpsiteAPI
 
 log = logging.getLogger("corpsite-bot.events")
+
+
+def _truthy_env(name: str) -> bool:
+    v = (os.getenv(name) or "").strip().lower()
+    return v in ("1", "true", "yes", "y", "on")
 
 
 def _safe_int(v: Any) -> Optional[int]:
@@ -170,6 +176,8 @@ async def events_polling_loop(
       - if allowed_types has values -> send only those
         (cursor still advances for skipped types to avoid replay loops)
     """
+    debug_poll = _truthy_env("EVENTS_POLL_DEBUG")
+
     allowed_types = set(
         t.upper().strip() for t in (allowed_types or set()) if str(t).strip()
     )
@@ -179,6 +187,9 @@ async def events_polling_loop(
     else:
         log.info("Events polling filter disabled (send all types).")
 
+    if debug_poll:
+        log.info("Events polling debug enabled via EVENTS_POLL_DEBUG=1")
+
     log.info("Events polling loop started. interval=%ss limit=%s", poll_interval_s, per_user_limit)
 
     while True:
@@ -186,16 +197,17 @@ async def events_polling_loop(
             bindings_raw = bindings_store.load()
             pairs = _iter_bindings(bindings_raw)
 
-            # DBG (можно потом убрать)
-            log.info("DBG bindings_raw=%s", bindings_raw)
-            log.info("DBG pairs=%s", pairs)
+            if debug_poll:
+                log.debug("DBG bindings_raw=%s", bindings_raw)
+                log.debug("DBG pairs=%s", pairs)
 
             if not pairs:
                 await asyncio.sleep(max(1.0, poll_interval_s))
                 continue
 
             by_user = _group_by_user(pairs)
-            log.info("DBG by_user=%s", by_user)
+            if debug_poll:
+                log.debug("DBG by_user=%s", by_user)
 
             raw_state = state_store.load()
             state = _migrate_state_if_needed(raw_state=raw_state, pairs=pairs)  # chat_id -> last_event_id
@@ -225,13 +237,23 @@ async def events_polling_loop(
                     continue
 
                 if not isinstance(resp.json, list) or not resp.json:
-                    log.info("No events: user_id=%s since=%s", user_id, (min_last_id if min_last_id > 0 else None))
+                    # Это нормальный рабочий случай — не засоряем INFO
+                    log.debug(
+                        "No events: user_id=%s since=%s",
+                        user_id,
+                        (min_last_id if min_last_id > 0 else None),
+                    )
                     continue
 
                 events = resp.json
                 # backend отдаёт DESC; доставляем oldest-first
                 events_sorted = sorted(events, key=lambda e: int(e.get("event_id") or 0))
-                log.info("Fetched events: user_id=%s since=%s count=%s", user_id, (min_last_id if min_last_id > 0 else None), len(events_sorted))
+                log.info(
+                    "Fetched events: user_id=%s since=%s count=%s",
+                    user_id,
+                    (min_last_id if min_last_id > 0 else None),
+                    len(events_sorted),
+                )
 
                 for chat_id in chat_ids:
                     last_id = _safe_int(state.get(str(chat_id))) or 0

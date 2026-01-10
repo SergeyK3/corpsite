@@ -88,7 +88,14 @@ class CorpsiteAPI:
         if self._trace:
             # не печатаем потенциально длинный json_body полностью
             j = None if json_body is None else {k: json_body.get(k) for k in list(json_body.keys())[:20]}
-            log.info("HTTP -> %s %s user_id=%s params=%s json_keys=%s", method, path, user_id, params, None if j is None else list(j.keys()))
+            log.info(
+                "HTTP -> %s %s user_id=%s params=%s json_keys=%s",
+                method,
+                path,
+                user_id,
+                params,
+                None if j is None else list(j.keys()),
+            )
 
         try:
             r = await self._client.request(
@@ -166,28 +173,6 @@ class CorpsiteAPI:
     ) -> APIResponse:
         return await self._request("PATCH", f"/tasks/{int(task_id)}", user_id=user_id, json_body=payload)
 
-    async def submit_report(
-        self,
-        *,
-        task_id: int,
-        user_id: int,
-        report_link: str,
-        current_comment: str = "",
-    ) -> APIResponse:
-        body = {"report_link": str(report_link).strip(), "current_comment": str(current_comment or "").strip()}
-        return await self._request("POST", f"/tasks/{int(task_id)}/report", user_id=user_id, json_body=body)
-
-    async def approve_report(
-        self,
-        *,
-        task_id: int,
-        user_id: int,
-        approve: bool = True,
-        current_comment: str = "",
-    ) -> APIResponse:
-        body = {"approve": bool(approve), "current_comment": str(current_comment or "").strip()}
-        return await self._request("POST", f"/tasks/{int(task_id)}/approve", user_id=user_id, json_body=body)
-
     async def task_action(
         self,
         *,
@@ -203,6 +188,35 @@ class CorpsiteAPI:
             user_id=user_id,
             json_body=(payload or {}),
         )
+
+    # Backward-compatible wrappers:
+    # Важно: теперь они используют unified endpoint /actions/* (как в backend).
+    async def submit_report(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        report_link: str,
+        current_comment: str = "",
+    ) -> APIResponse:
+        body = {
+            "report_link": str(report_link).strip(),
+            "current_comment": str(current_comment or "").strip(),
+        }
+        return await self.task_action(task_id=task_id, user_id=user_id, action="report", payload=body)
+
+    async def approve_report(
+        self,
+        *,
+        task_id: int,
+        user_id: int,
+        approve: bool = True,
+        current_comment: str = "",
+    ) -> APIResponse:
+        comment = str(current_comment or "").strip()
+        if bool(approve):
+            return await self.task_action(task_id=task_id, user_id=user_id, action="approve", payload={"current_comment": comment})
+        return await self.task_action(task_id=task_id, user_id=user_id, action="reject", payload={"current_comment": comment})
 
     # -----------------------
     # Events / History
