@@ -176,12 +176,22 @@ async def _post_init(application: Application) -> None:
 
     # healthcheck backend (1 раз)
     # если backend мёртв — poller не стартуем (иначе постоянные ConnectError)
-    hc = await backend.get_my_events(user_id=(next(iter(ADMIN_TG_IDS)) if ADMIN_TG_IDS else 1), limit=1, offset=0)
+    hc = await backend.get_my_events(
+        user_id=(next(iter(ADMIN_TG_IDS)) if ADMIN_TG_IDS else 1),
+        limit=1,
+        offset=0,
+    )
+
     if hc.status_code == 0:
-        log.warning("Backend is not reachable at startup. Poller NOT started. base_url=%s", API_BASE_URL)
+        log.error("Backend healthcheck failed: unreachable. Poller NOT started. base_url=%s", API_BASE_URL)
         return
-    # 401/403 тоже означает "достучались" (ACL/заголовок), это ок для healthcheck
-    log.info("Backend healthcheck ok. status=%s", hc.status_code)
+
+    if 200 <= hc.status_code < 300:
+        log.info("Backend healthcheck ok. status=%s", hc.status_code)
+    elif 400 <= hc.status_code < 500:
+        log.warning("Backend healthcheck reachable but client error. status=%s", hc.status_code)
+    else:
+        log.error("Backend healthcheck error. status=%s", hc.status_code)
 
     task = asyncio.create_task(
         events_polling_loop(
