@@ -59,12 +59,9 @@ def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
     for k, v in bindings.items():
         chat_id = _safe_int(k)
         user_id = _safe_int(v)
-        # chat_id может быть отрицательным для групп/каналов; валидируем != 0
         if chat_id is None or user_id is None:
             continue
-        if chat_id == 0:
-            continue
-        if user_id <= 0:
+        if chat_id == 0 or user_id <= 0:
             continue
         out.append((chat_id, user_id))
     return tuple(out)
@@ -96,26 +93,13 @@ def _migrate_state_if_needed(
     pairs: Tuple[Tuple[int, int], ...],
 ) -> Dict[str, int]:
     """
-    Приводим state к целевому формату:
-      TARGET: { "<chat_id>": last_event_id }
-
-    Допустимые входные варианты:
-      A) старый: { "<corpsite_user_id>": last_event_id }
-      B) новый:  { "<chat_id>": last_event_id }
-      C) смешанный, включая { "last_event_id": N, ... }
-
-    Правило выхода:
-      - вернуть только ключи "<chat_id>" из bindings
-      - "last_event_id" не сохраняем никогда (можем использовать как fallback)
+    TARGET: { "<chat_id>": last_event_id }
     """
-    if not pairs:
+    if not pairs or not raw_state:
         return {}
 
     bound_chat_ids = {chat_id for chat_id, _ in pairs}
     bound_user_ids = {user_id for _, user_id in pairs}
-
-    if not raw_state:
-        return {}
 
     norm = _normalize_state_values(raw_state)
     fallback_last = norm.get("last_event_id", 0)
@@ -128,20 +112,20 @@ def _migrate_state_if_needed(
 
     out: Dict[str, int] = {}
 
-    # 1) если есть значения по chat_id — берём их
+    # 1) chat_id -> cursor
     for chat_id in bound_chat_ids:
         v = norm.get(str(chat_id))
         if v is not None:
             out[str(chat_id)] = v
 
-    # 2) если это старый формат (user_id -> cursor) и chat ключей нет — мигрируем
+    # 2) migrate old user_id -> cursor
     if user_key_hits > 0 and chat_key_hits == 0:
         for chat_id, user_id in pairs:
             ukey = str(user_id)
             if ukey in norm:
                 out[str(chat_id)] = max(out.get(str(chat_id), 0), norm[ukey])
 
-    # 3) если вообще ничего не получили, но есть fallback_last — применяем его ко всем chat_id
+    # 3) fallback_last
     if not out and fallback_last:
         for chat_id in bound_chat_ids:
             out[str(chat_id)] = fallback_last
@@ -159,17 +143,6 @@ async def events_polling_loop(
     per_user_limit: int = 200,
     allowed_types: Optional[Set[str]] = None,
 ) -> None:
-    """
-    Poll /tasks/me/events for each bound user and send notifications to their chat(s).
-
-    State:
-      - tracked per chat_id: since_audit_id (event_id)
-
-    Filtering:
-      - if allowed_types is None or empty -> send all types
-      - if allowed_types has values -> send only those
-        (cursor still advances for skipped types to avoid replay loops)
-    """
     allowed_types = set(
         t.upper().strip() for t in (allowed_types or set()) if str(t).strip()
     )
@@ -179,14 +152,17 @@ async def events_polling_loop(
     else:
         log.info("Events polling filter disabled (send all types).")
 
-    log.info("Events polling loop started. interval=%ss limit=%s", poll_interval_s, per_user_limit)
+    log.info(
+        "Events polling loop started. interval=%ss limit=%s",
+        poll_interval_s,
+        per_user_limit,
+    )
 
     while True:
         try:
             bindings_raw = bindings_store.load()
             pairs = _iter_bindings(bindings_raw)
 
-            # DBG (по умолчанию скрыто на INFO)
             log.debug("bindings_raw=%s", bindings_raw)
             log.debug("pairs=%s", pairs)
 
@@ -198,12 +174,11 @@ async def events_polling_loop(
             log.debug("by_user=%s", by_user)
 
             raw_state = state_store.load()
-            state = _migrate_state_if_needed(raw_state=raw_state, pairs=pairs)  # chat_id -> last_event_id
+            state = _migrate_state_if_needed(raw_state=raw_state, pairs=pairs)
 
             state_changed = False
 
             for user_id, chat_ids in by_user.items():
-                # since = минимум по чатам (чтобы не потерять события)
                 last_ids = [(_safe_int(state.get(str(chat_id))) or 0) for chat_id in chat_ids]
                 min_last_id = min(last_ids) if last_ids else 0
 
@@ -212,7 +187,7 @@ async def events_polling_loop(
                     since_audit_id=(min_last_id if min_last_id > 0 else None),
                     limit=per_user_limit,
                     offset=0,
-                    event_type=None,  # фильтруем клиентом по allowed_types
+                    event_type=None,
                 )
 
                 if resp.status_code != 200:
@@ -225,12 +200,17 @@ async def events_polling_loop(
                     continue
 
                 if not isinstance(resp.json, list) or not resp.json:
-                    log.info("No events: user_id=%s since=%s", user_id, (min_last_id if min_last_id > 0 else None))
+                    log.debug(
+                        "No events: user_id=%s since=%s",
+                        user_id,
+                        (min_last_id if min_last_id > 0 else None),
+                    )
                     continue
 
-                events = resp.json
-                # backend отдаёт DESC; доставляем oldest-first
-                events_sorted = sorted(events, key=lambda e: int(e.get("event_id") or 0))
+                events_sorted = sorted(
+                    resp.json, key=lambda e: int(e.get("event_id") or 0)
+                )
+
                 log.info(
                     "Fetched events: user_id=%s since=%s count=%s",
                     user_id,
@@ -248,21 +228,17 @@ async def events_polling_loop(
                             continue
 
                         ev_type = str(ev.get("event_type") or "").upper().strip()
-
-                        # если фильтр включён — пропускаем "не наши" события,
-                        # но курсор двигаем, чтобы не крутить одну и ту же пачку.
                         if allowed_types and ev_type not in allowed_types:
-                            if ev_id > max_event_id:
-                                max_event_id = ev_id
+                            max_event_id = max(max_event_id, ev_id)
                             continue
 
-                        text = render_event(ev)
                         try:
-                            await application.bot.send_message(chat_id=chat_id, text=text)
-                            if ev_id > max_event_id:
-                                max_event_id = ev_id
+                            await application.bot.send_message(
+                                chat_id=chat_id,
+                                text=render_event(ev),
+                            )
+                            max_event_id = max(max_event_id, ev_id)
                         except Exception:
-                            # курсор НЕ двигаем для этого чата, если не доставили сообщение
                             log.exception(
                                 "Failed to send event_id=%s to chat_id=%s (user_id=%s)",
                                 ev_id,
@@ -276,7 +252,6 @@ async def events_polling_loop(
                         state_changed = True
 
             if state_changed:
-                # сохраняем ТОЛЬКО chat_id -> cursor
                 state_store.save(state)
 
             await asyncio.sleep(max(1.0, poll_interval_s))
