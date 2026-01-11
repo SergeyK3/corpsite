@@ -1160,16 +1160,24 @@ def approve_report(
 
         status_code = str(task.get("status_code") or "")
         if status_code != "WAITING_APPROVAL":
+            # Для reject не надо мимикрировать под "approve no report" — это другой конфликт.
             raise_error(
-                ErrorCode.TASK_CONFLICT_APPROVE_NO_REPORT,
-                extra={"task_id": int(task_id), "current_status": status_code or "UNKNOWN"},
+                ErrorCode.TASK_CONFLICT_ACTION_STATUS,
+                extra={
+                    "task_id": int(task_id),
+                    "action": "approve" if approve else "reject",
+                    "current_status": status_code or "UNKNOWN",
+                },
             )
 
         rep = conn.execute(
             text("SELECT task_id FROM task_reports WHERE task_id = :tid"),
             {"tid": int(task_id)},
         ).mappings().first()
-        if not rep:
+
+        # ВАЖНО: требуем task_reports только для approve=True.
+        # reject в WAITING_APPROVAL должен быть возможен даже если запись отчёта отсутствует (seed/contract cases).
+        if approve and (not rep):
             raise_error(
                 ErrorCode.TASK_CONFLICT_APPROVE_NO_REPORT,
                 extra={"task_id": int(task_id), "current_status": status_code or "UNKNOWN"},
@@ -1234,21 +1242,23 @@ def approve_report(
         else:
             waiting_report_id = _get_status_id_by_code(conn, "WAITING_REPORT")
 
-            conn.execute(
-                text(
-                    """
-                    UPDATE task_reports
-                    SET approved_at = NULL,
-                        approved_by = NULL,
-                        current_comment = CASE
-                            WHEN :comment = '' THEN current_comment
-                            ELSE :comment
-                        END
-                    WHERE task_id = :tid
-                    """
-                ),
-                {"tid": int(task_id), "comment": current_comment},
-            )
+            # Если task_reports есть — сбрасываем поля; если нет — просто меняем статус и пишем event.
+            if rep:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE task_reports
+                        SET approved_at = NULL,
+                            approved_by = NULL,
+                            current_comment = CASE
+                                WHEN :comment = '' THEN current_comment
+                                ELSE :comment
+                            END
+                        WHERE task_id = :tid
+                        """
+                    ),
+                    {"tid": int(task_id), "comment": current_comment},
+                )
 
             conn.execute(
                 text("UPDATE tasks SET status_id = :sid WHERE task_id = :tid"),
