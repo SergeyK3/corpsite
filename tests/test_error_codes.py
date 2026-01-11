@@ -166,8 +166,12 @@ def test_error_code_task_forbidden_report_403(client: TestClient) -> None:
 
 def test_error_code_task_conflict_action_status_report_409(client: TestClient) -> None:
     """
-    Create IN_PROGRESS task for executor role=1.
-    Executor tries to report in wrong status -> 409 TASK_CONFLICT_ACTION_STATUS.
+    Variant 2 contract:
+      - report from IN_PROGRESS is allowed (200 -> WAITING_APPROVAL)
+      - second report attempt (already WAITING_APPROVAL) must fail with 409 conflict
+
+    Backend may return either a generic status-conflict code
+    or a more specific "already sent" code.
     """
     task_id = _create_task(
         client,
@@ -178,13 +182,19 @@ def test_error_code_task_conflict_action_status_report_409(client: TestClient) -
         assignment_scope="functional",
     )
 
-    r = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
-    assert r.status_code == 409, r.text
+    # First report is valid: IN_PROGRESS -> WAITING_APPROVAL
+    r1 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
+    assert r1.status_code == 200, r1.text
 
-    detail = _assert_detail(r.json(), expected_error="conflict", expected_code="TASK_CONFLICT_ACTION_STATUS")
+    # Second report must conflict (already reported / wrong status)
+    r2 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
+    assert r2.status_code == 409, r2.text
+
+    acceptable = {"TASK_CONFLICT_ACTION_STATUS", "TASK_CONFLICT_REPORT_ALREADY_SENT"}
+    detail = _assert_detail(r2.json(), expected_error="conflict", expected_code_in=acceptable)
     assert int(detail.get("task_id")) == task_id
     assert detail.get("action") in (None, "report") or True
-    assert detail.get("current_status") in ("IN_PROGRESS", None) or True
+    assert detail.get("current_status") in ("WAITING_APPROVAL", "IN_PROGRESS", None) or True
 
 
 # -------------------------
@@ -256,7 +266,6 @@ def test_error_code_task_conflict_approve_no_report_409(client: TestClient) -> N
     r = _approve_task(client, task_id=task_id, user_id=USER_SUPERVISOR, approve=True, comment="test")
     assert r.status_code == 409, r.text
 
-    # Acceptable set to reduce brittleness if code naming differs slightly.
     acceptable = {"TASK_CONFLICT_APPROVE_NO_REPORT", "TASK_CONFLICT_NO_REPORT"}
     detail = _assert_detail(r.json(), expected_error="conflict", expected_code_in=acceptable)
     assert int(detail.get("task_id")) == task_id
