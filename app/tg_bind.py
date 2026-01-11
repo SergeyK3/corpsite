@@ -269,7 +269,8 @@ def create_bind_code(x_user_id: int | None = Header(default=None, alias="X-User-
 @router.post("/tg/bind/consume", response_model=ConsumeBindCodeOut)
 def consume_bind_code(
     payload: ConsumeBindCodeIn,
-    x_bot_token: str | None = Header(default=None, alias="X-Bot-Token"),
+    # IMPORTANT: header name used by clients/bot is X-Bot-Bind-Token
+    x_bot_token: str | None = Header(default=None, alias="X-Bot-Bind-Token"),
 ) -> ConsumeBindCodeOut:
     """
     Bot-only endpoint.
