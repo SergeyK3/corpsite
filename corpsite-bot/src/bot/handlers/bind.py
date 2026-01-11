@@ -1,3 +1,4 @@
+# corpsite-bot/src/bot/handlers/bind.py
 from __future__ import annotations
 
 import logging
@@ -35,7 +36,7 @@ async def cmd_bind(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     /bind <code>
       Привязка по коду:
         1) POST /tg/bind/consume (bot-token)
-        2) POST /auth/self-bind (проверка/подтверждение) -> показывает user_id
+        2) POST /auth/self-bind (проверка/подтверждение)
     """
     msg = update.effective_message
     if msg is None:
@@ -72,44 +73,42 @@ async def cmd_bind(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
             return
 
-        if r.status_code == 0:
+        sc = int(r.status_code or 0)
+
+        if sc == 0:
             await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
             return
 
-        if r.status_code == 403:
-            await msg.reply_text("Сервис привязки недоступен (нет прав).")
+        if sc == 403:
+            await msg.reply_text("Привязка запрещена. Обратитесь к администратору.")
             return
 
-        if r.status_code == 409:
+        if sc == 409:
             await msg.reply_text("Код недействителен или уже использован. Запросите новый код.")
             return
 
-        if not (200 <= r.status_code < 300):
+        if not (200 <= sc < 300):
             await msg.reply_text("Не удалось выполнить привязку. Попробуйте позже.")
             return
 
-        # consume ok -> now confirm via self_bind (and show user_id)
+        # consume ok -> confirm via self_bind
         try:
             s = await api.self_bind(telegram_user_id=tg_user_id, telegram_username=tg_username)
         except Exception:
             log.exception("self_bind after consume failed")
-            await msg.reply_text("Привязка выполнена. Если задачи не появились — попробуйте /tasks позже.")
+            await msg.reply_text("Привязка выполнена. Откройте /tasks.")
             return
 
-        if s.status_code == 200:
-            user_id = _extract_user_id_from_json(s.json)
-            if user_id is not None:
-                await msg.reply_text(f"Привязка выполнена. user_id={user_id}")
-            else:
-                await msg.reply_text("Привязка выполнена.")
+        if int(s.status_code or 0) in (200, 201):
+            await msg.reply_text("Привязка выполнена. Откройте /tasks.")
             return
 
         # unexpected but safe UX
-        await msg.reply_text("Привязка выполнена.")
+        await msg.reply_text("Привязка выполнена. Откройте /tasks.")
         return
 
     if len(args) > 1:
-        await msg.reply_text("Формат: /bind  ИЛИ  /bind <code>")
+        await msg.reply_text("Формат: /bind  или  /bind <code>")
         return
 
     # -----------------------
@@ -122,23 +121,22 @@ async def cmd_bind(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
         return
 
-    if resp.status_code == 200:
-        user_id = _extract_user_id_from_json(resp.json)
-        if user_id is not None:
-            await msg.reply_text(f"Вы уже привязаны. user_id={user_id}")
-        else:
-            await msg.reply_text("Вы уже привязаны.")
+    sc = int(resp.status_code or 0)
+
+    if sc in (200, 201):
+        # internal debug (optional): keep user_id extraction for logs only
+        uid = _extract_user_id_from_json(resp.json)
+        if uid is not None:
+            log.info("bind status: already bound tg_user_id=%s user_id=%s", tg_user_id, uid)
+        await msg.reply_text("Уже привязано.")
         return
 
-    if resp.status_code == 404:
-        await msg.reply_text(
-            "Вы не привязаны.\n"
-            "Если у вас есть код привязки — выполните: /bind <code>"
-        )
+    if sc == 404:
+        await msg.reply_text("Не привязано. Введите: /bind <code>")
         return
 
-    if resp.status_code == 409:
-        await msg.reply_text("Вы уже привязаны.")
+    if sc == 409:
+        await msg.reply_text("Уже привязано.")
         return
 
-    await msg.reply_text("Не удалось выполнить привязку. Попробуйте позже.")
+    await msg.reply_text("Не удалось проверить привязку. Попробуйте позже.")
