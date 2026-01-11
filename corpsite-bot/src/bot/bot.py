@@ -5,7 +5,7 @@ import os
 import logging
 import asyncio
 from pathlib import Path
-from typing import Set, Optional, Any
+from typing import Set, Optional, Any, Dict
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -142,15 +142,19 @@ async def _post_init(application: Application) -> None:
     """
     Инициализация зависимостей и запуск poller.
 
-    У вас нет post_startup, поэтому:
-      - инициализируем backend и сторы в post_init
-      - делаем 1 healthcheck backend
-      - стартуем poller только если backend доступен (иначе будет бесконечный ConnectError-спам)
+    - инициализируем backend и сторы в post_init
+    - делаем 1 healthcheck backend
+    - стартуем poller только если backend доступен (иначе будет ConnectError-спам)
     """
+    # ensure data dir exists
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        log.exception("Failed to create DATA_DIR=%s", str(DATA_DIR))
+
     backend = CorpsiteAPI(base_url=API_BASE_URL, timeout_s=15.0)
 
-    # ВАЖНО: единая регистрация API-клиента для всех хендлеров.
-    # Старый код мог обращаться к "backend", новый self-bind ищет "api"/"corpsite_api".
+    # Единая регистрация API-клиента для всех хендлеров.
     application.bot_data["backend"] = backend
     application.bot_data["api"] = backend
     application.bot_data["corpsite_api"] = backend
@@ -179,24 +183,34 @@ async def _post_init(application: Application) -> None:
         log.info("Events polling already running; skip start")
         return
 
-    # healthcheck backend (1 раз)
-    # если backend мёртв — poller не стартуем (иначе постоянные ConnectError)
-    hc = await backend.get_my_events(
-        user_id=(next(iter(ADMIN_TG_IDS)) if ADMIN_TG_IDS else 1),
-        limit=1,
-        offset=0,
-    )
+    # Healthcheck backend (1 раз) через /tasks/me/events.
+    # Не привязываемся к возможным helper-методам клиента, чтобы не ловить рассинхрон по параметрам after_id/since.
+    hc_uid = 1
+    try:
+        if ADMIN_TG_IDS:
+            # user_id тут не равен tg_id, но пусть будет 1 стабильно для проверки доступности API.
+            hc_uid = 1
 
-    if hc.status_code == 0:
+        hc = await backend.get(
+            "/tasks/me/events",
+            headers={"X-User-Id": str(hc_uid)},
+            params={"limit": 1},
+        )
+    except Exception:
+        hc = None
+        log.exception("Backend healthcheck crashed")
+
+    if hc is None or getattr(hc, "status_code", 0) == 0:
         log.error("Backend healthcheck failed: unreachable. Poller NOT started. base_url=%s", API_BASE_URL)
         return
 
-    if 200 <= hc.status_code < 300:
-        log.info("Backend healthcheck ok. status=%s", hc.status_code)
-    elif 400 <= hc.status_code < 500:
-        log.warning("Backend healthcheck reachable but client error. status=%s", hc.status_code)
+    status = int(getattr(hc, "status_code", 0))
+    if 200 <= status < 300:
+        log.info("Backend healthcheck ok. status=%s", status)
+    elif 400 <= status < 500:
+        log.warning("Backend healthcheck reachable but client error. status=%s body=%s", status, getattr(hc, "text", ""))
     else:
-        log.error("Backend healthcheck error. status=%s", hc.status_code)
+        log.error("Backend healthcheck error. status=%s body=%s", status, getattr(hc, "text", ""))
 
     task = asyncio.create_task(
         events_polling_loop(
