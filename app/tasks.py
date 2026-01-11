@@ -355,7 +355,7 @@ def _allowed_actions_for_user(
     if code == "IN_PROGRESS":
         if _can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
             actions.append("update")
-            actions.append("report")  # <-- ИЗМЕНЕНИЕ: report разрешён и в IN_PROGRESS
+            actions.append("report")
 
     elif code == "WAITING_REPORT":
         if _can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
@@ -446,15 +446,25 @@ def list_tasks(
         if _is_supervisor_or_deputy(role_id):
             where.append("1=1")
         else:
-            where.append("t.executor_role_id = :role_id")
+            # IMPORTANT ACL FIX:
+            # Initiator must always see their tasks (any assignment_scope).
+            # Executor can see functional tasks by role_id; admin tasks only if initiator (covered by OR initiator).
+            params["functional_scope"] = functional_lbl
+            params["admin_scope"] = admin_lbl
 
             if functional_lbl and admin_lbl:
-                params["functional_scope"] = functional_lbl
-                params["admin_scope"] = admin_lbl
                 where.append(
                     "("
-                    "t.assignment_scope = :functional_scope "
-                    "OR (t.assignment_scope = :admin_scope AND t.initiator_user_id = :current_user_id)"
+                    "(t.executor_role_id = :role_id AND t.assignment_scope = :functional_scope) "
+                    "OR (t.initiator_user_id = :current_user_id)"
+                    ")"
+                )
+            else:
+                # fallback if enum labels not detected properly
+                where.append(
+                    "("
+                    "(t.executor_role_id = :role_id) "
+                    "OR (t.initiator_user_id = :current_user_id)"
                     ")"
                 )
 
@@ -531,6 +541,7 @@ def get_my_events(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     since_audit_id: Optional[int] = Query(None, ge=1),
+    after_id: Optional[int] = Query(None, ge=1),
     event_type: Optional[str] = Query(None),
 ) -> List[Dict[str, Any]]:
     """
@@ -539,9 +550,13 @@ def get_my_events(
     Релевантность:
     - пользователь может видеть задачу (initiator OR supervisor/deputy OR functional executor-role).
 
-    По умолчанию: самые новые первыми (ORDER BY audit_id DESC).
+    Cursor:
+    - since_audit_id (preferred) or after_id (alias for easy copy/paste). Uses strict ">".
     """
     current_user_id = _get_current_user_id(x_user_id)
+
+    # alias support: prefer since_audit_id
+    cursor = since_audit_id if since_audit_id is not None else after_id
 
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
@@ -561,13 +576,16 @@ def get_my_events(
             "is_sup": is_sup,
             "limit": int(limit),
             "offset": int(offset),
-            "since_audit_id": since_audit_id,
+            "cursor": cursor,
             "event_type": (event_type or "").strip() or None,
             "functional_scope": functional_lbl,
             "admin_scope": admin_lbl,
         }
 
         if functional_lbl and admin_lbl:
+            # IMPORTANT ACL FIX:
+            # Initiator must always receive events for their tasks (any assignment_scope).
+            # Executor receives functional tasks by role_id.
             scope_guard = """
             AND (
                 (:is_sup = TRUE)
@@ -575,10 +593,6 @@ def get_my_events(
                 OR (
                     t.executor_role_id = :rid
                     AND t.assignment_scope = :functional_scope
-                )
-                OR (
-                    t.initiator_user_id = :uid
-                    AND t.assignment_scope = :admin_scope
                 )
             )
             """
@@ -607,7 +621,7 @@ def get_my_events(
                 LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
                 WHERE a.event_type IS NOT NULL
                   AND (:event_type IS NULL OR a.event_type::text = :event_type)
-                  AND (:since_audit_id IS NULL OR a.audit_id > :since_audit_id)
+                  AND (:cursor IS NULL OR a.audit_id > :cursor)
                   {scope_guard}
                   AND COALESCE(ts.code,'') <> 'ARCHIVED'
                 ORDER BY a.audit_id DESC
@@ -928,7 +942,6 @@ def submit_report(
                 extra={"task_id": int(task_id)},
             )
 
-        # <-- ИЗМЕНЕНИЕ: report разрешён в IN_PROGRESS и WAITING_REPORT
         status_code = str(task.get("status_code") or "")
         if status_code not in {"WAITING_REPORT", "IN_PROGRESS"}:
             if status_code in {"WAITING_APPROVAL", "DONE", "ARCHIVED"}:
@@ -1175,13 +1188,16 @@ def get_task_events(
     include_archived: bool = Query(False),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
     since_audit_id: Optional[int] = Query(None, ge=1),
+    after_id: Optional[int] = Query(None, ge=1),
     limit: int = Query(200, ge=1, le=500),
 ) -> List[Dict[str, Any]]:
     """
     Возвращает только event-записи (event_type IS NOT NULL).
-    Для polling используйте since_audit_id (строго >).
+    Для polling используйте since_audit_id (preferred) или after_id (alias), строго >.
     """
     current_user_id = _get_current_user_id(x_user_id)
+
+    cursor = since_audit_id if since_audit_id is not None else after_id
 
     with engine.begin() as conn:
         role_id = _get_user_role_id(conn, current_user_id)
@@ -1207,12 +1223,12 @@ def get_task_events(
                 FROM task_audit_log
                 WHERE task_id = :tid
                   AND event_type IS NOT NULL
-                  AND (:since_audit_id IS NULL OR audit_id > :since_audit_id)
+                  AND (:cursor IS NULL OR audit_id > :cursor)
                 ORDER BY audit_id ASC
                 LIMIT :limit
                 """
             ),
-            {"tid": int(task_id), "since_audit_id": since_audit_id, "limit": int(limit)},
+            {"tid": int(task_id), "cursor": cursor, "limit": int(limit)},
         ).mappings().all()
 
     out: List[Dict[str, Any]] = []
