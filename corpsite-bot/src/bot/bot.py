@@ -5,7 +5,7 @@ import os
 import logging
 import asyncio
 from pathlib import Path
-from typing import Set, Optional, Any, Dict
+from typing import Set, Optional, Any
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -142,9 +142,10 @@ async def _post_init(application: Application) -> None:
     """
     Инициализация зависимостей и запуск poller.
 
-    - инициализируем backend и сторы в post_init
-    - делаем 1 healthcheck backend
-    - стартуем poller только если backend доступен (иначе будет ConnectError-спам)
+    VARIANT A:
+    - НЕ делаем блокирующий healthcheck (из-за рассинхрона методов клиента это ломало запуск).
+    - poller стартует всегда; доступ/ACL/релевантность аудитории контролируется backend.
+    - ошибки/недоступность backend обрабатываются внутри polling-цикла (лог + backoff).
     """
     # ensure data dir exists
     try:
@@ -183,35 +184,7 @@ async def _post_init(application: Application) -> None:
         log.info("Events polling already running; skip start")
         return
 
-    # Healthcheck backend (1 раз) через /tasks/me/events.
-    # Не привязываемся к возможным helper-методам клиента, чтобы не ловить рассинхрон по параметрам after_id/since.
-    hc_uid = 1
-    try:
-        if ADMIN_TG_IDS:
-            # user_id тут не равен tg_id, но пусть будет 1 стабильно для проверки доступности API.
-            hc_uid = 1
-
-        hc = await backend.get(
-            "/tasks/me/events",
-            headers={"X-User-Id": str(hc_uid)},
-            params={"limit": 1},
-        )
-    except Exception:
-        hc = None
-        log.exception("Backend healthcheck crashed")
-
-    if hc is None or getattr(hc, "status_code", 0) == 0:
-        log.error("Backend healthcheck failed: unreachable. Poller NOT started. base_url=%s", API_BASE_URL)
-        return
-
-    status = int(getattr(hc, "status_code", 0))
-    if 200 <= status < 300:
-        log.info("Backend healthcheck ok. status=%s", status)
-    elif 400 <= status < 500:
-        log.warning("Backend healthcheck reachable but client error. status=%s body=%s", status, getattr(hc, "text", ""))
-    else:
-        log.error("Backend healthcheck error. status=%s body=%s", status, getattr(hc, "text", ""))
-
+    # VARIANT A: always start poller (no blocking healthcheck)
     task = asyncio.create_task(
         events_polling_loop(
             application=application,
@@ -225,7 +198,7 @@ async def _post_init(application: Application) -> None:
         name="events-poller",
     )
     application.bot_data["events_poll_task"] = task
-    log.info("Events polling started.")
+    log.info("Events polling started (healthcheck skipped).")
 
 
 async def _post_stop(application: Application) -> None:

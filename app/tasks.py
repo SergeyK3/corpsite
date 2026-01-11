@@ -22,6 +22,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # Set in .env (comma-separated ints), for example:
 # SUPERVISOR_ROLE_IDS=10,11
 # DEPUTY_ROLE_IDS=12
+# DIRECTOR_ROLE_IDS=13
 def _parse_int_set(env_name: str) -> Set[int]:
     raw = (os.getenv(env_name) or "").strip()
     if not raw:
@@ -41,6 +42,7 @@ def _parse_int_set(env_name: str) -> Set[int]:
 
 SUPERVISOR_ROLE_IDS: Set[int] = _parse_int_set("SUPERVISOR_ROLE_IDS")
 DEPUTY_ROLE_IDS: Set[int] = _parse_int_set("DEPUTY_ROLE_IDS")
+DIRECTOR_ROLE_IDS: Set[int] = _parse_int_set("DIRECTOR_ROLE_IDS")
 
 
 def _is_supervisor_or_deputy(role_id: int) -> bool:
@@ -257,6 +259,135 @@ def _set_last_audit_event(
 
 
 # ---------------------------
+# Events delivery persistence (Variant A): task_events + task_event_recipients
+# ---------------------------
+
+def _safe_int(v: Any) -> Optional[int]:
+    try:
+        if v is None:
+            return None
+        return int(v)
+    except Exception:
+        return None
+
+
+def _uniq_positive_ints(items: List[Any]) -> List[int]:
+    out: List[int] = []
+    seen: Set[int] = set()
+    for x in items:
+        ix = _safe_int(x)
+        if ix is None or ix <= 0:
+            continue
+        if ix in seen:
+            continue
+        seen.add(ix)
+        out.append(ix)
+    return out
+
+
+def _resolve_event_recipients_for_task(
+    conn,
+    *,
+    task_row: Dict[str, Any],
+) -> List[int]:
+    """
+    Audience policy (server-side):
+      - initiator always
+      - all users with role_id == executor_role_id
+      - all supervisors/deputies/directors (by env role_id sets)
+
+    NOTE: If later you introduce hierarchy logic, update only this function.
+    """
+    initiator_user_id = _safe_int(task_row.get("initiator_user_id")) or 0
+    executor_role_id = _safe_int(task_row.get("executor_role_id")) or 0
+
+    executor_users: List[int] = []
+    if executor_role_id > 0:
+        executor_users = conn.execute(
+            text("SELECT user_id FROM users WHERE role_id = :rid"),
+            {"rid": int(executor_role_id)},
+        ).scalars().all()
+
+    mgmt_role_ids = sorted(set(SUPERVISOR_ROLE_IDS) | set(DEPUTY_ROLE_IDS) | set(DIRECTOR_ROLE_IDS))
+    mgmt_users: List[int] = []
+    if mgmt_role_ids:
+        mgmt_users = conn.execute(
+            text(
+                """
+                SELECT user_id
+                FROM users
+                WHERE role_id = ANY(CAST(:rids AS bigint[]))
+                """
+            ),
+            {"rids": [int(x) for x in mgmt_role_ids]},
+        ).scalars().all()
+
+    return _uniq_positive_ints([initiator_user_id] + list(executor_users) + list(mgmt_users))
+
+
+def _insert_task_event_for_delivery(
+    conn,
+    *,
+    task_id: int,
+    event_type: str,
+    actor_user_id: int,
+    actor_role_id: Optional[int],
+    payload: Dict[str, Any],
+) -> int:
+    """
+    Atomic within текущей транзакции:
+      - вставляет task_events (returns audit_id)
+      - вставляет task_event_recipients (denormalized audience)
+    """
+    et = (event_type or "").upper().strip()
+    if not et:
+        raise HTTPException(status_code=500, detail="event_type is required for task_events")
+
+    task_row = conn.execute(
+        text("SELECT task_id, initiator_user_id, executor_role_id FROM tasks WHERE task_id = :tid"),
+        {"tid": int(task_id)},
+    ).mappings().first()
+    if not task_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    recipients = _resolve_event_recipients_for_task(conn, task_row=dict(task_row))
+
+    audit_id = conn.execute(
+        text(
+            """
+            INSERT INTO task_events (task_id, event_type, actor_user_id, actor_role_id, payload)
+            VALUES (:task_id, :event_type, :actor_user_id, :actor_role_id, CAST(:payload AS jsonb))
+            RETURNING audit_id
+            """
+        ),
+        {
+            "task_id": int(task_id),
+            "event_type": et,
+            "actor_user_id": int(actor_user_id),
+            "actor_role_id": int(actor_role_id) if actor_role_id is not None else None,
+            "payload": json.dumps(payload or {}, ensure_ascii=False),
+        },
+    ).scalar_one()
+
+    if recipients:
+        conn.execute(
+            text(
+                """
+                INSERT INTO task_event_recipients (audit_id, user_id)
+                SELECT :audit_id, x.user_id
+                FROM (
+                    SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
+                ) x
+                ON CONFLICT DO NOTHING
+                """
+            ),
+            {"audit_id": int(audit_id), "uids": [int(x) for x in recipients]},
+        )
+
+    return int(audit_id)
+
+
+# ---------------------------
 # Events API models
 # ---------------------------
 
@@ -269,6 +400,7 @@ class TaskEventOut(BaseModel):
 
 
 class MeEventOut(BaseModel):
+    audit_id: int
     event_id: int
     task_id: int
     event_type: str
@@ -545,86 +677,50 @@ def get_my_events(
     event_type: Optional[str] = Query(None),
 ) -> List[Dict[str, Any]]:
     """
-    Лента событий, релевантных текущему пользователю, из task_audit_log (event_type IS NOT NULL).
-
-    Релевантность:
-    - пользователь может видеть задачу (initiator OR supervisor/deputy OR functional executor-role).
+    Лента событий, РЕЛЕВАНТНЫХ пользователю по аудитории (server-side),
+    из task_event_recipients + task_events.
 
     Cursor:
-    - since_audit_id (preferred) or after_id (alias for easy copy/paste). Uses strict ">".
+      - since_audit_id (preferred) or after_id (alias). strict ">".
+    Ordering:
+      - ASC by audit_id for stable cursor consumption.
     """
     current_user_id = _get_current_user_id(x_user_id)
-
-    # alias support: prefer since_audit_id
     cursor = since_audit_id if since_audit_id is not None else after_id
 
+    et = (event_type or "").strip()
+    et = et.upper() if et else ""
+
     with engine.begin() as conn:
-        role_id = _get_user_role_id(conn, current_user_id)
-
-        allowed = _load_assignment_scope_enum_labels(conn)
-        if not allowed:
-            raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
-
-        functional_lbl = _scope_label_or_none(allowed, "functional")
-        admin_lbl = _scope_label_or_none(allowed, "admin")
-
-        is_sup = bool(_is_supervisor_or_deputy(role_id))
-
         params: Dict[str, Any] = {
             "uid": int(current_user_id),
-            "rid": int(role_id),
-            "is_sup": is_sup,
             "limit": int(limit),
             "offset": int(offset),
-            "cursor": cursor,
-            "event_type": (event_type or "").strip() or None,
-            "functional_scope": functional_lbl,
-            "admin_scope": admin_lbl,
+            "cursor": int(cursor) if cursor is not None else None,
+            "event_type": et if et else None,
         }
-
-        if functional_lbl and admin_lbl:
-            # IMPORTANT ACL FIX:
-            # Initiator must always receive events for their tasks (any assignment_scope).
-            # Executor receives functional tasks by role_id.
-            scope_guard = """
-            AND (
-                (:is_sup = TRUE)
-                OR (t.initiator_user_id = :uid)
-                OR (
-                    t.executor_role_id = :rid
-                    AND t.assignment_scope = :functional_scope
-                )
-            )
-            """
-        else:
-            scope_guard = """
-            AND (
-                (:is_sup = TRUE)
-                OR (t.initiator_user_id = :uid)
-                OR (t.executor_role_id = :rid)
-            )
-            """
 
         rows = conn.execute(
             text(
-                f"""
+                """
                 SELECT
-                    a.audit_id AS event_id,
-                    a.task_id,
-                    a.event_type::text AS event_type,
-                    a.actor_user_id,
-                    a.created_at,
-                    a.actor_role,
-                    a.payload::text AS payload_text
-                FROM task_audit_log a
-                JOIN tasks t ON t.task_id = a.task_id
+                    e.audit_id,
+                    e.audit_id AS event_id,
+                    e.task_id,
+                    e.event_type,
+                    e.actor_user_id,
+                    e.actor_role_id,
+                    e.created_at,
+                    e.payload::text AS payload_text
+                FROM task_event_recipients r
+                JOIN task_events e ON e.audit_id = r.audit_id
+                JOIN tasks t ON t.task_id = e.task_id
                 LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE a.event_type IS NOT NULL
-                  AND (:event_type IS NULL OR a.event_type::text = :event_type)
-                  AND (:cursor IS NULL OR a.audit_id > :cursor)
-                  {scope_guard}
+                WHERE r.user_id = :uid
+                  AND (:event_type IS NULL OR e.event_type = :event_type)
+                  AND (:cursor IS NULL OR e.audit_id > :cursor)
                   AND COALESCE(ts.code,'') <> 'ARCHIVED'
-                ORDER BY a.audit_id DESC
+                ORDER BY e.audit_id ASC
                 LIMIT :limit OFFSET :offset
                 """
             ),
@@ -640,21 +736,15 @@ def get_my_events(
         except Exception:
             payload = {}
 
-        actor_role_id: Optional[int] = None
-        try:
-            if r.get("actor_role") is not None:
-                actor_role_id = int(str(r["actor_role"]))
-        except Exception:
-            actor_role_id = None
-
         created_at = r.get("created_at")
         out.append(
             {
+                "audit_id": int(r.get("audit_id") or 0),
                 "event_id": int(r.get("event_id") or 0),
                 "task_id": int(r.get("task_id") or 0),
                 "event_type": r.get("event_type"),
                 "actor_user_id": r.get("actor_user_id"),
-                "actor_role_id": actor_role_id,
+                "actor_role_id": r.get("actor_role_id"),
                 "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
                 "payload": payload,
             }
@@ -1018,6 +1108,16 @@ def submit_report(
             event_payload=payload_event,
         )
 
+        # Delivery audience is server-side (Variant A)
+        _insert_task_event_for_delivery(
+            conn,
+            task_id=int(task_id),
+            event_type="REPORT_SUBMITTED",
+            actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
+            payload=payload_event,
+        )
+
         updated = _load_task_full(conn, task_id=int(task_id))
         if not updated:
             raise HTTPException(status_code=500, detail="Task updated but not found")
@@ -1122,6 +1222,15 @@ def approve_report(
                 event_payload=payload_event,
             )
 
+            _insert_task_event_for_delivery(
+                conn,
+                task_id=int(task_id),
+                event_type="APPROVED",
+                actor_user_id=int(current_user_id),
+                actor_role_id=int(role_id),
+                payload=payload_event,
+            )
+
         else:
             waiting_report_id = _get_status_id_by_code(conn, "WAITING_REPORT")
 
@@ -1169,6 +1278,15 @@ def approve_report(
                 event_payload=payload_event,
             )
 
+            _insert_task_event_for_delivery(
+                conn,
+                task_id=int(task_id),
+                event_type="REJECTED",
+                actor_user_id=int(current_user_id),
+                actor_role_id=int(role_id),
+                payload=payload_event,
+            )
+
         updated = _load_task_full(conn, task_id=int(task_id))
         if not updated:
             raise HTTPException(status_code=500, detail="Task updated but not found")
@@ -1192,8 +1310,8 @@ def get_task_events(
     limit: int = Query(200, ge=1, le=500),
 ) -> List[Dict[str, Any]]:
     """
-    Возвращает только event-записи (event_type IS NOT NULL).
-    Для polling используйте since_audit_id (preferred) или after_id (alias), строго >.
+    Возвращает только event-записи (event_type IS NOT NULL) из task_audit_log.
+    Для polling используйте /tasks/me/events.
     """
     current_user_id = _get_current_user_id(x_user_id)
 

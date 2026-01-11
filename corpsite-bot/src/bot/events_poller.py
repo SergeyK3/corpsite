@@ -21,6 +21,9 @@ def _safe_int(v: Any) -> Optional[int]:
     try:
         if v is None:
             return None
+        # avoid bool being treated as int
+        if isinstance(v, bool):
+            return None
         return int(v)
     except Exception:
         return None
@@ -30,7 +33,7 @@ def _event_cursor_id(ev: Dict[str, Any]) -> int:
     """
     Cursor for since_audit_id:
     - Prefer audit_id (backend cursor)
-    - Fallback to event_id to remain compatible if audit_id is missing
+    - Fallback to event_id for backward compatibility
     """
     return _safe_int(ev.get("audit_id")) or _safe_int(ev.get("event_id")) or 0
 
@@ -70,7 +73,7 @@ def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
       { "<chat_id>": <corpsite_user_id> }
     """
     out: List[Tuple[int, int]] = []
-    for k, v in bindings.items():
+    for k, v in (bindings or {}).items():
         chat_id = _safe_int(k)
         user_id = _safe_int(v)
         if chat_id is None or user_id is None:
@@ -97,7 +100,7 @@ def _normalize_state_values(raw_state: Dict[str, Any]) -> Dict[str, int]:
         iv = _safe_int(v)
         if iv is None:
             continue
-        norm[str(k)] = iv
+        norm[str(k)] = int(iv)
     return norm
 
 
@@ -108,6 +111,7 @@ def _migrate_state_if_needed(
 ) -> Dict[str, int]:
     """
     TARGET: { "<chat_id>": last_cursor_id }
+
     NOTE: historically this was called last_event_id, but now it represents a cursor:
       - preferred: audit_id
       - fallback: event_id
@@ -119,7 +123,7 @@ def _migrate_state_if_needed(
     bound_user_ids = {user_id for _, user_id in pairs}
 
     norm = _normalize_state_values(raw_state)
-    fallback_last = norm.get("last_event_id", 0)
+    fallback_last = int(norm.get("last_event_id", 0) or 0)
 
     keys_int = {_safe_int(k) for k in norm.keys()}
     keys_int.discard(None)
@@ -129,20 +133,20 @@ def _migrate_state_if_needed(
 
     out: Dict[str, int] = {}
 
-    # 1) chat_id -> cursor
+    # 1) chat_id -> cursor (already in target form)
     for chat_id in bound_chat_ids:
         v = norm.get(str(chat_id))
         if v is not None:
-            out[str(chat_id)] = v
+            out[str(chat_id)] = int(v)
 
-    # 2) migrate old user_id -> cursor
+    # 2) migrate old user_id -> cursor (if state was keyed by user_id previously)
     if user_key_hits > 0 and chat_key_hits == 0:
         for chat_id, user_id in pairs:
             ukey = str(user_id)
             if ukey in norm:
-                out[str(chat_id)] = max(out.get(str(chat_id), 0), norm[ukey])
+                out[str(chat_id)] = max(int(out.get(str(chat_id), 0)), int(norm[ukey]))
 
-    # 3) fallback_last
+    # 3) fallback_last: replicate to all bound chats (legacy single cursor)
     if not out and fallback_last:
         for chat_id in bound_chat_ids:
             out[str(chat_id)] = fallback_last
@@ -160,6 +164,12 @@ async def events_polling_loop(
     per_user_limit: int = 200,
     allowed_types: Optional[Set[str]] = None,
 ) -> None:
+    """
+    Delivery policy (Variant A):
+      - Audience is computed on backend via /tasks/me/events.
+      - Bot only delivers to chats bound to user_id.
+      - Cursor is audit_id (fallback event_id), stored per chat_id.
+    """
     allowed_types = set(
         t.upper().strip() for t in (allowed_types or set()) if str(t).strip()
     )
@@ -207,14 +217,14 @@ async def events_polling_loop(
 
             for user_id, chat_ids in by_user.items():
                 # Use the most advanced cursor among chats for this user_id to avoid re-fetching old pages.
-                last_ids = [(_safe_int(state.get(str(chat_id))) or 0) for chat_id in chat_ids]
+                last_ids = [int(_safe_int(state.get(str(chat_id))) or 0) for chat_id in chat_ids]
                 max_last_id = max(last_ids) if last_ids else 0
-                since_val = max_last_id if max_last_id > 0 else 0
+                since_val = int(max_last_id) if max_last_id > 0 else 0
 
                 resp = await backend.get_my_events(
-                    user_id=user_id,
-                    since_audit_id=(max_last_id if max_last_id > 0 else None),
-                    limit=per_user_limit,
+                    user_id=int(user_id),
+                    since_audit_id=(int(max_last_id) if max_last_id > 0 else None),
+                    limit=int(per_user_limit),
                     offset=0,
                     event_type=None,
                 )
@@ -240,7 +250,7 @@ async def events_polling_loop(
                         log.info(
                             "No events: user_id=%s since=%s",
                             user_id,
-                            (max_last_id if max_last_id > 0 else None),
+                            (int(max_last_id) if max_last_id > 0 else None),
                         )
                         no_events_log_state[int(user_id)] = (since_val, now_ts)
 
@@ -255,42 +265,53 @@ async def events_polling_loop(
                 log.info(
                     "Fetched events: user_id=%s since=%s count=%s",
                     user_id,
-                    (max_last_id if max_last_id > 0 else None),
+                    (int(max_last_id) if max_last_id > 0 else None),
                     len(events_sorted),
                 )
 
+                # Guardrail: ensure cursor ids are present; if not, log once per batch
+                if events_sorted and _event_cursor_id(events_sorted[-1]) == 0:
+                    log.warning(
+                        "Events cursor_id is 0 (missing audit_id/event_id). user_id=%s",
+                        user_id,
+                    )
+
                 for chat_id in chat_ids:
-                    last_id = _safe_int(state.get(str(chat_id))) or 0
+                    last_id = int(_safe_int(state.get(str(chat_id))) or 0)
                     max_cursor_id = last_id
 
                     for ev in events_sorted:
-                        cursor_id = _event_cursor_id(ev)
+                        cursor_id = int(_event_cursor_id(ev))
                         if cursor_id <= last_id:
                             continue
 
                         ev_type = str(ev.get("event_type") or "").upper().strip()
+
+                        # IMPORTANT: even if we filter out by allowed_types,
+                        # we still advance cursor to avoid re-processing forever.
                         if allowed_types and ev_type not in allowed_types:
                             max_cursor_id = max(max_cursor_id, cursor_id)
                             continue
 
                         try:
                             await application.bot.send_message(
-                                chat_id=chat_id,
+                                chat_id=int(chat_id),
                                 text=render_event(ev),
                             )
                             max_cursor_id = max(max_cursor_id, cursor_id)
                         except Exception:
                             log.exception(
                                 "Failed to send event_id=%s cursor_id=%s to chat_id=%s (user_id=%s)",
-                                _safe_int(ev.get("event_id")) or 0,
+                                int(_safe_int(ev.get("event_id")) or 0),
                                 cursor_id,
                                 chat_id,
                                 user_id,
                             )
+                            # Stop this chat delivery on first failure to preserve ordering and avoid cursor skip.
                             break
 
                     if max_cursor_id > last_id:
-                        state[str(chat_id)] = max_cursor_id
+                        state[str(chat_id)] = int(max_cursor_id)
                         state_changed = True
 
             if state_changed:
