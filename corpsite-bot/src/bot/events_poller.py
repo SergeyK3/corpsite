@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
@@ -25,11 +26,24 @@ def _safe_int(v: Any) -> Optional[int]:
         return None
 
 
+def _event_cursor_id(ev: Dict[str, Any]) -> int:
+    """
+    Cursor for since_audit_id:
+    - Prefer audit_id (backend cursor)
+    - Fallback to event_id to remain compatible if audit_id is missing
+    """
+    return _safe_int(ev.get("audit_id")) or _safe_int(ev.get("event_id")) or 0
+
+
+def _sort_key(ev: Dict[str, Any]) -> int:
+    return _event_cursor_id(ev)
+
+
 class JsonFileStore:
     """
     JSON persistence store:
       - bindings: chat_id -> corpsite_user_id
-      - state: chat_id -> last_event_id
+      - state: chat_id -> last_cursor_id
     """
 
     def __init__(self, path: Path):
@@ -93,7 +107,10 @@ def _migrate_state_if_needed(
     pairs: Tuple[Tuple[int, int], ...],
 ) -> Dict[str, int]:
     """
-    TARGET: { "<chat_id>": last_event_id }
+    TARGET: { "<chat_id>": last_cursor_id }
+    NOTE: historically this was called last_event_id, but now it represents a cursor:
+      - preferred: audit_id
+      - fallback: event_id
     """
     if not pairs or not raw_state:
         return {}
@@ -158,20 +175,30 @@ async def events_polling_loop(
         per_user_limit,
     )
 
+    # Throttle logs when there are no bindings
+    last_no_bindings_log_ts = 0.0
+
+    # Throttle "No events" log per user_id when since cursor does not change
+    # user_id -> (last_since, last_log_ts)
+    no_events_log_state: Dict[int, Tuple[int, float]] = {}
+
     while True:
         try:
             bindings_raw = bindings_store.load()
             pairs = _iter_bindings(bindings_raw)
 
-            log.debug("bindings_raw=%s", bindings_raw)
-            log.debug("pairs=%s", pairs)
-
             if not pairs:
+                now_ts = time.time()
+                if now_ts - last_no_bindings_log_ts >= 60.0:
+                    last_no_bindings_log_ts = now_ts
+                    log.info(
+                        "Events polling: no bindings found. bindings_path=%s",
+                        str(bindings_store.path),
+                    )
                 await asyncio.sleep(max(1.0, poll_interval_s))
                 continue
 
             by_user = _group_by_user(pairs)
-            log.debug("by_user=%s", by_user)
 
             raw_state = state_store.load()
             state = _migrate_state_if_needed(raw_state=raw_state, pairs=pairs)
@@ -179,12 +206,14 @@ async def events_polling_loop(
             state_changed = False
 
             for user_id, chat_ids in by_user.items():
+                # Use the most advanced cursor among chats for this user_id to avoid re-fetching old pages.
                 last_ids = [(_safe_int(state.get(str(chat_id))) or 0) for chat_id in chat_ids]
-                min_last_id = min(last_ids) if last_ids else 0
+                max_last_id = max(last_ids) if last_ids else 0
+                since_val = max_last_id if max_last_id > 0 else 0
 
                 resp = await backend.get_my_events(
                     user_id=user_id,
-                    since_audit_id=(min_last_id if min_last_id > 0 else None),
+                    since_audit_id=(max_last_id if max_last_id > 0 else None),
                     limit=per_user_limit,
                     offset=0,
                     event_type=None,
@@ -200,36 +229,48 @@ async def events_polling_loop(
                     continue
 
                 if not isinstance(resp.json, list) or not resp.json:
-                    log.debug(
-                        "No events: user_id=%s since=%s",
-                        user_id,
-                        (min_last_id if min_last_id > 0 else None),
-                    )
+                    # Throttle identical "No events" lines
+                    now_ts = time.time()
+                    prev = no_events_log_state.get(int(user_id))
+                    prev_since = prev[0] if prev else -1
+                    prev_ts = prev[1] if prev else 0.0
+
+                    # Log immediately if since changed; otherwise at most once per 60 seconds
+                    if since_val != prev_since or (now_ts - prev_ts) >= 60.0:
+                        log.info(
+                            "No events: user_id=%s since=%s",
+                            user_id,
+                            (max_last_id if max_last_id > 0 else None),
+                        )
+                        no_events_log_state[int(user_id)] = (since_val, now_ts)
+
                     continue
 
-                events_sorted = sorted(
-                    resp.json, key=lambda e: int(e.get("event_id") or 0)
-                )
+                # We have events: reset "No events" throttle for this user
+                if int(user_id) in no_events_log_state:
+                    no_events_log_state.pop(int(user_id), None)
+
+                events_sorted = sorted(resp.json, key=_sort_key)
 
                 log.info(
                     "Fetched events: user_id=%s since=%s count=%s",
                     user_id,
-                    (min_last_id if min_last_id > 0 else None),
+                    (max_last_id if max_last_id > 0 else None),
                     len(events_sorted),
                 )
 
                 for chat_id in chat_ids:
                     last_id = _safe_int(state.get(str(chat_id))) or 0
-                    max_event_id = last_id
+                    max_cursor_id = last_id
 
                     for ev in events_sorted:
-                        ev_id = _safe_int(ev.get("event_id")) or 0
-                        if ev_id <= last_id:
+                        cursor_id = _event_cursor_id(ev)
+                        if cursor_id <= last_id:
                             continue
 
                         ev_type = str(ev.get("event_type") or "").upper().strip()
                         if allowed_types and ev_type not in allowed_types:
-                            max_event_id = max(max_event_id, ev_id)
+                            max_cursor_id = max(max_cursor_id, cursor_id)
                             continue
 
                         try:
@@ -237,18 +278,19 @@ async def events_polling_loop(
                                 chat_id=chat_id,
                                 text=render_event(ev),
                             )
-                            max_event_id = max(max_event_id, ev_id)
+                            max_cursor_id = max(max_cursor_id, cursor_id)
                         except Exception:
                             log.exception(
-                                "Failed to send event_id=%s to chat_id=%s (user_id=%s)",
-                                ev_id,
+                                "Failed to send event_id=%s cursor_id=%s to chat_id=%s (user_id=%s)",
+                                _safe_int(ev.get("event_id")) or 0,
+                                cursor_id,
                                 chat_id,
                                 user_id,
                             )
                             break
 
-                    if max_event_id > last_id:
-                        state[str(chat_id)] = max_event_id
+                    if max_cursor_id > last_id:
+                        state[str(chat_id)] = max_cursor_id
                         state_changed = True
 
             if state_changed:
