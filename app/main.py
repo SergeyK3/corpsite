@@ -15,6 +15,7 @@ load_dotenv(dotenv_path=ROOT_ENV)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -33,6 +34,18 @@ class UTF8JSONResponse(JSONResponse):
 
 
 app = FastAPI(title="Corpsite MVP", default_response_class=UTF8JSONResponse)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(meta_router)
 app.include_router(tasks_router)
 app.include_router(tg_bind_router)
