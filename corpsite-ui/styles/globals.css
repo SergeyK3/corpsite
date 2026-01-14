@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --bg: #0b0c10;
   --panel: #12141b;
@@ -138,13 +142,11 @@ body {
 @media print {
   @page { margin: 12mm; }
 
-  /* Общий фон и текст */
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
   }
 
-  /* Для печати devbar обычно служебная — скрываем целиком */
   .devbar,
   .devbar__right,
   button,
@@ -152,14 +154,12 @@ body {
     display: none !important;
   }
 
-  /* Компоновка: одна колонка */
   .content {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
     padding: 0 !important;
   }
 
-  /* Панели / контейнеры: белые, без теней, с тонкими рамками */
   .app,
   .left,
   .right,
@@ -173,7 +173,6 @@ body {
     outline: none !important;
   }
 
-  /* Убираем "тёмные" подложки в описаниях и полях ввода */
   .panel__desc,
   .input,
   .textarea {
@@ -182,7 +181,6 @@ body {
     border: 1px solid #cccccc !important;
   }
 
-  /* Текстовые вторичные элементы */
   .muted,
   .sectionTitle,
   .list__meta,
@@ -190,32 +188,27 @@ body {
     color: #444444 !important;
   }
 
-  /* Бейджи (если остаются) — нейтральные */
   .badge {
     color: #000000 !important;
     border: 1px solid #cccccc !important;
   }
 
-  /* Ссылки */
   a,
   a:visited {
     color: #000000 !important;
     text-decoration: underline;
   }
 
-  /* Без визуального мусора */
   * {
     box-shadow: none !important;
     text-shadow: none !important;
     filter: none !important;
   }
 
-  /* Размер шрифта для печати */
   body {
     font-size: 11pt !important;
     line-height: 1.35 !important;
   }
 
-  /* Не держим высоты "под экран" */
   .left, .right { min-height: auto !important; }
 }

@@ -1,3 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* дальше ВЕСЬ ваш существующий CSS */
+
 @import "tailwindcss";
 
 :root {
