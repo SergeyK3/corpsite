@@ -1,9 +1,10 @@
-# corpsite-bot/src/bot/events_poller.py
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import os
+import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -17,11 +18,19 @@ from .integrations.corpsite_api import CorpsiteAPI
 log = logging.getLogger("corpsite-bot.events")
 
 
+# ---------------------------
+# Utils
+# ---------------------------
+
+def _truthy_env(name: str) -> bool:
+    v = (os.getenv(name) or "").strip().lower()
+    return v in ("1", "true", "yes", "y", "on")
+
+
 def _safe_int(v: Any) -> Optional[int]:
     try:
         if v is None:
             return None
-        # avoid bool being treated as int
         if isinstance(v, bool):
             return None
         return int(v)
@@ -31,9 +40,9 @@ def _safe_int(v: Any) -> Optional[int]:
 
 def _event_cursor_id(ev: Dict[str, Any]) -> int:
     """
-    Cursor for since_audit_id:
-    - Prefer audit_id (backend cursor)
-    - Fallback to event_id for backward compatibility
+    Cursor for polling:
+      - prefer audit_id (backend cursor)
+      - fallback to event_id (legacy)
     """
     return _safe_int(ev.get("audit_id")) or _safe_int(ev.get("event_id")) or 0
 
@@ -42,11 +51,19 @@ def _sort_key(ev: Dict[str, Any]) -> int:
     return _event_cursor_id(ev)
 
 
+# ---------------------------
+# JSON persistence
+# ---------------------------
+
 class JsonFileStore:
     """
-    JSON persistence store:
-      - bindings: chat_id -> corpsite_user_id
-      - state: chat_id -> last_cursor_id
+    Simple JSON persistence.
+
+    bindings.json:
+      { "<chat_id>": <corpsite_user_id> }
+
+    events_cursor.json:
+      { "<chat_id>": <last_cursor_id> }
     """
 
     def __init__(self, path: Path):
@@ -57,28 +74,53 @@ class JsonFileStore:
         if not self.path.exists():
             return {}
         try:
-            return json.loads(self.path.read_text(encoding="utf-8") or "{}")
+            raw = self.path.read_text(encoding="utf-8").strip()
+            if not raw:
+                return {}
+            return json.loads(raw)
         except Exception:
+            log.exception("Failed to load json store: %s", self.path)
             return {}
 
     def save(self, data: Dict[str, Any]) -> None:
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        # атомарная запись: tmp -> replace
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
+        payload = json.dumps(data, ensure_ascii=False, indent=2)
+
+        tmp_dir = str(self.path.parent)
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=self.path.stem + ".",
+            suffix=self.path.suffix + ".tmp",
+            dir=tmp_dir,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+                f.write("\n")
+            os.replace(tmp_path, self.path)
+        finally:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+# ---------------------------
+# Bindings helpers
+# ---------------------------
 
 def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
     """
-    bindings json format:
-      { "<chat_id>": <corpsite_user_id> }
+    bindings format:
+      { "<chat_id>": <user_id> }
     """
     out: List[Tuple[int, int]] = []
     for k, v in (bindings or {}).items():
         chat_id = _safe_int(k)
         user_id = _safe_int(v)
-        if chat_id is None or user_id is None:
-            continue
-        if chat_id == 0 or user_id <= 0:
+        if not chat_id or not user_id:
             continue
         out.append((chat_id, user_id))
     return tuple(out)
@@ -94,13 +136,17 @@ def _group_by_user(pairs: Tuple[Tuple[int, int], ...]) -> Dict[int, List[int]]:
     return dict(m)
 
 
+# ---------------------------
+# Cursor state migration
+# ---------------------------
+
 def _normalize_state_values(raw_state: Dict[str, Any]) -> Dict[str, int]:
     norm: Dict[str, int] = {}
     for k, v in (raw_state or {}).items():
         iv = _safe_int(v)
         if iv is None:
             continue
-        norm[str(k)] = int(iv)
+        norm[str(k)] = iv
     return norm
 
 
@@ -110,19 +156,21 @@ def _migrate_state_if_needed(
     pairs: Tuple[Tuple[int, int], ...],
 ) -> Dict[str, int]:
     """
-    TARGET: { "<chat_id>": last_cursor_id }
+    Target format:
+      { "<chat_id>": last_cursor_id }
 
-    NOTE: historically this was called last_event_id, but now it represents a cursor:
-      - preferred: audit_id
-      - fallback: event_id
+    Supports legacy formats:
+      - user_id -> last_event_id
+      - single last_event_id
     """
-    if not pairs or not raw_state:
+    if not raw_state or not pairs:
         return {}
+
+    norm = _normalize_state_values(raw_state)
 
     bound_chat_ids = {chat_id for chat_id, _ in pairs}
     bound_user_ids = {user_id for _, user_id in pairs}
 
-    norm = _normalize_state_values(raw_state)
     fallback_last = int(norm.get("last_event_id", 0) or 0)
 
     keys_int = {_safe_int(k) for k in norm.keys()}
@@ -133,26 +181,32 @@ def _migrate_state_if_needed(
 
     out: Dict[str, int] = {}
 
-    # 1) chat_id -> cursor (already in target form)
+    # 1) already chat_id keyed
     for chat_id in bound_chat_ids:
         v = norm.get(str(chat_id))
         if v is not None:
-            out[str(chat_id)] = int(v)
+            out[str(chat_id)] = v
 
-    # 2) migrate old user_id -> cursor (if state was keyed by user_id previously)
+    # 2) migrate user_id keyed state
     if user_key_hits > 0 and chat_key_hits == 0:
         for chat_id, user_id in pairs:
-            ukey = str(user_id)
-            if ukey in norm:
-                out[str(chat_id)] = max(int(out.get(str(chat_id), 0)), int(norm[ukey]))
+            if str(user_id) in norm:
+                out[str(chat_id)] = max(
+                    out.get(str(chat_id), 0),
+                    norm[str(user_id)],
+                )
 
-    # 3) fallback_last: replicate to all bound chats (legacy single cursor)
+    # 3) legacy single cursor
     if not out and fallback_last:
         for chat_id in bound_chat_ids:
             out[str(chat_id)] = fallback_last
 
     return out
 
+
+# ---------------------------
+# Polling loop
+# ---------------------------
 
 async def events_polling_loop(
     *,
@@ -165,32 +219,32 @@ async def events_polling_loop(
     allowed_types: Optional[Set[str]] = None,
 ) -> None:
     """
-    Delivery policy (Variant A):
-      - Audience is computed on backend via /tasks/me/events.
-      - Bot only delivers to chats bound to user_id.
-      - Cursor is audit_id (fallback event_id), stored per chat_id.
-    """
-    allowed_types = set(
-        t.upper().strip() for t in (allowed_types or set()) if str(t).strip()
-    )
+    Events delivery loop.
 
-    if allowed_types:
-        log.info("Events polling filter enabled: %s", sorted(allowed_types))
-    else:
-        log.info("Events polling filter disabled (send all types).")
+    - Audience resolved on backend (/tasks/me/events)
+    - Cursor = audit_id (fallback event_id)
+    - Cursor stored per chat_id (state_store JSON)
+    - Optional reset: EVENTS_CURSOR_RESET=1 -> clears cursor store (for E2E)
+    """
+
+    allowed_types = {
+        t.upper().strip()
+        for t in (allowed_types or set())
+        if str(t).strip()
+    }
 
     log.info(
-        "Events polling loop started. interval=%ss limit=%s",
+        "Events polling started. interval=%ss limit=%s allowed_types=%s",
         poll_interval_s,
         per_user_limit,
+        sorted(allowed_types) if allowed_types else "ALL",
     )
 
-    # Throttle logs when there are no bindings
     last_no_bindings_log_ts = 0.0
-
-    # Throttle "No events" log per user_id when since cursor does not change
-    # user_id -> (last_since, last_log_ts)
     no_events_log_state: Dict[int, Tuple[int, float]] = {}
+
+    # One-time reset support (useful for E2E)
+    did_reset = False
 
     while True:
         try:
@@ -198,120 +252,117 @@ async def events_polling_loop(
             pairs = _iter_bindings(bindings_raw)
 
             if not pairs:
-                now_ts = time.time()
-                if now_ts - last_no_bindings_log_ts >= 60.0:
-                    last_no_bindings_log_ts = now_ts
-                    log.info(
-                        "Events polling: no bindings found. bindings_path=%s",
-                        str(bindings_store.path),
-                    )
+                now = time.time()
+                if now - last_no_bindings_log_ts >= 60.0:
+                    last_no_bindings_log_ts = now
+                    log.info("Events polling: no bindings")
                 await asyncio.sleep(max(1.0, poll_interval_s))
                 continue
 
             by_user = _group_by_user(pairs)
 
             raw_state = state_store.load()
-            state = _migrate_state_if_needed(raw_state=raw_state, pairs=pairs)
+
+            # RESET cursor if requested (only once per process start)
+            if not did_reset and _truthy_env("EVENTS_CURSOR_RESET"):
+                did_reset = True
+                raw_state = {}
+                state_store.save({})
+                log.info("Events cursor reset: store cleared (EVENTS_CURSOR_RESET=1)")
+
+            state = _migrate_state_if_needed(
+                raw_state=raw_state,
+                pairs=pairs,
+            )
 
             state_changed = False
 
             for user_id, chat_ids in by_user.items():
-                # Use the most advanced cursor among chats for this user_id to avoid re-fetching old pages.
-                last_ids = [int(_safe_int(state.get(str(chat_id))) or 0) for chat_id in chat_ids]
-                max_last_id = max(last_ids) if last_ids else 0
-                since_val = int(max_last_id) if max_last_id > 0 else 0
+                last_ids = [
+                    int(_safe_int(state.get(str(chat_id))) or 0)
+                    for chat_id in chat_ids
+                ]
+                since_val = max(last_ids) if last_ids else 0
 
                 resp = await backend.get_my_events(
-                    user_id=int(user_id),
-                    since_audit_id=(int(max_last_id) if max_last_id > 0 else None),
-                    limit=int(per_user_limit),
+                    user_id=user_id,
+                    since_audit_id=since_val if since_val > 0 else None,
+                    limit=per_user_limit,
                     offset=0,
                     event_type=None,
                 )
 
                 if resp.status_code != 200:
                     log.warning(
-                        "get_my_events failed: status=%s user_id=%s text=%s",
-                        resp.status_code,
+                        "get_my_events failed: user_id=%s status=%s",
                         user_id,
-                        (resp.text or "")[:300],
+                        resp.status_code,
                     )
                     continue
 
-                if not isinstance(resp.json, list) or not resp.json:
-                    # Throttle identical "No events" lines
-                    now_ts = time.time()
-                    prev = no_events_log_state.get(int(user_id))
+                events = resp.json or []
+                if not isinstance(events, list) or not events:
+                    now = time.time()
+                    prev = no_events_log_state.get(user_id)
                     prev_since = prev[0] if prev else -1
                     prev_ts = prev[1] if prev else 0.0
 
-                    # Log immediately if since changed; otherwise at most once per 60 seconds
-                    if since_val != prev_since or (now_ts - prev_ts) >= 60.0:
+                    if since_val != prev_since or now - prev_ts >= 60.0:
                         log.info(
                             "No events: user_id=%s since=%s",
                             user_id,
-                            (int(max_last_id) if max_last_id > 0 else None),
+                            since_val or None,
                         )
-                        no_events_log_state[int(user_id)] = (since_val, now_ts)
-
+                        no_events_log_state[user_id] = (since_val, now)
                     continue
 
-                # We have events: reset "No events" throttle for this user
-                if int(user_id) in no_events_log_state:
-                    no_events_log_state.pop(int(user_id), None)
+                no_events_log_state.pop(user_id, None)
 
-                events_sorted = sorted(resp.json, key=_sort_key)
+                events_sorted = sorted(events, key=_sort_key)
 
                 log.info(
                     "Fetched events: user_id=%s since=%s count=%s",
                     user_id,
-                    (int(max_last_id) if max_last_id > 0 else None),
+                    since_val or None,
                     len(events_sorted),
                 )
 
-                # Guardrail: ensure cursor ids are present; if not, log once per batch
-                if events_sorted and _event_cursor_id(events_sorted[-1]) == 0:
-                    log.warning(
-                        "Events cursor_id is 0 (missing audit_id/event_id). user_id=%s",
-                        user_id,
-                    )
-
                 for chat_id in chat_ids:
-                    last_id = int(_safe_int(state.get(str(chat_id))) or 0)
-                    max_cursor_id = last_id
+                    last_cursor = int(_safe_int(state.get(str(chat_id))) or 0)
+                    max_cursor = last_cursor
 
                     for ev in events_sorted:
-                        cursor_id = int(_event_cursor_id(ev))
-                        if cursor_id <= last_id:
+                        cursor_id = _event_cursor_id(ev)
+                        if cursor_id <= last_cursor:
                             continue
 
-                        ev_type = str(ev.get("event_type") or "").upper().strip()
+                        ev_type = str(ev.get("event_type") or "").upper()
 
-                        # IMPORTANT: even if we filter out by allowed_types,
-                        # we still advance cursor to avoid re-processing forever.
+                        # если фильтруем типы — всё равно двигаем курсор,
+                        # иначе будем видеть эти события заново
                         if allowed_types and ev_type not in allowed_types:
-                            max_cursor_id = max(max_cursor_id, cursor_id)
+                            max_cursor = max(max_cursor, cursor_id)
                             continue
 
                         try:
                             await application.bot.send_message(
-                                chat_id=int(chat_id),
+                                chat_id=chat_id,
                                 text=render_event(ev),
                             )
-                            max_cursor_id = max(max_cursor_id, cursor_id)
+                            max_cursor = max(max_cursor, cursor_id)
                         except Exception:
                             log.exception(
-                                "Failed to send event_id=%s cursor_id=%s to chat_id=%s (user_id=%s)",
-                                int(_safe_int(ev.get("event_id")) or 0),
-                                cursor_id,
+                                "Send failed: chat_id=%s user_id=%s cursor_id=%s",
                                 chat_id,
                                 user_id,
+                                cursor_id,
                             )
-                            # Stop this chat delivery on first failure to preserve ordering and avoid cursor skip.
+                            # IMPORTANT: не двигаем курсор дальше текущего max_cursor,
+                            # чтобы не потерять события, которые не отправились.
                             break
 
-                    if max_cursor_id > last_id:
-                        state[str(chat_id)] = int(max_cursor_id)
+                    if max_cursor > last_cursor:
+                        state[str(chat_id)] = max_cursor
                         state_changed = True
 
             if state_changed:
@@ -320,8 +371,8 @@ async def events_polling_loop(
             await asyncio.sleep(max(1.0, poll_interval_s))
 
         except asyncio.CancelledError:
-            log.info("Events polling loop cancelled.")
+            log.info("Events polling cancelled")
             raise
         except Exception:
-            log.exception("Polling loop failure (outer). Backing off.")
+            log.exception("Events polling failure (outer loop)")
             await asyncio.sleep(max(2.0, poll_interval_s))

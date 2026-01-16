@@ -178,3 +178,9 @@ def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, A
             )
 
     return {"period_id": period_id, "created_tasks": created_count}
+
+from app.directory import router as directory_router
+app.include_router(directory_router)
+
+from app.directory import router as directory_router
+app.include_router(directory_router)

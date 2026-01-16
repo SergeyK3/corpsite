@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import List, Optional, Literal
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Path, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -37,6 +37,17 @@ class EmployeesResponse(BaseModel):
     total: int
 
 
+class EmployeeDetail(BaseModel):
+    id: str
+    full_name: str
+    department: Department
+    position: Position
+    date_from: Optional[str]
+    date_to: Optional[str]
+    employment_rate: Optional[float]
+    is_active: bool
+
+
 @router.get("/departments", response_model=List[Department])
 def departments() -> List[Department]:
     sql = text("""
@@ -66,6 +77,7 @@ def employees(
     q: Optional[str] = Query(default=None),
     department_id: Optional[int] = Query(default=None, ge=1),
     position_id: Optional[int] = Query(default=None, ge=1),
+    status: Literal["active", "inactive", "all"] = Query(default="active"),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: Literal["full_name", "id"] = Query(default="full_name"),
@@ -86,6 +98,11 @@ def employees(
     if position_id:
         where.append("e.position_id = :position_id")
         params["position_id"] = position_id
+
+    if status == "active":
+        where.append("e.is_active = TRUE")
+    elif status == "inactive":
+        where.append("e.is_active = FALSE")
 
     where_sql = "WHERE " + " AND ".join(where) if where else ""
 
@@ -138,11 +155,43 @@ def employees(
 
     return EmployeesResponse(items=items, total=total)
 
-@router.get("/_debug/db")
-def _debug_db():
-    from sqlalchemy import text
+
+@router.get("/employees/{employee_id}", response_model=EmployeeDetail)
+def employee_detail(
+    employee_id: str = Path(..., min_length=1, max_length=64),
+) -> EmployeeDetail:
+    sql = text("""
+        SELECT
+            e.employee_id AS id,
+            e.full_name,
+            d.department_id AS department_id,
+            d.name AS department_name,
+            p.position_id AS position_id,
+            p.name AS position_name,
+            e.date_from::text AS date_from,
+            e.date_to::text AS date_to,
+            e.employment_rate::float AS employment_rate,
+            e.is_active
+        FROM public.employees e
+        JOIN public.departments d ON d.department_id = e.department_id
+        JOIN public.positions p ON p.position_id = e.position_id
+        WHERE e.employee_id = :employee_id
+        LIMIT 1
+    """)
+
     with engine.begin() as conn:
-        row = conn.execute(
-            text("SELECT current_database() AS db, current_setting('port') AS port")
-        ).mappings().one()
-    return {"db": row["db"], "port": row["port"]}
+        r = conn.execute(sql, {"employee_id": employee_id}).mappings().first()
+
+    if not r:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    return EmployeeDetail(
+        id=r["id"],
+        full_name=r["full_name"],
+        department=Department(id=r["department_id"], name=r["department_name"]),
+        position=Position(id=r["position_id"], name=r["position_name"]),
+        date_from=r["date_from"],
+        date_to=r["date_to"],
+        employment_rate=r["employment_rate"],
+        is_active=bool(r["is_active"]),
+    )
