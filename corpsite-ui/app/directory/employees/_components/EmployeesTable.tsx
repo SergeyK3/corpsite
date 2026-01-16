@@ -1,5 +1,4 @@
 // corpsite-ui/app/directory/employees/_components/EmployeesTable.tsx
-
 "use client";
 
 import Link from "next/link";
@@ -17,10 +16,21 @@ type Props = {
 
 function formatDate(d: string | null): string {
   if (!d) return "—";
-  return d;
+  // API returns YYYY-MM-DD; render as DD.MM.YYYY for RU UX
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString("ru-RU");
 }
 
 function computeIsActive(it: any): boolean {
+  // Prefer normalized API field: status ("active" | "inactive" | "unknown")
+  if (typeof it?.status === "string") {
+    const s = String(it.status).toLowerCase();
+    if (s === "active") return true;
+    if (s === "inactive") return false;
+  }
+
+  // Fallbacks for other payloads
   if (typeof it.is_active === "boolean") return it.is_active;
   if (typeof it.isActive === "boolean") return it.isActive;
   if ("date_to" in it) return it.date_to == null;
@@ -28,11 +38,18 @@ function computeIsActive(it: any): boolean {
   return true;
 }
 
-function StatusBadge({ active }: { active: boolean }) {
-  const label = active ? "Работает" : "Уволен";
-  const cls = active
-    ? "bg-green-100 text-green-800"
-    : "bg-gray-100 text-gray-700";
+function StatusBadge({ status }: { status: string | null | undefined }) {
+  const s = (status ?? "").toString().toLowerCase();
+  const active = s ? s === "active" : null;
+
+  const label = active === null ? "—" : active ? "Работает" : "Не работает";
+  const cls =
+    active === null
+      ? "bg-gray-100 text-gray-700"
+      : active
+      ? "bg-green-100 text-green-800"
+      : "bg-gray-100 text-gray-700";
+
   return <span className={`px-2 py-1 rounded text-xs ${cls}`}>{label}</span>;
 }
 
@@ -163,7 +180,7 @@ export default function EmployeesTable({
                     </td>
 
                     <td className="px-3 py-2">
-                      <StatusBadge active={active} />
+                      <StatusBadge status={it?.status ?? null} />
                     </td>
 
                     <td className="px-3 py-2 text-right">

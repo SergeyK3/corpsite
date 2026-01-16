@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+import csv
+import io
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Tuple, Set
 
-from fastapi import APIRouter, Header, HTTPException, Query, Path
+from fastapi import APIRouter, Header, HTTPException, Query, Path, Request
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -19,6 +22,36 @@ def _rbac_mode() -> str:
     # off | dept
     v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
     return v if v in ("off", "dept") else "dept"
+
+
+def _parse_int_set_env(name: str) -> Set[int]:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return set()
+    out: Set[int] = set()
+    for part in raw.split(","):
+        s = part.strip()
+        if not s:
+            continue
+        try:
+            out.add(int(s))
+        except ValueError:
+            continue
+    return out
+
+
+def _privileged_ids() -> Set[int]:
+    # MVP: allowlist user ids (X-User-Id) that can see all employees/departments + import
+    # Example: DIRECTORY_PRIVILEGED_IDS=34,12345
+    return _parse_int_set_env("DIRECTORY_PRIVILEGED_IDS")
+
+
+def _is_privileged(viewer_id_text: str) -> bool:
+    try:
+        vid = int(str(viewer_id_text).strip())
+    except Exception:
+        return False
+    return vid in _privileged_ids()
 
 
 def _as_http500(e: Exception) -> HTTPException:
@@ -116,7 +149,6 @@ def _score_departments(name: str, cols: List[str]) -> int:
     if "org_unit" in n or "orgunit" in n or "unit" in n:
         score += 10
 
-    # Must look like id+name dictionary
     if lc.intersection({"id", "department_id", "dept_id", "org_unit_id"}):
         score += 20
     if lc.intersection({"name", "name_ru", "dept_name", "department_name", "org_unit_name"}):
@@ -232,7 +264,6 @@ def _dept_key_from_row(row: Dict[str, Any], cols: List[str]) -> Optional[str]:
     if fk and row.get(fk) is not None:
         return str(row.get(fk)).strip().lower()
 
-    # fallback if some schemas store dept name directly
     dn = _pick_first(cols, ["department_name", "dept_name", "org_unit_name", "department"])
     if dn and row.get(dn):
         return str(row.get(dn)).strip().lower()
@@ -240,8 +271,16 @@ def _dept_key_from_row(row: Dict[str, Any], cols: List[str]) -> Optional[str]:
     return None
 
 
-def _can_view_employee(viewer_id_text: str, target_id_text: str, target_row: Dict[str, Any], target_cols: List[str]) -> bool:
+def _can_view_employee(
+    viewer_id_text: str,
+    target_id_text: str,
+    target_row: Dict[str, Any],
+    target_cols: List[str],
+) -> bool:
     if viewer_id_text == target_id_text:
+        return True
+
+    if _is_privileged(viewer_id_text):
         return True
 
     viewer_row, _, viewer_cols = _load_employee_raw(viewer_id_text)
@@ -266,8 +305,11 @@ def _can_view_employee(viewer_id_text: str, target_id_text: str, target_row: Dic
 def list_departments(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     try:
+        _ = x_user_id
+
         rel, cols = _departments_relation()
         if not rel:
             return {"items": [], "total": 0}
@@ -303,8 +345,11 @@ def list_departments(
 def list_positions(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     try:
+        _ = x_user_id
+
         rel, cols = _positions_relation()
         if not rel:
             return {"items": [], "total": 0}
@@ -339,14 +384,7 @@ def list_positions(
 # ---------------------------
 # Employees: list + card (with JOIN-enrichment)
 # ---------------------------
-def _employee_select_sql(
-    emp_rel: str,
-    emp_cols: List[str],
-) -> Tuple[str, Dict[str, str]]:
-    """
-    Returns (sql_select_fragment, aliases) where aliases provide names for joined fields.
-    We keep it resilient: if dict relations are not detected, return plain employee fields.
-    """
+def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[str, str]]:
     emp_id_col = _employees_id_col(emp_cols)
 
     fio_col = _pick_first(emp_cols, ["fio", "full_name", "name", "name_ru", "employee_name"])
@@ -365,7 +403,6 @@ def _employee_select_sql(
     dep_rel, dep_cols = _departments_relation()
     pos_rel, pos_cols = _positions_relation()
 
-    # detect dict id/name cols
     dep_id_col = _dict_id_col(dep_cols, ["department_id", "dept_id", "org_unit_id"]) if dep_rel else None
     dep_name_col = _dict_name_col(dep_cols, ["department_name", "dept_name", "org_unit_name"]) if dep_rel else None
 
@@ -388,7 +425,6 @@ def _employee_select_sql(
 
     join_sql = ""
 
-    # department join
     if dep_rel and dept_fk and dep_id_col and dep_name_col:
         select_parts.append(f"d.{dep_name_col} AS dept_name")
         join_sql += (
@@ -398,7 +434,6 @@ def _employee_select_sql(
     else:
         select_parts.append("NULL AS dept_name")
 
-    # position join
     if pos_rel and pos_fk and pos_id_col and pos_name_col:
         select_parts.append(f"p.{pos_name_col} AS pos_name")
         join_sql += (
@@ -413,7 +448,6 @@ def _employee_select_sql(
 
 
 def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, Any]:
-    # fio fallback
     fio = (str(row.get("e_fio")).strip() if row.get("e_fio") else "").strip()
     if not fio:
         parts = []
@@ -422,7 +456,6 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
                 parts.append(str(row.get(k)).strip())
         fio = " ".join([p for p in parts if p]) or None
 
-    # status normalize
     status_norm = "unknown"
     v = row.get("e_status")
     if isinstance(v, bool):
@@ -456,18 +489,22 @@ def list_employees(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     status: str = Query(default="active", pattern="^(active|inactive|all)$"),
     q: Optional[str] = Query(default=None),
+    department_id: Optional[int] = Query(default=None, ge=1),
+    position_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    sort: Optional[str] = Query(default=None),
+    order: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
     try:
         viewer_id_text = _require_user_id(x_user_id)
+        privileged = _is_privileged(viewer_id_text)
 
         emp_rel, emp_cols = _employees_relation()
         emp_id_col = _employees_id_col(emp_cols)
 
         base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
 
-        # Reuse the same search/status heuristics but now with alias "e."
         status_col = _pick_first(emp_cols, ["status", "is_active", "active"])
         fio_col = _pick_first(emp_cols, ["fio", "full_name", "name", "name_ru", "employee_name"])
         last_col = _pick_first(emp_cols, ["last_name", "surname"])
@@ -475,6 +512,7 @@ def list_employees(
         mid_col = _pick_first(emp_cols, ["middle_name", "patronymic"])
 
         dept_fk = _dept_fk_col(emp_cols)
+        pos_fk = _pos_fk_col(emp_cols)
         dept_name_direct = _pick_first(emp_cols, ["department_name", "dept_name", "org_unit_name", "department"])
 
         where: List[str] = []
@@ -487,9 +525,13 @@ def list_employees(
                 params["is_active"] = True if status == "active" else False
             else:
                 if status == "active":
-                    where.append(f"LOWER(CAST(e.{status_col} AS TEXT)) IN ('active','работает','в штате','1','true','yes')")
+                    where.append(
+                        f"LOWER(CAST(e.{status_col} AS TEXT)) IN ('active','работает','в штате','1','true','yes')"
+                    )
                 else:
-                    where.append(f"LOWER(CAST(e.{status_col} AS TEXT)) IN ('inactive','уволен','не работает','0','false','no')")
+                    where.append(
+                        f"LOWER(CAST(e.{status_col} AS TEXT)) IN ('inactive','уволен','не работает','0','false','no')"
+                    )
 
         # Search
         if q:
@@ -507,8 +549,17 @@ def list_employees(
             if parts:
                 where.append("(" + " OR ".join(parts) + ")")
 
+        # Filter by dept/pos
+        if department_id is not None and dept_fk:
+            where.append(f"CAST(e.{dept_fk} AS INT) = :department_id")
+            params["department_id"] = int(department_id)
+
+        if position_id is not None and pos_fk:
+            where.append(f"CAST(e.{pos_fk} AS INT) = :position_id")
+            params["position_id"] = int(position_id)
+
         # RBAC
-        if _rbac_mode() != "off":
+        if _rbac_mode() != "off" and not privileged:
             viewer_row, _, viewer_cols = _load_employee_raw(viewer_id_text)
             viewer_dept = _dept_key_from_row(viewer_row, viewer_cols) if viewer_row else None
 
@@ -529,11 +580,23 @@ def list_employees(
 
         where_sql = " AND ".join(where) if where else "TRUE"
 
+        ord_dir = "ASC" if (order or "").lower() != "desc" else "DESC"
+        if (sort or "").lower() in ("full_name", "fio", "name") and fio_col:
+            order_sql = f"LOWER(CAST(e.{fio_col} AS TEXT)) {ord_dir}, CAST(e.{emp_id_col} AS TEXT) ASC"
+        elif (sort or "").lower() in ("full_name", "fio", "name") and last_col:
+            order_sql = (
+                f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}, LOWER(CAST(e.{first_col} AS TEXT)) {ord_dir}"
+                if first_col
+                else f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}"
+            )
+        else:
+            order_sql = f"CAST(e.{emp_id_col} AS TEXT) ASC"
+
         q_list = text(
             f"""
             {base_sql}
             WHERE {where_sql}
-            ORDER BY CAST(e.{emp_id_col} AS TEXT) ASC
+            ORDER BY {order_sql}
             LIMIT :limit OFFSET :offset
             """
         )
@@ -576,9 +639,9 @@ def get_employee(
             if not _can_view_employee(viewer_id_text, target_id_text, target_row_raw, emp_cols):
                 raise HTTPException(status_code=404, detail="Employee not found.")
 
-        # Fetch the same record but through JOIN select to fill dept/pos names
         emp_id_col = _employees_id_col(emp_cols)
         base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
+
         q_one = text(
             f"""
             {base_sql}
@@ -590,7 +653,6 @@ def get_employee(
             row = conn.execute(q_one, {"id_text": target_id_text}).mappings().first()
 
         if not row:
-            # Should not happen, but keep semantics
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         return _normalize_employee_joined(dict(row), emp_rel)
@@ -599,3 +661,302 @@ def get_employee(
         raise
     except Exception as e:
         raise _as_http500(e)
+
+
+# ============================================================
+# IMPORT: employees CSV (privileged only)
+# ============================================================
+def _decode_csv_bytes(b: bytes) -> str:
+    """
+    Robust decoding for CSV from Excel/Windows.
+    Tries BOM-based UTF variants first, then common Cyrillic encodings.
+    Avoids errors="replace" unless absolutely necessary.
+    """
+    if not b:
+        return ""
+
+    # UTF BOMs
+    if b.startswith(b"\xef\xbb\xbf"):
+        return b.decode("utf-8-sig")
+    if b.startswith(b"\xff\xfe") or b.startswith(b"\xfe\xff"):
+        # UTF-16 with BOM
+        return b.decode("utf-16")
+
+    # Heuristic: many NUL bytes => UTF-16LE/BE without BOM
+    if b[:200].count(b"\x00") > 10:
+        for enc in ("utf-16le", "utf-16be", "utf-16"):
+            try:
+                return b.decode(enc)
+            except UnicodeDecodeError:
+                pass
+
+    # Common encodings (order matters)
+    for enc in ("utf-8", "utf-8-sig", "cp1251", "cp866", "koi8-r"):
+        try:
+            return b.decode(enc)
+        except UnicodeDecodeError:
+            continue
+
+    # Last resort
+    return b.decode("utf-8", errors="replace")
+
+
+def _sniff_delimiter(sample: str) -> str:
+    semi = sample.count(";")
+    comma = sample.count(",")
+    return ";" if semi > comma else ","
+
+
+def _norm_header(h: str) -> str:
+    if h is None:
+        return ""
+    s = str(h).strip().lstrip("\ufeff")
+    s = s.replace("\u00a0", " ")
+    return s.strip().lower()
+
+
+def _parse_bool(v: Optional[str]) -> Optional[bool]:
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if s == "":
+        return None
+    if s in ("1", "true", "yes", "y", "on", "да"):
+        return True
+    if s in ("0", "false", "no", "n", "off", "нет"):
+        return False
+    return None
+
+
+def _parse_rate(v: Optional[str]) -> Optional[float]:
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _parse_date_any(v: Optional[str]) -> Optional[date]:
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(s, "%d.%m.%Y").date()
+    except ValueError:
+        pass
+
+    return None
+
+
+def _get_or_create_department_id(conn, name: str) -> int:
+    name = name.strip()
+    if not name:
+        raise ValueError("department_name is empty")
+
+    row = conn.execute(
+        text("SELECT department_id FROM public.departments WHERE name = :name"),
+        {"name": name},
+    ).mappings().first()
+    if row:
+        return int(row["department_id"])
+
+    row2 = conn.execute(
+        text(
+            """
+            INSERT INTO public.departments (name)
+            VALUES (:name)
+            ON CONFLICT (name) DO NOTHING
+            RETURNING department_id
+            """
+        ),
+        {"name": name},
+    ).mappings().first()
+
+    if row2 and row2.get("department_id") is not None:
+        return int(row2["department_id"])
+
+    row3 = conn.execute(
+        text("SELECT department_id FROM public.departments WHERE name = :name"),
+        {"name": name},
+    ).mappings().first()
+    if not row3:
+        raise ValueError(f"cannot resolve department_id for name={name}")
+    return int(row3["department_id"])
+
+
+def _get_or_create_position_id(conn, name: str) -> int:
+    name = name.strip()
+    if not name:
+        raise ValueError("position_name is empty")
+
+    row = conn.execute(
+        text("SELECT position_id FROM public.positions WHERE name = :name"),
+        {"name": name},
+    ).mappings().first()
+    if row:
+        return int(row["position_id"])
+
+    row2 = conn.execute(
+        text(
+            """
+            INSERT INTO public.positions (name)
+            VALUES (:name)
+            ON CONFLICT (name) DO NOTHING
+            RETURNING position_id
+            """
+        ),
+        {"name": name},
+    ).mappings().first()
+
+    if row2 and row2.get("position_id") is not None:
+        return int(row2["position_id"])
+
+    row3 = conn.execute(
+        text("SELECT position_id FROM public.positions WHERE name = :name"),
+        {"name": name},
+    ).mappings().first()
+    if not row3:
+        raise ValueError(f"cannot resolve position_id for name={name}")
+    return int(row3["position_id"])
+
+
+@router.post("/import/employees_csv")
+async def import_employees_csv(
+    request: Request,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    viewer_id_text = _require_user_id(x_user_id)
+    if not _is_privileged(viewer_id_text):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    try:
+        raw = await request.body()  # bytes (важно: устраняет UnicodeDecodeError в обработчике ошибок FastAPI)
+        text_csv = _decode_csv_bytes(raw)
+
+        if not text_csv.strip():
+            raise HTTPException(status_code=400, detail="Empty CSV body.")
+
+        delim = _sniff_delimiter(text_csv[:4096])
+        f = io.StringIO(text_csv)
+        reader = csv.DictReader(f, delimiter=delim)
+
+        if not reader.fieldnames:
+            raise HTTPException(status_code=400, detail="CSV has no header row.")
+
+        field_map: Dict[str, str] = {}
+        for h in reader.fieldnames:
+            field_map[_norm_header(h)] = h
+
+        def col(name: str) -> Optional[str]:
+            return field_map.get(name)
+
+        c_emp = col("employee_id")
+        c_name = col("full_name")
+        c_dept = col("department_name")
+        c_pos = col("position_name")
+
+        if not (c_emp and c_name and c_dept and c_pos):
+            raise HTTPException(
+                status_code=400,
+                detail="CSV header must include: employee_id, full_name, department_name, position_name.",
+            )
+
+        c_from = col("date_from")
+        c_to = col("date_to")
+        c_rate = col("employment_rate")
+        c_active = col("is_active")
+
+        rows_seen = 0
+        emp_upserted = 0
+
+        with engine.begin() as conn:
+            dep_cache: Dict[str, int] = {}
+            pos_cache: Dict[str, int] = {}
+
+            for r in reader:
+                rows_seen += 1
+
+                employee_id = str((r.get(c_emp) or "")).strip()
+                full_name = str((r.get(c_name) or "")).strip()
+                dept_name = str((r.get(c_dept) or "")).strip()
+                pos_name = str((r.get(c_pos) or "")).strip()
+
+                if not employee_id or not full_name or not dept_name or not pos_name:
+                    continue
+
+                if dept_name not in dep_cache:
+                    dep_cache[dept_name] = _get_or_create_department_id(conn, dept_name)
+
+                if pos_name not in pos_cache:
+                    pos_cache[pos_name] = _get_or_create_position_id(conn, pos_name)
+
+                department_id = dep_cache[dept_name]
+                position_id = pos_cache[pos_name]
+
+                date_from_v = _parse_date_any(r.get(c_from)) if c_from else None
+                date_to_v = _parse_date_any(r.get(c_to)) if c_to else None
+                rate_v = _parse_rate(r.get(c_rate)) if c_rate else None
+                active_v = _parse_bool(r.get(c_active)) if c_active else None
+
+                if rate_v is None:
+                    rate_v = 1.00
+                if active_v is None:
+                    active_v = True
+                if date_to_v is not None:
+                    active_v = False
+
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.employees
+                          (employee_id, full_name, department_id, position_id, date_from, date_to, employment_rate, is_active)
+                        VALUES
+                          (:employee_id, :full_name, :department_id, :position_id, :date_from, :date_to, :employment_rate, :is_active)
+                        ON CONFLICT (employee_id) DO UPDATE SET
+                          full_name = EXCLUDED.full_name,
+                          department_id = EXCLUDED.department_id,
+                          position_id = EXCLUDED.position_id,
+                          date_from = EXCLUDED.date_from,
+                          date_to = EXCLUDED.date_to,
+                          employment_rate = EXCLUDED.employment_rate,
+                          is_active = EXCLUDED.is_active
+                        """
+                    ),
+                    {
+                        "employee_id": employee_id,
+                        "full_name": full_name,
+                        "department_id": department_id,
+                        "position_id": position_id,
+                        "date_from": date_from_v,
+                        "date_to": date_to_v,
+                        "employment_rate": rate_v,
+                        "is_active": active_v,
+                    },
+                )
+                emp_upserted += 1
+
+        return {
+            "rows_seen": rows_seen,
+            "departments_touched": len(dep_cache),
+            "positions_touched": len(pos_cache),
+            "employees_upserted": emp_upserted,
+            "delimiter": delim,
+            "encoding": "auto(utf-8/cp1251)",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"import error: {type(e).__name__}: {str(e)}")

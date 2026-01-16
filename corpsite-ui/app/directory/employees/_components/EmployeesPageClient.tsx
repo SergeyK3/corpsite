@@ -1,9 +1,16 @@
+// corpsite-ui/app/directory/employees/_components/EmployeesPageClient.tsx
+
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import type { Department, Position, EmployeeDetails, EmployeeListResponse } from "../_lib/types";
+import type {
+  Department,
+  Position,
+  EmployeeDetails,
+  EmployeeListResponse,
+} from "../_lib/types";
 import type { EmployeesFilters } from "../_lib/query";
 import { normalizeFilters, filtersToSearchParams } from "../_lib/query";
 import { getEmployees } from "../_lib/api.client";
@@ -18,6 +25,7 @@ type Props = {
   initialDepartments: Department[];
   initialPositions: Position[];
   initialEmployees: EmployeeListResponse;
+  initialError?: string;
 };
 
 export default function EmployeesPageClient({
@@ -25,6 +33,7 @@ export default function EmployeesPageClient({
   initialDepartments,
   initialPositions,
   initialEmployees,
+  initialError,
 }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -34,10 +43,13 @@ export default function EmployeesPageClient({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [terminateOpen, setTerminateOpen] = useState(false);
-  const [terminateEmployee, setTerminateEmployee] = useState<EmployeeDetails | null>(null);
+  const [terminateEmployee, setTerminateEmployee] =
+    useState<EmployeeDetails | null>(null);
 
   const [isPending, startTransition] = useTransition();
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(
+    initialError ? String(initialError) : null
+  );
 
   const paging = useMemo(
     () => ({ limit: filters.limit ?? 50, offset: filters.offset ?? 0 }),
@@ -48,16 +60,18 @@ export default function EmployeesPageClient({
   useEffect(() => {
     const next = normalizeFilters({
       q: sp.get("q") ?? undefined,
-      department_id: sp.get("department_id") ? Number(sp.get("department_id")) : undefined,
-      position_id: sp.get("position_id") ? Number(sp.get("position_id")) : undefined,
+      department_id: sp.get("department_id")
+        ? Number(sp.get("department_id"))
+        : undefined,
+      position_id: sp.get("position_id")
+        ? Number(sp.get("position_id"))
+        : undefined,
       status: (sp.get("status") as any) ?? undefined,
       limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
       offset: sp.get("offset") ? Number(sp.get("offset")) : undefined,
     });
+
     setFilters(next);
-    // Не подгружаем тут автоматически — обновление идёт через refreshList() при изменении фильтров пользователем.
-    // Back/forward будет сопровождаться сменой URL, но данные могут отличаться — это допустимо, если вы не хотите
-    // двойных запросов. Если нужно строго — снимем ограничение.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp.toString()]);
 
@@ -67,7 +81,7 @@ export default function EmployeesPageClient({
       try {
         const resp = await getEmployees(nextFilters);
         setData(resp);
-      } catch (e) {
+      } catch {
         setLoadError("Не удалось загрузить список сотрудников.");
       }
     });
@@ -85,7 +99,7 @@ export default function EmployeesPageClient({
     pushFilters({
       ...filters,
       ...partial,
-      offset: 0, // при смене фильтров сбрасываем пагинацию
+      offset: 0,
     });
   }
 
@@ -112,7 +126,6 @@ export default function EmployeesPageClient({
 
   async function onTerminated() {
     setTerminateOpen(false);
-    // обновляем список после успешного PATCH
     await refreshList(filters);
   }
 
@@ -134,7 +147,9 @@ export default function EmployeesPageClient({
       />
 
       {loadError ? (
-        <div className="border rounded p-3 bg-white text-sm text-red-700">{loadError}</div>
+        <div className="border rounded p-3 bg-white text-sm text-red-700">
+          {loadError}
+        </div>
       ) : null}
 
       <EmployeesTable
@@ -144,7 +159,9 @@ export default function EmployeesPageClient({
         offset={paging.offset}
         loading={isPending}
         onOpenEmployee={onOpenEmployee}
-        onChangePage={(nextOffset) => pushFilters({ ...filters, offset: nextOffset })}
+        onChangePage={(nextOffset) =>
+          pushFilters({ ...filters, offset: nextOffset })
+        }
       />
 
       <EmployeeDrawer

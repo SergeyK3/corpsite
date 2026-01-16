@@ -1,3 +1,5 @@
+// corpsite-ui/app/directory/employees/_components/EmployeeDrawer.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -11,11 +13,33 @@ type Props = {
   onTerminate: (details: EmployeeDetails) => void;
 };
 
-function isActive(d: EmployeeDetails): boolean {
-  return d.date_to === null;
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return "—";
+  const dt = new Date(v);
+  if (Number.isNaN(dt.getTime())) return String(v);
+  return dt.toLocaleDateString("ru-RU");
 }
 
-export default function EmployeeDrawer({ employeeId, open, onClose, onTerminate }: Props) {
+function statusLabel(details: any): string {
+  const s = (details?.status ?? "").toString().toLowerCase();
+  if (s === "active") return "Работает";
+  if (s === "inactive") return "Не работает";
+  return "—";
+}
+
+function isActive(d: EmployeeDetails): boolean {
+  const s = (d as any)?.status?.toString?.().toLowerCase?.();
+  if (s === "active") return true;
+  if (s === "inactive") return false;
+  return (d as any)?.date_to === null;
+}
+
+export default function EmployeeDrawer({
+  employeeId,
+  open,
+  onClose,
+  onTerminate,
+}: Props) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<EmployeeDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,18 +69,41 @@ export default function EmployeeDrawer({ employeeId, open, onClose, onTerminate 
 
   if (!open) return null;
 
+  const fio =
+    (details as any)?.fio ??
+    (details as any)?.full_name ??
+    (details as any)?.fullName ??
+    (loading ? "Загрузка…" : "Сотрудник");
+
+  const tabNo = details
+    ? (details as any)?.id ?? (details as any)?.employee_id ?? employeeId
+    : "";
+
+  const departmentName =
+    (details as any)?.department?.name ??
+    (details as any)?.department_name ??
+    (details as any)?.departmentName ??
+    "—";
+
+  const positionName =
+    (details as any)?.position?.name ??
+    (details as any)?.position_name ??
+    (details as any)?.positionName ??
+    "—";
+
+  const rate = (details as any)?.employment_rate ?? (details as any)?.rate ?? "—";
+
+  const dateFrom = fmtDate((details as any)?.date_from ?? (details as any)?.dateFrom);
+  const dateTo = fmtDate((details as any)?.date_to ?? (details as any)?.dateTo);
+
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-xl border-l">
         <div className="p-4 border-b flex items-start justify-between">
           <div>
-            <div className="font-semibold">
-              {details?.full_name ?? (loading ? "Загрузка…" : "Сотрудник")}
-            </div>
-            <div className="text-sm text-gray-600">
-              {details ? `Таб. № ${details.employee_id}` : ""}
-            </div>
+            <div className="font-semibold">{fio}</div>
+            <div className="text-sm text-gray-600">{details ? `Таб. № ${tabNo}` : ""}</div>
           </div>
           <button type="button" className="text-sm underline" onClick={onClose}>
             Закрыть
@@ -65,7 +112,9 @@ export default function EmployeeDrawer({ employeeId, open, onClose, onTerminate 
 
         <div className="p-4 space-y-3">
           {error ? (
-            <div className="border rounded p-3 bg-white text-sm text-red-700">{error}</div>
+            <div className="border rounded p-3 bg-white text-sm text-red-700">
+              {error}
+            </div>
           ) : null}
 
           {details ? (
@@ -73,20 +122,28 @@ export default function EmployeeDrawer({ employeeId, open, onClose, onTerminate 
               <div className="border rounded p-3">
                 <div className="font-semibold mb-2">Текущие данные</div>
                 <div className="grid grid-cols-2 gap-2">
+                  <div className="text-gray-600">Статус</div>
+                  <div>{statusLabel(details)}</div>
+
                   <div className="text-gray-600">Отдел</div>
-                  <div>{details.department_name}</div>
+                  <div>{departmentName}</div>
 
                   <div className="text-gray-600">Должность</div>
-                  <div>{details.position_name}</div>
+                  <div>{positionName}</div>
 
                   <div className="text-gray-600">Ставка</div>
-                  <div>{details.employment_rate}</div>
+                  <div>{rate}</div>
 
                   <div className="text-gray-600">Дата с</div>
-                  <div>{details.date_from}</div>
+                  <div>{dateFrom}</div>
 
                   <div className="text-gray-600">Дата по</div>
-                  <div>{details.date_to ?? "—"}</div>
+                  <div>{dateTo}</div>
+
+                  <div className="text-gray-600">Период</div>
+                  <div>
+                    {dateFrom} — {dateTo}
+                  </div>
                 </div>
               </div>
 
