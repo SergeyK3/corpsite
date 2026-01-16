@@ -36,6 +36,42 @@ function StatusBadge({ active }: { active: boolean }) {
   return <span className={`px-2 py-1 rounded text-xs ${cls}`}>{label}</span>;
 }
 
+function getEmployeeId(it: any): string {
+  const v = it?.employee_id ?? it?.employeeId ?? it?.id;
+  return v == null ? "" : String(v);
+}
+
+function getEmployeeFio(it: any): string {
+  return (
+    it?.fio ??
+    it?.full_name ??
+    it?.fullName ??
+    it?.name ??
+    it?.title ??
+    "—"
+  );
+}
+
+function getDepartmentName(it: any): string {
+  return (
+    it?.department_name ??
+    it?.departmentName ??
+    it?.department?.name ??
+    it?.department?.title ??
+    "—"
+  );
+}
+
+function getPositionName(it: any): string {
+  return (
+    it?.position_name ??
+    it?.positionName ??
+    it?.position?.name ??
+    it?.position?.title ??
+    "—"
+  );
+}
+
 export default function EmployeesTable({
   items,
   total,
@@ -48,7 +84,6 @@ export default function EmployeesTable({
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(total / limit));
 
-  const getId = (it: any): string => String(it.employee_id ?? it.id ?? "");
   const hrefOf = (employee_id: string) =>
     `/directory/employees/${encodeURIComponent(employee_id)}`;
 
@@ -79,36 +114,44 @@ export default function EmployeesTable({
               </tr>
             ) : (
               (items as any[]).map((it) => {
-                const employee_id = getId(it);
+                const employee_id = getEmployeeId(it);
+                const fio = getEmployeeFio(it);
+                const dept = getDepartmentName(it);
+                const pos = getPositionName(it);
+
                 const active = computeIsActive(it);
                 const rowCls = !active ? "text-gray-600" : "text-gray-900";
 
+                // Если по какой-то причине id пустой, не строим кликабельные ссылки.
+                const canOpen = Boolean(employee_id);
+
                 return (
-                  <tr key={employee_id} className={rowCls}>
+                  <tr key={employee_id || fio} className={rowCls}>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {employee_id}
+                      {employee_id || "—"}
                     </td>
 
                     <td className="px-3 py-2">
-                      <Link
-                        href={hrefOf(employee_id)}
-                        className="underline text-blue-700 hover:text-blue-900"
-                        onClick={() => {
-                          try {
-                            onOpenEmployee(employee_id);
-                          } catch {}
-                        }}
-                      >
-                        {it.full_name ?? it.fullName}
-                      </Link>
+                      {canOpen ? (
+                        <Link
+                          href={hrefOf(employee_id)}
+                          className="underline text-blue-700 hover:text-blue-900"
+                          onClick={() => {
+                            try {
+                              onOpenEmployee(employee_id);
+                            } catch {}
+                          }}
+                        >
+                          {fio}
+                        </Link>
+                      ) : (
+                        <span>{fio}</span>
+                      )}
                     </td>
 
-                    <td className="px-3 py-2">
-                      {it.department_name ?? it.departmentName}
-                    </td>
-                    <td className="px-3 py-2">
-                      {it.position_name ?? it.positionName}
-                    </td>
+                    <td className="px-3 py-2">{dept}</td>
+                    <td className="px-3 py-2">{pos}</td>
+
                     <td className="px-3 py-2 whitespace-nowrap">
                       {it.employment_rate ?? it.rate ?? "—"}
                     </td>
@@ -124,17 +167,21 @@ export default function EmployeesTable({
                     </td>
 
                     <td className="px-3 py-2 text-right">
-                      <Link
-                        href={hrefOf(employee_id)}
-                        className="underline text-blue-700 hover:text-blue-900"
-                        onClick={() => {
-                          try {
-                            onOpenEmployee(employee_id);
-                          } catch {}
-                        }}
-                      >
-                        Просмотр
-                      </Link>
+                      {canOpen ? (
+                        <Link
+                          href={hrefOf(employee_id)}
+                          className="underline text-blue-700 hover:text-blue-900"
+                          onClick={() => {
+                            try {
+                              onOpenEmployee(employee_id);
+                            } catch {}
+                          }}
+                        >
+                          Просмотр
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 );

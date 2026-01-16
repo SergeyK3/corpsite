@@ -1,69 +1,76 @@
 // corpsite-ui/app/directory/employees/[employee_id]/page.tsx
 
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getEmployeeById } from "../_lib/api.server";
 
-type EmployeeDetail = {
-  id: string;
-  full_name: string;
-  department?: { id: number; name: string };
-  position?: { id: number; name: string };
-  date_from: string | null;
-  date_to: string | null;
-  employment_rate: number | null;
-  is_active: boolean;
+type Props = {
+  params: Promise<{
+    employee_id: string;
+  }>;
 };
 
-function Row({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+}: {
+  label: string;
+  value?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="text-gray-600 text-sm">{label}</div>
-      <div className="font-medium">{value}</div>
+    <div className="bg-white rounded border p-4">
+      <div className="text-xs text-gray-500 uppercase tracking-wide">
+        {label}
+      </div>
+      <div className="mt-1 text-gray-900 font-medium">
+        {value ?? "—"}
+      </div>
     </div>
   );
 }
 
-function fmt(v: string | null) {
-  return v ?? "—";
-}
+export default async function EmployeeByIdPage({ params }: Props) {
+  const { employee_id } = await params;
+  const idNum = Number(employee_id);
 
-export default async function EmployeeCardPage({
-  params,
-}: {
-  params: { employee_id: string };
-}) {
-  const e = (await getEmployeeById(params.employee_id)) as EmployeeDetail;
+  if (!Number.isFinite(idNum)) {
+    notFound();
+  }
+
+  const emp = await getEmployeeById(idNum);
+
+  if (!emp) {
+    notFound();
+  }
 
   return (
-    <main className="p-4 space-y-4">
+    <div className="space-y-6">
       <div>
         <Link
           href="/directory/employees"
-          className="underline text-blue-700 hover:text-blue-900"
+          className="text-blue-600 hover:text-blue-800 underline text-sm"
         >
-          ← Назад к списку
+          ← К списку сотрудников
         </Link>
       </div>
 
-      <h1 className="text-xl font-semibold">Карточка сотрудника</h1>
+      <h1 className="text-2xl font-semibold text-gray-900">
+        Сотрудник #{emp.id}
+      </h1>
 
-      <div className="border rounded bg-white p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Row label="Таб. №" value={e.id} />
-          <Row label="Статус" value={e.is_active ? "Работает" : "Уволен"} />
-          <div className="md:col-span-2">
-            <Row label="ФИО" value={e.full_name} />
-          </div>
-          <Row label="Отдел" value={e.department?.name ?? "—"} />
-          <Row label="Должность" value={e.position?.name ?? "—"} />
-          <Row
-            label="Ставка"
-            value={e.employment_rate != null ? String(e.employment_rate) : "—"}
-          />
-          <Row label="Дата с" value={fmt(e.date_from)} />
-          <Row label="Дата по" value={fmt(e.date_to)} />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field label="ФИО" value={emp.fio} />
+        <Field label="Статус" value={emp.status} />
+
+        <Field label="Отдел" value={emp.department?.name} />
+        <Field label="Должность" value={emp.position?.name} />
+
+        <Field label="Ставка" value={emp.rate} />
+        <Field
+          label="Период"
+          value={`${emp.date_from ?? "—"} — ${emp.date_to ?? "—"}`}
+        />
       </div>
-    </main>
+    </div>
   );
 }

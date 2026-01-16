@@ -1,4 +1,5 @@
-// app/api/directory.ts
+// corpsite-ui/app/api/directory.ts
+
 
 export type Department = {
   id: number;

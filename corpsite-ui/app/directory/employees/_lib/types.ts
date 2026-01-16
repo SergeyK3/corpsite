@@ -2,24 +2,32 @@
 
 export type Department = {
   id: number;
-  name: string;
+  name: string | null;
 };
 
 export type Position = {
   id: number;
-  name: string;
+  name: string | null;
 };
 
-// То, что реально приходит с backend (/directory/employees)
+/**
+ * То, что реально приходит с backend (/directory/employees и /directory/employees/{id})
+ */
 export type EmployeeDTO = {
   id: string;
-  full_name: string;
+
+  fio: string;
+
   department: Department;
   position: Position;
+
+  rate: string | number | null;
+  status: "active" | "inactive" | string;
+
   date_from: string | null;
   date_to: string | null;
-  employment_rate: number | null;
-  is_active: boolean; // важно: именно is_active
+
+  source?: { relation?: string } | null;
 };
 
 export type EmployeesResponse = {
@@ -27,31 +35,67 @@ export type EmployeesResponse = {
   total: number;
 };
 
-// То, что использует UI внутри таблицы/компонентов (нормализованный формат)
+/**
+ * Алиасы для совместимости с текущими компонентами UI
+ */
+export type EmployeeListResponse = EmployeesResponse;
+export type EmployeeDetails = EmployeeDTO;
+
+/**
+ * Таблица сейчас умеет читать DTO напрямую
+ */
+export type EmployeeListItem = EmployeeDTO;
+
+/**
+ * Нормализованный формат (если понадобится единый вид)
+ */
 export type Employee = {
-  id: string; // таб.№
-  fullName: string;
+  id: string;
+  fio: string;
+
   departmentId: number;
-  departmentName: string;
+  departmentName: string | null;
+
   positionId: number;
-  positionName: string;
+  positionName: string | null;
+
   rate: number | null;
+
+  status: string;
+
   dateFrom: string | null;
   dateTo: string | null;
+
   isActive: boolean;
 };
 
+function toNumber(v: string | number | null | undefined): number | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const n = Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
 export function mapEmployee(dto: EmployeeDTO): Employee {
+  const dateTo = dto.date_to ?? null;
+  const isActive = dto.status === "active" || dateTo == null;
+
   return {
     id: dto.id,
-    fullName: dto.full_name,
-    departmentId: dto.department.id,
-    departmentName: dto.department.name,
-    positionId: dto.position.id,
-    positionName: dto.position.name,
-    rate: dto.employment_rate,
-    dateFrom: dto.date_from,
-    dateTo: dto.date_to,
-    isActive: dto.is_active,
+    fio: dto.fio,
+
+    departmentId: dto.department?.id ?? 0,
+    departmentName: dto.department?.name ?? null,
+
+    positionId: dto.position?.id ?? 0,
+    positionName: dto.position?.name ?? null,
+
+    rate: toNumber(dto.rate),
+    status: dto.status,
+
+    dateFrom: dto.date_from ?? null,
+    dateTo,
+
+    isActive,
   };
 }

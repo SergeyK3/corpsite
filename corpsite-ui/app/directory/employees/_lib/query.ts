@@ -1,3 +1,5 @@
+// corpsite-ui/app/directory/employees/_lib/query.ts
+
 export type EmployeesFilters = {
   q?: string;
   department_id?: number;
@@ -8,9 +10,10 @@ export type EmployeesFilters = {
 };
 
 export function normalizeFilters(input: Partial<EmployeesFilters>): EmployeesFilters {
-  const status = input.status ?? "active";
+  // По умолчанию показываем всех (иначе на тестовой базе с 1 записью легко получить "0")
+  const status = input.status ?? "all";
   const normalizedStatus: EmployeesFilters["status"] =
-    status === "active" || status === "inactive" || status === "all" ? status : "active";
+    status === "active" || status === "inactive" || status === "all" ? status : "all";
 
   return {
     q: (input.q ?? "").trim() || undefined,
