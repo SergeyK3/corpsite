@@ -6,6 +6,8 @@ import csv
 import io
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple, Set
+from openpyxl import load_workbook
+
 
 from fastapi import APIRouter, Header, HTTPException, Query, Path, Request
 from sqlalchemy import text
@@ -960,3 +962,209 @@ async def import_employees_csv(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"import error: {type(e).__name__}: {str(e)}")
+
+# ============================================================
+# IMPORT: employees XLSX (recommended, keeps Unicode)
+# ============================================================
+
+def _to_text(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v)
+    return s.replace("\u00a0", " ").strip()
+
+
+def _norm_header_any(h: Any) -> str:
+    s = _to_text(h).lstrip("\ufeff").lower()
+    s = " ".join(s.split())
+    return s
+
+
+def _parse_date_cell(v: Any) -> Optional[date]:
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    s = _to_text(v)
+    if not s:
+        return None
+    return _parse_date_any(s)
+
+
+def _parse_rate_cell(v: Any) -> Optional[float]:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        try:
+            return float(v)
+        except Exception:
+            return None
+    return _parse_rate(_to_text(v))
+
+
+def _parse_bool_cell(v: Any) -> Optional[bool]:
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(int(v))
+    return _parse_bool(_to_text(v))
+
+
+def _pick_header(field_map: Dict[str, int], names: List[str]) -> Optional[int]:
+    for n in names:
+        k = _norm_header_any(n)
+        if k in field_map:
+            return field_map[k]
+    return None
+
+
+@router.post("/import/employees_xlsx")
+async def import_employees_xlsx(
+    request: Request,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    viewer_id_text = _require_user_id(x_user_id)
+
+    # only privileged can import
+    if not _is_privileged(viewer_id_text):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    try:
+        raw = await request.body()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Empty XLSX body.")
+
+        wb = load_workbook(filename=io.BytesIO(raw), data_only=True)
+        ws = wb.active
+
+        # find header row: first non-empty row
+        header_row_idx = None
+        header_vals: List[Any] = []
+        for r in range(1, min(ws.max_row, 50) + 1):
+            vals = [ws.cell(row=r, column=c).value for c in range(1, ws.max_column + 1)]
+            if any(_to_text(v) for v in vals):
+                header_row_idx = r
+                header_vals = vals
+                break
+
+        if not header_row_idx:
+            raise HTTPException(status_code=400, detail="XLSX has no header row.")
+
+        # map normalized header -> column index (1-based)
+        field_map: Dict[str, int] = {}
+        for idx, h in enumerate(header_vals, start=1):
+            hn = _norm_header_any(h)
+            if hn:
+                field_map[hn] = idx
+
+        # required columns (support both canonical and RU-friendly headers)
+        c_emp = _pick_header(field_map, ["employee_id", "табельный номер", "таб. №", "таб номер", "тн", "id"])
+        c_name = _pick_header(field_map, ["full_name", "фио", "ф.и.о.", "сотрудник", "фамилия имя отчество"])
+        c_dept = _pick_header(field_map, ["department_name", "отдел", "подразделение", "отделение"])
+        c_pos = _pick_header(field_map, ["position_name", "должность", "позиция"])
+
+        if not (c_emp and c_name and c_dept and c_pos):
+            raise HTTPException(
+                status_code=400,
+                detail="XLSX header must include: employee_id/full_name/department_name/position_name (or RU equivalents).",
+            )
+
+        # optional
+        c_from = _pick_header(field_map, ["date_from", "дата с", "дата_с", "начало", "date from"])
+        c_to = _pick_header(field_map, ["date_to", "дата по", "дата_по", "окончание", "date to"])
+        c_rate = _pick_header(field_map, ["employment_rate", "ставка", "rate", "fte"])
+        c_active = _pick_header(field_map, ["is_active", "работает", "активен", "active"])
+
+        dep_upserted = 0
+        pos_upserted = 0
+        emp_upserted = 0
+        rows_seen = 0
+
+        with engine.begin() as conn:
+            dep_cache: Dict[str, int] = {}
+            pos_cache: Dict[str, int] = {}
+
+            for r in range(header_row_idx + 1, ws.max_row + 1):
+                rows_seen += 1
+
+                employee_id = _to_text(ws.cell(row=r, column=c_emp).value)
+                full_name = _to_text(ws.cell(row=r, column=c_name).value)
+                dept_name = _to_text(ws.cell(row=r, column=c_dept).value)
+                pos_name = _to_text(ws.cell(row=r, column=c_pos).value)
+
+                # skip empty lines
+                if not employee_id or not full_name or not dept_name or not pos_name:
+                    continue
+
+                if dept_name not in dep_cache:
+                    dep_id = _get_or_create_department_id(conn, dept_name)
+                    dep_cache[dept_name] = dep_id
+                    dep_upserted += 1
+
+                if pos_name not in pos_cache:
+                    pos_id = _get_or_create_position_id(conn, pos_name)
+                    pos_cache[pos_name] = pos_id
+                    pos_upserted += 1
+
+                department_id = dep_cache[dept_name]
+                position_id = pos_cache[pos_name]
+
+                date_from_v = _parse_date_cell(ws.cell(row=r, column=c_from).value) if c_from else None
+                date_to_v = _parse_date_cell(ws.cell(row=r, column=c_to).value) if c_to else None
+                rate_v = _parse_rate_cell(ws.cell(row=r, column=c_rate).value) if c_rate else None
+                active_v = _parse_bool_cell(ws.cell(row=r, column=c_active).value) if c_active else None
+
+                if rate_v is None:
+                    rate_v = 1.00
+                if active_v is None:
+                    active_v = True
+                if date_to_v is not None:
+                    active_v = False
+
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.employees
+                          (employee_id, full_name, department_id, position_id, date_from, date_to, employment_rate, is_active)
+                        VALUES
+                          (:employee_id, :full_name, :department_id, :position_id, :date_from, :date_to, :employment_rate, :is_active)
+                        ON CONFLICT (employee_id) DO UPDATE SET
+                          full_name = EXCLUDED.full_name,
+                          department_id = EXCLUDED.department_id,
+                          position_id = EXCLUDED.position_id,
+                          date_from = EXCLUDED.date_from,
+                          date_to = EXCLUDED.date_to,
+                          employment_rate = EXCLUDED.employment_rate,
+                          is_active = EXCLUDED.is_active
+                        """
+                    ),
+                    {
+                        "employee_id": employee_id,
+                        "full_name": full_name,
+                        "department_id": department_id,
+                        "position_id": position_id,
+                        "date_from": date_from_v,
+                        "date_to": date_to_v,
+                        "employment_rate": rate_v,
+                        "is_active": active_v,
+                    },
+                )
+                emp_upserted += 1
+
+        return {
+            "rows_seen": rows_seen,
+            "departments_touched": len(set(dep_cache.keys())),
+            "positions_touched": len(set(pos_cache.keys())),
+            "employees_upserted": emp_upserted,
+            "sheet": ws.title,
+            "header_row": header_row_idx,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"import xlsx error: {type(e).__name__}: {str(e)}")
