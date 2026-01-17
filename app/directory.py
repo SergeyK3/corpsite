@@ -41,18 +41,18 @@ def _parse_int_set_env(name: str) -> Set[int]:
     return out
 
 
-def _privileged_ids() -> Set[int]:
-    # MVP: allowlist user ids (X-User-Id) that can see all employees/departments + import
-    # Example: DIRECTORY_PRIVILEGED_IDS=34,12345
-    return _parse_int_set_env("DIRECTORY_PRIVILEGED_IDS")
+def _privileged_user_ids() -> Set[int]:
+    # Preferred: DIRECTORY_PRIVILEGED_USER_IDS
+    # Backward-compat: DIRECTORY_PRIVILEGED_IDS
+    s = set()
+    s |= _parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
+    s |= _parse_int_set_env("DIRECTORY_PRIVILEGED_IDS")
+    return s
 
 
-def _is_privileged(viewer_id_text: str) -> bool:
-    try:
-        vid = int(str(viewer_id_text).strip())
-    except Exception:
-        return False
-    return vid in _privileged_ids()
+def _privileged_role_ids() -> Set[int]:
+    # Preferred: DIRECTORY_PRIVILEGED_ROLE_IDS
+    return _parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
 
 
 def _as_http500(e: Exception) -> HTTPException:
@@ -60,6 +60,70 @@ def _as_http500(e: Exception) -> HTTPException:
         status_code=500,
         detail=f"directory error: {type(e).__name__}: {str(e)}",
     )
+
+
+# ---------------------------
+# Requester context (RBAC)
+# ---------------------------
+def _require_user_id(x_user_id: Optional[str]) -> int:
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Missing X-User-Id header.")
+    s = str(x_user_id).strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
+    try:
+        return int(s)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
+
+
+def _load_user_ctx(user_id: int) -> Dict[str, Any]:
+    q = text(
+        """
+        SELECT user_id, role_id, unit_id, is_active
+        FROM public.users
+        WHERE user_id = :uid
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(q, {"uid": user_id}).mappings().first()
+
+    if not row:
+        raise HTTPException(status_code=401, detail="Unknown user.")
+    if not bool(row.get("is_active")):
+        raise HTTPException(status_code=403, detail="User is inactive.")
+    return dict(row)
+
+
+def _is_privileged(user_ctx: Dict[str, Any]) -> bool:
+    uid = int(user_ctx["user_id"])
+    rid = int(user_ctx["role_id"]) if user_ctx.get("role_id") is not None else -1
+    if uid in _privileged_user_ids():
+        return True
+    if rid in _privileged_role_ids():
+        return True
+    return False
+
+
+def _require_dept_scope(user_ctx: Dict[str, Any]) -> int:
+    """
+    For RBAC_MODE=dept: non-privileged users must have unit_id.
+    unit_id is treated as department scope.
+    """
+    unit_id = user_ctx.get("unit_id")
+    if unit_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="directory: cannot determine department scope for user (unit_id is null).",
+        )
+    try:
+        return int(unit_id)
+    except Exception:
+        raise HTTPException(
+            status_code=403,
+            detail="directory: invalid unit_id for department scope.",
+        )
 
 
 # ---------------------------
@@ -239,71 +303,11 @@ def _dict_name_col(cols: List[str], preferred: List[str]) -> Optional[str]:
     return _pick_first(cols, preferred + ["name", "name_ru"])
 
 
-def _require_user_id(x_user_id: Optional[str]) -> str:
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing X-User-Id header.")
-    s = str(x_user_id).strip()
-    if not s:
-        raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
-    return s
-
-
 def _normalize_employee_id_text(v: Any) -> str:
     # IMPORTANT: preserve leading zeros
     if v is None:
         return ""
     return str(v).strip()
-
-
-# ---------------------------
-# RBAC helpers
-# ---------------------------
-def _load_employee_raw(employee_id_text: str) -> Tuple[Optional[Dict[str, Any]], str, List[str]]:
-    rel, cols = _employees_relation()
-    id_col = _employees_id_col(cols)
-    q = text(f"SELECT * FROM public.{rel} WHERE CAST({id_col} AS TEXT) = :id_text LIMIT 1")
-    with engine.begin() as conn:
-        row = conn.execute(q, {"id_text": employee_id_text}).mappings().first()
-        return (dict(row) if row else None), rel, cols
-
-
-def _dept_key_from_row(row: Dict[str, Any], cols: List[str]) -> Optional[str]:
-    fk = _dept_fk_col(cols)
-    if fk and row.get(fk) is not None:
-        return str(row.get(fk)).strip().lower()
-
-    dn = _pick_first(cols, ["department_name", "dept_name", "org_unit_name", "department"])
-    if dn and row.get(dn):
-        return str(row.get(dn)).strip().lower()
-
-    return None
-
-
-def _can_view_employee(
-    viewer_id_text: str,
-    target_id_text: str,
-    target_row: Dict[str, Any],
-    target_cols: List[str],
-) -> bool:
-    if viewer_id_text == target_id_text:
-        return True
-
-    if _is_privileged(viewer_id_text):
-        return True
-
-    viewer_row, _, viewer_cols = _load_employee_raw(viewer_id_text)
-    if not viewer_row:
-        return False
-
-    viewer_dept = _dept_key_from_row(viewer_row, viewer_cols)
-    if not viewer_dept:
-        return False
-
-    target_dept = _dept_key_from_row(target_row, target_cols)
-    if not target_dept:
-        return False
-
-    return viewer_dept == target_dept
 
 
 # ---------------------------
@@ -316,7 +320,9 @@ def list_departments(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     try:
-        _ = x_user_id
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+        privileged = _is_privileged(user_ctx)
 
         rel, cols = _departments_relation()
         if not rel:
@@ -328,23 +334,34 @@ def list_departments(
         if not id_col or not name_col:
             return {"items": [], "total": 0}
 
-        q_total = text(f"SELECT COUNT(*) AS cnt FROM public.{rel}")
+        where = "TRUE"
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+
+        if _rbac_mode() == "dept" and not privileged:
+            dept_id = _require_dept_scope(user_ctx)
+            where = f"CAST({id_col} AS TEXT) = :dept_id_text"
+            params["dept_id_text"] = str(dept_id)
+
+        q_total = text(f"SELECT COUNT(*) AS cnt FROM public.{rel} WHERE {where}")
         q_list = text(
             f"""
             SELECT {id_col} AS id, {name_col} AS name
             FROM public.{rel}
+            WHERE {where}
             ORDER BY CAST({id_col} AS TEXT) ASC
             LIMIT :limit OFFSET :offset
             """
         )
 
         with engine.begin() as conn:
-            total = int(conn.execute(q_total).mappings().first()["cnt"])
-            rows = conn.execute(q_list, {"limit": limit, "offset": offset}).mappings().all()
+            total = int(conn.execute(q_total, params).mappings().first()["cnt"])
+            rows = conn.execute(q_list, params).mappings().all()
 
         items = [{"id": r["id"], "name": r["name"]} for r in rows]
         return {"items": items, "total": total}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise _as_http500(e)
 
@@ -356,7 +373,8 @@ def list_positions(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     try:
-        _ = x_user_id
+        # positions usually not sensitive; keep open under dept-rbac too
+        _ = _require_user_id(x_user_id)
 
         rel, cols = _positions_relation()
         if not rel:
@@ -385,6 +403,8 @@ def list_positions(
         items = [{"id": r["id"], "name": r["name"]} for r in rows]
         return {"items": items, "total": total}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise _as_http500(e)
 
@@ -505,8 +525,9 @@ def list_employees(
     order: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
     try:
-        viewer_id_text = _require_user_id(x_user_id)
-        privileged = _is_privileged(viewer_id_text)
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+        privileged = _is_privileged(user_ctx)
 
         emp_rel, emp_cols = _employees_relation()
         emp_id_col = _employees_id_col(emp_cols)
@@ -521,10 +542,9 @@ def list_employees(
 
         dept_fk = _dept_fk_col(emp_cols)
         pos_fk = _pos_fk_col(emp_cols)
-        dept_name_direct = _pick_first(emp_cols, ["department_name", "dept_name", "org_unit_name", "department"])
 
         where: List[str] = []
-        params: Dict[str, Any] = {"limit": limit, "offset": offset, "viewer_id_text": viewer_id_text}
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
         # Status
         if status != "all" and status_col:
@@ -557,8 +577,25 @@ def list_employees(
             if parts:
                 where.append("(" + " OR ".join(parts) + ")")
 
-        # Filter by dept/pos (compare as TEXT to avoid type surprises)
+        # RBAC: dept scope
+        if _rbac_mode() == "dept" and not privileged:
+            dept_id = _require_dept_scope(user_ctx)
+            if dept_fk:
+                where.append(f"CAST(e.{dept_fk} AS TEXT) = :rbac_dept_id_text")
+                params["rbac_dept_id_text"] = str(dept_id)
+            else:
+                # Employees table without department FK -> cannot enforce dept RBAC correctly
+                raise HTTPException(status_code=500, detail="directory: employees has no department_id column.")
+
+        # Explicit filter by dept/pos
+        # IMPORTANT: under RBAC=dept for non-privileged, department_id filter must not allow escaping scope.
         if department_id is not None and dept_fk:
+            if _rbac_mode() == "dept" and not privileged:
+                # Only allow same dept as scope
+                dept_id = _require_dept_scope(user_ctx)
+                if int(department_id) != int(dept_id):
+                    # Return empty list (safer than 403 for list)
+                    return {"items": [], "total": 0}
             where.append(f"CAST(e.{dept_fk} AS TEXT) = :department_id_text")
             params["department_id_text"] = str(int(department_id))
 
@@ -566,37 +603,16 @@ def list_employees(
             where.append(f"CAST(e.{pos_fk} AS TEXT) = :position_id_text")
             params["position_id_text"] = str(int(position_id))
 
-        # RBAC
-        if _rbac_mode() != "off" and not privileged:
-            viewer_row, _, viewer_cols = _load_employee_raw(viewer_id_text)
-            viewer_dept = _dept_key_from_row(viewer_row, viewer_cols) if viewer_row else None
-
-            if not viewer_dept:
-                where.append(f"CAST(e.{emp_id_col} AS TEXT) = :viewer_id_text")
-            else:
-                params["viewer_dept"] = viewer_dept
-                if dept_fk:
-                    where.append(
-                        f"(CAST(e.{emp_id_col} AS TEXT) = :viewer_id_text OR LOWER(CAST(e.{dept_fk} AS TEXT)) = :viewer_dept)"
-                    )
-                elif dept_name_direct:
-                    where.append(
-                        f"(CAST(e.{emp_id_col} AS TEXT) = :viewer_id_text OR LOWER(CAST(e.{dept_name_direct} AS TEXT)) = :viewer_dept)"
-                    )
-                else:
-                    where.append(f"CAST(e.{emp_id_col} AS TEXT) = :viewer_id_text")
-
         where_sql = " AND ".join(where) if where else "TRUE"
 
         ord_dir = "ASC" if (order or "").lower() != "desc" else "DESC"
         if (sort or "").lower() in ("full_name", "fio", "name") and fio_col:
             order_sql = f"LOWER(CAST(e.{fio_col} AS TEXT)) {ord_dir}, CAST(e.{emp_id_col} AS TEXT) ASC"
         elif (sort or "").lower() in ("full_name", "fio", "name") and last_col:
-            order_sql = (
-                f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}, LOWER(CAST(e.{first_col} AS TEXT)) {ord_dir}"
-                if first_col
-                else f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}"
-            )
+            if first_col:
+                order_sql = f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}, LOWER(CAST(e.{first_col} AS TEXT)) {ord_dir}"
+            else:
+                order_sql = f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}"
         else:
             order_sql = f"CAST(e.{emp_id_col} AS TEXT) ASC"
 
@@ -639,34 +655,43 @@ def get_employee(
     IMPORTANT: employee_id is TEXT. Preserve leading zeros.
     """
     try:
-        viewer_id_text = _require_user_id(x_user_id)
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+        privileged = _is_privileged(user_ctx)
 
         target_id_text = _normalize_employee_id_text(employee_id)
         if not target_id_text:
             raise HTTPException(status_code=404, detail="Employee not found.")
 
-        target_row_raw, emp_rel, emp_cols = _load_employee_raw(target_id_text)
-        if not target_row_raw:
-            raise HTTPException(status_code=404, detail="Employee not found.")
-
-        if _rbac_mode() != "off":
-            if not _can_view_employee(viewer_id_text, target_id_text, target_row_raw, emp_cols):
-                raise HTTPException(status_code=404, detail="Employee not found.")
-
+        emp_rel, emp_cols = _employees_relation()
         emp_id_col = _employees_id_col(emp_cols)
+        dept_fk = _dept_fk_col(emp_cols)
+
         base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
+
+        where = [f"CAST(e.{emp_id_col} AS TEXT) = :id_text"]
+        params: Dict[str, Any] = {"id_text": target_id_text}
+
+        if _rbac_mode() == "dept" and not privileged:
+            dept_id = _require_dept_scope(user_ctx)
+            if not dept_fk:
+                raise HTTPException(status_code=500, detail="directory: employees has no department_id column.")
+            where.append(f"CAST(e.{dept_fk} AS TEXT) = :rbac_dept_id_text")
+            params["rbac_dept_id_text"] = str(dept_id)
 
         q_one = text(
             f"""
             {base_sql}
-            WHERE CAST(e.{emp_id_col} AS TEXT) = :id_text
+            WHERE {' AND '.join(where)}
             LIMIT 1
             """
         )
+
         with engine.begin() as conn:
-            row = conn.execute(q_one, {"id_text": target_id_text}).mappings().first()
+            row = conn.execute(q_one, params).mappings().first()
 
         if not row:
+            # 404 is intentional (does not leak existence outside scope)
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         return _normalize_employee_joined(dict(row), emp_rel)
@@ -678,25 +703,118 @@ def get_employee(
 
 
 # ============================================================
+# IMPORT helpers (use real PK/name columns for departments/positions)
+# ============================================================
+def _dept_table_meta() -> Tuple[str, str]:
+    cols = _get_columns("departments", "public")
+    if not cols:
+        raise HTTPException(status_code=500, detail="departments table not found.")
+    id_col = _pick_first(cols, ["department_id", "id"])
+    name_col = _pick_first(cols, ["name", "name_ru", "department_name", "dept_name"])
+    if not id_col or not name_col:
+        raise HTTPException(status_code=500, detail="departments table has no recognizable id/name columns.")
+    return id_col, name_col
+
+
+def _pos_table_meta() -> Tuple[str, str]:
+    cols = _get_columns("positions", "public")
+    if not cols:
+        raise HTTPException(status_code=500, detail="positions table not found.")
+    id_col = _pick_first(cols, ["position_id", "id"])
+    name_col = _pick_first(cols, ["name", "name_ru", "position_name", "pos_name"])
+    if not id_col or not name_col:
+        raise HTTPException(status_code=500, detail="positions table has no recognizable id/name columns.")
+    return id_col, name_col
+
+
+def _get_or_create_department_id(conn, name: str) -> int:
+    name = name.strip()
+    if not name:
+        raise ValueError("department_name is empty")
+
+    id_col, name_col = _dept_table_meta()
+
+    row = conn.execute(
+        text(f"SELECT {id_col} AS id FROM public.departments WHERE {name_col} = :name"),
+        {"name": name},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+
+    row2 = conn.execute(
+        text(
+            f"""
+            INSERT INTO public.departments ({name_col})
+            VALUES (:name)
+            ON CONFLICT ({name_col}) DO NOTHING
+            RETURNING {id_col} AS id
+            """
+        ),
+        {"name": name},
+    ).mappings().first()
+
+    if row2 and row2.get("id") is not None:
+        return int(row2["id"])
+
+    row3 = conn.execute(
+        text(f"SELECT {id_col} AS id FROM public.departments WHERE {name_col} = :name"),
+        {"name": name},
+    ).mappings().first()
+    if not row3:
+        raise ValueError(f"cannot resolve department id for name={name}")
+    return int(row3["id"])
+
+
+def _get_or_create_position_id(conn, name: str) -> int:
+    name = name.strip()
+    if not name:
+        raise ValueError("position_name is empty")
+
+    id_col, name_col = _pos_table_meta()
+
+    row = conn.execute(
+        text(f"SELECT {id_col} AS id FROM public.positions WHERE {name_col} = :name"),
+        {"name": name},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+
+    row2 = conn.execute(
+        text(
+            f"""
+            INSERT INTO public.positions ({name_col})
+            VALUES (:name)
+            ON CONFLICT ({name_col}) DO NOTHING
+            RETURNING {id_col} AS id
+            """
+        ),
+        {"name": name},
+    ).mappings().first()
+
+    if row2 and row2.get("id") is not None:
+        return int(row2["id"])
+
+    row3 = conn.execute(
+        text(f"SELECT {id_col} AS id FROM public.positions WHERE {name_col} = :name"),
+        {"name": name},
+    ).mappings().first()
+    if not row3:
+        raise ValueError(f"cannot resolve position id for name={name}")
+    return int(row3["id"])
+
+
+# ============================================================
 # IMPORT: employees CSV (privileged only)
 # ============================================================
 def _decode_csv_bytes(b: bytes) -> str:
-    """
-    Robust decoding for CSV from Excel/Windows.
-    Tries BOM-based UTF variants first, then common Cyrillic encodings.
-    Avoids errors="replace" unless absolutely necessary.
-    """
     if not b:
         return ""
 
-    # UTF BOMs
     if b.startswith(b"\xef\xbb\xbf"):
         return b.decode("utf-8-sig")
     if b.startswith(b"\xff\xfe") or b.startswith(b"\xfe\xff"):
-        # UTF-16 with BOM
         return b.decode("utf-16")
 
-    # Heuristic: many NUL bytes => UTF-16LE/BE without BOM
     if b[:200].count(b"\x00") > 10:
         for enc in ("utf-16le", "utf-16be", "utf-16"):
             try:
@@ -704,14 +822,12 @@ def _decode_csv_bytes(b: bytes) -> str:
             except UnicodeDecodeError:
                 pass
 
-    # Common encodings (order matters)
     for enc in ("utf-8", "utf-8-sig", "cp1251", "cp866", "koi8-r"):
         try:
             return b.decode(enc)
         except UnicodeDecodeError:
             continue
 
-    # Last resort
     return b.decode("utf-8", errors="replace")
 
 
@@ -774,89 +890,18 @@ def _parse_date_any(v: Optional[str]) -> Optional[date]:
     return None
 
 
-def _get_or_create_department_id(conn, name: str) -> int:
-    name = name.strip()
-    if not name:
-        raise ValueError("department_name is empty")
-
-    row = conn.execute(
-        text("SELECT department_id FROM public.departments WHERE name = :name"),
-        {"name": name},
-    ).mappings().first()
-    if row:
-        return int(row["department_id"])
-
-    row2 = conn.execute(
-        text(
-            """
-            INSERT INTO public.departments (name)
-            VALUES (:name)
-            ON CONFLICT (name) DO NOTHING
-            RETURNING department_id
-            """
-        ),
-        {"name": name},
-    ).mappings().first()
-
-    if row2 and row2.get("department_id") is not None:
-        return int(row2["department_id"])
-
-    row3 = conn.execute(
-        text("SELECT department_id FROM public.departments WHERE name = :name"),
-        {"name": name},
-    ).mappings().first()
-    if not row3:
-        raise ValueError(f"cannot resolve department_id for name={name}")
-    return int(row3["department_id"])
-
-
-def _get_or_create_position_id(conn, name: str) -> int:
-    name = name.strip()
-    if not name:
-        raise ValueError("position_name is empty")
-
-    row = conn.execute(
-        text("SELECT position_id FROM public.positions WHERE name = :name"),
-        {"name": name},
-    ).mappings().first()
-    if row:
-        return int(row["position_id"])
-
-    row2 = conn.execute(
-        text(
-            """
-            INSERT INTO public.positions (name)
-            VALUES (:name)
-            ON CONFLICT (name) DO NOTHING
-            RETURNING position_id
-            """
-        ),
-        {"name": name},
-    ).mappings().first()
-
-    if row2 and row2.get("position_id") is not None:
-        return int(row2["position_id"])
-
-    row3 = conn.execute(
-        text("SELECT position_id FROM public.positions WHERE name = :name"),
-        {"name": name},
-    ).mappings().first()
-    if not row3:
-        raise ValueError(f"cannot resolve position_id for name={name}")
-    return int(row3["position_id"])
-
-
 @router.post("/import/employees_csv")
 async def import_employees_csv(
     request: Request,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    viewer_id_text = _require_user_id(x_user_id)
-    if not _is_privileged(viewer_id_text):
+    uid = _require_user_id(x_user_id)
+    user_ctx = _load_user_ctx(uid)
+    if not _is_privileged(user_ctx):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     try:
-        raw = await request.body()  # bytes
+        raw = await request.body()
         text_csv = _decode_csv_bytes(raw)
 
         if not text_csv.strip():
@@ -977,7 +1022,7 @@ async def import_employees_csv(
 
 
 # ============================================================
-# IMPORT: employees XLSX (recommended, keeps Unicode)
+# IMPORT: employees XLSX (recommended)
 # ============================================================
 def _to_text(v: Any) -> str:
     if v is None:
@@ -1039,9 +1084,9 @@ async def import_employees_xlsx(
     request: Request,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    viewer_id_text = _require_user_id(x_user_id)
-
-    if not _is_privileged(viewer_id_text):
+    uid = _require_user_id(x_user_id)
+    user_ctx = _load_user_ctx(uid)
+    if not _is_privileged(user_ctx):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     try:
