@@ -35,13 +35,12 @@ function Field({ label, value }: { label: string; value?: React.ReactNode }) {
 
 export default async function EmployeeByIdPage({ params }: Props) {
   const { employee_id } = await params;
-  const idNum = Number(employee_id);
 
-  if (!Number.isFinite(idNum)) {
-    notFound();
-  }
+  const id = (employee_id ?? "").toString().trim();
+  if (!id) notFound();
 
-  const emp = await getEmployeeById(idNum);
+  // ВАЖНО: employee_id — строковый ключ (с ведущими нулями). НЕ приводить к Number.
+  const emp = await getEmployeeById(id);
 
   if (!emp) {
     notFound();

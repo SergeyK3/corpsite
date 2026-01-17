@@ -6,9 +6,8 @@ import csv
 import io
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple, Set
+
 from openpyxl import load_workbook
-
-
 from fastapi import APIRouter, Header, HTTPException, Query, Path, Request
 from sqlalchemy import text
 
@@ -247,6 +246,13 @@ def _require_user_id(x_user_id: Optional[str]) -> str:
     if not s:
         raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
     return s
+
+
+def _normalize_employee_id_text(v: Any) -> str:
+    # IMPORTANT: preserve leading zeros
+    if v is None:
+        return ""
+    return str(v).strip()
 
 
 # ---------------------------
@@ -551,14 +557,14 @@ def list_employees(
             if parts:
                 where.append("(" + " OR ".join(parts) + ")")
 
-        # Filter by dept/pos
+        # Filter by dept/pos (compare as TEXT to avoid type surprises)
         if department_id is not None and dept_fk:
-            where.append(f"CAST(e.{dept_fk} AS INT) = :department_id")
-            params["department_id"] = int(department_id)
+            where.append(f"CAST(e.{dept_fk} AS TEXT) = :department_id_text")
+            params["department_id_text"] = str(int(department_id))
 
         if position_id is not None and pos_fk:
-            where.append(f"CAST(e.{pos_fk} AS INT) = :position_id")
-            params["position_id"] = int(position_id)
+            where.append(f"CAST(e.{pos_fk} AS TEXT) = :position_id_text")
+            params["position_id_text"] = str(int(position_id))
 
         # RBAC
         if _rbac_mode() != "off" and not privileged:
@@ -626,12 +632,18 @@ def list_employees(
 
 @router.get("/employees/{employee_id}")
 def get_employee(
-    employee_id: int = Path(..., ge=1),
+    employee_id: str = Path(..., min_length=1),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
+    """
+    IMPORTANT: employee_id is TEXT. Preserve leading zeros.
+    """
     try:
         viewer_id_text = _require_user_id(x_user_id)
-        target_id_text = str(employee_id)
+
+        target_id_text = _normalize_employee_id_text(employee_id)
+        if not target_id_text:
+            raise HTTPException(status_code=404, detail="Employee not found.")
 
         target_row_raw, emp_rel, emp_cols = _load_employee_raw(target_id_text)
         if not target_row_raw:
@@ -844,7 +856,7 @@ async def import_employees_csv(
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     try:
-        raw = await request.body()  # bytes (важно: устраняет UnicodeDecodeError в обработчике ошибок FastAPI)
+        raw = await request.body()  # bytes
         text_csv = _decode_csv_bytes(raw)
 
         if not text_csv.strip():
@@ -963,10 +975,10 @@ async def import_employees_csv(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"import error: {type(e).__name__}: {str(e)}")
 
+
 # ============================================================
 # IMPORT: employees XLSX (recommended, keeps Unicode)
 # ============================================================
-
 def _to_text(v: Any) -> str:
     if v is None:
         return ""
@@ -1029,7 +1041,6 @@ async def import_employees_xlsx(
 ) -> Dict[str, Any]:
     viewer_id_text = _require_user_id(x_user_id)
 
-    # only privileged can import
     if not _is_privileged(viewer_id_text):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
@@ -1041,7 +1052,6 @@ async def import_employees_xlsx(
         wb = load_workbook(filename=io.BytesIO(raw), data_only=True)
         ws = wb.active
 
-        # find header row: first non-empty row
         header_row_idx = None
         header_vals: List[Any] = []
         for r in range(1, min(ws.max_row, 50) + 1):
@@ -1054,14 +1064,12 @@ async def import_employees_xlsx(
         if not header_row_idx:
             raise HTTPException(status_code=400, detail="XLSX has no header row.")
 
-        # map normalized header -> column index (1-based)
         field_map: Dict[str, int] = {}
         for idx, h in enumerate(header_vals, start=1):
             hn = _norm_header_any(h)
             if hn:
                 field_map[hn] = idx
 
-        # required columns (support both canonical and RU-friendly headers)
         c_emp = _pick_header(field_map, ["employee_id", "табельный номер", "таб. №", "таб номер", "тн", "id"])
         c_name = _pick_header(field_map, ["full_name", "фио", "ф.и.о.", "сотрудник", "фамилия имя отчество"])
         c_dept = _pick_header(field_map, ["department_name", "отдел", "подразделение", "отделение"])
@@ -1073,14 +1081,11 @@ async def import_employees_xlsx(
                 detail="XLSX header must include: employee_id/full_name/department_name/position_name (or RU equivalents).",
             )
 
-        # optional
         c_from = _pick_header(field_map, ["date_from", "дата с", "дата_с", "начало", "date from"])
         c_to = _pick_header(field_map, ["date_to", "дата по", "дата_по", "окончание", "date to"])
         c_rate = _pick_header(field_map, ["employment_rate", "ставка", "rate", "fte"])
         c_active = _pick_header(field_map, ["is_active", "работает", "активен", "active"])
 
-        dep_upserted = 0
-        pos_upserted = 0
         emp_upserted = 0
         rows_seen = 0
 
@@ -1096,19 +1101,14 @@ async def import_employees_xlsx(
                 dept_name = _to_text(ws.cell(row=r, column=c_dept).value)
                 pos_name = _to_text(ws.cell(row=r, column=c_pos).value)
 
-                # skip empty lines
                 if not employee_id or not full_name or not dept_name or not pos_name:
                     continue
 
                 if dept_name not in dep_cache:
-                    dep_id = _get_or_create_department_id(conn, dept_name)
-                    dep_cache[dept_name] = dep_id
-                    dep_upserted += 1
+                    dep_cache[dept_name] = _get_or_create_department_id(conn, dept_name)
 
                 if pos_name not in pos_cache:
-                    pos_id = _get_or_create_position_id(conn, pos_name)
-                    pos_cache[pos_name] = pos_id
-                    pos_upserted += 1
+                    pos_cache[pos_name] = _get_or_create_position_id(conn, pos_name)
 
                 department_id = dep_cache[dept_name]
                 position_id = pos_cache[pos_name]
