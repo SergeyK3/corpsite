@@ -170,6 +170,23 @@ def _pick_first(existing: List[str], candidates: List[str]) -> Optional[str]:
 
 
 # ---------------------------
+# org_units helpers (explicit relations)
+# ---------------------------
+def _org_units_relation() -> Tuple[str, List[str]]:
+    cols = _get_columns("org_units", "public")
+    if not cols:
+        raise HTTPException(status_code=500, detail="org_units relation not found.")
+    return "org_units", cols
+
+
+def _org_unit_managers_relation() -> Tuple[str, List[str]]:
+    cols = _get_columns("org_unit_managers", "public")
+    if not cols:
+        raise HTTPException(status_code=500, detail="org_unit_managers relation not found.")
+    return "org_unit_managers", cols
+
+
+# ---------------------------
 # Relation scoring (auto-detect)
 # ---------------------------
 def _score_employees(name: str, cols: List[str]) -> int:
@@ -410,6 +427,202 @@ def list_positions(
 
 
 # ---------------------------
+# org_units endpoints (read-only)
+# ---------------------------
+@router.get("/org-units")
+def list_org_units(
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    active: Optional[bool] = Query(default=True),
+    q: Optional[str] = Query(default=None),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    try:
+        _ = _require_user_id(x_user_id)  # auth presence check only
+
+        rel, _cols = _org_units_relation()
+
+        where: List[str] = []
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+
+        if active is not None:
+            where.append("is_active = :active")
+            params["active"] = bool(active)
+
+        if q:
+            params["q"] = f"%{q.strip().lower()}%"
+            where.append("(LOWER(name) LIKE :q OR LOWER(COALESCE(code,'')) LIKE :q)")
+
+        where_sql = " AND ".join(where) if where else "TRUE"
+
+        q_total = text(f"SELECT COUNT(*) AS cnt FROM public.{rel} WHERE {where_sql}")
+
+        q_list = text(
+            f"""
+            SELECT unit_id, name, code, parent_unit_id, is_active
+            FROM public.{rel}
+            WHERE {where_sql}
+            ORDER BY parent_unit_id NULLS FIRST, unit_id ASC
+            LIMIT :limit OFFSET :offset
+            """
+        )
+
+        with engine.begin() as conn:
+            total = int(conn.execute(q_total, params).mappings().first()["cnt"])
+            rows = conn.execute(q_list, params).mappings().all()
+
+        items = [
+            {
+                "unit_id": int(r["unit_id"]),
+                "name": r["name"],
+                "code": r.get("code"),
+                "parent_unit_id": (int(r["parent_unit_id"]) if r.get("parent_unit_id") is not None else None),
+                "is_active": bool(r["is_active"]),
+            }
+            for r in rows
+        ]
+
+        return {"items": items, "total": total}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _as_http500(e)
+
+
+@router.get("/org-units/tree")
+def org_units_tree(
+    active: Optional[bool] = Query(default=True),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    try:
+        _ = _require_user_id(x_user_id)
+
+        rel, _cols = _org_units_relation()
+
+        params: Dict[str, Any] = {}
+        where_sql = "TRUE"
+        if active is not None:
+            where_sql = "is_active = :active"
+            params["active"] = bool(active)
+
+        q_list = text(
+            f"""
+            SELECT unit_id, name, code, parent_unit_id, is_active
+            FROM public.{rel}
+            WHERE {where_sql}
+            ORDER BY parent_unit_id NULLS FIRST, unit_id ASC
+            """
+        )
+
+        with engine.begin() as conn:
+            rows = conn.execute(q_list, params).mappings().all()
+
+        nodes: Dict[int, Dict[str, Any]] = {}
+        children_map: Dict[Optional[int], List[int]] = {}
+
+        for r in rows:
+            uid = int(r["unit_id"])
+            pid = int(r["parent_unit_id"]) if r.get("parent_unit_id") is not None else None
+            node = {
+                "unit_id": uid,
+                "name": r["name"],
+                "code": r.get("code"),
+                "parent_unit_id": pid,
+                "is_active": bool(r["is_active"]),
+                "children": [],
+            }
+            nodes[uid] = node
+            children_map.setdefault(pid, []).append(uid)
+
+        for pid, child_ids in children_map.items():
+            if pid is None:
+                continue
+            if pid in nodes:
+                nodes[pid]["children"] = [nodes[cid] for cid in child_ids if cid in nodes]
+
+        roots = [nodes[cid] for cid in children_map.get(None, []) if cid in nodes]
+
+        return {"items": roots, "total": len(nodes)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _as_http500(e)
+
+
+@router.get("/org-units/{unit_id}/managers")
+def org_unit_managers(
+    unit_id: int = Path(..., ge=1),
+    active: Optional[bool] = Query(default=True),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    try:
+        _ = _require_user_id(x_user_id)
+
+        rel, _cols = _org_unit_managers_relation()
+
+        where: List[str] = ["m.unit_id = :unit_id"]
+        params: Dict[str, Any] = {"unit_id": int(unit_id)}
+
+        if active is not None:
+            where.append("m.is_active = :active")
+            params["active"] = bool(active)
+
+        where_sql = " AND ".join(where)
+
+        q_list = text(
+            f"""
+            SELECT
+              m.manager_id,
+              m.unit_id,
+              m.user_id,
+              m.manager_type,
+              m.date_from,
+              m.date_to,
+              m.is_active,
+              u.full_name AS user_full_name,
+              u.role_id AS user_role_id,
+              u.unit_id AS user_unit_id
+            FROM public.{rel} m
+            JOIN public.users u ON u.user_id = m.user_id
+            WHERE {where_sql}
+            ORDER BY
+              CASE WHEN m.manager_type = 'HEAD' THEN 0 ELSE 1 END,
+              m.manager_id ASC
+            """
+        )
+
+        with engine.begin() as conn:
+            rows = conn.execute(q_list, params).mappings().all()
+
+        items = [
+            {
+                "manager_id": int(r["manager_id"]),
+                "unit_id": int(r["unit_id"]),
+                "user": {
+                    "user_id": int(r["user_id"]),
+                    "full_name": r["user_full_name"],
+                    "role_id": int(r["user_role_id"]) if r.get("user_role_id") is not None else None,
+                    "unit_id": int(r["user_unit_id"]) if r.get("user_unit_id") is not None else None,
+                },
+                "manager_type": r["manager_type"],
+                "date_from": r.get("date_from"),
+                "date_to": r.get("date_to"),
+                "is_active": bool(r["is_active"]),
+            }
+            for r in rows
+        ]
+
+        return {"items": items, "total": len(items)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _as_http500(e)
+
+
+# ---------------------------
 # Employees: list + card (with JOIN-enrichment)
 # ---------------------------
 def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[str, str]]:
@@ -584,17 +797,12 @@ def list_employees(
                 where.append(f"CAST(e.{dept_fk} AS TEXT) = :rbac_dept_id_text")
                 params["rbac_dept_id_text"] = str(dept_id)
             else:
-                # Employees table without department FK -> cannot enforce dept RBAC correctly
                 raise HTTPException(status_code=500, detail="directory: employees has no department_id column.")
 
-        # Explicit filter by dept/pos
-        # IMPORTANT: under RBAC=dept for non-privileged, department_id filter must not allow escaping scope.
         if department_id is not None and dept_fk:
             if _rbac_mode() == "dept" and not privileged:
-                # Only allow same dept as scope
                 dept_id = _require_dept_scope(user_ctx)
                 if int(department_id) != int(dept_id):
-                    # Return empty list (safer than 403 for list)
                     return {"items": [], "total": 0}
             where.append(f"CAST(e.{dept_fk} AS TEXT) = :department_id_text")
             params["department_id_text"] = str(int(department_id))
@@ -691,7 +899,6 @@ def get_employee(
             row = conn.execute(q_one, params).mappings().first()
 
         if not row:
-            # 404 is intentional (does not leak existence outside scope)
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         return _normalize_employee_joined(dict(row), emp_rel)
