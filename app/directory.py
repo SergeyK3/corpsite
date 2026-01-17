@@ -109,7 +109,7 @@ def _is_privileged(user_ctx: Dict[str, Any]) -> bool:
 def _require_dept_scope(user_ctx: Dict[str, Any]) -> int:
     """
     For RBAC_MODE=dept: non-privileged users must have unit_id.
-    unit_id is treated as department scope.
+    unit_id is treated as scope root (org_units tree).
     """
     unit_id = user_ctx.get("unit_id")
     if unit_id is None:
@@ -124,6 +124,44 @@ def _require_dept_scope(user_ctx: Dict[str, Any]) -> int:
             status_code=403,
             detail="directory: invalid unit_id for department scope.",
         )
+
+
+# ---------------------------
+# Debug helpers (temporary)
+# ---------------------------
+@router.get("/_debug/rbac")
+def debug_rbac(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    """
+    Temporary diagnostic endpoint.
+    Shows what backend actually sees in env and computed privileged flag.
+    Remove after issue is resolved.
+    """
+    uid = _require_user_id(x_user_id)
+    user_ctx = _load_user_ctx(uid)
+    return {
+        "rbac_mode": _rbac_mode(),
+        "env": {
+            "DIRECTORY_RBAC_MODE": (os.getenv("DIRECTORY_RBAC_MODE") or ""),
+            "DIRECTORY_PRIVILEGED_ROLE_IDS": (os.getenv("DIRECTORY_PRIVILEGED_ROLE_IDS") or ""),
+            "DIRECTORY_PRIVILEGED_USER_IDS": (os.getenv("DIRECTORY_PRIVILEGED_USER_IDS") or ""),
+            "DIRECTORY_PRIVILEGED_IDS": (os.getenv("DIRECTORY_PRIVILEGED_IDS") or ""),
+        },
+        "parsed": {
+            "privileged_role_ids": sorted(list(_privileged_role_ids())),
+            "privileged_user_ids": sorted(list(_privileged_user_ids())),
+        },
+        "user_ctx": {
+            "user_id": int(user_ctx.get("user_id")),
+            "role_id": int(user_ctx.get("role_id")) if user_ctx.get("role_id") is not None else None,
+            "unit_id": int(user_ctx.get("unit_id")) if user_ctx.get("unit_id") is not None else None,
+            "is_active": bool(user_ctx.get("is_active")),
+        },
+        "computed": {
+            "is_privileged": bool(_is_privileged(user_ctx)),
+        },
+    }
 
 
 # ---------------------------
@@ -321,7 +359,6 @@ def _dict_name_col(cols: List[str], preferred: List[str]) -> Optional[str]:
 
 
 def _normalize_employee_id_text(v: Any) -> str:
-    # IMPORTANT: preserve leading zeros
     if v is None:
         return ""
     return str(v).strip()
@@ -390,7 +427,6 @@ def list_positions(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     try:
-        # positions usually not sensitive; keep open under dept-rbac too
         _ = _require_user_id(x_user_id)
 
         rel, cols = _positions_relation()
@@ -438,7 +474,7 @@ def list_org_units(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     try:
-        _ = _require_user_id(x_user_id)  # auth presence check only
+        _ = _require_user_id(x_user_id)
 
         rel, _cols = _org_units_relation()
 
@@ -638,17 +674,9 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     date_to_col = _pick_first(emp_cols, ["date_to", "end_date", "terminated_at", "fired_at"])
     rate_col = _pick_first(emp_cols, ["rate", "stavka", "fte", "workload", "employment_rate"])
 
-    dept_fk = _dept_fk_col(emp_cols)
-    pos_fk = _pos_fk_col(emp_cols)
-
-    dep_rel, dep_cols = _departments_relation()
-    pos_rel, pos_cols = _positions_relation()
-
-    dep_id_col = _dict_id_col(dep_cols, ["department_id", "dept_id", "org_unit_id"]) if dep_rel else None
-    dep_name_col = _dict_name_col(dep_cols, ["department_name", "dept_name", "org_unit_name"]) if dep_rel else None
-
-    pos_id_col = _dict_id_col(pos_cols, ["position_id", "pos_id"]) if pos_rel else None
-    pos_name_col = _dict_name_col(pos_cols, ["position_name", "pos_name"]) if pos_rel else None
+    dept_fk = _dept_fk_col(emp_cols)          # ожидаем department_id
+    pos_fk = _pos_fk_col(emp_cols)            # ожидаем position_id
+    org_unit_fk = _pick_first(emp_cols, ["org_unit_id"])  # ожидаем org_unit_id
 
     select_parts = [
         f"e.{emp_id_col} AS e_id",
@@ -662,27 +690,36 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         (f"e.{date_to_col} AS e_date_to" if date_to_col else "NULL AS e_date_to"),
         (f"e.{dept_fk} AS e_dept_id" if dept_fk else "NULL AS e_dept_id"),
         (f"e.{pos_fk} AS e_pos_id" if pos_fk else "NULL AS e_pos_id"),
+        (f"e.{org_unit_fk} AS e_org_unit_id" if org_unit_fk else "NULL AS e_org_unit_id"),
     ]
 
     join_sql = ""
 
-    if dep_rel and dept_fk and dep_id_col and dep_name_col:
-        select_parts.append(f"d.{dep_name_col} AS dept_name")
-        join_sql += (
-            f" LEFT JOIN public.{dep_rel} d"
-            f" ON CAST(d.{dep_id_col} AS TEXT) = CAST(e.{dept_fk} AS TEXT)"
-        )
+    # --- FIX: join to real dictionaries with real PKs ---
+    # departments(department_id, name)
+    # positions(position_id, name)
+
+    if dept_fk == "department_id":
+        select_parts.append("d.name AS dept_name")
+        join_sql += " LEFT JOIN public.departments d ON d.department_id = e.department_id"
     else:
+        # если FK называется иначе (dept_id и т.п.), оставляем без обогащения
         select_parts.append("NULL AS dept_name")
 
-    if pos_rel and pos_fk and pos_id_col and pos_name_col:
-        select_parts.append(f"p.{pos_name_col} AS pos_name")
-        join_sql += (
-            f" LEFT JOIN public.{pos_rel} p"
-            f" ON CAST(p.{pos_id_col} AS TEXT) = CAST(e.{pos_fk} AS TEXT)"
-        )
+    if pos_fk == "position_id":
+        select_parts.append("p.name AS pos_name")
+        join_sql += " LEFT JOIN public.positions p ON p.position_id = e.position_id"
     else:
         select_parts.append("NULL AS pos_name")
+
+    # org_units enrichment (unit_id, name, code, parent_unit_id, is_active)
+    select_parts += [
+        "ou.name AS org_unit_name",
+        "ou.code AS org_unit_code",
+        "ou.parent_unit_id AS org_unit_parent_unit_id",
+        "ou.is_active AS org_unit_is_active",
+    ]
+    join_sql += " LEFT JOIN public.org_units ou ON ou.unit_id = e.org_unit_id"
 
     sql = "SELECT " + ", ".join(select_parts) + f" FROM public.{emp_rel} e" + join_sql
     return sql, {"emp_id_col": emp_id_col}
@@ -712,11 +749,36 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         else:
             status_norm = s
 
+    org_unit_id = row.get("e_org_unit_id")
+    if org_unit_id is not None:
+        try:
+            org_unit_id = int(org_unit_id)
+        except Exception:
+            pass
+
+    parent_unit_id = row.get("org_unit_parent_unit_id")
+    if parent_unit_id is not None:
+        try:
+            parent_unit_id = int(parent_unit_id)
+        except Exception:
+            pass
+
+    org_unit_is_active = row.get("org_unit_is_active")
+    if org_unit_is_active is not None:
+        org_unit_is_active = bool(org_unit_is_active)
+
     return {
         "id": str(row.get("e_id")) if row.get("e_id") is not None else None,
         "fio": fio,
         "department": {"id": row.get("e_dept_id"), "name": row.get("dept_name")},
         "position": {"id": row.get("e_pos_id"), "name": row.get("pos_name")},
+        "org_unit": {
+            "unit_id": org_unit_id,
+            "name": row.get("org_unit_name"),
+            "code": row.get("org_unit_code"),
+            "parent_unit_id": parent_unit_id,
+            "is_active": org_unit_is_active,
+        },
         "rate": row.get("e_rate"),
         "status": status_norm,
         "date_from": row.get("e_date_from"),
@@ -732,6 +794,8 @@ def list_employees(
     q: Optional[str] = Query(default=None),
     department_id: Optional[int] = Query(default=None, ge=1),
     position_id: Optional[int] = Query(default=None, ge=1),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
+    include_children: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: Optional[str] = Query(default=None),
@@ -744,6 +808,9 @@ def list_employees(
 
         emp_rel, emp_cols = _employees_relation()
         emp_id_col = _employees_id_col(emp_cols)
+
+        if "org_unit_id" not in set(emp_cols):
+            raise HTTPException(status_code=500, detail="directory: employees has no org_unit_id column.")
 
         base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
 
@@ -790,20 +857,56 @@ def list_employees(
             if parts:
                 where.append("(" + " OR ".join(parts) + ")")
 
-        # RBAC: dept scope
-        if _rbac_mode() == "dept" and not privileged:
-            dept_id = _require_dept_scope(user_ctx)
-            if dept_fk:
-                where.append(f"CAST(e.{dept_fk} AS TEXT) = :rbac_dept_id_text")
-                params["rbac_dept_id_text"] = str(dept_id)
-            else:
-                raise HTTPException(status_code=500, detail="directory: employees has no department_id column.")
+        # ---- CTE merge: RBAC subtree + optional org_unit_id/include_children subtree ----
+        cte_prefix = ""
+        cte_parts: List[str] = []
 
+        # RBAC: org_unit tree scope (uses users.unit_id as scope root)
+        if _rbac_mode() == "dept" and not privileged:
+            scope_unit_id = _require_dept_scope(user_ctx)
+            params["rbac_scope_unit_id"] = int(scope_unit_id)
+            cte_parts.append(
+                """
+                WITH RECURSIVE rbac_subtree AS (
+                    SELECT unit_id
+                    FROM public.org_units
+                    WHERE unit_id = :rbac_scope_unit_id
+                    UNION ALL
+                    SELECT ou.unit_id
+                    FROM public.org_units ou
+                    JOIN rbac_subtree s ON ou.parent_unit_id = s.unit_id
+                )
+                """.strip()
+            )
+            where.append("e.org_unit_id IN (SELECT unit_id FROM rbac_subtree)")
+
+        # org_unit_id/include_children filter
+        if org_unit_id is not None:
+            params["org_unit_id"] = int(org_unit_id)
+            if include_children:
+                cte_parts.append(
+                    """
+                    subtree AS (
+                        SELECT unit_id
+                        FROM public.org_units
+                        WHERE unit_id = :org_unit_id
+                        UNION ALL
+                        SELECT ou.unit_id
+                        FROM public.org_units ou
+                        JOIN subtree s ON ou.parent_unit_id = s.unit_id
+                    )
+                    """.strip()
+                )
+                where.append("e.org_unit_id IN (SELECT unit_id FROM subtree)")
+            else:
+                where.append("e.org_unit_id = :org_unit_id")
+
+        if cte_parts:
+            body = ",\n".join([p.replace("WITH RECURSIVE", "").strip().lstrip(",") for p in cte_parts])
+            cte_prefix = "WITH RECURSIVE\n" + body
+
+        # department/position filters (optional)
         if department_id is not None and dept_fk:
-            if _rbac_mode() == "dept" and not privileged:
-                dept_id = _require_dept_scope(user_ctx)
-                if int(department_id) != int(dept_id):
-                    return {"items": [], "total": 0}
             where.append(f"CAST(e.{dept_fk} AS TEXT) = :department_id_text")
             params["department_id_text"] = str(int(department_id))
 
@@ -818,7 +921,10 @@ def list_employees(
             order_sql = f"LOWER(CAST(e.{fio_col} AS TEXT)) {ord_dir}, CAST(e.{emp_id_col} AS TEXT) ASC"
         elif (sort or "").lower() in ("full_name", "fio", "name") and last_col:
             if first_col:
-                order_sql = f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}, LOWER(CAST(e.{first_col} AS TEXT)) {ord_dir}"
+                order_sql = (
+                    f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}, "
+                    f"LOWER(CAST(e.{first_col} AS TEXT)) {ord_dir}"
+                )
             else:
                 order_sql = f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}"
         else:
@@ -826,6 +932,7 @@ def list_employees(
 
         q_list = text(
             f"""
+            {cte_prefix}
             {base_sql}
             WHERE {where_sql}
             ORDER BY {order_sql}
@@ -835,6 +942,7 @@ def list_employees(
 
         q_total = text(
             f"""
+            {cte_prefix}
             SELECT COUNT(*) AS cnt
             FROM public.{emp_rel} e
             WHERE {where_sql}
@@ -859,9 +967,6 @@ def get_employee(
     employee_id: str = Path(..., min_length=1),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    IMPORTANT: employee_id is TEXT. Preserve leading zeros.
-    """
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
@@ -873,22 +978,36 @@ def get_employee(
 
         emp_rel, emp_cols = _employees_relation()
         emp_id_col = _employees_id_col(emp_cols)
-        dept_fk = _dept_fk_col(emp_cols)
+
+        if "org_unit_id" not in set(emp_cols):
+            raise HTTPException(status_code=500, detail="directory: employees has no org_unit_id column.")
 
         base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
 
         where = [f"CAST(e.{emp_id_col} AS TEXT) = :id_text"]
         params: Dict[str, Any] = {"id_text": target_id_text}
 
+        # RBAC by org_units tree
+        cte_prefix = ""
         if _rbac_mode() == "dept" and not privileged:
-            dept_id = _require_dept_scope(user_ctx)
-            if not dept_fk:
-                raise HTTPException(status_code=500, detail="directory: employees has no department_id column.")
-            where.append(f"CAST(e.{dept_fk} AS TEXT) = :rbac_dept_id_text")
-            params["rbac_dept_id_text"] = str(dept_id)
+            scope_unit_id = _require_dept_scope(user_ctx)
+            params["rbac_scope_unit_id"] = int(scope_unit_id)
+            cte_prefix = """
+            WITH RECURSIVE rbac_subtree AS (
+                SELECT unit_id
+                FROM public.org_units
+                WHERE unit_id = :rbac_scope_unit_id
+                UNION ALL
+                SELECT ou.unit_id
+                FROM public.org_units ou
+                JOIN rbac_subtree s ON ou.parent_unit_id = s.unit_id
+            )
+            """
+            where.append("e.org_unit_id IN (SELECT unit_id FROM rbac_subtree)")
 
         q_one = text(
             f"""
+            {cte_prefix}
             {base_sql}
             WHERE {' AND '.join(where)}
             LIMIT 1
