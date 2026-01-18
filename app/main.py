@@ -181,6 +181,3 @@ def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, A
 
 from app.directory import router as directory_router
 app.include_router(directory_router)
-
-from app.directory import router as directory_router
-app.include_router(directory_router)
