@@ -40,3 +40,8 @@ docs/*
 !docs/adr/**
 
 .botdata/
+
+# local test artifacts
+/tmp_*.xlsx
+/*.xlsx
+
