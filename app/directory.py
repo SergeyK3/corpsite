@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 
@@ -108,8 +108,6 @@ def list_departments(
             limit=limit,
             offset=offset,
             dept_scope_id=dept_scope_id,
-            user_ctx=user_ctx,
-            privileged=privileged,
         )
 
     except HTTPException:
@@ -162,10 +160,7 @@ def list_employees(
 
         return _call_service(
             svc_list_employees,
-            user_ctx=user_ctx,
-            privileged=privileged,
             scope_unit_id=scope_unit_id,
-            rbac_scope_unit_id=scope_unit_id,
             status=status,
             q=q,
             department_id=department_id,
@@ -200,10 +195,7 @@ def get_employee(
 
         return _call_service(
             svc_get_employee,
-            user_ctx=user_ctx,
-            privileged=privileged,
             scope_unit_id=scope_unit_id,
-            rbac_scope_unit_id=scope_unit_id,
             employee_id=employee_id,
         )
 
