@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set, List
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 
+from app.db.engine import engine
 from app.security.directory_scope import (
     rbac_mode as _rbac_mode,
     privileged_user_ids as _privileged_user_ids,
@@ -16,6 +17,7 @@ from app.security.directory_scope import (
     is_privileged as _is_privileged,
     require_dept_scope as _require_dept_scope,
 )
+from app.services.org_units_service import OrgUnitsService
 from app.services.directory_service import (
     list_departments as svc_list_departments,
     list_positions as svc_list_positions,
@@ -26,6 +28,8 @@ from app.services.directory_import_csv import import_employees_csv_bytes
 from app.services.directory_import_xlsx import import_employees_xlsx_bytes
 
 router = APIRouter(prefix="/directory", tags=["directory"])
+
+_org_units = OrgUnitsService(engine)
 
 
 def _as_http500(e: Exception) -> HTTPException:
@@ -52,6 +56,44 @@ def _call_service(fn, **kwargs):
     return fn(**filtered)
 
 
+def _compute_scope(
+    uid: int,
+    user_ctx: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Returns dict with:
+      - privileged: bool
+      - scope_unit_id: Optional[int]  (backward-compatible root unit for older services)
+      - scope_unit_ids: Optional[List[int]] (preferred: root + descendants)
+    """
+    privileged = _is_privileged(user_ctx)
+
+    # Default: no scope
+    scope_unit_id: Optional[int] = None
+    scope_unit_ids: Optional[List[int]] = None
+
+    if _rbac_mode() == "dept" and not privileged:
+        # Keep old behavior as fallback (root unit_id)
+        scope_unit_id = _require_dept_scope(user_ctx)
+
+        # Preferred: full scope (root + descendants)
+        try:
+            s: Optional[Set[int]] = _org_units.compute_user_scope_unit_ids(uid)
+        except PermissionError as pe:
+            # Map RBAC scope failures to 403
+            raise HTTPException(status_code=403, detail=str(pe))
+
+        if s is not None:
+            # deterministic ordering for stable outputs/logs
+            scope_unit_ids = sorted(list(s))
+
+    return {
+        "privileged": bool(privileged),
+        "scope_unit_id": scope_unit_id,
+        "scope_unit_ids": scope_unit_ids,
+    }
+
+
 # ---------------------------
 # Debug helpers (temporary)
 # ---------------------------
@@ -61,6 +103,9 @@ def debug_rbac(
 ) -> Dict[str, Any]:
     uid = _require_user_id(x_user_id)
     user_ctx = _load_user_ctx(uid)
+
+    scope = _compute_scope(uid, user_ctx)
+
     return {
         "rbac_mode": _rbac_mode(),
         "env": {
@@ -80,7 +125,9 @@ def debug_rbac(
             "is_active": bool(user_ctx.get("is_active")),
         },
         "computed": {
-            "is_privileged": bool(_is_privileged(user_ctx)),
+            "is_privileged": bool(scope["privileged"]),
+            "scope_unit_id": scope["scope_unit_id"],
+            "scope_unit_ids": scope["scope_unit_ids"],
         },
     }
 
@@ -97,17 +144,21 @@ def list_departments(
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
-        privileged = _is_privileged(user_ctx)
 
-        dept_scope_id: Optional[int] = None
-        if _rbac_mode() == "dept" and not privileged:
-            dept_scope_id = _require_dept_scope(user_ctx)
+        scope = _compute_scope(uid, user_ctx)
+
+        # Backward compatible (old services):
+        dept_scope_id: Optional[int] = scope["scope_unit_id"]
+
+        # Preferred (newer services may support):
+        dept_scope_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         return _call_service(
             svc_list_departments,
             limit=limit,
             offset=offset,
             dept_scope_id=dept_scope_id,
+            dept_scope_ids=dept_scope_ids,
         )
 
     except HTTPException:
@@ -152,15 +203,19 @@ def list_employees(
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
-        privileged = _is_privileged(user_ctx)
 
-        scope_unit_id: Optional[int] = None
-        if _rbac_mode() == "dept" and not privileged:
-            scope_unit_id = _require_dept_scope(user_ctx)
+        scope = _compute_scope(uid, user_ctx)
+
+        # Backward-compatible:
+        scope_unit_id: Optional[int] = scope["scope_unit_id"]
+
+        # Preferred:
+        scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         return _call_service(
             svc_list_employees,
             scope_unit_id=scope_unit_id,
+            scope_unit_ids=scope_unit_ids,
             status=status,
             q=q,
             department_id=department_id,
@@ -187,15 +242,19 @@ def get_employee(
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
-        privileged = _is_privileged(user_ctx)
 
-        scope_unit_id: Optional[int] = None
-        if _rbac_mode() == "dept" and not privileged:
-            scope_unit_id = _require_dept_scope(user_ctx)
+        scope = _compute_scope(uid, user_ctx)
+
+        # Backward-compatible:
+        scope_unit_id: Optional[int] = scope["scope_unit_id"]
+
+        # Preferred:
+        scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         return _call_service(
             svc_get_employee,
             scope_unit_id=scope_unit_id,
+            scope_unit_ids=scope_unit_ids,
             employee_id=employee_id,
         )
 
