@@ -1,8 +1,7 @@
-# app/security/directory_scope.py
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -111,3 +110,43 @@ def require_dept_scope(user_ctx: Dict[str, Any]) -> int:
             status_code=403,
             detail="directory: invalid unit_id for department scope.",
         )
+
+
+# ---------------------------
+# RBAC helpers for services
+# ---------------------------
+def build_dept_scope_cte(
+    *,
+    scope_unit_id: Optional[int],
+    alias: str = "e",
+    column: str = "org_unit_id",
+) -> Tuple[str, str, Dict[str, Any]]:
+    """
+    Build CTE + WHERE fragment for dept RBAC scope.
+
+    Returns:
+      cte_sql      : string (WITH RECURSIVE ... or empty)
+      where_sql    : string condition to be AND-ed
+      params       : dict of SQL params
+
+    If scope_unit_id is None -> returns empty fragments (no RBAC restriction).
+    """
+    if scope_unit_id is None:
+        return "", "TRUE", {}
+
+    cte_sql = """
+    WITH RECURSIVE rbac_subtree AS (
+        SELECT unit_id
+        FROM public.org_units
+        WHERE unit_id = :rbac_scope_unit_id
+        UNION ALL
+        SELECT ou.unit_id
+        FROM public.org_units ou
+        JOIN rbac_subtree s ON ou.parent_unit_id = s.unit_id
+    )
+    """.strip()
+
+    where_sql = f"{alias}.{column} IN (SELECT unit_id FROM rbac_subtree)"
+    params = {"rbac_scope_unit_id": int(scope_unit_id)}
+
+    return cte_sql, where_sql, params

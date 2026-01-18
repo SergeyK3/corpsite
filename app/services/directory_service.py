@@ -1,12 +1,18 @@
 # app/services/directory_service.py
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple
-from sqlalchemy import text
-from app.db.engine import engine
 
-# ============================================================
+from typing import Any, Dict, List, Optional, Tuple
+
+from fastapi import HTTPException
+from sqlalchemy import text
+
+from app.db.engine import engine
+from app.security.directory_scope import build_dept_scope_cte
+
+
+# ---------------------------
 # Introspection helpers
-# ============================================================
+# ---------------------------
 def _list_relations(schema: str = "public") -> List[Tuple[str, str]]:
     q = text(
         """
@@ -46,9 +52,10 @@ def _pick_first(existing: List[str], candidates: List[str]) -> Optional[str]:
             return c
     return None
 
-# ============================================================
+
+# ---------------------------
 # Relation scoring (auto-detect)
-# ============================================================
+# ---------------------------
 def _score_employees(name: str, cols: List[str]) -> int:
     lc = {c.lower() for c in cols}
     n = name.lower()
@@ -75,6 +82,7 @@ def _score_employees(name: str, cols: List[str]) -> int:
         score += 10
     if lc.intersection({"position_id", "pos_id", "position"}):
         score += 6
+
     return score
 
 
@@ -139,46 +147,52 @@ def _best_relation(score_fn, min_score: int) -> Tuple[Optional[str], List[str], 
 def _employees_relation() -> Tuple[str, List[str]]:
     rel, cols, score = _best_relation(_score_employees, min_score=20)
     if not rel:
-        raise RuntimeError(f"Cannot auto-detect employees relation (score={score}).")
+        raise HTTPException(status_code=500, detail=f"Cannot auto-detect employees relation (score={score}).")
     return rel, cols
+
 
 def _departments_relation() -> Tuple[Optional[str], List[str]]:
     rel, cols, _ = _best_relation(_score_departments, min_score=30)
     return rel, cols
 
+
 def _positions_relation() -> Tuple[Optional[str], List[str]]:
     rel, cols, _ = _best_relation(_score_positions, min_score=30)
     return rel, cols
 
-# ============================================================
-# Column mapping
-# ============================================================
+
 def _employees_id_col(cols: List[str]) -> str:
     c = _pick_first(cols, ["employee_id", "id", "tab_no", "tab_number", "personnel_no", "tn", "tabel"])
     if not c:
-        raise RuntimeError("Employees relation has no recognizable id column.")
+        raise HTTPException(status_code=500, detail="Employees relation has no recognizable id column.")
     return c
+
 
 def _dept_fk_col(cols: List[str]) -> Optional[str]:
     return _pick_first(cols, ["department_id", "dept_id", "org_unit_id"])
 
+
 def _pos_fk_col(cols: List[str]) -> Optional[str]:
     return _pick_first(cols, ["position_id", "pos_id"])
+
 
 def _dict_id_col(cols: List[str], preferred: List[str]) -> Optional[str]:
     return _pick_first(cols, preferred + ["id"])
 
+
 def _dict_name_col(cols: List[str], preferred: List[str]) -> Optional[str]:
     return _pick_first(cols, preferred + ["name", "name_ru"])
+
 
 def _normalize_employee_id_text(v: Any) -> str:
     if v is None:
         return ""
     return str(v).strip()
 
-# ============================================================
+
+# ---------------------------
 # Dictionaries (read)
-# ============================================================
+# ---------------------------
 def list_departments(
     *,
     limit: int,
@@ -217,7 +231,8 @@ def list_departments(
         total = int(conn.execute(q_total, params).mappings().first()["cnt"])
         rows = conn.execute(q_list, params).mappings().all()
 
-    return {"items": [{"id": r["id"], "name": r["name"]} for r in rows], "total": total}
+    items = [{"id": r["id"], "name": r["name"]} for r in rows]
+    return {"items": items, "total": total}
 
 
 def list_positions(*, limit: int, offset: int) -> Dict[str, Any]:
@@ -242,15 +257,16 @@ def list_positions(*, limit: int, offset: int) -> Dict[str, Any]:
     )
 
     with engine.begin() as conn:
-        total = int(conn.execute(q_total, {"limit": limit, "offset": offset}).mappings().first()["cnt"])
+        total = int(conn.execute(q_total).mappings().first()["cnt"])
         rows = conn.execute(q_list, {"limit": limit, "offset": offset}).mappings().all()
 
-    return {"items": [{"id": r["id"], "name": r["name"]} for r in rows], "total": total}
+    items = [{"id": r["id"], "name": r["name"]} for r in rows]
+    return {"items": items, "total": total}
 
 
-# ============================================================
-# Employees: select + normalize
-# ============================================================
+# ---------------------------
+# Employees select + normalize
+# ---------------------------
 def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[str, str]]:
     emp_id_col = _employees_id_col(emp_cols)
 
@@ -285,21 +301,19 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
 
     join_sql = ""
 
-    # Departments enrichment only if FK matches canonical dict
+    # Note: join-by-known-schema is optional; otherwise keep NULLs
     if dept_fk == "department_id":
         select_parts.append("d.name AS dept_name")
         join_sql += " LEFT JOIN public.departments d ON d.department_id = e.department_id"
     else:
         select_parts.append("NULL AS dept_name")
 
-    # Positions enrichment only if FK matches canonical dict
     if pos_fk == "position_id":
         select_parts.append("p.name AS pos_name")
         join_sql += " LEFT JOIN public.positions p ON p.position_id = e.position_id"
     else:
         select_parts.append("NULL AS pos_name")
 
-    # Org units enrichment (unit_id, name, code, parent_unit_id, is_active)
     select_parts += [
         "ou.name AS org_unit_name",
         "ou.code AS org_unit_code",
@@ -374,11 +388,15 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
     }
 
 
-# ============================================================
+# ---------------------------
 # Employees (read)
-# ============================================================
+# ---------------------------
 def list_employees(
     *,
+    # New-style: scope_unit_id defines dept-RBAC subtree restriction (or None)
+    scope_unit_id: Optional[int] = None,
+    # Backward-compat alias accepted by directory router adapter
+    rbac_scope_unit_id: Optional[int] = None,
     status: str,
     q: Optional[str],
     department_id: Optional[int],
@@ -389,14 +407,12 @@ def list_employees(
     offset: int,
     sort: Optional[str],
     order: Optional[str],
-    scope_unit_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     emp_rel, emp_cols = _employees_relation()
     emp_id_col = _employees_id_col(emp_cols)
 
-    # List API relies on org_unit_id for RBAC filtering. If column absent, it's schema mismatch.
     if "org_unit_id" not in set(emp_cols):
-        raise RuntimeError("directory: employees has no org_unit_id column.")
+        raise HTTPException(status_code=500, detail="directory: employees has no org_unit_id column.")
 
     base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
 
@@ -416,7 +432,7 @@ def list_employees(
     if status != "all" and status_col:
         if status_col in ("is_active", "active"):
             where.append(f"e.{status_col} = :is_active")
-            params["is_active"] = status == "active"
+            params["is_active"] = True if status == "active" else False
         else:
             if status == "active":
                 where.append(
@@ -429,26 +445,65 @@ def list_employees(
 
     # Search
     if q:
-        params["q"] = f"%{q.strip().lower()}%"
+        qq = q.strip().lower()
+        params["q"] = f"%{qq}%"
         parts = []
-        for c in (fio_col, last_col, first_col, mid_col):
-            if c:
-                parts.append(f"LOWER(CAST(e.{c} AS TEXT)) LIKE :q")
+        if fio_col:
+            parts.append(f"LOWER(CAST(e.{fio_col} AS TEXT)) LIKE :q")
+        if last_col:
+            parts.append(f"LOWER(CAST(e.{last_col} AS TEXT)) LIKE :q")
+        if first_col:
+            parts.append(f"LOWER(CAST(e.{first_col} AS TEXT)) LIKE :q")
+        if mid_col:
+            parts.append(f"LOWER(CAST(e.{mid_col} AS TEXT)) LIKE :q")
         if parts:
             where.append("(" + " OR ".join(parts) + ")")
 
-    # RBAC scope filtering (precomputed list of org_units)
-    if scope_unit_ids:
-        params["scope_unit_ids"] = tuple(int(x) for x in scope_unit_ids)
-        where.append("e.org_unit_id IN :scope_unit_ids")
+    # ---- CTE merge: dept RBAC subtree + optional org_unit_id/include_children subtree ----
+    cte_parts: List[str] = []
+    cte_prefix = ""
 
-    # org_unit_id/include_children is expected to be resolved by router into scope_unit_ids.
-    # Keep compatibility: if router still sends org_unit_id without scope list.
-    if org_unit_id is not None and not scope_unit_ids:
+    # dept RBAC subtree
+    effective_scope = scope_unit_id if scope_unit_id is not None else rbac_scope_unit_id
+    rbac_cte, rbac_where, rbac_params = build_dept_scope_cte(scope_unit_id=effective_scope, alias="e")
+    if rbac_cte:
+        cte_parts.append(rbac_cte)
+        where.append(rbac_where)
+        params.update(rbac_params)
+
+    # optional subtree by org_unit_id (independent filter)
+    if org_unit_id is not None:
         params["org_unit_id"] = int(org_unit_id)
-        where.append("e.org_unit_id = :org_unit_id")
+        if include_children:
+            cte_parts.append(
+                """
+                subtree AS (
+                    SELECT unit_id
+                    FROM public.org_units
+                    WHERE unit_id = :org_unit_id
+                    UNION ALL
+                    SELECT ou.unit_id
+                    FROM public.org_units ou
+                    JOIN subtree s ON ou.parent_unit_id = s.unit_id
+                )
+                """.strip()
+            )
+            where.append("e.org_unit_id IN (SELECT unit_id FROM subtree)")
+        else:
+            where.append("e.org_unit_id = :org_unit_id")
 
-    # department/position filters
+    if cte_parts:
+        # unify into one WITH RECURSIVE ... if multiple parts exist
+        # rbac_cte is already WITH RECURSIVE..., subtree part is "subtree AS (...)"
+        # normalize:
+        normalized: List[str] = []
+        for p in cte_parts:
+            p2 = p.strip()
+            if p2.lower().startswith("with recursive"):
+                p2 = p2[len("with recursive") :].strip()
+            normalized.append(p2.strip().lstrip(","))
+        cte_prefix = "WITH RECURSIVE\n" + ",\n".join(normalized)
+
     if department_id is not None and dept_fk:
         where.append(f"CAST(e.{dept_fk} AS TEXT) = :department_id_text")
         params["department_id_text"] = str(int(department_id))
@@ -475,6 +530,7 @@ def list_employees(
 
     q_list = text(
         f"""
+        {cte_prefix}
         {base_sql}
         WHERE {where_sql}
         ORDER BY {order_sql}
@@ -484,6 +540,7 @@ def list_employees(
 
     q_total = text(
         f"""
+        {cte_prefix}
         SELECT COUNT(*) AS cnt
         FROM public.{emp_rel} e
         WHERE {where_sql}
@@ -500,30 +557,34 @@ def list_employees(
 
 def get_employee(
     *,
+    scope_unit_id: Optional[int] = None,
+    rbac_scope_unit_id: Optional[int] = None,
     employee_id: str,
-    scope_unit_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     target_id_text = _normalize_employee_id_text(employee_id)
     if not target_id_text:
-        return {}
+        raise HTTPException(status_code=404, detail="Employee not found.")
 
     emp_rel, emp_cols = _employees_relation()
     emp_id_col = _employees_id_col(emp_cols)
 
     if "org_unit_id" not in set(emp_cols):
-        raise RuntimeError("directory: employees has no org_unit_id column.")
+        raise HTTPException(status_code=500, detail="directory: employees has no org_unit_id column.")
 
     base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
 
     where = [f"CAST(e.{emp_id_col} AS TEXT) = :id_text"]
     params: Dict[str, Any] = {"id_text": target_id_text}
 
-    if scope_unit_ids:
-        params["scope_unit_ids"] = tuple(int(x) for x in scope_unit_ids)
-        where.append("e.org_unit_id IN :scope_unit_ids")
+    effective_scope = scope_unit_id if scope_unit_id is not None else rbac_scope_unit_id
+    rbac_cte, rbac_where, rbac_params = build_dept_scope_cte(scope_unit_id=effective_scope, alias="e")
+    if rbac_cte:
+        params.update(rbac_params)
+        where.append(rbac_where)
 
     q_one = text(
         f"""
+        {rbac_cte}
         {base_sql}
         WHERE {' AND '.join(where)}
         LIMIT 1
@@ -534,6 +595,6 @@ def get_employee(
         row = conn.execute(q_one, params).mappings().first()
 
     if not row:
-        return {}
+        raise HTTPException(status_code=404, detail="Employee not found.")
 
     return _normalize_employee_joined(dict(row), emp_rel)
