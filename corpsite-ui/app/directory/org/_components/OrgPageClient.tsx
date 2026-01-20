@@ -1,6 +1,8 @@
+// corpsite-ui/app/directory/org/_components/OrgPageClient.tsx
 "use client";
 
 import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import type {
   OrgTreeNode,
@@ -11,7 +13,6 @@ import type {
 } from "../../employees/lib/types";
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
-import { getEmployee } from "../../employees/_lib/api.client";
 
 type UnitPick = {
   unit_id: number;
@@ -86,7 +87,68 @@ function safeStatus(e: any): string {
   return "—";
 }
 
-// Зафиксировали: backend реально принимает org_unit_id
+// ---------------------------
+// Sorting within org unit
+// ---------------------------
+type RoleRule = {
+  rank: number;
+  keywords: string[];
+};
+
+const DEFAULT_ROLE_ORDER: RoleRule[] = [
+  // 1) заведующий
+  { rank: 10, keywords: ["завед", "зав."] },
+
+  // 2) врачи (прочие)
+  { rank: 20, keywords: ["врач", "доктор"] },
+
+  // 3) старшая медсестра / старший фельдшер
+  {
+    rank: 30,
+    keywords: ["старшая медсестра", "ст. медсестра", "старший фельдшер", "ст. фельдшер"],
+  },
+
+  // 4) прочие медсестры (детализацию уточним позже)
+  { rank: 40, keywords: ["медсестра", "м/с", "сестра"] },
+
+  // 5) сестра-хозяйка
+  { rank: 50, keywords: ["сестра-хозяйка", "сестра хозяйка", "с-х"] },
+
+  // 6) санитарки
+  { rank: 60, keywords: ["санитар", "санитарка"] },
+];
+
+function normalizeText(v: any): string {
+  return String(v ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[ё]/g, "е")
+    .trim();
+}
+
+function getPositionName(e: any): string {
+  return e?.position?.name ?? e?.position_name ?? "";
+}
+
+function roleRankByPositionName(posName: string): number {
+  const t = normalizeText(posName);
+  if (!t) return 999;
+
+  for (const rule of DEFAULT_ROLE_ORDER) {
+    for (const kw of rule.keywords) {
+      if (t.includes(normalizeText(kw))) return rule.rank;
+    }
+  }
+  return 999;
+}
+
+function fioForSort(e: any): string {
+  return normalizeText(safeFio(e));
+}
+
+// ---------------------------
+// Backend fetch
+// ---------------------------
 async function fetchEmployeesByOrgUnit(args: {
   apiBase: string;
   headers: Record<string, string>;
@@ -120,7 +182,16 @@ async function fetchEmployeesByOrgUnit(args: {
   return { items, total };
 }
 
+function parseIntOrNull(v: string | null): number | null {
+  if (!v) return null;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function OrgPageClient() {
+  const router = useRouter();
+  const sp = useSearchParams();
+
   const apiBase = React.useMemo(() => getApiBase(), []);
   const devUserId = getDevUserId();
 
@@ -129,6 +200,13 @@ export default function OrgPageClient() {
     if (devUserId) h["X-User-Id"] = devUserId;
     return h;
   }, [devUserId]);
+
+  // URL state
+  const urlOrgUnitId = React.useMemo(() => parseIntOrNull(sp.get("org_unit_id")), [sp]);
+  const urlEmployeeId = React.useMemo(
+    () => (sp.get("employee_id") || "").trim() || null,
+    [sp]
+  );
 
   const [orgLoading, setOrgLoading] = React.useState(false);
   const [orgError, setOrgError] = React.useState<string | null>(null);
@@ -141,10 +219,21 @@ export default function OrgPageClient() {
   const [empError, setEmpError] = React.useState<string | null>(null);
   const [empData, setEmpData] = React.useState<EmployeesResponse>({ items: [], total: 0 });
 
-  // Drawer state
+  // Drawer state (управляем через URL + локальный state для UX)
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
 
+  function replaceUrl(next: Partial<Record<string, string | null>>) {
+    const p = new URLSearchParams(sp.toString());
+    Object.entries(next).forEach(([k, v]) => {
+      const s = (v ?? "").toString().trim();
+      if (!s) p.delete(k);
+      else p.set(k, s);
+    });
+    router.replace(`/directory/org?${p.toString()}`);
+  }
+
+  // 1) load org tree
   React.useEffect(() => {
     let cancelled = false;
 
@@ -170,8 +259,26 @@ export default function OrgPageClient() {
         if (cancelled) return;
 
         setOrgItems(items);
-        if (!selectedUnit && items.length > 0) {
-          setSelectedUnit({ unit_id: items[0].unit_id, name: items[0].name });
+
+        const flat = flattenUnits(items);
+
+        // priority:
+        // 1) org_unit_id from URL
+        // 2) first unit
+        if (urlOrgUnitId != null) {
+          const found = flat.find((u) => u.unit_id === urlOrgUnitId);
+          if (found) {
+            setSelectedUnit(found);
+            return;
+          }
+        }
+
+        if (!selectedUnit && flat.length > 0) {
+          const first = flat[0];
+          setSelectedUnit(first);
+          if (sp.get("org_unit_id") == null) {
+            replaceUrl({ org_unit_id: String(first.unit_id) });
+          }
         }
       } catch (e) {
         if (cancelled) return;
@@ -189,6 +296,22 @@ export default function OrgPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, devUserId]);
 
+  // 1b) sync selectedUnit from URL on navigation
+  React.useEffect(() => {
+    if (orgItems.length === 0) return;
+    if (urlOrgUnitId == null) return;
+
+    const flat = flattenUnits(orgItems);
+    const found = flat.find((u) => u.unit_id === urlOrgUnitId);
+    if (!found) return;
+
+    if (selectedUnit?.unit_id !== found.unit_id) {
+      setSelectedUnit(found);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlOrgUnitId, orgItems]);
+
+  // 2) load employees by selected unit
   React.useEffect(() => {
     let cancelled = false;
 
@@ -236,21 +359,64 @@ export default function OrgPageClient() {
     return flatUnits.filter((u) => (u.name || "").toLowerCase().includes(t));
   }, [flatUnits, filterText]);
 
+  // Sorted employees within the org unit
+  const sortedEmployees = React.useMemo(() => {
+    const items = Array.isArray(empData?.items) ? [...empData.items] : [];
+    items.sort((a: any, b: any) => {
+      const ra = roleRankByPositionName(getPositionName(a));
+      const rb = roleRankByPositionName(getPositionName(b));
+      if (ra !== rb) return ra - rb;
+
+      const fa = fioForSort(a);
+      const fb = fioForSort(b);
+      if (fa !== fb) return fa.localeCompare(fb, "ru");
+
+      return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+    });
+    return items;
+  }, [empData]);
+
+  // Drawer sync from URL
+  React.useEffect(() => {
+    if (urlEmployeeId) {
+      setDrawerEmployeeId(urlEmployeeId);
+      setDrawerOpen(true);
+      return;
+    }
+    setDrawerOpen(false);
+    setDrawerEmployeeId(null);
+  }, [urlEmployeeId]);
+
+  function onSelectUnit(u: UnitPick) {
+    setSelectedUnit(u);
+    replaceUrl({
+      org_unit_id: String(u.unit_id),
+      employee_id: null,
+    });
+  }
+
   function openEmployeeDrawer(employeeId: string) {
     const id = String(employeeId ?? "").trim();
     if (!id) return;
+
     setDrawerEmployeeId(id);
     setDrawerOpen(true);
+
+    replaceUrl({
+      org_unit_id: selectedUnit ? String(selectedUnit.unit_id) : sp.get("org_unit_id") || null,
+      employee_id: id,
+    });
   }
 
   function closeEmployeeDrawer() {
     setDrawerOpen(false);
+    setDrawerEmployeeId(null);
+    replaceUrl({ employee_id: null });
   }
 
-  async function onTerminate(details: EmployeeDetails) {
-    // пока без бизнес-логики, просто закрываем
-    // (в дальнейшем подключим реальный terminate flow)
-    setDrawerOpen(false);
+  async function onTerminate(_details: EmployeeDetails) {
+    // пока без бизнес-логики: только закрываем
+    closeEmployeeDrawer();
   }
 
   return (
@@ -291,7 +457,7 @@ export default function OrgPageClient() {
                           ? "bg-gray-100 border-gray-400"
                           : "bg-white border-gray-200 hover:bg-gray-50",
                       ].join(" ")}
-                      onClick={() => setSelectedUnit(u)}
+                      onClick={() => onSelectUnit(u)}
                     >
                       {u.name}
                     </button>
@@ -315,6 +481,7 @@ export default function OrgPageClient() {
             </div>
             <div className="text-xs text-gray-700 mt-1">
               {selectedUnit ? `Фильтр: org_unit_id=${selectedUnit.unit_id}` : null}
+              {drawerEmployeeId ? ` · employee_id=${drawerEmployeeId}` : null}
             </div>
           </div>
 
@@ -342,31 +509,39 @@ export default function OrgPageClient() {
                       </tr>
                     </thead>
                     <tbody>
-                      {empData.items.map((e: any) => (
-                        <tr
-                          key={String(e.id)}
-                          className="hover:bg-gray-50 cursor-pointer"
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openEmployeeDrawer(String(e.id))}
-                          onKeyDown={(ev) => {
-                            if (ev.key === "Enter" || ev.key === " ") {
-                              ev.preventDefault();
-                              openEmployeeDrawer(String(e.id));
-                            }
-                          }}
-                          title="Открыть карточку сотрудника"
-                        >
-                          <td className="p-2 border-b whitespace-nowrap">{String(e.id)}</td>
-                          <td className="p-2 border-b">{safeFio(e)}</td>
-                          <td className="p-2 border-b">{safeDept(e)}</td>
-                          <td className="p-2 border-b">{safePos(e)}</td>
-                          <td className="p-2 border-b whitespace-nowrap">{safeRate(e)}</td>
-                          <td className="p-2 border-b whitespace-nowrap">{safeStatus(e)}</td>
-                        </tr>
-                      ))}
+                      {sortedEmployees.map((e: any) => {
+                        const id = String(e?.id ?? "");
+                        const isSelected = drawerEmployeeId && id === drawerEmployeeId;
 
-                      {empData.items.length === 0 ? (
+                        return (
+                          <tr
+                            key={id}
+                            className={[
+                              "hover:bg-gray-50 cursor-pointer",
+                              isSelected ? "bg-gray-50" : "",
+                            ].join(" ")}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openEmployeeDrawer(id)}
+                            onKeyDown={(ev) => {
+                              if (ev.key === "Enter" || ev.key === " ") {
+                                ev.preventDefault();
+                                openEmployeeDrawer(id);
+                              }
+                            }}
+                            title="Открыть карточку сотрудника"
+                          >
+                            <td className="p-2 border-b whitespace-nowrap">{id}</td>
+                            <td className="p-2 border-b">{safeFio(e)}</td>
+                            <td className="p-2 border-b">{safeDept(e)}</td>
+                            <td className="p-2 border-b">{safePos(e)}</td>
+                            <td className="p-2 border-b whitespace-nowrap">{safeRate(e)}</td>
+                            <td className="p-2 border-b whitespace-nowrap">{safeStatus(e)}</td>
+                          </tr>
+                        );
+                      })}
+
+                      {sortedEmployees.length === 0 ? (
                         <tr>
                           <td className="p-3 text-gray-700" colSpan={6}>
                             Нет сотрудников в выбранном подразделении.
