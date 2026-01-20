@@ -12,11 +12,7 @@ function apiBase(): string {
 }
 
 function devUserId(): string {
-  return (
-    process.env.DEV_X_USER_ID ||
-    process.env.NEXT_PUBLIC_DEV_X_USER_ID ||
-    ""
-  );
+  return process.env.DEV_X_USER_ID || process.env.NEXT_PUBLIC_DEV_X_USER_ID || "";
 }
 
 function buildUrl(path: string, params?: Record<string, any>): string {
@@ -47,16 +43,14 @@ async function apiGet(path: string, params?: Record<string, any>): Promise<Json>
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(
-      `Directory API GET ${path} -> ${res.status} ${res.statusText}: ${body}`
-    );
+    throw new Error(`Directory API GET ${path} -> ${res.status} ${res.statusText}: ${body}`);
   }
 
   return res.json();
 }
 
 // --------------------
-// Public API used by page.tsx
+// Public API used by pages / server components
 // --------------------
 
 export async function getDepartments(): Promise<Array<{ id: number; name: string }>> {
@@ -97,6 +91,7 @@ export async function getEmployees(args: GetEmployeesArgs) {
 // Employee card API
 // --------------------
 
-export async function getEmployeeById(employee_id: string | number) {
-  return apiGet(`/directory/employees/${employee_id}`);
+export async function getEmployeeById(employee_id: string) {
+  const id = (employee_id ?? "").toString().trim();
+  return apiGet(`/directory/employees/${encodeURIComponent(id)}`);
 }

@@ -15,7 +15,6 @@ export type Position = {
  */
 export type EmployeeDTO = {
   id: string;
-
   fio: string;
 
   department: Department;
@@ -67,6 +66,23 @@ export type Employee = {
   dateTo: string | null;
 
   isActive: boolean;
+};
+
+// ---------------------------
+// Org tree (Directory / Org Structure B1+B2)
+// Contract aligned with backend: /directory/org-units/tree
+// ---------------------------
+export type OrgTreeNode = {
+  unit_id: number;
+  name: string;
+  code: string | null;
+  parent_unit_id: number | null;
+  is_active?: boolean;
+  children: OrgTreeNode[];
+};
+
+export type OrgTreeResponse = {
+  items: OrgTreeNode[];
 };
 
 function toNumber(v: string | number | null | undefined): number | null {

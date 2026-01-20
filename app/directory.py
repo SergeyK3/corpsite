@@ -80,11 +80,9 @@ def _compute_scope(
         try:
             s: Optional[Set[int]] = _org_units.compute_user_scope_unit_ids(uid)
         except PermissionError as pe:
-            # Map RBAC scope failures to 403
             raise HTTPException(status_code=403, detail=str(pe))
 
         if s is not None:
-            # deterministic ordering for stable outputs/logs
             scope_unit_ids = sorted(list(s))
 
     return {
@@ -130,6 +128,92 @@ def debug_rbac(
             "scope_unit_ids": scope["scope_unit_ids"],
         },
     }
+
+
+# ---------------------------
+# Org structure (B1): tree + flat org units
+# ---------------------------
+@router.get("/departments/tree")
+def departments_tree(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    """
+    Tree of org units (departments) within RBAC scope.
+    For dept-scoped user -> subtree rooted at user's unit (single root).
+    For privileged/off -> forest of roots.
+    """
+    try:
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+        scope = _compute_scope(uid, user_ctx)
+
+        scope_unit_id: Optional[int] = scope["scope_unit_id"]
+        scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
+
+        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids)
+        forest = _org_units.build_tree(units)
+
+        # If user is dept-scoped -> return subtree rooted at scope_unit_id (if present)
+        if scope_unit_id is not None:
+            # Find node with id == scope_unit_id inside forest
+            def find_node(nodes: List[Dict[str, Any]], target: int) -> Optional[Dict[str, Any]]:
+                for n in nodes:
+                    if int(n["id"]) == int(target):
+                        return n
+                    got = find_node(n.get("children") or [], target)
+                    if got is not None:
+                        return got
+                return None
+
+            root = find_node(forest, int(scope_unit_id))
+            return {"items": [root] if root is not None else [], "root_id": int(scope_unit_id)}
+
+        return {"items": forest, "root_id": None}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _as_http500(e)
+
+
+@router.get("/org-units")
+def list_org_units_flat(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    """
+    Flat list of org units within RBAC scope (for admin tools / debugging).
+    """
+    try:
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+        scope = _compute_scope(uid, user_ctx)
+
+        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"])
+        return {
+            "items": [
+                {
+                    "id": u.unit_id,
+                    "parent_id": u.parent_unit_id,
+                    "name": u.name,
+                    "code": u.code,
+                    "is_active": u.is_active,
+                }
+                for u in units
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _as_http500(e)
+
+
+@router.get("/org-units/tree")
+def org_units_tree_alias(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    # Alias to keep naming option open without breaking "departments" API.
+    return departments_tree(x_user_id=x_user_id)
 
 
 # ---------------------------
