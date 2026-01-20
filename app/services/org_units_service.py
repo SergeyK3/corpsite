@@ -26,11 +26,15 @@ class OrgUnitsService:
         schema: str = "public",
         org_units_table: str = "org_units",
         users_table: str = "users",
+        org_unit_groups_table: str = "org_unit_groups",
+        org_unit_group_units_table: str = "org_unit_group_units",
     ) -> None:
         self._engine = engine
         self._schema = schema
         self._org_units_table = org_units_table
         self._users_table = users_table
+        self._org_unit_groups_table = org_unit_groups_table
+        self._org_unit_group_units_table = org_unit_group_units_table
 
     # ---------------------------
     # Users
@@ -77,8 +81,20 @@ class OrgUnitsService:
 
     @staticmethod
     def _rbac_mode() -> str:
+        # off | dept | groups
         v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
-        return v if v in ("off", "dept") else "dept"
+        return v if v in ("off", "dept", "groups") else "dept"
+
+    def _fallback_dept_scope_or_raise(self, *, user_id: int, unit_id: Optional[int], include_inactive: bool) -> Set[int]:
+        """
+        MVP fallback for groups-RBAC:
+        If deputy has no group assignments, fall back to dept scope using users.unit_id (+ descendants).
+        """
+        if unit_id is None:
+            raise PermissionError(
+                f"RBAC(dept): cannot determine department scope for user_id={user_id}: unit_id is null"
+            )
+        return self.get_scope_unit_ids(int(unit_id), include_inactive=include_inactive)
 
     # ---------------------------
     # Org units load (ids only)
@@ -123,13 +139,57 @@ class OrgUnitsService:
 
         return result
 
-    def compute_user_scope_unit_ids(self, user_id: int, include_inactive: bool = False) -> Optional[Set[int]]:
+    def get_scope_unit_ids_many(self, root_unit_ids: List[int], include_inactive: bool = False) -> Set[int]:
+        out: Set[int] = set()
+        for rid in root_unit_ids:
+            out |= self.get_scope_unit_ids(int(rid), include_inactive=include_inactive)
+        return out
+
+    # ---------------------------
+    # RBAC (groups): deputy -> group -> units
+    # ---------------------------
+    def list_group_unit_ids_for_deputy(self, deputy_user_id: int, include_inactive: bool = False) -> List[int]:
+        """
+        Returns direct unit_ids assigned to deputy's groups (org_unit_group_units).
+        Note: descendants are NOT included here.
+        """
+        where_active_g = "AND COALESCE(g.is_active, true) = true"
+        where_active_u = "" if include_inactive else "AND COALESCE(u.is_active, true) = true"
+
+        sql = text(
+            f"""
+            SELECT DISTINCT u.unit_id
+            FROM {self._schema}.{self._org_unit_groups_table} g
+            JOIN {self._schema}.{self._org_unit_group_units_table} gu
+              ON gu.group_id = g.group_id
+            JOIN {self._schema}.{self._org_units_table} u
+              ON u.unit_id = gu.unit_id
+            WHERE g.deputy_user_id = :uid
+              {where_active_g}
+              {where_active_u}
+            ORDER BY u.unit_id
+            """
+        )
+        with self._engine.begin() as c:
+            rows = c.execute(sql, {"uid": int(deputy_user_id)}).mappings().all()
+
+        return [int(r["unit_id"]) for r in rows]
+
+    def compute_user_scope_unit_ids(
+        self,
+        user_id: int,
+        include_inactive: bool = False,
+    ) -> Optional[Set[int]]:
         """
         Returns:
           - None: no restrictions (rbac off or privileged)
-          - Set[int]: allowed unit_ids (user unit + descendants)
+          - Set[int]: allowed unit_ids
+             * dept  : user's unit + descendants
+             * groups: union(assigned group unit + its descendants)
+                      (MVP fallback: if no assignments -> dept scope)
         """
-        if self._rbac_mode() == "off":
+        mode = self._rbac_mode()
+        if mode == "off":
             return None
 
         privileged_users = self._parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
@@ -146,12 +206,16 @@ class OrgUnitsService:
         if role_id is not None and role_id in privileged_roles:
             return None
 
-        if unit_id is None:
-            raise PermissionError(
-                f"RBAC: cannot determine department scope for user_id={user_id}: unit_id is null"
-            )
+        if mode == "dept":
+            return self._fallback_dept_scope_or_raise(user_id=user_id, unit_id=unit_id, include_inactive=include_inactive)
 
-        return self.get_scope_unit_ids(unit_id, include_inactive=include_inactive)
+        # mode == "groups"
+        assigned = self.list_group_unit_ids_for_deputy(user_id, include_inactive=include_inactive)
+        if not assigned:
+            # MVP fallback: allow dept-scope if deputy is not configured in groups tables yet
+            return self._fallback_dept_scope_or_raise(user_id=user_id, unit_id=unit_id, include_inactive=include_inactive)
+
+        return self.get_scope_unit_ids_many(assigned, include_inactive=include_inactive)
 
     # ---------------------------
     # Org units (full rows)
@@ -164,7 +228,7 @@ class OrgUnitsService:
         """
         Flat list of org units.
         If scope_unit_ids provided -> restrict to these unit_ids.
-        include_inactive=True -> includes inactive units (COALESCE(is_active,true) may be false)
+        include_inactive=True -> includes inactive units
         """
         where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
 
@@ -216,7 +280,7 @@ class OrgUnitsService:
     @staticmethod
     def build_tree(units: List[OrgUnit]) -> List[Dict[str, Any]]:
         """
-        Legacy tree schema (kept for backward compatibility with existing consumers):
+        Legacy tree schema:
           {
             "unit_id": int,
             "parent_unit_id": Optional[int],
@@ -259,7 +323,7 @@ class OrgUnitsService:
     @staticmethod
     def build_ui_tree(units: List[OrgUnit]) -> Tuple[List[Dict[str, Any]], List[str], int]:
         """
-        UI tree schema (for corpsite-ui TreeView):
+        UI tree schema:
           {
             "id": str,
             "title": str,
@@ -267,7 +331,6 @@ class OrgUnitsService:
             "is_active": bool,
             "children": [...]
           }
-
         Returns: (items, inactive_ids, total)
         """
         inactive_ids: List[str] = [str(u.unit_id) for u in units if not u.is_active]
