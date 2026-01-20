@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import text, bindparam
+from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
 
@@ -42,7 +42,7 @@ class OrgUnitsService:
             FROM {self._schema}.{self._users_table}
             WHERE user_id = :uid
             LIMIT 1
-        """
+            """
         )
         with self._engine.begin() as c:
             row = c.execute(sql, {"uid": user_id}).mappings().first()
@@ -83,13 +83,17 @@ class OrgUnitsService:
     # ---------------------------
     # Org units load (ids only)
     # ---------------------------
-    def _load_unit_edges(self) -> List[Tuple[int, Optional[int]]]:
+    def _load_unit_edges(self, include_inactive: bool = False) -> List[Tuple[int, Optional[int]]]:
+        where = ""
+        if not include_inactive:
+            where = "WHERE COALESCE(is_active, true) = true"
+
         sql = text(
             f"""
             SELECT unit_id, parent_unit_id
             FROM {self._schema}.{self._org_units_table}
-            WHERE COALESCE(is_active, true) = true
-        """
+            {where}
+            """
         )
         with self._engine.begin() as c:
             rows = c.execute(sql).mappings().all()
@@ -99,8 +103,8 @@ class OrgUnitsService:
             for r in rows
         ]
 
-    def get_scope_unit_ids(self, root_unit_id: int) -> Set[int]:
-        edges = self._load_unit_edges()
+    def get_scope_unit_ids(self, root_unit_id: int, include_inactive: bool = False) -> Set[int]:
+        edges = self._load_unit_edges(include_inactive=include_inactive)
 
         children: Dict[int, List[int]] = {}
         for uid, pid in edges:
@@ -119,7 +123,7 @@ class OrgUnitsService:
 
         return result
 
-    def compute_user_scope_unit_ids(self, user_id: int) -> Optional[Set[int]]:
+    def compute_user_scope_unit_ids(self, user_id: int, include_inactive: bool = False) -> Optional[Set[int]]:
         """
         Returns:
           - None: no restrictions (rbac off or privileged)
@@ -147,27 +151,32 @@ class OrgUnitsService:
                 f"RBAC: cannot determine department scope for user_id={user_id}: unit_id is null"
             )
 
-        return self.get_scope_unit_ids(unit_id)
+        return self.get_scope_unit_ids(unit_id, include_inactive=include_inactive)
 
     # ---------------------------
-    # Org units (full rows) + tree
+    # Org units (full rows)
     # ---------------------------
     def list_org_units(
         self,
         scope_unit_ids: Optional[List[int]] = None,
+        include_inactive: bool = True,
     ) -> List[OrgUnit]:
         """
-        Flat list of active org units.
+        Flat list of org units.
         If scope_unit_ids provided -> restrict to these unit_ids.
+        include_inactive=True -> includes inactive units (COALESCE(is_active,true) may be false)
         """
+        where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
+
         if scope_unit_ids is None:
             sql = text(
                 f"""
                 SELECT unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
                 FROM {self._schema}.{self._org_units_table}
-                WHERE COALESCE(is_active, true) = true
+                WHERE 1=1
+                  {where_active}
                 ORDER BY unit_id
-            """
+                """
             )
             params: Dict[str, Any] = {}
         else:
@@ -176,10 +185,10 @@ class OrgUnitsService:
                     f"""
                     SELECT unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
                     FROM {self._schema}.{self._org_units_table}
-                    WHERE COALESCE(is_active, true) = true
-                      AND unit_id IN :ids
+                    WHERE unit_id IN :ids
+                      {where_active}
                     ORDER BY unit_id
-                """
+                    """
                 )
                 .bindparams(bindparam("ids", expanding=True))
             )
@@ -201,12 +210,13 @@ class OrgUnitsService:
             )
         return out
 
+    # ---------------------------
+    # Tree builders
+    # ---------------------------
     @staticmethod
     def build_tree(units: List[OrgUnit]) -> List[Dict[str, Any]]:
         """
-        Returns forest of roots.
-
-        Public API node schema (aligned with employee.org_unit):
+        Legacy tree schema (kept for backward compatibility with existing consumers):
           {
             "unit_id": int,
             "parent_unit_id": Optional[int],
@@ -245,3 +255,49 @@ class OrgUnitsService:
             sort_rec(r)
 
         return roots
+
+    @staticmethod
+    def build_ui_tree(units: List[OrgUnit]) -> Tuple[List[Dict[str, Any]], List[str], int]:
+        """
+        UI tree schema (for corpsite-ui TreeView):
+          {
+            "id": str,
+            "title": str,
+            "type": "unit",
+            "is_active": bool,
+            "children": [...]
+          }
+
+        Returns: (items, inactive_ids, total)
+        """
+        inactive_ids: List[str] = [str(u.unit_id) for u in units if not u.is_active]
+
+        nodes: Dict[int, Dict[str, Any]] = {}
+        for u in units:
+            nodes[u.unit_id] = {
+                "id": str(u.unit_id),
+                "title": u.name,
+                "type": "unit",
+                "is_active": bool(u.is_active),
+                "children": [],
+            }
+
+        roots: List[Dict[str, Any]] = []
+        for u in units:
+            node = nodes[u.unit_id]
+            pid = u.parent_unit_id
+            if pid is not None and pid in nodes:
+                nodes[pid]["children"].append(node)
+            else:
+                roots.append(node)
+
+        def sort_rec(n: Dict[str, Any]) -> None:
+            n["children"].sort(key=lambda x: (x.get("title") or "", x.get("id") or ""))
+            for ch in n["children"]:
+                sort_rec(ch)
+
+        roots.sort(key=lambda x: (x.get("title") or "", x.get("id") or ""))
+        for r in roots:
+            sort_rec(r)
+
+        return roots, inactive_ids, len(units)

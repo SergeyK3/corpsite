@@ -1,4 +1,5 @@
-﻿# app/directory.py
+﻿# FILE: app/directory.py
+
 from __future__ import annotations
 
 import inspect
@@ -59,6 +60,7 @@ def _call_service(fn, **kwargs):
 def _compute_scope(
     uid: int,
     user_ctx: Dict[str, Any],
+    include_inactive: bool = False,
 ) -> Dict[str, Any]:
     """
     Returns dict with:
@@ -78,7 +80,7 @@ def _compute_scope(
 
         # Preferred: full scope (root + descendants)
         try:
-            s: Optional[Set[int]] = _org_units.compute_user_scope_unit_ids(uid)
+            s: Optional[Set[int]] = _org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
         except PermissionError as pe:
             raise HTTPException(status_code=403, detail=str(pe))
 
@@ -131,44 +133,56 @@ def debug_rbac(
 
 
 # ---------------------------
-# Org structure (B1): tree + flat org units
+# Org structure (B1): UI tree + flat org units
 # ---------------------------
-@router.get("/departments/tree")
-def departments_tree(
+@router.get("/org-units/tree")
+def org_units_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
     """
-    Tree of org units (departments) within RBAC scope.
-    For dept-scoped user -> subtree rooted at user's unit (single root).
-    For privileged/off -> forest of roots.
+    UI Tree for corpsite-ui TreeView.
+    - privileged/off -> forest of roots
+    - dept-scoped user -> subtree rooted at user's unit (single root), if found
     """
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
-        scope = _compute_scope(uid, user_ctx)
 
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
-        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids)
-        forest = _org_units.build_tree(units)
+        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive)
+        items, inactive_ids, total = _org_units.build_ui_tree(units)
 
         # If user is dept-scoped -> return subtree rooted at scope_unit_id (if present)
         if scope_unit_id is not None:
-            # Find node with id == scope_unit_id inside forest
-            def find_node(nodes: List[Dict[str, Any]], target: int) -> Optional[Dict[str, Any]]:
+            def find_node(nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
                 for n in nodes:
-                    if int(n["id"]) == int(target):
+                    if str(n.get("id")) == target_id:
                         return n
-                    got = find_node(n.get("children") or [], target)
+                    got = find_node(n.get("children") or [], target_id)
                     if got is not None:
                         return got
                 return None
 
-            root = find_node(forest, int(scope_unit_id))
-            return {"items": [root] if root is not None else [], "root_id": int(scope_unit_id)}
+            root = find_node(items, str(scope_unit_id))
+            return {
+                "version": 1,
+                "total": total,
+                "inactive_ids": inactive_ids,
+                "items": [root] if root is not None else [],
+                "root_id": int(scope_unit_id),
+            }
 
-        return {"items": forest, "root_id": None}
+        return {
+            "version": 1,
+            "total": total,
+            "inactive_ids": inactive_ids,
+            "items": items,
+            "root_id": None,
+        }
 
     except HTTPException:
         raise
@@ -179,6 +193,7 @@ def departments_tree(
 @router.get("/org-units")
 def list_org_units_flat(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
     """
     Flat list of org units within RBAC scope (for admin tools / debugging).
@@ -186,9 +201,9 @@ def list_org_units_flat(
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
-        scope = _compute_scope(uid, user_ctx)
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
 
-        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"])
+        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive)
         return {
             "items": [
                 {
@@ -208,12 +223,13 @@ def list_org_units_flat(
         raise _as_http500(e)
 
 
-@router.get("/org-units/tree")
-def org_units_tree_alias(
+# Backward-compat alias (if you already used it somewhere)
+@router.get("/departments/tree")
+def departments_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
-    # Alias to keep naming option open without breaking "departments" API.
-    return departments_tree(x_user_id=x_user_id)
+    return org_units_tree(x_user_id=x_user_id, include_inactive=include_inactive)
 
 
 # ---------------------------
