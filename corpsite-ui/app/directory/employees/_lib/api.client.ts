@@ -1,76 +1,66 @@
+// ROUTE: (library used by /directory/employees/* and /directory/org)
+// FILE: corpsite-ui/app/directory/employees/_lib/api.client.ts
+
 import type {
-  EmployeeDetails,
-  EmployeeListResponse,
-  Department,
-  Position,
+  EmployeesResponse,
+  EmployeeDTO,
+  EmployeesQuery,
+  OrgTreeResponse,
 } from "./types";
-import type { EmployeesFilters } from "./query";
 
-type ApiError = Error & { status?: number; body?: string };
-
-function buildQuery(filters: EmployeesFilters): string {
-  const p = new URLSearchParams();
-  if (filters.q) p.set("q", filters.q);
-  if (filters.department_id) p.set("department_id", String(filters.department_id));
-  if (filters.position_id) p.set("position_id", String(filters.position_id));
-  if (filters.status) p.set("status", filters.status);
-  if (filters.limit != null) p.set("limit", String(filters.limit));
-  if (filters.offset != null) p.set("offset", String(filters.offset));
-  const s = p.toString();
+function toQueryString(params: Record<string, unknown>): string {
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === "") continue;
+    usp.set(k, String(v));
+  }
+  const s = usp.toString();
   return s ? `?${s}` : "";
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "";
+
+// DEV: add X-User-Id header from NEXT_PUBLIC_DEV_X_USER_ID
+const DEV_UID = process.env.NEXT_PUBLIC_DEV_X_USER_ID?.trim() || "";
+
+async function apiGet<T>(path: string): Promise<T> {
+  const url = BASE ? `${BASE}${path}` : path;
+
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (DEV_UID) headers["X-User-Id"] = DEV_UID;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers,
     cache: "no-store",
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    const err: ApiError = Object.assign(new Error(`HTTP ${res.status}`), {
-      status: res.status,
-      body: text,
-    });
-    throw err;
+    throw new Error(`Directory API ${res.status}: ${text || res.statusText}`);
   }
+
   return (await res.json()) as T;
 }
 
-export async function getEmployees(filters: EmployeesFilters): Promise<EmployeeListResponse> {
-  return apiFetch<EmployeeListResponse>(`/directory/employees${buildQuery(filters)}`);
+// ---------------------------
+// Employees
+// ---------------------------
+
+export function getEmployees(query: EmployeesQuery = {}): Promise<EmployeesResponse> {
+  const qs = toQueryString(query as Record<string, unknown>);
+  return apiGet<EmployeesResponse>(`/directory/employees${qs}`);
 }
 
-export async function getEmployee(employee_id: string): Promise<EmployeeDetails> {
-  return apiFetch<EmployeeDetails>(`/directory/employees/${encodeURIComponent(employee_id)}`);
+export function getEmployee(id: string): Promise<EmployeeDTO> {
+  const safe = encodeURIComponent(String(id).trim());
+  return apiGet<EmployeeDTO>(`/directory/employees/${safe}`);
 }
 
-export async function terminateEmployee(employee_id: string, date_to: string): Promise<{ ok: true }> {
-  return apiFetch<{ ok: true }>(`/directory/employees/${encodeURIComponent(employee_id)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ date_to }),
-  });
-}
+// ---------------------------
+// Org tree
+// ---------------------------
 
-export async function getDepartments(): Promise<Department[]> {
-  return apiFetch<Department[]>(`/directory/departments`);
-}
-
-export async function getPositions(): Promise<Position[]> {
-  return apiFetch<Position[]>(`/directory/positions`);
-}
-
-export function mapApiErrorToMessage(e: unknown): string {
-  const err = e as ApiError;
-  const status = err?.status;
-
-  if (status === 409) return "Некорректные данные (конфликт/диапазон дат).";
-  if (status === 403) return "Недостаточно прав для выполнения операции.";
-  if (status === 404) return "Объект не найден (возможно, сотрудник удалён/перемещён).";
-  if (status) return `Ошибка запроса (HTTP ${status}).`;
-  return "Неизвестная ошибка.";
+export function getOrgTree(): Promise<OrgTreeResponse> {
+  return apiGet<OrgTreeResponse>("/directory/org-units/tree");
 }
