@@ -1,5 +1,3 @@
-// corpsite-ui/app/directory/employees/_components/EmployeeDrawer.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -34,23 +32,31 @@ function isActive(d: EmployeeDetails): boolean {
   return (d as any)?.date_to === null;
 }
 
-export default function EmployeeDrawer({
-  employeeId,
-  open,
-  onClose,
-  onTerminate,
-}: Props) {
+export default function EmployeeDrawer({ employeeId, open, onClose, onTerminate }: Props) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<EmployeeDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // При закрытии чистим, чтобы не показывать старые данные при следующем открытии
+    if (!open) {
+      setLoading(false);
+      setError(null);
+      setDetails(null);
+      return;
+    }
+  }, [open]);
 
   useEffect(() => {
     let alive = true;
 
     async function load() {
       if (!open || !employeeId) return;
+
       setLoading(true);
       setError(null);
+      setDetails(null);
+
       try {
         const d = await getEmployee(employeeId);
         if (alive) setDetails(d);
@@ -75,9 +81,7 @@ export default function EmployeeDrawer({
     (details as any)?.fullName ??
     (loading ? "Загрузка…" : "Сотрудник");
 
-  const tabNo = details
-    ? (details as any)?.id ?? (details as any)?.employee_id ?? employeeId
-    : "";
+  const tabNo = details ? (details as any)?.id ?? (details as any)?.employee_id ?? employeeId : "";
 
   const departmentName =
     (details as any)?.department?.name ??
@@ -112,9 +116,7 @@ export default function EmployeeDrawer({
 
         <div className="p-4 space-y-3">
           {error ? (
-            <div className="border rounded p-3 bg-white text-sm text-red-700">
-              {error}
-            </div>
+            <div className="border rounded p-3 bg-white text-sm text-red-700">{error}</div>
           ) : null}
 
           {details ? (

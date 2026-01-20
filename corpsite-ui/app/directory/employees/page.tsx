@@ -1,4 +1,5 @@
-// corpsite-ui/app/directory/employees/page.tsx
+// ROUTE: /directory/employees
+// FILE: corpsite-ui/app/directory/employees/page.tsx
 
 import EmployeesPageClient from "./_components/EmployeesPageClient";
 import { normalizeFilters, type EmployeesFilters } from "./_lib/query";
@@ -48,7 +49,8 @@ export default async function EmployeesPage({
           status: filters.status,
           limit: filters.limit,
           offset: filters.offset,
-          sort: "full_name",
+          // FIX: backend contract uses fio (not full_name)
+          sort: "fio",
           order: "asc",
         }),
       ]);

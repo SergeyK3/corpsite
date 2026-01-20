@@ -6,24 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 
-type Dept = { id: number; name: string };
-type Pos = { id: number; name: string };
+import { getEmployees, getPositions, mapApiErrorToMessage } from "../_lib/api.client";
+import type { EmployeeDTO, Position, Department, EmployeesResponse, EmployeeDetails } from "../_lib/types";
 
-type Employee = {
-  id: string;
-  fio: string;
-  department?: { id: number; name: string } | null;
-  position?: { id: number; name: string } | null;
-  rate?: string | number | null;
-  status?: string | null;
-  date_from?: string | null;
-  date_to?: string | null;
-};
-
-type EmployeesResp = {
-  items: Employee[];
-  total: number;
-};
+type Dept = Department;
+type Pos = Position;
 
 function buildQuery(params: Record<string, string | undefined>): string {
   const q = new URLSearchParams();
@@ -37,7 +24,6 @@ function buildQuery(params: Record<string, string | undefined>): string {
 }
 
 function getDevUserId(): string | null {
-  // DEV only: берём из NEXT_PUBLIC_DEV_X_USER_ID
   const v = process.env.NEXT_PUBLIC_DEV_X_USER_ID;
   return v && String(v).trim() ? String(v).trim() : null;
 }
@@ -46,7 +32,7 @@ export default function EmployeesPageClient() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // текущие фильтры ТОЛЬКО как строки (это важно для Select)
+  // фильтры как строки (важно для select)
   const departmentId = sp.get("department_id") ?? "";
   const positionId = sp.get("position_id") ?? "";
   const status = sp.get("status") ?? "all";
@@ -57,17 +43,18 @@ export default function EmployeesPageClient() {
   const [departments, setDepartments] = React.useState<Dept[]>([]);
   const [positions, setPositions] = React.useState<Pos[]>([]);
 
-  const [data, setData] = React.useState<EmployeesResp>({ items: [], total: 0 });
+  const [data, setData] = React.useState<EmployeesResponse>({ items: [], total: 0 });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | null>(null);
 
   const devUserId = getDevUserId();
 
   const apiBase =
-    (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "") ||
-    "http://127.0.0.1:8000";
+    (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "") || "http://127.0.0.1:8000";
 
-  // Helper: обновление URL (и сброс offset на 0 при смене фильтров)
   function updateUrl(next: Partial<Record<string, string>>) {
     const nextParams = new URLSearchParams(sp.toString());
 
@@ -77,7 +64,7 @@ export default function EmployeesPageClient() {
       else nextParams.set(k, s);
     });
 
-    // при смене фильтров всегда сбрасываем пагинацию
+    // при смене фильтров сбрасываем пагинацию
     nextParams.set("offset", "0");
 
     // limit/status держим стабильными
@@ -87,28 +74,52 @@ export default function EmployeesPageClient() {
     router.replace(`/directory/employees?${nextParams.toString()}`);
   }
 
-  // Загрузка справочников (отделы/должности) один раз
+  function openDrawer(employeeId: string) {
+    setSelectedEmployeeId(employeeId);
+    setDrawerOpen(true);
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    setSelectedEmployeeId(null);
+  }
+
+  function onTerminate(details: EmployeeDetails) {
+    // MVP: только хук под действие. Реальную “деактивацию/увольнение” подключим, когда будет endpoint.
+    // Можно заменить на ваш modal/confirm.
+    // eslint-disable-next-line no-alert
+    alert(`TODO: завершить работу сотрудника: ${(details as any)?.fio ?? details.id}`);
+  }
+
+  // загрузка справочников (отделы/должности) один раз
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadRefs() {
       try {
-        const [dRes, pRes] = await Promise.all([
-          fetch(`${apiBase}/directory/departments`, { cache: "no-store" }),
-          fetch(`${apiBase}/directory/positions?limit=200&offset=0`, {
-            cache: "no-store",
-          }),
-        ]);
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (devUserId) headers["X-User-Id"] = devUserId;
 
-        const dJson = await dRes.json();
-        const pJson = await pRes.json();
+        // departments пока нет в api.client.ts — оставляем прямой fetch
+        const dRes = await fetch(`${apiBase}/directory/departments?limit=500&offset=0`, {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        });
+
+        let dItems: Dept[] = [];
+        if (dRes.ok) {
+          const dJson = await dRes.json().catch(() => null);
+          dItems = Array.isArray(dJson?.items) ? (dJson.items as Dept[]) : [];
+        }
+
+        const pItems = await getPositions().catch(() => [] as Pos[]);
 
         if (cancelled) return;
 
-        setDepartments(Array.isArray(dJson?.items) ? dJson.items : []);
-        setPositions(Array.isArray(pJson?.items) ? pJson.items : []);
+        setDepartments(dItems);
+        setPositions(pItems);
       } catch {
-        // справочники не критичны: UI просто будет без опций
         if (cancelled) return;
         setDepartments([]);
         setPositions([]);
@@ -119,9 +130,9 @@ export default function EmployeesPageClient() {
     return () => {
       cancelled = true;
     };
-  }, [apiBase]);
+  }, [apiBase, devUserId]);
 
-  // Загрузка сотрудников — КЛЮЧЕВО: зависим от ВСЕХ фильтров из URL
+  // загрузка сотрудников — зависит от фильтров
   React.useEffect(() => {
     let cancelled = false;
 
@@ -130,6 +141,8 @@ export default function EmployeesPageClient() {
       setError(null);
 
       try {
+        // Примечание: getEmployees сейчас поддерживает status/limit/offset.
+        // department_id/position_id/q пока используем прямым fetch (так как API клиента не расширяли).
         const qs = buildQuery({
           status,
           department_id: departmentId || undefined,
@@ -139,7 +152,7 @@ export default function EmployeesPageClient() {
           offset,
         });
 
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = { Accept: "application/json" };
         if (devUserId) headers["X-User-Id"] = devUserId;
 
         const res = await fetch(`${apiBase}/directory/employees?${qs}`, {
@@ -153,17 +166,17 @@ export default function EmployeesPageClient() {
           throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
         }
 
-        const json = (await res.json()) as EmployeesResp;
+        const json = (await res.json()) as EmployeesResponse;
+
         if (cancelled) return;
 
         setData({
-          items: Array.isArray(json?.items) ? json.items : [],
+          items: Array.isArray(json?.items) ? (json.items as EmployeeDTO[]) : [],
           total: Number(json?.total ?? 0),
         });
-      } catch (e: any) {
+      } catch (e) {
         if (cancelled) return;
-        setError("Не удалось загрузить список сотрудников.");
-        // важно: при ошибке не оставляем “старые” строки
+        setError(mapApiErrorToMessage(e));
         setData({ items: [], total: 0 });
       } finally {
         if (!cancelled) setLoading(false);
@@ -176,6 +189,9 @@ export default function EmployeesPageClient() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, devUserId, departmentId, positionId, status, qText, limit, offset]);
+
+  // EmployeesTable неизвестного контракта: подключаем selection максимально “мягко”
+  const EmployeesTableAny = EmployeesTable as any;
 
   return (
     <div className="space-y-4">
@@ -201,7 +217,7 @@ export default function EmployeesPageClient() {
               <option value="">Все</option>
               {departments.map((d) => (
                 <option key={d.id} value={String(d.id)}>
-                  {d.name}
+                  {d.name ?? "—"}
                 </option>
               ))}
             </select>
@@ -217,7 +233,7 @@ export default function EmployeesPageClient() {
               <option value="">Все</option>
               {positions.map((p) => (
                 <option key={p.id} value={String(p.id)}>
-                  {p.name}
+                  {p.name ?? "—"}
                 </option>
               ))}
             </select>
@@ -239,18 +255,23 @@ export default function EmployeesPageClient() {
       </div>
 
       {error ? (
-        <div className="bg-white rounded border p-4 text-red-600 text-sm">
-          {error}
-        </div>
+        <div className="bg-white rounded border p-4 text-red-600 text-sm">{error}</div>
       ) : null}
 
-      <EmployeesTable
+      <EmployeesTableAny
         items={data.items}
         total={data.total}
         loading={loading}
+        onRowClick={(row: EmployeeDTO) => openDrawer(row.id)}
+        onSelectEmployeeId={(id: string) => openDrawer(id)}
       />
 
-      <EmployeeDrawer />
+      <EmployeeDrawer
+        employeeId={selectedEmployeeId}
+        open={drawerOpen}
+        onClose={closeDrawer}
+        onTerminate={onTerminate}
+      />
     </div>
   );
 }
