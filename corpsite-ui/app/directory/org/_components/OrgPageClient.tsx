@@ -1,4 +1,3 @@
-// corpsite-ui/app/directory/org/_components/OrgPageClient.tsx
 "use client";
 
 import * as React from "react";
@@ -8,7 +7,11 @@ import type {
   OrgTreeResponse,
   EmployeeDTO,
   EmployeesResponse,
+  EmployeeDetails,
 } from "../../employees/lib/types";
+
+import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
+import { getEmployee } from "../../employees/_lib/api.client";
 
 type UnitPick = {
   unit_id: number;
@@ -138,6 +141,10 @@ export default function OrgPageClient() {
   const [empError, setEmpError] = React.useState<string | null>(null);
   const [empData, setEmpData] = React.useState<EmployeesResponse>({ items: [], total: 0 });
 
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
+
   React.useEffect(() => {
     let cancelled = false;
 
@@ -229,6 +236,23 @@ export default function OrgPageClient() {
     return flatUnits.filter((u) => (u.name || "").toLowerCase().includes(t));
   }, [flatUnits, filterText]);
 
+  function openEmployeeDrawer(employeeId: string) {
+    const id = String(employeeId ?? "").trim();
+    if (!id) return;
+    setDrawerEmployeeId(id);
+    setDrawerOpen(true);
+  }
+
+  function closeEmployeeDrawer() {
+    setDrawerOpen(false);
+  }
+
+  async function onTerminate(details: EmployeeDetails) {
+    // пока без бизнес-логики, просто закрываем
+    // (в дальнейшем подключим реальный terminate flow)
+    setDrawerOpen(false);
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
       <div className="lg:col-span-5">
@@ -319,7 +343,20 @@ export default function OrgPageClient() {
                     </thead>
                     <tbody>
                       {empData.items.map((e: any) => (
-                        <tr key={String(e.id)} className="hover:bg-gray-50">
+                        <tr
+                          key={String(e.id)}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openEmployeeDrawer(String(e.id))}
+                          onKeyDown={(ev) => {
+                            if (ev.key === "Enter" || ev.key === " ") {
+                              ev.preventDefault();
+                              openEmployeeDrawer(String(e.id));
+                            }
+                          }}
+                          title="Открыть карточку сотрудника"
+                        >
                           <td className="p-2 border-b whitespace-nowrap">{String(e.id)}</td>
                           <td className="p-2 border-b">{safeFio(e)}</td>
                           <td className="p-2 border-b">{safeDept(e)}</td>
@@ -344,6 +381,13 @@ export default function OrgPageClient() {
           </div>
         </div>
       </div>
+
+      <EmployeeDrawer
+        employeeId={drawerEmployeeId}
+        open={drawerOpen}
+        onClose={closeEmployeeDrawer}
+        onTerminate={onTerminate}
+      />
     </div>
   );
 }
