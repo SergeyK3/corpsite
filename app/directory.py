@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, Set, List
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 from sqlalchemy import text
@@ -165,30 +165,6 @@ def _load_ancestor_chain_units(
     return out
 
 
-def _status_to_include_inactive(
-    *,
-    status: Optional[str],
-    include_inactive: Optional[bool],
-    default_include_inactive: bool,
-) -> bool:
-    """
-    Backward/forward compatibility:
-    - Prefer `status` (all|active).
-    - Fall back to `include_inactive` if provided.
-    - Else use default.
-    """
-    if status is not None:
-        s = (status or "").strip().lower()
-        if s == "all":
-            return True
-        if s == "active":
-            return False
-        # if invalid, rely on FastAPI pattern validation where used
-    if include_inactive is not None:
-        return bool(include_inactive)
-    return bool(default_include_inactive)
-
-
 # ---------------------------
 # Debug helpers (temporary)
 # ---------------------------
@@ -253,20 +229,11 @@ def debug_rbac(
 @router.get("/org-units/tree")
 def org_units_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
-    status: Optional[str] = Query(default=None, pattern="^(all|active)$"),
-    include_inactive: Optional[bool] = Query(default=None),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
     """
     UI Tree for corpsite-ui TreeView.
-
-    Preferred query param:
-      - status=all|active
-
-    Legacy param (kept for compatibility):
-      - include_inactive=true|false
-
-    Behavior:
-    - privileged/off -> forest of roots (all within requested status)
+    - privileged/off -> forest of roots (all)
     - dept-scoped     -> ancestors chain to root + subtree rooted at user's unit
     - groups-scoped   -> forest limited to assigned units (+ descendants), root_id=null
     """
@@ -274,23 +241,17 @@ def org_units_tree(
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
 
-        include_inactive_eff = _status_to_include_inactive(
-            status=status,
-            include_inactive=include_inactive,
-            default_include_inactive=True,
-        )
-
-        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive_eff)
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         # base: all units within scope
-        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive_eff)
+        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive)
 
         # dept-mode: add ancestors chain (context) to allow UI to show root -> ... -> scope
         top_id: Optional[int] = None
         if scope_unit_id is not None:
-            chain = _load_ancestor_chain_units(leaf_unit_id=int(scope_unit_id), include_inactive=include_inactive_eff)
+            chain = _load_ancestor_chain_units(leaf_unit_id=int(scope_unit_id), include_inactive=include_inactive)
 
             merged: Dict[int, OrgUnit] = {u.unit_id: u for u in units}
             for u in chain:
@@ -352,48 +313,28 @@ def org_units_tree(
 @router.get("/org-units")
 def list_org_units_flat(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
-    status: Optional[str] = Query(default=None, pattern="^(all|active)$"),
-    include_inactive: Optional[bool] = Query(default=None),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
     """
-    Flat list of org units within RBAC scope (read-only).
-
-    Preferred query param:
-      - status=all|active
-
-    Legacy param (kept for compatibility):
-      - include_inactive=true|false
+    Flat list of org units within RBAC scope (for admin tools / debugging).
     """
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
 
-        include_inactive_eff = _status_to_include_inactive(
-            status=status,
-            include_inactive=include_inactive,
-            default_include_inactive=True,
-        )
-
-        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive_eff)
-        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive_eff)
-
-        # Contract for checks:
-        # - keep "unit_id/parent_unit_id" as canonical keys
-        # - keep "id/parent_id" as compatibility aliases if UI/debug already uses them
+        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive)
         return {
             "items": [
                 {
-                    "unit_id": u.unit_id,
-                    "parent_unit_id": u.parent_unit_id,
+                    "id": u.unit_id,
+                    "parent_id": u.parent_unit_id,
                     "name": u.name,
                     "code": u.code,
                     "is_active": u.is_active,
-                    "id": u.unit_id,
-                    "parent_id": u.parent_unit_id,
                 }
                 for u in units
-            ],
-            "total": len(units),
+            ]
         }
 
     except HTTPException:
@@ -406,16 +347,45 @@ def list_org_units_flat(
 @router.get("/departments/tree")
 def departments_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
-    status: Optional[str] = Query(default=None, pattern="^(all|active)$"),
-    include_inactive: Optional[bool] = Query(default=None),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
-    include_inactive_eff = _status_to_include_inactive(
-        status=status,
-        include_inactive=include_inactive,
-        default_include_inactive=True,
-    )
-    return org_units_tree(x_user_id=x_user_id, status=status, include_inactive=include_inactive_eff)
+    return org_units_tree(x_user_id=x_user_id, include_inactive=include_inactive)
 
+# ---------------------------
+# Org units (B3.1 Rename)
+# ---------------------------
+@router.patch("/org-units/{unit_id}")
+def rename_org_unit(
+    unit_id: int = Path(..., ge=1),
+    payload: Dict[str, Any] = None,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    try:
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+
+        # write-операции — только privileged
+        if not _is_privileged(user_ctx):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        if not payload or "name" not in payload:
+            raise HTTPException(status_code=400, detail="Missing field: name")
+
+        _org_units.rename_org_unit(
+            unit_id=int(unit_id),
+            new_name=str(payload.get("name")),
+        )
+
+        return {"ok": True}
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except LookupError as le:
+        raise HTTPException(status_code=404, detail=str(le))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _as_http500(e)
 
 # ---------------------------
 # Dictionaries endpoints

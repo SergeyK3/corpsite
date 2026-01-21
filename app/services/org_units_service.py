@@ -454,3 +454,35 @@ class OrgUnitsService:
             sort_rec(r)
 
         return roots, inactive_ids, len(units)
+    
+    # ---------------------------
+    # B3.1 Rename (write)
+    # ---------------------------
+    def rename_org_unit(
+        self,
+        *,
+        unit_id: int,
+        new_name: str,
+    ) -> None:
+        name = (new_name or "").strip()
+        if not name:
+            raise ValueError("name must not be empty")
+
+        sql = text(
+            f"""
+            UPDATE {self._schema}.{self._org_units_table}
+            SET name = :name
+            WHERE unit_id = :unit_id
+            """
+        )
+
+        with self._engine.begin() as c:
+            res = c.execute(
+                sql,
+                {
+                    "unit_id": int(unit_id),
+                    "name": name,
+                },
+            )
+            if res.rowcount == 0:
+                raise LookupError(f"org unit not found: unit_id={unit_id}")

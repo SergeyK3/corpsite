@@ -3,8 +3,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import OrgUnitsTree, { type TreeNode } from "./_components/OrgUnitsTree";
-import { getOrgUnitsTree, mapApiErrorToMessage } from "./_lib/api.client";
+import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
+import { getOrgUnitsTree, mapApiErrorToMessage, renameOrgUnit } from "./_lib/api.client";
+
 
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
@@ -45,6 +46,11 @@ export default function OrgUnitsPage() {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string>("");
+
+  // B3.1 Rename UI
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
 
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
@@ -110,6 +116,37 @@ export default function OrgUnitsPage() {
   const children = selectedNode?.children ?? [];
   const isInactive = selectedId ? inactiveSet.has(String(selectedId)) : false;
 
+  const openRename = useCallback(
+    (id: string) => {
+      const n = findNodeById(nodes, id);
+      if (!n) return;
+      setSelectedId(String(id));
+      setRenameValue(n.title || "");
+      setRenameOpen(true);
+    },
+    [nodes]
+  );
+
+  const submitRename = useCallback(async () => {
+    if (!selectedNode) return;
+    const nextName = renameValue.trim();
+    if (!nextName) return;
+
+    setRenameBusy(true);
+    setErrorText("");
+
+    try {
+      await renameOrgUnit({ unit_id: String(selectedNode.id), name: nextName });
+      setRenameOpen(false);
+      setRenameValue("");
+      await loadTree();
+    } catch (e) {
+      setErrorText(mapApiErrorToMessage(e));
+    } finally {
+      setRenameBusy(false);
+    }
+  }, [loadTree, renameValue, selectedNode]);
+
   return (
     <div className="h-[calc(100vh-64px)] w-full p-4">
       <div className="flex h-full w-full gap-4">
@@ -130,7 +167,7 @@ export default function OrgUnitsPage() {
 
           {errorText ? (
             <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              <div className="font-medium">Ошибка загрузки дерева</div>
+              <div className="font-medium">Ошибка</div>
               <div className="mt-1 whitespace-pre-wrap">{errorText}</div>
             </div>
           ) : null}
@@ -146,12 +183,12 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              // B1/B2: read-only
-              can={{ add: false, rename: false, move: false, deactivate: false }}
+              // B3.1: только rename, остальное read-only
+              can={{ add: false, rename: true, move: false, deactivate: false }}
               onSelect={handleSelect}
               onToggle={handleToggle}
-              onAction={() => {
-                /* read-only */
+              onAction={(id: string, action: TreeAction) => {
+                if (action === "rename") openRename(String(id));
               }}
               onSearch={setSearchQuery}
               onResetExpand={handleResetExpand}
@@ -168,23 +205,26 @@ export default function OrgUnitsPage() {
               {selectedNode ? (
                 <div className="mt-2">
                   <div className="text-xl font-medium leading-tight">{selectedNode.title}</div>
-                  <div className="mt-1 text-sm text-gray-500">{isInactive ? "Статус: неактивно" : "Статус: активно"}</div>
+                  <div className="mt-1 text-sm text-gray-500">
+                    {isInactive ? "Статус: неактивно" : "Статус: активно"}
+                  </div>
                 </div>
               ) : (
                 <div className="mt-2 text-sm text-gray-500">Выберите подразделение в дереве слева.</div>
               )}
             </div>
 
-            {/* B1/B2: read-only — кнопки действий отключены */}
             {selectedNode ? (
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
-                  disabled
+                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => openRename(String(selectedNode.id))}
+                  disabled={renameBusy}
                 >
                   Переименовать
                 </button>
+
                 <button
                   type="button"
                   className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
@@ -192,6 +232,7 @@ export default function OrgUnitsPage() {
                 >
                   Переместить
                 </button>
+
                 <button
                   type="button"
                   className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
@@ -199,6 +240,8 @@ export default function OrgUnitsPage() {
                 >
                   Добавить секцию
                 </button>
+
+                
               </div>
             ) : null}
           </div>
@@ -248,7 +291,9 @@ export default function OrgUnitsPage() {
                 <div className="text-sm font-medium">Дочерние подразделения</div>
 
                 {children.length === 0 ? (
-                  <div className="mt-2 rounded-xl border px-4 py-3 text-sm text-gray-600">Нет дочерних подразделений.</div>
+                  <div className="mt-2 rounded-xl border px-4 py-3 text-sm text-gray-600">
+                    Нет дочерних подразделений.
+                  </div>
                 ) : (
                   <div className="mt-2 overflow-hidden rounded-xl border">
                     <div className="grid grid-cols-12 border-b bg-gray-50 px-4 py-2 text-xs text-gray-600">
@@ -260,7 +305,9 @@ export default function OrgUnitsPage() {
                     <div className="divide-y">
                       {children
                         .slice()
-                        .sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" }))
+                        .sort((a, b) =>
+                          (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" })
+                        )
                         .map((ch) => {
                           const chInactive = inactiveSet.has(String(ch.id));
                           return (
@@ -273,9 +320,13 @@ export default function OrgUnitsPage() {
                             >
                               <div className="col-span-2 text-gray-500">{ch.id}</div>
                               <div className="col-span-8 truncate">
-                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>{ch.title}</span>
+                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>
+                                  {ch.title}
+                                </span>
                               </div>
-                              <div className="col-span-2 text-right text-gray-500">{chInactive ? "неактивно" : "активно"}</div>
+                              <div className="col-span-2 text-right text-gray-500">
+                                {chInactive ? "неактивно" : "активно"}
+                              </div>
                             </button>
                           );
                         })}
@@ -287,6 +338,42 @@ export default function OrgUnitsPage() {
           ) : null}
         </div>
       </div>
+
+      {/* Rename modal */}
+      {renameOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-[520px] rounded-2xl border bg-white p-4 shadow-lg">
+            <div className="text-sm font-medium">Переименовать подразделение</div>
+
+            <input
+              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              disabled={renameBusy}
+              autoFocus
+            />
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={() => setRenameOpen(false)}
+                disabled={renameBusy}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => void submitRename()}
+                disabled={renameBusy || !renameValue.trim()}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -65,9 +65,6 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
 /**
  * UI-дерево оргструктуры
  * Backend: GET /directory/org-units/tree
- *
- * Предпочтительно: status=all|active
- * (include_inactive оставлен для совместимости)
  */
 export async function getOrgUnitsTree(args?: {
   status?: "all" | "active";
@@ -75,9 +72,40 @@ export async function getOrgUnitsTree(args?: {
 }): Promise<OrgUnitsTreeResponse> {
   const qs = buildQuery({
     status: args?.status ?? "all",
-    // legacy param (backend принимает и его тоже)
     include_inactive: args?.include_inactive,
   });
-
   return apiGetJson<OrgUnitsTreeResponse>("/directory/org-units/tree", qs);
+}
+
+async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
+  const apiBase = getApiBase();
+  const devUserId = getDevUserId();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (devUserId) headers["X-User-Id"] = devUserId;
+
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+/**
+ * Rename org unit
+ * Backend: PATCH /directory/org-units/{unit_id}
+ */
+export async function renameOrgUnit(args: { unit_id: string | number; name: string }): Promise<{ ok: true }> {
+  return apiPatchJson<{ ok: true }>(`/directory/org-units/${args.unit_id}`, { name: args.name });
 }
