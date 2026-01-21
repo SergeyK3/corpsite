@@ -49,7 +49,7 @@ class OrgUnitsService:
             """
         )
         with self._engine.begin() as c:
-            row = c.execute(sql, {"uid": user_id}).mappings().first()
+            row = c.execute(sql, {"uid": int(user_id)}).mappings().first()
 
         if not row:
             return None, None, False
@@ -195,25 +195,25 @@ class OrgUnitsService:
         privileged_users = self._parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
         privileged_roles = self._parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
 
-        unit_id, role_id, is_active = self.get_user_unit_and_role(user_id)
+        unit_id, role_id, is_active = self.get_user_unit_and_role(int(user_id))
 
         if not is_active:
             raise PermissionError(f"user_id={user_id} inactive or not found")
 
-        if user_id in privileged_users:
+        if int(user_id) in privileged_users:
             return None
 
-        if role_id is not None and role_id in privileged_roles:
+        if role_id is not None and int(role_id) in privileged_roles:
             return None
 
         if mode == "dept":
-            return self._fallback_dept_scope_or_raise(user_id=user_id, unit_id=unit_id, include_inactive=include_inactive)
+            return self._fallback_dept_scope_or_raise(user_id=int(user_id), unit_id=unit_id, include_inactive=include_inactive)
 
         # mode == "groups"
-        assigned = self.list_group_unit_ids_for_deputy(user_id, include_inactive=include_inactive)
+        assigned = self.list_group_unit_ids_for_deputy(int(user_id), include_inactive=include_inactive)
         if not assigned:
             # MVP fallback: allow dept-scope if deputy is not configured in groups tables yet
-            return self._fallback_dept_scope_or_raise(user_id=user_id, unit_id=unit_id, include_inactive=include_inactive)
+            return self._fallback_dept_scope_or_raise(user_id=int(user_id), unit_id=unit_id, include_inactive=include_inactive)
 
         return self.get_scope_unit_ids_many(assigned, include_inactive=include_inactive)
 
@@ -228,7 +228,7 @@ class OrgUnitsService:
         """
         Flat list of org units.
         If scope_unit_ids provided -> restrict to these unit_ids.
-        include_inactive=True -> includes inactive units
+        include_inactive=True -> includes inactive units.
         """
         where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
 
@@ -275,12 +275,66 @@ class OrgUnitsService:
         return out
 
     # ---------------------------
-    # Tree builders
+    # Convenience: scoped reads for endpoints
     # ---------------------------
+    def list_org_units_for_user(
+        self,
+        *,
+        user_id: int,
+        include_inactive: bool,
+    ) -> List[OrgUnit]:
+        """
+        Read-only helper for endpoints:
+        - applies RBAC scope if enabled (dept/groups)
+        - returns flat list of OrgUnit rows
+        """
+        scope = self.compute_user_scope_unit_ids(int(user_id), include_inactive=include_inactive)
+        scope_ids = None if scope is None else sorted(scope)
+        return self.list_org_units(scope_unit_ids=scope_ids, include_inactive=include_inactive)
+
+    def get_org_units_tree_for_user(
+        self,
+        *,
+        user_id: int,
+        include_inactive: bool,
+    ) -> List[Dict[str, Any]]:
+        units = self.list_org_units_for_user(user_id=int(user_id), include_inactive=include_inactive)
+        return self.build_tree(units)
+
+    def get_org_units_ui_tree_for_user(
+        self,
+        *,
+        user_id: int,
+        include_inactive: bool,
+    ) -> Tuple[List[Dict[str, Any]], List[str], int]:
+        units = self.list_org_units_for_user(user_id=int(user_id), include_inactive=include_inactive)
+        return self.build_ui_tree(units)
+
+    # ---------------------------
+    # Tree builders (cycle/orphan safe)
+    # ---------------------------
+    @staticmethod
+    def _creates_cycle(child_id: int, parent_id: int, parent_map: Dict[int, Optional[int]]) -> bool:
+        """
+        Detects whether linking child -> parent would create a cycle.
+        Walk up from parent_id to roots; if we meet child_id => cycle.
+        """
+        cur = parent_id
+        seen: Set[int] = set()
+        while cur is not None:
+            if cur == child_id:
+                return True
+            if cur in seen:
+                # defensive: existing cycle already present upstream
+                return True
+            seen.add(cur)
+            cur = parent_map.get(cur)
+        return False
+
     @staticmethod
     def build_tree(units: List[OrgUnit]) -> List[Dict[str, Any]]:
         """
-        Legacy tree schema:
+        Legacy tree schema (kept stable for callers):
           {
             "unit_id": int,
             "parent_unit_id": Optional[int],
@@ -289,9 +343,16 @@ class OrgUnitsService:
             "is_active": bool,
             "children": [...]
           }
+
+        Safety:
+          - Orphans (parent not found) become roots.
+          - Cycles are broken: the offending node becomes a root (no infinite recursion).
         """
         nodes: Dict[int, Dict[str, Any]] = {}
+        parent_map: Dict[int, Optional[int]] = {}
+
         for u in units:
+            parent_map[u.unit_id] = u.parent_unit_id
             nodes[u.unit_id] = {
                 "unit_id": u.unit_id,
                 "parent_unit_id": u.parent_unit_id,
@@ -302,19 +363,30 @@ class OrgUnitsService:
             }
 
         roots: List[Dict[str, Any]] = []
-        for node in nodes.values():
+        for uid, node in nodes.items():
             pid = node["parent_unit_id"]
-            if pid is not None and pid in nodes:
-                nodes[pid]["children"].append(node)
-            else:
+            if pid is None:
                 roots.append(node)
+                continue
+
+            if pid not in nodes:
+                # orphan -> root
+                roots.append(node)
+                continue
+
+            # cycle check
+            if OrgUnitsService._creates_cycle(int(uid), int(pid), parent_map):
+                roots.append(node)
+                continue
+
+            nodes[int(pid)]["children"].append(node)
 
         def sort_rec(n: Dict[str, Any]) -> None:
-            n["children"].sort(key=lambda x: (x.get("name") or "", x["unit_id"]))
+            n["children"].sort(key=lambda x: ((x.get("name") or "").lower(), int(x["unit_id"])))
             for ch in n["children"]:
                 sort_rec(ch)
 
-        roots.sort(key=lambda x: (x.get("name") or "", x["unit_id"]))
+        roots.sort(key=lambda x: ((x.get("name") or "").lower(), int(x["unit_id"])))
         for r in roots:
             sort_rec(r)
 
@@ -332,11 +404,18 @@ class OrgUnitsService:
             "children": [...]
           }
         Returns: (items, inactive_ids, total)
+
+        Safety:
+          - Orphans become roots.
+          - Cycles are broken: offending node becomes a root (no infinite recursion).
         """
         inactive_ids: List[str] = [str(u.unit_id) for u in units if not u.is_active]
 
         nodes: Dict[int, Dict[str, Any]] = {}
+        parent_map: Dict[int, Optional[int]] = {}
+
         for u in units:
+            parent_map[u.unit_id] = u.parent_unit_id
             nodes[u.unit_id] = {
                 "id": str(u.unit_id),
                 "title": u.name,
@@ -347,19 +426,30 @@ class OrgUnitsService:
 
         roots: List[Dict[str, Any]] = []
         for u in units:
-            node = nodes[u.unit_id]
+            uid = int(u.unit_id)
             pid = u.parent_unit_id
-            if pid is not None and pid in nodes:
-                nodes[pid]["children"].append(node)
-            else:
+            node = nodes[uid]
+
+            if pid is None:
                 roots.append(node)
+                continue
+
+            if int(pid) not in nodes:
+                roots.append(node)
+                continue
+
+            if OrgUnitsService._creates_cycle(uid, int(pid), parent_map):
+                roots.append(node)
+                continue
+
+            nodes[int(pid)]["children"].append(node)
 
         def sort_rec(n: Dict[str, Any]) -> None:
-            n["children"].sort(key=lambda x: (x.get("title") or "", x.get("id") or ""))
+            n["children"].sort(key=lambda x: ((x.get("title") or "").lower(), str(x.get("id") or "")))
             for ch in n["children"]:
                 sort_rec(ch)
 
-        roots.sort(key=lambda x: (x.get("title") or "", x.get("id") or ""))
+        roots.sort(key=lambda x: ((x.get("title") or "").lower(), str(x.get("id") or "")))
         for r in roots:
             sort_rec(r)
 

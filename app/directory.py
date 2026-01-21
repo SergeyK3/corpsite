@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, Dict, Optional, Set, List
+from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
+from sqlalchemy import text
 
 from app.db.engine import engine
 from app.security.directory_scope import (
@@ -18,7 +19,7 @@ from app.security.directory_scope import (
     is_privileged as _is_privileged,
     require_dept_scope as _require_dept_scope,
 )
-from app.services.org_units_service import OrgUnitsService
+from app.services.org_units_service import OrgUnitsService, OrgUnit
 from app.services.directory_service import (
     list_departments as svc_list_departments,
     list_positions as svc_list_positions,
@@ -105,6 +106,89 @@ def _compute_scope(
     }
 
 
+def _load_ancestor_chain_units(
+    *,
+    leaf_unit_id: int,
+    include_inactive: bool,
+) -> List[OrgUnit]:
+    """
+    Load ancestors chain (leaf -> ... -> root) including the leaf itself.
+    Returns list of OrgUnit (any order; caller can decide).
+    Only ancestors path, no siblings.
+    """
+    active_where = "" if include_inactive else "AND COALESCE(ou.is_active, true) = true"
+
+    sql = text(
+        f"""
+        WITH RECURSIVE up AS (
+            SELECT
+                ou.unit_id,
+                ou.parent_unit_id,
+                ou.name,
+                ou.code,
+                COALESCE(ou.is_active, true) AS is_active
+            FROM public.org_units ou
+            WHERE ou.unit_id = :leaf_unit_id
+            {active_where}
+
+            UNION ALL
+
+            SELECT
+                p.unit_id,
+                p.parent_unit_id,
+                p.name,
+                p.code,
+                COALESCE(p.is_active, true) AS is_active
+            FROM public.org_units p
+            JOIN up ON up.parent_unit_id = p.unit_id
+            {active_where}
+        )
+        SELECT unit_id, parent_unit_id, name, code, is_active
+        FROM up
+        """
+    )
+
+    with engine.begin() as c:
+        rows = c.execute(sql, {"leaf_unit_id": int(leaf_unit_id)}).mappings().all()
+
+    out: List[OrgUnit] = []
+    for r in rows:
+        out.append(
+            OrgUnit(
+                unit_id=int(r["unit_id"]),
+                parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+                name=str(r["name"]) if r["name"] is not None else "",
+                code=str(r["code"]) if r["code"] is not None else None,
+                is_active=bool(r["is_active"]),
+            )
+        )
+    return out
+
+
+def _status_to_include_inactive(
+    *,
+    status: Optional[str],
+    include_inactive: Optional[bool],
+    default_include_inactive: bool,
+) -> bool:
+    """
+    Backward/forward compatibility:
+    - Prefer `status` (all|active).
+    - Fall back to `include_inactive` if provided.
+    - Else use default.
+    """
+    if status is not None:
+        s = (status or "").strip().lower()
+        if s == "all":
+            return True
+        if s == "active":
+            return False
+        # if invalid, rely on FastAPI pattern validation where used
+    if include_inactive is not None:
+        return bool(include_inactive)
+    return bool(default_include_inactive)
+
+
 # ---------------------------
 # Debug helpers (temporary)
 # ---------------------------
@@ -169,42 +253,84 @@ def debug_rbac(
 @router.get("/org-units/tree")
 def org_units_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
-    include_inactive: bool = Query(default=True),
+    status: Optional[str] = Query(default=None, pattern="^(all|active)$"),
+    include_inactive: Optional[bool] = Query(default=None),
 ) -> Dict[str, Any]:
     """
     UI Tree for corpsite-ui TreeView.
-    - privileged/off -> forest of roots (all)
-    - dept-scoped     -> subtree rooted at user's unit (root_id=user.unit_id)
+
+    Preferred query param:
+      - status=all|active
+
+    Legacy param (kept for compatibility):
+      - include_inactive=true|false
+
+    Behavior:
+    - privileged/off -> forest of roots (all within requested status)
+    - dept-scoped     -> ancestors chain to root + subtree rooted at user's unit
     - groups-scoped   -> forest limited to assigned units (+ descendants), root_id=null
     """
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
 
-        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
+        include_inactive_eff = _status_to_include_inactive(
+            status=status,
+            include_inactive=include_inactive,
+            default_include_inactive=True,
+        )
+
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive_eff)
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
-        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive)
+        # base: all units within scope
+        units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive_eff)
+
+        # dept-mode: add ancestors chain (context) to allow UI to show root -> ... -> scope
+        top_id: Optional[int] = None
+        if scope_unit_id is not None:
+            chain = _load_ancestor_chain_units(leaf_unit_id=int(scope_unit_id), include_inactive=include_inactive_eff)
+
+            merged: Dict[int, OrgUnit] = {u.unit_id: u for u in units}
+            for u in chain:
+                merged.setdefault(u.unit_id, u)
+
+            units = list(merged.values())
+
+            # define TRUE top ancestor id (root of this chain): parent_unit_id IS NULL
+            root_candidates = [u for u in chain if u.parent_unit_id is None]
+            if root_candidates:
+                top_id = int(root_candidates[0].unit_id)
+            else:
+                # fallback: если цепочка оборвана/данные кривые — используем сам leaf
+                top_id = int(scope_unit_id)
+
         items, inactive_ids, total = _org_units.build_ui_tree(units)
 
-        # dept-mode: subtree rooted at scope_unit_id
-        if scope_unit_id is not None:
-            def find_node(nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
-                for n in nodes:
-                    if str(n.get("id")) == target_id:
-                        return n
-                    got = find_node(n.get("children") or [], target_id)
-                    if got is not None:
-                        return got
-                return None
+        def find_node(nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
+            for n in nodes:
+                if str(n.get("id")) == target_id:
+                    return n
+                got = find_node(n.get("children") or [], target_id)
+                if got is not None:
+                    return got
+            return None
 
-            root = find_node(items, str(scope_unit_id))
+        # dept-mode: return single tree rooted at top ancestor (context)
+        if scope_unit_id is not None:
+            root_node: Optional[Dict[str, Any]] = None
+            if top_id is not None:
+                root_node = find_node(items, str(top_id))
+            # fallback: if for some reason top not found -> fallback to scope root
+            if root_node is None:
+                root_node = find_node(items, str(scope_unit_id))
+
             return {
                 "version": 1,
                 "total": total,
                 "inactive_ids": inactive_ids,
-                "items": [root] if root is not None else [],
+                "items": [root_node] if root_node is not None else [],
                 "root_id": int(scope_unit_id),
             }
 
@@ -226,28 +352,48 @@ def org_units_tree(
 @router.get("/org-units")
 def list_org_units_flat(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
-    include_inactive: bool = Query(default=True),
+    status: Optional[str] = Query(default=None, pattern="^(all|active)$"),
+    include_inactive: Optional[bool] = Query(default=None),
 ) -> Dict[str, Any]:
     """
-    Flat list of org units within RBAC scope (for admin tools / debugging).
+    Flat list of org units within RBAC scope (read-only).
+
+    Preferred query param:
+      - status=all|active
+
+    Legacy param (kept for compatibility):
+      - include_inactive=true|false
     """
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
-        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
 
-        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive)
+        include_inactive_eff = _status_to_include_inactive(
+            status=status,
+            include_inactive=include_inactive,
+            default_include_inactive=True,
+        )
+
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive_eff)
+        units = _org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive_eff)
+
+        # Contract for checks:
+        # - keep "unit_id/parent_unit_id" as canonical keys
+        # - keep "id/parent_id" as compatibility aliases if UI/debug already uses them
         return {
             "items": [
                 {
-                    "id": u.unit_id,
-                    "parent_id": u.parent_unit_id,
+                    "unit_id": u.unit_id,
+                    "parent_unit_id": u.parent_unit_id,
                     "name": u.name,
                     "code": u.code,
                     "is_active": u.is_active,
+                    "id": u.unit_id,
+                    "parent_id": u.parent_unit_id,
                 }
                 for u in units
-            ]
+            ],
+            "total": len(units),
         }
 
     except HTTPException:
@@ -260,9 +406,15 @@ def list_org_units_flat(
 @router.get("/departments/tree")
 def departments_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
-    include_inactive: bool = Query(default=True),
+    status: Optional[str] = Query(default=None, pattern="^(all|active)$"),
+    include_inactive: Optional[bool] = Query(default=None),
 ) -> Dict[str, Any]:
-    return org_units_tree(x_user_id=x_user_id, include_inactive=include_inactive)
+    include_inactive_eff = _status_to_include_inactive(
+        status=status,
+        include_inactive=include_inactive,
+        default_include_inactive=True,
+    )
+    return org_units_tree(x_user_id=x_user_id, status=status, include_inactive=include_inactive_eff)
 
 
 # ---------------------------
