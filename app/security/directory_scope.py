@@ -1,3 +1,5 @@
+# app/security/directory_scope.py
+
 from __future__ import annotations
 
 import os
@@ -48,6 +50,20 @@ def privileged_role_ids() -> Set[int]:
     return _parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
 
 
+def deputy_user_ids() -> Set[int]:
+    # New: DIRECTORY_DEPUTY_USER_IDS
+    # Backward-compat (если захотите): DIRECTORY_DEPUTY_IDS
+    s = set()
+    s |= _parse_int_set_env("DIRECTORY_DEPUTY_USER_IDS")
+    s |= _parse_int_set_env("DIRECTORY_DEPUTY_IDS")
+    return s
+
+
+def deputy_role_ids() -> Set[int]:
+    # New: DIRECTORY_DEPUTY_ROLE_IDS
+    return _parse_int_set_env("DIRECTORY_DEPUTY_ROLE_IDS")
+
+
 # ---------------------------
 # Requester context (RBAC)
 # ---------------------------
@@ -92,10 +108,55 @@ def is_privileged(user_ctx: Dict[str, Any]) -> bool:
     return False
 
 
+def is_deputy(user_ctx: Dict[str, Any]) -> bool:
+    """
+    'Зам' определяется через env:
+      - DIRECTORY_DEPUTY_USER_IDS
+      - DIRECTORY_DEPUTY_ROLE_IDS
+    """
+    uid = int(user_ctx["user_id"])
+    rid = int(user_ctx["role_id"]) if user_ctx.get("role_id") is not None else -1
+    if uid in deputy_user_ids():
+        return True
+    if rid in deputy_role_ids():
+        return True
+    return False
+
+
+def _resolve_parent_unit_id(unit_id: int) -> Optional[int]:
+    """
+    Возвращает parent_unit_id для org_units.unit_id.
+    Если не найдено или parent_unit_id NULL -> None.
+    """
+    q = text(
+        """
+        SELECT parent_unit_id
+        FROM public.org_units
+        WHERE unit_id = :uid
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(q, {"uid": int(unit_id)}).mappings().first()
+    if not row:
+        return None
+    parent_id = row.get("parent_unit_id")
+    if parent_id is None:
+        return None
+    try:
+        return int(parent_id)
+    except Exception:
+        return None
+
+
 def require_dept_scope(user_ctx: Dict[str, Any]) -> int:
     """
     For RBAC_MODE=dept: non-privileged users must have unit_id.
-    unit_id is treated as scope root (org_units tree).
+
+    Effective scope rule:
+      - privileged        -> scope is handled outside (no restriction)
+      - deputy (зам)      -> scope = parent(unit_id) if exists else unit_id
+      - regular user      -> scope = unit_id
     """
     unit_id = user_ctx.get("unit_id")
     if unit_id is None:
@@ -104,12 +165,19 @@ def require_dept_scope(user_ctx: Dict[str, Any]) -> int:
             detail="directory: cannot determine department scope for user (unit_id is null).",
         )
     try:
-        return int(unit_id)
+        own_unit_id = int(unit_id)
     except Exception:
         raise HTTPException(
             status_code=403,
             detail="directory: invalid unit_id for department scope.",
         )
+
+    # "Зам" видит уровень выше (если есть parent_unit_id)
+    if is_deputy(user_ctx):
+        parent_unit_id = _resolve_parent_unit_id(own_unit_id)
+        return parent_unit_id if parent_unit_id is not None else own_unit_id
+
+    return own_unit_id
 
 
 # ---------------------------

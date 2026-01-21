@@ -65,27 +65,38 @@ def _compute_scope(
     """
     Returns dict with:
       - privileged: bool
-      - scope_unit_id: Optional[int]  (backward-compatible root unit for older services)
-      - scope_unit_ids: Optional[List[int]] (preferred: root + descendants)
+      - scope_unit_id: Optional[int]  (used only for dept-mode subtree root)
+      - scope_unit_ids: Optional[List[int]] (preferred: set of allowed unit_ids)
     """
     privileged = _is_privileged(user_ctx)
 
-    # Default: no scope
     scope_unit_id: Optional[int] = None
     scope_unit_ids: Optional[List[int]] = None
 
-    if _rbac_mode() == "dept" and not privileged:
-        # Keep old behavior as fallback (root unit_id)
+    mode = _rbac_mode()
+
+    # dept-mode: keep old behavior (root = user's unit_id) + descendants
+    if mode == "dept" and not privileged:
         scope_unit_id = _require_dept_scope(user_ctx)
 
-        # Preferred: full scope (root + descendants)
         try:
-            s: Optional[Set[int]] = _org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
+            s = _org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
         except PermissionError as pe:
             raise HTTPException(status_code=403, detail=str(pe))
 
         if s is not None:
             scope_unit_ids = sorted(list(s))
+
+    # groups-mode: no single root, scope = union assigned units (+ descendants)
+    if mode == "groups" and not privileged:
+        try:
+            s = _org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
+        except PermissionError as pe:
+            raise HTTPException(status_code=403, detail=str(pe))
+
+        if s is not None:
+            scope_unit_ids = sorted(list(s))
+        scope_unit_id = None
 
     return {
         "privileged": bool(privileged),
@@ -100,11 +111,28 @@ def _compute_scope(
 @router.get("/_debug/rbac")
 def debug_rbac(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    include_inactive: bool = Query(default=True),
 ) -> Dict[str, Any]:
     uid = _require_user_id(x_user_id)
     user_ctx = _load_user_ctx(uid)
 
-    scope = _compute_scope(uid, user_ctx)
+    try:
+        scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
+        scope_err: Optional[str] = None
+    except HTTPException as he:
+        scope = {
+            "privileged": bool(_is_privileged(user_ctx)),
+            "scope_unit_id": None,
+            "scope_unit_ids": None,
+        }
+        scope_err = str(he.detail)
+
+    # best-effort: show direct assignments for groups mode
+    assigned_units: List[int] = []
+    try:
+        assigned_units = _org_units.list_group_unit_ids_for_deputy(uid, include_inactive=include_inactive)
+    except Exception:
+        assigned_units = []
 
     return {
         "rbac_mode": _rbac_mode(),
@@ -127,13 +155,16 @@ def debug_rbac(
         "computed": {
             "is_privileged": bool(scope["privileged"]),
             "scope_unit_id": scope["scope_unit_id"],
-            "scope_unit_ids": scope["scope_unit_ids"],
+            "scope_unit_ids_count": len(scope["scope_unit_ids"] or []),
+            "scope_unit_ids_preview": (scope["scope_unit_ids"] or [])[:20],
+            "assigned_units_direct": assigned_units,
+            "error": scope_err,
         },
     }
 
 
 # ---------------------------
-# Org structure (B1): UI tree + flat org units
+# Org structure (B1+B2): UI tree + flat org units
 # ---------------------------
 @router.get("/org-units/tree")
 def org_units_tree(
@@ -142,8 +173,9 @@ def org_units_tree(
 ) -> Dict[str, Any]:
     """
     UI Tree for corpsite-ui TreeView.
-    - privileged/off -> forest of roots
-    - dept-scoped user -> subtree rooted at user's unit (single root), if found
+    - privileged/off -> forest of roots (all)
+    - dept-scoped     -> subtree rooted at user's unit (root_id=user.unit_id)
+    - groups-scoped   -> forest limited to assigned units (+ descendants), root_id=null
     """
     try:
         uid = _require_user_id(x_user_id)
@@ -156,7 +188,7 @@ def org_units_tree(
         units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive)
         items, inactive_ids, total = _org_units.build_ui_tree(units)
 
-        # If user is dept-scoped -> return subtree rooted at scope_unit_id (if present)
+        # dept-mode: subtree rooted at scope_unit_id
         if scope_unit_id is not None:
             def find_node(nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
                 for n in nodes:
@@ -176,6 +208,7 @@ def org_units_tree(
                 "root_id": int(scope_unit_id),
             }
 
+        # groups/off/privileged: forest
         return {
             "version": 1,
             "total": total,
@@ -223,7 +256,7 @@ def list_org_units_flat(
         raise _as_http500(e)
 
 
-# Backward-compat alias (if you already used it somewhere)
+# Backward-compat alias
 @router.get("/departments/tree")
 def departments_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
@@ -247,10 +280,7 @@ def list_departments(
 
         scope = _compute_scope(uid, user_ctx)
 
-        # Backward compatible (old services):
         dept_scope_id: Optional[int] = scope["scope_unit_id"]
-
-        # Preferred (newer services may support):
         dept_scope_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         return _call_service(
@@ -306,10 +336,7 @@ def list_employees(
 
         scope = _compute_scope(uid, user_ctx)
 
-        # Backward-compatible:
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
-
-        # Preferred:
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         return _call_service(
@@ -345,10 +372,7 @@ def get_employee(
 
         scope = _compute_scope(uid, user_ctx)
 
-        # Backward-compatible:
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
-
-        # Preferred:
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
         return _call_service(
