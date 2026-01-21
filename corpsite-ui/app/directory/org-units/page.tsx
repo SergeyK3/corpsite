@@ -1,30 +1,12 @@
-// corpsite-ui/app/org-units/page.tsx
+// FILE: corpsite-ui/app/org-units/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import OrgUnitsTree, {
-  type TreeNode,
-  type TreeAction,
-} from "./_components/OrgUnitsTree";
+import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
 
-type OrgUnitsTreeResponse = {
-  version: number;
-  total: number;
-  inactive_ids: string[];
-  items: TreeNode[];
-  root_id?: number | null;
-};
-
-function _apiBase(): string {
-  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
-  return v || "http://127.0.0.1:8000";
-}
-
-function _devUserId(): string {
-  const v = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
-  return v || "34";
-}
+// ВАЖНО: используем уже существующий клиент (который вы показали)
+import { getOrgUnitsTree, mapApiErrorToMessage } from "../directory/org-units/_lib/api.client";
 
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
@@ -57,9 +39,6 @@ function findParentId(nodes: TreeNode[], id: string): string | null {
 }
 
 export default function OrgUnitsPage() {
-  const apiBase = useMemo(() => _apiBase(), []);
-  const devUserId = useMemo(() => _devUserId(), []);
-
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [inactiveIds, setInactiveIds] = useState<string[]>([]);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
@@ -76,19 +55,7 @@ export default function OrgUnitsPage() {
     setErrorText("");
 
     try {
-      const url = `${apiBase}/directory/org-units/tree?include_inactive=true`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { "X-User-Id": devUserId },
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
-      }
-
-      const data = (await res.json()) as OrgUnitsTreeResponse;
+      const data = await getOrgUnitsTree({ include_inactive: true });
 
       setNodes(Array.isArray(data.items) ? data.items : []);
       setInactiveIds(Array.isArray(data.inactive_ids) ? data.inactive_ids : []);
@@ -96,14 +63,14 @@ export default function OrgUnitsPage() {
       if (data.root_id != null) {
         setExpandedIds([String(data.root_id)]);
       }
-    } catch (e: any) {
-      setErrorText(e?.message ? String(e.message) : "Failed to load org units tree.");
+    } catch (e) {
+      setErrorText(mapApiErrorToMessage(e));
       setNodes([]);
       setInactiveIds([]);
     } finally {
       setIsLoading(false);
     }
-  }, [apiBase, devUserId]);
+  }, []);
 
   useEffect(() => {
     void loadTree();
@@ -189,12 +156,7 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              can={{
-                add: true,
-                rename: true,
-                move: true,
-                deactivate: true,
-              }}
+              can={{ add: true, rename: true, move: true, deactivate: true }}
               onSelect={handleSelect}
               onToggle={handleToggle}
               onAction={handleAction}
@@ -218,9 +180,7 @@ export default function OrgUnitsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-gray-500">
-                  Выберите подразделение в дереве слева.
-                </div>
+                <div className="mt-2 text-sm text-gray-500">Выберите подразделение в дереве слева.</div>
               )}
             </div>
 
@@ -264,7 +224,6 @@ export default function OrgUnitsPage() {
                   <div className="mt-1 text-sm font-medium">{selectedNode.type}</div>
                 </div>
 
-                {/* PARENT (clickable) */}
                 <div className="rounded-xl border p-4 md:col-span-2">
                   <div className="text-xs text-gray-500">Родитель</div>
 
@@ -279,14 +238,11 @@ export default function OrgUnitsPage() {
                       title="Перейти к родительскому подразделению"
                     >
                       <span className="block truncate">
-                        {parentNode.title}{" "}
-                        <span className="text-gray-400">({parentNode.id})</span>
+                        {parentNode.title} <span className="text-gray-400">({parentNode.id})</span>
                       </span>
                     </button>
                   ) : (
-                    <div className="mt-1 text-sm font-medium text-gray-500">
-                      Нет (корневой узел)
-                    </div>
+                    <div className="mt-1 text-sm font-medium text-gray-500">Нет (корневой узел)</div>
                   )}
                 </div>
 
@@ -314,9 +270,7 @@ export default function OrgUnitsPage() {
                     <div className="divide-y">
                       {children
                         .slice()
-                        .sort((a, b) =>
-                          (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" })
-                        )
+                        .sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" }))
                         .map((ch) => {
                           const chInactive = inactiveSet.has(String(ch.id));
                           return (
@@ -329,9 +283,7 @@ export default function OrgUnitsPage() {
                             >
                               <div className="col-span-2 text-gray-500">{ch.id}</div>
                               <div className="col-span-8 truncate">
-                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>
-                                  {ch.title}
-                                </span>
+                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>{ch.title}</span>
                               </div>
                               <div className="col-span-2 text-right text-gray-500">
                                 {chInactive ? "неактивно" : "активно"}
@@ -347,8 +299,8 @@ export default function OrgUnitsPage() {
               <div className="mt-6">
                 <div className="text-sm font-medium">Дальнейшие шаги</div>
                 <div className="mt-2 rounded-xl border bg-white p-4 text-sm text-gray-600">
-                  В этом блоке на B2/B3 подключим: переименование/перемещение/деактивацию,
-                  а также отображение сотрудников подразделения и назначение “кураторов” (3 зама).
+                  В этом блоке на B2/B3 подключим: переименование/перемещение/деактивацию, а также отображение
+                  сотрудников подразделения и назначение “кураторов” (3 зама).
                 </div>
               </div>
             </>
