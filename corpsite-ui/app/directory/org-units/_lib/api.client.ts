@@ -25,6 +25,7 @@ function buildQuery(params: Record<string, string | number | boolean | null | un
 
 /**
  * Единая мапа ошибок fetch/HTTP → человеко-читаемый текст для UI.
+ * Важно: backend возвращает detail как строку или объект; мы вытаскиваем detail когда можем.
  */
 export function mapApiErrorToMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
@@ -37,6 +38,27 @@ export function mapApiErrorToMessage(e: unknown): string {
   if (status === 404) return "Не найдено (404).";
   if (status && status >= 500) return "Ошибка сервера. Попробуйте позже.";
   return msg || "Ошибка запроса.";
+}
+
+async function readErrorText(res: Response): Promise<string> {
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  try {
+    if (ct.includes("application/json")) {
+      const j: any = await res.json();
+      const detail = j?.detail ?? j?.message ?? j?.error;
+      if (typeof detail === "string" && detail.trim()) return detail.trim();
+      if (detail != null) return JSON.stringify(detail);
+      return JSON.stringify(j);
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const t = await res.text();
+    return (t || "").trim();
+  } catch {
+    return "";
+  }
 }
 
 async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
@@ -55,26 +77,11 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
   });
 
   if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+    const detail = await readErrorText(res);
+    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
   }
 
   return (await res.json()) as T;
-}
-
-/**
- * UI-дерево оргструктуры
- * Backend: GET /directory/org-units/tree
- */
-export async function getOrgUnitsTree(args?: {
-  status?: "all" | "active";
-  include_inactive?: boolean; // legacy
-}): Promise<OrgUnitsTreeResponse> {
-  const qs = buildQuery({
-    status: args?.status ?? "all",
-    include_inactive: args?.include_inactive,
-  });
-  return apiGetJson<OrgUnitsTreeResponse>("/directory/org-units/tree", qs);
 }
 
 async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
@@ -95,17 +102,57 @@ async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
   });
 
   if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+    const detail = await readErrorText(res);
+    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
   }
 
   return (await res.json()) as T;
 }
 
 /**
- * Rename org unit
- * Backend: PATCH /directory/org-units/{unit_id}
+ * UI-дерево оргструктуры
+ * Backend: GET /directory/org-units/tree
+ *
+ * Важно: НЕ передаем одновременно status и include_inactive, чтобы избежать
+ * неоднозначности (status у вас уже маппится в include_inactive на backend).
  */
-export async function renameOrgUnit(args: { unit_id: string | number; name: string }): Promise<{ ok: true }> {
-  return apiPatchJson<{ ok: true }>(`/directory/org-units/${args.unit_id}`, { name: args.name });
+export async function getOrgUnitsTree(args?: {
+  status?: "all" | "active";
+  include_inactive?: boolean; // legacy
+}): Promise<OrgUnitsTreeResponse> {
+  const hasLegacy = args?.include_inactive !== undefined && args?.include_inactive !== null;
+
+  const qs = buildQuery(
+    hasLegacy
+      ? { include_inactive: args?.include_inactive }
+      : { status: args?.status ?? "all" }
+  );
+
+  return apiGetJson<OrgUnitsTreeResponse>("/directory/org-units/tree", qs);
+}
+
+/**
+ * Rename org unit
+ * Backend:
+ * - основной: PATCH /directory/org-units/{unit_id}/rename  (новый)
+ * - совместимость: PATCH /directory/org-units/{unit_id}   (старый)
+ *
+ * Мы бьём в /rename (предпочтительно), а при 404 — падаем назад на legacy endpoint.
+ */
+export async function renameOrgUnit(args: {
+  unit_id: string | number;
+  name: string;
+}): Promise<{ ok: true }> {
+  const id = String(args.unit_id);
+  const payload = { name: args.name };
+
+  try {
+    return await apiPatchJson<{ ok: true }>(`/directory/org-units/${id}/rename`, payload);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e ?? "");
+    if (/\bHTTP\s+404\b/i.test(msg)) {
+      return apiPatchJson<{ ok: true }>(`/directory/org-units/${id}`, payload);
+    }
+    throw e;
+  }
 }

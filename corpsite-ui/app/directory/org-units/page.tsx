@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
 import { getOrgUnitsTree, mapApiErrorToMessage, renameOrgUnit } from "./_lib/api.client";
 
-
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
   const stack: TreeNode[] = [...nodes];
@@ -62,10 +61,13 @@ export default function OrgUnitsPage() {
       const data = await getOrgUnitsTree({ status: "all" });
 
       setNodes(Array.isArray(data.items) ? data.items : []);
-      setInactiveIds(Array.isArray((data as any).inactive_ids) ? (data as any).inactive_ids : []);
+      // types.ts уже описывает inactive_ids, поэтому каст к any не нужен
+      setInactiveIds(Array.isArray(data.inactive_ids) ? data.inactive_ids : []);
 
-      if ((data as any).root_id != null) {
-        setExpandedIds([String((data as any).root_id)]);
+      // Важно: не затирать раскрытие пользователя при каждом refresh.
+      // Раскроем root_id только при первом заходе/когда раскрытия еще нет.
+      if (data.root_id != null) {
+        setExpandedIds((prev) => (prev.length ? prev : [String(data.root_id)]));
       }
     } catch (e) {
       setErrorText(mapApiErrorToMessage(e));
@@ -116,6 +118,13 @@ export default function OrgUnitsPage() {
   const children = selectedNode?.children ?? [];
   const isInactive = selectedId ? inactiveSet.has(String(selectedId)) : false;
 
+  // Если после обновления данных выбранный узел исчез (например, права/фильтр/удаление) — сбросим selection.
+  useEffect(() => {
+    if (!selectedId) return;
+    const exists = findNodeById(nodes, selectedId);
+    if (!exists) setSelectedId(null);
+  }, [nodes, selectedId]);
+
   const openRename = useCallback(
     (id: string) => {
       const n = findNodeById(nodes, id);
@@ -123,36 +132,74 @@ export default function OrgUnitsPage() {
       setSelectedId(String(id));
       setRenameValue(n.title || "");
       setRenameOpen(true);
+      setErrorText("");
     },
     [nodes]
   );
 
+  const closeRename = useCallback(() => {
+    if (renameBusy) return;
+    setRenameOpen(false);
+    setRenameValue("");
+  }, [renameBusy]);
+
   const submitRename = useCallback(async () => {
     if (!selectedNode) return;
+
     const nextName = renameValue.trim();
     if (!nextName) return;
+
+    // UX: если имя не изменилось — просто закрыть окно
+    if ((selectedNode.title || "").trim() === nextName) {
+      closeRename();
+      return;
+    }
 
     setRenameBusy(true);
     setErrorText("");
 
     try {
       await renameOrgUnit({ unit_id: String(selectedNode.id), name: nextName });
-      setRenameOpen(false);
-      setRenameValue("");
+      closeRename();
       await loadTree();
     } catch (e) {
       setErrorText(mapApiErrorToMessage(e));
     } finally {
       setRenameBusy(false);
     }
-  }, [loadTree, renameValue, selectedNode]);
+  }, [closeRename, loadTree, renameValue, selectedNode]);
+
+  // Enter/Escape в модалке
+  useEffect(() => {
+    if (!renameOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeRename();
+      }
+      if (e.key === "Enter") {
+        // чтобы Enter в инпуте работал как "Сохранить"
+        e.preventDefault();
+        void submitRename();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [renameOpen, closeRename, submitRename]);
 
   return (
     <div className="h-[calc(100vh-64px)] w-full p-4">
       <div className="flex h-full w-full gap-4">
         {/* LEFT */}
         <div className="flex w-[420px] shrink-0 flex-col">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="rounded-lg border border-white/30
+            px-3 py-1 text-xs
+            text-white
+            hover:bg-white hover:text-black
+            transition-colors
+            disabled:opacity-50">
             <div className="text-sm font-medium">Оргструктура</div>
             <button
               type="button"
@@ -240,8 +287,6 @@ export default function OrgUnitsPage() {
                 >
                   Добавить секцию
                 </button>
-
-                
               </div>
             ) : null}
           </div>
@@ -305,9 +350,7 @@ export default function OrgUnitsPage() {
                     <div className="divide-y">
                       {children
                         .slice()
-                        .sort((a, b) =>
-                          (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" })
-                        )
+                        .sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" }))
                         .map((ch) => {
                           const chInactive = inactiveSet.has(String(ch.id));
                           return (
@@ -320,9 +363,7 @@ export default function OrgUnitsPage() {
                             >
                               <div className="col-span-2 text-gray-500">{ch.id}</div>
                               <div className="col-span-8 truncate">
-                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>
-                                  {ch.title}
-                                </span>
+                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>{ch.title}</span>
                               </div>
                               <div className="col-span-2 text-right text-gray-500">
                                 {chInactive ? "неактивно" : "активно"}
@@ -341,7 +382,13 @@ export default function OrgUnitsPage() {
 
       {/* Rename modal */}
       {renameOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onMouseDown={(e) => {
+            // клик по подложке закрывает окно (но не во время сохранения)
+            if (e.target === e.currentTarget) closeRename();
+          }}
+        >
           <div className="w-full max-w-[520px] rounded-2xl border bg-white p-4 shadow-lg">
             <div className="text-sm font-medium">Переименовать подразделение</div>
 
@@ -357,7 +404,7 @@ export default function OrgUnitsPage() {
               <button
                 type="button"
                 className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                onClick={() => setRenameOpen(false)}
+                onClick={closeRename}
                 disabled={renameBusy}
               >
                 Отмена

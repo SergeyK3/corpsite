@@ -1,7 +1,7 @@
-// corpsite-ui/app/org-units/_components/OrgUnitsTree.tsx
+// FILE: corpsite-ui/app/directory/org-units/_components/OrgUnitsTree.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type OrgUnitNodeType = "org" | "dept" | "unit";
 
@@ -57,20 +57,24 @@ function buildIndex(nodes: TreeNode[]): FlatIndex {
 
   const walk = (arr: TreeNode[], parentId: string | null) => {
     for (const n of arr) {
-      byId.set(n.id, n);
-      parentById.set(n.id, parentId);
-      if (parentId == null) rootIds.push(n.id);
+      const id = String(n.id);
+      byId.set(id, { ...n, id });
+      parentById.set(id, parentId);
+      if (parentId == null) rootIds.push(id);
 
-      const childIds = (n.children ?? []).map((c) => c.id);
-      childrenById.set(n.id, childIds);
+      const childIds = (n.children ?? []).map((c) => String(c.id));
+      childrenById.set(id, childIds);
 
       if (n.children && n.children.length > 0) {
-        walk(n.children, n.id);
+        walk(
+          n.children.map((c) => ({ ...c, id: String(c.id) })),
+          id
+        );
       }
     }
   };
 
-  walk(nodes, null);
+  walk(nodes.map((n) => ({ ...n, id: String(n.id) })), null);
   return { byId, parentById, childrenById, rootIds };
 }
 
@@ -225,7 +229,8 @@ function filterTreeForSearch(opts: {
   showInactive: boolean;
 }): { nodes: TreeNode[]; matchIds: Set<string> } {
   const { nodes, q, inactiveSet, showInactive } = opts;
-  const query = q.trim();
+  const query = (q || "").trim();
+
   if (!query) {
     // Только режим скрытия inactive
     if (showInactive) return { nodes, matchIds: new Set() };
@@ -234,10 +239,13 @@ function filterTreeForSearch(opts: {
       const out: TreeNode[] = [];
       for (const n of arr) {
         const ch = pruneInactive(n.children ?? []);
-        const isInactive = inactiveSet.has(n.id);
+        const id = String(n.id);
+        const isInactive = inactiveSet.has(id);
+
         // Если узел inactive, но имеет детей (активных) — сохраняем как контейнер, иначе скрываем.
         if (isInactive && ch.length === 0) continue;
-        out.push({ ...n, children: ch.length ? ch : [] });
+
+        out.push({ ...n, id, children: ch.length ? ch : [] });
       }
       return out;
     };
@@ -255,8 +263,10 @@ function filterTreeForSearch(opts: {
   const matchIds = new Set<string>();
 
   const prune = (n: TreeNode): TreeNode | null => {
-    const titleMatch = qRe.test(n.title);
-    if (titleMatch) matchIds.add(n.id);
+    const id = String(n.id);
+    const title = n.title || "";
+    const titleMatch = qRe.test(title);
+    if (titleMatch) matchIds.add(id);
 
     const childOut: TreeNode[] = [];
     for (const c of n.children ?? []) {
@@ -267,17 +277,16 @@ function filterTreeForSearch(opts: {
     const keep = titleMatch || childOut.length > 0;
     if (!keep) return null;
 
-    const isInactive = inactiveSet.has(n.id);
+    const isInactive = inactiveSet.has(id);
     if (!showInactive) {
-      // inactive скрываем, но если он нужен как путь к найденным детям — оставляем
-      // (иначе пользователь теряет контекст).
+      // inactive скрываем, но если он нужен как путь к найденным детям — оставляем (контекст)
       if (isInactive && childOut.length === 0 && titleMatch) {
         // матч на inactive листе — в режиме hide inactive скрываем
         return null;
       }
     }
 
-    return { ...n, children: childOut };
+    return { ...n, id, children: childOut };
   };
 
   const out: TreeNode[] = [];
@@ -306,8 +315,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     headerTitle = "Структура",
   } = props;
 
-  const inactiveSet = useMemo(() => new Set(inactiveIds), [inactiveIds]);
-  const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds]);
+  const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
   // Скрывать inactive по умолчанию (тонкая UX-правка: убирает “мусор” сверху).
   const [showInactive, setShowInactive] = useState<boolean>(false);
@@ -332,6 +340,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   // При включении поиска — фиксируем snapshot и раскрываем пути (по полному дереву).
   useEffect(() => {
     const q = (searchQuery || "").trim();
+
     if (!q) {
       if (expandedSnapshotRef.current) {
         const snap = expandedSnapshotRef.current;
@@ -364,17 +373,18 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
     const needOpen = new Set<string>();
     for (const [id, node] of fullIdx.byId.entries()) {
-      if (qRe.test(node.title)) {
+      if (qRe.test(node.title || "")) {
         const path = pathToRoot(fullIdx.parentById, id);
         for (let i = 1; i < path.length; i++) needOpen.add(path[i]);
       }
     }
 
+    // useEffect не должен полагаться на "замкнутый" expandedSet — сравниваем с актуальными expandedIds.
+    const expandedNow = new Set(expandedIds);
     for (const id of needOpen) {
-      if (!expandedSet.has(id)) onToggle(id, true);
+      if (!expandedNow.has(id)) onToggle(id, true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, fullIdx.byId, fullIdx.parentById]);
+  }, [searchQuery, fullIdx.byId, fullIdx.parentById, expandedIds, onToggle]);
 
   // При поиске — автоматически прокручивать к первому совпадению в текущем представлении.
   useEffect(() => {
@@ -397,7 +407,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
     if (!firstMatchId) return;
 
-    // даём React отрендерить
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(firstMatchId!)}"]`);
       if (el) el.scrollIntoView({ block: "center" });
@@ -407,6 +416,11 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   }, [searchQuery, viewIdx.rootIds, viewIdx.childrenById, matchIds]);
 
   const [menu, setMenu] = useState<{ nodeId: string; rect: DOMRect } | null>(null);
+
+  // Автозакрытие меню при смене selection/поиска/скрытия inactive
+  useEffect(() => {
+    setMenu(null);
+  }, [selectedId, searchQuery, showInactive]);
 
   const q = (searchQuery || "").trim();
   const highlightRe = useMemo(() => {
@@ -418,49 +432,57 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     }
   }, [q]);
 
-  const renderTitle = (title: string) => {
-    if (!highlightRe) return <span>{title}</span>;
+  const renderTitle = useCallback(
+    (title: string) => {
+      if (!highlightRe) return <span>{title}</span>;
 
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    const s = title;
+      const parts: React.ReactNode[] = [];
+      let lastIndex = 0;
+      const s = title || "";
 
-    for (const m of s.matchAll(highlightRe)) {
-      const start = m.index ?? 0;
-      const end = start + m[0].length;
+      for (const m of s.matchAll(highlightRe)) {
+        const start = m.index ?? 0;
+        const end = start + m[0].length;
 
-      if (start > lastIndex) {
-        parts.push(<span key={`t-${lastIndex}`}>{s.slice(lastIndex, start)}</span>);
+        if (start > lastIndex) {
+          parts.push(<span key={`t-${lastIndex}`}>{s.slice(lastIndex, start)}</span>);
+        }
+        parts.push(
+          <mark key={`m-${start}`} className="rounded bg-yellow-200 px-1">
+            {s.slice(start, end)}
+          </mark>
+        );
+        lastIndex = end;
       }
-      parts.push(
-        <mark key={`m-${start}`} className="rounded px-1 bg-yellow-200">
-          {s.slice(start, end)}
-        </mark>
-      );
-      lastIndex = end;
-    }
 
-    if (lastIndex < s.length) {
-      parts.push(<span key={`t-${lastIndex}`}>{s.slice(lastIndex)}</span>);
-    }
+      if (lastIndex < s.length) {
+        parts.push(<span key={`t-${lastIndex}`}>{s.slice(lastIndex)}</span>);
+      }
 
-    return <span>{parts}</span>;
-  };
+      return <span>{parts}</span>;
+    },
+    [highlightRe]
+  );
 
-  const sortChildren = (ids: string[]) => {
-    const enriched = ids
-      .map((id) => ({ id, node: viewIdx.byId.get(id) }))
-      .filter((x): x is { id: string; node: TreeNode } => !!x.node);
+  const sortChildren = useCallback(
+    (ids: string[]) => {
+      const enriched = ids
+        .map((id) => ({ id, node: viewIdx.byId.get(id) }))
+        .filter((x): x is { id: string; node: TreeNode } => !!x.node);
 
-    enriched.sort((a, b) => {
-      const aInactive = inactiveSet.has(a.id);
-      const bInactive = inactiveSet.has(b.id);
-      if (aInactive !== bInactive) return aInactive ? 1 : -1; // active first
-      return (a.node.title || "").localeCompare(b.node.title || "", "ru", { sensitivity: "base" });
-    });
+      enriched.sort((a, b) => {
+        const aInactive = inactiveSet.has(a.id);
+        const bInactive = inactiveSet.has(b.id);
+        if (aInactive !== bInactive) return aInactive ? 1 : -1; // active first
+        return (a.node.title || "").localeCompare(b.node.title || "", "ru", { sensitivity: "base" });
+      });
 
-    return enriched.map((x) => x.id);
-  };
+      return enriched.map((x) => x.id);
+    },
+    [inactiveSet, viewIdx.byId]
+  );
+
+  const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds]);
 
   const Row = ({ nodeId, depth }: { nodeId: string; depth: number }) => {
     const node = viewIdx.byId.get(nodeId);
@@ -490,8 +512,13 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
           onClick={() => onSelect(nodeId)}
           onKeyDown={(e) => {
             if (e.key === "Enter") onSelect(nodeId);
+
+            // UX: если узел без детей — стрелки не должны “делать вид” что можно раскрыть
             if (e.key === "ArrowRight" && hasChildren && !isOpen) onToggle(nodeId, true);
             if (e.key === "ArrowLeft" && hasChildren && isOpen) onToggle(nodeId, false);
+
+            // UX: ESC закрывает контекстное меню, если открыто
+            if (e.key === "Escape" && menu) setMenu(null);
           }}
           className={[
             "group flex items-center rounded-lg px-2 py-1.5 text-sm",
@@ -541,11 +568,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
         <div className="text-sm font-medium">{headerTitle}</div>
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onClickReset}
-            className="rounded-lg border px-2.5 py-1.5 text-sm hover:bg-gray-50"
-          >
+          <button type="button" onClick={onClickReset} className="rounded-lg border px-2.5 py-1.5 text-sm hover:bg-gray-50">
             Свернуть всё
           </button>
         </div>
@@ -557,7 +580,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Поиск по структуре"
-            className="w-full rounded-xl border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 bg-white outline-none focus:ring-2 focus:ring-offset-2"
+            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-offset-2"
           />
 
           {searchQuery ? (
@@ -574,7 +597,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
         </div>
 
         <div className="mt-2 flex items-center justify-between">
-          <label className="inline-flex items-center gap-2 text-xs text-gray-700 select-none">
+          <label className="inline-flex select-none items-center gap-2 text-xs text-gray-700">
             <input
               type="checkbox"
               checked={showInactive}
@@ -584,11 +607,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             Показывать неактивные
           </label>
 
-          {searchQuery ? (
-            <div className="text-xs text-gray-500">
-              Найдено: {matchIds.size}
-            </div>
-          ) : null}
+          {searchQuery ? <div className="text-xs text-gray-500">Найдено: {matchIds.size}</div> : null}
         </div>
 
         <div role="tree" className="mt-3 space-y-1">
