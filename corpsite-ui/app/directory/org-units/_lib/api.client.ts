@@ -12,7 +12,7 @@ function getDevUserId(): string | null {
   return v ? v : null;
 }
 
-function buildQuery(params: Record<string, string | number | null | undefined>): string {
+function buildQuery(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
     if (v === undefined || v === null) return;
@@ -65,12 +65,19 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
 /**
  * UI-дерево оргструктуры
  * Backend: GET /directory/org-units/tree
+ *
+ * Предпочтительно: status=all|active
+ * (include_inactive оставлен для совместимости)
  */
 export async function getOrgUnitsTree(args?: {
-  include_inactive?: boolean;
+  status?: "all" | "active";
+  include_inactive?: boolean; // legacy
 }): Promise<OrgUnitsTreeResponse> {
   const qs = buildQuery({
-    include_inactive: args?.include_inactive ?? true,
+    status: args?.status ?? "all",
+    // legacy param (backend принимает и его тоже)
+    include_inactive: args?.include_inactive,
   });
+
   return apiGetJson<OrgUnitsTreeResponse>("/directory/org-units/tree", qs);
 }

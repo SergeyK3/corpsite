@@ -1,12 +1,10 @@
-// FILE: corpsite-ui/app/org-units/page.tsx
+// FILE: corpsite-ui/app/directory/org-units/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
-
-// ВАЖНО: используем уже существующий клиент (который вы показали)
-import { getOrgUnitsTree, mapApiErrorToMessage } from "../directory/org-units/_lib/api.client";
+import OrgUnitsTree, { type TreeNode } from "./_components/OrgUnitsTree";
+import { getOrgUnitsTree, mapApiErrorToMessage } from "./_lib/api.client";
 
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
@@ -55,13 +53,13 @@ export default function OrgUnitsPage() {
     setErrorText("");
 
     try {
-      const data = await getOrgUnitsTree({ include_inactive: true });
+      const data = await getOrgUnitsTree({ status: "all" });
 
       setNodes(Array.isArray(data.items) ? data.items : []);
-      setInactiveIds(Array.isArray(data.inactive_ids) ? data.inactive_ids : []);
+      setInactiveIds(Array.isArray((data as any).inactive_ids) ? (data as any).inactive_ids : []);
 
-      if (data.root_id != null) {
-        setExpandedIds([String(data.root_id)]);
+      if ((data as any).root_id != null) {
+        setExpandedIds([String((data as any).root_id)]);
       }
     } catch (e) {
       setErrorText(mapApiErrorToMessage(e));
@@ -88,12 +86,6 @@ export default function OrgUnitsPage() {
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-  };
-
-  const handleAction = (id: string, action: TreeAction) => {
-    // v1: только логирование. Далее подключим модалки/CRUD.
-    // eslint-disable-next-line no-console
-    console.log("org-units tree action:", { id, action });
   };
 
   const handleResetExpand = () => {
@@ -144,9 +136,7 @@ export default function OrgUnitsPage() {
           ) : null}
 
           {isLoading ? (
-            <div className="mb-3 rounded-xl border bg-white p-3 text-sm text-gray-600">
-              Загрузка…
-            </div>
+            <div className="mb-3 rounded-xl border bg-white p-3 text-sm text-gray-600">Загрузка…</div>
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-auto">
@@ -156,10 +146,13 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              can={{ add: true, rename: true, move: true, deactivate: true }}
+              // B1/B2: read-only
+              can={{ add: false, rename: false, move: false, deactivate: false }}
               onSelect={handleSelect}
               onToggle={handleToggle}
-              onAction={handleAction}
+              onAction={() => {
+                /* read-only */
+              }}
               onSearch={setSearchQuery}
               onResetExpand={handleResetExpand}
               headerTitle="Подразделения"
@@ -175,35 +168,34 @@ export default function OrgUnitsPage() {
               {selectedNode ? (
                 <div className="mt-2">
                   <div className="text-xl font-medium leading-tight">{selectedNode.title}</div>
-                  <div className="mt-1 text-sm text-gray-500">
-                    {isInactive ? "Статус: неактивно" : "Статус: активно"}
-                  </div>
+                  <div className="mt-1 text-sm text-gray-500">{isInactive ? "Статус: неактивно" : "Статус: активно"}</div>
                 </div>
               ) : (
                 <div className="mt-2 text-sm text-gray-500">Выберите подразделение в дереве слева.</div>
               )}
             </div>
 
+            {/* B1/B2: read-only — кнопки действий отключены */}
             {selectedNode ? (
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-                  onClick={() => handleAction(String(selectedNode.id), "rename")}
+                  className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
+                  disabled
                 >
                   Переименовать
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-                  onClick={() => handleAction(String(selectedNode.id), "move")}
+                  className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
+                  disabled
                 >
                   Переместить
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-                  onClick={() => handleAction(String(selectedNode.id), "add_child")}
+                  className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
+                  disabled
                 >
                   Добавить секцию
                 </button>
@@ -256,9 +248,7 @@ export default function OrgUnitsPage() {
                 <div className="text-sm font-medium">Дочерние подразделения</div>
 
                 {children.length === 0 ? (
-                  <div className="mt-2 rounded-xl border px-4 py-3 text-sm text-gray-600">
-                    Нет дочерних подразделений.
-                  </div>
+                  <div className="mt-2 rounded-xl border px-4 py-3 text-sm text-gray-600">Нет дочерних подразделений.</div>
                 ) : (
                   <div className="mt-2 overflow-hidden rounded-xl border">
                     <div className="grid grid-cols-12 border-b bg-gray-50 px-4 py-2 text-xs text-gray-600">
@@ -285,23 +275,13 @@ export default function OrgUnitsPage() {
                               <div className="col-span-8 truncate">
                                 <span className={chInactive ? "text-gray-500" : "text-gray-900"}>{ch.title}</span>
                               </div>
-                              <div className="col-span-2 text-right text-gray-500">
-                                {chInactive ? "неактивно" : "активно"}
-                              </div>
+                              <div className="col-span-2 text-right text-gray-500">{chInactive ? "неактивно" : "активно"}</div>
                             </button>
                           );
                         })}
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div className="mt-6">
-                <div className="text-sm font-medium">Дальнейшие шаги</div>
-                <div className="mt-2 rounded-xl border bg-white p-4 text-sm text-gray-600">
-                  В этом блоке на B2/B3 подключим: переименование/перемещение/деактивацию, а также отображение
-                  сотрудников подразделения и назначение “кураторов” (3 зама).
-                </div>
               </div>
             </>
           ) : null}
