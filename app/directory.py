@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, Dict, Optional, Set, List
+from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -42,14 +43,9 @@ def _as_http500(e: Exception) -> HTTPException:
 
 
 def _call_service(fn, **kwargs):
-    """
-    Safe adapter: passes only supported kwargs to service.
-    This prevents runtime TypeError while service layer is being refactored.
-    """
     sig = inspect.signature(fn)
     params = sig.parameters
 
-    # if service has **kwargs -> pass everything
     for p in params.values():
         if p.kind == inspect.Parameter.VAR_KEYWORD:
             return fn(**kwargs)
@@ -63,12 +59,6 @@ def _compute_scope(
     user_ctx: Dict[str, Any],
     include_inactive: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Returns dict with:
-      - privileged: bool
-      - scope_unit_id: Optional[int]  (used only for dept-mode subtree root)
-      - scope_unit_ids: Optional[List[int]] (preferred: set of allowed unit_ids)
-    """
     privileged = _is_privileged(user_ctx)
 
     scope_unit_id: Optional[int] = None
@@ -76,25 +66,20 @@ def _compute_scope(
 
     mode = _rbac_mode()
 
-    # dept-mode: keep old behavior (root = user's unit_id) + descendants
     if mode == "dept" and not privileged:
         scope_unit_id = _require_dept_scope(user_ctx)
-
         try:
             s = _org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
         except PermissionError as pe:
             raise HTTPException(status_code=403, detail=str(pe))
-
         if s is not None:
             scope_unit_ids = sorted(list(s))
 
-    # groups-mode: no single root, scope = union assigned units (+ descendants)
     if mode == "groups" and not privileged:
         try:
             s = _org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
         except PermissionError as pe:
             raise HTTPException(status_code=403, detail=str(pe))
-
         if s is not None:
             scope_unit_ids = sorted(list(s))
         scope_unit_id = None
@@ -111,11 +96,6 @@ def _load_ancestor_chain_units(
     leaf_unit_id: int,
     include_inactive: bool,
 ) -> List[OrgUnit]:
-    """
-    Load ancestors chain (leaf -> ... -> root) including the leaf itself.
-    Returns list of OrgUnit (any order; caller can decide).
-    Only ancestors path, no siblings.
-    """
     active_where = "" if include_inactive else "AND COALESCE(ou.is_active, true) = true"
 
     sql = text(
@@ -187,7 +167,6 @@ def debug_rbac(
         }
         scope_err = str(he.detail)
 
-    # best-effort: show direct assignments for groups mode
     assigned_units: List[int] = []
     try:
         assigned_units = _org_units.list_group_unit_ids_for_deputy(uid, include_inactive=include_inactive)
@@ -230,14 +209,21 @@ def debug_rbac(
 def org_units_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
+    status: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
     """
-    UI Tree for corpsite-ui TreeView.
-    - privileged/off -> forest of roots (all)
-    - dept-scoped     -> ancestors chain to root + subtree rooted at user's unit
-    - groups-scoped   -> forest limited to assigned units (+ descendants), root_id=null
+    GET /directory/org-units/tree
+    - include_inactive: bool (default true)
+    - status: optional legacy alias (active|all) -> include_inactive
     """
     try:
+        if status is not None:
+            s = status.strip().lower()
+            if s == "active":
+                include_inactive = False
+            elif s == "all":
+                include_inactive = True
+
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
 
@@ -245,10 +231,8 @@ def org_units_tree(
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
-        # base: all units within scope
         units = _org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive)
 
-        # dept-mode: add ancestors chain (context) to allow UI to show root -> ... -> scope
         top_id: Optional[int] = None
         if scope_unit_id is not None:
             chain = _load_ancestor_chain_units(leaf_unit_id=int(scope_unit_id), include_inactive=include_inactive)
@@ -256,16 +240,10 @@ def org_units_tree(
             merged: Dict[int, OrgUnit] = {u.unit_id: u for u in units}
             for u in chain:
                 merged.setdefault(u.unit_id, u)
-
             units = list(merged.values())
 
-            # define TRUE top ancestor id (root of this chain): parent_unit_id IS NULL
             root_candidates = [u for u in chain if u.parent_unit_id is None]
-            if root_candidates:
-                top_id = int(root_candidates[0].unit_id)
-            else:
-                # fallback: если цепочка оборвана/данные кривые — используем сам leaf
-                top_id = int(scope_unit_id)
+            top_id = int(root_candidates[0].unit_id) if root_candidates else int(scope_unit_id)
 
         items, inactive_ids, total = _org_units.build_ui_tree(units)
 
@@ -278,12 +256,10 @@ def org_units_tree(
                     return got
             return None
 
-        # dept-mode: return single tree rooted at top ancestor (context)
         if scope_unit_id is not None:
             root_node: Optional[Dict[str, Any]] = None
             if top_id is not None:
                 root_node = find_node(items, str(top_id))
-            # fallback: if for some reason top not found -> fallback to scope root
             if root_node is None:
                 root_node = find_node(items, str(scope_unit_id))
 
@@ -295,7 +271,6 @@ def org_units_tree(
                 "root_id": int(scope_unit_id),
             }
 
-        # groups/off/privileged: forest
         return {
             "version": 1,
             "total": total,
@@ -314,11 +289,21 @@ def org_units_tree(
 def list_org_units_flat(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
+    status: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
     """
-    Flat list of org units within RBAC scope (for admin tools / debugging).
+    GET /directory/org-units
+    - include_inactive: bool (default true)
+    - status: optional legacy alias (active|all) -> include_inactive
     """
     try:
+        if status is not None:
+            s = status.strip().lower()
+            if s == "active":
+                include_inactive = False
+            elif s == "all":
+                include_inactive = True
+
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
         scope = _compute_scope(uid, user_ctx, include_inactive=include_inactive)
@@ -351,41 +336,131 @@ def departments_tree(
 ) -> Dict[str, Any]:
     return org_units_tree(x_user_id=x_user_id, include_inactive=include_inactive)
 
+
 # ---------------------------
-# Org units (B3.1 Rename)
+# Org units mutations (B3.x)
 # ---------------------------
-@router.patch("/org-units/{unit_id}")
-def rename_org_unit(
+class OrgUnitRenameIn(BaseModel):
+    name: str
+
+
+class OrgUnitMoveIn(BaseModel):
+    parent_unit_id: Optional[int] = None
+
+
+def _require_unit_in_scope_or_403(
+    *,
+    scope_unit_ids: Optional[List[int]],
+    unit_id: int,
+    parent_unit_id: Optional[int],
+) -> None:
+    if scope_unit_ids is None:
+        return
+    s = set(int(x) for x in scope_unit_ids)
+    if int(unit_id) not in s:
+        raise HTTPException(status_code=403, detail="Forbidden: unit out of scope")
+    if parent_unit_id is not None and int(parent_unit_id) not in s:
+        raise HTTPException(status_code=403, detail="Forbidden: target parent out of scope")
+
+
+@router.patch("/org-units/{unit_id}/rename")
+async def org_unit_rename(
     unit_id: int = Path(..., ge=1),
-    payload: Dict[str, Any] = None,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    body: OrgUnitRenameIn = None,  # type: ignore[assignment]
 ) -> Dict[str, Any]:
     try:
+        if body is None or not getattr(body, "name", None):
+            raise HTTPException(status_code=400, detail="name is required")
+
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
 
-        # write-операции — только privileged
-        if not _is_privileged(user_ctx):
-            raise HTTPException(status_code=403, detail="Forbidden.")
+        scope = _compute_scope(uid, user_ctx, include_inactive=True)
 
-        if not payload or "name" not in payload:
-            raise HTTPException(status_code=400, detail="Missing field: name")
+        if not scope["privileged"]:
+            _require_unit_in_scope_or_403(
+                scope_unit_ids=scope["scope_unit_ids"],
+                unit_id=int(unit_id),
+                parent_unit_id=None,
+            )
 
-        _org_units.rename_org_unit(
-            unit_id=int(unit_id),
-            new_name=str(payload.get("name")),
-        )
+        u = _org_units.rename_org_unit(unit_id=int(unit_id), new_name=body.name)
+        return {
+            "item": {
+                "id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "is_active": u.is_active,
+            }
+        }
 
-        return {"ok": True}
-
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except LookupError as le:
-        raise HTTPException(status_code=404, detail=str(le))
     except HTTPException:
         raise
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise _as_http500(e)
+
+
+# Backward-compat: PATCH /directory/org-units/{unit_id} with {"name": "..."}
+# (нужно, чтобы старый UI-клиент не ломался)
+@router.patch("/org-units/{unit_id}")
+async def org_unit_patch_compat(
+    unit_id: int = Path(..., ge=1),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    body: OrgUnitRenameIn = None,  # type: ignore[assignment]
+) -> Dict[str, Any]:
+    # Пока поддерживаем только rename (поле name).
+    # Move остаётся отдельным endpoint /move.
+    return await org_unit_rename(unit_id=unit_id, x_user_id=x_user_id, body=body)
+
+
+@router.patch("/org-units/{unit_id}/move")
+async def org_unit_move(
+    unit_id: int = Path(..., ge=1),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    body: OrgUnitMoveIn = None,  # type: ignore[assignment]
+) -> Dict[str, Any]:
+    try:
+        if body is None:
+            raise HTTPException(status_code=400, detail="body is required")
+
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+
+        scope = _compute_scope(uid, user_ctx, include_inactive=True)
+
+        if not scope["privileged"]:
+            _require_unit_in_scope_or_403(
+                scope_unit_ids=scope["scope_unit_ids"],
+                unit_id=int(unit_id),
+                parent_unit_id=body.parent_unit_id,
+            )
+
+        u = _org_units.move_org_unit(unit_id=int(unit_id), parent_unit_id=body.parent_unit_id)
+        return {
+            "item": {
+                "id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "is_active": u.is_active,
+            }
+        }
+
+    except HTTPException:
+        raise
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _as_http500(e)
+
 
 # ---------------------------
 # Dictionaries endpoints

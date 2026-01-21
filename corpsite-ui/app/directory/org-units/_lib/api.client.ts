@@ -122,37 +122,61 @@ export async function getOrgUnitsTree(args?: {
 }): Promise<OrgUnitsTreeResponse> {
   const hasLegacy = args?.include_inactive !== undefined && args?.include_inactive !== null;
 
-  const qs = buildQuery(
-    hasLegacy
-      ? { include_inactive: args?.include_inactive }
-      : { status: args?.status ?? "all" }
-  );
+  const qs = buildQuery(hasLegacy ? { include_inactive: args?.include_inactive } : { status: args?.status ?? "all" });
 
   return apiGetJson<OrgUnitsTreeResponse>("/directory/org-units/tree", qs);
 }
 
 /**
+ * Общий формат item, который возвращает backend для rename/move.
+ * (Сейчас он не совпадает с TreeNode, поэтому UI после операции делает reload tree.)
+ */
+export type OrgUnitMutationItem = {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+};
+
+export type OrgUnitMutationResponse = {
+  item: OrgUnitMutationItem;
+};
+
+/**
  * Rename org unit
  * Backend:
- * - основной: PATCH /directory/org-units/{unit_id}/rename  (новый)
- * - совместимость: PATCH /directory/org-units/{unit_id}   (старый)
- *
- * Мы бьём в /rename (предпочтительно), а при 404 — падаем назад на legacy endpoint.
+ * - основной: PATCH /directory/org-units/{unit_id}/rename
+ * - совместимость: PATCH /directory/org-units/{unit_id}
  */
 export async function renameOrgUnit(args: {
   unit_id: string | number;
   name: string;
-}): Promise<{ ok: true }> {
+}): Promise<OrgUnitMutationResponse> {
   const id = String(args.unit_id);
   const payload = { name: args.name };
 
   try {
-    return await apiPatchJson<{ ok: true }>(`/directory/org-units/${id}/rename`, payload);
+    return await apiPatchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/rename`, payload);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e ?? "");
     if (/\bHTTP\s+404\b/i.test(msg)) {
-      return apiPatchJson<{ ok: true }>(`/directory/org-units/${id}`, payload);
+      return apiPatchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}`, payload);
     }
     throw e;
   }
+}
+
+/**
+ * Move org unit
+ * Backend: PATCH /directory/org-units/{unit_id}/move  body: { parent_unit_id: number | null }
+ */
+export async function moveOrgUnit(args: {
+  unit_id: string | number;
+  parent_unit_id: number | null;
+}): Promise<OrgUnitMutationResponse> {
+  const id = String(args.unit_id);
+  const payload = { parent_unit_id: args.parent_unit_id };
+
+  return apiPatchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/move`, payload);
 }

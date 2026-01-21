@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
-import { getOrgUnitsTree, mapApiErrorToMessage, renameOrgUnit } from "./_lib/api.client";
+import { getOrgUnitsTree, mapApiErrorToMessage, renameOrgUnit, moveOrgUnit } from "./_lib/api.client";
 
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
@@ -36,6 +36,17 @@ function findParentId(nodes: TreeNode[], id: string): string | null {
   return null;
 }
 
+function flattenNodes(nodes: TreeNode[]): Array<{ id: string; title: string; type: string }> {
+  const out: Array<{ id: string; title: string; type: string }> = [];
+  const stack: TreeNode[] = [...nodes];
+  while (stack.length) {
+    const n = stack.pop()!;
+    out.push({ id: String(n.id), title: n.title || "", type: n.type });
+    for (const ch of n.children ?? []) stack.push(ch);
+  }
+  return out;
+}
+
 export default function OrgUnitsPage() {
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [inactiveIds, setInactiveIds] = useState<string[]>([]);
@@ -50,6 +61,12 @@ export default function OrgUnitsPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+
+  // B3.2 Move UI
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveQuery, setMoveQuery] = useState("");
+  const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
 
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
@@ -164,35 +181,122 @@ export default function OrgUnitsPage() {
     }
   }, [closeRename, loadTree, renameValue, selectedNode]);
 
+  // Move: open/close
+  const openMove = useCallback(
+    (id: string) => {
+      const n = findNodeById(nodes, id);
+      if (!n) return;
+
+      const curParentId = findParentId(nodes, String(id));
+
+      setSelectedId(String(id));
+      setMoveTargetId(curParentId); // по умолчанию — текущий родитель (можно сменить)
+      setMoveQuery("");
+      setMoveOpen(true);
+      setErrorText("");
+    },
+    [nodes]
+  );
+
+  const closeMove = useCallback(() => {
+    if (moveBusy) return;
+    setMoveOpen(false);
+    setMoveQuery("");
+    setMoveTargetId(null);
+  }, [moveBusy]);
+
+  const moveCandidates = useMemo(() => {
+    if (!selectedNode) return [];
+    const flat = flattenNodes(nodes);
+
+    const selected = String(selectedNode.id);
+    const disallow = new Set<string>();
+    // нельзя перемещать в самого себя или в своих потомков
+    const stack: TreeNode[] = [...(selectedNode.children ?? [])];
+    disallow.add(selected);
+    while (stack.length) {
+      const n = stack.pop()!;
+      disallow.add(String(n.id));
+      for (const ch of n.children ?? []) stack.push(ch);
+    }
+
+    let list = flat.filter((x) => !disallow.has(String(x.id)));
+
+    // опционально: не предлагать inactive как родителя
+    list = list.filter((x) => !inactiveSet.has(String(x.id)));
+
+    const q = (moveQuery || "").trim().toLowerCase();
+    if (q) {
+      list = list.filter((x) => {
+        const t = (x.title || "").toLowerCase();
+        const id = String(x.id).toLowerCase();
+        return t.includes(q) || id.includes(q);
+      });
+    }
+
+    // сорт: по title
+    list.sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" }));
+    return list;
+  }, [nodes, selectedNode, moveQuery, inactiveSet]);
+
+  const submitMove = useCallback(async () => {
+    if (!selectedNode) return;
+
+    const currentParentId = findParentId(nodes, String(selectedNode.id));
+    const nextParentId = moveTargetId;
+
+    // если не изменили — закрыть
+    if ((currentParentId ?? null) === (nextParentId ?? null)) {
+      closeMove();
+      return;
+    }
+
+    setMoveBusy(true);
+    setErrorText("");
+
+    try {
+      await moveOrgUnit({
+        unit_id: String(selectedNode.id),
+        parent_unit_id: nextParentId ? Number(nextParentId) : null,
+      });
+      closeMove();
+      await loadTree();
+    } catch (e) {
+      setErrorText(mapApiErrorToMessage(e));
+    } finally {
+      setMoveBusy(false);
+    }
+  }, [closeMove, loadTree, moveTargetId, nodes, selectedNode]);
+
+  // Enter/Escape в модалках
   useEffect(() => {
-    if (!renameOpen) return;
+    if (!renameOpen && !moveOpen) return;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        closeRename();
+        if (renameOpen) closeRename();
+        if (moveOpen) closeMove();
       }
       if (e.key === "Enter") {
+        // В модалке перемещения Enter подтверждает, когда фокус не в select?
+        // Здесь делаем: если открыто rename — submitRename, иначе move — submitMove.
         e.preventDefault();
-        void submitRename();
+        if (renameOpen) void submitRename();
+        if (moveOpen) void submitMove();
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [renameOpen, closeRename, submitRename]);
+  }, [renameOpen, moveOpen, closeRename, closeMove, submitRename, submitMove]);
 
   return (
     <div className="h-[calc(100vh-64px)] w-full p-4">
       <div className="flex h-full w-full gap-4">
         {/* LEFT */}
         <div className="flex w-[420px] shrink-0 flex-col">
-          <div
-            className={[
-              "mb-3 flex items-center justify-between",
-              // оставляю вашу текущую правку по кнопке/хедеру как есть
-            ].join(" ")}
-          >
+          <div className="mb-3 flex items-center justify-between">
             <div className="text-sm font-medium">Оргструктура</div>
             <button
               type="button"
@@ -223,11 +327,13 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              can={{ add: false, rename: true, move: false, deactivate: false }}
+              // на этом шаге: включаем move (UX), add/deactivate — позже
+              can={{ add: false, rename: true, move: true, deactivate: false }}
               onSelect={handleSelect}
               onToggle={handleToggle}
               onAction={(id: string, action: TreeAction) => {
                 if (action === "rename") openRename(String(id));
+                if (action === "move") openMove(String(id));
               }}
               onSearch={setSearchQuery}
               onResetExpand={handleResetExpand}
@@ -241,11 +347,9 @@ export default function OrgUnitsPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-sm text-gray-800">Карточка подразделения</div>
-
               {selectedNode ? (
                 <div className="mt-2">
                   <div className="text-xl font-medium leading-tight text-gray-900">{selectedNode.title}</div>
-
                   <div className="mt-1 text-sm">
                     <span className="text-gray-800">Статус: </span>
                     <span className={isInactive ? "text-rose-700" : "text-emerald-700"}>
@@ -264,12 +368,18 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openRename(String(selectedNode.id))}
-                  disabled={renameBusy}
+                  disabled={renameBusy || moveBusy}
                 >
                   Переименовать
                 </button>
 
-                <button type="button" className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50" disabled>
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => openMove(String(selectedNode.id))}
+                  disabled={renameBusy || moveBusy || isInactive}
+                  title={isInactive ? "Нельзя перемещать неактивное подразделение" : "Переместить"}
+                >
                   Переместить
                 </button>
 
@@ -349,11 +459,9 @@ export default function OrgUnitsPage() {
                               title="Открыть карточку"
                             >
                               <div className="col-span-2 text-gray-800">{ch.id}</div>
-
                               <div className="col-span-8 truncate">
                                 <span className={chInactive ? "text-gray-700" : "text-gray-900"}>{ch.title}</span>
                               </div>
-
                               <div className="col-span-2 text-right">
                                 <span className={chInactive ? "text-rose-700" : "text-emerald-700"}>
                                   {chInactive ? "неактивно" : "активно"}
@@ -406,6 +514,97 @@ export default function OrgUnitsPage() {
                 disabled={renameBusy || !renameValue.trim()}
               >
                 Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Move modal */}
+      {moveOpen && selectedNode ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeMove();
+          }}
+        >
+          <div className="w-full max-w-[720px] rounded-2xl border bg-white p-4 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-gray-900">Переместить подразделение</div>
+                <div className="mt-1 text-sm text-gray-700">
+                  <span className="font-medium text-gray-900">{selectedNode.title}</span>{" "}
+                  <span className="text-gray-500">({String(selectedNode.id)})</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={closeMove}
+                disabled={moveBusy}
+                title="Закрыть"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-xl border p-3">
+                <div className="text-xs font-medium text-gray-800">Поиск родителя</div>
+                <input
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
+                  value={moveQuery}
+                  onChange={(e) => setMoveQuery(e.target.value)}
+                  placeholder="Введите часть названия или ID…"
+                  disabled={moveBusy}
+                  autoFocus
+                />
+                <div className="mt-2 text-xs text-gray-600">
+                  Доступно вариантов: <span className="font-medium text-gray-900">{moveCandidates.length}</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3">
+                <div className="text-xs font-medium text-gray-800">Новый родитель</div>
+                <select
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm text-gray-900"
+                  value={moveTargetId ?? ""}
+                  onChange={(e) => setMoveTargetId(e.target.value ? e.target.value : null)}
+                  disabled={moveBusy}
+                >
+                  <option value="">(сделать корневым)</option>
+                  {moveCandidates.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.title} ({x.id})
+                    </option>
+                  ))}
+                </select>
+
+                <div className="mt-2 text-xs text-gray-600">
+                  Текущий родитель:{" "}
+                  <span className="font-medium text-gray-900">
+                    {parentNode ? `${parentNode.title} (${parentNode.id})` : "нет"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={closeMove}
+                disabled={moveBusy}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => void submitMove()}
+                disabled={moveBusy}
+              >
+                Переместить
               </button>
             </div>
           </div>

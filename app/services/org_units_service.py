@@ -207,13 +207,21 @@ class OrgUnitsService:
             return None
 
         if mode == "dept":
-            return self._fallback_dept_scope_or_raise(user_id=int(user_id), unit_id=unit_id, include_inactive=include_inactive)
+            return self._fallback_dept_scope_or_raise(
+                user_id=int(user_id),
+                unit_id=unit_id,
+                include_inactive=include_inactive,
+            )
 
         # mode == "groups"
         assigned = self.list_group_unit_ids_for_deputy(int(user_id), include_inactive=include_inactive)
         if not assigned:
             # MVP fallback: allow dept-scope if deputy is not configured in groups tables yet
-            return self._fallback_dept_scope_or_raise(user_id=int(user_id), unit_id=unit_id, include_inactive=include_inactive)
+            return self._fallback_dept_scope_or_raise(
+                user_id=int(user_id),
+                unit_id=unit_id,
+                include_inactive=include_inactive,
+            )
 
         return self.get_scope_unit_ids_many(assigned, include_inactive=include_inactive)
 
@@ -273,6 +281,31 @@ class OrgUnitsService:
                 )
             )
         return out
+
+    def get_org_unit(self, *, unit_id: int, include_inactive: bool = True) -> Optional[OrgUnit]:
+        where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
+        sql = text(
+            f"""
+            SELECT unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            FROM {self._schema}.{self._org_units_table}
+            WHERE unit_id = :unit_id
+              {where_active}
+            LIMIT 1
+            """
+        )
+        with self._engine.begin() as c:
+            r = c.execute(sql, {"unit_id": int(unit_id)}).mappings().first()
+
+        if not r:
+            return None
+
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            is_active=bool(r["is_active"]),
+        )
 
     # ---------------------------
     # Convenience: scoped reads for endpoints
@@ -370,11 +403,9 @@ class OrgUnitsService:
                 continue
 
             if pid not in nodes:
-                # orphan -> root
                 roots.append(node)
                 continue
 
-            # cycle check
             if OrgUnitsService._creates_cycle(int(uid), int(pid), parent_map):
                 roots.append(node)
                 continue
@@ -454,7 +485,7 @@ class OrgUnitsService:
             sort_rec(r)
 
         return roots, inactive_ids, len(units)
-    
+
     # ---------------------------
     # B3.1 Rename (write)
     # ---------------------------
@@ -463,7 +494,7 @@ class OrgUnitsService:
         *,
         unit_id: int,
         new_name: str,
-    ) -> None:
+    ) -> OrgUnit:
         name = (new_name or "").strip()
         if not name:
             raise ValueError("name must not be empty")
@@ -473,16 +504,87 @@ class OrgUnitsService:
             UPDATE {self._schema}.{self._org_units_table}
             SET name = :name
             WHERE unit_id = :unit_id
+            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
             """
         )
 
         with self._engine.begin() as c:
-            res = c.execute(
+            r = c.execute(
                 sql,
                 {
                     "unit_id": int(unit_id),
                     "name": name,
                 },
-            )
-            if res.rowcount == 0:
-                raise LookupError(f"org unit not found: unit_id={unit_id}")
+            ).mappings().first()
+
+        if not r:
+            raise LookupError(f"org unit not found: unit_id={unit_id}")
+
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            is_active=bool(r["is_active"]),
+        )
+
+    # ---------------------------
+    # B3.2 Move (write)
+    # ---------------------------
+    def move_org_unit(
+        self,
+        *,
+        unit_id: int,
+        parent_unit_id: Optional[int],
+    ) -> OrgUnit:
+        uid = int(unit_id)
+        pid = int(parent_unit_id) if parent_unit_id is not None else None
+
+        if pid is not None and pid == uid:
+            raise ValueError("parent_unit_id cannot equal unit_id")
+
+        src = self.get_org_unit(unit_id=uid, include_inactive=True)
+        if src is None:
+            raise LookupError(f"org unit not found: unit_id={uid}")
+
+        if pid is not None:
+            parent = self.get_org_unit(unit_id=pid, include_inactive=True)
+            if parent is None:
+                raise LookupError(f"parent org unit not found: parent_unit_id={pid}")
+
+        # Cycle check: linking uid -> pid must not make uid reachable from pid chain.
+        if pid is not None:
+            # build parent_map (unit_id -> parent_unit_id)
+            edges = self._load_unit_edges(include_inactive=True)
+            parent_map: Dict[int, Optional[int]] = {u: p for (u, p) in edges}
+            if self._creates_cycle(uid, pid, parent_map):
+                raise ValueError("cycle detected: parent_unit_id is inside unit subtree")
+
+        sql = text(
+            f"""
+            UPDATE {self._schema}.{self._org_units_table}
+            SET parent_unit_id = :parent_unit_id
+            WHERE unit_id = :unit_id
+            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            """
+        )
+
+        with self._engine.begin() as c:
+            r = c.execute(
+                sql,
+                {
+                    "unit_id": uid,
+                    "parent_unit_id": pid,
+                },
+            ).mappings().first()
+
+        if not r:
+            raise LookupError(f"org unit not found: unit_id={uid}")
+
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            is_active=bool(r["is_active"]),
+        )

@@ -124,15 +124,28 @@ function Chevron({ open, onClick, disabled }: { open: boolean; onClick: () => vo
   );
 }
 
-function KebabButton({ visible, onClick }: { visible: boolean; onClick: (e: React.MouseEvent) => void }) {
+function KebabButton({
+  visible,
+  enabled,
+  onClick,
+}: {
+  visible: boolean;
+  enabled: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
   return (
     <button
       type="button"
       aria-label="Действия"
       onClick={onClick}
+      disabled={!enabled}
       className={[
         "ml-auto inline-flex h-8 w-8 items-center justify-center rounded",
-        visible ? "opacity-80 hover:opacity-100" : "opacity-0 pointer-events-none",
+        enabled
+          ? visible
+            ? "opacity-80 hover:opacity-100"
+            : "opacity-0 pointer-events-none"
+          : "opacity-0 pointer-events-none",
         "focus:outline-none focus:ring-2 focus:ring-offset-2",
       ].join(" ")}
     >
@@ -232,7 +245,6 @@ function filterTreeForSearch(opts: {
   const query = (q || "").trim();
 
   if (!query) {
-    // Только режим скрытия inactive
     if (showInactive) return { nodes, matchIds: new Set() };
 
     const pruneInactive = (arr: TreeNode[]): TreeNode[] => {
@@ -242,7 +254,6 @@ function filterTreeForSearch(opts: {
         const id = String(n.id);
         const isInactive = inactiveSet.has(id);
 
-        // Если узел inactive, но имеет детей (активных) — сохраняем как контейнер, иначе скрываем.
         if (isInactive && ch.length === 0) continue;
 
         out.push({ ...n, id, children: ch.length ? ch : [] });
@@ -279,9 +290,7 @@ function filterTreeForSearch(opts: {
 
     const isInactive = inactiveSet.has(id);
     if (!showInactive) {
-      // inactive скрываем, но если он нужен как путь к найденным детям — оставляем (контекст)
       if (isInactive && childOut.length === 0 && titleMatch) {
-        // матч на inactive листе — в режиме hide inactive скрываем
         return null;
       }
     }
@@ -317,7 +326,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
-  // Скрывать inactive по умолчанию (тонкая UX-правка: убирает “мусор” сверху).
   const [showInactive, setShowInactive] = useState<boolean>(false);
 
   const fullIdx = useMemo(() => buildIndex(nodes), [nodes]);
@@ -334,10 +342,8 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
   const viewIdx = useMemo(() => buildIndex(viewNodes), [viewNodes]);
 
-  // Snapshot expandedIds до поиска: нужен для восстановления после очистки.
   const expandedSnapshotRef = useRef<string[] | null>(null);
 
-  // При включении поиска — фиксируем snapshot и раскрываем пути (по полному дереву).
   useEffect(() => {
     const q = (searchQuery || "").trim();
 
@@ -379,19 +385,16 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
       }
     }
 
-    // useEffect не должен полагаться на "замкнутый" expandedSet — сравниваем с актуальными expandedIds.
     const expandedNow = new Set(expandedIds);
     for (const id of needOpen) {
       if (!expandedNow.has(id)) onToggle(id, true);
     }
   }, [searchQuery, fullIdx.byId, fullIdx.parentById, expandedIds, onToggle]);
 
-  // При поиске — автоматически прокручивать к первому совпадению в текущем представлении.
   useEffect(() => {
     const q = (searchQuery || "").trim();
     if (!q) return;
 
-    // выбираем первый матч из view-дерева (в порядке обхода)
     const stack: string[] = [...viewIdx.rootIds].reverse();
     let firstMatchId: string | null = null;
 
@@ -417,7 +420,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
   const [menu, setMenu] = useState<{ nodeId: string; rect: DOMRect } | null>(null);
 
-  // Автозакрытие меню при смене selection/поиска/скрытия inactive
   useEffect(() => {
     setMenu(null);
   }, [selectedId, searchQuery, showInactive]);
@@ -473,7 +475,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
       enriched.sort((a, b) => {
         const aInactive = inactiveSet.has(a.id);
         const bInactive = inactiveSet.has(b.id);
-        if (aInactive !== bInactive) return aInactive ? 1 : -1; // active first
+        if (aInactive !== bInactive) return aInactive ? 1 : -1;
         return (a.node.title || "").localeCompare(b.node.title || "", "ru", { sensitivity: "base" });
       });
 
@@ -483,6 +485,10 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   );
 
   const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds]);
+
+  const hasAnyActions = useMemo(() => {
+    return !!(can.add || can.rename || can.move || can.deactivate);
+  }, [can.add, can.rename, can.move, can.deactivate]);
 
   const Row = ({ nodeId, depth }: { nodeId: string; depth: number }) => {
     const node = viewIdx.byId.get(nodeId);
@@ -513,32 +519,32 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
           onKeyDown={(e) => {
             if (e.key === "Enter") onSelect(nodeId);
 
-            // UX: если узел без детей — стрелки не должны “делать вид” что можно раскрыть
             if (e.key === "ArrowRight" && hasChildren && !isOpen) onToggle(nodeId, true);
             if (e.key === "ArrowLeft" && hasChildren && isOpen) onToggle(nodeId, false);
 
-            // UX: ESC закрывает контекстное меню, если открыто
             if (e.key === "Escape" && menu) setMenu(null);
           }}
           className={[
             "group flex items-center rounded-lg px-2 py-1.5 text-sm",
-            isSelected ? "bg-gray-100" : "hover:bg-gray-50",
+            isSelected ? "bg-gray-100 ring-1 ring-gray-200" : "hover:bg-gray-50",
             "focus:outline-none focus:ring-2 focus:ring-offset-2",
-            isInactive ? "text-gray-500" : "text-gray-900",
+            isInactive ? "text-gray-700" : "text-gray-900",
           ].join(" ")}
           style={{ paddingLeft: 8 + depth * 16 }}
         >
           <Chevron open={isOpen} disabled={!hasChildren} onClick={() => onToggle(nodeId, !isOpen)} />
           <TypeIcon type={node.type} />
           <div className="min-w-0 flex-1 truncate">
-            <span className={isInactive ? "opacity-80" : ""}>{renderTitle(node.title)}</span>
-            {isInactive ? <span className="ml-2 text-xs opacity-70">(неактивно)</span> : null}
+            <span>{renderTitle(node.title)}</span>
+            {isInactive ? <span className="ml-2 text-xs text-gray-600">(неактивно)</span> : null}
           </div>
 
           <KebabButton
             visible={hover}
+            enabled={hasAnyActions}
             onClick={(e) => {
               e.stopPropagation();
+              if (!hasAnyActions) return;
               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
               setMenu({ nodeId, rect });
             }}
@@ -558,7 +564,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
   const onClickReset = () => {
     onResetExpand();
-    // UX: при “Свернуть всё” — сворачиваем и очищаем поиск, чтобы пользователь вернулся в “нормальный режим”.
     onSearch("");
   };
 
@@ -607,12 +612,12 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             Показывать неактивные
           </label>
 
-          {searchQuery ? <div className="text-xs text-gray-500">Найдено: {matchIds.size}</div> : null}
+          {searchQuery ? <div className="text-xs text-gray-600">Найдено: {matchIds.size}</div> : null}
         </div>
 
         <div role="tree" className="mt-3 space-y-1">
           {viewIdx.rootIds.length === 0 ? (
-            <div className="rounded-xl border px-3 py-3 text-sm text-gray-600">
+            <div className="rounded-xl border px-3 py-3 text-sm text-gray-700">
               {searchQuery ? "Нет совпадений." : "Нет данных для отображения."}
             </div>
           ) : (
