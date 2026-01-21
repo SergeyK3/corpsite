@@ -61,11 +61,8 @@ export default function OrgUnitsPage() {
       const data = await getOrgUnitsTree({ status: "all" });
 
       setNodes(Array.isArray(data.items) ? data.items : []);
-      // types.ts уже описывает inactive_ids, поэтому каст к any не нужен
       setInactiveIds(Array.isArray(data.inactive_ids) ? data.inactive_ids : []);
 
-      // Важно: не затирать раскрытие пользователя при каждом refresh.
-      // Раскроем root_id только при первом заходе/когда раскрытия еще нет.
       if (data.root_id != null) {
         setExpandedIds((prev) => (prev.length ? prev : [String(data.root_id)]));
       }
@@ -118,7 +115,6 @@ export default function OrgUnitsPage() {
   const children = selectedNode?.children ?? [];
   const isInactive = selectedId ? inactiveSet.has(String(selectedId)) : false;
 
-  // Если после обновления данных выбранный узел исчез (например, права/фильтр/удаление) — сбросим selection.
   useEffect(() => {
     if (!selectedId) return;
     const exists = findNodeById(nodes, selectedId);
@@ -149,7 +145,6 @@ export default function OrgUnitsPage() {
     const nextName = renameValue.trim();
     if (!nextName) return;
 
-    // UX: если имя не изменилось — просто закрыть окно
     if ((selectedNode.title || "").trim() === nextName) {
       closeRename();
       return;
@@ -169,7 +164,6 @@ export default function OrgUnitsPage() {
     }
   }, [closeRename, loadTree, renameValue, selectedNode]);
 
-  // Enter/Escape в модалке
   useEffect(() => {
     if (!renameOpen) return;
 
@@ -179,7 +173,6 @@ export default function OrgUnitsPage() {
         closeRename();
       }
       if (e.key === "Enter") {
-        // чтобы Enter в инпуте работал как "Сохранить"
         e.preventDefault();
         void submitRename();
       }
@@ -194,12 +187,12 @@ export default function OrgUnitsPage() {
       <div className="flex h-full w-full gap-4">
         {/* LEFT */}
         <div className="flex w-[420px] shrink-0 flex-col">
-          <div className="rounded-lg border border-white/30
-            px-3 py-1 text-xs
-            text-white
-            hover:bg-white hover:text-black
-            transition-colors
-            disabled:opacity-50">
+          <div
+            className={[
+              "mb-3 flex items-center justify-between",
+              // оставляю вашу текущую правку по кнопке/хедеру как есть
+            ].join(" ")}
+          >
             <div className="text-sm font-medium">Оргструктура</div>
             <button
               type="button"
@@ -230,7 +223,6 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              // B3.1: только rename, остальное read-only
               can={{ add: false, rename: true, move: false, deactivate: false }}
               onSelect={handleSelect}
               onToggle={handleToggle}
@@ -245,19 +237,24 @@ export default function OrgUnitsPage() {
         </div>
 
         {/* RIGHT */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-white p-6">
+        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-white p-6 text-gray-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-sm text-gray-500">Карточка подразделения</div>
+              <div className="text-sm text-gray-800">Карточка подразделения</div>
+
               {selectedNode ? (
                 <div className="mt-2">
-                  <div className="text-xl font-medium leading-tight">{selectedNode.title}</div>
-                  <div className="mt-1 text-sm text-gray-500">
-                    {isInactive ? "Статус: неактивно" : "Статус: активно"}
+                  <div className="text-xl font-medium leading-tight text-gray-900">{selectedNode.title}</div>
+
+                  <div className="mt-1 text-sm">
+                    <span className="text-gray-800">Статус: </span>
+                    <span className={isInactive ? "text-rose-700" : "text-emerald-700"}>
+                      {isInactive ? "неактивно" : "активно"}
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-gray-500">Выберите подразделение в дереве слева.</div>
+                <div className="mt-2 text-sm text-gray-800">Выберите подразделение в дереве слева.</div>
               )}
             </div>
 
@@ -272,19 +269,11 @@ export default function OrgUnitsPage() {
                   Переименовать
                 </button>
 
-                <button
-                  type="button"
-                  className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
-                  disabled
-                >
+                <button type="button" className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50" disabled>
                   Переместить
                 </button>
 
-                <button
-                  type="button"
-                  className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50"
-                  disabled
-                >
+                <button type="button" className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50" disabled>
                   Добавить секцию
                 </button>
               </div>
@@ -295,53 +284,51 @@ export default function OrgUnitsPage() {
             <>
               <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="rounded-xl border p-4">
-                  <div className="text-xs text-gray-500">ID</div>
-                  <div className="mt-1 text-sm font-medium">{selectedNode.id}</div>
+                  <div className="text-xs text-gray-800">ID</div>
+                  <div className="mt-1 text-sm font-medium text-gray-900">{selectedNode.id}</div>
                 </div>
 
                 <div className="rounded-xl border p-4">
-                  <div className="text-xs text-gray-500">Тип</div>
-                  <div className="mt-1 text-sm font-medium">{selectedNode.type}</div>
+                  <div className="text-xs text-gray-800">Тип</div>
+                  <div className="mt-1 text-sm font-medium text-gray-900">{selectedNode.type}</div>
                 </div>
 
                 <div className="rounded-xl border p-4 md:col-span-2">
-                  <div className="text-xs text-gray-500">Родитель</div>
+                  <div className="text-xs text-gray-800">Родитель</div>
 
                   {parentNode ? (
                     <button
                       type="button"
                       onClick={() => handleSelect(String(parentNode.id))}
                       className={[
-                        "mt-1 w-full rounded-lg px-2 py-2 text-left text-sm font-medium",
+                        "mt-1 w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-gray-900",
                         "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2",
                       ].join(" ")}
                       title="Перейти к родительскому подразделению"
                     >
                       <span className="block truncate">
-                        {parentNode.title} <span className="text-gray-400">({parentNode.id})</span>
+                        {parentNode.title} <span className="text-gray-600">({parentNode.id})</span>
                       </span>
                     </button>
                   ) : (
-                    <div className="mt-1 text-sm font-medium text-gray-500">Нет (корневой узел)</div>
+                    <div className="mt-1 text-sm font-medium text-gray-800">Нет (корневой узел)</div>
                   )}
                 </div>
 
                 <div className="rounded-xl border p-4">
-                  <div className="text-xs text-gray-500">Дочерних подразделений</div>
-                  <div className="mt-1 text-sm font-medium">{children.length}</div>
+                  <div className="text-xs text-gray-800">Дочерних подразделений</div>
+                  <div className="mt-1 text-sm font-medium text-gray-900">{children.length}</div>
                 </div>
               </div>
 
               <div className="mt-6">
-                <div className="text-sm font-medium">Дочерние подразделения</div>
+                <div className="text-sm font-medium text-gray-900">Дочерние подразделения</div>
 
                 {children.length === 0 ? (
-                  <div className="mt-2 rounded-xl border px-4 py-3 text-sm text-gray-600">
-                    Нет дочерних подразделений.
-                  </div>
+                  <div className="mt-2 rounded-xl border px-4 py-3 text-sm text-gray-800">Нет дочерних подразделений.</div>
                 ) : (
                   <div className="mt-2 overflow-hidden rounded-xl border">
-                    <div className="grid grid-cols-12 border-b bg-gray-50 px-4 py-2 text-xs text-gray-600">
+                    <div className="grid grid-cols-12 border-b bg-gray-50 px-4 py-2 text-xs text-gray-800">
                       <div className="col-span-2">ID</div>
                       <div className="col-span-8">Название</div>
                       <div className="col-span-2 text-right">Статус</div>
@@ -361,12 +348,16 @@ export default function OrgUnitsPage() {
                               onClick={() => handleSelect(String(ch.id))}
                               title="Открыть карточку"
                             >
-                              <div className="col-span-2 text-gray-500">{ch.id}</div>
+                              <div className="col-span-2 text-gray-800">{ch.id}</div>
+
                               <div className="col-span-8 truncate">
-                                <span className={chInactive ? "text-gray-500" : "text-gray-900"}>{ch.title}</span>
+                                <span className={chInactive ? "text-gray-700" : "text-gray-900"}>{ch.title}</span>
                               </div>
-                              <div className="col-span-2 text-right text-gray-500">
-                                {chInactive ? "неактивно" : "активно"}
+
+                              <div className="col-span-2 text-right">
+                                <span className={chInactive ? "text-rose-700" : "text-emerald-700"}>
+                                  {chInactive ? "неактивно" : "активно"}
+                                </span>
                               </div>
                             </button>
                           );
@@ -385,15 +376,14 @@ export default function OrgUnitsPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
           onMouseDown={(e) => {
-            // клик по подложке закрывает окно (но не во время сохранения)
             if (e.target === e.currentTarget) closeRename();
           }}
         >
           <div className="w-full max-w-[520px] rounded-2xl border bg-white p-4 shadow-lg">
-            <div className="text-sm font-medium">Переименовать подразделение</div>
+            <div className="text-sm font-medium text-gray-900">Переименовать подразделение</div>
 
             <input
-              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm text-gray-900"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               disabled={renameBusy}
