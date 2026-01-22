@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { getEmployees } from "../directory/employees/_lib/api.client";
@@ -14,7 +14,7 @@ function pickName(e: any): string {
   return e?.full_name || e?.fio || "";
 }
 
-export default function DirectoryHomePage() {
+function DirectoryHomeInner() {
   const sp = useSearchParams();
 
   const initOrgUnitId = sp.get("org_unit_id") || "";
@@ -33,6 +33,13 @@ export default function DirectoryHomePage() {
 
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string>("");
+
+  // Если URL меняется (навигация), синхронизируем init параметры
+  useEffect(() => {
+    setOrgUnitId(initOrgUnitId);
+    setIncludeChildren(initIncludeChildren);
+    setOffset(0);
+  }, [initOrgUnitId, initIncludeChildren]);
 
   const query = useMemo(() => {
     const out: any = {
@@ -266,15 +273,9 @@ export default function DirectoryHomePage() {
                             {e.id}
                           </a>
                         </td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-                          {fio}
-                        </td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-                          {unitName}
-                        </td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-                          {posName}
-                        </td>
+                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{fio}</td>
+                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{unitName}</td>
+                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{posName}</td>
                         <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                           {rate === null || rate === undefined ? "—" : String(rate)}
                         </td>
@@ -304,5 +305,14 @@ export default function DirectoryHomePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function DirectoryHomePage() {
+  // Важно: useSearchParams() должен быть внутри Suspense boundary для prerender/SSG
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Загрузка…</div>}>
+      <DirectoryHomeInner />
+    </Suspense>
   );
 }

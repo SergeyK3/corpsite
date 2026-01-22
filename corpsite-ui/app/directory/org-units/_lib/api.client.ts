@@ -1,6 +1,6 @@
 // FILE: corpsite-ui/app/directory/org-units/_lib/api.client.ts
 
-import type { OrgUnitsTreeResponse } from "./types";
+import type { OrgUnitsTreeResponse, OrgUnitTreeNode } from "./types";
 
 function getApiBase(): string {
   const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
@@ -14,19 +14,15 @@ function getDevUserId(): string | null {
 
 function buildQuery(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === undefined || v === null) return;
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null) continue;
     const s = String(v).trim();
-    if (!s) return;
+    if (!s) continue;
     q.set(k, s);
-  });
+  }
   return q.toString();
 }
 
-/**
- * Единая мапа ошибок fetch/HTTP → человеко-читаемый текст для UI.
- * Важно: backend возвращает detail как строку или объект; мы вытаскиваем detail когда можем.
- */
 export function mapApiErrorToMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
 
@@ -134,12 +130,43 @@ async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+// ---------------------------
+// Tree normalization (fix TS: TreeNode.id must be string)
+// ---------------------------
+
+function toStringId(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return String(v);
+}
+
+function normalizeTreeNode(node: any): OrgUnitTreeNode {
+  const childrenRaw = Array.isArray(node?.children) ? node.children : [];
+  return {
+    ...node,
+    id: toStringId(node?.id),
+    // (optional) если parent_id/parent_unit_id в node нужен как number|null — не трогаем.
+    children: childrenRaw.map(normalizeTreeNode),
+  } as OrgUnitTreeNode;
+}
+
+function normalizeTreeResponse(raw: any): OrgUnitsTreeResponse {
+  const itemsRaw = Array.isArray(raw?.items) ? raw.items : [];
+  const inactiveRaw = Array.isArray(raw?.inactive_ids) ? raw.inactive_ids : [];
+
+  return {
+    ...raw,
+    // items: всегда массив, и каждый id приведён к string
+    items: itemsRaw.map(normalizeTreeNode),
+    // inactive_ids: приведём к string[], чтобы не конфликтовало с UI (обычно UI хранит id как string)
+    inactive_ids: inactiveRaw.map((x: any) => toStringId(x)).filter((s: string) => s !== ""),
+    // root_id: тоже в string (если в types ожидается number — скажете, но тогда нужно будет синхронизировать UI)
+    root_id: raw?.root_id === null || raw?.root_id === undefined ? null : toStringId(raw.root_id),
+  } as OrgUnitsTreeResponse;
+}
+
 /**
  * UI-дерево оргструктуры
  * Backend: GET /directory/org-units/tree
- *
- * Важно: НЕ передаем одновременно status и include_inactive, чтобы избежать
- * неоднозначности (status у вас уже маппится в include_inactive на backend).
  */
 export async function getOrgUnitsTree(args?: {
   status?: "all" | "active";
@@ -147,14 +174,16 @@ export async function getOrgUnitsTree(args?: {
 }): Promise<OrgUnitsTreeResponse> {
   const hasLegacy = args?.include_inactive !== undefined && args?.include_inactive !== null;
 
-  const qs = buildQuery(hasLegacy ? { include_inactive: args?.include_inactive } : { status: args?.status ?? "all" });
+  const qs = buildQuery(
+    hasLegacy ? { include_inactive: args?.include_inactive } : { status: args?.status ?? "all" }
+  );
 
-  return apiGetJson<OrgUnitsTreeResponse>("/directory/org-units/tree", qs);
+  const raw = await apiGetJson<any>("/directory/org-units/tree", qs);
+  return normalizeTreeResponse(raw);
 }
 
 /**
  * Общий формат item, который возвращает backend для rename/move/activate/deactivate/create.
- * (Сейчас он не совпадает с TreeNode, поэтому UI после операции делает reload tree.)
  */
 export type OrgUnitMutationItem = {
   id: number;
@@ -168,12 +197,6 @@ export type OrgUnitMutationResponse = {
   item: OrgUnitMutationItem;
 };
 
-/**
- * Rename org unit
- * Backend:
- * - основной: PATCH /directory/org-units/{unit_id}/rename
- * - совместимость: PATCH /directory/org-units/{unit_id}
- */
 export async function renameOrgUnit(args: {
   unit_id: string | number;
   name: string;
@@ -192,10 +215,6 @@ export async function renameOrgUnit(args: {
   }
 }
 
-/**
- * Move org unit
- * Backend: PATCH /directory/org-units/{unit_id}/move  body: { parent_unit_id: number | null }
- */
 export async function moveOrgUnit(args: {
   unit_id: string | number;
   parent_unit_id: number | null;
@@ -206,10 +225,6 @@ export async function moveOrgUnit(args: {
   return apiPatchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/move`, payload);
 }
 
-/**
- * B3.3 Deactivate org unit
- * Backend: PATCH /directory/org-units/{unit_id}/deactivate
- */
 export async function deactivateOrgUnit(args: {
   unit_id: string | number;
 }): Promise<OrgUnitMutationResponse> {
@@ -217,10 +232,6 @@ export async function deactivateOrgUnit(args: {
   return apiPatchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/deactivate`, {});
 }
 
-/**
- * B3.3 Activate org unit
- * Backend: PATCH /directory/org-units/{unit_id}/activate
- */
 export async function activateOrgUnit(args: {
   unit_id: string | number;
 }): Promise<OrgUnitMutationResponse> {
@@ -228,10 +239,6 @@ export async function activateOrgUnit(args: {
   return apiPatchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/activate`, {});
 }
 
-/**
- * B4 Create org unit
- * Backend: POST /directory/org-units
- */
 export async function createOrgUnit(args: {
   name: string;
   parent_unit_id?: number | null;

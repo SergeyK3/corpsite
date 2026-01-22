@@ -20,7 +20,7 @@ function fmt(v: unknown): string {
   return s ? s : "—";
 }
 
-export default function EmployeeDetailsPage(): JSX.Element {
+export default function EmployeeDetailsPage() {
   const params = useParams<{ id: string }>();
   const id = useMemo(() => String(params?.id || "").trim(), [params]);
 
@@ -79,6 +79,10 @@ export default function EmployeeDetailsPage(): JSX.Element {
     );
   }
 
+  if (state.status !== "ok") {
+    return null;
+  }
+
   const e = state.item;
 
   return (
@@ -106,7 +110,7 @@ export default function EmployeeDetailsPage(): JSX.Element {
   );
 }
 
-function Row(props: { label: string; value: unknown }): JSX.Element {
+function Row(props: { label: string; value: unknown }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 12 }}>
       <div style={{ color: "#6b7280" }}>{props.label}</div>

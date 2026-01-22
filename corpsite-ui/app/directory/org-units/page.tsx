@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import OrgUnitsTree, { type TreeAction, type TreeNode } from "./_components/OrgUnitsTree";
+import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
 import {
   activateOrgUnit,
   createOrgUnit,
@@ -71,12 +71,6 @@ export default function OrgUnitsPage() {
   const [moveQuery, setMoveQuery] = useState("");
   const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
 
-  // Add (create child) modal — kept for compatibility with your current UX
-  const [addOpen, setAddOpen] = useState(false);
-  const [addBusy, setAddBusy] = useState(false);
-  const [addName, setAddName] = useState("");
-  const [addParentId, setAddParentId] = useState<string | null>(null);
-
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
   const loadTree = useCallback(async () => {
@@ -86,8 +80,8 @@ export default function OrgUnitsPage() {
     try {
       const data = await getOrgUnitsTree({ status: "all" });
 
-      setNodes(Array.isArray(data.items) ? data.items : []);
-      setInactiveIds(Array.isArray(data.inactive_ids) ? data.inactive_ids : []);
+      setNodes(Array.isArray(data.items) ? (data.items as unknown as TreeNode[]) : []);
+      setInactiveIds(Array.isArray(data.inactive_ids) ? (data.inactive_ids as unknown as string[]) : []);
 
       if (data.root_id != null) {
         setExpandedIds((prev) => (prev.length ? prev : [String(data.root_id)]));
@@ -263,126 +257,87 @@ export default function OrgUnitsPage() {
   }, [closeMove, loadTree, moveTargetId, nodes, selectedNode]);
 
   // ---------------------------
-  // Add child (Create)
+  // Create + Toggle active delegated from OrgUnitsTree
+  // FIX: сигнатуры должны совпадать с OrgUnitsTreeProps:
+  //   onCreateChild(parentId: string, name: string)
+  //   onToggleActive(id: string, makeActive: boolean)
   // ---------------------------
-  const openAddChild = useCallback(
-    (parentNodeId: string) => {
-      const n = findNodeById(nodes, parentNodeId);
-      if (!n) return;
+  const handleCreateChild = useCallback(
+    async (parentId: string, name: string) => {
+      const pid = String(parentId);
+      const nm = String(name ?? "").trim();
+      if (!pid || !nm) return;
 
-      setSelectedId(String(parentNodeId));
-      setAddParentId(String(parentNodeId));
-      setAddName("");
-      setAddOpen(true);
-      setErrorText("");
-    },
-    [nodes]
-  );
-
-  const closeAdd = useCallback(() => {
-    if (addBusy) return;
-    setAddOpen(false);
-    setAddName("");
-    setAddParentId(null);
-  }, [addBusy]);
-
-  const submitAdd = useCallback(async () => {
-    const pid = addParentId;
-    const name = addName.trim();
-    if (!pid || !name) return;
-
-    setAddBusy(true);
-    setErrorText("");
-
-    try {
-      await createOrgUnit({
-        name,
-        parent_unit_id: Number(pid),
-        is_active: true,
-      });
-      closeAdd();
-      await loadTree();
-
-      setExpandedIds((prev) => {
-        const p = String(pid);
-        return prev.includes(p) ? prev : [...prev, p];
-      });
-    } catch (e) {
-      setErrorText(mapApiErrorToMessage(e));
-    } finally {
-      setAddBusy(false);
-    }
-  }, [addParentId, addName, closeAdd, loadTree]);
-
-  // ---------------------------
-  // Toggle active (activate/deactivate) for selected
-  // ---------------------------
-  const doDeactivateById = useCallback(
-    async (id: string) => {
-      if (inactiveSet.has(String(id))) return;
       setErrorText("");
       try {
-        await deactivateOrgUnit({ unit_id: String(id) });
+        await createOrgUnit({
+          name: nm,
+          parent_unit_id: Number(pid),
+          is_active: true,
+        });
+
+        await loadTree();
+
+        setExpandedIds((prev) => {
+          const p = String(pid);
+          return prev.includes(p) ? prev : [...prev, p];
+        });
+      } catch (e) {
+        setErrorText(mapApiErrorToMessage(e));
+        throw e;
+      }
+    },
+    [loadTree]
+  );
+
+  const handleToggleActive = useCallback(
+    async (id: string, makeActive: boolean) => {
+      const sid = String(id);
+      if (!sid) return;
+
+      setErrorText("");
+      try {
+        if (makeActive) {
+          if (!inactiveSet.has(sid)) return;
+          await activateOrgUnit({ unit_id: sid });
+        } else {
+          if (inactiveSet.has(sid)) return;
+          await deactivateOrgUnit({ unit_id: sid });
+        }
         await loadTree();
       } catch (e) {
         setErrorText(mapApiErrorToMessage(e));
+        throw e;
       }
     },
     [inactiveSet, loadTree]
   );
 
-  const doActivateById = useCallback(
-    async (id: string) => {
-      if (!inactiveSet.has(String(id))) return;
-      setErrorText("");
-      try {
-        await activateOrgUnit({ unit_id: String(id) });
-        await loadTree();
-      } catch (e) {
-        setErrorText(mapApiErrorToMessage(e));
-      }
-    },
-    [inactiveSet, loadTree]
-  );
-
-  const doDeactivate = useCallback(async () => {
-    if (!selectedNode) return;
-    void doDeactivateById(String(selectedNode.id));
-  }, [doDeactivateById, selectedNode]);
-
-  const doActivate = useCallback(async () => {
-    if (!selectedNode) return;
-    void doActivateById(String(selectedNode.id));
-  }, [doActivateById, selectedNode]);
-
   // ---------------------------
-  // Keyboard in modals
+  // Keyboard in modals (rename/move)
   // ---------------------------
   useEffect(() => {
-    if (!renameOpen && !moveOpen && !addOpen) return;
+    if (!renameOpen && !moveOpen) return;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         if (renameOpen) closeRename();
         if (moveOpen) closeMove();
-        if (addOpen) closeAdd();
       }
       if (e.key === "Enter") {
         e.preventDefault();
         if (renameOpen) void submitRename();
         if (moveOpen) void submitMove();
-        if (addOpen) void submitAdd();
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [renameOpen, moveOpen, addOpen, closeRename, closeMove, closeAdd, submitRename, submitMove, submitAdd]);
+  }, [renameOpen, moveOpen, closeRename, closeMove, submitRename, submitMove]);
 
   // ---------------------------
-  // Tree actions (kebab)
-  // Important: action "activate" exists now (from OrgUnitsTree.tsx)
+  // Tree actions (legacy): now only rename/move are handled here
   // ---------------------------
   const handleTreeAction = useCallback(
     (id: string, action: TreeAction) => {
@@ -394,22 +349,8 @@ export default function OrgUnitsPage() {
         openMove(String(id));
         return;
       }
-      if (action === "add_child") {
-        openAddChild(String(id));
-        return;
-      }
-      if (action === "deactivate") {
-        setSelectedId(String(id));
-        void doDeactivateById(String(id));
-        return;
-      }
-      if (action === "activate") {
-        setSelectedId(String(id));
-        void doActivateById(String(id));
-        return;
-      }
     },
-    [doActivateById, doDeactivateById, openAddChild, openMove, openRename]
+    [openMove, openRename]
   );
 
   return (
@@ -450,6 +391,8 @@ export default function OrgUnitsPage() {
               onSelect={handleSelect}
               onToggle={handleToggle}
               onAction={handleTreeAction}
+              onCreateChild={handleCreateChild}
+              onToggleActive={handleToggleActive}
               onSearch={setSearchQuery}
               onResetExpand={handleResetExpand}
               headerTitle="Подразделения"
@@ -483,7 +426,7 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openRename(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || addBusy}
+                  disabled={renameBusy || moveBusy}
                 >
                   Переименовать
                 </button>
@@ -492,28 +435,18 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openMove(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || addBusy || isInactive}
+                  disabled={renameBusy || moveBusy || isInactive}
                   title={isInactive ? "Нельзя перемещать неактивное подразделение" : "Переместить"}
                 >
                   Переместить
-                </button>
-
-                <button
-                  type="button"
-                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                  onClick={() => openAddChild(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || addBusy || isInactive}
-                  title={isInactive ? "Нельзя добавлять в неактивное подразделение" : "Добавить дочернее подразделение"}
-                >
-                  Добавить секцию
                 </button>
 
                 {isInactive ? (
                   <button
                     type="button"
                     className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    onClick={() => void doActivate()}
-                    disabled={renameBusy || moveBusy || addBusy || isLoading}
+                    onClick={() => void handleToggleActive(String(selectedNode.id), true)}
+                    disabled={renameBusy || moveBusy || isLoading}
                     title="Активировать"
                   >
                     Активировать
@@ -522,8 +455,8 @@ export default function OrgUnitsPage() {
                   <button
                     type="button"
                     className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    onClick={() => void doDeactivate()}
-                    disabled={renameBusy || moveBusy || addBusy || isLoading}
+                    onClick={() => void handleToggleActive(String(selectedNode.id), false)}
+                    disabled={renameBusy || moveBusy || isLoading}
                     title="Деактивировать"
                   >
                     Деактивировать
@@ -748,57 +681,6 @@ export default function OrgUnitsPage() {
                 disabled={moveBusy}
               >
                 Переместить
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Add child modal */}
-      {addOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closeAdd();
-          }}
-        >
-          <div className="w-full max-w-[560px] rounded-2xl border bg-white p-4 shadow-lg">
-            <div className="text-sm font-medium text-gray-900">Добавить дочернее подразделение</div>
-
-            <div className="mt-2 text-sm text-gray-700">
-              Родитель:{" "}
-              <span className="font-medium text-gray-900">
-                {addParentId && findNodeById(nodes, addParentId)
-                  ? `${findNodeById(nodes, addParentId)!.title} (${addParentId})`
-                  : addParentId ?? "-"}
-              </span>
-            </div>
-
-            <input
-              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm text-gray-900"
-              value={addName}
-              onChange={(e) => setAddName(e.target.value)}
-              disabled={addBusy}
-              placeholder="Название нового подразделения"
-              autoFocus
-            />
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                onClick={closeAdd}
-                disabled={addBusy}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-                onClick={() => void submitAdd()}
-                disabled={addBusy || !addName.trim()}
-              >
-                Создать
               </button>
             </div>
           </div>

@@ -16,7 +16,7 @@ export type TreeCan = {
   add: boolean;
   rename: boolean;
   move: boolean;
-  deactivate: boolean; // используем как "toggle active" (deactivate/activate)
+  deactivate: boolean;
 };
 
 export type TreeAction = "add_child" | "rename" | "move" | "deactivate" | "activate";
@@ -34,23 +34,10 @@ export type OrgUnitsTreeProps = {
   onSelect: (id: string) => void;
   onToggle: (id: string, open: boolean) => void;
 
-  /**
-   * Старый/совместимый режим: контейнер сам решает, что делать по action.
-   * Если ниже переданы onCreateChild/onToggleActive — компонент может выполнять UX сам.
-   */
   onAction: (id: string, action: TreeAction) => void;
 
-  /**
-   * Новый режим (не обязателен):
-   * - Create: компонент покажет диалог и вызовет onCreateChild.
-   */
-  onCreateChild?: (args: { parent_id: string; name: string; code: string | null }) => Promise<void> | void;
-
-  /**
-   * Новый режим (не обязателен):
-   * - Toggle active: компонент сам вызывает onToggleActive, UI подтверждение внутри.
-   */
-  onToggleActive?: (args: { id: string; make_active: boolean }) => Promise<void> | void;
+  onCreateChild?: (parentId: string, name: string) => Promise<void> | void;
+  onToggleActive?: (id: string, makeActive: boolean) => Promise<void> | void;
 
   onSearch: (q: string) => void;
   onResetExpand: () => void;
@@ -102,7 +89,7 @@ function pathToRoot(parentById: Map<string, string | null>, id: string): string[
     path.push(cur);
     cur = parentById.get(cur) ?? null;
   }
-  return path; // id -> ... -> root
+  return path;
 }
 
 function escapeRegExp(s: string) {
@@ -565,19 +552,14 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     return !!(can.add || can.rename || can.move || can.deactivate);
   }, [can.add, can.rename, can.move, can.deactivate]);
 
-  // ---------------------------
-  // Create child modal state
-  // ---------------------------
   const [createModal, setCreateModal] = useState<{ open: boolean; parentId: string | null }>({ open: false, parentId: null });
   const [createName, setCreateName] = useState<string>("");
-  const [createCode, setCreateCode] = useState<string>("");
   const [createBusy, setCreateBusy] = useState<boolean>(false);
   const [createErr, setCreateErr] = useState<string | null>(null);
 
   const openCreate = useCallback((parentId: string) => {
     setCreateErr(null);
     setCreateName("");
-    setCreateCode("");
     setCreateModal({ open: true, parentId });
   }, []);
 
@@ -590,7 +572,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   const submitCreate = useCallback(async () => {
     if (!createModal.parentId) return;
     const name = (createName || "").trim();
-    const code = (createCode || "").trim();
 
     if (!name) {
       setCreateErr("Название обязательно.");
@@ -598,7 +579,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     }
 
     if (!onCreateChild) {
-      // fallback to legacy mode
       onAction(createModal.parentId, "add_child");
       setCreateModal({ open: false, parentId: null });
       return;
@@ -607,11 +587,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     setCreateBusy(true);
     setCreateErr(null);
     try {
-      await onCreateChild({
-        parent_id: createModal.parentId,
-        name,
-        code: code ? code : null,
-      });
+      await onCreateChild(createModal.parentId, name);
       setCreateModal({ open: false, parentId: null });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e ?? "Ошибка");
@@ -619,11 +595,8 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     } finally {
       setCreateBusy(false);
     }
-  }, [createModal.parentId, createName, createCode, onCreateChild, onAction]);
+  }, [createModal.parentId, createName, onCreateChild, onAction]);
 
-  // ---------------------------
-  // Toggle active helper
-  // ---------------------------
   const runToggleActive = useCallback(
     async (id: string, makeActive: boolean) => {
       if (!onToggleActive) {
@@ -637,7 +610,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
       }
 
       try {
-        await onToggleActive({ id, make_active: makeActive });
+        await onToggleActive(id, makeActive);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e ?? "Ошибка");
         window.alert(msg || "Ошибка");
@@ -793,11 +766,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             setMenu(null);
 
             if (action === "add_child") {
-              if (onCreateChild) {
-                openCreate(nodeId);
-                return;
-              }
-              onAction(nodeId, action);
+              openCreate(nodeId);
               return;
             }
 
@@ -833,21 +802,17 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="block text-xs text-gray-700">Код (опционально)</label>
-            <input
-              value={createCode}
-              onChange={(e) => setCreateCode(e.target.value)}
-              className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-offset-2"
-              placeholder="Например: SEC-01"
-              disabled={createBusy}
-            />
-          </div>
-
-          {createErr ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{createErr}</div> : null}
+          {createErr ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{createErr}</div>
+          ) : null}
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={closeCreate} disabled={createBusy} className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50">
+            <button
+              type="button"
+              onClick={closeCreate}
+              disabled={createBusy}
+              className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            >
               Отмена
             </button>
             <button

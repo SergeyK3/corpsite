@@ -1,9 +1,6 @@
 // corpsite-ui/app/directory/employees/_lib/api.client.ts
 
-import type {
-  EmployeesResponse,
-  EmployeeDetails,
-} from "./types";
+import type { EmployeesResponse, EmployeeDetails } from "./types";
 
 function getApiBase(): string {
   const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
@@ -33,7 +30,6 @@ function buildQuery(params: Record<string, string | number | null | undefined>):
 export function mapApiErrorToMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
 
-  // Пытаемся вытащить HTTP статус из типового текста ошибок
   const m = msg.match(/\bHTTP\s+(\d{3})\b/i);
   const status = m ? Number(m[1]) : undefined;
 
@@ -56,6 +52,31 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
   const res = await fetch(url, {
     method: "GET",
     headers,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
+  const apiBase = getApiBase();
+  const devUserId = getDevUserId();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (devUserId) headers["X-User-Id"] = devUserId;
+
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "POST",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
   });
 
@@ -102,8 +123,25 @@ export async function getEmployee(employeeId: string): Promise<EmployeeDetails> 
 }
 
 /**
- * Должности (если endpoint у вас реально есть)
- * Если backend возвращает { items, total } — компонент отработает.
+ * Завершение работы сотрудника
+ * Backend: POST /directory/employees/{id}/terminate
+ *
+ * Совместимость с UI:
+ * - terminateEmployee(id)
+ * - terminateEmployee(id, dateTo)  // dateTo: "YYYY-MM-DD"
+ */
+export async function terminateEmployee(employeeId: string, dateTo?: string): Promise<EmployeeDetails> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+
+  const dt = (dateTo ?? "").trim();
+  const body = dt ? { date_to: dt } : undefined;
+
+  return apiPostJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}/terminate`, body);
+}
+
+/**
+ * Должности
  */
 export async function getPositions(args?: { limit?: number; offset?: number }): Promise<any> {
   const qs = buildQuery({
@@ -114,7 +152,7 @@ export async function getPositions(args?: { limit?: number; offset?: number }): 
 }
 
 /**
- * Отделы (опционально; если используете)
+ * Отделы
  */
 export async function getDepartments(args?: { limit?: number; offset?: number }): Promise<any> {
   const qs = buildQuery({

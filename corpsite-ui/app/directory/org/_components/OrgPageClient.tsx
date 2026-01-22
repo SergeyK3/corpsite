@@ -10,7 +10,7 @@ import type {
   EmployeeDTO,
   EmployeesResponse,
   EmployeeDetails,
-} from "../../employees/lib/types";
+} from "../../employees/_lib/types";
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
 

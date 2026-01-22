@@ -1,4 +1,5 @@
 // corpsite-ui/app/directory/org/page.tsx
+import * as React from "react";
 import OrgPageClient from "./_components/OrgPageClient";
 
 export default function OrgPage() {
@@ -11,7 +12,9 @@ export default function OrgPage() {
         </div>
       </div>
 
-      <OrgPageClient />
+      <React.Suspense fallback={<div className="rounded border bg-white p-4 text-sm text-gray-700">Загрузка…</div>}>
+        <OrgPageClient />
+      </React.Suspense>
     </div>
   );
 }
