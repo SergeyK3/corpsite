@@ -1,6 +1,4 @@
-﻿# FILE: app/directory.py
-
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import inspect
 import os
@@ -338,7 +336,7 @@ def departments_tree(
 
 
 # ---------------------------
-# Org units mutations (B3.x)
+# Org units mutations (B3.x + B4)
 # ---------------------------
 class OrgUnitRenameIn(BaseModel):
     name: str
@@ -346,6 +344,13 @@ class OrgUnitRenameIn(BaseModel):
 
 class OrgUnitMoveIn(BaseModel):
     parent_unit_id: Optional[int] = None
+
+
+class OrgUnitCreateIn(BaseModel):
+    name: str
+    parent_unit_id: Optional[int] = None
+    code: Optional[str] = None
+    is_active: bool = True
 
 
 def _require_unit_in_scope_or_403(
@@ -455,6 +460,143 @@ async def org_unit_move(
     except HTTPException:
         raise
     except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _as_http500(e)
+
+
+# ---------------------------
+# B3.3 Activate / Deactivate
+# ---------------------------
+@router.patch("/org-units/{unit_id}/deactivate")
+async def org_unit_deactivate(
+    unit_id: int = Path(..., ge=1),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    try:
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+
+        scope = _compute_scope(uid, user_ctx, include_inactive=True)
+
+        if not scope["privileged"]:
+            _require_unit_in_scope_or_403(
+                scope_unit_ids=scope["scope_unit_ids"],
+                unit_id=int(unit_id),
+                parent_unit_id=None,
+            )
+
+        u = _org_units.deactivate_org_unit(unit_id=int(unit_id))
+        return {
+            "item": {
+                "id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "is_active": u.is_active,
+            }
+        }
+
+    except HTTPException:
+        raise
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _as_http500(e)
+
+
+@router.patch("/org-units/{unit_id}/activate")
+async def org_unit_activate(
+    unit_id: int = Path(..., ge=1),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    try:
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+
+        scope = _compute_scope(uid, user_ctx, include_inactive=True)
+
+        if not scope["privileged"]:
+            _require_unit_in_scope_or_403(
+                scope_unit_ids=scope["scope_unit_ids"],
+                unit_id=int(unit_id),
+                parent_unit_id=None,
+            )
+
+        u = _org_units.activate_org_unit(unit_id=int(unit_id))
+        return {
+            "item": {
+                "id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "is_active": u.is_active,
+            }
+        }
+
+    except HTTPException:
+        raise
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise _as_http500(e)
+
+
+# ---------------------------
+# B4 Create org unit
+# ---------------------------
+@router.post("/org-units")
+async def org_unit_create(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    body: OrgUnitCreateIn = None,  # type: ignore[assignment]
+) -> Dict[str, Any]:
+    try:
+        if body is None or not getattr(body, "name", None):
+            raise HTTPException(status_code=400, detail="name is required")
+
+        uid = _require_user_id(x_user_id)
+        user_ctx = _load_user_ctx(uid)
+
+        scope = _compute_scope(uid, user_ctx, include_inactive=True)
+
+        # For non-privileged users, require that parent is in scope (if provided).
+        if not scope["privileged"]:
+            if body.parent_unit_id is not None:
+                _require_unit_in_scope_or_403(
+                    scope_unit_ids=scope["scope_unit_ids"],
+                    unit_id=int(body.parent_unit_id),
+                    parent_unit_id=None,
+                )
+            else:
+                # If trying to create a root unit without being privileged -> forbid.
+                raise HTTPException(status_code=403, detail="Forbidden: root unit create requires privileged user")
+
+        u = _org_units.create_org_unit(
+            name=body.name,
+            parent_unit_id=body.parent_unit_id,
+            code=body.code,
+            is_active=bool(body.is_active),
+        )
+        return {
+            "item": {
+                "id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "is_active": u.is_active,
+            }
+        }
+
+    except HTTPException:
+        raise
+    except LookupError as e:
+        # parent org unit not found
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

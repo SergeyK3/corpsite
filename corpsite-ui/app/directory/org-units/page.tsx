@@ -3,89 +3,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
-import { getOrgUnitsTree, mapApiErrorToMessage, renameOrgUnit, moveOrgUnit } from "./_lib/api.client";
-
-function getApiBase(): string {
-  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  return v || "http://127.0.0.1:8000";
-}
-
-function getDevUserId(): string | null {
-  const v = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
-  return v ? v : null;
-}
-
-async function readErrorText(res: Response): Promise<string> {
-  const ct = (res.headers.get("content-type") || "").toLowerCase();
-  try {
-    if (ct.includes("application/json")) {
-      const j: any = await res.json();
-      const detail = j?.detail ?? j?.message ?? j?.error;
-      if (typeof detail === "string" && detail.trim()) return detail.trim();
-      if (detail != null) return JSON.stringify(detail);
-      return JSON.stringify(j);
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    const t = await res.text();
-    return (t || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
-  const apiBase = getApiBase();
-  const devUserId = getDevUserId();
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (devUserId) headers["X-User-Id"] = devUserId;
-
-  const res = await fetch(`${apiBase}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const detail = await readErrorText(res);
-    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
-  }
-
-  return (await res.json()) as T;
-}
-
-async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
-  const apiBase = getApiBase();
-  const devUserId = getDevUserId();
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (devUserId) headers["X-User-Id"] = devUserId;
-
-  const res = await fetch(`${apiBase}${path}`, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const detail = await readErrorText(res);
-    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
-  }
-
-  return (await res.json()) as T;
-}
+import OrgUnitsTree, { type TreeAction, type TreeNode } from "./_components/OrgUnitsTree";
+import {
+  activateOrgUnit,
+  createOrgUnit,
+  deactivateOrgUnit,
+  getOrgUnitsTree,
+  mapApiErrorToMessage,
+  moveOrgUnit,
+  renameOrgUnit,
+} from "./_lib/api.client";
 
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
@@ -93,19 +20,14 @@ function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   while (stack.length) {
     const n = stack.pop()!;
     if (String(n.id) === target) return n;
-    if (n.children && n.children.length) {
-      for (const ch of n.children) stack.push(ch);
-    }
+    for (const ch of n.children ?? []) stack.push(ch);
   }
   return null;
 }
 
 function findParentId(nodes: TreeNode[], id: string): string | null {
   const target = String(id);
-  const stack: Array<{ node: TreeNode; parentId: string | null }> = nodes.map((n) => ({
-    node: n,
-    parentId: null,
-  }));
+  const stack: Array<{ node: TreeNode; parentId: string | null }> = nodes.map((n) => ({ node: n, parentId: null }));
 
   while (stack.length) {
     const cur = stack.pop()!;
@@ -128,26 +50,6 @@ function flattenNodes(nodes: TreeNode[]): Array<{ id: string; title: string; typ
   return out;
 }
 
-type CreateOrgUnitResponse = {
-  item: {
-    id: number | string;
-    parent_id: number | null;
-    name: string;
-    code: string | null;
-    is_active: boolean;
-  };
-};
-
-type ToggleActiveResponse = {
-  item: {
-    id: number | string;
-    parent_id: number | null;
-    name: string;
-    code: string | null;
-    is_active: boolean;
-  };
-};
-
 export default function OrgUnitsPage() {
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [inactiveIds, setInactiveIds] = useState<string[]>([]);
@@ -158,23 +60,22 @@ export default function OrgUnitsPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string>("");
 
-  // B3.1 Rename UI
+  // Rename modal
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
 
-  // B3.2 Move UI
+  // Move modal
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveBusy, setMoveBusy] = useState(false);
   const [moveQuery, setMoveQuery] = useState("");
   const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
 
-  // B4 Create UI
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createCode, setCreateCode] = useState("");
-  const [createParentId, setCreateParentId] = useState<string | null>(null);
-  const [createBusy, setCreateBusy] = useState(false);
+  // Add (create child) modal — kept for compatibility with your current UX
+  const [addOpen, setAddOpen] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addParentId, setAddParentId] = useState<string | null>(null);
 
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
@@ -214,38 +115,26 @@ export default function OrgUnitsPage() {
     });
   };
 
-  const handleSelect = (id: string) => {
-    setSelectedId(id);
-  };
+  const handleSelect = (id: string) => setSelectedId(id);
+  const handleResetExpand = () => setExpandedIds([]);
 
-  const handleResetExpand = () => {
-    setExpandedIds([]);
-  };
-
-  const selectedNode = useMemo(() => {
-    if (!selectedId) return null;
-    return findNodeById(nodes, selectedId);
-  }, [nodes, selectedId]);
-
-  const parentId = useMemo(() => {
-    if (!selectedId) return null;
-    return findParentId(nodes, selectedId);
-  }, [nodes, selectedId]);
-
-  const parentNode = useMemo(() => {
-    if (!parentId) return null;
-    return findNodeById(nodes, parentId);
-  }, [nodes, parentId]);
+  const selectedNode = useMemo(() => (selectedId ? findNodeById(nodes, selectedId) : null), [nodes, selectedId]);
+  const parentId = useMemo(() => (selectedId ? findParentId(nodes, selectedId) : null), [nodes, selectedId]);
+  const parentNode = useMemo(() => (parentId ? findNodeById(nodes, parentId) : null), [nodes, parentId]);
 
   const children = selectedNode?.children ?? [];
   const isInactive = selectedId ? inactiveSet.has(String(selectedId)) : false;
 
+  // if selected disappears after reload — reset
   useEffect(() => {
     if (!selectedId) return;
     const exists = findNodeById(nodes, selectedId);
     if (!exists) setSelectedId(null);
   }, [nodes, selectedId]);
 
+  // ---------------------------
+  // Rename
+  // ---------------------------
   const openRename = useCallback(
     (id: string) => {
       const n = findNodeById(nodes, id);
@@ -289,16 +178,17 @@ export default function OrgUnitsPage() {
     }
   }, [closeRename, loadTree, renameValue, selectedNode]);
 
-  // Move: open/close
+  // ---------------------------
+  // Move
+  // ---------------------------
   const openMove = useCallback(
     (id: string) => {
       const n = findNodeById(nodes, id);
       if (!n) return;
 
       const curParentId = findParentId(nodes, String(id));
-
       setSelectedId(String(id));
-      setMoveTargetId(curParentId); // по умолчанию — текущий родитель
+      setMoveTargetId(curParentId);
       setMoveQuery("");
       setMoveOpen(true);
       setErrorText("");
@@ -319,9 +209,9 @@ export default function OrgUnitsPage() {
 
     const selected = String(selectedNode.id);
     const disallow = new Set<string>();
-    // нельзя перемещать в самого себя или в своих потомков
-    const stack: TreeNode[] = [...(selectedNode.children ?? [])];
     disallow.add(selected);
+
+    const stack: TreeNode[] = [...(selectedNode.children ?? [])];
     while (stack.length) {
       const n = stack.pop()!;
       disallow.add(String(n.id));
@@ -329,8 +219,6 @@ export default function OrgUnitsPage() {
     }
 
     let list = flat.filter((x) => !disallow.has(String(x.id)));
-
-    // не предлагать inactive как родителя
     list = list.filter((x) => !inactiveSet.has(String(x.id)));
 
     const q = (moveQuery || "").trim().toLowerCase();
@@ -374,105 +262,155 @@ export default function OrgUnitsPage() {
     }
   }, [closeMove, loadTree, moveTargetId, nodes, selectedNode]);
 
-  // Create: open/close/submit
-  const openCreate = useCallback(
-    (parent_id: string) => {
-      const parent = findNodeById(nodes, parent_id);
-      if (!parent) return;
+  // ---------------------------
+  // Add child (Create)
+  // ---------------------------
+  const openAddChild = useCallback(
+    (parentNodeId: string) => {
+      const n = findNodeById(nodes, parentNodeId);
+      if (!n) return;
 
-      setCreateParentId(String(parent_id));
-      setCreateName("");
-      setCreateCode("");
-      setCreateOpen(true);
+      setSelectedId(String(parentNodeId));
+      setAddParentId(String(parentNodeId));
+      setAddName("");
+      setAddOpen(true);
       setErrorText("");
     },
     [nodes]
   );
 
-  const closeCreate = useCallback(() => {
-    if (createBusy) return;
-    setCreateOpen(false);
-    setCreateName("");
-    setCreateCode("");
-    setCreateParentId(null);
-  }, [createBusy]);
+  const closeAdd = useCallback(() => {
+    if (addBusy) return;
+    setAddOpen(false);
+    setAddName("");
+    setAddParentId(null);
+  }, [addBusy]);
 
-  const submitCreate = useCallback(async () => {
-    if (!createParentId) return;
+  const submitAdd = useCallback(async () => {
+    const pid = addParentId;
+    const name = addName.trim();
+    if (!pid || !name) return;
 
-    const name = createName.trim();
-    const code = createCode.trim();
-
-    if (!name) return;
-
-    setCreateBusy(true);
+    setAddBusy(true);
     setErrorText("");
 
     try {
-      await apiPostJson<CreateOrgUnitResponse>("/directory/org-units", {
+      await createOrgUnit({
         name,
-        parent_unit_id: Number(createParentId),
-        code: code ? code : null,
+        parent_unit_id: Number(pid),
         is_active: true,
       });
-
-      closeCreate();
+      closeAdd();
       await loadTree();
+
+      setExpandedIds((prev) => {
+        const p = String(pid);
+        return prev.includes(p) ? prev : [...prev, p];
+      });
     } catch (e) {
       setErrorText(mapApiErrorToMessage(e));
     } finally {
-      setCreateBusy(false);
+      setAddBusy(false);
     }
-  }, [createParentId, createName, createCode, closeCreate, loadTree]);
+  }, [addParentId, addName, closeAdd, loadTree]);
 
-  // Toggle active: backend PATCH /activate /deactivate
-  const toggleActive = useCallback(
-    async (id: string, makeActive: boolean) => {
-      const unitId = String(id);
-
-      if (!makeActive) {
-        const ok = window.confirm("Деактивировать подразделение? Оно исчезнет из списка активных.");
-        if (!ok) return;
-      }
-
+  // ---------------------------
+  // Toggle active (activate/deactivate) for selected
+  // ---------------------------
+  const doDeactivateById = useCallback(
+    async (id: string) => {
+      if (inactiveSet.has(String(id))) return;
       setErrorText("");
-
       try {
-        if (makeActive) {
-          await apiPatchJson<ToggleActiveResponse>(`/directory/org-units/${unitId}/activate`, {});
-        } else {
-          await apiPatchJson<ToggleActiveResponse>(`/directory/org-units/${unitId}/deactivate`, {});
-        }
+        await deactivateOrgUnit({ unit_id: String(id) });
         await loadTree();
       } catch (e) {
         setErrorText(mapApiErrorToMessage(e));
       }
     },
-    [loadTree]
+    [inactiveSet, loadTree]
   );
 
-  // Enter/Escape в модалках
+  const doActivateById = useCallback(
+    async (id: string) => {
+      if (!inactiveSet.has(String(id))) return;
+      setErrorText("");
+      try {
+        await activateOrgUnit({ unit_id: String(id) });
+        await loadTree();
+      } catch (e) {
+        setErrorText(mapApiErrorToMessage(e));
+      }
+    },
+    [inactiveSet, loadTree]
+  );
+
+  const doDeactivate = useCallback(async () => {
+    if (!selectedNode) return;
+    void doDeactivateById(String(selectedNode.id));
+  }, [doDeactivateById, selectedNode]);
+
+  const doActivate = useCallback(async () => {
+    if (!selectedNode) return;
+    void doActivateById(String(selectedNode.id));
+  }, [doActivateById, selectedNode]);
+
+  // ---------------------------
+  // Keyboard in modals
+  // ---------------------------
   useEffect(() => {
-    if (!renameOpen && !moveOpen && !createOpen) return;
+    if (!renameOpen && !moveOpen && !addOpen) return;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         if (renameOpen) closeRename();
         if (moveOpen) closeMove();
-        if (createOpen) closeCreate();
+        if (addOpen) closeAdd();
       }
       if (e.key === "Enter") {
         e.preventDefault();
         if (renameOpen) void submitRename();
         if (moveOpen) void submitMove();
-        if (createOpen) void submitCreate();
+        if (addOpen) void submitAdd();
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [renameOpen, moveOpen, createOpen, closeRename, closeMove, closeCreate, submitRename, submitMove, submitCreate]);
+  }, [renameOpen, moveOpen, addOpen, closeRename, closeMove, closeAdd, submitRename, submitMove, submitAdd]);
+
+  // ---------------------------
+  // Tree actions (kebab)
+  // Important: action "activate" exists now (from OrgUnitsTree.tsx)
+  // ---------------------------
+  const handleTreeAction = useCallback(
+    (id: string, action: TreeAction) => {
+      if (action === "rename") {
+        openRename(String(id));
+        return;
+      }
+      if (action === "move") {
+        openMove(String(id));
+        return;
+      }
+      if (action === "add_child") {
+        openAddChild(String(id));
+        return;
+      }
+      if (action === "deactivate") {
+        setSelectedId(String(id));
+        void doDeactivateById(String(id));
+        return;
+      }
+      if (action === "activate") {
+        setSelectedId(String(id));
+        void doActivateById(String(id));
+        return;
+      }
+    },
+    [doActivateById, doDeactivateById, openAddChild, openMove, openRename]
+  );
 
   return (
     <div className="h-[calc(100vh-64px)] w-full p-4">
@@ -508,17 +446,10 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              // Включаем: Add + ToggleActive + Rename + Move
               can={{ add: true, rename: true, move: true, deactivate: true }}
               onSelect={handleSelect}
               onToggle={handleToggle}
-              onAction={(id: string, action: TreeAction) => {
-                if (action === "rename") openRename(String(id));
-                if (action === "move") openMove(String(id));
-                if (action === "add_child") openCreate(String(id));
-                if (action === "deactivate") void toggleActive(String(id), false);
-                if (action === "activate") void toggleActive(String(id), true);
-              }}
+              onAction={handleTreeAction}
               onSearch={setSearchQuery}
               onResetExpand={handleResetExpand}
               headerTitle="Подразделения"
@@ -552,7 +483,7 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openRename(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || createBusy}
+                  disabled={renameBusy || moveBusy || addBusy}
                 >
                   Переименовать
                 </button>
@@ -561,7 +492,7 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openMove(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || createBusy || isInactive}
+                  disabled={renameBusy || moveBusy || addBusy || isInactive}
                   title={isInactive ? "Нельзя перемещать неактивное подразделение" : "Переместить"}
                 >
                   Переместить
@@ -570,22 +501,34 @@ export default function OrgUnitsPage() {
                 <button
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                  onClick={() => openCreate(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || createBusy || isInactive}
-                  title={isInactive ? "Нельзя добавлять дочерние к неактивному узлу" : "Добавить дочерний"}
+                  onClick={() => openAddChild(String(selectedNode.id))}
+                  disabled={renameBusy || moveBusy || addBusy || isInactive}
+                  title={isInactive ? "Нельзя добавлять в неактивное подразделение" : "Добавить дочернее подразделение"}
                 >
                   Добавить секцию
                 </button>
 
-                <button
-                  type="button"
-                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                  onClick={() => void toggleActive(String(selectedNode.id), isInactive)}
-                  disabled={renameBusy || moveBusy || createBusy}
-                  title={isInactive ? "Активировать" : "Деактивировать"}
-                >
-                  {isInactive ? "Активировать" : "Деактивировать"}
-                </button>
+                {isInactive ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => void doActivate()}
+                    disabled={renameBusy || moveBusy || addBusy || isLoading}
+                    title="Активировать"
+                  >
+                    Активировать
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => void doDeactivate()}
+                    disabled={renameBusy || moveBusy || addBusy || isLoading}
+                    title="Деактивировать"
+                  >
+                    Деактивировать
+                  </button>
+                )}
               </div>
             ) : null}
           </div>
@@ -811,65 +754,49 @@ export default function OrgUnitsPage() {
         </div>
       ) : null}
 
-      {/* Create modal */}
-      {createOpen && createParentId ? (
+      {/* Add child modal */}
+      {addOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closeCreate();
+            if (e.target === e.currentTarget) closeAdd();
           }}
         >
           <div className="w-full max-w-[560px] rounded-2xl border bg-white p-4 shadow-lg">
             <div className="text-sm font-medium text-gray-900">Добавить дочернее подразделение</div>
-            <div className="mt-1 text-xs text-gray-600">
+
+            <div className="mt-2 text-sm text-gray-700">
               Родитель:{" "}
               <span className="font-medium text-gray-900">
-                {(() => {
-                  const p = findNodeById(nodes, createParentId);
-                  return p ? `${p.title} (${p.id})` : createParentId;
-                })()}
+                {addParentId && findNodeById(nodes, addParentId)
+                  ? `${findNodeById(nodes, addParentId)!.title} (${addParentId})`
+                  : addParentId ?? "-"}
               </span>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3">
-              <div>
-                <div className="text-xs font-medium text-gray-800">Название *</div>
-                <input
-                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="Например: Секция внутреннего обучения"
-                  disabled={createBusy}
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <div className="text-xs font-medium text-gray-800">Код (опционально)</div>
-                <input
-                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
-                  value={createCode}
-                  onChange={(e) => setCreateCode(e.target.value)}
-                  placeholder="Например: SEC-01"
-                  disabled={createBusy}
-                />
-              </div>
-            </div>
+            <input
+              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm text-gray-900"
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+              disabled={addBusy}
+              placeholder="Название нового подразделения"
+              autoFocus
+            />
 
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                onClick={closeCreate}
-                disabled={createBusy}
+                onClick={closeAdd}
+                disabled={addBusy}
               >
                 Отмена
               </button>
               <button
                 type="button"
                 className="rounded-lg border bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-                onClick={() => void submitCreate()}
-                disabled={createBusy || !createName.trim()}
+                onClick={() => void submitAdd()}
+                disabled={addBusy || !addName.trim()}
               >
                 Создать
               </button>

@@ -109,6 +109,31 @@ async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
+  const apiBase = getApiBase();
+  const devUserId = getDevUserId();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (devUserId) headers["X-User-Id"] = devUserId;
+
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const detail = await readErrorText(res);
+    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
 /**
  * UI-дерево оргструктуры
  * Backend: GET /directory/org-units/tree
@@ -160,4 +185,62 @@ export async function renameOrgUnit(args: { unit_id: string | number; name: stri
     }
     throw e;
   }
+}
+
+/**
+ * Move org unit
+ * Backend: PATCH /directory/org-units/{unit_id}/move  body: { parent_unit_id: number | null }
+ */
+export type OrgUnitMoveResponse = OrgUnitRenameResponse;
+
+export async function moveOrgUnit(args: {
+  unit_id: string | number;
+  parent_unit_id: number | null;
+}): Promise<OrgUnitMoveResponse> {
+  const id = String(args.unit_id);
+  const payload = { parent_unit_id: args.parent_unit_id };
+  return apiPatchJson<OrgUnitMoveResponse>(`/directory/org-units/${id}/move`, payload);
+}
+
+/**
+ * B3.3 Deactivate org unit
+ * Backend: PATCH /directory/org-units/{unit_id}/deactivate
+ */
+export type OrgUnitDeactivateResponse = OrgUnitRenameResponse;
+
+export async function deactivateOrgUnit(args: { unit_id: string | number }): Promise<OrgUnitDeactivateResponse> {
+  const id = String(args.unit_id);
+  return apiPatchJson<OrgUnitDeactivateResponse>(`/directory/org-units/${id}/deactivate`, {});
+}
+
+/**
+ * B3.3 Activate org unit
+ * Backend: PATCH /directory/org-units/{unit_id}/activate
+ */
+export type OrgUnitActivateResponse = OrgUnitRenameResponse;
+
+export async function activateOrgUnit(args: { unit_id: string | number }): Promise<OrgUnitActivateResponse> {
+  const id = String(args.unit_id);
+  return apiPatchJson<OrgUnitActivateResponse>(`/directory/org-units/${id}/activate`, {});
+}
+
+/**
+ * B4 Create org unit
+ * Backend: POST /directory/org-units
+ */
+export type OrgUnitCreateResponse = OrgUnitRenameResponse;
+
+export async function createOrgUnit(args: {
+  name: string;
+  parent_unit_id?: number | null;
+  code?: string | null;
+  is_active?: boolean;
+}): Promise<OrgUnitCreateResponse> {
+  const payload = {
+    name: args.name,
+    parent_unit_id: args.parent_unit_id ?? null,
+    code: args.code ?? null,
+    is_active: args.is_active ?? true,
+  };
+  return apiPostJson<OrgUnitCreateResponse>(`/directory/org-units`, payload);
 }

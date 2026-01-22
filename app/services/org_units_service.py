@@ -1,5 +1,3 @@
-# FILE: app/services/org_units_service.py
-
 from __future__ import annotations
 
 import os
@@ -84,6 +82,13 @@ class OrgUnitsService:
         # off | dept | groups
         v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
         return v if v in ("off", "dept", "groups") else "dept"
+
+    @staticmethod
+    def _trim_opt(v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = v.strip()
+        return s if s else None
 
     def _fallback_dept_scope_or_raise(self, *, user_id: int, unit_id: Optional[int], include_inactive: bool) -> Set[int]:
         """
@@ -580,6 +585,106 @@ class OrgUnitsService:
 
         if not r:
             raise LookupError(f"org unit not found: unit_id={uid}")
+
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            is_active=bool(r["is_active"]),
+        )
+
+    # ---------------------------
+    # B3.3 Deactivate / Activate (write)
+    # ---------------------------
+    def set_org_unit_active(
+        self,
+        *,
+        unit_id: int,
+        is_active: bool,
+    ) -> OrgUnit:
+        uid = int(unit_id)
+
+        sql = text(
+            f"""
+            UPDATE {self._schema}.{self._org_units_table}
+            SET is_active = :is_active
+            WHERE unit_id = :unit_id
+            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            """
+        )
+
+        with self._engine.begin() as c:
+            r = c.execute(
+                sql,
+                {
+                    "unit_id": uid,
+                    "is_active": bool(is_active),
+                },
+            ).mappings().first()
+
+        if not r:
+            raise LookupError(f"org unit not found: unit_id={uid}")
+
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            is_active=bool(r["is_active"]),
+        )
+
+    def deactivate_org_unit(self, *, unit_id: int) -> OrgUnit:
+        return self.set_org_unit_active(unit_id=int(unit_id), is_active=False)
+
+    def activate_org_unit(self, *, unit_id: int) -> OrgUnit:
+        return self.set_org_unit_active(unit_id=int(unit_id), is_active=True)
+
+    # ---------------------------
+    # B4 Add org unit (create flow)
+    # ---------------------------
+    def create_org_unit(
+        self,
+        *,
+        name: str,
+        parent_unit_id: Optional[int] = None,
+        code: Optional[str] = None,
+        is_active: bool = True,
+    ) -> OrgUnit:
+        nm = (name or "").strip()
+        if not nm:
+            raise ValueError("name must not be empty")
+
+        pid = int(parent_unit_id) if parent_unit_id is not None else None
+
+        if pid is not None:
+            parent = self.get_org_unit(unit_id=pid, include_inactive=True)
+            if parent is None:
+                raise LookupError(f"parent org unit not found: parent_unit_id={pid}")
+
+        cd = self._trim_opt(code)
+
+        sql = text(
+            f"""
+            INSERT INTO {self._schema}.{self._org_units_table} (parent_unit_id, name, code, is_active)
+            VALUES (:parent_unit_id, :name, :code, :is_active)
+            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            """
+        )
+
+        with self._engine.begin() as c:
+            r = c.execute(
+                sql,
+                {
+                    "parent_unit_id": pid,
+                    "name": nm,
+                    "code": cd,
+                    "is_active": bool(is_active),
+                },
+            ).mappings().first()
+
+        if not r:
+            raise RuntimeError("create org unit failed")
 
         return OrgUnit(
             unit_id=int(r["unit_id"]),

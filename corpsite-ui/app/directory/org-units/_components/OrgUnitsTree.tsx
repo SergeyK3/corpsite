@@ -16,10 +16,10 @@ export type TreeCan = {
   add: boolean;
   rename: boolean;
   move: boolean;
-  deactivate: boolean;
+  deactivate: boolean; // используем как "toggle active" (deactivate/activate)
 };
 
-export type TreeAction = "add_child" | "rename" | "move" | "deactivate";
+export type TreeAction = "add_child" | "rename" | "move" | "deactivate" | "activate";
 
 export type OrgUnitsTreeProps = {
   nodes: TreeNode[];
@@ -33,7 +33,24 @@ export type OrgUnitsTreeProps = {
 
   onSelect: (id: string) => void;
   onToggle: (id: string, open: boolean) => void;
+
+  /**
+   * Старый/совместимый режим: контейнер сам решает, что делать по action.
+   * Если ниже переданы onCreateChild/onToggleActive — компонент может выполнять UX сам.
+   */
   onAction: (id: string, action: TreeAction) => void;
+
+  /**
+   * Новый режим (не обязателен):
+   * - Create: компонент покажет диалог и вызовет onCreateChild.
+   */
+  onCreateChild?: (args: { parent_id: string; name: string; code: string | null }) => Promise<void> | void;
+
+  /**
+   * Новый режим (не обязателен):
+   * - Toggle active: компонент сам вызывает onToggleActive, UI подтверждение внутри.
+   */
+  onToggleActive?: (args: { id: string; make_active: boolean }) => Promise<void> | void;
 
   onSearch: (q: string) => void;
   onResetExpand: () => void;
@@ -161,11 +178,13 @@ function ContextMenu({
   onClose,
   onPick,
   can,
+  isInactive,
 }: {
   anchorRect: DOMRect;
   onClose: () => void;
   onPick: (action: TreeAction) => void;
   can: TreeCan;
+  isInactive: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -186,11 +205,15 @@ function ContextMenu({
     };
   }, [onClose]);
 
+  const toggleItem = isInactive
+    ? { key: "activate" as const, label: "Активировать", enabled: can.deactivate }
+    : { key: "deactivate" as const, label: "Деактивировать", enabled: can.deactivate };
+
   const items: Array<{ key: TreeAction; label: string; enabled: boolean }> = [
     { key: "add_child", label: "Добавить дочерний", enabled: can.add },
     { key: "rename", label: "Переименовать", enabled: can.rename },
     { key: "move", label: "Переместить", enabled: can.move },
-    { key: "deactivate", label: "Деактивировать", enabled: can.deactivate },
+    toggleItem,
   ];
 
   const style: React.CSSProperties = {
@@ -202,7 +225,7 @@ function ContextMenu({
   };
 
   return (
-    <div ref={ref} style={style} className="rounded-xl border bg-white shadow-lg">
+    <div ref={ref} style={style} className="rounded-xl border bg-white text-gray-900 shadow-lg">
       <div className="py-1">
         {items.slice(0, 3).map((it) => (
           <button
@@ -212,7 +235,7 @@ function ContextMenu({
             onClick={() => it.enabled && onPick(it.key)}
             className={[
               "w-full px-3 py-2 text-left text-sm",
-              it.enabled ? "hover:bg-gray-50" : "opacity-40 cursor-not-allowed",
+              it.enabled ? "text-gray-900 hover:bg-gray-50" : "text-gray-400 cursor-not-allowed",
             ].join(" ")}
           >
             {it.label}
@@ -225,7 +248,7 @@ function ContextMenu({
           onClick={() => items[3].enabled && onPick(items[3].key)}
           className={[
             "w-full px-3 py-2 text-left text-sm",
-            items[3].enabled ? "hover:bg-gray-50" : "opacity-40 cursor-not-allowed",
+            items[3].enabled ? "text-gray-900 hover:bg-gray-50" : "text-gray-400 cursor-not-allowed",
           ].join(" ")}
         >
           {items[3].label}
@@ -307,6 +330,58 @@ function filterTreeForSearch(opts: {
   return { nodes: out, matchIds };
 }
 
+function Modal({
+  open,
+  title,
+  children,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onClick = (e: MouseEvent) => {
+      const el = ref.current;
+      if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
+      <div ref={ref} className="w-full max-w-lg rounded-2xl border bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="text-sm font-medium">{title}</div>
+          <button type="button" onClick={onClose} className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50">
+            Закрыть
+          </button>
+        </div>
+        <div className="px-4 py-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   const {
     nodes,
@@ -318,6 +393,8 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     onSelect,
     onToggle,
     onAction,
+    onCreateChild,
+    onToggleActive,
     onSearch,
     onResetExpand,
     className,
@@ -325,7 +402,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   } = props;
 
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
-
   const [showInactive, setShowInactive] = useState<boolean>(false);
 
   const fullIdx = useMemo(() => buildIndex(nodes), [nodes]);
@@ -341,7 +417,6 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   }, [nodes, searchQuery, inactiveSet, showInactive]);
 
   const viewIdx = useMemo(() => buildIndex(viewNodes), [viewNodes]);
-
   const expandedSnapshotRef = useRef<string[] | null>(null);
 
   useEffect(() => {
@@ -490,6 +565,87 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     return !!(can.add || can.rename || can.move || can.deactivate);
   }, [can.add, can.rename, can.move, can.deactivate]);
 
+  // ---------------------------
+  // Create child modal state
+  // ---------------------------
+  const [createModal, setCreateModal] = useState<{ open: boolean; parentId: string | null }>({ open: false, parentId: null });
+  const [createName, setCreateName] = useState<string>("");
+  const [createCode, setCreateCode] = useState<string>("");
+  const [createBusy, setCreateBusy] = useState<boolean>(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
+
+  const openCreate = useCallback((parentId: string) => {
+    setCreateErr(null);
+    setCreateName("");
+    setCreateCode("");
+    setCreateModal({ open: true, parentId });
+  }, []);
+
+  const closeCreate = useCallback(() => {
+    if (createBusy) return;
+    setCreateModal({ open: false, parentId: null });
+    setCreateErr(null);
+  }, [createBusy]);
+
+  const submitCreate = useCallback(async () => {
+    if (!createModal.parentId) return;
+    const name = (createName || "").trim();
+    const code = (createCode || "").trim();
+
+    if (!name) {
+      setCreateErr("Название обязательно.");
+      return;
+    }
+
+    if (!onCreateChild) {
+      // fallback to legacy mode
+      onAction(createModal.parentId, "add_child");
+      setCreateModal({ open: false, parentId: null });
+      return;
+    }
+
+    setCreateBusy(true);
+    setCreateErr(null);
+    try {
+      await onCreateChild({
+        parent_id: createModal.parentId,
+        name,
+        code: code ? code : null,
+      });
+      setCreateModal({ open: false, parentId: null });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e ?? "Ошибка");
+      setCreateErr(msg || "Ошибка");
+    } finally {
+      setCreateBusy(false);
+    }
+  }, [createModal.parentId, createName, createCode, onCreateChild, onAction]);
+
+  // ---------------------------
+  // Toggle active helper
+  // ---------------------------
+  const runToggleActive = useCallback(
+    async (id: string, makeActive: boolean) => {
+      if (!onToggleActive) {
+        onAction(id, makeActive ? "activate" : "deactivate");
+        return;
+      }
+
+      if (!makeActive) {
+        const ok = window.confirm("Деактивировать подразделение? Оно исчезнет из списка активных.");
+        if (!ok) return;
+      }
+
+      try {
+        await onToggleActive({ id, make_active: makeActive });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e ?? "Ошибка");
+        window.alert(msg || "Ошибка");
+      }
+    },
+    [onToggleActive, onAction]
+  );
+
   const Row = ({ nodeId, depth }: { nodeId: string; depth: number }) => {
     const node = viewIdx.byId.get(nodeId);
     if (!node) return null;
@@ -630,14 +786,81 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
         <ContextMenu
           anchorRect={menu.rect}
           can={can}
+          isInactive={inactiveSet.has(menu.nodeId)}
           onClose={() => setMenu(null)}
           onPick={(action) => {
             const nodeId = menu.nodeId;
             setMenu(null);
+
+            if (action === "add_child") {
+              if (onCreateChild) {
+                openCreate(nodeId);
+                return;
+              }
+              onAction(nodeId, action);
+              return;
+            }
+
+            if (action === "deactivate") {
+              void runToggleActive(nodeId, false);
+              return;
+            }
+
+            if (action === "activate") {
+              void runToggleActive(nodeId, true);
+              return;
+            }
+
             onAction(nodeId, action);
           }}
         />
       ) : null}
+
+      <Modal open={createModal.open} title="Добавить подразделение" onClose={closeCreate}>
+        <div className="space-y-3">
+          <div className="text-xs text-gray-600">
+            Родитель: <span className="font-medium">{createModal.parentId ?? "-"}</span>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-xs text-gray-700">Название *</label>
+            <input
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-offset-2"
+              placeholder="Например: Секция внутреннего обучения"
+              disabled={createBusy}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-xs text-gray-700">Код (опционально)</label>
+            <input
+              value={createCode}
+              onChange={(e) => setCreateCode(e.target.value)}
+              className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-offset-2"
+              placeholder="Например: SEC-01"
+              disabled={createBusy}
+            />
+          </div>
+
+          {createErr ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{createErr}</div> : null}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onClick={closeCreate} disabled={createBusy} className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50">
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={() => void submitCreate()}
+              disabled={createBusy}
+              className="rounded-xl border bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {createBusy ? "Создание..." : "Создать"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
