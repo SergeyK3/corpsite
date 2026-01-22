@@ -6,6 +6,87 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
 import { getOrgUnitsTree, mapApiErrorToMessage, renameOrgUnit, moveOrgUnit } from "./_lib/api.client";
 
+function getApiBase(): string {
+  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  return v || "http://127.0.0.1:8000";
+}
+
+function getDevUserId(): string | null {
+  const v = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
+  return v ? v : null;
+}
+
+async function readErrorText(res: Response): Promise<string> {
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  try {
+    if (ct.includes("application/json")) {
+      const j: any = await res.json();
+      const detail = j?.detail ?? j?.message ?? j?.error;
+      if (typeof detail === "string" && detail.trim()) return detail.trim();
+      if (detail != null) return JSON.stringify(detail);
+      return JSON.stringify(j);
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const t = await res.text();
+    return (t || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
+  const apiBase = getApiBase();
+  const devUserId = getDevUserId();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (devUserId) headers["X-User-Id"] = devUserId;
+
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const detail = await readErrorText(res);
+    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
+  const apiBase = getApiBase();
+  const devUserId = getDevUserId();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (devUserId) headers["X-User-Id"] = devUserId;
+
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const detail = await readErrorText(res);
+    throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
 function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   const target = String(id);
   const stack: TreeNode[] = [...nodes];
@@ -47,6 +128,26 @@ function flattenNodes(nodes: TreeNode[]): Array<{ id: string; title: string; typ
   return out;
 }
 
+type CreateOrgUnitResponse = {
+  item: {
+    id: number | string;
+    parent_id: number | null;
+    name: string;
+    code: string | null;
+    is_active: boolean;
+  };
+};
+
+type ToggleActiveResponse = {
+  item: {
+    id: number | string;
+    parent_id: number | null;
+    name: string;
+    code: string | null;
+    is_active: boolean;
+  };
+};
+
 export default function OrgUnitsPage() {
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [inactiveIds, setInactiveIds] = useState<string[]>([]);
@@ -67,6 +168,13 @@ export default function OrgUnitsPage() {
   const [moveBusy, setMoveBusy] = useState(false);
   const [moveQuery, setMoveQuery] = useState("");
   const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
+
+  // B4 Create UI
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createCode, setCreateCode] = useState("");
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
 
   const inactiveSet = useMemo(() => new Set(inactiveIds.map(String)), [inactiveIds]);
 
@@ -190,7 +298,7 @@ export default function OrgUnitsPage() {
       const curParentId = findParentId(nodes, String(id));
 
       setSelectedId(String(id));
-      setMoveTargetId(curParentId); // по умолчанию — текущий родитель (можно сменить)
+      setMoveTargetId(curParentId); // по умолчанию — текущий родитель
       setMoveQuery("");
       setMoveOpen(true);
       setErrorText("");
@@ -222,7 +330,7 @@ export default function OrgUnitsPage() {
 
     let list = flat.filter((x) => !disallow.has(String(x.id)));
 
-    // опционально: не предлагать inactive как родителя
+    // не предлагать inactive как родителя
     list = list.filter((x) => !inactiveSet.has(String(x.id)));
 
     const q = (moveQuery || "").trim().toLowerCase();
@@ -234,7 +342,6 @@ export default function OrgUnitsPage() {
       });
     }
 
-    // сорт: по title
     list.sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru", { sensitivity: "base" }));
     return list;
   }, [nodes, selectedNode, moveQuery, inactiveSet]);
@@ -245,7 +352,6 @@ export default function OrgUnitsPage() {
     const currentParentId = findParentId(nodes, String(selectedNode.id));
     const nextParentId = moveTargetId;
 
-    // если не изменили — закрыть
     if ((currentParentId ?? null) === (nextParentId ?? null)) {
       closeMove();
       return;
@@ -268,28 +374,105 @@ export default function OrgUnitsPage() {
     }
   }, [closeMove, loadTree, moveTargetId, nodes, selectedNode]);
 
+  // Create: open/close/submit
+  const openCreate = useCallback(
+    (parent_id: string) => {
+      const parent = findNodeById(nodes, parent_id);
+      if (!parent) return;
+
+      setCreateParentId(String(parent_id));
+      setCreateName("");
+      setCreateCode("");
+      setCreateOpen(true);
+      setErrorText("");
+    },
+    [nodes]
+  );
+
+  const closeCreate = useCallback(() => {
+    if (createBusy) return;
+    setCreateOpen(false);
+    setCreateName("");
+    setCreateCode("");
+    setCreateParentId(null);
+  }, [createBusy]);
+
+  const submitCreate = useCallback(async () => {
+    if (!createParentId) return;
+
+    const name = createName.trim();
+    const code = createCode.trim();
+
+    if (!name) return;
+
+    setCreateBusy(true);
+    setErrorText("");
+
+    try {
+      await apiPostJson<CreateOrgUnitResponse>("/directory/org-units", {
+        name,
+        parent_unit_id: Number(createParentId),
+        code: code ? code : null,
+        is_active: true,
+      });
+
+      closeCreate();
+      await loadTree();
+    } catch (e) {
+      setErrorText(mapApiErrorToMessage(e));
+    } finally {
+      setCreateBusy(false);
+    }
+  }, [createParentId, createName, createCode, closeCreate, loadTree]);
+
+  // Toggle active: backend PATCH /activate /deactivate
+  const toggleActive = useCallback(
+    async (id: string, makeActive: boolean) => {
+      const unitId = String(id);
+
+      if (!makeActive) {
+        const ok = window.confirm("Деактивировать подразделение? Оно исчезнет из списка активных.");
+        if (!ok) return;
+      }
+
+      setErrorText("");
+
+      try {
+        if (makeActive) {
+          await apiPatchJson<ToggleActiveResponse>(`/directory/org-units/${unitId}/activate`, {});
+        } else {
+          await apiPatchJson<ToggleActiveResponse>(`/directory/org-units/${unitId}/deactivate`, {});
+        }
+        await loadTree();
+      } catch (e) {
+        setErrorText(mapApiErrorToMessage(e));
+      }
+    },
+    [loadTree]
+  );
+
   // Enter/Escape в модалках
   useEffect(() => {
-    if (!renameOpen && !moveOpen) return;
+    if (!renameOpen && !moveOpen && !createOpen) return;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         if (renameOpen) closeRename();
         if (moveOpen) closeMove();
+        if (createOpen) closeCreate();
       }
       if (e.key === "Enter") {
-        // В модалке перемещения Enter подтверждает, когда фокус не в select?
-        // Здесь делаем: если открыто rename — submitRename, иначе move — submitMove.
         e.preventDefault();
         if (renameOpen) void submitRename();
         if (moveOpen) void submitMove();
+        if (createOpen) void submitCreate();
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [renameOpen, moveOpen, closeRename, closeMove, submitRename, submitMove]);
+  }, [renameOpen, moveOpen, createOpen, closeRename, closeMove, closeCreate, submitRename, submitMove, submitCreate]);
 
   return (
     <div className="h-[calc(100vh-64px)] w-full p-4">
@@ -316,9 +499,7 @@ export default function OrgUnitsPage() {
             </div>
           ) : null}
 
-          {isLoading ? (
-            <div className="mb-3 rounded-xl border bg-white p-3 text-sm text-gray-600">Загрузка…</div>
-          ) : null}
+          {isLoading ? <div className="mb-3 rounded-xl border bg-white p-3 text-sm text-gray-600">Загрузка…</div> : null}
 
           <div className="min-h-0 flex-1 overflow-auto">
             <OrgUnitsTree
@@ -327,13 +508,16 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              // на этом шаге: включаем move (UX), add/deactivate — позже
-              can={{ add: false, rename: true, move: true, deactivate: false }}
+              // Включаем: Add + ToggleActive + Rename + Move
+              can={{ add: true, rename: true, move: true, deactivate: true }}
               onSelect={handleSelect}
               onToggle={handleToggle}
               onAction={(id: string, action: TreeAction) => {
                 if (action === "rename") openRename(String(id));
                 if (action === "move") openMove(String(id));
+                if (action === "add_child") openCreate(String(id));
+                if (action === "deactivate") void toggleActive(String(id), false);
+                if (action === "activate") void toggleActive(String(id), true);
               }}
               onSearch={setSearchQuery}
               onResetExpand={handleResetExpand}
@@ -368,7 +552,7 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openRename(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy}
+                  disabled={renameBusy || moveBusy || createBusy}
                 >
                   Переименовать
                 </button>
@@ -377,14 +561,30 @@ export default function OrgUnitsPage() {
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                   onClick={() => openMove(String(selectedNode.id))}
-                  disabled={renameBusy || moveBusy || isInactive}
+                  disabled={renameBusy || moveBusy || createBusy || isInactive}
                   title={isInactive ? "Нельзя перемещать неактивное подразделение" : "Переместить"}
                 >
                   Переместить
                 </button>
 
-                <button type="button" className="cursor-not-allowed rounded-lg border px-3 py-2 text-sm opacity-50" disabled>
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => openCreate(String(selectedNode.id))}
+                  disabled={renameBusy || moveBusy || createBusy || isInactive}
+                  title={isInactive ? "Нельзя добавлять дочерние к неактивному узлу" : "Добавить дочерний"}
+                >
                   Добавить секцию
+                </button>
+
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => void toggleActive(String(selectedNode.id), isInactive)}
+                  disabled={renameBusy || moveBusy || createBusy}
+                  title={isInactive ? "Активировать" : "Деактивировать"}
+                >
+                  {isInactive ? "Активировать" : "Деактивировать"}
                 </button>
               </div>
             ) : null}
@@ -605,6 +805,73 @@ export default function OrgUnitsPage() {
                 disabled={moveBusy}
               >
                 Переместить
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Create modal */}
+      {createOpen && createParentId ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeCreate();
+          }}
+        >
+          <div className="w-full max-w-[560px] rounded-2xl border bg-white p-4 shadow-lg">
+            <div className="text-sm font-medium text-gray-900">Добавить дочернее подразделение</div>
+            <div className="mt-1 text-xs text-gray-600">
+              Родитель:{" "}
+              <span className="font-medium text-gray-900">
+                {(() => {
+                  const p = findNodeById(nodes, createParentId);
+                  return p ? `${p.title} (${p.id})` : createParentId;
+                })()}
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <div>
+                <div className="text-xs font-medium text-gray-800">Название *</div>
+                <input
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="Например: Секция внутреннего обучения"
+                  disabled={createBusy}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-gray-800">Код (опционально)</div>
+                <input
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
+                  value={createCode}
+                  onChange={(e) => setCreateCode(e.target.value)}
+                  placeholder="Например: SEC-01"
+                  disabled={createBusy}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={closeCreate}
+                disabled={createBusy}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => void submitCreate()}
+                disabled={createBusy || !createName.trim()}
+              >
+                Создать
               </button>
             </div>
           </div>
