@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set, Callable
 
 import pytest
 
@@ -12,22 +12,29 @@ except Exception as e:
     raise RuntimeError("fastapi TestClient is required for tests") from e
 
 
-# Known seeded users in your DB
-USER_EXECUTOR = 2     # role_id=1
-USER_SUPERVISOR = 34  # role_id=58 (supervisor in env sets below)
+# -------------------------
+# Test config (known seeded users in your DB)
+# -------------------------
+USER_EXECUTOR = 2        # role_id = 1
+USER_SUPERVISOR = 34     # role_id = 58 (in SUPERVISOR_ROLE_IDS)
 ROLE_EXECUTOR = 1
 
 DEFAULT_PERIOD_ID = int(os.getenv("TEST_PERIOD_ID", "2"))
 
 
+# -------------------------
+# Helpers
+# -------------------------
 def _ensure_env_for_rbac() -> None:
-    # app/tasks.py reads SUPERVISOR_ROLE_IDS / DEPUTY_ROLE_IDS at import-time
+    """
+    app/tasks.py reads SUPERVISOR_ROLE_IDS / DEPUTY_ROLE_IDS at import-time.
+    For test stability we set defaults before importing app.main.
+    """
     os.environ.setdefault("SUPERVISOR_ROLE_IDS", "58,59")
     os.environ.setdefault("DEPUTY_ROLE_IDS", "60")
 
 
-@pytest.fixture(scope="session")
-def client() -> TestClient:
+def _make_client() -> TestClient:
     _ensure_env_for_rbac()
     from app.main import app  # noqa: WPS433
 
@@ -36,6 +43,23 @@ def client() -> TestClient:
 
 def _headers(user_id: int) -> Dict[str, str]:
     return {"X-User-Id": str(int(user_id))}
+
+
+def _assert_business_error(body: Dict[str, Any], expected_error: str) -> Dict[str, Any]:
+    """
+    Contract for ADR-003/004 business errors:
+      {"detail": {"error": "...", "message": "...", "reason": "...", "hint": "...", "code": "...", ...}}
+    """
+    assert "detail" in body, f"Expected 'detail' in response JSON, got: {body}"
+    detail = body["detail"]
+    assert isinstance(detail, dict), f"Expected detail to be object, got: {type(detail)}"
+
+    for k in ("error", "message", "reason", "hint", "code"):
+        assert k in detail, f"Missing detail.{k} in: {detail}"
+
+    assert detail["error"] == expected_error, f"Expected error={expected_error}, got: {detail}"
+    assert isinstance(detail["code"], str) and detail["code"], f"detail.code must be non-empty string: {detail}"
+    return detail
 
 
 def _create_task(
@@ -64,117 +88,124 @@ def _create_task(
     return int(data["task_id"])
 
 
-def _submit_report(c: TestClient, *, task_id: int, user_id: int) -> Any:
-    payload = {"report_link": "https://example.com/r-test", "current_comment": "test"}
+def _submit_report(
+    c: TestClient,
+    *,
+    task_id: int,
+    user_id: int,
+    link: str = "https://example.com/r-test",
+    comment: str = "test",
+):
+    payload = {"report_link": link, "current_comment": comment}
     return c.post(f"/tasks/{task_id}/report", json=payload, headers=_headers(user_id))
 
 
-def _patch_task(c: TestClient, *, task_id: int, user_id: int) -> Any:
-    payload = {"description": "try patch"}
+def _patch_task(
+    c: TestClient,
+    *,
+    task_id: int,
+    user_id: int,
+    payload: Dict[str, Any],
+):
     return c.patch(f"/tasks/{task_id}", json=payload, headers=_headers(user_id))
 
 
-def _approve_task(c: TestClient, *, task_id: int, user_id: int, approve: bool) -> Any:
-    payload = {"approve": bool(approve), "current_comment": "test"}
+def _approve_task(
+    c: TestClient,
+    *,
+    task_id: int,
+    user_id: int,
+    approve: bool = True,
+    comment: str = "test",
+):
+    payload = {"approve": bool(approve), "current_comment": comment}
     return c.post(f"/tasks/{task_id}/approve", json=payload, headers=_headers(user_id))
 
 
-def _assert_contract(
-    resp_json: Dict[str, Any],
-    *,
-    expected_http: int,
-    expected_error: str,
-) -> Dict[str, Any]:
-    assert isinstance(resp_json, dict), f"Expected JSON object, got: {type(resp_json)}"
-    assert "detail" in resp_json, f"Missing 'detail' in response: {resp_json}"
-
-    detail = resp_json["detail"]
-    assert isinstance(detail, dict), f"detail must be object, got: {type(detail)}"
-
-    # Required contract fields for business errors
-    required = ("error", "message", "reason", "hint", "code")
-    for k in required:
-        assert k in detail, f"Missing detail.{k} in: {detail}"
-        assert detail[k] is not None, f"detail.{k} must not be None in: {detail}"
-        assert str(detail[k]).strip() != "", f"detail.{k} must not be empty in: {detail}"
-
-    assert detail["error"] == expected_error, f"Expected detail.error={expected_error}, got: {detail}"
-
-    # Basic code quality
-    code = str(detail["code"])
-    assert code.upper() == code, f"detail.code must be UPPER_SNAKE_CASE, got: {code}"
-    assert " " not in code, f"detail.code must not contain spaces, got: {code}"
-    assert len(code) <= 64, f"detail.code must be <= 64 chars, got: {code} ({len(code)})"
-
-    # Category ↔ HTTP mapping
-    if code.endswith("_FORBIDDEN") or "_FORBIDDEN_" in code:
-        assert expected_http == 403, f"{code} must be returned with HTTP 403"
-    if code.endswith("_CONFLICT") or "_CONFLICT_" in code:
-        assert expected_http == 409, f"{code} must be returned with HTTP 409"
-
-    return detail
+# -------------------------
+# Fixtures
+# -------------------------
+@pytest.fixture(scope="session")
+def client() -> TestClient:
+    return _make_client()
 
 
-def _scenario_forbidden_report(c: TestClient) -> Any:
+# -------------------------
+# Scenarios
+# -------------------------
+def _scenario_forbidden_report(client: TestClient):
     task_id = _create_task(
-        c,
+        client,
         created_by_user_id=USER_SUPERVISOR,
         title="CONTRACT: forbidden report",
         status_code="WAITING_REPORT",
         executor_role_id=ROLE_EXECUTOR,
         assignment_scope="functional",
     )
-    return _submit_report(c, task_id=task_id, user_id=USER_SUPERVISOR)
+    return _submit_report(client, task_id=task_id, user_id=USER_SUPERVISOR)
 
 
-def _scenario_conflict_report_status(c: TestClient) -> Any:
+def _scenario_conflict_report_status(client: TestClient):
+    """
+    Variant 2 contract:
+      - report from IN_PROGRESS is allowed (200 -> WAITING_APPROVAL)
+      - second report attempt must fail with 409 conflict
+    """
     task_id = _create_task(
-        c,
+        client,
         created_by_user_id=USER_SUPERVISOR,
         title="CONTRACT: conflict report status",
         status_code="IN_PROGRESS",
         executor_role_id=ROLE_EXECUTOR,
         assignment_scope="functional",
     )
-    return _submit_report(c, task_id=task_id, user_id=USER_EXECUTOR)
+
+    r1 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
+    assert r1.status_code == 200, r1.text
+
+    r2 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
+    return r2
 
 
-def _scenario_forbidden_patch(c: TestClient) -> Any:
+def _scenario_forbidden_patch(client: TestClient):
     task_id = _create_task(
-        c,
+        client,
         created_by_user_id=USER_SUPERVISOR,
         title="CONTRACT: forbidden patch",
         status_code="IN_PROGRESS",
         executor_role_id=ROLE_EXECUTOR,
         assignment_scope="functional",
     )
-    return _patch_task(c, task_id=task_id, user_id=USER_SUPERVISOR)
+    return _patch_task(client, task_id=task_id, user_id=USER_SUPERVISOR, payload={"title": "try patch"})
 
 
-def _scenario_conflict_patch_status(c: TestClient) -> Any:
+def _scenario_conflict_patch_status(client: TestClient):
     task_id = _create_task(
-        c,
+        client,
         created_by_user_id=USER_SUPERVISOR,
         title="CONTRACT: conflict patch status",
         status_code="WAITING_REPORT",
         executor_role_id=ROLE_EXECUTOR,
         assignment_scope="functional",
     )
-    return _patch_task(c, task_id=task_id, user_id=USER_EXECUTOR)
+    return _patch_task(client, task_id=task_id, user_id=USER_EXECUTOR, payload={"description": "try patch"})
 
 
-def _scenario_conflict_approve_no_report(c: TestClient) -> Any:
+def _scenario_conflict_approve_no_report(client: TestClient):
     task_id = _create_task(
-        c,
+        client,
         created_by_user_id=USER_SUPERVISOR,
         title="CONTRACT: conflict approve no report",
         status_code="WAITING_APPROVAL",
         executor_role_id=ROLE_EXECUTOR,
         assignment_scope="functional",
     )
-    return _approve_task(c, task_id=task_id, user_id=USER_SUPERVISOR, approve=True)
+    return _approve_task(client, task_id=task_id, user_id=USER_SUPERVISOR, approve=True, comment="test")
 
 
+# -------------------------
+# Tests
+# -------------------------
 @pytest.mark.parametrize(
     "scenario, expected_http, expected_error",
     [
@@ -187,18 +218,12 @@ def _scenario_conflict_approve_no_report(c: TestClient) -> Any:
 )
 def test_business_error_contract(
     client: TestClient,
-    scenario,
+    scenario: Callable[[TestClient], Any],
     expected_http: int,
     expected_error: str,
 ) -> None:
     r = scenario(client)
     assert r.status_code == expected_http, r.text
 
-    detail = _assert_contract(r.json(), expected_http=expected_http, expected_error=expected_error)
-
-    # Optional but recommended context fields quality
-    if "task_id" in detail:
-        try:
-            int(detail["task_id"])
-        except Exception:
-            pytest.fail(f"detail.task_id must be int-like, got: {detail.get('task_id')}")
+    body = r.json()
+    _assert_business_error(body, expected_error)

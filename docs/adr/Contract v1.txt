@@ -1,0 +1,159 @@
+Directory / Org Structure
+API Contract v1 (фиксированный, без реализации)
+
+Статус: approved
+Scope: Org Structure + RBAC (dept)
+Out of scope: Tasks, KPI, UX-детали, Telegram формулировки
+
+1. Общие положения
+Аутентификация
+
+Все запросы требуют заголовок:
+X-User-Id: <int>
+
+RBAC режимы
+
+Переменная окружения:
+
+DIRECTORY_RBAC_MODE = off | dept
+
+2. RBAC инварианты (обязательные)
+2.1 Привилегированный пользователь
+
+Пользователь считается privileged, если:
+
+user_id ∈ DIRECTORY_PRIVILEGED_USER_IDS, или
+
+role_id ∈ DIRECTORY_PRIVILEGED_ROLE_IDS
+
+Поведение:
+
+scope не применяется
+
+доступны все org units / departments
+
+2.2 Непривилегированный пользователь (dept mode)
+Условие	Результат
+users.unit_id IS NULL	403 Forbidden
+users.unit_id IS NOT NULL	scope = subtree(unit_id)
+
+Важно (инвариант):
+В режиме dept каждый активный непривилегированный пользователь обязан иметь users.unit_id.
+
+3. Endpoints (Directory)
+3.1 GET /directory/departments
+
+Назначение:
+Плоский список подразделений (backward compatible).
+
+Query params:
+
+limit (int, default 200)
+
+offset (int, default 0)
+
+RBAC:
+
+privileged → все
+
+dept-scoped → только подразделения в scope
+
+Response (пример):
+
+{
+  "items": [
+    { "id": 1, "name": "Dept 1" },
+    { "id": 2, "name": "Dept 2" }
+  ],
+  "total": 2
+}
+
+3.2 GET /directory/departments/tree
+
+Назначение:
+Иерархическое дерево оргструктуры.
+
+RBAC поведение:
+Пользователь	Response
+privileged / mode=off	forest всех root
+dept-scoped	subtree от unit_id
+
+Response schema:
+
+{
+  "root_id": 1 | null,
+  "items": [
+    {
+      "id": 1,
+      "parent_id": null,
+      "name": "Dept 1",
+      "code": "DEPT_1",
+      "children": [
+        {
+          "id": 3,
+          "parent_id": 1,
+          "name": "Dept 1.1",
+          "code": "DEPT_1_1",
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+
+3.3 GET /directory/org-units
+
+Назначение:
+Плоский список org units (admin/debug).
+
+RBAC — как у /departments.
+
+3.4 GET /directory/org-units/tree
+
+Alias → /directory/departments/tree
+(зарезервировано для возможного переименования в будущем)
+
+4. Ошибки (фиксированные)
+403 Forbidden
+
+Возвращается, если:
+
+DIRECTORY_RBAC_MODE=dept
+
+пользователь не privileged
+
+users.unit_id IS NULL
+
+Формат:
+
+{
+  "detail": "directory: cannot determine department scope for user (unit_id is null)."
+}
+
+500 Internal Server Error
+
+Ошибка БД
+
+Нарушение схемы данных
+
+5. Контрактные гарантии
+
+Структура дерева детерминирована
+
+Сортировка стабильна
+
+root_id:
+
+null → unrestricted
+
+<int> → subtree
+
+6. Не делаем в v1
+
+CRUD org units
+
+Перемещения пользователей
+
+Назначения руководителей
+
+KPI / задачи / отчёты

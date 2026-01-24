@@ -2,56 +2,141 @@
 from __future__ import annotations
 
 import logging
+from typing import Optional
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..storage.bindings import set_binding
+from ..integrations.corpsite_api import CorpsiteAPI
 
 log = logging.getLogger("corpsite-bot")
 
 
-def _is_admin(tg_user_id: int, admin_ids: set[int]) -> bool:
-    return tg_user_id in admin_ids
+def _get_api(context: ContextTypes.DEFAULT_TYPE) -> Optional[CorpsiteAPI]:
+    bd = context.bot_data or {}
+    api = bd.get("backend")
+    return api if isinstance(api, CorpsiteAPI) else None
+
+
+def _extract_user_id_from_json(data: object) -> Optional[int]:
+    if isinstance(data, dict):
+        v = data.get("user_id")
+        try:
+            return int(v) if v is not None else None
+        except Exception:
+            return None
+    return None
 
 
 async def cmd_bind(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /bind <tg_user_id> <user_id>
-    Персистентная привязка tg_user_id -> user_id в bindings.json.
-    Доступ только для админов (bot_data["admin_tg_ids"]).
+    /bind
+      Проверка статуса привязки (self-bind check): backend /auth/self-bind.
+
+    /bind <code>
+      Привязка по коду:
+        1) POST /tg/bind/consume (bot-token)
+        2) POST /auth/self-bind (проверка/подтверждение)
     """
     msg = update.effective_message
     if msg is None:
-        log.error("cmd_bind: effective_message is None")
         return
 
-    actor = update.effective_user
-    actor_tg_id = actor.id if actor else 0
+    user = update.effective_user
+    if user is None:
+        await msg.reply_text("Не удалось определить пользователя Telegram.")
+        return
 
-    admin_ids_raw = context.bot_data.get("admin_tg_ids", set())
-    admin_ids: set[int] = admin_ids_raw if isinstance(admin_ids_raw, set) else set(admin_ids_raw)
+    tg_user_id = int(user.id)
+    tg_username = (user.username or "").strip() or None
 
-    if not _is_admin(actor_tg_id, admin_ids):
-        await msg.reply_text("Доступ запрещён.")
+    api = _get_api(context)
+    if api is None:
+        await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
         return
 
     args = context.args or []
-    if len(args) != 2:
-        await msg.reply_text("Формат: /bind <tg_user_id:int> <user_id:int>")
+
+    # -----------------------
+    # /bind <code>
+    # -----------------------
+    if len(args) == 1:
+        code = (args[0] or "").strip()
+        if not code:
+            await msg.reply_text("Формат: /bind <code>")
+            return
+
+        try:
+            r = await api.consume_bind_code(code=code, telegram_user_id=tg_user_id)
+        except Exception:
+            log.exception("consume_bind_code failed")
+            await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
+            return
+
+        sc = int(r.status_code or 0)
+
+        if sc == 0:
+            await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
+            return
+
+        if sc == 403:
+            await msg.reply_text("Привязка запрещена. Обратитесь к администратору.")
+            return
+
+        if sc == 409:
+            await msg.reply_text("Код недействителен или уже использован. Запросите новый код.")
+            return
+
+        if not (200 <= sc < 300):
+            await msg.reply_text("Не удалось выполнить привязку. Попробуйте позже.")
+            return
+
+        # consume ok -> confirm via self_bind
+        try:
+            s = await api.self_bind(telegram_user_id=tg_user_id, telegram_username=tg_username)
+        except Exception:
+            log.exception("self_bind after consume failed")
+            await msg.reply_text("Привязка выполнена. Откройте /tasks.")
+            return
+
+        if int(s.status_code or 0) in (200, 201):
+            await msg.reply_text("Привязка выполнена. Откройте /tasks.")
+            return
+
+        # unexpected but safe UX
+        await msg.reply_text("Привязка выполнена. Откройте /tasks.")
         return
 
-    a0 = args[0].strip()
-    a1 = args[1].strip()
-    if (not a0.isdigit()) or (not a1.isdigit()):
-        await msg.reply_text("Формат: /bind <tg_user_id:int> <user_id:int>")
+    if len(args) > 1:
+        await msg.reply_text("Формат: /bind  или  /bind <code>")
         return
 
-    tg_user_id = int(a0)
-    user_id = int(a1)
-
+    # -----------------------
+    # /bind (status check)
+    # -----------------------
     try:
-        set_binding(tg_user_id, user_id)
-        await msg.reply_text(f"Привязка установлена: tg={tg_user_id} → user_id={user_id}")
-    except Exception as e:
-        log.exception("Failed to set binding")
-        await msg.reply_text(f"Ошибка привязки: {type(e).__name__}: {e}")
+        resp = await api.self_bind(telegram_user_id=tg_user_id, telegram_username=tg_username)
+    except Exception:
+        log.exception("self_bind failed")
+        await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")
+        return
+
+    sc = int(resp.status_code or 0)
+
+    if sc in (200, 201):
+        # internal debug (optional): keep user_id extraction for logs only
+        uid = _extract_user_id_from_json(resp.json)
+        if uid is not None:
+            log.info("bind status: already bound tg_user_id=%s user_id=%s", tg_user_id, uid)
+        await msg.reply_text("Уже привязано.")
+        return
+
+    if sc == 404:
+        await msg.reply_text("Не привязано. Введите: /bind <code>")
+        return
+
+    if sc == 409:
+        await msg.reply_text("Уже привязано.")
+        return
+
+    await msg.reply_text("Не удалось проверить привязку. Попробуйте позже.")

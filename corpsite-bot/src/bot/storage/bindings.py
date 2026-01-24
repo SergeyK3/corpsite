@@ -48,7 +48,6 @@ def _resolve_repo_root() -> Path:
     if "corpsite-bot" in parts:
         idx = parts.index("corpsite-bot")
         return Path(*p.parts[:idx])  # родитель corpsite-bot
-    # fallback (если структура другая) — как было ранее
     return p.parents[4]
 
 

@@ -1,14 +1,16 @@
+# corpsite-bot/src/bot/handlers/tasks.py
 from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List, Dict, Tuple
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..storage.bindings import get_binding
+from ..integrations.corpsite_api import CorpsiteAPI
 
 log = logging.getLogger("corpsite-bot")
 
@@ -18,9 +20,76 @@ class CommandParseError(Exception):
     message: str
 
 
-def _get_bound_user_id(tg_user_id: int) -> Optional[int]:
-    return get_binding(tg_user_id)
+# -----------------------
+# Resolve user_id via backend (users.telegram_id)
+# -----------------------
 
+# cache: tg_user_id -> (user_id, expires_at_monotonic)
+_UID_CACHE: dict[int, Tuple[int, float]] = {}
+_UID_CACHE_TTL_S = 600.0  # 10 минут
+
+
+def _get_backend(context: ContextTypes.DEFAULT_TYPE) -> Optional[CorpsiteAPI]:
+    bd = context.bot_data or {}
+    api = bd.get("api") or bd.get("corpsite_api") or bd.get("backend")
+    return api if isinstance(api, CorpsiteAPI) else None
+
+
+def _uid_cache_get(tg_user_id: int) -> Optional[int]:
+    rec = _UID_CACHE.get(int(tg_user_id))
+    if not rec:
+        return None
+    uid, exp = rec
+    if time.monotonic() >= exp:
+        _UID_CACHE.pop(int(tg_user_id), None)
+        return None
+    return int(uid)
+
+
+def _uid_cache_set(tg_user_id: int, user_id: int) -> None:
+    _UID_CACHE[int(tg_user_id)] = (int(user_id), time.monotonic() + _UID_CACHE_TTL_S)
+
+
+async def _resolve_user_id(
+    *,
+    backend: CorpsiteAPI,
+    tg_user_id: int,
+    tg_username: Optional[str],
+) -> tuple[Optional[int], int]:
+    """
+    Returns (user_id or None, status_code)
+    status_code:
+      200/201 ok
+      404 not bound
+      0 backend unreachable
+      other: backend error
+    """
+    cached = _uid_cache_get(tg_user_id)
+    if cached is not None:
+        return cached, 200
+
+    resp = await backend.self_bind(
+        telegram_user_id=int(tg_user_id),
+        telegram_username=tg_username,
+    )
+    sc = int(resp.status_code or 0)
+
+    if sc in (200, 201) and isinstance(resp.json, dict):
+        uid = resp.json.get("user_id")
+        try:
+            if uid is not None and int(uid) > 0:
+                _uid_cache_set(tg_user_id, int(uid))
+                return int(uid), sc
+        except Exception:
+            return None, sc
+        return None, sc
+
+    return None, sc
+
+
+# -----------------------
+# Parsing / formatting
+# -----------------------
 
 _TITLE_KV_RE = re.compile(r'title="([^"]+)"')
 _DESC_KV_RE = re.compile(r'desc="([^"]+)"')
@@ -42,15 +111,15 @@ _UNKNOWN_STATUS = ("❓", "Неизвестный статус")
 
 def _help_text() -> str:
     return (
-        "Формат:\n"
+        "Команды задач:\n"
         "/tasks                     — список задач\n"
-        "/tasks list                — список задач\n"
         "/tasks <id>                — показать задачу\n"
         "/tasks <id> history        — история событий\n"
         "/tasks <id> update title=\"...\" desc=\"...\" scope=\"functional|admin\"\n"
         "/tasks <id> report <url> [comment]\n"
         "/tasks <id> approve [comment]\n"
         "/tasks <id> reject [comment]\n"
+        "/tasks help                — справка\n"
     )
 
 
@@ -94,7 +163,11 @@ def _status_label(code: Any) -> str:
 def _extract_allowed_actions(task: dict) -> List[str]:
     aa = task.get("allowed_actions")
     if isinstance(aa, list):
-        return [str(a).lower() for a in aa if str(a).lower() in ("update", "report", "approve", "reject")]
+        return [
+            str(a).lower()
+            for a in aa
+            if str(a).lower() in ("update", "report", "approve", "reject")
+        ]
     return []
 
 
@@ -115,25 +188,22 @@ def _fmt_task_view(t: dict) -> str:
         lines.append(f"Описание: {t['description']}")
     actions = _extract_allowed_actions(t)
     if actions:
-        lines.append(f"\nДоступные действия: {' / '.join(actions)}")
+        lines.append(f"Доступные действия: {' / '.join(actions)}")
     return "\n".join(lines)
 
 
 def _fmt_dt_short(iso: str) -> str:
-    # Оставляем как есть (backend отдаёт ISO). Если нужно укоротить — сделаем отдельно.
+    # Пока оставляем как есть (ISO). Если захотите — сделаем короткий формат.
     return iso
 
 
 def _fmt_event_line(ev: dict) -> str:
     ts = _fmt_dt_short(str(ev.get("created_at", "")))
-    et = str(ev.get("event_type", ""))
+    et = str(ev.get("event_type", "")).strip()
     actor = ev.get("actor_user_id")
     payload = ev.get("payload") or {}
 
-    # Привычный формат как у вас в /tasks_history:
-    # • 08.01 01:20 REPORT от user1 — link — Комментарий: ...
-    # Но раз backend отдаёт ISO — оставим ISO, чтобы не потерять TZ (можем укоротить позже).
-    parts = [f"• {ts} {et}"]
+    parts = [f"• {ts} {et}".strip()]
     if actor is not None:
         parts.append(f"от user{actor}")
 
@@ -145,7 +215,7 @@ def _fmt_event_line(ev: dict) -> str:
     if comment:
         parts.append(f"— Комментарий: {comment}")
 
-    return " ".join(parts)
+    return " ".join(p for p in parts if p)
 
 
 def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
@@ -160,10 +230,119 @@ def _parse_task_command(args: list[str]) -> tuple[int, str, list[str]]:
     rest = args[2:]
 
     if action not in ("update", "report", "approve", "reject", "history"):
-        raise CommandParseError("Неизвестное действие. Допустимо: update/report/approve/reject/history")
+        raise CommandParseError(
+            "Неизвестное действие. Допустимо: update/report/approve/reject/history"
+        )
 
     return task_id, action, rest
 
+
+def _extract_backend_detail(resp: Any) -> str:
+    """
+    Extracts a short human-readable message from backend response.
+    Supports both:
+      - detail: "string"
+      - detail: {error,message,reason,hint,code}
+    """
+    # 1) JSON
+    try:
+        data = getattr(resp, "json", None)
+
+        # Some clients expose json as a method; CorpsiteAPI uses field .json
+        if callable(data):
+            data = data()
+
+        if isinstance(data, dict):
+            # FastAPI default: {"detail": "..."} or {"detail": {...}}
+            detail = data.get("detail")
+            if isinstance(detail, str) and detail.strip():
+                return detail.strip()
+            if isinstance(detail, dict):
+                # stable UX error contract
+                msg = (detail.get("message") or "").strip()
+                reason = (detail.get("reason") or "").strip()
+                hint = (detail.get("hint") or "").strip()
+                code = (detail.get("code") or "").strip()
+
+                parts: List[str] = []
+                if msg:
+                    parts.append(msg)
+                if reason and reason != msg:
+                    parts.append(reason)
+                if hint:
+                    parts.append(hint)
+                if not parts and code:
+                    parts.append(code)
+                return " — ".join(parts).strip()
+
+            # alternative shapes
+            for k in ("message", "error"):
+                v = data.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+
+            errs = data.get("errors")
+            if isinstance(errs, list) and errs:
+                head = errs[0]
+                if isinstance(head, str) and head.strip():
+                    return head.strip()
+                if isinstance(head, dict):
+                    dv = head.get("detail") or head.get("message")
+                    if isinstance(dv, str) and dv.strip():
+                        return dv.strip()
+    except Exception:
+        pass
+
+    # 2) Text
+    try:
+        txt = getattr(resp, "text", "") or ""
+        return txt.strip()
+    except Exception:
+        return ""
+
+
+def _user_friendly_action_error(action: str, resp: Any) -> str:
+    sc = int(getattr(resp, "status_code", 0) or 0)
+    detail = _extract_backend_detail(resp)
+
+    if sc == 403:
+        return "Недостаточно прав."
+    if sc == 404:
+        return "Задача не найдена или недоступна."
+    if sc == 409:
+        return detail or "Невозможно выполнить действие в текущем статусе задачи."
+    if sc == 422:
+        return detail or "Некорректные данные запроса."
+    if sc >= 500:
+        return "Ошибка сервера. Попробуйте позже."
+    return detail or "Ошибка выполнения операции."
+
+
+def _looks_like_url(s: str) -> bool:
+    s = (s or "").strip().lower()
+    return s.startswith("http://") or s.startswith("https://")
+
+
+def _strip_legacy_decision_token(rest: List[str]) -> List[str]:
+    """
+    Legacy UX compatibility:
+      /tasks <id> approve ok "comment"
+      /tasks <id> reject back "comment"
+
+    Tokens ok/back DO NOT control backend action; they should not be included into comment.
+    We only strip the first token if it equals ok/back.
+    """
+    if not rest:
+        return rest
+    head = (rest[0] or "").strip().lower()
+    if head in ("ok", "back"):
+        return rest[1:]
+    return rest
+
+
+# -----------------------
+# Handler
+# -----------------------
 
 async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
@@ -174,30 +353,64 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not tg_user:
         return
 
-    user_id = _get_bound_user_id(tg_user.id)
-    if user_id is None:
-        await msg.reply_text("Вы не привязаны. Используйте /bind (если вы админ) или обратитесь к администратору.")
+    backend = _get_backend(context)
+    if backend is None:
+        await msg.reply_text("Сервис временно недоступен.")
         return
 
-    backend = context.bot_data.get("backend")
-    if backend is None:
-        await msg.reply_text("Backend не инициализирован.")
+    tg_user_id = int(tg_user.id)
+    tg_username = (tg_user.username or "").strip() or None
+
+    user_id, sc = await _resolve_user_id(
+        backend=backend,
+        tg_user_id=tg_user_id,
+        tg_username=tg_username,
+    )
+    if user_id is None:
+        if sc == 404:
+            await msg.reply_text("Telegram не привязан к профилю. Используйте /bind.")
+            return
+        if sc == 0:
+            await msg.reply_text("Backend временно недоступен. Попробуйте позже.")
+            return
+        await msg.reply_text("Не удалось определить пользователя. Попробуйте позже.")
         return
 
     args = context.args or []
 
+    # /tasks help
+    if args == ["help"]:
+        await msg.reply_text(_help_text())
+        return
+
     # /tasks or /tasks list
     if not args or args == ["list"]:
         raw = await backend.list_tasks(user_id=user_id, limit=_LIST_LIMIT)
-        items = raw.json.get("items", []) if raw.json else []
+
+        # Expect dict {"items":[...]} but be defensive
+        if raw.status_code != 200 or raw.json is None:
+            await msg.reply_text(_user_friendly_action_error(action="list", resp=raw))
+            return
+
+        items: List[dict] = []
+        if isinstance(raw.json, dict):
+            items = raw.json.get("items", []) or []
+        elif isinstance(raw.json, list):
+            items = raw.json
+        else:
+            items = []
+
         if not items:
             await msg.reply_text("Задач нет.")
             return
+
         lines = ["Ваши задачи:"]
         for t in items:
-            line = _fmt_task_line(t)
-            if line:
-                lines.append(line)
+            if isinstance(t, dict):
+                line = _fmt_task_line(t)
+                if line:
+                    lines.append(line)
+
         await msg.reply_text("\n".join(lines))
         return
 
@@ -205,7 +418,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(args) == 1 and args[0].isdigit():
         tid = int(args[0])
         raw = await backend.get_task(task_id=tid, user_id=user_id)
-        if raw.status_code != 200 or not raw.json:
+        if raw.status_code != 200 or not isinstance(raw.json, dict):
             await msg.reply_text("Задача не найдена или недоступна.")
             return
         await msg.reply_text(_fmt_task_view(raw.json))
@@ -220,20 +433,25 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # history
     if action == "history":
-        raw = await backend.get_task_events(task_id=task_id, user_id=user_id, include_archived=False)
+        raw = await backend.get_task_events(
+            task_id=task_id,
+            user_id=user_id,
+            include_archived=False,
+        )
         if raw.status_code == 404:
             await msg.reply_text("Задача не найдена или недоступна.")
             return
         if raw.status_code != 200 or not isinstance(raw.json, list):
-            await msg.reply_text("Не удалось получить историю.")
+            await msg.reply_text(_user_friendly_action_error(action="history", resp=raw))
             return
         if not raw.json:
-            await msg.reply_text(f"История по задаче #{task_id}: событий нет.")
+            await msg.reply_text(f"Задача #{task_id}: история пустая.")
             return
 
         lines = [f"История по задаче #{task_id}:"]
         for ev in raw.json:
-            lines.append(_fmt_event_line(ev))
+            if isinstance(ev, dict):
+                lines.append(_fmt_event_line(ev))
         await msg.reply_text("\n".join(lines))
         return
 
@@ -247,30 +465,48 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         resp = await backend.patch_task(task_id=task_id, user_id=user_id, payload=payload)
-        await msg.reply_text("Изменения сохранены." if resp.status_code < 300 else "Ошибка обновления задачи.")
+        if int(resp.status_code or 0) < 300:
+            await msg.reply_text("Изменения сохранены.")
+        else:
+            await msg.reply_text(_user_friendly_action_error(action="update", resp=resp))
         return
 
-    # report: /tasks <id> report <url> [comment...]
+    # report
     if action == "report":
         if len(rest) < 1:
             await msg.reply_text("Формат: /tasks <id> report <url> [comment]")
             return
-        url = rest[0]
+
+        url = rest[0].strip()
+        if not _looks_like_url(url):
+            await msg.reply_text("Некорректная ссылка. Нужен URL, начинающийся с http:// или https://")
+            return
+
         comment = " ".join(rest[1:]).strip()
-        resp = await backend.submit_report(task_id=task_id, user_id=user_id, report_link=url, current_comment=comment)
-        await msg.reply_text("Отчёт отправлен." if resp.status_code < 300 else "Ошибка отправки отчёта.")
+        payload: Dict[str, Any] = {"report_link": url}
+        if comment:
+            payload["current_comment"] = comment
+
+        resp = await backend.task_action(task_id=task_id, user_id=user_id, action="report", payload=payload)
+        if int(resp.status_code or 0) < 300:
+            await msg.reply_text("Отчёт отправлен.")
+        else:
+            await msg.reply_text(_user_friendly_action_error(action="report", resp=resp))
         return
 
-    # approve / reject: используем unified action endpoint (самый устойчивый путь)
+    # approve / reject
     if action in ("approve", "reject"):
+        # Compatibility: strip leading ok/back so they don't pollute current_comment.
+        rest = _strip_legacy_decision_token(list(rest))
+
         comment = " ".join(rest).strip()
         payload: Dict[str, Any] = {}
         if comment:
             payload["current_comment"] = comment
 
         resp = await backend.task_action(task_id=task_id, user_id=user_id, action=action, payload=payload)
-        if resp.status_code < 300:
-            await msg.reply_text("Задача принята." if action == "approve" else "Задача возвращена.")
+        if int(resp.status_code or 0) < 300:
+            await msg.reply_text("Согласовано." if action == "approve" else "Отклонено.")
         else:
-            await msg.reply_text("Ошибка approve." if action == "approve" else "Ошибка reject.")
+            await msg.reply_text(_user_friendly_action_error(action=action, resp=resp))
         return

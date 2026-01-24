@@ -142,14 +142,24 @@ async def _post_init(application: Application) -> None:
     """
     Инициализация зависимостей и запуск poller.
 
-    У вас нет post_startup, поэтому:
-      - инициализируем backend и сторы в post_init
-      - делаем 1 healthcheck backend
-      - стартуем poller только если backend доступен (иначе будет бесконечный ConnectError-спам)
+    VARIANT A:
+    - НЕ делаем блокирующий healthcheck (из-за рассинхрона методов клиента это ломало запуск).
+    - poller стартует всегда; доступ/ACL/релевантность аудитории контролируется backend.
+    - ошибки/недоступность backend обрабатываются внутри polling-цикла (лог + backoff).
     """
+    # ensure data dir exists
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        log.exception("Failed to create DATA_DIR=%s", str(DATA_DIR))
+
     backend = CorpsiteAPI(base_url=API_BASE_URL, timeout_s=15.0)
 
+    # Единая регистрация API-клиента для всех хендлеров.
     application.bot_data["backend"] = backend
+    application.bot_data["api"] = backend
+    application.bot_data["corpsite_api"] = backend
+
     application.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
     bindings_store = JsonFileStore(BINDINGS_PATH)
@@ -174,15 +184,7 @@ async def _post_init(application: Application) -> None:
         log.info("Events polling already running; skip start")
         return
 
-    # healthcheck backend (1 раз)
-    # если backend мёртв — poller не стартуем (иначе постоянные ConnectError)
-    hc = await backend.get_my_events(user_id=(next(iter(ADMIN_TG_IDS)) if ADMIN_TG_IDS else 1), limit=1, offset=0)
-    if hc.status_code == 0:
-        log.warning("Backend is not reachable at startup. Poller NOT started. base_url=%s", API_BASE_URL)
-        return
-    # 401/403 тоже означает "достучались" (ACL/заголовок), это ок для healthcheck
-    log.info("Backend healthcheck ok. status=%s", hc.status_code)
-
+    # VARIANT A: always start poller (no blocking healthcheck)
     task = asyncio.create_task(
         events_polling_loop(
             application=application,
@@ -196,7 +198,7 @@ async def _post_init(application: Application) -> None:
         name="events-poller",
     )
     application.bot_data["events_poll_task"] = task
-    log.info("Events polling started.")
+    log.info("Events polling started (healthcheck skipped).")
 
 
 async def _post_stop(application: Application) -> None:

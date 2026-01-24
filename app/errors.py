@@ -69,6 +69,9 @@ class ErrorCode(str, Enum):
     TGBIND_CONFLICT_CODE_EXISTS = "TGBIND_CONFLICT_CODE_EXISTS"
     TGBIND_FORBIDDEN_CONSUME = "TGBIND_FORBIDDEN_CONSUME"
     TGBIND_CONFLICT_CODE_INVALID = "TGBIND_CONFLICT_CODE_INVALID"
+    # tg bind (additional conflicts for users.telegram_id source of truth)
+    TGBIND_CONFLICT_TG_ALREADY_BOUND = "TGBIND_CONFLICT_TG_ALREADY_BOUND"
+    TGBIND_CONFLICT_USER_ALREADY_BOUND = "TGBIND_CONFLICT_USER_ALREADY_BOUND"
 
     # periods
     PERIODS_FORBIDDEN_LIST = "PERIODS_FORBIDDEN_LIST"
@@ -231,6 +234,20 @@ ERRORS: Dict[ErrorCode, ApiErrorSpec] = {
         message="Невозможно выполнить привязку",
         reason="Код недействителен или уже использован",
         hint="Создайте новый код привязки",
+    ),
+    ErrorCode.TGBIND_CONFLICT_TG_ALREADY_BOUND: ApiErrorSpec(
+        http_status=status.HTTP_409_CONFLICT,
+        error=ErrorKind.CONFLICT,
+        message="Невозможно выполнить привязку",
+        reason="Этот Telegram уже привязан к другому пользователю",
+        hint="Обратитесь к администратору",
+    ),
+    ErrorCode.TGBIND_CONFLICT_USER_ALREADY_BOUND: ApiErrorSpec(
+        http_status=status.HTTP_409_CONFLICT,
+        error=ErrorKind.CONFLICT,
+        message="Невозможно выполнить привязку",
+        reason="Этот пользователь уже привязан к другому Telegram",
+        hint="Отвяжите старый Telegram и повторите привязку",
     ),
     # periods
     ErrorCode.PERIODS_FORBIDDEN_LIST: ApiErrorSpec(
