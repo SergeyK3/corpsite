@@ -1,4 +1,6 @@
-﻿from __future__ import annotations
+﻿# FILE: app/directory.py
+
+from __future__ import annotations
 
 import inspect
 import os
@@ -52,6 +54,11 @@ def _call_service(fn, **kwargs):
     return fn(**filtered)
 
 
+def _require_privileged_or_403(user_ctx: Dict[str, Any]) -> None:
+    if not _is_privileged(user_ctx):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+
 def _compute_scope(
     uid: int,
     user_ctx: Dict[str, Any],
@@ -94,7 +101,8 @@ def _load_ancestor_chain_units(
     leaf_unit_id: int,
     include_inactive: bool,
 ) -> List[OrgUnit]:
-    active_where = "" if include_inactive else "AND COALESCE(ou.is_active, true) = true"
+    where_ou = "" if include_inactive else "AND COALESCE(ou.is_active, true) = true"
+    where_p = "" if include_inactive else "AND COALESCE(p.is_active, true) = true"
 
     sql = text(
         f"""
@@ -107,7 +115,7 @@ def _load_ancestor_chain_units(
                 COALESCE(ou.is_active, true) AS is_active
             FROM public.org_units ou
             WHERE ou.unit_id = :leaf_unit_id
-            {active_where}
+            {where_ou}
 
             UNION ALL
 
@@ -119,7 +127,7 @@ def _load_ancestor_chain_units(
                 COALESCE(p.is_active, true) AS is_active
             FROM public.org_units p
             JOIN up ON up.parent_unit_id = p.unit_id
-            {active_where}
+            {where_p}
         )
         SELECT unit_id, parent_unit_id, name, code, is_active
         FROM up
@@ -143,9 +151,6 @@ def _load_ancestor_chain_units(
     return out
 
 
-# ---------------------------
-# Debug helpers (temporary)
-# ---------------------------
 @router.get("/_debug/rbac")
 def debug_rbac(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
@@ -200,20 +205,12 @@ def debug_rbac(
     }
 
 
-# ---------------------------
-# Org structure (B1+B2): UI tree + flat org units
-# ---------------------------
 @router.get("/org-units/tree")
 def org_units_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
     status: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
-    """
-    GET /directory/org-units/tree
-    - include_inactive: bool (default true)
-    - status: optional legacy alias (active|all) -> include_inactive
-    """
     try:
         if status is not None:
             s = status.strip().lower()
@@ -261,12 +258,21 @@ def org_units_tree(
             if root_node is None:
                 root_node = find_node(items, str(scope_unit_id))
 
+            root_id_out: Optional[int] = None
+            if root_node is not None and root_node.get("id") is not None:
+                try:
+                    root_id_out = int(root_node["id"])
+                except Exception:
+                    root_id_out = int(scope_unit_id)
+            else:
+                root_id_out = int(scope_unit_id)
+
             return {
                 "version": 1,
                 "total": total,
                 "inactive_ids": inactive_ids,
                 "items": [root_node] if root_node is not None else [],
-                "root_id": int(scope_unit_id),
+                "root_id": root_id_out,
             }
 
         return {
@@ -289,11 +295,6 @@ def list_org_units_flat(
     include_inactive: bool = Query(default=True),
     status: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
-    """
-    GET /directory/org-units
-    - include_inactive: bool (default true)
-    - status: optional legacy alias (active|all) -> include_inactive
-    """
     try:
         if status is not None:
             s = status.strip().lower()
@@ -326,7 +327,6 @@ def list_org_units_flat(
         raise _as_http500(e)
 
 
-# Backward-compat alias
 @router.get("/departments/tree")
 def departments_tree(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
@@ -335,9 +335,6 @@ def departments_tree(
     return org_units_tree(x_user_id=x_user_id, include_inactive=include_inactive)
 
 
-# ---------------------------
-# Org units mutations (B3.x + B4)
-# ---------------------------
 class OrgUnitRenameIn(BaseModel):
     name: str
 
@@ -380,15 +377,10 @@ async def org_unit_rename(
 
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
+        _require_privileged_or_403(user_ctx)
 
         scope = _compute_scope(uid, user_ctx, include_inactive=True)
-
-        if not scope["privileged"]:
-            _require_unit_in_scope_or_403(
-                scope_unit_ids=scope["scope_unit_ids"],
-                unit_id=int(unit_id),
-                parent_unit_id=None,
-            )
+        _ = scope
 
         u = _org_units.rename_org_unit(unit_id=int(unit_id), new_name=body.name)
         return {
@@ -411,16 +403,12 @@ async def org_unit_rename(
         raise _as_http500(e)
 
 
-# Backward-compat: PATCH /directory/org-units/{unit_id} with {"name": "..."}
-# (нужно, чтобы старый UI-клиент не ломался)
 @router.patch("/org-units/{unit_id}")
 async def org_unit_patch_compat(
     unit_id: int = Path(..., ge=1),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     body: OrgUnitRenameIn = None,  # type: ignore[assignment]
 ) -> Dict[str, Any]:
-    # Пока поддерживаем только rename (поле name).
-    # Move остаётся отдельным endpoint /move.
     return await org_unit_rename(unit_id=unit_id, x_user_id=x_user_id, body=body)
 
 
@@ -436,15 +424,10 @@ async def org_unit_move(
 
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
+        _require_privileged_or_403(user_ctx)
 
         scope = _compute_scope(uid, user_ctx, include_inactive=True)
-
-        if not scope["privileged"]:
-            _require_unit_in_scope_or_403(
-                scope_unit_ids=scope["scope_unit_ids"],
-                unit_id=int(unit_id),
-                parent_unit_id=body.parent_unit_id,
-            )
+        _ = scope
 
         u = _org_units.move_org_unit(unit_id=int(unit_id), parent_unit_id=body.parent_unit_id)
         return {
@@ -467,9 +450,6 @@ async def org_unit_move(
         raise _as_http500(e)
 
 
-# ---------------------------
-# B3.3 Activate / Deactivate
-# ---------------------------
 @router.patch("/org-units/{unit_id}/deactivate")
 async def org_unit_deactivate(
     unit_id: int = Path(..., ge=1),
@@ -478,15 +458,10 @@ async def org_unit_deactivate(
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
+        _require_privileged_or_403(user_ctx)
 
         scope = _compute_scope(uid, user_ctx, include_inactive=True)
-
-        if not scope["privileged"]:
-            _require_unit_in_scope_or_403(
-                scope_unit_ids=scope["scope_unit_ids"],
-                unit_id=int(unit_id),
-                parent_unit_id=None,
-            )
+        _ = scope
 
         u = _org_units.deactivate_org_unit(unit_id=int(unit_id))
         return {
@@ -517,15 +492,10 @@ async def org_unit_activate(
     try:
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
+        _require_privileged_or_403(user_ctx)
 
         scope = _compute_scope(uid, user_ctx, include_inactive=True)
-
-        if not scope["privileged"]:
-            _require_unit_in_scope_or_403(
-                scope_unit_ids=scope["scope_unit_ids"],
-                unit_id=int(unit_id),
-                parent_unit_id=None,
-            )
+        _ = scope
 
         u = _org_units.activate_org_unit(unit_id=int(unit_id))
         return {
@@ -548,9 +518,6 @@ async def org_unit_activate(
         raise _as_http500(e)
 
 
-# ---------------------------
-# B4 Create org unit
-# ---------------------------
 @router.post("/org-units")
 async def org_unit_create(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
@@ -562,20 +529,10 @@ async def org_unit_create(
 
         uid = _require_user_id(x_user_id)
         user_ctx = _load_user_ctx(uid)
+        _require_privileged_or_403(user_ctx)
 
         scope = _compute_scope(uid, user_ctx, include_inactive=True)
-
-        # For non-privileged users, require that parent is in scope (if provided).
-        if not scope["privileged"]:
-            if body.parent_unit_id is not None:
-                _require_unit_in_scope_or_403(
-                    scope_unit_ids=scope["scope_unit_ids"],
-                    unit_id=int(body.parent_unit_id),
-                    parent_unit_id=None,
-                )
-            else:
-                # If trying to create a root unit without being privileged -> forbid.
-                raise HTTPException(status_code=403, detail="Forbidden: root unit create requires privileged user")
+        _ = scope
 
         u = _org_units.create_org_unit(
             name=body.name,
@@ -596,7 +553,6 @@ async def org_unit_create(
     except HTTPException:
         raise
     except LookupError as e:
-        # parent org unit not found
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -604,9 +560,6 @@ async def org_unit_create(
         raise _as_http500(e)
 
 
-# ---------------------------
-# Dictionaries endpoints
-# ---------------------------
 @router.get("/departments")
 def list_departments(
     limit: int = Query(default=200, ge=1, le=1000),
@@ -652,9 +605,6 @@ def list_positions(
         raise _as_http500(e)
 
 
-# ---------------------------
-# Employees endpoints (service-driven)
-# ---------------------------
 @router.get("/employees")
 def list_employees(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
@@ -727,9 +677,6 @@ def get_employee(
         raise _as_http500(e)
 
 
-# ---------------------------
-# Import endpoints (privileged only)
-# ---------------------------
 @router.post("/import/employees_csv")
 async def import_employees_csv(
     request: Request,

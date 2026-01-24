@@ -1,10 +1,10 @@
-# app/services/directory_service.py
+# FILE: app/services/directory_service.py
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
 from app.security.directory_scope import build_dept_scope_cte
@@ -198,6 +198,7 @@ def list_departments(
     limit: int,
     offset: int,
     dept_scope_id: Optional[int] = None,
+    dept_scope_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     rel, cols = _departments_relation()
     if not rel:
@@ -209,23 +210,35 @@ def list_departments(
     if not id_col or not name_col:
         return {"items": [], "total": 0}
 
-    where = "TRUE"
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
+    where_parts: List[str] = ["TRUE"]
 
-    if dept_scope_id is not None:
-        where = f"CAST({id_col} AS TEXT) = :dept_id_text"
-        params["dept_id_text"] = str(dept_scope_id)
+    if dept_scope_ids is not None:
+        ids = [int(x) for x in dept_scope_ids]
+        if not ids:
+            return {"items": [], "total": 0}
+        where_parts.append(f"CAST({id_col} AS BIGINT) IN :dept_ids")
+        params["dept_ids"] = ids
+    elif dept_scope_id is not None:
+        where_parts.append(f"CAST({id_col} AS BIGINT) = :dept_id")
+        params["dept_id"] = int(dept_scope_id)
 
-    q_total = text(f"SELECT COUNT(*) AS cnt FROM public.{rel} WHERE {where}")
+    where_sql = " AND ".join(where_parts)
+
+    q_total = text(f"SELECT COUNT(*) AS cnt FROM public.{rel} WHERE {where_sql}")
     q_list = text(
         f"""
         SELECT {id_col} AS id, {name_col} AS name
         FROM public.{rel}
-        WHERE {where}
+        WHERE {where_sql}
         ORDER BY CAST({id_col} AS TEXT) ASC
         LIMIT :limit OFFSET :offset
         """
     )
+
+    if "dept_ids" in params:
+        q_total = q_total.bindparams(bindparam("dept_ids", expanding=True))
+        q_list = q_list.bindparams(bindparam("dept_ids", expanding=True))
 
     with engine.begin() as conn:
         total = int(conn.execute(q_total, params).mappings().first()["cnt"])
@@ -301,7 +314,6 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
 
     join_sql = ""
 
-    # Note: join-by-known-schema is optional; otherwise keep NULLs
     if dept_fk == "department_id":
         select_parts.append("d.name AS dept_name")
         join_sql += " LEFT JOIN public.departments d ON d.department_id = e.department_id"
@@ -393,9 +405,8 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
 # ---------------------------
 def list_employees(
     *,
-    # New-style: scope_unit_id defines dept-RBAC subtree restriction (or None)
     scope_unit_id: Optional[int] = None,
-    # Backward-compat alias accepted by directory router adapter
+    scope_unit_ids: Optional[List[int]] = None,
     rbac_scope_unit_id: Optional[int] = None,
     status: str,
     q: Optional[str],
@@ -428,7 +439,6 @@ def list_employees(
     where: List[str] = []
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
-    # Status
     if status != "all" and status_col:
         if status_col in ("is_active", "active"):
             where.append(f"e.{status_col} = :is_active")
@@ -443,7 +453,6 @@ def list_employees(
                     f"LOWER(CAST(e.{status_col} AS TEXT)) IN ('inactive','уволен','не работает','0','false','no')"
                 )
 
-    # Search
     if q:
         qq = q.strip().lower()
         params["q"] = f"%{qq}%"
@@ -459,11 +468,9 @@ def list_employees(
         if parts:
             where.append("(" + " OR ".join(parts) + ")")
 
-    # ---- CTE merge: dept RBAC subtree + optional org_unit_id/include_children subtree ----
     cte_parts: List[str] = []
     cte_prefix = ""
 
-    # dept RBAC subtree
     effective_scope = scope_unit_id if scope_unit_id is not None else rbac_scope_unit_id
     rbac_cte, rbac_where, rbac_params = build_dept_scope_cte(scope_unit_id=effective_scope, alias="e")
     if rbac_cte:
@@ -471,7 +478,13 @@ def list_employees(
         where.append(rbac_where)
         params.update(rbac_params)
 
-    # optional subtree by org_unit_id (independent filter)
+    if scope_unit_ids is not None:
+        ids = [int(x) for x in scope_unit_ids]
+        if not ids:
+            return {"items": [], "total": 0}
+        where.append("e.org_unit_id IN :rbac_unit_ids")
+        params["rbac_unit_ids"] = ids
+
     if org_unit_id is not None:
         params["org_unit_id"] = int(org_unit_id)
         if include_children:
@@ -493,9 +506,6 @@ def list_employees(
             where.append("e.org_unit_id = :org_unit_id")
 
     if cte_parts:
-        # unify into one WITH RECURSIVE ... if multiple parts exist
-        # rbac_cte is already WITH RECURSIVE..., subtree part is "subtree AS (...)"
-        # normalize:
         normalized: List[str] = []
         for p in cte_parts:
             p2 = p.strip()
@@ -547,6 +557,10 @@ def list_employees(
         """
     )
 
+    if "rbac_unit_ids" in params:
+        q_list = q_list.bindparams(bindparam("rbac_unit_ids", expanding=True))
+        q_total = q_total.bindparams(bindparam("rbac_unit_ids", expanding=True))
+
     with engine.begin() as conn:
         total = int(conn.execute(q_total, params).mappings().first()["cnt"])
         rows = conn.execute(q_list, params).mappings().all()
@@ -558,6 +572,7 @@ def list_employees(
 def get_employee(
     *,
     scope_unit_id: Optional[int] = None,
+    scope_unit_ids: Optional[List[int]] = None,
     rbac_scope_unit_id: Optional[int] = None,
     employee_id: str,
 ) -> Dict[str, Any]:
@@ -582,6 +597,13 @@ def get_employee(
         params.update(rbac_params)
         where.append(rbac_where)
 
+    if scope_unit_ids is not None:
+        ids = [int(x) for x in scope_unit_ids]
+        if not ids:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+        where.append("e.org_unit_id IN :rbac_unit_ids")
+        params["rbac_unit_ids"] = ids
+
     q_one = text(
         f"""
         {rbac_cte}
@@ -590,6 +612,9 @@ def get_employee(
         LIMIT 1
         """
     )
+
+    if "rbac_unit_ids" in params:
+        q_one = q_one.bindparams(bindparam("rbac_unit_ids", expanding=True))
 
     with engine.begin() as conn:
         row = conn.execute(q_one, params).mappings().first()

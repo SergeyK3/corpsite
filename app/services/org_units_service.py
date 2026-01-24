@@ -1,3 +1,5 @@
+# FILE: app/services/org_units_service.py
+
 from __future__ import annotations
 
 import os
@@ -79,7 +81,6 @@ class OrgUnitsService:
 
     @staticmethod
     def _rbac_mode() -> str:
-        # off | dept | groups
         v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
         return v if v in ("off", "dept", "groups") else "dept"
 
@@ -91,15 +92,42 @@ class OrgUnitsService:
         return s if s else None
 
     def _fallback_dept_scope_or_raise(self, *, user_id: int, unit_id: Optional[int], include_inactive: bool) -> Set[int]:
-        """
-        MVP fallback for groups-RBAC:
-        If deputy has no group assignments, fall back to dept scope using users.unit_id (+ descendants).
-        """
         if unit_id is None:
             raise PermissionError(
                 f"RBAC(dept): cannot determine department scope for user_id={user_id}: unit_id is null"
             )
         return self.get_scope_unit_ids(int(unit_id), include_inactive=include_inactive)
+
+    # ---------------------------
+    # Roots invariants (single root)
+    # ---------------------------
+    def _list_root_ids(self, include_inactive: bool = True) -> List[int]:
+        where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
+        sql = text(
+            f"""
+            SELECT unit_id
+            FROM {self._schema}.{self._org_units_table}
+            WHERE parent_unit_id IS NULL
+              {where_active}
+            ORDER BY unit_id
+            """
+        )
+        with self._engine.begin() as c:
+            rows = c.execute(sql).mappings().all()
+        return [int(r["unit_id"]) for r in rows]
+
+    def _ensure_single_root_on_create(self, *, include_inactive: bool = True) -> None:
+        roots = self._list_root_ids(include_inactive=include_inactive)
+        if roots:
+            raise ValueError("single-root invariant: root already exists")
+
+    def _ensure_single_root_on_move_to_null(self, *, unit_id: int) -> None:
+        src = self.get_org_unit(unit_id=int(unit_id), include_inactive=True)
+        if src is None:
+            raise LookupError(f"org unit not found: unit_id={unit_id}")
+        if src.parent_unit_id is None:
+            return
+        raise ValueError("single-root invariant: moving a non-root unit to root is forbidden")
 
     # ---------------------------
     # Org units load (ids only)
@@ -154,10 +182,6 @@ class OrgUnitsService:
     # RBAC (groups): deputy -> group -> units
     # ---------------------------
     def list_group_unit_ids_for_deputy(self, deputy_user_id: int, include_inactive: bool = False) -> List[int]:
-        """
-        Returns direct unit_ids assigned to deputy's groups (org_unit_group_units).
-        Note: descendants are NOT included here.
-        """
         where_active_g = "AND COALESCE(g.is_active, true) = true"
         where_active_u = "" if include_inactive else "AND COALESCE(u.is_active, true) = true"
 
@@ -185,14 +209,6 @@ class OrgUnitsService:
         user_id: int,
         include_inactive: bool = False,
     ) -> Optional[Set[int]]:
-        """
-        Returns:
-          - None: no restrictions (rbac off or privileged)
-          - Set[int]: allowed unit_ids
-             * dept  : user's unit + descendants
-             * groups: union(assigned group unit + its descendants)
-                      (MVP fallback: if no assignments -> dept scope)
-        """
         mode = self._rbac_mode()
         if mode == "off":
             return None
@@ -218,10 +234,8 @@ class OrgUnitsService:
                 include_inactive=include_inactive,
             )
 
-        # mode == "groups"
         assigned = self.list_group_unit_ids_for_deputy(int(user_id), include_inactive=include_inactive)
         if not assigned:
-            # MVP fallback: allow dept-scope if deputy is not configured in groups tables yet
             return self._fallback_dept_scope_or_raise(
                 user_id=int(user_id),
                 unit_id=unit_id,
@@ -238,11 +252,6 @@ class OrgUnitsService:
         scope_unit_ids: Optional[List[int]] = None,
         include_inactive: bool = True,
     ) -> List[OrgUnit]:
-        """
-        Flat list of org units.
-        If scope_unit_ids provided -> restrict to these unit_ids.
-        include_inactive=True -> includes inactive units.
-        """
         where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
 
         if scope_unit_ids is None:
@@ -321,11 +330,6 @@ class OrgUnitsService:
         user_id: int,
         include_inactive: bool,
     ) -> List[OrgUnit]:
-        """
-        Read-only helper for endpoints:
-        - applies RBAC scope if enabled (dept/groups)
-        - returns flat list of OrgUnit rows
-        """
         scope = self.compute_user_scope_unit_ids(int(user_id), include_inactive=include_inactive)
         scope_ids = None if scope is None else sorted(scope)
         return self.list_org_units(scope_unit_ids=scope_ids, include_inactive=include_inactive)
@@ -353,17 +357,12 @@ class OrgUnitsService:
     # ---------------------------
     @staticmethod
     def _creates_cycle(child_id: int, parent_id: int, parent_map: Dict[int, Optional[int]]) -> bool:
-        """
-        Detects whether linking child -> parent would create a cycle.
-        Walk up from parent_id to roots; if we meet child_id => cycle.
-        """
         cur = parent_id
         seen: Set[int] = set()
         while cur is not None:
             if cur == child_id:
                 return True
             if cur in seen:
-                # defensive: existing cycle already present upstream
                 return True
             seen.add(cur)
             cur = parent_map.get(cur)
@@ -371,21 +370,6 @@ class OrgUnitsService:
 
     @staticmethod
     def build_tree(units: List[OrgUnit]) -> List[Dict[str, Any]]:
-        """
-        Legacy tree schema (kept stable for callers):
-          {
-            "unit_id": int,
-            "parent_unit_id": Optional[int],
-            "name": str,
-            "code": Optional[str],
-            "is_active": bool,
-            "children": [...]
-          }
-
-        Safety:
-          - Orphans (parent not found) become roots.
-          - Cycles are broken: the offending node becomes a root (no infinite recursion).
-        """
         nodes: Dict[int, Dict[str, Any]] = {}
         parent_map: Dict[int, Optional[int]] = {}
 
@@ -430,21 +414,6 @@ class OrgUnitsService:
 
     @staticmethod
     def build_ui_tree(units: List[OrgUnit]) -> Tuple[List[Dict[str, Any]], List[str], int]:
-        """
-        UI tree schema:
-          {
-            "id": str,
-            "title": str,
-            "type": "unit",
-            "is_active": bool,
-            "children": [...]
-          }
-        Returns: (items, inactive_ids, total)
-
-        Safety:
-          - Orphans become roots.
-          - Cycles are broken: offending node becomes a root (no infinite recursion).
-        """
         inactive_ids: List[str] = [str(u.unit_id) for u in units if not u.is_active]
 
         nodes: Dict[int, Dict[str, Any]] = {}
@@ -548,6 +517,9 @@ class OrgUnitsService:
         if pid is not None and pid == uid:
             raise ValueError("parent_unit_id cannot equal unit_id")
 
+        if pid is None:
+            self._ensure_single_root_on_move_to_null(unit_id=uid)
+
         src = self.get_org_unit(unit_id=uid, include_inactive=True)
         if src is None:
             raise LookupError(f"org unit not found: unit_id={uid}")
@@ -557,9 +529,7 @@ class OrgUnitsService:
             if parent is None:
                 raise LookupError(f"parent org unit not found: parent_unit_id={pid}")
 
-        # Cycle check: linking uid -> pid must not make uid reachable from pid chain.
         if pid is not None:
-            # build parent_map (unit_id -> parent_unit_id)
             edges = self._load_unit_edges(include_inactive=True)
             parent_map: Dict[int, Optional[int]] = {u: p for (u, p) in edges}
             if self._creates_cycle(uid, pid, parent_map):
@@ -657,7 +627,9 @@ class OrgUnitsService:
 
         pid = int(parent_unit_id) if parent_unit_id is not None else None
 
-        if pid is not None:
+        if pid is None:
+            self._ensure_single_root_on_create(include_inactive=True)
+        else:
             parent = self.get_org_unit(unit_id=pid, include_inactive=True)
             if parent is None:
                 raise LookupError(f"parent org unit not found: parent_unit_id={pid}")
