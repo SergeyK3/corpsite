@@ -206,7 +206,6 @@ def list_departments(
 
     id_col = _dict_id_col(cols, ["department_id", "dept_id", "org_unit_id"])
     name_col = _dict_name_col(cols, ["department_name", "dept_name", "org_unit_name"])
-
     if not id_col or not name_col:
         return {"items": [], "total": 0}
 
@@ -255,7 +254,6 @@ def list_positions(*, limit: int, offset: int) -> Dict[str, Any]:
 
     id_col = _dict_id_col(cols, ["position_id", "pos_id"])
     name_col = _dict_name_col(cols, ["position_name", "pos_name"])
-
     if not id_col or not name_col:
         return {"items": [], "total": 0}
 
@@ -295,7 +293,9 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
 
     dept_fk = _dept_fk_col(emp_cols)
     pos_fk = _pos_fk_col(emp_cols)
-    org_unit_fk = _pick_first(emp_cols, ["org_unit_id"])
+
+    # org_unit_id должен существовать (проверяется выше в list/get)
+    org_unit_fk = "org_unit_id"
 
     select_parts = [
         f"e.{emp_id_col} AS e_id",
@@ -309,23 +309,40 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         (f"e.{date_to_col} AS e_date_to" if date_to_col else "NULL AS e_date_to"),
         (f"e.{dept_fk} AS e_dept_id" if dept_fk else "NULL AS e_dept_id"),
         (f"e.{pos_fk} AS e_pos_id" if pos_fk else "NULL AS e_pos_id"),
-        (f"e.{org_unit_fk} AS e_org_unit_id" if org_unit_fk else "NULL AS e_org_unit_id"),
+        f"e.{org_unit_fk} AS e_org_unit_id",
     ]
 
     join_sql = ""
 
-    if dept_fk == "department_id":
-        select_parts.append("d.name AS dept_name")
-        join_sql += " LEFT JOIN public.departments d ON d.department_id = e.department_id"
+    # Departments (auto-detect relation + columns)
+    dept_rel, dept_cols = _departments_relation()
+    dept_id_col = _dict_id_col(dept_cols, ["department_id", "dept_id", "org_unit_id"]) if dept_rel else None
+    dept_name_col = _dict_name_col(dept_cols, ["department_name", "dept_name", "org_unit_name"]) if dept_rel else None
+
+    if dept_fk and dept_rel and dept_id_col and dept_name_col:
+        select_parts.append(f"d.{dept_name_col} AS dept_name")
+        join_sql += (
+            f" LEFT JOIN public.{dept_rel} d"
+            f" ON CAST(d.{dept_id_col} AS TEXT) = CAST(e.{dept_fk} AS TEXT)"
+        )
     else:
         select_parts.append("NULL AS dept_name")
 
-    if pos_fk == "position_id":
-        select_parts.append("p.name AS pos_name")
-        join_sql += " LEFT JOIN public.positions p ON p.position_id = e.position_id"
+    # Positions (auto-detect relation + columns)
+    pos_rel, pos_cols = _positions_relation()
+    pos_id_col = _dict_id_col(pos_cols, ["position_id", "pos_id"]) if pos_rel else None
+    pos_name_col = _dict_name_col(pos_cols, ["position_name", "pos_name"]) if pos_rel else None
+
+    if pos_fk and pos_rel and pos_id_col and pos_name_col:
+        select_parts.append(f"p.{pos_name_col} AS pos_name")
+        join_sql += (
+            f" LEFT JOIN public.{pos_rel} p"
+            f" ON CAST(p.{pos_id_col} AS TEXT) = CAST(e.{pos_fk} AS TEXT)"
+        )
     else:
         select_parts.append("NULL AS pos_name")
 
+    # Org Units (canonical table)
     select_parts += [
         "ou.name AS org_unit_name",
         "ou.code AS org_unit_code",
@@ -439,6 +456,7 @@ def list_employees(
     where: List[str] = []
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
+    # status filter
     if status != "all" and status_col:
         if status_col in ("is_active", "active"):
             where.append(f"e.{status_col} = :is_active")
@@ -453,10 +471,11 @@ def list_employees(
                     f"LOWER(CAST(e.{status_col} AS TEXT)) IN ('inactive','уволен','не работает','0','false','no')"
                 )
 
+    # search
     if q:
         qq = q.strip().lower()
         params["q"] = f"%{qq}%"
-        parts = []
+        parts: List[str] = []
         if fio_col:
             parts.append(f"LOWER(CAST(e.{fio_col} AS TEXT)) LIKE :q")
         if last_col:
@@ -468,6 +487,7 @@ def list_employees(
         if parts:
             where.append("(" + " OR ".join(parts) + ")")
 
+    # RBAC dept subtree
     cte_parts: List[str] = []
     cte_prefix = ""
 
@@ -478,6 +498,7 @@ def list_employees(
         where.append(rbac_where)
         params.update(rbac_params)
 
+    # explicit scope list (groups-mode or precomputed list)
     if scope_unit_ids is not None:
         ids = [int(x) for x in scope_unit_ids]
         if not ids:
@@ -485,9 +506,11 @@ def list_employees(
         where.append("e.org_unit_id IN :rbac_unit_ids")
         params["rbac_unit_ids"] = ids
 
+    # filter by org_unit_id (+ optionally children)
     if org_unit_id is not None:
         params["org_unit_id"] = int(org_unit_id)
         if include_children:
+            # NOTE: this is a recursive CTE fragment (subtree references itself), so it must live under WITH RECURSIVE.
             cte_parts.append(
                 """
                 subtree AS (
@@ -505,6 +528,7 @@ def list_employees(
         else:
             where.append("e.org_unit_id = :org_unit_id")
 
+    # stitch CTEs into a single WITH RECURSIVE ...
     if cte_parts:
         normalized: List[str] = []
         for p in cte_parts:
@@ -512,8 +536,9 @@ def list_employees(
             if p2.lower().startswith("with recursive"):
                 p2 = p2[len("with recursive") :].strip()
             normalized.append(p2.strip().lstrip(","))
-        cte_prefix = "WITH RECURSIVE\n" + ",\n".join(normalized)
+        cte_prefix = "WITH RECURSIVE\n" + ",\n".join([x for x in normalized if x])
 
+    # department/position filters
     if department_id is not None and dept_fk:
         where.append(f"CAST(e.{dept_fk} AS TEXT) = :department_id_text")
         params["department_id_text"] = str(int(department_id))
@@ -524,6 +549,7 @@ def list_employees(
 
     where_sql = " AND ".join(where) if where else "TRUE"
 
+    # order
     ord_dir = "ASC" if (order or "").lower() != "desc" else "DESC"
     if (sort or "").lower() in ("full_name", "fio", "name") and fio_col:
         order_sql = f"LOWER(CAST(e.{fio_col} AS TEXT)) {ord_dir}, CAST(e.{emp_id_col} AS TEXT) ASC"

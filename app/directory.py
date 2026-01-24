@@ -104,6 +104,9 @@ def _load_ancestor_chain_units(
     where_ou = "" if include_inactive else "AND COALESCE(ou.is_active, true) = true"
     where_p = "" if include_inactive else "AND COALESCE(p.is_active, true) = true"
 
+    schema = getattr(_org_units, "_schema", "public")
+    table = getattr(_org_units, "_org_units_table", "org_units")
+
     sql = text(
         f"""
         WITH RECURSIVE up AS (
@@ -113,7 +116,7 @@ def _load_ancestor_chain_units(
                 ou.name,
                 ou.code,
                 COALESCE(ou.is_active, true) AS is_active
-            FROM public.org_units ou
+            FROM {schema}.{table} ou
             WHERE ou.unit_id = :leaf_unit_id
             {where_ou}
 
@@ -125,7 +128,7 @@ def _load_ancestor_chain_units(
                 p.name,
                 p.code,
                 COALESCE(p.is_active, true) AS is_active
-            FROM public.org_units p
+            FROM {schema}.{table} p
             JOIN up ON up.parent_unit_id = p.unit_id
             {where_p}
         )

@@ -15,9 +15,9 @@ from app.db.engine import engine
 # Config
 # ---------------------------
 def rbac_mode() -> str:
-    # off | dept
+    # off | dept | groups
     v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
-    return v if v in ("off", "dept") else "dept"
+    return v if v in ("off", "dept", "groups") else "dept"
 
 
 def _parse_int_set_env(name: str) -> Set[int]:
