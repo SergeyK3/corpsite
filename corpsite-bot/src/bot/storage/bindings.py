@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 log = logging.getLogger("corpsite-bot")
 
@@ -25,6 +27,8 @@ def _safe_int(v: Any) -> Optional[int]:
     try:
         if v is None:
             return None
+        if isinstance(v, bool):
+            return None
         if isinstance(v, int):
             return v
         s = _clean_str(str(v))
@@ -35,31 +39,19 @@ def _safe_int(v: Any) -> Optional[int]:
         return None
 
 
-def _resolve_repo_root() -> Path:
-    """
-    Возвращает корень репозитория (папка "09 Corpsite"), т.е. родитель папки "corpsite-bot".
-
-    Надёжнее, чем parents[N], потому что глубина может меняться.
-    Ожидаем путь вида:
-      .../09 Corpsite/corpsite-bot/src/bot/storage/bindings.py
-    """
-    p = Path(__file__).resolve()
-    parts = [x.lower() for x in p.parts]
-    if "corpsite-bot" in parts:
-        idx = parts.index("corpsite-bot")
-        return Path(*p.parts[:idx])  # родитель corpsite-bot
-    return p.parents[4]
+def _bindings_path() -> Path:
+    data_dir = (os.getenv("DATA_DIR") or "").strip()
+    if not data_dir:
+        data_dir = os.path.join(os.getcwd(), "data")
+    p = Path(data_dir).resolve()
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "bindings.json"
 
 
-_REPO_ROOT = _resolve_repo_root()
-_BINDINGS_FILE = _REPO_ROOT / ".botdata" / "bindings.json"
+_BINDINGS_FILE = _bindings_path()
 
 
 def load_bindings() -> None:
-    """
-    Загружает bindings из .botdata/bindings.json (если есть).
-    Молча стартует с пустыми bindings, если файла нет или он повреждён.
-    """
     global BINDINGS
 
     if not _BINDINGS_FILE.exists():
@@ -67,7 +59,8 @@ def load_bindings() -> None:
         return
 
     try:
-        raw = json.loads(_BINDINGS_FILE.read_text(encoding="utf-8") or "{}")
+        raw_text = _BINDINGS_FILE.read_text(encoding="utf-8") or ""
+        raw = json.loads(raw_text) if raw_text.strip() else {}
         if not isinstance(raw, dict):
             BINDINGS = {}
             return
@@ -78,9 +71,9 @@ def load_bindings() -> None:
             iv = _safe_int(v)
             if ik is None or iv is None:
                 continue
-            if ik == 0 or iv <= 0:
+            if ik <= 0 or iv <= 0:
                 continue
-            out[ik] = iv
+            out[int(ik)] = int(iv)
 
         BINDINGS = out
     except Exception:
@@ -88,21 +81,29 @@ def load_bindings() -> None:
 
 
 def save_bindings() -> None:
-    """
-    Атомарно сохраняет bindings в .botdata/bindings.json.
-    """
     _BINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    data = {str(k): int(v) for k, v in BINDINGS.items()}
+    data = {str(k): int(v) for k, v in sorted(BINDINGS.items(), key=lambda x: x[0])}
 
-    tmp = _BINDINGS_FILE.with_suffix(_BINDINGS_FILE.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(_BINDINGS_FILE)
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+
+    with tempfile.NamedTemporaryFile(
+        "w",
+        delete=False,
+        encoding="utf-8",
+        dir=str(_BINDINGS_FILE.parent),
+        prefix=".tmp_",
+        suffix=".json",
+    ) as f:
+        tmp_name = f.name
+        f.write(payload)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+    os.replace(tmp_name, _BINDINGS_FILE)
 
 
 def set_binding(tg_user_id: int, user_id: int) -> None:
-    """
-    ВАЖНО: всегда reload перед модификацией, чтобы не терять остальные привязки.
-    """
     load_bindings()
     BINDINGS[int(tg_user_id)] = int(user_id)
     save_bindings()
@@ -120,14 +121,13 @@ def get_all_bindings() -> Dict[int, int]:
 
 def remove_binding(tg_user_id: int) -> bool:
     load_bindings()
-    tg_user_id = int(tg_user_id)
-    if tg_user_id not in BINDINGS:
+    tid = int(tg_user_id)
+    if tid not in BINDINGS:
         return False
-    del BINDINGS[tg_user_id]
+    del BINDINGS[tid]
     save_bindings()
     return True
 
 
-# Автозагрузка при импорте + явный лог "куда пишем"
 load_bindings()
 log.info("BINDINGS_FILE=%s (exists=%s) loaded_keys=%s", str(_BINDINGS_FILE), _BINDINGS_FILE.exists(), sorted(BINDINGS.keys()))

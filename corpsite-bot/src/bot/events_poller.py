@@ -1,4 +1,4 @@
-# corpsite-bot/src/bot/events_poller.py
+# FILE: corpsite-bot/src/bot/events_poller.py
 
 from __future__ import annotations
 
@@ -16,13 +16,10 @@ from telegram.ext import Application
 
 from .events_renderer import render_event
 from .integrations.corpsite_api import CorpsiteAPI
+from .storage.cursor_store import CursorStore
 
 log = logging.getLogger("corpsite-bot.events")
 
-
-# ---------------------------
-# Utils
-# ---------------------------
 
 def _truthy_env(name: str) -> bool:
     v = (os.getenv(name) or "").strip().lower()
@@ -41,11 +38,6 @@ def _safe_int(v: Any) -> Optional[int]:
 
 
 def _event_cursor_id(ev: Dict[str, Any]) -> int:
-    """
-    Cursor for polling:
-      - prefer audit_id (backend cursor)
-      - fallback to event_id (legacy)
-    """
     return _safe_int(ev.get("audit_id")) or _safe_int(ev.get("event_id")) or 0
 
 
@@ -53,21 +45,7 @@ def _sort_key(ev: Dict[str, Any]) -> int:
     return _event_cursor_id(ev)
 
 
-# ---------------------------
-# JSON persistence
-# ---------------------------
-
 class JsonFileStore:
-    """
-    Simple JSON persistence.
-
-    bindings.json:
-      { "<chat_id>": <corpsite_user_id> }
-
-    events_cursor.json:
-      { "<chat_id>": <last_cursor_id> }
-    """
-
     def __init__(self, path: Path):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,15 +86,7 @@ class JsonFileStore:
                 pass
 
 
-# ---------------------------
-# Bindings helpers
-# ---------------------------
-
 def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
-    """
-    bindings format:
-      { "<chat_id>": <user_id> }
-    """
     out: List[Tuple[int, int]] = []
     for k, v in (bindings or {}).items():
         chat_id = _safe_int(k)
@@ -128,83 +98,39 @@ def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
 
 
 def _group_by_user(pairs: Tuple[Tuple[int, int], ...]) -> Dict[int, List[int]]:
-    """
-    user_id -> [chat_id, ...]
-    """
     m: DefaultDict[int, List[int]] = defaultdict(list)
     for chat_id, user_id in pairs:
         m[user_id].append(chat_id)
     return dict(m)
 
 
-# ---------------------------
-# Cursor state migration
-# ---------------------------
-
-def _normalize_state_values(raw_state: Dict[str, Any]) -> Dict[str, int]:
-    norm: Dict[str, int] = {}
-    for k, v in (raw_state or {}).items():
-        iv = _safe_int(v)
-        if iv is None:
-            continue
-        norm[str(k)] = iv
-    return norm
+def _cursor_reset(cursor_store: CursorStore) -> None:
+    try:
+        if cursor_store.path.exists():
+            cursor_store.path.unlink()
+    except Exception:
+        log.exception("Events cursor reset failed: %s", cursor_store.path)
 
 
-def _migrate_state_if_needed(
-    *,
-    raw_state: Dict[str, Any],
-    pairs: Tuple[Tuple[int, int], ...],
-) -> Dict[str, int]:
+def _extract_events_payload(payload: Any) -> Tuple[List[Dict[str, Any]], Optional[int]]:
     """
-    Target format:
-      { "<chat_id>": last_cursor_id }
-
-    Supports legacy formats:
-      - user_id -> last_event_id
-      - single last_event_id
+    Contract v1: {"items":[...], "next_cursor": <int>}
+    Legacy fallback: [...]
     """
-    if not raw_state or not pairs:
-        return {}
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        next_cursor = _safe_int(payload.get("next_cursor"))
+        if isinstance(items, list):
+            out: List[Dict[str, Any]] = [x for x in items if isinstance(x, dict)]
+            return out, next_cursor
+        return [], next_cursor
 
-    norm = _normalize_state_values(raw_state)
+    if isinstance(payload, list):
+        out2: List[Dict[str, Any]] = [x for x in payload if isinstance(x, dict)]
+        return out2, None
 
-    bound_chat_ids = {chat_id for chat_id, _ in pairs}
-    bound_user_ids = {user_id for _, user_id in pairs}
+    return [], None
 
-    fallback_last = int(norm.get("last_event_id", 0) or 0)
-
-    keys_int = {_safe_int(k) for k in norm.keys()}
-    keys_int.discard(None)
-
-    user_key_hits = sum(1 for k in keys_int if k in bound_user_ids)
-    chat_key_hits = sum(1 for k in keys_int if k in bound_chat_ids)
-
-    out: Dict[str, int] = {}
-
-    for chat_id in bound_chat_ids:
-        v = norm.get(str(chat_id))
-        if v is not None:
-            out[str(chat_id)] = v
-
-    if user_key_hits > 0 and chat_key_hits == 0:
-        for chat_id, user_id in pairs:
-            if str(user_id) in norm:
-                out[str(chat_id)] = max(
-                    out.get(str(chat_id), 0),
-                    norm[str(user_id)],
-                )
-
-    if not out and fallback_last:
-        for chat_id in bound_chat_ids:
-            out[str(chat_id)] = fallback_last
-
-    return out
-
-
-# ---------------------------
-# Polling loop
-# ---------------------------
 
 async def events_polling_loop(
     *,
@@ -212,35 +138,23 @@ async def events_polling_loop(
     backend: CorpsiteAPI,
     poll_interval_s: float,
     bindings_store: JsonFileStore,
-    state_store: JsonFileStore,
+    state_store: Optional[JsonFileStore] = None,
+    cursor_store: CursorStore,
     per_user_limit: int = 200,
     allowed_types: Optional[Set[str]] = None,
 ) -> None:
-    """
-    Events delivery loop.
-
-    - Audience resolved on backend (/tasks/me/events)
-    - Cursor = audit_id (fallback event_id)
-    - Cursor stored per chat_id (state_store JSON)
-    - Optional reset: EVENTS_CURSOR_RESET=1 -> clears cursor store (for E2E)
-    """
-
-    allowed_types = {
-        t.upper().strip()
-        for t in (allowed_types or set())
-        if str(t).strip()
-    }
+    allowed_types = {t.upper().strip() for t in (allowed_types or set()) if str(t).strip()}
 
     log.info(
-        "Events polling started. interval=%ss limit=%s allowed_types=%s",
+        "Events polling started. interval=%ss limit=%s allowed_types=%s cursor_file=%s",
         poll_interval_s,
         per_user_limit,
         sorted(allowed_types) if allowed_types else "ALL",
+        str(cursor_store.path),
     )
 
     last_no_bindings_log_ts = 0.0
     no_events_log_state: Dict[int, Tuple[int, float]] = {}
-
     did_reset = False
 
     while True:
@@ -258,32 +172,23 @@ async def events_polling_loop(
 
             by_user = _group_by_user(pairs)
 
-            raw_state = state_store.load()
-
             if not did_reset and _truthy_env("EVENTS_CURSOR_RESET"):
                 did_reset = True
-                raw_state = {}
-                state_store.save({})
+                _cursor_reset(cursor_store)
+                if state_store is not None:
+                    try:
+                        state_store.save({})
+                    except Exception:
+                        pass
                 log.info("Events cursor reset: store cleared (EVENTS_CURSOR_RESET=1)")
 
-            state = _migrate_state_if_needed(
-                raw_state=raw_state,
-                pairs=pairs,
-            )
-
-            state_changed = False
-
             for user_id, chat_ids in by_user.items():
-                last_ids = [
-                    int(_safe_int(state.get(str(chat_id))) or 0)
-                    for chat_id in chat_ids
-                ]
-                since_val = min(last_ids) if last_ids else 0
+                since_val = cursor_store.get(int(user_id), default=0)
 
                 resp = await backend.get_my_events(
-                    user_id=user_id,
+                    user_id=int(user_id),
                     since_audit_id=since_val if since_val > 0 else None,
-                    limit=per_user_limit,
+                    limit=int(per_user_limit),
                     offset=0,
                     event_type=None,
                 )
@@ -296,8 +201,9 @@ async def events_polling_loop(
                     )
                     continue
 
-                events = resp.json or []
-                if not isinstance(events, list) or not events:
+                events, next_cursor = _extract_events_payload(resp.json)
+
+                if not events:
                     now = time.time()
                     prev = no_events_log_state.get(user_id)
                     prev_since = prev[0] if prev else -1
@@ -305,11 +211,15 @@ async def events_polling_loop(
 
                     if since_val != prev_since or now - prev_ts >= 60.0:
                         log.info(
-                            "No events: user_id=%s since=%s",
+                            "No events: user_id=%s since=%s next_cursor=%s",
                             user_id,
                             since_val or None,
+                            next_cursor,
                         )
                         no_events_log_state[user_id] = (since_val, now)
+
+                    if next_cursor is not None and next_cursor > since_val:
+                        cursor_store.set(int(user_id), int(next_cursor))
                     continue
 
                 no_events_log_state.pop(user_id, None)
@@ -317,33 +227,36 @@ async def events_polling_loop(
                 events_sorted = sorted(events, key=_sort_key)
 
                 log.info(
-                    "Fetched events: user_id=%s since=%s count=%s",
+                    "Fetched events: user_id=%s since=%s count=%s next_cursor=%s",
                     user_id,
                     since_val or None,
                     len(events_sorted),
+                    next_cursor,
                 )
 
-                for chat_id in chat_ids:
-                    last_cursor = int(_safe_int(state.get(str(chat_id))) or 0)
-                    max_cursor = last_cursor
+                last_cursor = int(since_val or 0)
+                max_seen_cursor = last_cursor
+                delivery_ok = True
 
-                    for ev in events_sorted:
-                        cursor_id = _event_cursor_id(ev)
-                        if cursor_id <= last_cursor:
-                            continue
+                for ev in events_sorted:
+                    cursor_id = _event_cursor_id(ev)
+                    if cursor_id <= last_cursor:
+                        continue
 
-                        ev_type = str(ev.get("event_type") or "").upper()
+                    ev_type = str(ev.get("event_type") or "").upper()
 
-                        if allowed_types and ev_type not in allowed_types:
-                            max_cursor = max(max_cursor, cursor_id)
-                            continue
+                    if allowed_types and ev_type not in allowed_types:
+                        max_seen_cursor = max(max_seen_cursor, cursor_id)
+                        continue
 
+                    rendered = render_event(ev)
+
+                    for chat_id in chat_ids:
                         try:
                             await application.bot.send_message(
-                                chat_id=chat_id,
-                                text=render_event(ev),
+                                chat_id=int(chat_id),
+                                text=rendered,
                             )
-                            max_cursor = max(max_cursor, cursor_id)
                         except Exception:
                             log.exception(
                                 "Send failed: chat_id=%s user_id=%s cursor_id=%s",
@@ -351,14 +264,23 @@ async def events_polling_loop(
                                 user_id,
                                 cursor_id,
                             )
+                            delivery_ok = False
                             break
 
-                    if max_cursor > last_cursor:
-                        state[str(chat_id)] = max_cursor
-                        state_changed = True
+                    if not delivery_ok:
+                        break
 
-            if state_changed:
-                state_store.save(state)
+                    max_seen_cursor = max(max_seen_cursor, cursor_id)
+
+                if not delivery_ok:
+                    continue
+
+                candidate_cursor = max_seen_cursor
+                if next_cursor is not None:
+                    candidate_cursor = max(candidate_cursor, int(next_cursor))
+
+                if candidate_cursor > last_cursor:
+                    cursor_store.set(int(user_id), int(candidate_cursor))
 
             await asyncio.sleep(max(1.0, poll_interval_s))
 
