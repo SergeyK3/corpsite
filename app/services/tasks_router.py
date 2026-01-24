@@ -1,12 +1,10 @@
-# app/routers/tasks_router.py
+# FILE: app/services/tasks_router.py
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query
 from fastapi.responses import Response
-from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -29,33 +27,6 @@ from app.services.tasks_service import (
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-
-# ---------------------------
-# Events API models
-# ---------------------------
-
-class TaskEventOut(BaseModel):
-    event_type: str
-    actor_user_id: Optional[int] = None
-    actor_role_id: Optional[int] = None
-    created_at: str
-    payload: Dict[str, Any] = {}
-
-
-class MeEventOut(BaseModel):
-    audit_id: int
-    event_id: int
-    task_id: int
-    event_type: str
-    actor_user_id: Optional[int] = None
-    actor_role_id: Optional[int] = None
-    created_at: str
-    payload: Dict[str, Any] = {}
-
-
-# ---------------------------
-# Endpoints
-# ---------------------------
 
 @router.get("")
 def list_tasks(
@@ -166,81 +137,6 @@ def list_tasks(
             items.append(t)
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": items}
-
-
-# IMPORTANT: /me/events MUST be defined before "/{task_id}" routes
-@router.get("/me/events", response_model=List[MeEventOut])
-def get_my_events(
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    since_audit_id: Optional[int] = Query(None, ge=1),
-    after_id: Optional[int] = Query(None, ge=1),
-    event_type: Optional[str] = Query(None),
-) -> List[Dict[str, Any]]:
-    current_user_id = get_current_user_id(x_user_id)
-    cursor = since_audit_id if since_audit_id is not None else after_id
-
-    et = (event_type or "").strip().upper() or None
-
-    with engine.begin() as conn:
-        rows = conn.execute(
-            text(
-                """
-                SELECT
-                    e.audit_id,
-                    e.audit_id AS event_id,
-                    e.task_id,
-                    e.event_type,
-                    e.actor_user_id,
-                    e.actor_role_id,
-                    e.created_at,
-                    e.payload::text AS payload_text
-                FROM task_event_recipients r
-                JOIN task_events e ON e.audit_id = r.audit_id
-                JOIN tasks t ON t.task_id = e.task_id
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
-                WHERE r.user_id = :uid
-                  AND (:event_type IS NULL OR e.event_type = :event_type)
-                  AND (:cursor IS NULL OR e.audit_id > :cursor)
-                  AND COALESCE(ts.code,'') <> 'ARCHIVED'
-                ORDER BY e.audit_id ASC
-                LIMIT :limit OFFSET :offset
-                """
-            ),
-            {
-                "uid": int(current_user_id),
-                "limit": int(limit),
-                "offset": int(offset),
-                "cursor": int(cursor) if cursor is not None else None,
-                "event_type": et,
-            },
-        ).mappings().all()
-
-    out: List[Dict[str, Any]] = []
-    for r in rows:
-        payload = {}
-        try:
-            if r.get("payload_text"):
-                payload = json.loads(r["payload_text"])
-        except Exception:
-            payload = {}
-
-        created_at = r.get("created_at")
-        out.append(
-            {
-                "audit_id": int(r["audit_id"]),
-                "event_id": int(r["event_id"]),
-                "task_id": int(r["task_id"]),
-                "event_type": r["event_type"],
-                "actor_user_id": r["actor_user_id"],
-                "actor_role_id": r["actor_role_id"],
-                "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
-                "payload": payload,
-            }
-        )
-
-    return out
 
 
 @router.get("/{task_id}")

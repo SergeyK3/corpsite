@@ -1,3 +1,5 @@
+# corpsite-bot/src/bot/events_poller.py
+
 from __future__ import annotations
 
 import asyncio
@@ -83,7 +85,6 @@ class JsonFileStore:
             return {}
 
     def save(self, data: Dict[str, Any]) -> None:
-        # атомарная запись: tmp -> replace
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
         payload = json.dumps(data, ensure_ascii=False, indent=2)
@@ -181,13 +182,11 @@ def _migrate_state_if_needed(
 
     out: Dict[str, int] = {}
 
-    # 1) already chat_id keyed
     for chat_id in bound_chat_ids:
         v = norm.get(str(chat_id))
         if v is not None:
             out[str(chat_id)] = v
 
-    # 2) migrate user_id keyed state
     if user_key_hits > 0 and chat_key_hits == 0:
         for chat_id, user_id in pairs:
             if str(user_id) in norm:
@@ -196,7 +195,6 @@ def _migrate_state_if_needed(
                     norm[str(user_id)],
                 )
 
-    # 3) legacy single cursor
     if not out and fallback_last:
         for chat_id in bound_chat_ids:
             out[str(chat_id)] = fallback_last
@@ -243,7 +241,6 @@ async def events_polling_loop(
     last_no_bindings_log_ts = 0.0
     no_events_log_state: Dict[int, Tuple[int, float]] = {}
 
-    # One-time reset support (useful for E2E)
     did_reset = False
 
     while True:
@@ -263,7 +260,6 @@ async def events_polling_loop(
 
             raw_state = state_store.load()
 
-            # RESET cursor if requested (only once per process start)
             if not did_reset and _truthy_env("EVENTS_CURSOR_RESET"):
                 did_reset = True
                 raw_state = {}
@@ -282,7 +278,7 @@ async def events_polling_loop(
                     int(_safe_int(state.get(str(chat_id))) or 0)
                     for chat_id in chat_ids
                 ]
-                since_val = max(last_ids) if last_ids else 0
+                since_val = min(last_ids) if last_ids else 0
 
                 resp = await backend.get_my_events(
                     user_id=user_id,
@@ -338,8 +334,6 @@ async def events_polling_loop(
 
                         ev_type = str(ev.get("event_type") or "").upper()
 
-                        # если фильтруем типы — всё равно двигаем курсор,
-                        # иначе будем видеть эти события заново
                         if allowed_types and ev_type not in allowed_types:
                             max_cursor = max(max_cursor, cursor_id)
                             continue
@@ -357,8 +351,6 @@ async def events_polling_loop(
                                 user_id,
                                 cursor_id,
                             )
-                            # IMPORTANT: не двигаем курсор дальше текущего max_cursor,
-                            # чтобы не потерять события, которые не отправились.
                             break
 
                     if max_cursor > last_cursor:

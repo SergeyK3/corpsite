@@ -195,7 +195,6 @@ class CorpsiteAPI:
     # -----------------------
 
     async def health(self) -> APIResponse:
-        # Expected: {"ok": true} or similar
         return await self._request_headers("GET", "/health", headers={})
 
     async def get_task_statuses(self, *, user_id: int) -> APIResponse:
@@ -306,7 +305,6 @@ class CorpsiteAPI:
             json_body=(payload or {}),
         )
 
-    # Backward-compatible wrappers (keep old bot code working)
     async def submit_report(
         self,
         *,
@@ -362,7 +360,7 @@ class CorpsiteAPI:
             "limit": int(limit),
         }
         if since_audit_id is not None:
-            params["since_audit_id"] = int(since_audit_id)
+            params["cursor"] = int(since_audit_id)
 
         return await self._request("GET", f"/tasks/{int(task_id)}/events", user_id=user_id, params=params)
 
@@ -380,7 +378,7 @@ class CorpsiteAPI:
             "offset": int(offset),
         }
         if since_audit_id is not None:
-            params["since_audit_id"] = int(since_audit_id)
+            params["cursor"] = int(since_audit_id)
         if event_type:
             params["event_type"] = str(event_type).strip()
 
