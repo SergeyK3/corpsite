@@ -1,5 +1,5 @@
-// corpsite-ui/lib/api.ts
-import { APIError, TaskAction, TaskActionPayload, TaskDetails, TaskListItem } from "./types";
+// FILE: corpsite-ui/lib/api.ts
+import type { APIError, TaskAction, TaskActionPayload, TaskDetails, TaskListItem } from "./types";
 
 function env(name: string, fallback = ""): string {
   const v = process.env[name];
@@ -48,10 +48,7 @@ function toApiError(status: number, body: any, meta?: Record<string, any>): APIE
   return err;
 }
 
-function buildUrl(
-  path: string,
-  query?: Record<string, string | number | boolean | undefined>,
-): URL {
+function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined>): URL {
   const url = new URL(path, API_BASE_URL);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
@@ -130,10 +127,22 @@ export async function apiGetTask(params: {
   return body as TaskDetails;
 }
 
+function pickString(payload: Record<string, any>, keys: string[]): string {
+  for (const k of keys) {
+    const v = payload[k];
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (s) return s;
+    }
+  }
+  return "";
+}
+
 /**
- * POST /tasks/{id}/actions/{action}
- * - Всегда отправляет JSON (даже пустой объект), чтобы backend не зависел от Content-Length/типов.
- * - Возвращает тело (если есть), иначе null.
+ * Backend endpoints:
+ * - POST /tasks/{id}/report   { report_link, current_comment? }
+ * - POST /tasks/{id}/approve  { approve: true|false, current_comment? }
+ * - DELETE /tasks/{id}        (archive)
  */
 export async function apiPostTaskAction(params: {
   devUserId: number;
@@ -141,21 +150,55 @@ export async function apiPostTaskAction(params: {
   action: TaskAction;
   payload?: TaskActionPayload;
 }): Promise<any> {
-  const url = buildUrl(`/tasks/${params.taskId}/actions/${params.action}`);
-
   const payloadObj = (params.payload ?? {}) as Record<string, any>;
 
+  const currentComment = pickString(payloadObj, ["current_comment", "comment"]);
+  const reportLink = pickString(payloadObj, ["report_link", "reportLink", "link", "url"]);
+
+  let method: "POST" | "DELETE" = "POST";
+  let url: URL;
+  let body: string | undefined = undefined;
+
+  if (params.action === "report") {
+    url = buildUrl(`/tasks/${params.taskId}/report`);
+    const out: Record<string, any> = {
+      report_link: reportLink,
+    };
+    if (currentComment) out.current_comment = currentComment;
+    body = JSON.stringify(out);
+  } else if (params.action === "approve" || params.action === "reject") {
+    url = buildUrl(`/tasks/${params.taskId}/approve`);
+    const out: Record<string, any> = {
+      approve: params.action === "approve",
+    };
+    if (currentComment) out.current_comment = currentComment;
+    body = JSON.stringify(out);
+  } else if (params.action === "archive") {
+    url = buildUrl(`/tasks/${params.taskId}`);
+    method = "DELETE";
+  } else {
+    url = buildUrl(`/tasks/${params.taskId}/approve`);
+    const out: Record<string, any> = { approve: true };
+    if (currentComment) out.current_comment = currentComment;
+    body = JSON.stringify(out);
+  }
+
+  const headers =
+    method === "POST"
+      ? buildHeaders(params.devUserId, { "Content-Type": "application/json" })
+      : buildHeaders(params.devUserId);
+
   const res = await fetch(url.toString(), {
-    method: "POST",
-    headers: buildHeaders(params.devUserId, { "Content-Type": "application/json" }),
-    body: JSON.stringify(payloadObj),
+    method,
+    headers,
+    body,
     cache: "no-store",
   });
 
-  const body = await readJsonSafe(res);
+  const resBody = await readJsonSafe(res);
   if (!res.ok) {
-    throw toApiError(res.status, body, {
-      method: "POST",
+    throw toApiError(res.status, resBody, {
+      method,
       url: url.toString(),
       taskId: params.taskId,
       action: params.action,
@@ -164,5 +207,5 @@ export async function apiPostTaskAction(params: {
     });
   }
 
-  return body;
+  return resBody;
 }

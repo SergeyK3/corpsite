@@ -116,9 +116,9 @@ export default function TasksPage() {
 
     if (action === "report") {
       (payload as any).report_link = reportLink;
-      if (comment.trim()) (payload as any).comment = comment.trim();
+      if (comment.trim()) (payload as any).current_comment = comment.trim();
     } else {
-      if (comment.trim()) (payload as any).comment = comment.trim();
+      if (comment.trim()) (payload as any).current_comment = comment.trim();
     }
 
     setTaskError(null);
@@ -157,12 +157,13 @@ export default function TasksPage() {
     }
     void reloadTask(selectedTaskId, userId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaskId]);
+  }, [selectedTaskId, userId]);
 
   const allowed = allowedActionsOf(task ?? selectedFromList);
   const hasReport = allowed.includes("report");
   const hasApprove = allowed.includes("approve");
   const hasReject = allowed.includes("reject");
+  const hasArchive = allowed.includes("archive");
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -187,8 +188,7 @@ export default function TasksPage() {
               onClick={() => {
                 setDevUserId(userId);
                 void reloadList(userId);
-                setSelectedTaskId(null);
-                setTask(null);
+                if (selectedTaskId) void reloadTask(selectedTaskId, userId);
                 setTaskError(null);
               }}
               className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800"
@@ -314,6 +314,13 @@ export default function TasksPage() {
                         className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
                       >
                         Reject
+                      </button>
+                      <button
+                        onClick={() => void runAction("archive")}
+                        disabled={!hasArchive || taskLoading}
+                        className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+                      >
+                        Archive
                       </button>
                     </div>
 
