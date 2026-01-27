@@ -217,19 +217,25 @@ def _allowed_actions_for_user(
     code = str(task_row.get("status_code") or "")
     actions: List[str] = []
 
-    if code == "IN_PROGRESS":
-        if can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
-            actions.append("update")
+    if code in ("IN_PROGRESS", "WAITING_REPORT"):
+        if can_report_or_update(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            task_row=task_row,
+        ):
             actions.append("report")
 
-    elif code == "WAITING_REPORT":
-        if can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
-            actions.append("report")
-
-    elif code == "WAITING_APPROVAL":
-        if can_approve(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
+    if code == "WAITING_APPROVAL":
+        if can_approve(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            task_row=task_row,
+        ):
             actions.append("approve")
             actions.append("reject")
+
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row) and code != "ARCHIVED":
+        actions.append("archive")
 
     return actions
 
@@ -242,7 +248,9 @@ def attach_allowed_actions(
 ) -> Dict[str, Any]:
     t = dict(task)
     t["allowed_actions"] = _allowed_actions_for_user(
-        task_row=t, current_user_id=current_user_id, current_role_id=current_role_id
+        task_row=t,
+        current_user_id=current_user_id,
+        current_role_id=current_role_id,
     )
     return t
 

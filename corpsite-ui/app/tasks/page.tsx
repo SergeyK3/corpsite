@@ -1,4 +1,4 @@
-// corpsite-ui/app/tasks/page.tsx
+// FILE: corpsite-ui/app/tasks/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -24,16 +24,19 @@ function taskIdOf(t: any): number {
 }
 
 function titleOf(t: any): string {
-  return String(t?.title ?? t?.name ?? `Task #${taskIdOf(t)}`);
+  const id = taskIdOf(t);
+  const title = String(t?.title ?? t?.name ?? "").trim();
+  return title || (id > 0 ? `Задача #${id}` : "Задача");
 }
 
 function statusOf(t: any): string {
-  return String(t?.status ?? t?.status_code ?? "—");
+  const v = String(t?.status ?? t?.status_code ?? "").trim();
+  return v || "—";
 }
 
 function allowedActionsOf(t: any): string[] {
   const v = t?.allowed_actions ?? t?.allowedActions ?? [];
-  if (Array.isArray(v)) return v.map(String);
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
   if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
   return [];
 }
@@ -51,7 +54,6 @@ export default function TasksPage() {
   const [taskLoading, setTaskLoading] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
 
-  // inputs for actions
   const [reportLink, setReportLink] = useState<string>("https://example.com/r");
   const [comment, setComment] = useState<string>("");
 
@@ -68,7 +70,6 @@ export default function TasksPage() {
       const data = await apiGetTasks({ devUserId, limit: 50, offset: 0 });
       setTasks(data);
 
-      // если выбранной задачи больше нет — сброс выбора
       if (selectedTaskId && !data.some((x: any) => taskIdOf(x) === selectedTaskId)) {
         setSelectedTaskId(null);
         setTask(null);
@@ -117,7 +118,6 @@ export default function TasksPage() {
       (payload as any).report_link = reportLink;
       if (comment.trim()) (payload as any).comment = comment.trim();
     } else {
-      // approve/reject: обычно только comment
       if (comment.trim()) (payload as any).comment = comment.trim();
     }
 
@@ -131,7 +131,6 @@ export default function TasksPage() {
         payload: payload as any,
       });
 
-      // после действия — обновляем карточку и список
       await Promise.all([reloadTask(selectedTaskId, userId), reloadList(userId)]);
       setComment("");
     } catch (e: any) {
@@ -150,7 +149,6 @@ export default function TasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // при смене выбранной задачи — грузим карточку
   useEffect(() => {
     if (!selectedTaskId) {
       setTask(null);
@@ -189,7 +187,6 @@ export default function TasksPage() {
               onClick={() => {
                 setDevUserId(userId);
                 void reloadList(userId);
-                // при смене юзера логично сбросить выбор
                 setSelectedTaskId(null);
                 setTask(null);
                 setTaskError(null);
@@ -202,7 +199,6 @@ export default function TasksPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* LEFT: LIST */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-sm uppercase tracking-wide text-zinc-300">Все задачи</div>
@@ -216,7 +212,6 @@ export default function TasksPage() {
             </div>
 
             {listError ? <div className="mb-3 text-sm text-red-400">Ошибка списка: {listError}</div> : null}
-
             {listLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
 
             <div className="space-y-2">
@@ -229,9 +224,7 @@ export default function TasksPage() {
                     onClick={() => setSelectedTaskId(id)}
                     className={[
                       "w-full rounded-lg border px-3 py-2 text-left",
-                      active
-                        ? "border-zinc-600 bg-zinc-900"
-                        : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/60",
+                      active ? "border-zinc-600 bg-zinc-900" : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/60",
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -245,7 +238,6 @@ export default function TasksPage() {
             </div>
           </div>
 
-          {/* RIGHT: DETAILS */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-sm uppercase tracking-wide text-zinc-300">Карточка</div>
@@ -274,13 +266,10 @@ export default function TasksPage() {
 
                     <div className="mt-2 text-xs text-zinc-400">
                       allowed_actions:{" "}
-                      <span className="text-zinc-200">
-                        {allowed.length ? allowed.join(", ") : "—"}
-                      </span>
+                      <span className="text-zinc-200">{allowed.length ? allowed.join(", ") : "—"}</span>
                     </div>
                   </div>
 
-                  {/* ACTIONS */}
                   <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                     <div className="mb-2 text-sm font-semibold">Действия</div>
 
@@ -333,7 +322,6 @@ export default function TasksPage() {
                     </div>
                   </div>
 
-                  {/* RAW JSON (удобно на MVP) */}
                   <details className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                     <summary className="cursor-pointer text-sm text-zinc-300">Raw JSON</summary>
                     <pre className="mt-2 overflow-auto text-xs text-zinc-200">

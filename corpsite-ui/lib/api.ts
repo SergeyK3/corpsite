@@ -41,7 +41,6 @@ function toApiError(status: number, body: any, meta?: Record<string, any>): APIE
     details: body,
   };
 
-  // Не шумим в UI, но при желании кладём метаданные (удобно смотреть в thrown error)
   if (API_TRACE && meta) {
     (err as any).meta = meta;
   }
@@ -49,7 +48,10 @@ function toApiError(status: number, body: any, meta?: Record<string, any>): APIE
   return err;
 }
 
-function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined>): URL {
+function buildUrl(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined>,
+): URL {
   const url = new URL(path, API_BASE_URL);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
@@ -94,7 +96,6 @@ export async function apiGetTasks(params: {
     });
   }
 
-  // поддержка обоих форматов: массив или {items:[]}
   if (Array.isArray(body)) return body as TaskListItem[];
   if (body?.items && Array.isArray(body.items)) return body.items as TaskListItem[];
 
@@ -107,7 +108,7 @@ export async function apiGetTask(params: {
   includeArchived?: boolean;
 }): Promise<TaskDetails> {
   const url = buildUrl(`/tasks/${params.taskId}`, {
-    include_archived: params.includeArchived ? "true" : "false",
+    include_archived: !!params.includeArchived,
   });
 
   const res = await fetch(url.toString(), {

@@ -168,10 +168,6 @@ def create_task(
     payload: Dict[str, Any],
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
-    """
-    CREATE НЕ ЯВЛЯЕТСЯ ACTION FSM.
-    FSM применяется только к переходам статуса: report/approve/reject/archive.
-    """
     current_user_id = get_current_user_id(x_user_id)
 
     title = (payload.get("title") or "").strip()
