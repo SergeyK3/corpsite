@@ -8,27 +8,58 @@ from fastapi.responses import Response
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.errors import raise_error, ErrorCode
+from app.errors import ErrorCode, raise_error
 from app.services.tasks_fsm import transition
 from app.services.tasks_service import (
+    attach_allowed_actions,
+    can_approve,
+    can_report_or_update,
+    ensure_task_visible_or_404,
     get_current_user_id,
+    get_status_id_by_code,
     get_user_role_id,
     is_supervisor_or_deputy,
     load_assignment_scope_enum_labels,
+    load_task_full,
     normalize_assignment_scope,
     scope_label_or_none,
-    get_status_id_by_code,
-    load_task_full,
-    ensure_task_visible_or_404,
-    attach_allowed_actions,
-    can_report_or_update,
-    can_approve,
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.get("")
+def _as_int_or_none(v: Any) -> Optional[int]:
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            return int(s)
+        except Exception:
+            return None
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+
+def _as_str_or_none(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        return s if s else None
+    # для description лучше не пытаться "умно" сериализовать dict/list
+    return str(v).strip() or None
+
+
+@router.get("/")
 def list_tasks(
     period_id: Optional[int] = Query(None, ge=1),
     status_code: Optional[str] = Query(None),
@@ -55,9 +86,8 @@ def list_tasks(
 
         where: List[str] = []
 
-        if is_supervisor_or_deputy(role_id):
-            where.append("1=1")
-        else:
+        # RBAC-фильтр: суперв/деп видят всё (текущее поведение системы)
+        if not is_supervisor_or_deputy(role_id):
             params["functional_scope"] = functional_lbl
             params["admin_scope"] = admin_lbl
 
@@ -88,8 +118,10 @@ def list_tasks(
             where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
 
         if search:
-            where.append("(t.title ILIKE :q OR COALESCE(t.description,'') ILIKE :q)")
-            params["q"] = f"%{search}%"
+            q = search.strip()
+            if q:
+                where.append("(t.title ILIKE :q OR COALESCE(t.description,'') ILIKE :q)")
+                params["q"] = f"%{q}%"
 
         where_sql = " AND ".join(where) if where else "1=1"
 
@@ -163,7 +195,7 @@ def get_task(
     return dict(task)
 
 
-@router.post("")
+@router.post("/")
 def create_task(
     payload: Dict[str, Any],
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
@@ -183,6 +215,8 @@ def create_task(
         raise HTTPException(status_code=422, detail="period_id is required")
 
     status_code = (payload.get("status_code") or "IN_PROGRESS").strip()
+    regular_task_id = _as_int_or_none(payload.get("regular_task_id"))
+    description = _as_str_or_none(payload.get("description"))
 
     with engine.begin() as conn:
         assignment_scope = normalize_assignment_scope(conn, payload.get("assignment_scope"))
@@ -204,9 +238,9 @@ def create_task(
             ),
             {
                 "period_id": int(period_id),
-                "regular_task_id": payload.get("regular_task_id"),
+                "regular_task_id": int(regular_task_id) if regular_task_id is not None else None,
                 "title": title,
-                "description": payload.get("description"),
+                "description": description,
                 "initiator_user_id": int(current_user_id),
                 "executor_role_id": int(executor_role_id),
                 "assignment_scope": assignment_scope,
@@ -299,8 +333,8 @@ def approve_report(
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     current_user_id = get_current_user_id(x_user_id)
-    approve = payload.get("approve", True)
 
+    approve = payload.get("approve", True)
     if not isinstance(approve, bool):
         raise HTTPException(status_code=422, detail="approve must be boolean")
 
@@ -356,6 +390,7 @@ def delete_task(
             include_archived=True,
         )
 
+        # скрываем существование: не инициатор -> 404
         if int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
 

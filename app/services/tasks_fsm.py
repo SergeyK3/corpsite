@@ -1,12 +1,12 @@
 # app/services/tasks_fsm.py
 from __future__ import annotations
 
-from typing import Dict, Any, Set
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from app.errors import raise_error, ErrorCode
+from app.errors import ErrorCode, raise_error
 from app.events import create_task_event_tx
 from app.services.tasks_service import get_status_id_by_code, write_task_audit
 
@@ -22,7 +22,7 @@ def transition(
     action: str,
     actor_user_id: int,
     actor_role_id: int,
-    payload: Dict[str, Any] | None = None,
+    payload: Optional[Dict[str, Any]] = None,
 ) -> None:
     payload = payload or {}
 
@@ -35,7 +35,7 @@ def transition(
             WHERE t.task_id = :tid
             """
         ),
-        {"tid": task_id},
+        {"tid": int(task_id)},
     ).mappings().first()
 
     if not row:
@@ -77,9 +77,10 @@ def _set_status(
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
             extra={
-                "task_id": task_id,
+                "task_id": int(task_id),
                 "current_status": from_status,
                 "allowed_from": sorted(allowed_from),
+                "status_to": to_status,
             },
         )
 
@@ -87,7 +88,7 @@ def _set_status(
 
     conn.execute(
         text("UPDATE tasks SET status_id = :sid WHERE task_id = :tid"),
-        {"sid": status_id, "tid": task_id},
+        {"sid": int(status_id), "tid": int(task_id)},
     )
 
 
@@ -136,22 +137,23 @@ def _report(
 
     write_task_audit(
         conn,
-        task_id=task_id,
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        task_id=int(task_id),
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         action="REPORT_SUBMIT",
         fields_changed={"status_code": {"from": from_status, "to": "WAITING_APPROVAL"}},
         request_body=payload,
+        meta=None,
         event_type="REPORT_SUBMITTED",
         event_payload=payload,
     )
 
     create_task_event_tx(
         conn,
-        task_id=task_id,
+        task_id=int(task_id),
         event_type="REPORT_SUBMITTED",
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         payload={**payload, "status_to": "WAITING_APPROVAL"},
     )
 
@@ -165,17 +167,18 @@ def _approve(
     payload: Dict[str, Any],
 ) -> None:
     # 1) статус должен позволять approve
-    if from_status not in {"WAITING_APPROVAL"}:
+    if from_status != "WAITING_APPROVAL":
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
             extra={
                 "task_id": int(task_id),
                 "current_status": from_status,
                 "allowed_from": ["WAITING_APPROVAL"],
+                "status_to": "DONE",
             },
         )
 
-    # 2) должен быть отчёт; и перед DONE обязаны проставить approved_at/by (DB-trigger)
+    # 2) должен быть отчёт; перед DONE обязаны проставить approved_at/by
     _ensure_report_exists(conn, task_id)
 
     comment = (payload.get("current_comment") or "").strip()
@@ -204,22 +207,23 @@ def _approve(
 
     write_task_audit(
         conn,
-        task_id=task_id,
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        task_id=int(task_id),
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         action="APPROVE",
         fields_changed={"status_code": {"from": from_status, "to": "DONE"}},
         request_body=payload,
+        meta=None,
         event_type="APPROVED",
         event_payload=payload,
     )
 
     create_task_event_tx(
         conn,
-        task_id=task_id,
+        task_id=int(task_id),
         event_type="APPROVED",
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         payload={**payload, "status_to": "DONE"},
     )
 
@@ -240,6 +244,9 @@ def _reject(
         allowed_from={"WAITING_APPROVAL"},
     )
 
+    # если отчёта нет — это конфликт, иначе "reject" не имеет смысла
+    _ensure_report_exists(conn, task_id)
+
     # при reject сбрасываем approve-метки; comment (если передали) сохраняем
     comment = (payload.get("current_comment") or "").strip()
     conn.execute(
@@ -257,22 +264,23 @@ def _reject(
 
     write_task_audit(
         conn,
-        task_id=task_id,
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        task_id=int(task_id),
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         action="REJECT",
         fields_changed={"status_code": {"from": from_status, "to": "WAITING_REPORT"}},
         request_body=payload,
+        meta=None,
         event_type="REJECTED",
         event_payload=payload,
     )
 
     create_task_event_tx(
         conn,
-        task_id=task_id,
+        task_id=int(task_id),
         event_type="REJECTED",
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         payload={**payload, "status_to": "WAITING_REPORT"},
     )
 
@@ -284,22 +292,55 @@ def _archive(
     actor_user_id: int,
     actor_role_id: int,
 ) -> None:
+    # Архивируем из любого состояния, кроме уже ARCHIVED
+    allowed_from = {
+        "IN_PROGRESS",
+        "WAITING_REPORT",
+        "WAITING_APPROVAL",
+        "DONE",
+        "REJECTED",
+        "CANCELLED",
+        "ARCHIVED",  # оставим для корректного conflict
+    }
+
+    if from_status == "ARCHIVED":
+        raise_error(
+            ErrorCode.TASK_CONFLICT_ACTION_STATUS,
+            extra={
+                "task_id": int(task_id),
+                "current_status": from_status,
+                "allowed_from": sorted(allowed_from - {"ARCHIVED"}),
+                "status_to": "ARCHIVED",
+            },
+        )
+
     _set_status(
         conn,
         task_id,
         from_status,
         to_status="ARCHIVED",
-        allowed_from={from_status},
+        allowed_from=allowed_from - {"ARCHIVED"},
     )
 
     write_task_audit(
         conn,
-        task_id=task_id,
-        actor_user_id=actor_user_id,
-        actor_role_id=actor_role_id,
+        task_id=int(task_id),
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
         action="ARCHIVE",
         fields_changed={"status_code": {"from": from_status, "to": "ARCHIVED"}},
         request_body=None,
+        meta=None,
         event_type=None,
         event_payload=None,
+    )
+
+    # событие для доставок/ленты событий
+    create_task_event_tx(
+        conn,
+        task_id=int(task_id),
+        event_type="ARCHIVED",
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
+        payload={"status_to": "ARCHIVED", "status_from": from_status},
     )
