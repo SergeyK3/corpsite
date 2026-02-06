@@ -52,6 +52,37 @@ export type TaskActionPayload = {
   current_comment?: string;
 };
 
+export type RegularTaskStatus = "active" | "inactive" | "all";
+
+export type RegularTask = {
+  regular_task_id: number;
+
+  code?: string | null;
+  title: string;
+  description?: string | null;
+
+  is_active?: boolean;
+
+  schedule_type?: string | null;
+  schedule_params?: any;
+
+  create_offset_days?: number;
+  due_offset_days?: number;
+
+  executor_role_id?: number | null;
+  assignment_scope?: string | null;
+
+  created_by_user_id?: number | null;
+  updated_at?: string | null;
+};
+
+export type RegularTasksListResponse = {
+  total?: number;
+  limit?: number;
+  offset?: number;
+  items?: RegularTask[];
+};
+
 export type APIError = {
   status: number;
   code?: string;

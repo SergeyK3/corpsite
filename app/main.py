@@ -19,7 +19,11 @@ from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
 from app.directory import router as directory_router
+
+# regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
+from app.services.regular_tasks_public_router import router as regular_tasks_router
+
 from app.errors import raise_error, ErrorCode
 
 
@@ -47,14 +51,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
+# -----------------------
+# Routers (public)
+# -----------------------
 app.include_router(meta_router)
 app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any
 app.include_router(tg_bind_router)
 app.include_router(directory_router)
 
-# Internal routers
+# Regular tasks (PUBLIC CRUD)
+app.include_router(regular_tasks_router)
+
+# -----------------------
+# Routers (internal)
+# -----------------------
 app.include_router(internal_regular_tasks_router)
 
 

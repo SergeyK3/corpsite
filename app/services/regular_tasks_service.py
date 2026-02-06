@@ -243,6 +243,68 @@ def _period_resolve(conn: Connection, *, schedule_type: str, for_date: date) -> 
     return int(FALLBACK_PERIOD_ID)
 
 
+def _log_run_item_safe(
+    conn: Connection,
+    *,
+    run_id: int,
+    regular_task_id: int,
+    period_id: Optional[int],
+    executor_role_id: Optional[int],
+    is_due: bool,
+    created_tasks: int,
+    status: str,
+    error: Optional[str],
+    meta: Dict[str, Any],
+) -> None:
+    """
+    Пишем подробный журнал по шаблону в рамках запуска.
+    Никогда не валим весь ран из-за проблем логирования.
+    """
+    try:
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.regular_task_run_items (
+                    run_id,
+                    regular_task_id,
+                    period_id,
+                    executor_role_id,
+                    is_due,
+                    created_tasks,
+                    status,
+                    error,
+                    meta
+                )
+                VALUES (
+                    :run_id,
+                    :regular_task_id,
+                    :period_id,
+                    :executor_role_id,
+                    :is_due,
+                    :created_tasks,
+                    :status,
+                    :error,
+                    CAST(:meta AS jsonb)
+                )
+                """
+            ),
+            {
+                "run_id": int(run_id),
+                "regular_task_id": int(regular_task_id),
+                "period_id": int(period_id) if period_id is not None else None,
+                "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
+                "is_due": bool(is_due),
+                "created_tasks": int(created_tasks),
+                "status": str(status),
+                "error": str(error) if error else None,
+                "meta": json.dumps(meta or {}, ensure_ascii=False),
+            },
+        )
+    except Exception:
+        # intentionally swallow
+        return
+
+
 def run_regular_tasks_generation_tx(
     conn: Connection,
     *,
@@ -296,9 +358,14 @@ def run_regular_tasks_generation_tx(
     for t in templates:
         rid = _safe_int(t.get("regular_task_id"))
         if rid is None:
-            # теоретически не должно случаться
             errors.append({"regular_task_id": None, "error": "regular_task_id is not an int"})
             continue
+
+        # Базовый meta для журнала
+        base_meta: Dict[str, Any] = {
+            "dry_run": bool(dry_run),
+            "now_local": now_local.isoformat(),
+        }
 
         try:
             schedule_type = str(t.get("schedule_type") or "").strip().lower()
@@ -306,33 +373,80 @@ def run_regular_tasks_generation_tx(
             if not isinstance(schedule_params, dict):
                 schedule_params = {}
 
+            create_offset_days = _safe_int(t.get("create_offset_days")) or 0
+            base_meta.update(
+                {
+                    "schedule_type": schedule_type,
+                    "schedule_params": schedule_params,
+                    "create_offset_days": int(create_offset_days),
+                    "due_offset_days": int(_safe_int(t.get("due_offset_days")) or 0),
+                }
+            )
+
             # Валидация расписания. Если конфиг битый — фиксируем ошибку, но не падаем.
             sched_err = _validate_template_schedule(schedule_type, schedule_params)
             if sched_err:
                 errors.append({"regular_task_id": rid, "error": sched_err})
+                _log_run_item_safe(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=None,
+                    executor_role_id=_safe_int(t.get("executor_role_id")),
+                    is_due=False,
+                    created_tasks=0,
+                    status="error",
+                    error=sched_err,
+                    meta=base_meta,
+                )
                 continue
 
-            create_offset_days = _safe_int(t.get("create_offset_days")) or 0
-
-            if not _is_due_today_or_with_offset(
+            is_due = _is_due_today_or_with_offset(
                 now_local=now_local,
                 schedule_type=schedule_type,
                 schedule_params=schedule_params,
                 create_offset_days=create_offset_days,
-            ):
+            )
+
+            if not is_due:
                 continue
 
             due += 1
 
-            # Если "пора создавать", то требуем executor_role_id (иначе раньше было int(None) и partial).
+            # Если "пора создавать", то требуем executor_role_id
             executor_role_id = _safe_int(t.get("executor_role_id"))
             if executor_role_id is None:
-                errors.append({"regular_task_id": rid, "error": "executor_role_id is required (cannot be NULL) when template is due"})
+                msg = "executor_role_id is required (cannot be NULL) when template is due"
+                errors.append({"regular_task_id": rid, "error": msg})
+                _log_run_item_safe(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=None,
+                    executor_role_id=None,
+                    is_due=True,
+                    created_tasks=0,
+                    status="error",
+                    error=msg,
+                    meta=base_meta,
+                )
                 continue
 
             period_id = _period_resolve(conn, schedule_type=schedule_type, for_date=now_local.date())
 
             if dry_run:
+                _log_run_item_safe(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=int(period_id),
+                    executor_role_id=int(executor_role_id),
+                    is_due=True,
+                    created_tasks=0,
+                    status="skip",
+                    error=None,
+                    meta={**base_meta, "reason": "dry_run"},
+                )
                 continue
 
             row = conn.execute(
@@ -372,11 +486,48 @@ def run_regular_tasks_generation_tx(
 
             if row and row.get("task_id"):
                 created += 1
+                _log_run_item_safe(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=int(period_id),
+                    executor_role_id=int(executor_role_id),
+                    is_due=True,
+                    created_tasks=1,
+                    status="ok",
+                    error=None,
+                    meta={**base_meta, "task_id": int(row["task_id"]), "deduped": False},
+                )
             else:
                 deduped += 1
+                _log_run_item_safe(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=int(period_id),
+                    executor_role_id=int(executor_role_id),
+                    is_due=True,
+                    created_tasks=0,
+                    status="ok",
+                    error=None,
+                    meta={**base_meta, "task_id": None, "deduped": True},
+                )
 
         except Exception as e:
-            errors.append({"regular_task_id": rid, "error": str(e)})
+            err_str = str(e)
+            errors.append({"regular_task_id": rid, "error": err_str})
+            _log_run_item_safe(
+                conn,
+                run_id=int(run_id),
+                regular_task_id=int(rid),
+                period_id=None,
+                executor_role_id=_safe_int(t.get("executor_role_id")),
+                is_due=True,  # мы в блоке due/создания; если исключение раньше — не критично
+                created_tasks=0,
+                status="error",
+                error=err_str,
+                meta=base_meta,
+            )
             continue
 
     stats = RunStats(
