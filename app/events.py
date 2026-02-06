@@ -1,4 +1,4 @@
-# app/events.py
+# FILE: app/events.py
 from __future__ import annotations
 
 import json
@@ -27,9 +27,26 @@ def _parse_int_set(env_name: str) -> Set[int]:
     return out
 
 
+def _parse_str_set(env_name: str) -> Set[str]:
+    raw = (os.getenv(env_name) or "").strip()
+    if not raw:
+        return set()
+    out: Set[str] = set()
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        out.add(p.upper())
+    return out
+
+
 SUPERVISOR_ROLE_IDS = _parse_int_set("SUPERVISOR_ROLE_IDS")
 DEPUTY_ROLE_IDS = _parse_int_set("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS = _parse_int_set("DIRECTOR_ROLE_IDS")
+
+# optional: какие события не отправлять самому актору
+# пример: TASK_EVENTS_DROP_SELF_TYPES=REPORT_SUBMITTED,APPROVED,REJECTED
+DROP_SELF_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_DROP_SELF_TYPES")
 
 
 def _uniq_ints(xs: Iterable[Optional[int]]) -> List[int]:
@@ -50,8 +67,11 @@ def _uniq_ints(xs: Iterable[Optional[int]]) -> List[int]:
 
 
 def _should_drop_self(event_type: str) -> bool:
-    DROP_SELF_FOR_TYPES: Set[str] = set()
-    return event_type in DROP_SELF_FOR_TYPES
+    et = (event_type or "").upper().strip()
+    if DROP_SELF_FOR_TYPES:
+        return et in DROP_SELF_FOR_TYPES
+    DROP_SELF_FOR_TYPES_FALLBACK: Set[str] = set()
+    return et in DROP_SELF_FOR_TYPES_FALLBACK
 
 
 @dataclass(frozen=True)
@@ -71,11 +91,14 @@ def resolve_recipients_for_task_event_tx(
     et = (event_type or "").upper().strip()
 
     executor_users = conn.execute(
-        text("""
+        text(
+            """
             SELECT u.user_id
             FROM public.users u
             WHERE u.role_id = :rid
-        """),
+              AND COALESCE(u.is_active, true) = true
+            """
+        ),
         {"rid": int(task.executor_role_id)},
     ).scalars().all()
 
@@ -83,11 +106,14 @@ def resolve_recipients_for_task_event_tx(
     mgmt_users: List[int] = []
     if mgmt_role_ids:
         mgmt_users = conn.execute(
-            text("""
+            text(
+                """
                 SELECT u.user_id
                 FROM public.users u
-                WHERE u.role_id = ANY(CAST(:rids AS bigint[]))
-            """),
+                WHERE u.role_id = ANY(:rids)
+                  AND COALESCE(u.is_active, true) = true
+                """
+            ),
             {"rids": [int(x) for x in mgmt_role_ids]},
         ).scalars().all()
 
@@ -121,11 +147,13 @@ def create_task_event_tx(
     payload = payload or {}
 
     row = conn.execute(
-        text("""
+        text(
+            """
             SELECT task_id, initiator_user_id, executor_role_id
             FROM public.tasks
             WHERE task_id = :tid
-        """),
+            """
+        ),
         {"tid": int(task_id)},
     ).mappings().first()
     if not row:
@@ -145,11 +173,13 @@ def create_task_event_tx(
     )
 
     audit_id = conn.execute(
-        text("""
+        text(
+            """
             INSERT INTO public.task_events (task_id, event_type, actor_user_id, actor_role_id, payload)
             VALUES (:task_id, :event_type, :actor_user_id, :actor_role_id, CAST(:payload AS jsonb))
             RETURNING audit_id
-        """),
+            """
+        ),
         {
             "task_id": int(task_id),
             "event_type": et,
@@ -161,14 +191,16 @@ def create_task_event_tx(
 
     if recipients:
         conn.execute(
-            text("""
+            text(
+                """
                 INSERT INTO public.task_event_recipients (audit_id, user_id)
                 SELECT :audit_id, x.user_id
                 FROM (
                     SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
                 ) x
                 ON CONFLICT DO NOTHING
-            """),
+                """
+            ),
             {"audit_id": int(audit_id), "uids": [int(x) for x in recipients]},
         )
 

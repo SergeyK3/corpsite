@@ -1,4 +1,4 @@
-# app/services/tasks_fsm.py
+# FILE: app/services/tasks_fsm.py
 from __future__ import annotations
 
 from typing import Any, Dict, Optional, Set
@@ -166,7 +166,6 @@ def _approve(
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
-    # 1) статус должен позволять approve
     if from_status != "WAITING_APPROVAL":
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
@@ -178,7 +177,6 @@ def _approve(
             },
         )
 
-    # 2) должен быть отчёт; перед DONE обязаны проставить approved_at/by
     _ensure_report_exists(conn, task_id)
 
     comment = (payload.get("current_comment") or "").strip()
@@ -196,7 +194,6 @@ def _approve(
         {"by": int(actor_user_id), "tid": int(task_id), "comment": comment},
     )
 
-    # 3) теперь можно ставить DONE
     _set_status(
         conn,
         task_id,
@@ -244,10 +241,8 @@ def _reject(
         allowed_from={"WAITING_APPROVAL"},
     )
 
-    # если отчёта нет — это конфликт, иначе "reject" не имеет смысла
     _ensure_report_exists(conn, task_id)
 
-    # при reject сбрасываем approve-метки; comment (если передали) сохраняем
     comment = (payload.get("current_comment") or "").strip()
     conn.execute(
         text(
@@ -292,24 +287,13 @@ def _archive(
     actor_user_id: int,
     actor_role_id: int,
 ) -> None:
-    # Архивируем из любого состояния, кроме уже ARCHIVED
-    allowed_from = {
-        "IN_PROGRESS",
-        "WAITING_REPORT",
-        "WAITING_APPROVAL",
-        "DONE",
-        "REJECTED",
-        "CANCELLED",
-        "ARCHIVED",  # оставим для корректного conflict
-    }
-
     if from_status == "ARCHIVED":
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
             extra={
                 "task_id": int(task_id),
                 "current_status": from_status,
-                "allowed_from": sorted(allowed_from - {"ARCHIVED"}),
+                "allowed_from": ["IN_PROGRESS", "WAITING_REPORT", "WAITING_APPROVAL", "DONE"],
                 "status_to": "ARCHIVED",
             },
         )
@@ -319,9 +303,10 @@ def _archive(
         task_id,
         from_status,
         to_status="ARCHIVED",
-        allowed_from=allowed_from - {"ARCHIVED"},
+        allowed_from={"IN_PROGRESS", "WAITING_REPORT", "WAITING_APPROVAL", "DONE"},
     )
 
+    # ВАЖНО: события ARCHIVED в enum task_event_type НЕТ, поэтому здесь только audit.
     write_task_audit(
         conn,
         task_id=int(task_id),
@@ -333,14 +318,4 @@ def _archive(
         meta=None,
         event_type=None,
         event_payload=None,
-    )
-
-    # событие для доставок/ленты событий
-    create_task_event_tx(
-        conn,
-        task_id=int(task_id),
-        event_type="ARCHIVED",
-        actor_user_id=int(actor_user_id),
-        actor_role_id=int(actor_role_id),
-        payload={"status_to": "ARCHIVED", "status_from": from_status},
     )

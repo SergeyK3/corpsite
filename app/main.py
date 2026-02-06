@@ -1,4 +1,4 @@
-# app/main.py
+# FILE: app/main.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,6 +19,7 @@ from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
 from app.directory import router as directory_router
+from app.services.regular_tasks_router import router as internal_regular_tasks_router
 from app.errors import raise_error, ErrorCode
 
 
@@ -52,6 +53,9 @@ app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any
 app.include_router(tg_bind_router)
 app.include_router(directory_router)
+
+# Internal routers
+app.include_router(internal_regular_tasks_router)
 
 
 # -----------------------
@@ -177,4 +181,4 @@ def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, A
                 extra={"period_id": int(period_id)},
             )
 
-    return {"period_id": period_id, "created_tasks": created_count}
+    return {"period_id": int(period_id), "created_tasks": int(created_count)}
