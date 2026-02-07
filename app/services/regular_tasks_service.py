@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
@@ -39,7 +39,8 @@ class RunStats:
 
 def _now_local() -> datetime:
     # фиксируем UTC+5 как в проекте (простая модель)
-    return datetime.utcnow() + timedelta(hours=TZ_OFFSET_HOURS)
+    # timezone-aware UTC, затем сдвиг
+    return datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET_HOURS)
 
 
 def _safe_int(v: Any) -> Optional[int]:
@@ -258,50 +259,54 @@ def _log_run_item_safe(
 ) -> None:
     """
     Пишем подробный журнал по шаблону в рамках запуска.
-    Никогда не валим весь ран из-за проблем логирования.
+
+    ВАЖНО: просто try/except недостаточно, потому что ошибка INSERT внутри транзакции
+    помечает транзакцию как failed. Поэтому пишем через SAVEPOINT (begin_nested),
+    чтобы сбой логирования не валил основной run.
     """
     try:
-        conn.execute(
-            text(
-                """
-                INSERT INTO public.regular_task_run_items (
-                    run_id,
-                    regular_task_id,
-                    period_id,
-                    executor_role_id,
-                    is_due,
-                    created_tasks,
-                    status,
-                    error,
-                    meta
-                )
-                VALUES (
-                    :run_id,
-                    :regular_task_id,
-                    :period_id,
-                    :executor_role_id,
-                    :is_due,
-                    :created_tasks,
-                    :status,
-                    :error,
-                    CAST(:meta AS jsonb)
-                )
-                """
-            ),
-            {
-                "run_id": int(run_id),
-                "regular_task_id": int(regular_task_id),
-                "period_id": int(period_id) if period_id is not None else None,
-                "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
-                "is_due": bool(is_due),
-                "created_tasks": int(created_tasks),
-                "status": str(status),
-                "error": str(error) if error else None,
-                "meta": json.dumps(meta or {}, ensure_ascii=False),
-            },
-        )
+        with conn.begin_nested():  # SAVEPOINT
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO public.regular_task_run_items (
+                        run_id,
+                        regular_task_id,
+                        period_id,
+                        executor_role_id,
+                        is_due,
+                        created_tasks,
+                        status,
+                        error,
+                        meta
+                    )
+                    VALUES (
+                        :run_id,
+                        :regular_task_id,
+                        :period_id,
+                        :executor_role_id,
+                        :is_due,
+                        :created_tasks,
+                        :status,
+                        :error,
+                        CAST(:meta AS jsonb)
+                    )
+                    """
+                ),
+                {
+                    "run_id": int(run_id),
+                    "regular_task_id": int(regular_task_id),
+                    "period_id": int(period_id) if period_id is not None else None,
+                    "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
+                    "is_due": bool(is_due),
+                    "created_tasks": int(created_tasks),
+                    "status": str(status),
+                    "error": str(error) if error else None,
+                    "meta": json.dumps(meta or {}, ensure_ascii=False),
+                },
+            )
     except Exception:
-        # intentionally swallow
+        # intentionally swallow (and SAVEPOINT rollback already handled)
         return
 
 
@@ -310,10 +315,10 @@ def run_regular_tasks_generation_tx(
     *,
     run_at_local: Optional[datetime] = None,
     dry_run: bool = False,
-) -> Tuple[int, RunStats]:
+) -> Tuple[int, Dict[str, Any]]:
     """
     Запуск генерации (в текущей транзакции).
-    Возвращает (run_id, stats).
+    Возвращает (run_id, stats_dict).
     """
     now_local = run_at_local or _now_local()
 
@@ -522,7 +527,7 @@ def run_regular_tasks_generation_tx(
                 regular_task_id=int(rid),
                 period_id=None,
                 executor_role_id=_safe_int(t.get("executor_role_id")),
-                is_due=True,  # мы в блоке due/создания; если исключение раньше — не критично
+                is_due=True,
                 created_tasks=0,
                 status="error",
                 error=err_str,
