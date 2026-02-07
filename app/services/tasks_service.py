@@ -1,4 +1,4 @@
-# app/services/tasks_service.py
+# FILE: app/services/tasks_service.py
 from __future__ import annotations
 
 import json
@@ -217,9 +217,20 @@ def ensure_task_visible_or_404(
 
 
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
-        return False
-    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
+    """
+    Кто может отправлять/обновлять отчёт.
+
+    Ранее: инициатор всегда запрещён.
+    Проблема: тестовый пайплайн, когда инициатор = исполнитель по роли (executor_role_id),
+    нельзя было сдать отчёт.
+
+    Новое правило:
+      - если пользователь является исполнителем по роли (executor_role_id == current_role_id) -> можно
+      - иначе (в т.ч. инициатор без роли исполнителя) -> нельзя
+    """
+    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
+        return True
+    return False
 
 
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:

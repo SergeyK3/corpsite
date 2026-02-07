@@ -306,7 +306,8 @@ def _archive(
         allowed_from={"IN_PROGRESS", "WAITING_REPORT", "WAITING_APPROVAL", "DONE"},
     )
 
-    # ВАЖНО: события ARCHIVED в enum task_event_type НЕТ, поэтому здесь только audit.
+    # ВАЖНО: ранее считалось, что события ARCHIVED в enum task_event_type НЕТ.
+    # Но по факту в БД task_events уже есть event_type='ARCHIVED', и доставки в telegram существуют.
     write_task_audit(
         conn,
         task_id=int(task_id),
@@ -318,4 +319,14 @@ def _archive(
         meta=None,
         event_type=None,
         event_payload=None,
+    )
+
+    # Создаём task_event, чтобы работали recipients/deliveries (в т.ч. telegram) по правилам routing.
+    create_task_event_tx(
+        conn,
+        task_id=int(task_id),
+        event_type="ARCHIVED",
+        actor_user_id=int(actor_user_id),
+        actor_role_id=int(actor_role_id),
+        payload={"status_to": "ARCHIVED"},
     )
