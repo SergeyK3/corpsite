@@ -44,9 +44,16 @@ SUPERVISOR_ROLE_IDS = _parse_int_set("SUPERVISOR_ROLE_IDS")
 DEPUTY_ROLE_IDS = _parse_int_set("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS = _parse_int_set("DIRECTOR_ROLE_IDS")
 
+# 🔒 allow-list Telegram (если пусто — ограничения нет)
+TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set(
+    "TELEGRAM_DELIVERY_ALLOW_USER_IDS"
+)
+
 # optional: какие события не отправлять самому актору
-# пример: TASK_EVENTS_DROP_SELF_TYPES=REPORT_SUBMITTED,APPROVED,REJECTED
 DROP_SELF_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_DROP_SELF_TYPES")
+
+# optional: для каких типов событий создавать non-system deliveries (PENDING) сразу
+TELEGRAM_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_TELEGRAM_TYPES")
 
 
 def _uniq_ints(xs: Iterable[Optional[int]]) -> List[int]:
@@ -70,8 +77,21 @@ def _should_drop_self(event_type: str) -> bool:
     et = (event_type or "").upper().strip()
     if DROP_SELF_FOR_TYPES:
         return et in DROP_SELF_FOR_TYPES
-    DROP_SELF_FOR_TYPES_FALLBACK: Set[str] = set()
-    return et in DROP_SELF_FOR_TYPES_FALLBACK
+    return False
+
+
+def _channels_for_event_type(event_type: str) -> List[str]:
+    et = (event_type or "").upper().strip()
+
+    if TELEGRAM_FOR_TYPES:
+        if et in TELEGRAM_FOR_TYPES:
+            return ["telegram"]
+        return []
+
+    if et in {"REPORT_SUBMITTED", "APPROVED", "REJECTED", "ARCHIVED"}:
+        return ["telegram"]
+
+    return []
 
 
 @dataclass(frozen=True)
@@ -118,7 +138,9 @@ def resolve_recipients_for_task_event_tx(
         ).scalars().all()
 
     recipients = _uniq_ints(
-        [int(task.initiator_user_id)] + [int(x) for x in executor_users] + [int(x) for x in mgmt_users]
+        [int(task.initiator_user_id)]
+        + [int(x) for x in executor_users]
+        + [int(x) for x in mgmt_users]
     )
 
     if _should_drop_self(et):
@@ -136,10 +158,6 @@ def create_task_event_tx(
     actor_role_id: Optional[int],
     payload: Optional[Dict[str, Any]] = None,
 ) -> int:
-    """
-    Создаёт task_events + task_event_recipients в ТЕКУЩЕЙ транзакции (conn).
-    Возвращает audit_id (cursor).
-    """
     et = (event_type or "").upper().strip()
     if not et:
         raise ValueError("event_type is required")
@@ -175,8 +193,10 @@ def create_task_event_tx(
     audit_id = conn.execute(
         text(
             """
-            INSERT INTO public.task_events (task_id, event_type, actor_user_id, actor_role_id, payload)
-            VALUES (:task_id, :event_type, :actor_user_id, :actor_role_id, CAST(:payload AS jsonb))
+            INSERT INTO public.task_events
+              (task_id, event_type, actor_user_id, actor_role_id, payload)
+            VALUES
+              (:task_id, :event_type, :actor_user_id, :actor_role_id, CAST(:payload AS jsonb))
             RETURNING audit_id
             """
         ),
@@ -201,8 +221,63 @@ def create_task_event_tx(
                 ON CONFLICT DO NOTHING
                 """
             ),
-            {"audit_id": int(audit_id), "uids": [int(x) for x in recipients]},
+            {"audit_id": int(audit_id), "uids": recipients},
         )
+
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.task_event_deliveries
+                  (audit_id, user_id, channel, status)
+                SELECT :audit_id, x.user_id, :channel, :status
+                FROM (
+                    SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
+                ) x
+                ON CONFLICT (audit_id, user_id, channel) DO NOTHING
+                """
+            ),
+            {
+                "audit_id": int(audit_id),
+                "uids": recipients,
+                "channel": "system",
+                "status": "SENT",
+            },
+        )
+
+        channels = _channels_for_event_type(et)
+        if channels:
+            # 🔒 Telegram allow-list применяем ЗДЕСЬ
+            filtered_uids = recipients
+            if "telegram" in channels and TELEGRAM_DELIVERY_ALLOW_USER_IDS:
+                filtered_uids = [
+                    uid for uid in recipients
+                    if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS
+                ]
+
+            if filtered_uids:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.task_event_deliveries
+                          (audit_id, user_id, channel, status)
+                        SELECT :audit_id, x.user_id, x.channel, :status
+                        FROM (
+                            SELECT
+                              u.user_id,
+                              c.channel
+                            FROM UNNEST(CAST(:uids AS bigint[])) AS u(user_id)
+                            CROSS JOIN UNNEST(CAST(:channels AS text[])) AS c(channel)
+                        ) x
+                        ON CONFLICT (audit_id, user_id, channel) DO NOTHING
+                        """
+                    ),
+                    {
+                        "audit_id": int(audit_id),
+                        "uids": filtered_uids,
+                        "channels": channels,
+                        "status": "PENDING",
+                    },
+                )
 
     return int(audit_id)
 
@@ -215,10 +290,6 @@ def create_task_event(
     actor_role_id: Optional[int],
     payload: Optional[Dict[str, Any]] = None,
 ) -> int:
-    """
-    Backward-compatible wrapper: opens its own tx.
-    Для FSM/handlers используйте create_task_event_tx(conn,...).
-    """
     with engine.begin() as conn:
         return create_task_event_tx(
             conn,
