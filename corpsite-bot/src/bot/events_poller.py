@@ -87,6 +87,10 @@ class JsonFileStore:
 
 
 def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
+    """
+    bindings store format (existing):
+      { "<chat_id>": <user_id>, ... }
+    """
     out: List[Tuple[int, int]] = []
     for k, v in (bindings or {}).items():
         chat_id = _safe_int(k)
@@ -112,7 +116,7 @@ def _cursor_reset(cursor_store: CursorStore) -> None:
         log.exception("Events cursor reset failed: %s", cursor_store.path)
 
 
-def _extract_events_payload(payload: Any) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+def _extract_items_and_cursor(payload: Any) -> Tuple[List[Dict[str, Any]], Optional[int]]:
     """
     Contract v1: {"items":[...], "next_cursor": <int>}
     Legacy fallback: [...]
@@ -132,27 +136,44 @@ def _extract_events_payload(payload: Any) -> Tuple[List[Dict[str, Any]], Optiona
     return [], None
 
 
-async def events_polling_loop(
+def _use_delivery_queue_mode() -> bool:
+    # recommended: EVENTS_USE_DELIVERY_QUEUE=1
+    return _truthy_env("EVENTS_USE_DELIVERY_QUEUE")
+
+
+def _delivery_internal_user_id() -> int:
+    # who can call /tasks/internal/...
+    v = _safe_int(os.getenv("EVENTS_INTERNAL_API_USER_ID"))
+    return int(v or 1)
+
+
+def _delivery_channel() -> str:
+    ch = (os.getenv("EVENTS_DELIVERY_CHANNEL") or "telegram").strip()
+    return ch or "telegram"
+
+
+def _delivery_cursor_key() -> int:
+    # cursor_store key; default 0 (shared cursor)
+    v = _safe_int(os.getenv("EVENTS_DELIVERY_CURSOR_KEY"))
+    return int(v or 0)
+
+
+def _ack_on_partial_success() -> bool:
+    # if user has multiple chat_ids and at least one succeeded -> SENT
+    return _truthy_env("EVENTS_ACK_ON_PARTIAL_SUCCESS")
+
+
+async def _poll_per_user_events(
     *,
     application: Application,
     backend: CorpsiteAPI,
     poll_interval_s: float,
     bindings_store: JsonFileStore,
-    state_store: Optional[JsonFileStore] = None,
+    state_store: Optional[JsonFileStore],
     cursor_store: CursorStore,
-    per_user_limit: int = 200,
-    allowed_types: Optional[Set[str]] = None,
+    per_user_limit: int,
+    allowed_types: Set[str],
 ) -> None:
-    allowed_types = {t.upper().strip() for t in (allowed_types or set()) if str(t).strip()}
-
-    log.info(
-        "Events polling started. interval=%ss limit=%s allowed_types=%s cursor_file=%s",
-        poll_interval_s,
-        per_user_limit,
-        sorted(allowed_types) if allowed_types else "ALL",
-        str(cursor_store.path),
-    )
-
     last_no_bindings_log_ts = 0.0
     no_events_log_state: Dict[int, Tuple[int, float]] = {}
     did_reset = False
@@ -194,14 +215,10 @@ async def events_polling_loop(
                 )
 
                 if resp.status_code != 200:
-                    log.warning(
-                        "get_my_events failed: user_id=%s status=%s",
-                        user_id,
-                        resp.status_code,
-                    )
+                    log.warning("get_my_events failed: user_id=%s status=%s", user_id, resp.status_code)
                     continue
 
-                events, next_cursor = _extract_events_payload(resp.json)
+                events, next_cursor = _extract_items_and_cursor(resp.json)
 
                 if not events:
                     now = time.time()
@@ -210,12 +227,7 @@ async def events_polling_loop(
                     prev_ts = prev[1] if prev else 0.0
 
                     if since_val != prev_since or now - prev_ts >= 60.0:
-                        log.info(
-                            "No events: user_id=%s since=%s next_cursor=%s",
-                            user_id,
-                            since_val or None,
-                            next_cursor,
-                        )
+                        log.info("No events: user_id=%s since=%s next_cursor=%s", user_id, since_val or None, next_cursor)
                         no_events_log_state[user_id] = (since_val, now)
 
                     if next_cursor is not None and next_cursor > since_val:
@@ -253,17 +265,9 @@ async def events_polling_loop(
 
                     for chat_id in chat_ids:
                         try:
-                            await application.bot.send_message(
-                                chat_id=int(chat_id),
-                                text=rendered,
-                            )
+                            await application.bot.send_message(chat_id=int(chat_id), text=rendered)
                         except Exception:
-                            log.exception(
-                                "Send failed: chat_id=%s user_id=%s cursor_id=%s",
-                                chat_id,
-                                user_id,
-                                cursor_id,
-                            )
+                            log.exception("Send failed: chat_id=%s user_id=%s cursor_id=%s", chat_id, user_id, cursor_id)
                             delivery_ok = False
                             break
 
@@ -288,5 +292,242 @@ async def events_polling_loop(
             log.info("Events polling cancelled")
             raise
         except Exception:
-            log.exception("Events polling failure (outer loop)")
+            log.exception("Events polling failure (per-user loop)")
             await asyncio.sleep(max(2.0, poll_interval_s))
+
+
+async def _poll_delivery_queue(
+    *,
+    application: Application,
+    backend: CorpsiteAPI,
+    poll_interval_s: float,
+    bindings_store: JsonFileStore,
+    cursor_store: CursorStore,
+    per_user_limit: int,
+    allowed_types: Set[str],
+) -> None:
+    """
+    Delivery-queue mode:
+      - fetch pending deliveries for channel=telegram via internal endpoint
+      - send to chat_id resolved by payload.telegram_chat_id (preferred) or bindings fallback
+      - ack SENT/FAILED in backend to resolve telegram/PENDING
+      - maintain shared cursor in cursor_store under key EVENTS_DELIVERY_CURSOR_KEY (default 0)
+    """
+    last_no_bindings_log_ts = 0.0
+    did_reset = False
+
+    internal_user_id = _delivery_internal_user_id()
+    channel = _delivery_channel()
+    cursor_key = _delivery_cursor_key()
+    partial_ok = _ack_on_partial_success()
+
+    log.info(
+        "Delivery queue polling enabled. internal_user_id=%s channel=%s cursor_key=%s partial_ok=%s",
+        internal_user_id,
+        channel,
+        cursor_key,
+        partial_ok,
+    )
+
+    while True:
+        try:
+            # bindings are now fallback-only; preferred routing is from backend field telegram_chat_id
+            bindings_raw = bindings_store.load()
+            pairs = _iter_bindings(bindings_raw)
+
+            by_user: Dict[int, List[int]] = {}
+            if pairs:
+                by_user = _group_by_user(pairs)
+            else:
+                now = time.time()
+                if now - last_no_bindings_log_ts >= 60.0:
+                    last_no_bindings_log_ts = now
+                    log.info("Delivery queue polling: no bindings (will rely on telegram_chat_id from backend)")
+
+            if not did_reset and _truthy_env("EVENTS_CURSOR_RESET"):
+                did_reset = True
+                _cursor_reset(cursor_store)
+                log.info("Delivery queue cursor reset: store cleared (EVENTS_CURSOR_RESET=1)")
+
+            since_val = int(cursor_store.get(int(cursor_key), default=0) or 0)
+
+            resp = await backend.get_pending_deliveries(
+                user_id=int(internal_user_id),
+                channel=str(channel),
+                cursor_from=int(since_val),
+                limit=int(per_user_limit),
+            )
+
+            if resp.status_code != 200:
+                log.warning(
+                    "get_pending_deliveries failed: status=%s internal_user_id=%s channel=%s since=%s",
+                    resp.status_code,
+                    internal_user_id,
+                    channel,
+                    since_val,
+                )
+                await asyncio.sleep(max(2.0, poll_interval_s))
+                continue
+
+            items, next_cursor = _extract_items_and_cursor(resp.json)
+
+            if not items:
+                if next_cursor is not None and next_cursor > since_val:
+                    cursor_store.set(int(cursor_key), int(next_cursor))
+                await asyncio.sleep(max(1.0, poll_interval_s))
+                continue
+
+            items_sorted = sorted(items, key=_sort_key)
+
+            log.info(
+                "Fetched pending deliveries: channel=%s since=%s count=%s next_cursor=%s",
+                channel,
+                since_val or None,
+                len(items_sorted),
+                next_cursor,
+            )
+
+            max_seen_audit = since_val
+
+            for d in items_sorted:
+                audit_id = _safe_int(d.get("audit_id")) or 0
+                delivery_user_id = _safe_int(d.get("user_id")) or 0
+
+                if audit_id <= since_val:
+                    continue
+
+                ev_type = str(d.get("event_type") or "").upper()
+                if allowed_types and ev_type not in allowed_types:
+                    max_seen_audit = max(max_seen_audit, audit_id)
+                    continue
+
+                # Preferred: telegram_chat_id comes from backend (users.telegram_id)
+                tg_chat_id = _safe_int(d.get("telegram_chat_id"))
+
+                if tg_chat_id:
+                    chat_ids = [int(tg_chat_id)]
+                else:
+                    # Fallback: local bindings store (chat_id -> user_id)
+                    chat_ids = by_user.get(int(delivery_user_id)) or []
+
+                if not chat_ids:
+                    await backend.ack_delivery(
+                        user_id=int(internal_user_id),
+                        audit_id=int(audit_id),
+                        delivery_user_id=int(delivery_user_id),
+                        channel=str(channel),
+                        status="FAILED",
+                        error_code="NO_BINDING",
+                        error_text=f"no telegram_chat_id and no local binding for user_id={delivery_user_id}",
+                    )
+                    max_seen_audit = max(max_seen_audit, audit_id)
+                    continue
+
+                rendered = render_event(d)
+
+                ok_count = 0
+                fail_count = 0
+                first_err: Optional[str] = None
+
+                for chat_id in chat_ids:
+                    try:
+                        await application.bot.send_message(chat_id=int(chat_id), text=rendered)
+                        ok_count += 1
+                    except Exception as e:
+                        fail_count += 1
+                        if first_err is None:
+                            first_err = repr(e)
+                        log.exception(
+                            "Send failed: chat_id=%s delivery_user_id=%s audit_id=%s",
+                            chat_id,
+                            delivery_user_id,
+                            audit_id,
+                        )
+
+                if partial_ok:
+                    delivered_ok = ok_count > 0
+                else:
+                    delivered_ok = (fail_count == 0)
+
+                if delivered_ok:
+                    await backend.ack_delivery(
+                        user_id=int(internal_user_id),
+                        audit_id=int(audit_id),
+                        delivery_user_id=int(delivery_user_id),
+                        channel=str(channel),
+                        status="SENT",
+                    )
+                else:
+                    await backend.ack_delivery(
+                        user_id=int(internal_user_id),
+                        audit_id=int(audit_id),
+                        delivery_user_id=int(delivery_user_id),
+                        channel=str(channel),
+                        status="FAILED",
+                        error_code="SEND_ERROR",
+                        error_text=f"send failed ok={ok_count} fail={fail_count} err={first_err or 'unknown'}",
+                    )
+
+                max_seen_audit = max(max_seen_audit, audit_id)
+
+            candidate = max_seen_audit
+            if next_cursor is not None:
+                candidate = max(candidate, int(next_cursor))
+
+            if candidate > since_val:
+                cursor_store.set(int(cursor_key), int(candidate))
+
+            await asyncio.sleep(max(1.0, poll_interval_s))
+
+        except asyncio.CancelledError:
+            log.info("Delivery queue polling cancelled")
+            raise
+        except Exception:
+            log.exception("Delivery queue polling failure (outer loop)")
+            await asyncio.sleep(max(2.0, poll_interval_s))
+
+
+async def events_polling_loop(
+    *,
+    application: Application,
+    backend: CorpsiteAPI,
+    poll_interval_s: float,
+    bindings_store: JsonFileStore,
+    state_store: Optional[JsonFileStore] = None,
+    cursor_store: CursorStore,
+    per_user_limit: int = 200,
+    allowed_types: Optional[Set[str]] = None,
+) -> None:
+    allowed_types_norm = {t.upper().strip() for t in (allowed_types or set()) if str(t).strip()}
+
+    log.info(
+        "Events polling started. mode=%s interval=%ss limit=%s allowed_types=%s cursor_file=%s",
+        "delivery-queue" if _use_delivery_queue_mode() else "per-user",
+        poll_interval_s,
+        per_user_limit,
+        sorted(allowed_types_norm) if allowed_types_norm else "ALL",
+        str(cursor_store.path),
+    )
+
+    if _use_delivery_queue_mode():
+        await _poll_delivery_queue(
+            application=application,
+            backend=backend,
+            poll_interval_s=poll_interval_s,
+            bindings_store=bindings_store,
+            cursor_store=cursor_store,
+            per_user_limit=per_user_limit,
+            allowed_types=allowed_types_norm,
+        )
+        return
+
+    await _poll_per_user_events(
+        application=application,
+        backend=backend,
+        poll_interval_s=poll_interval_s,
+        bindings_store=bindings_store,
+        state_store=state_store,
+        cursor_store=cursor_store,
+        per_user_limit=per_user_limit,
+        allowed_types=allowed_types_norm,
+    )
