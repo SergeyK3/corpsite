@@ -37,6 +37,7 @@ class CursorStore:
         if not self.path.exists():
             return {}
 
+        raw_text = ""
         try:
             raw_text = self.path.read_text(encoding="utf-8")
             raw = json.loads(raw_text)
@@ -45,11 +46,7 @@ class CursorStore:
             # чтобы не сломать поллер
             try:
                 bad = self.path.with_name(f"{self.path.name}.bad.{_utc_now_compact()}")
-                # пишем ровно то, что прочитали (если прочитали)
-                if "raw_text" in locals():
-                    bad.write_text(raw_text, encoding="utf-8")
-                else:
-                    bad.write_text("", encoding="utf-8")
+                bad.write_text(raw_text or "", encoding="utf-8")
             except Exception:
                 pass
             return {}
@@ -63,7 +60,9 @@ class CursorStore:
             try:
                 uid = int(k)
                 cur = int(v)
-                if uid > 0 and cur >= 0:
+                # Важно: разрешаем uid == 0 для shared cursor (delivery-queue mode).
+                # Отрицательные ключи запрещены.
+                if uid >= 0 and cur >= 0:
                     out[uid] = cur
             except Exception:
                 continue
@@ -76,11 +75,14 @@ class CursorStore:
     def set(self, user_id: int, cursor: int) -> None:
         user_id = int(user_id)
         cursor = int(cursor)
-        if user_id <= 0 or cursor < 0:
+
+        # Важно: разрешаем user_id == 0 (shared cursor).
+        if user_id < 0 or cursor < 0:
             return
 
         allc = self.load_all()
         prev = int(allc.get(user_id, 0))
+
         # не даём курсору откатиться назад
         if cursor < prev:
             return
