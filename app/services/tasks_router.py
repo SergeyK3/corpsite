@@ -372,6 +372,56 @@ def approve_report(
     return dict(updated)
 
 
+@router.post("/{task_id}/reject")
+def reject_report(
+    payload: Dict[str, Any],
+    task_id: int = Path(..., ge=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    """
+    Явный endpoint для отклонения отчёта.
+    Нужен для UX и для сквозного сценария REPORT_SUBMITTED -> REJECTED -> delivery -> ACK.
+    """
+    current_user_id = get_current_user_id(x_user_id)
+
+    reason = (payload.get("reason") or "").strip()
+    current_comment = (payload.get("current_comment") or "").strip()
+
+    with engine.begin() as conn:
+        role_id = get_user_role_id(conn, current_user_id)
+
+        task = load_task_full(conn, task_id=int(task_id))
+        task = ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=False,
+        )
+
+        if not can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
+            raise_error(
+                ErrorCode.TASK_FORBIDDEN_APPROVE,
+                extra={"task_id": int(task_id), "action": "reject"},
+            )
+
+        transition(
+            conn=conn,
+            task_id=int(task_id),
+            action="reject",
+            actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
+            payload={
+                "reason": reason,
+                "current_comment": current_comment,
+            },
+        )
+
+        updated = load_task_full(conn, task_id=int(task_id))
+        updated = attach_allowed_actions(task=updated, current_user_id=current_user_id, current_role_id=role_id)
+
+    return dict(updated)
+
+
 @router.delete("/{task_id}", status_code=204)
 def delete_task(
     task_id: int = Path(..., ge=1),

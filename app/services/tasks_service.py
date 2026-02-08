@@ -241,6 +241,24 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     return False
 
 
+def can_reject_task(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    """
+    Кто может делать reject задачи (не review-reject отчёта, а task-level reject из IN_PROGRESS/WAITING_REPORT).
+
+    Политика (минимальная, практичная):
+      - инициатор может отклонить задачу
+      - supervisor/deputy может отклонить задачу
+      - исполнитель по роли может отклонить (если это нужно как "отказ исполнителя")
+    """
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return True
+    if is_supervisor_or_deputy(current_role_id):
+        return True
+    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
+        return True
+    return False
+
+
 def _allowed_actions_for_user(
     *,
     task_row: Dict[str, Any],
@@ -258,6 +276,14 @@ def _allowed_actions_for_user(
         ):
             actions.append("report")
 
+        # NEW: task-level reject из IN_PROGRESS/WAITING_REPORT
+        if can_reject_task(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            task_row=task_row,
+        ):
+            actions.append("reject")
+
     if code == "WAITING_APPROVAL":
         if can_approve(
             current_user_id=current_user_id,
@@ -265,12 +291,22 @@ def _allowed_actions_for_user(
             task_row=task_row,
         ):
             actions.append("approve")
+            # review-reject: WAITING_APPROVAL -> WAITING_REPORT (отклонить отчёт)
             actions.append("reject")
 
     if _is_initiator(current_user_id=current_user_id, task_row=task_row) and code != "ARCHIVED":
         actions.append("archive")
 
-    return actions
+    # стабильный порядок для UI/тестов (необязательно, но удобно)
+    # убираем дубли на всякий случай
+    seen: Set[str] = set()
+    out: List[str] = []
+    for a in actions:
+        if a in seen:
+            continue
+        seen.add(a)
+        out.append(a)
+    return out
 
 
 def attach_allowed_actions(

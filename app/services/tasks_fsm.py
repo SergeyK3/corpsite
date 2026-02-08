@@ -115,6 +115,14 @@ def _apply_comment_sql() -> str:
     """
 
 
+def _normalize_comment(payload: Dict[str, Any]) -> str:
+    # Поддержка обоих ключей: current_comment (старый контракт) и reason (новый/долгосрок).
+    v = payload.get("current_comment")
+    if v is None or str(v).strip() == "":
+        v = payload.get("reason")
+    return (v or "").strip()
+
+
 # ---------------------------
 # Transitions
 # ---------------------------
@@ -179,7 +187,7 @@ def _approve(
 
     _ensure_report_exists(conn, task_id)
 
-    comment = (payload.get("current_comment") or "").strip()
+    comment = _normalize_comment(payload)
 
     conn.execute(
         text(
@@ -233,24 +241,82 @@ def _reject(
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
+    """
+    reject имеет ДВА допустимых смысла (на текущий момент):
+    1) Review reject: WAITING_APPROVAL -> WAITING_REPORT (отклонить отчёт, вернуть в работу).
+    2) Task reject:   IN_PROGRESS/WAITING_REPORT -> REJECTED (отказ/отклонение задачи как сущности).
+
+    Это сделано намеренно, чтобы поддержать "новый endpoint reject" без введения нового action-кода.
+    Клиентам рекомендуется передавать reason (или current_comment) для обоих случаев.
+    """
+
+    # 1) Review reject: отклонение отчёта (как было)
+    if from_status == "WAITING_APPROVAL":
+        _set_status(
+            conn,
+            task_id,
+            from_status,
+            to_status="WAITING_REPORT",
+            allowed_from={"WAITING_APPROVAL"},
+        )
+
+        _ensure_report_exists(conn, task_id)
+
+        comment = _normalize_comment(payload)
+        conn.execute(
+            text(
+                f"""
+                UPDATE task_reports
+                SET approved_at = NULL,
+                    approved_by = NULL,
+                    {_apply_comment_sql()}
+                WHERE task_id = :tid
+                """
+            ),
+            {"tid": int(task_id), "comment": comment},
+        )
+
+        write_task_audit(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(actor_user_id),
+            actor_role_id=int(actor_role_id),
+            action="REJECT",
+            fields_changed={"status_code": {"from": from_status, "to": "WAITING_REPORT"}},
+            request_body=payload,
+            meta=None,
+            event_type="REJECTED",
+            event_payload={**payload, "reject_kind": "review"},
+        )
+
+        create_task_event_tx(
+            conn,
+            task_id=int(task_id),
+            event_type="REJECTED",
+            actor_user_id=int(actor_user_id),
+            actor_role_id=int(actor_role_id),
+            payload={**payload, "status_to": "WAITING_REPORT", "reject_kind": "review"},
+        )
+        return
+
+    # 2) Task reject: отказ/отклонение задачи как сущности (новое поведение)
     _set_status(
         conn,
         task_id,
         from_status,
-        to_status="WAITING_REPORT",
-        allowed_from={"WAITING_APPROVAL"},
+        to_status="REJECTED",
+        allowed_from={"IN_PROGRESS", "WAITING_REPORT"},
     )
 
-    _ensure_report_exists(conn, task_id)
+    comment = _normalize_comment(payload)
 
-    comment = (payload.get("current_comment") or "").strip()
+    # Если есть task_reports — сохраним комментарий в current_comment (не создаём отчёт, если его нет).
+    # Это даёт единое место хранения причины в UI.
     conn.execute(
         text(
             f"""
             UPDATE task_reports
-            SET approved_at = NULL,
-                approved_by = NULL,
-                {_apply_comment_sql()}
+            SET {_apply_comment_sql()}
             WHERE task_id = :tid
             """
         ),
@@ -262,12 +328,12 @@ def _reject(
         task_id=int(task_id),
         actor_user_id=int(actor_user_id),
         actor_role_id=int(actor_role_id),
-        action="REJECT",
-        fields_changed={"status_code": {"from": from_status, "to": "WAITING_REPORT"}},
+        action="REJECT_TASK",
+        fields_changed={"status_code": {"from": from_status, "to": "REJECTED"}},
         request_body=payload,
         meta=None,
         event_type="REJECTED",
-        event_payload=payload,
+        event_payload={**payload, "status_to": "REJECTED", "reject_kind": "task"},
     )
 
     create_task_event_tx(
@@ -276,7 +342,7 @@ def _reject(
         event_type="REJECTED",
         actor_user_id=int(actor_user_id),
         actor_role_id=int(actor_role_id),
-        payload={**payload, "status_to": "WAITING_REPORT"},
+        payload={**payload, "status_to": "REJECTED", "reject_kind": "task"},
     )
 
 
