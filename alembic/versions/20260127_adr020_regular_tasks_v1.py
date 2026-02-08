@@ -245,9 +245,57 @@ def upgrade() -> None:
                 unique=True,
             )
 
+    # 6) task_event_deliveries — базовая таблица доставки событий (идемпотентность по UNIQUE)
+    if not _table_exists("task_event_deliveries"):
+        op.create_table(
+            "task_event_deliveries",
+            sa.Column("audit_id", sa.BigInteger(), nullable=False),
+            sa.Column("user_id", sa.BigInteger(), nullable=False),
+            sa.Column("channel", sa.Text(), nullable=False),
+            sa.Column("status", sa.Text(), nullable=False, server_default=sa.text("'PENDING'")),
+            sa.Column("error_code", sa.Text(), nullable=True),
+            sa.Column("error_text", sa.Text(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+            sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
+        )
+
+    # Колонки (если таблица была старой/неполной)
+    if not _col_exists("task_event_deliveries", "status"):
+        op.add_column("task_event_deliveries", sa.Column("status", sa.Text(), nullable=False, server_default=sa.text("'PENDING'")))
+    if not _col_exists("task_event_deliveries", "error_code"):
+        op.add_column("task_event_deliveries", sa.Column("error_code", sa.Text(), nullable=True))
+    if not _col_exists("task_event_deliveries", "error_text"):
+        op.add_column("task_event_deliveries", sa.Column("error_text", sa.Text(), nullable=True))
+    if not _col_exists("task_event_deliveries", "created_at"):
+        op.add_column("task_event_deliveries", sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")))
+    if not _col_exists("task_event_deliveries", "sent_at"):
+        op.add_column("task_event_deliveries", sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True))
+
+    # Индексы/уникальность (критично для идемпотентности)
+    if not _index_exists("ux_task_event_deliveries_audit_user_channel"):
+        op.create_index(
+            "ux_task_event_deliveries_audit_user_channel",
+            "task_event_deliveries",
+            ["audit_id", "user_id", "channel"],
+            unique=True,
+        )
+
+    if not _index_exists("ix_task_event_deliveries_channel_status"):
+        op.create_index(
+            "ix_task_event_deliveries_channel_status",
+            "task_event_deliveries",
+            ["channel", "status", "audit_id"],
+        )
+
 
 def downgrade() -> None:
     # Для dev можно; на prod лучше делать отдельные миграции на удаление.
+
+    if _index_exists("ix_task_event_deliveries_channel_status"):
+        op.drop_index("ix_task_event_deliveries_channel_status", table_name="task_event_deliveries")
+    if _index_exists("ux_task_event_deliveries_audit_user_channel"):
+        op.drop_index("ux_task_event_deliveries_audit_user_channel", table_name="task_event_deliveries")
+    # саму таблицу task_event_deliveries в downgrade НЕ трогаем: могла существовать до миграции
 
     if _index_exists("ux_tasks_regular_period_executor"):
         op.drop_index("ux_tasks_regular_period_executor", table_name="tasks")

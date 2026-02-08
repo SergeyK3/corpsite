@@ -52,7 +52,7 @@ TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set(
 # optional: какие события не отправлять самому актору
 DROP_SELF_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_DROP_SELF_TYPES")
 
-# optional: для каких типов событий создавать non-system deliveries (PENDING) сразу
+# optional: для каких типов событий создавать non-system deliveries
 TELEGRAM_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_TELEGRAM_TYPES")
 
 
@@ -88,7 +88,15 @@ def _channels_for_event_type(event_type: str) -> List[str]:
             return ["telegram"]
         return []
 
-    if et in {"REPORT_SUBMITTED", "APPROVED", "REJECTED", "ARCHIVED"}:
+    if et in {
+        "REPORT_SUBMITTED",
+        "REPORT_APPROVED",
+        "REPORT_REJECTED",
+        "REPORT_ARCHIVED",
+        "APPROVED",
+        "REJECTED",
+        "ARCHIVED",
+    }:
         return ["telegram"]
 
     return []
@@ -101,31 +109,46 @@ class TaskAudienceInput:
     executor_role_id: int
 
 
-def resolve_recipients_for_task_event_tx(
-    conn,
-    *,
-    task: TaskAudienceInput,
-    event_type: str,
-    actor_user_id: int,
-) -> List[int]:
-    et = (event_type or "").upper().strip()
+def _extract_bindings(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not payload:
+        return []
+    b = payload.get("bindings")
+    if not isinstance(b, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in b:
+        if not isinstance(item, dict):
+            continue
+        t = str(item.get("type") or "").strip().lower()
+        rid = item.get("id")
+        try:
+            iid = int(rid)
+        except Exception:
+            continue
+        if iid <= 0:
+            continue
+        if t not in ("user", "role"):
+            continue
+        out.append({"type": t, "id": iid})
+    return out
 
-    executor_users = conn.execute(
-        text(
-            """
-            SELECT u.user_id
-            FROM public.users u
-            WHERE u.role_id = :rid
-              AND COALESCE(u.is_active, true) = true
-            """
-        ),
-        {"rid": int(task.executor_role_id)},
-    ).scalars().all()
 
-    mgmt_role_ids = sorted(set(SUPERVISOR_ROLE_IDS) | set(DEPUTY_ROLE_IDS) | set(DIRECTOR_ROLE_IDS))
-    mgmt_users: List[int] = []
-    if mgmt_role_ids:
-        mgmt_users = conn.execute(
+def _resolve_bindings_to_user_ids_tx(conn, bindings: List[Dict[str, Any]]) -> List[int]:
+    user_ids: List[int] = []
+    role_ids: List[int] = []
+
+    for b in bindings:
+        t = b["type"]
+        iid = int(b["id"])
+        if t == "user":
+            user_ids.append(iid)
+        elif t == "role":
+            role_ids.append(iid)
+
+    out = _uniq_ints(user_ids)
+
+    if role_ids:
+        rows = conn.execute(
             text(
                 """
                 SELECT u.user_id
@@ -134,14 +157,62 @@ def resolve_recipients_for_task_event_tx(
                   AND COALESCE(u.is_active, true) = true
                 """
             ),
-            {"rids": [int(x) for x in mgmt_role_ids]},
+            {"rids": sorted(set(role_ids))},
+        ).scalars().all()
+        out = _uniq_ints(out + [int(x) for x in rows])
+
+    return out
+
+
+def resolve_recipients_for_task_event_tx(
+    conn,
+    *,
+    task: TaskAudienceInput,
+    event_type: str,
+    actor_user_id: int,
+    payload: Optional[Dict[str, Any]] = None,
+) -> List[int]:
+    et = (event_type or "").upper().strip()
+    payload = payload or {}
+
+    bindings = _extract_bindings(payload)
+    if bindings:
+        recipients = _resolve_bindings_to_user_ids_tx(conn, bindings)
+    else:
+        executor_users = conn.execute(
+            text(
+                """
+                SELECT u.user_id
+                FROM public.users u
+                WHERE u.role_id = :rid
+                  AND COALESCE(u.is_active, true) = true
+                """
+            ),
+            {"rid": int(task.executor_role_id)},
         ).scalars().all()
 
-    recipients = _uniq_ints(
-        [int(task.initiator_user_id)]
-        + [int(x) for x in executor_users]
-        + [int(x) for x in mgmt_users]
-    )
+        mgmt_role_ids = sorted(
+            set(SUPERVISOR_ROLE_IDS) | set(DEPUTY_ROLE_IDS) | set(DIRECTOR_ROLE_IDS)
+        )
+        mgmt_users: List[int] = []
+        if mgmt_role_ids:
+            mgmt_users = conn.execute(
+                text(
+                    """
+                    SELECT u.user_id
+                    FROM public.users u
+                    WHERE u.role_id = ANY(:rids)
+                      AND COALESCE(u.is_active, true) = true
+                    """
+                ),
+                {"rids": mgmt_role_ids},
+            ).scalars().all()
+
+        recipients = _uniq_ints(
+            [task.initiator_user_id]
+            + [int(x) for x in executor_users]
+            + [int(x) for x in mgmt_users]
+        )
 
     if _should_drop_self(et):
         recipients = [uid for uid in recipients if uid != int(actor_user_id)]
@@ -188,6 +259,7 @@ def create_task_event_tx(
         task=task,
         event_type=et,
         actor_user_id=int(actor_user_id),
+        payload=payload,
     )
 
     audit_id = conn.execute(
@@ -224,34 +296,28 @@ def create_task_event_tx(
             {"audit_id": int(audit_id), "uids": recipients},
         )
 
+        # system — всегда SENT
         conn.execute(
             text(
                 """
                 INSERT INTO public.task_event_deliveries
                   (audit_id, user_id, channel, status)
-                SELECT :audit_id, x.user_id, :channel, :status
+                SELECT :audit_id, x.user_id, 'system', 'SENT'
                 FROM (
                     SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
                 ) x
                 ON CONFLICT (audit_id, user_id, channel) DO NOTHING
                 """
             ),
-            {
-                "audit_id": int(audit_id),
-                "uids": recipients,
-                "channel": "system",
-                "status": "SENT",
-            },
+            {"audit_id": int(audit_id), "uids": recipients},
         )
 
         channels = _channels_for_event_type(et)
         if channels:
-            # 🔒 Telegram allow-list применяем ЗДЕСЬ
             filtered_uids = recipients
             if "telegram" in channels and TELEGRAM_DELIVERY_ALLOW_USER_IDS:
                 filtered_uids = [
-                    uid for uid in recipients
-                    if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS
+                    uid for uid in recipients if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS
                 ]
 
             if filtered_uids:
@@ -260,7 +326,7 @@ def create_task_event_tx(
                         """
                         INSERT INTO public.task_event_deliveries
                           (audit_id, user_id, channel, status)
-                        SELECT :audit_id, x.user_id, x.channel, :status
+                        SELECT :audit_id, x.user_id, x.channel, 'PENDING'
                         FROM (
                             SELECT
                               u.user_id,
@@ -275,8 +341,27 @@ def create_task_event_tx(
                         "audit_id": int(audit_id),
                         "uids": filtered_uids,
                         "channels": channels,
-                        "status": "PENDING",
                     },
+                )
+
+            skipped_uids = [uid for uid in recipients if uid not in filtered_uids]
+            if skipped_uids:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.task_event_deliveries
+                          (audit_id, user_id, channel, status, error_code, error_text, sent_at)
+                        SELECT :audit_id, x.user_id, 'telegram', 'FAILED',
+                               'NO_BINDING',
+                               'Telegram delivery skipped by policy',
+                               now()
+                        FROM (
+                            SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
+                        ) x
+                        ON CONFLICT (audit_id, user_id, channel) DO NOTHING
+                        """
+                    ),
+                    {"audit_id": int(audit_id), "uids": skipped_uids},
                 )
 
     return int(audit_id)

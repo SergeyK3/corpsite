@@ -358,7 +358,7 @@ def analytics_task_events_summary(
 
 
 # ---------------------------
-# Internal: pending deliveries queue + ack
+# Internal: pending deliveries queue + ack (worker result)
 # ---------------------------
 
 @router.get("/internal/task-event-deliveries/pending")
@@ -441,6 +441,13 @@ def ack_delivery(
     *,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
+    """
+    Это ACK ВОРКЕРА (результат отправки), а не ACK пользователя.
+    Инварианты:
+      - запрещаем регресс статусов (SENT не возвращаем в PENDING)
+      - допускаем FAILED -> SENT (ретрай)
+      - PENDING через этот endpoint не выставляем
+    """
     _ = _require_user_id(x_user_id)
 
     audit_id = _safe_int(payload.get("audit_id"))
@@ -454,21 +461,23 @@ def ack_delivery(
         raise HTTPException(status_code=422, detail="user_id is required (positive int)")
     if not ch:
         raise HTTPException(status_code=422, detail="channel is required")
-    if status not in ("SENT", "FAILED", "PENDING"):
-        raise HTTPException(status_code=422, detail="status must be one of: SENT, FAILED, PENDING")
+    if status not in ("SENT", "FAILED"):
+        raise HTTPException(status_code=422, detail="status must be one of: SENT, FAILED")
 
     sent_at = _parse_dt(payload.get("sent_at"))
     error_code = (payload.get("error_code") or None)
     error_text = (payload.get("error_text") or None)
 
     # Guard: NO_BINDING по telegram не считаем "ошибкой доставки".
-    # Это означает, что воркер не нашёл chat_id ни в users.telegram_id, ни в локальном bindings.json.
-    # Чтобы не засорять FAILED-метрики, фиксируем как SENT (acknowledged/consumed) и сохраняем error_* для диагностики.
     if ch == "telegram" and status == "FAILED":
         ec = (str(error_code).strip().upper() if error_code is not None else "")
         if ec == "NO_BINDING":
             status = "SENT"
 
+    # Монотонные переходы:
+    # - если уже SENT, не трогаем
+    # - если было FAILED и пришло SENT — разрешаем
+    # - если было PENDING и пришло SENT/FAILED — разрешаем
     q = text(
         """
         INSERT INTO public.task_event_deliveries (
@@ -476,17 +485,29 @@ def ack_delivery(
         )
         VALUES (
           :audit_id, :user_id, :channel, :status, :error_code, :error_text,
-          CASE
-            WHEN :status IN ('SENT','FAILED') THEN COALESCE(:sent_at, now())
-            ELSE :sent_at
-          END
+          COALESCE(:sent_at, now())
         )
         ON CONFLICT (audit_id, user_id, channel)
         DO UPDATE SET
-          status = EXCLUDED.status,
-          error_code = EXCLUDED.error_code,
-          error_text = EXCLUDED.error_text,
-          sent_at = EXCLUDED.sent_at
+          status = CASE
+            WHEN public.task_event_deliveries.status = 'SENT' THEN 'SENT'
+            WHEN public.task_event_deliveries.status = 'FAILED' AND EXCLUDED.status = 'SENT' THEN 'SENT'
+            WHEN public.task_event_deliveries.status = 'FAILED' AND EXCLUDED.status = 'FAILED' THEN 'FAILED'
+            WHEN public.task_event_deliveries.status = 'PENDING' THEN EXCLUDED.status
+            ELSE public.task_event_deliveries.status
+          END,
+          error_code = CASE
+            WHEN public.task_event_deliveries.status = 'SENT' THEN public.task_event_deliveries.error_code
+            ELSE EXCLUDED.error_code
+          END,
+          error_text = CASE
+            WHEN public.task_event_deliveries.status = 'SENT' THEN public.task_event_deliveries.error_text
+            ELSE EXCLUDED.error_text
+          END,
+          sent_at = CASE
+            WHEN public.task_event_deliveries.status = 'SENT' THEN public.task_event_deliveries.sent_at
+            ELSE COALESCE(EXCLUDED.sent_at, public.task_event_deliveries.sent_at)
+          END
         RETURNING audit_id, user_id, channel, status, created_at, sent_at, error_code, error_text
         """
     )
