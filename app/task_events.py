@@ -74,6 +74,10 @@ def _parse_dt(v: Any) -> Optional[datetime]:
     return None
 
 
+def _norm_channel(v: Any) -> str:
+    return str(v or "").strip().lower()
+
+
 # ---------------------------
 # Public: per-user events feed (recipients)
 # ---------------------------
@@ -152,7 +156,7 @@ def analytics_task_events_summary(
     cursor_to: Optional[int] = Query(default=None, ge=0, description="Фильтр по audit_id <= cursor_to"),
     channel: Optional[str] = Query(
         default=None,
-        description="Канал фактической доставки (telegram/ui/email/...). Если NULL — агрегируем по всем каналам кроме system как combined.",
+        description="Канал фактической доставки (telegram/ui/email/...). Если NULL — combined (все кроме system). Если system — считаем system.",
     ),
     only_with_deliveries: bool = Query(
         default=False,
@@ -161,9 +165,14 @@ def analytics_task_events_summary(
 ) -> Dict[str, Any]:
     _ = _require_user_id(x_user_id)
 
-    ch = (channel or "").strip() or None
+    ch_raw = (channel or "").strip()
+    ch = ch_raw.lower() if ch_raw else None
     et = (event_type or "").strip() or None
 
+    # facts/latency выбор канала:
+    # - channel is NULL  => combined: d.channel <> 'system'
+    # - channel == system => d.channel = 'system'
+    # - else => d.channel = :channel AND d.channel <> 'system' (по сути просто d.channel=:channel)
     q = text(
         """
         WITH base_events AS (
@@ -198,8 +207,11 @@ def analytics_task_events_summary(
           FROM public.task_event_deliveries d
           JOIN base_events e ON e.audit_id = d.audit_id
           WHERE
-            d.channel <> 'system'
-            AND (:channel IS NULL OR d.channel = :channel)
+            (
+              (:channel IS NULL AND d.channel <> 'system')
+              OR (:channel = 'system' AND d.channel = 'system')
+              OR (:channel IS NOT NULL AND :channel <> 'system' AND d.channel = :channel)
+            )
           GROUP BY d.audit_id
         ),
         per_event AS (
@@ -222,8 +234,11 @@ def analytics_task_events_summary(
           FROM public.task_event_deliveries d
           JOIN base_events e ON e.audit_id = d.audit_id
           WHERE
-            d.channel <> 'system'
-            AND (:channel IS NULL OR d.channel = :channel)
+            (
+              (:channel IS NULL AND d.channel <> 'system')
+              OR (:channel = 'system' AND d.channel = 'system')
+              OR (:channel IS NOT NULL AND :channel <> 'system' AND d.channel = :channel)
+            )
             AND d.sent_at IS NOT NULL
             AND d.status IN ('SENT','FAILED')
         ),
@@ -371,7 +386,7 @@ def list_pending_deliveries(
 ) -> Dict[str, Any]:
     _ = _require_user_id(x_user_id)
 
-    ch = (channel or "").strip()
+    ch = _norm_channel(channel)
     if not ch:
         raise HTTPException(status_code=422, detail="channel is required")
 
@@ -426,7 +441,6 @@ def list_pending_deliveries(
                 "channel": str(r.get("channel") or ch),
                 "status": str(r.get("status") or "PENDING"),
                 "telegram_chat_id": tg,
-                # для воркера: если нет DB-binding, ожидается резолв из локального bindings.json
                 "has_db_binding": bool(has_db_binding),
                 "needs_local_binding": bool((ch == "telegram") and (not has_db_binding)),
             }
@@ -442,17 +456,19 @@ def ack_delivery(
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
-    Это ACK ВОРКЕРА (результат отправки), а не ACK пользователя.
+    ACK ВОРКЕРА (результат отправки), а не ACK пользователя.
+
     Инварианты:
       - запрещаем регресс статусов (SENT не возвращаем в PENDING)
       - допускаем FAILED -> SENT (ретрай)
       - PENDING через этот endpoint не выставляем
+      - если итоговый статус = SENT, то error_code/error_text должны быть NULL
     """
     _ = _require_user_id(x_user_id)
 
     audit_id = _safe_int(payload.get("audit_id"))
     user_id = _safe_int(payload.get("user_id"))
-    ch = (payload.get("channel") or "").strip()
+    ch = _norm_channel(payload.get("channel"))
     status = (payload.get("status") or "").strip().upper()
 
     if not audit_id or audit_id <= 0:
@@ -465,19 +481,23 @@ def ack_delivery(
         raise HTTPException(status_code=422, detail="status must be one of: SENT, FAILED")
 
     sent_at = _parse_dt(payload.get("sent_at"))
-    error_code = (payload.get("error_code") or None)
-    error_text = (payload.get("error_text") or None)
+    error_code = payload.get("error_code")
+    error_text = payload.get("error_text")
 
-    # Guard: NO_BINDING по telegram не считаем "ошибкой доставки".
+    # ВАЖНО: "NO_BINDING" не является ошибкой доставки (это policy-skip).
+    # Поэтому переводим в SENT и ОБНУЛЯЕМ ошибку, иначе получаем неконсистентность SENT+NO_BINDING.
     if ch == "telegram" and status == "FAILED":
         ec = (str(error_code).strip().upper() if error_code is not None else "")
         if ec == "NO_BINDING":
             status = "SENT"
+            error_code = None
+            error_text = None
 
-    # Монотонные переходы:
-    # - если уже SENT, не трогаем
-    # - если было FAILED и пришло SENT — разрешаем
-    # - если было PENDING и пришло SENT/FAILED — разрешаем
+    # Нормализация ошибок: для SENT — всегда NULL
+    if status == "SENT":
+        error_code = None
+        error_text = None
+
     q = text(
         """
         INSERT INTO public.task_event_deliveries (
@@ -496,17 +516,25 @@ def ack_delivery(
             WHEN public.task_event_deliveries.status = 'PENDING' THEN EXCLUDED.status
             ELSE public.task_event_deliveries.status
           END,
+
+          -- Если финально SENT — ошибка должна быть NULL.
           error_code = CASE
-            WHEN public.task_event_deliveries.status = 'SENT' THEN public.task_event_deliveries.error_code
+            WHEN public.task_event_deliveries.status = 'SENT' THEN NULL
+            WHEN EXCLUDED.status = 'SENT' THEN NULL
             ELSE EXCLUDED.error_code
           END,
           error_text = CASE
-            WHEN public.task_event_deliveries.status = 'SENT' THEN public.task_event_deliveries.error_text
+            WHEN public.task_event_deliveries.status = 'SENT' THEN NULL
+            WHEN EXCLUDED.status = 'SENT' THEN NULL
             ELSE EXCLUDED.error_text
           END,
+
+          -- sent_at фиксируем на первом "не-pending" результате,
+          -- но если стало SENT после FAILED — обновляем на ack-время.
           sent_at = CASE
             WHEN public.task_event_deliveries.status = 'SENT' THEN public.task_event_deliveries.sent_at
-            ELSE COALESCE(EXCLUDED.sent_at, public.task_event_deliveries.sent_at)
+            WHEN EXCLUDED.status IN ('SENT','FAILED') THEN COALESCE(EXCLUDED.sent_at, now())
+            ELSE public.task_event_deliveries.sent_at
           END
         RETURNING audit_id, user_id, channel, status, created_at, sent_at, error_code, error_text
         """
@@ -520,8 +548,8 @@ def ack_delivery(
                 "user_id": int(user_id),
                 "channel": ch,
                 "status": status,
-                "error_code": str(error_code) if error_code is not None and str(error_code).strip() else None,
-                "error_text": str(error_text) if error_text is not None and str(error_text).strip() else None,
+                "error_code": str(error_code).strip() if error_code is not None and str(error_code).strip() else None,
+                "error_text": str(error_text).strip() if error_text is not None and str(error_text).strip() else None,
                 "sent_at": sent_at,
             },
         ).mappings().first()

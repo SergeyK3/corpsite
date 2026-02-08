@@ -296,13 +296,13 @@ def create_task_event_tx(
             {"audit_id": int(audit_id), "uids": recipients},
         )
 
-        # system — всегда SENT
+        # system — всегда SENT (+ sent_at=now() чтобы аналитика не считала это "pending")
         conn.execute(
             text(
                 """
                 INSERT INTO public.task_event_deliveries
-                  (audit_id, user_id, channel, status)
-                SELECT :audit_id, x.user_id, 'system', 'SENT'
+                  (audit_id, user_id, channel, status, sent_at)
+                SELECT :audit_id, x.user_id, 'system', 'SENT', now()
                 FROM (
                     SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
                 ) x
@@ -344,17 +344,16 @@ def create_task_event_tx(
                     },
                 )
 
+            # policy-skip == не ошибка доставки.
+            # Фиксируем telegram как SENT (без error_code/error_text), чтобы не портить аналитику и не требовать ACK.
             skipped_uids = [uid for uid in recipients if uid not in filtered_uids]
             if skipped_uids:
                 conn.execute(
                     text(
                         """
                         INSERT INTO public.task_event_deliveries
-                          (audit_id, user_id, channel, status, error_code, error_text, sent_at)
-                        SELECT :audit_id, x.user_id, 'telegram', 'FAILED',
-                               'NO_BINDING',
-                               'Telegram delivery skipped by policy',
-                               now()
+                          (audit_id, user_id, channel, status, sent_at)
+                        SELECT :audit_id, x.user_id, 'telegram', 'SENT', now()
                         FROM (
                             SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
                         ) x
