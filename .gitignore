@@ -45,3 +45,7 @@ docs/*
 /tmp_*.xlsx
 /*.xlsx
 
+
+# local runtime data
+data/
+
