@@ -55,10 +55,21 @@ def _as_str_or_none(v: Any) -> Optional[str]:
     if isinstance(v, str):
         s = v.strip()
         return s if s else None
-    # для description лучше не пытаться "умно" сериализовать dict/list
     return str(v).strip() or None
 
 
+def _pick_str(payload: Dict[str, Any], keys: List[str]) -> str:
+    for k in keys:
+        v = payload.get(k)
+        if isinstance(v, str):
+            s = v.strip()
+            if s:
+                return s
+    return ""
+
+
+# Support both /tasks and /tasks/ to avoid 307 redirects in some clients.
+@router.get("")
 @router.get("/")
 def list_tasks(
     period_id: Optional[int] = Query(None, ge=1),
@@ -272,7 +283,9 @@ def submit_report(
     if not report_link:
         raise HTTPException(status_code=422, detail="report_link is required")
 
-    current_comment = (payload.get("current_comment") or "").strip()
+    current_comment = _pick_str(payload, ["current_comment", "comment"])
+    # optional: reason can be carried too (UI sometimes uses reason field)
+    reason = _pick_str(payload, ["reason"])
 
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
@@ -317,7 +330,7 @@ def submit_report(
             action="report",
             actor_user_id=int(current_user_id),
             actor_role_id=int(role_id),
-            payload={"report_link": report_link, "current_comment": current_comment},
+            payload={"report_link": report_link, "current_comment": current_comment, "reason": reason},
         )
 
         updated = load_task_full(conn, task_id=int(task_id))
@@ -332,13 +345,18 @@ def approve_report(
     task_id: int = Path(..., ge=1),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
+    """
+    Approve task report.
+    UI contract: POST /tasks/{id}/approve { reason? }
+    Backward-compat: supports { approve: true|false, current_comment? } and will route approve=false to REJECT.
+    """
     current_user_id = get_current_user_id(x_user_id)
 
-    approve = payload.get("approve", True)
-    if not isinstance(approve, bool):
-        raise HTTPException(status_code=422, detail="approve must be boolean")
+    approve_raw = payload.get("approve", True)
+    approve = bool(approve_raw) if isinstance(approve_raw, bool) else True
 
-    current_comment = (payload.get("current_comment") or "").strip()
+    reason = _pick_str(payload, ["reason", "current_comment", "comment"])
+    current_comment = _pick_str(payload, ["current_comment", "comment"])
 
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
@@ -363,7 +381,7 @@ def approve_report(
             action="approve" if approve else "reject",
             actor_user_id=int(current_user_id),
             actor_role_id=int(role_id),
-            payload={"current_comment": current_comment},
+            payload={"reason": reason, "current_comment": current_comment},
         )
 
         updated = load_task_full(conn, task_id=int(task_id))
@@ -379,13 +397,13 @@ def reject_report(
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
-    Явный endpoint для отклонения отчёта.
-    Нужен для UX и для сквозного сценария REPORT_SUBMITTED -> REJECTED -> delivery -> ACK.
+    Explicit endpoint for rejection (UX / clear contract).
+    UI contract: POST /tasks/{id}/reject { reason? }
     """
     current_user_id = get_current_user_id(x_user_id)
 
-    reason = (payload.get("reason") or "").strip()
-    current_comment = (payload.get("current_comment") or "").strip()
+    reason = _pick_str(payload, ["reason", "current_comment", "comment"])
+    current_comment = _pick_str(payload, ["current_comment", "comment"])
 
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
@@ -410,10 +428,52 @@ def reject_report(
             action="reject",
             actor_user_id=int(current_user_id),
             actor_role_id=int(role_id),
-            payload={
-                "reason": reason,
-                "current_comment": current_comment,
-            },
+            payload={"reason": reason, "current_comment": current_comment},
+        )
+
+        updated = load_task_full(conn, task_id=int(task_id))
+        updated = attach_allowed_actions(task=updated, current_user_id=current_user_id, current_role_id=role_id)
+
+    return dict(updated)
+
+
+@router.post("/{task_id}/archive")
+def archive_task(
+    payload: Dict[str, Any],
+    task_id: int = Path(..., ge=1),
+    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+) -> Dict[str, Any]:
+    """
+    UI contract: POST /tasks/{id}/archive { reason? }
+    Keeps legacy DELETE /tasks/{id} for backward compatibility.
+    """
+    current_user_id = get_current_user_id(x_user_id)
+
+    reason = _pick_str(payload, ["reason", "current_comment", "comment"])
+    current_comment = _pick_str(payload, ["current_comment", "comment"])
+
+    with engine.begin() as conn:
+        role_id = get_user_role_id(conn, current_user_id)
+
+        task = load_task_full(conn, task_id=int(task_id))
+        task = ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=True,
+        )
+
+        # текущая политика: скрываем существование, если не инициатор
+        if int(task.get("initiator_user_id") or 0) != int(current_user_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        transition(
+            conn=conn,
+            task_id=int(task_id),
+            action="archive",
+            actor_user_id=int(current_user_id),
+            actor_role_id=int(role_id),
+            payload={"reason": reason, "current_comment": current_comment},
         )
 
         updated = load_task_full(conn, task_id=int(task_id))
@@ -427,6 +487,10 @@ def delete_task(
     task_id: int = Path(..., ge=1),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Response:
+    """
+    Legacy archive endpoint (kept).
+    Prefer POST /tasks/{id}/archive for UI.
+    """
     current_user_id = get_current_user_id(x_user_id)
 
     with engine.begin() as conn:

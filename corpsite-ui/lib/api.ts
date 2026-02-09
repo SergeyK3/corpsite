@@ -152,9 +152,10 @@ export async function apiGetTask(params: {
 
 /**
  * Backend endpoints:
- * - POST /tasks/{id}/report   { report_link, current_comment? }
- * - POST /tasks/{id}/approve  { approve: true|false, current_comment? }
- * - DELETE /tasks/{id}        (archive)
+ * - POST /tasks/{id}/report    { report_link, current_comment? }
+ * - POST /tasks/{id}/approve   { reason? }
+ * - POST /tasks/{id}/reject    { reason? }
+ * - POST /tasks/{id}/archive   { reason? }
  */
 export async function apiPostTaskAction(params: {
   devUserId: number;
@@ -166,38 +167,43 @@ export async function apiPostTaskAction(params: {
 
   const currentComment = pickString(payloadObj, ["current_comment", "comment"]);
   const reportLink = pickString(payloadObj, ["report_link", "reportLink", "link", "url"]);
+  const reason = pickString(payloadObj, ["reason", "current_comment", "comment"]); // reason по умолчанию можно брать из comment
 
-  let method: "POST" | "DELETE" = "POST";
   let url: URL;
-  let body: string | undefined = undefined;
+  let body: string | undefined;
 
   if (params.action === "report") {
     url = buildUrl(`/tasks/${params.taskId}/report`);
     const out: Record<string, any> = { report_link: reportLink };
     if (currentComment) out.current_comment = currentComment;
     body = JSON.stringify(out);
-  } else if (params.action === "approve" || params.action === "reject") {
+  } else if (params.action === "approve") {
     url = buildUrl(`/tasks/${params.taskId}/approve`);
-    const out: Record<string, any> = { approve: params.action === "approve" };
-    if (currentComment) out.current_comment = currentComment;
+    const out: Record<string, any> = {};
+    if (reason) out.reason = reason;
+    body = JSON.stringify(out);
+  } else if (params.action === "reject") {
+    url = buildUrl(`/tasks/${params.taskId}/reject`);
+    const out: Record<string, any> = {};
+    if (reason) out.reason = reason;
     body = JSON.stringify(out);
   } else if (params.action === "archive") {
-    url = buildUrl(`/tasks/${params.taskId}`);
-    method = "DELETE";
+    url = buildUrl(`/tasks/${params.taskId}/archive`);
+    const out: Record<string, any> = {};
+    if (reason) out.reason = reason;
+    body = JSON.stringify(out);
   } else {
+    // safety fallback: approve
     url = buildUrl(`/tasks/${params.taskId}/approve`);
-    const out: Record<string, any> = { approve: true };
-    if (currentComment) out.current_comment = currentComment;
+    const out: Record<string, any> = {};
+    if (reason) out.reason = reason;
     body = JSON.stringify(out);
   }
 
-  const headers =
-    method === "POST"
-      ? buildHeaders(params.devUserId, { "Content-Type": "application/json" })
-      : buildHeaders(params.devUserId);
+  const headers = buildHeaders(params.devUserId, { "Content-Type": "application/json" });
 
   const res = await fetch(url.toString(), {
-    method,
+    method: "POST",
     headers,
     body,
     cache: "no-store",
@@ -206,7 +212,7 @@ export async function apiPostTaskAction(params: {
   const resBody = await readJsonSafe(res);
   if (!res.ok) {
     throw toApiError(res.status, resBody, {
-      method,
+      method: "POST",
       url: url.toString(),
       taskId: params.taskId,
       action: params.action,

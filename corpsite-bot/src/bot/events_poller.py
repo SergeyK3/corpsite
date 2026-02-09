@@ -45,6 +45,11 @@ def _sort_key(ev: Dict[str, Any]) -> int:
     return _event_cursor_id(ev)
 
 
+def _sort_key_delivery(d: Dict[str, Any]) -> Tuple[int, int]:
+    # Композитный порядок: (audit_id, user_id)
+    return int(_safe_int(d.get("audit_id")) or 0), int(_safe_int(d.get("user_id")) or 0)
+
+
 class JsonFileStore:
     def __init__(self, path: Path):
         self.path = path
@@ -54,10 +59,13 @@ class JsonFileStore:
         if not self.path.exists():
             return {}
         try:
-            raw = self.path.read_text(encoding="utf-8").strip()
+            # ВАЖНО: PowerShell/Set-Content может писать UTF-8 с BOM.
+            # json.loads падает на BOM, поэтому читаем как utf-8-sig.
+            raw = self.path.read_text(encoding="utf-8-sig").strip()
             if not raw:
                 return {}
-            return json.loads(raw)
+            val = json.loads(raw)
+            return val if isinstance(val, dict) else {}
         except Exception:
             log.exception("Failed to load json store: %s", self.path)
             return {}
@@ -74,7 +82,8 @@ class JsonFileStore:
             dir=tmp_dir,
         )
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
+            # Пишем без BOM (обычный utf-8) и фиксируем переносы строк.
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
                 f.write(payload)
                 f.write("\n")
             os.replace(tmp_path, self.path)
@@ -136,6 +145,34 @@ def _extract_items_and_cursor(payload: Any) -> Tuple[List[Dict[str, Any]], Optio
     return [], None
 
 
+def _extract_items_and_delivery_cursor(
+    payload: Any,
+) -> Tuple[List[Dict[str, Any]], Optional[int], Optional[int], Optional[int]]:
+    """
+    Delivery queue response (new):
+      {"items":[...], "next_cursor_audit_id": int, "next_cursor_user_id": int, "next_cursor": int(legacy)}
+    Also supports legacy:
+      {"items":[...], "next_cursor": int}
+    """
+    if not isinstance(payload, dict):
+        items, nc = _extract_items_and_cursor(payload)
+        return items, nc, None, None
+
+    items_raw = payload.get("items")
+    items: List[Dict[str, Any]] = [x for x in items_raw if isinstance(x, dict)] if isinstance(items_raw, list) else []
+
+    next_cursor = _safe_int(payload.get("next_cursor"))
+    next_audit = _safe_int(payload.get("next_cursor_audit_id"))
+    next_user = _safe_int(payload.get("next_cursor_user_id"))
+
+    # если отдали только legacy next_cursor — считаем, что user_id = 0
+    if next_audit is None and next_cursor is not None:
+        next_audit = next_cursor
+        next_user = 0
+
+    return items, next_cursor, next_audit, next_user
+
+
 def _use_delivery_queue_mode() -> bool:
     # recommended: EVENTS_USE_DELIVERY_QUEUE=1
     return _truthy_env("EVENTS_USE_DELIVERY_QUEUE")
@@ -161,6 +198,45 @@ def _delivery_cursor_key() -> int:
 def _ack_on_partial_success() -> bool:
     # if user has multiple chat_ids and at least one succeeded -> SENT
     return _truthy_env("EVENTS_ACK_ON_PARTIAL_SUCCESS")
+
+
+def _data_dir() -> Path:
+    # backend style: DATA_DIR, но у бота может быть не задан — дефолт ./data
+    raw = (os.getenv("DATA_DIR") or "").strip()
+    if raw:
+        return Path(raw)
+    return Path("data")
+
+
+def _delivery_cursor_file(channel: str) -> JsonFileStore:
+    # совместимо с тем, что ты руками создавал: events_cursor_telegram.json
+    fname = f"events_cursor_{(channel or 'telegram').strip().lower()}.json"
+    return JsonFileStore(_data_dir() / fname)
+
+
+def _load_delivery_cursor(store: JsonFileStore) -> Tuple[int, int]:
+    d = store.load() or {}
+    a = _safe_int(d.get("cursor_audit_id")) or 0
+    u = _safe_int(d.get("cursor_user_id")) or 0
+    if a < 0:
+        a = 0
+    if u < 0:
+        u = 0
+    return int(a), int(u)
+
+
+def _save_delivery_cursor(store: JsonFileStore, audit_id: int, user_id: int) -> None:
+    store.save({"cursor_audit_id": int(max(0, audit_id)), "cursor_user_id": int(max(0, user_id))})
+
+
+def _cursor_gt(a1: Tuple[int, int], a2: Tuple[int, int]) -> bool:
+    # True if a1 > a2 lexicographically (audit_id, user_id)
+    return a1[0] > a2[0] or (a1[0] == a2[0] and a1[1] > a2[1])
+
+
+def _cursor_le(a1: Tuple[int, int], a2: Tuple[int, int]) -> bool:
+    # True if a1 <= a2
+    return (a1[0] < a2[0]) or (a1[0] == a2[0] and a1[1] <= a2[1])
 
 
 async def _poll_per_user_events(
@@ -311,7 +387,7 @@ async def _poll_delivery_queue(
       - fetch pending deliveries for channel=telegram via internal endpoint
       - send to chat_id resolved by payload.telegram_chat_id (preferred) or bindings fallback
       - ack SENT/FAILED in backend to resolve telegram/PENDING
-      - maintain shared cursor in cursor_store under key EVENTS_DELIVERY_CURSOR_KEY (default 0)
+      - maintain shared composite cursor (audit_id,user_id) in DATA_DIR/events_cursor_<channel>.json
     """
     last_no_bindings_log_ts = 0.0
     did_reset = False
@@ -321,17 +397,19 @@ async def _poll_delivery_queue(
     cursor_key = _delivery_cursor_key()
     partial_ok = _ack_on_partial_success()
 
+    cursor_file = _delivery_cursor_file(channel)
+
     log.info(
-        "Delivery queue polling enabled. internal_user_id=%s channel=%s cursor_key=%s partial_ok=%s",
+        "Delivery queue polling enabled. internal_user_id=%s channel=%s cursor_key=%s partial_ok=%s cursor_file=%s",
         internal_user_id,
         channel,
         cursor_key,
         partial_ok,
+        str(cursor_file.path),
     )
 
     while True:
         try:
-            # bindings are now fallback-only; preferred routing is from backend field telegram_chat_id
             bindings_raw = bindings_store.load()
             pairs = _iter_bindings(bindings_raw)
 
@@ -347,16 +425,36 @@ async def _poll_delivery_queue(
             if not did_reset and _truthy_env("EVENTS_CURSOR_RESET"):
                 did_reset = True
                 _cursor_reset(cursor_store)
-                log.info("Delivery queue cursor reset: store cleared (EVENTS_CURSOR_RESET=1)")
+                try:
+                    if cursor_file.path.exists():
+                        cursor_file.path.unlink()
+                except Exception:
+                    log.exception("Delivery queue cursor reset failed: %s", cursor_file.path)
+                log.info("Delivery queue cursor reset: stores cleared (EVENTS_CURSOR_RESET=1)")
 
-            since_val = int(cursor_store.get(int(cursor_key), default=0) or 0)
+            cur_audit, cur_user = _load_delivery_cursor(cursor_file)
+            since_tuple = (int(cur_audit), int(cur_user))
 
-            resp = await backend.get_pending_deliveries(
-                user_id=int(internal_user_id),
-                channel=str(channel),
-                cursor_from=int(since_val),
-                limit=int(per_user_limit),
-            )
+            legacy_since = int(cursor_store.get(int(cursor_key), default=0) or 0)
+            if legacy_since > since_tuple[0]:
+                since_tuple = (legacy_since, 0)
+                _save_delivery_cursor(cursor_file, since_tuple[0], since_tuple[1])
+
+            try:
+                resp = await backend.get_pending_deliveries(
+                    user_id=int(internal_user_id),
+                    channel=str(channel),
+                    cursor_from=int(since_tuple[0]),
+                    cursor_user_id=int(since_tuple[1]),
+                    limit=int(per_user_limit),
+                )
+            except TypeError:
+                resp = await backend.get_pending_deliveries(
+                    user_id=int(internal_user_id),
+                    channel=str(channel),
+                    cursor_from=int(since_tuple[0]),
+                    limit=int(per_user_limit),
+                )
 
             if resp.status_code != 200:
                 log.warning(
@@ -364,63 +462,83 @@ async def _poll_delivery_queue(
                     resp.status_code,
                     internal_user_id,
                     channel,
-                    since_val,
+                    since_tuple,
                 )
                 await asyncio.sleep(max(2.0, poll_interval_s))
                 continue
 
-            items, next_cursor = _extract_items_and_cursor(resp.json)
+            items, next_cursor_legacy, next_audit, next_user = _extract_items_and_delivery_cursor(resp.json)
 
             if not items:
-                if next_cursor is not None and next_cursor > since_val:
-                    cursor_store.set(int(cursor_key), int(next_cursor))
+                candidate = since_tuple
+                if next_audit is not None and next_user is not None:
+                    nc = (int(next_audit), int(next_user))
+                    if _cursor_gt(nc, candidate):
+                        candidate = nc
+                elif next_cursor_legacy is not None:
+                    nc2 = (int(next_cursor_legacy), 0)
+                    if _cursor_gt(nc2, candidate):
+                        candidate = nc2
+
+                if _cursor_gt(candidate, since_tuple):
+                    _save_delivery_cursor(cursor_file, candidate[0], candidate[1])
+                    cursor_store.set(int(cursor_key), int(candidate[0]))
                 await asyncio.sleep(max(1.0, poll_interval_s))
                 continue
 
-            items_sorted = sorted(items, key=_sort_key)
+            items_sorted = sorted(items, key=_sort_key_delivery)
 
             log.info(
-                "Fetched pending deliveries: channel=%s since=%s count=%s next_cursor=%s",
+                "Fetched pending deliveries: channel=%s since=%s count=%s next=(%s,%s) legacy_next=%s",
                 channel,
-                since_val or None,
+                since_tuple,
                 len(items_sorted),
-                next_cursor,
+                next_audit,
+                next_user,
+                next_cursor_legacy,
             )
 
-            max_seen_audit = since_val
+            current_cursor = since_tuple
 
             for d in items_sorted:
-                audit_id = _safe_int(d.get("audit_id")) or 0
-                delivery_user_id = _safe_int(d.get("user_id")) or 0
+                audit_id = int(_safe_int(d.get("audit_id")) or 0)
+                delivery_user_id = int(_safe_int(d.get("user_id")) or 0)
+                item_tuple = (audit_id, delivery_user_id)
 
-                if audit_id <= since_val:
+                if _cursor_le(item_tuple, current_cursor):
                     continue
 
                 ev_type = str(d.get("event_type") or "").upper()
                 if allowed_types and ev_type not in allowed_types:
-                    max_seen_audit = max(max_seen_audit, audit_id)
+                    current_cursor = item_tuple
+                    _save_delivery_cursor(cursor_file, current_cursor[0], current_cursor[1])
+                    cursor_store.set(int(cursor_key), int(current_cursor[0]))
                     continue
 
-                # Preferred: telegram_chat_id comes from backend (users.telegram_id)
                 tg_chat_id = _safe_int(d.get("telegram_chat_id"))
 
                 if tg_chat_id:
                     chat_ids = [int(tg_chat_id)]
                 else:
-                    # Fallback: local bindings store (chat_id -> user_id)
                     chat_ids = by_user.get(int(delivery_user_id)) or []
 
                 if not chat_ids:
-                    await backend.ack_delivery(
-                        user_id=int(internal_user_id),
-                        audit_id=int(audit_id),
-                        delivery_user_id=int(delivery_user_id),
-                        channel=str(channel),
-                        status="FAILED",
-                        error_code="NO_BINDING",
-                        error_text=f"no telegram_chat_id and no local binding for user_id={delivery_user_id}",
-                    )
-                    max_seen_audit = max(max_seen_audit, audit_id)
+                    try:
+                        await backend.ack_delivery(
+                            user_id=int(internal_user_id),
+                            audit_id=int(audit_id),
+                            delivery_user_id=int(delivery_user_id),
+                            channel=str(channel),
+                            status="FAILED",
+                            error_code="NO_BINDING",
+                            error_text=f"no telegram_chat_id and no local binding for user_id={delivery_user_id}",
+                        )
+                    except Exception:
+                        log.exception("ack_delivery failed: audit_id=%s delivery_user_id=%s status=FAILED", audit_id, delivery_user_id)
+
+                    current_cursor = item_tuple
+                    _save_delivery_cursor(cursor_file, current_cursor[0], current_cursor[1])
+                    cursor_store.set(int(cursor_key), int(current_cursor[0]))
                     continue
 
                 rendered = render_event(d)
@@ -444,38 +562,53 @@ async def _poll_delivery_queue(
                             audit_id,
                         )
 
-                if partial_ok:
-                    delivered_ok = ok_count > 0
-                else:
-                    delivered_ok = (fail_count == 0)
+                delivered_ok = (ok_count > 0) if partial_ok else (fail_count == 0)
 
                 if delivered_ok:
-                    await backend.ack_delivery(
-                        user_id=int(internal_user_id),
-                        audit_id=int(audit_id),
-                        delivery_user_id=int(delivery_user_id),
-                        channel=str(channel),
-                        status="SENT",
-                    )
+                    try:
+                        await backend.ack_delivery(
+                            user_id=int(internal_user_id),
+                            audit_id=int(audit_id),
+                            delivery_user_id=int(delivery_user_id),
+                            channel=str(channel),
+                            status="SENT",
+                        )
+                    except Exception:
+                        log.exception("ack_delivery failed: audit_id=%s delivery_user_id=%s status=SENT", audit_id, delivery_user_id)
                 else:
-                    await backend.ack_delivery(
-                        user_id=int(internal_user_id),
-                        audit_id=int(audit_id),
-                        delivery_user_id=int(delivery_user_id),
-                        channel=str(channel),
-                        status="FAILED",
-                        error_code="SEND_ERROR",
-                        error_text=f"send failed ok={ok_count} fail={fail_count} err={first_err or 'unknown'}",
-                    )
+                    try:
+                        await backend.ack_delivery(
+                            user_id=int(internal_user_id),
+                            audit_id=int(audit_id),
+                            delivery_user_id=int(delivery_user_id),
+                            channel=str(channel),
+                            status="FAILED",
+                            error_code="SEND_ERROR",
+                            error_text=f"send failed ok={ok_count} fail={fail_count} err={first_err or 'unknown'}",
+                        )
+                    except Exception:
+                        log.exception("ack_delivery failed: audit_id=%s delivery_user_id=%s status=FAILED", audit_id, delivery_user_id)
 
-                max_seen_audit = max(max_seen_audit, audit_id)
+                # ВАЖНО: курсор двигаем после обработки элемента (успех/ошибка) — чтобы не слать повторно
+                current_cursor = item_tuple
+                _save_delivery_cursor(cursor_file, current_cursor[0], current_cursor[1])
+                cursor_store.set(int(cursor_key), int(current_cursor[0]))
 
-            candidate = max_seen_audit
-            if next_cursor is not None:
-                candidate = max(candidate, int(next_cursor))
+            # optional jump by next_cursor_* (без регресса)
+            candidate = current_cursor
+            if next_audit is not None and next_user is not None:
+                nc = (int(next_audit), int(next_user))
+                if _cursor_gt(nc, candidate):
+                    candidate = nc
+            elif next_cursor_legacy is not None:
+                nc2 = (int(next_cursor_legacy), 0)
+                if _cursor_gt(nc2, candidate):
+                    candidate = nc2
 
-            if candidate > since_val:
-                cursor_store.set(int(cursor_key), int(candidate))
+            if _cursor_gt(candidate, current_cursor):
+                current_cursor = candidate
+                _save_delivery_cursor(cursor_file, current_cursor[0], current_cursor[1])
+                cursor_store.set(int(cursor_key), int(current_cursor[0]))
 
             await asyncio.sleep(max(1.0, poll_interval_s))
 

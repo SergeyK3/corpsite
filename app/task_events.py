@@ -169,10 +169,6 @@ def analytics_task_events_summary(
     ch = ch_raw.lower() if ch_raw else None
     et = (event_type or "").strip() or None
 
-    # facts/latency выбор канала:
-    # - channel is NULL  => combined: d.channel <> 'system'
-    # - channel == system => d.channel = 'system'
-    # - else => d.channel = :channel AND d.channel <> 'system' (по сути просто d.channel=:channel)
     q = text(
         """
         WITH base_events AS (
@@ -381,7 +377,8 @@ def list_pending_deliveries(
     *,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     channel: str = Query(default="telegram", description="Канал очереди (например telegram)."),
-    cursor_from: int = Query(default=0, ge=0, description="Вернём записи с audit_id > cursor_from."),
+    cursor_from: int = Query(default=0, ge=0, description="audit_id часть курсора (legacy name)."),
+    cursor_user_id: int = Query(default=0, ge=0, description="user_id часть курсора (используется вместе с cursor_from)."),
     limit: int = Query(default=200, ge=1, le=1000),
 ) -> Dict[str, Any]:
     _ = _require_user_id(x_user_id)
@@ -390,6 +387,7 @@ def list_pending_deliveries(
     if not ch:
         raise HTTPException(status_code=422, detail="channel is required")
 
+    # Композитный курсор: (audit_id, user_id)
     q = text(
         """
         SELECT
@@ -408,7 +406,10 @@ def list_pending_deliveries(
         LEFT JOIN public.users u ON u.user_id = d.user_id
         WHERE d.channel = :channel
           AND d.status = 'PENDING'
-          AND d.audit_id > :cursor_from
+          AND (
+            d.audit_id > :cursor_audit
+            OR (d.audit_id = :cursor_audit AND d.user_id > :cursor_user)
+          )
         ORDER BY d.audit_id ASC, d.user_id ASC
         LIMIT :limit
         """
@@ -417,15 +418,23 @@ def list_pending_deliveries(
     with engine.begin() as conn:
         rows = conn.execute(
             q,
-            {"channel": ch, "cursor_from": int(cursor_from), "limit": int(limit)},
+            {
+                "channel": ch,
+                "cursor_audit": int(cursor_from),
+                "cursor_user": int(cursor_user_id),
+                "limit": int(limit),
+            },
         ).mappings().all()
 
     items: List[Dict[str, Any]] = []
-    next_cursor = int(cursor_from)
+
+    next_audit = int(cursor_from)
+    next_user = int(cursor_user_id)
 
     for r in rows:
         audit_id = int(r["audit_id"])
-        next_cursor = max(next_cursor, audit_id)
+        user_id = int(r["user_id"])
+        next_audit, next_user = audit_id, user_id
 
         tg = _safe_int(r.get("telegram_chat_id"))
         has_db_binding = tg is not None
@@ -433,7 +442,7 @@ def list_pending_deliveries(
         items.append(
             {
                 "audit_id": audit_id,
-                "user_id": int(r["user_id"]),
+                "user_id": user_id,
                 "task_id": int(r["task_id"]),
                 "event_type": str(r["event_type"] or ""),
                 "payload": _as_dict_payload(r.get("payload")),
@@ -446,7 +455,14 @@ def list_pending_deliveries(
             }
         )
 
-    return {"items": items, "next_cursor": next_cursor}
+    # legacy next_cursor (только audit_id) оставляем для обратной совместимости,
+    # но корректный курсор для пагинации — пара (next_cursor_audit_id, next_cursor_user_id).
+    return {
+        "items": items,
+        "next_cursor": int(next_audit),
+        "next_cursor_audit_id": int(next_audit),
+        "next_cursor_user_id": int(next_user),
+    }
 
 
 @router.post("/internal/task-event-deliveries/ack")

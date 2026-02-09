@@ -44,7 +44,7 @@ SUPERVISOR_ROLE_IDS = _parse_int_set("SUPERVISOR_ROLE_IDS")
 DEPUTY_ROLE_IDS = _parse_int_set("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS = _parse_int_set("DIRECTOR_ROLE_IDS")
 
-# 🔒 allow-list Telegram (если пусто — ограничения нет)
+# allow-list Telegram (если пусто — ограничения нет)
 TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set(
     "TELEGRAM_DELIVERY_ALLOW_USER_IDS"
 )
@@ -52,7 +52,7 @@ TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set(
 # optional: какие события не отправлять самому актору
 DROP_SELF_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_DROP_SELF_TYPES")
 
-# optional: для каких типов событий создавать non-system deliveries
+# optional: для каких типов событий создавать telegram deliveries
 TELEGRAM_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_TELEGRAM_TYPES")
 
 
@@ -281,86 +281,75 @@ def create_task_event_tx(
         },
     ).scalar_one()
 
-    if recipients:
-        conn.execute(
-            text(
-                """
-                INSERT INTO public.task_event_recipients (audit_id, user_id)
-                SELECT :audit_id, x.user_id
-                FROM (
-                    SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
-                ) x
-                ON CONFLICT DO NOTHING
-                """
-            ),
-            {"audit_id": int(audit_id), "uids": recipients},
-        )
+    if not recipients:
+        return int(audit_id)
 
-        # system — всегда SENT (+ sent_at=now() чтобы аналитика не считала это "pending")
-        conn.execute(
-            text(
-                """
-                INSERT INTO public.task_event_deliveries
-                  (audit_id, user_id, channel, status, sent_at)
-                SELECT :audit_id, x.user_id, 'system', 'SENT', now()
-                FROM (
-                    SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
-                ) x
-                ON CONFLICT (audit_id, user_id, channel) DO NOTHING
-                """
-            ),
-            {"audit_id": int(audit_id), "uids": recipients},
-        )
+    conn.execute(
+        text(
+            """
+            INSERT INTO public.task_event_recipients (audit_id, user_id)
+            SELECT :audit_id, x.user_id
+            FROM (
+                SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
+            ) x
+            ON CONFLICT DO NOTHING
+            """
+        ),
+        {"audit_id": int(audit_id), "uids": recipients},
+    )
 
-        channels = _channels_for_event_type(et)
-        if channels:
-            filtered_uids = recipients
-            if "telegram" in channels and TELEGRAM_DELIVERY_ALLOW_USER_IDS:
-                filtered_uids = [
-                    uid for uid in recipients if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS
-                ]
+    # system — всегда SENT
+    conn.execute(
+        text(
+            """
+            INSERT INTO public.task_event_deliveries
+              (audit_id, user_id, channel, status, sent_at)
+            SELECT :audit_id, x.user_id, 'system', 'SENT', now()
+            FROM (
+                SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
+            ) x
+            ON CONFLICT (audit_id, user_id, channel) DO NOTHING
+            """
+        ),
+        {"audit_id": int(audit_id), "uids": recipients},
+    )
 
-            if filtered_uids:
+    channels = _channels_for_event_type(et)
+    if "telegram" in channels:
+        filtered_uids = recipients
+        if TELEGRAM_DELIVERY_ALLOW_USER_IDS:
+            filtered_uids = [
+                uid for uid in recipients if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS
+            ]
+
+        if filtered_uids:
+            tg_rows = conn.execute(
+                text(
+                    """
+                    SELECT b.user_id
+                    FROM public.tg_bindings b
+                    WHERE b.user_id = ANY(:uids)
+                    """
+                ),
+                {"uids": filtered_uids},
+            ).scalars().all()
+
+            tg_uids = _uniq_ints([int(x) for x in tg_rows])
+
+            if tg_uids:
                 conn.execute(
                     text(
                         """
                         INSERT INTO public.task_event_deliveries
                           (audit_id, user_id, channel, status)
-                        SELECT :audit_id, x.user_id, x.channel, 'PENDING'
-                        FROM (
-                            SELECT
-                              u.user_id,
-                              c.channel
-                            FROM UNNEST(CAST(:uids AS bigint[])) AS u(user_id)
-                            CROSS JOIN UNNEST(CAST(:channels AS text[])) AS c(channel)
-                        ) x
-                        ON CONFLICT (audit_id, user_id, channel) DO NOTHING
-                        """
-                    ),
-                    {
-                        "audit_id": int(audit_id),
-                        "uids": filtered_uids,
-                        "channels": channels,
-                    },
-                )
-
-            # policy-skip == не ошибка доставки.
-            # Фиксируем telegram как SENT (без error_code/error_text), чтобы не портить аналитику и не требовать ACK.
-            skipped_uids = [uid for uid in recipients if uid not in filtered_uids]
-            if skipped_uids:
-                conn.execute(
-                    text(
-                        """
-                        INSERT INTO public.task_event_deliveries
-                          (audit_id, user_id, channel, status, sent_at)
-                        SELECT :audit_id, x.user_id, 'telegram', 'SENT', now()
+                        SELECT :audit_id, x.user_id, 'telegram', 'PENDING'
                         FROM (
                             SELECT UNNEST(CAST(:uids AS bigint[])) AS user_id
                         ) x
                         ON CONFLICT (audit_id, user_id, channel) DO NOTHING
                         """
                     ),
-                    {"audit_id": int(audit_id), "uids": skipped_uids},
+                    {"audit_id": int(audit_id), "uids": tg_uids},
                 )
 
     return int(audit_id)

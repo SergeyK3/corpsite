@@ -1,5 +1,13 @@
 // FILE: corpsite-ui/lib/types.ts
+
+// UI actions we show as buttons
 export type AllowedAction = "report" | "approve" | "reject" | "archive";
+
+// Backend may return allowed_actions as:
+// - object: { "archive": true }
+// - list:   ["archive"]
+// - empty object / empty list / null
+export type AllowedActionsRaw = Record<string, any> | string[] | null | undefined;
 
 export type TaskListItem = {
   task_id: number;
@@ -20,7 +28,8 @@ export type TaskListItem = {
   status?: string;
   deadline?: string | null;
 
-  allowed_actions?: AllowedAction[] | null;
+  // accept backend shapes
+  allowed_actions?: AllowedActionsRaw;
 };
 
 export type TaskDetails = {
@@ -42,14 +51,18 @@ export type TaskDetails = {
   status?: string;
   deadline?: string | null;
 
-  allowed_actions: AllowedAction[];
+  // accept backend shapes
+  allowed_actions?: AllowedActionsRaw;
 };
 
-export type TaskAction = "report" | "approve" | "reject" | "archive";
+export type TaskAction = AllowedAction;
 
 export type TaskActionPayload = {
   report_link?: string;
   current_comment?: string;
+
+  // approve/reject/archive
+  reason?: string;
 };
 
 export type RegularTaskStatus = "active" | "inactive" | "all";
