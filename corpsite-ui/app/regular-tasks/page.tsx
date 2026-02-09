@@ -5,7 +5,25 @@ import { useEffect, useMemo, useState } from "react";
 
 const DEV_USER_ID_KEY = "corpsite.devUserId";
 
+function env(name: string, fallback = ""): string {
+  const v = process.env[name];
+  return (v ?? fallback).toString().trim();
+}
+
+function truthyEnv(name: string): boolean {
+  const v = env(name, "").toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+const API_BASE_URL = env("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000");
+
+// DEV UI:
+// - if NEXT_PUBLIC_DEV_UI=1 (or true/yes/on) -> enable
+// - otherwise enabled only in non-production
+const DEV_UI = truthyEnv("NEXT_PUBLIC_DEV_UI") || process.env.NODE_ENV !== "production";
+
 function getDevUserId(): number {
+  if (!DEV_UI) return 1;
   if (typeof window === "undefined") return 1;
   const raw = window.localStorage.getItem(DEV_USER_ID_KEY);
   const n = Number(raw);
@@ -13,16 +31,10 @@ function getDevUserId(): number {
 }
 
 function setDevUserId(v: number): void {
+  if (!DEV_UI) return;
   if (typeof window === "undefined") return;
   window.localStorage.setItem(DEV_USER_ID_KEY, String(v));
 }
-
-function env(name: string, fallback = ""): string {
-  const v = process.env[name];
-  return (v ?? fallback).toString().trim();
-}
-
-const API_BASE_URL = env("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000");
 
 async function readJsonSafe(res: Response): Promise<any> {
   const text = await res.text();
@@ -159,11 +171,7 @@ async function apiCreateRegularTask(params: { devUserId: number; payload: Record
   return body;
 }
 
-async function apiPatchRegularTask(params: {
-  devUserId: number;
-  id: number;
-  payload: Record<string, any>;
-}): Promise<any> {
+async function apiPatchRegularTask(params: { devUserId: number; id: number; payload: Record<string, any> }): Promise<any> {
   const url = buildUrl(`/regular-tasks/${params.id}`);
 
   const res = await fetch(url.toString(), {
@@ -228,11 +236,85 @@ function parseJsonOrEmpty(text: string): any {
   }
 }
 
+function uiActiveLabel(v: boolean | undefined): string {
+  if (v === true) return "Активен";
+  if (v === false) return "Неактивен";
+  return "—";
+}
+
+function uiScheduleTypeLabel(v: any): string {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s) return "—";
+  if (s === "weekly") return "еженедельно";
+  if (s === "monthly") return "ежемесячно";
+  if (s === "yearly") return "ежегодно";
+  if (s === "daily") return "ежедневно";
+  return String(v);
+}
+
+function uiFieldLabel(v: string): string {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  if (s === "title") return "Название (title)";
+  if (s === "schedule_params") return "Параметры расписания (schedule_params)";
+  return s;
+}
+
+function formatUserError(e: any): string {
+  const status = Number(e?.status ?? 0);
+  const rawMsg = String(e?.message ?? "").trim();
+
+  const base =
+    status === 401
+      ? "Требуется авторизация."
+      : status === 403
+        ? "Недостаточно прав для выполнения действия."
+        : status === 404
+          ? "Объект не найден."
+          : status === 409
+            ? "Конфликт данных. Обновите страницу и попробуйте снова."
+            : status === 422
+              ? "Некорректные данные. Проверьте заполнение полей."
+              : status >= 500
+                ? "Ошибка сервера. Попробуйте позже."
+                : "Не удалось выполнить запрос.";
+
+  if (DEV_UI && rawMsg) return status ? `(${status}) ${base} ${rawMsg}` : `${base} ${rawMsg}`;
+  return status ? `(${status}) ${base}` : base;
+}
+
+function validatePayload(p: Record<string, any>): string | null {
+  const title = String(p.title ?? "").trim();
+  if (!title) return "title is required";
+  if (p.schedule_params === null) return "schedule_params must be valid JSON";
+  return null;
+}
+
+function validatePayloadUi(p: Record<string, any>): string | null {
+  const raw = validatePayload(p);
+  if (!raw) return null;
+
+  const m = String(raw);
+
+  // minimal, predictable UX translation
+  if (m.includes("title is required")) return "Название обязательно для заполнения.";
+  if (m.includes("schedule_params must be valid JSON")) return "Параметры расписания должны быть корректным JSON.";
+  if (m.includes("must be valid")) return "Проверьте корректность полей.";
+  return DEV_UI ? `Ошибка валидации: ${m}` : "Проверьте корректность заполнения полей.";
+}
+
+type Toast = { kind: "success" | "error" | "info"; text: string };
+
 export default function RegularTasksPage() {
   const [userId, setUserIdState] = useState<number>(1);
 
   const [status, setStatus] = useState<"active" | "inactive" | "all">("active");
   const [q, setQ] = useState<string>("");
+
+  const [applied, setApplied] = useState<{ status: "active" | "inactive" | "all"; q: string }>({
+    status: "active",
+    q: "",
+  });
 
   const [items, setItems] = useState<RegularTask[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -249,6 +331,13 @@ export default function RegularTasksPage() {
   // - create: show card header + embedded create form
   // - edit: show card header + embedded edit form (actions activate/deactivate hidden)
   const [mode, setMode] = useState<"view" | "create" | "edit">("view");
+
+  // toast
+  const [toast, setToast] = useState<Toast | null>(null);
+  function showToast(kind: Toast["kind"], text: string) {
+    setToast({ kind, text });
+    window.setTimeout(() => setToast(null), 3000);
+  }
 
   // form (create/edit)
   const [fTitle, setFTitle] = useState<string>("");
@@ -277,62 +366,17 @@ export default function RegularTasksPage() {
     setFDueOffsetDays(String(x?.due_offset_days ?? 0));
   }
 
-  async function reloadList(uid?: number) {
-    const devUserId = uid ?? userId;
-    setListLoading(true);
-    setListError(null);
-    try {
-      const data = await apiListRegularTasks({
-        devUserId,
-        status,
-        q: q.trim() ? q.trim() : undefined,
-        limit: 50,
-        offset: 0,
-      });
-      setItems(data.items);
-
-      if (selectedId && !data.items.some((x) => x.regular_task_id === selectedId)) {
-        setSelectedId(null);
-        setCard(null);
-        setMode("view");
-      }
-    } catch (e: any) {
-      const statusCode = e?.status;
-      const msg = e?.message || "Failed to fetch regular tasks";
-      setItems([]);
-      setSelectedId(null);
-      setCard(null);
-      setMode("view");
-      setListError(statusCode ? `(${statusCode}) ${msg}` : msg);
-    } finally {
-      setListLoading(false);
-    }
+  function normalizedFilters() {
+    return {
+      status,
+      q: q.trim(),
+    };
   }
 
-  async function reloadCard(id: number, uid?: number) {
-    const devUserId = uid ?? userId;
-    setCardLoading(true);
-    setCardError(null);
-    try {
-      const data = await apiGetRegularTask({ devUserId, id });
-      setCard(data);
-      if (mode === "edit") resetFormFromTask(data);
-    } catch (e: any) {
-      const statusCode = e?.status;
-      const msg = e?.message || "Failed to fetch regular task";
-      setCard(null);
-      setCardError(statusCode ? `(${statusCode}) ${msg}` : msg);
-    } finally {
-      setCardLoading(false);
-    }
-  }
-
-  function validatePayload(p: Record<string, any>): string | null {
-    const title = String(p.title ?? "").trim();
-    if (!title) return "title is required";
-    if (p.schedule_params === null) return "schedule_params must be valid JSON";
-    return null;
-  }
+  const filtersChanged = useMemo(() => {
+    const nf = normalizedFilters();
+    return nf.status !== applied.status || nf.q !== applied.q;
+  }, [status, q, applied]);
 
   function buildPayload(): Record<string, any> {
     const scheduleParamsParsed = parseJsonOrEmpty(fScheduleParams);
@@ -356,6 +400,74 @@ export default function RegularTasksPage() {
     return payload;
   }
 
+  const draftPayload = useMemo(() => buildPayload(), [
+    fTitle,
+    fDescription,
+    fCode,
+    fExecutorRoleId,
+    fScheduleType,
+    fScheduleParams,
+    fCreateOffsetDays,
+    fDueOffsetDays,
+  ]);
+
+  const draftError = useMemo(() => validatePayloadUi(draftPayload), [draftPayload]);
+
+  async function reloadList(
+    uid?: number,
+    opts?: { useCurrentFilters?: boolean; status?: "active" | "inactive" | "all"; q?: string }
+  ) {
+    const devUserId = uid ?? userId;
+
+    const s = opts?.useCurrentFilters === false ? (opts?.status ?? applied.status) : (opts?.status ?? status);
+    const qq = opts?.useCurrentFilters === false ? (opts?.q ?? applied.q) : (opts?.q ?? q.trim());
+
+    setListLoading(true);
+    setListError(null);
+    try {
+      const data = await apiListRegularTasks({
+        devUserId,
+        status: s,
+        q: qq ? qq : undefined,
+        limit: 50,
+        offset: 0,
+      });
+
+      setItems(data.items);
+      setApplied({ status: s, q: qq ?? "" });
+
+      if (selectedId && !data.items.some((x) => x.regular_task_id === selectedId)) {
+        setSelectedId(null);
+        setCard(null);
+        setMode("view");
+      }
+    } catch (e: any) {
+      setItems([]);
+      setSelectedId(null);
+      setCard(null);
+      setMode("view");
+      setListError(formatUserError(e));
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  async function reloadCard(id: number, uid?: number) {
+    const devUserId = uid ?? userId;
+    setCardLoading(true);
+    setCardError(null);
+    try {
+      const data = await apiGetRegularTask({ devUserId, id });
+      setCard(data);
+      if (mode === "edit") resetFormFromTask(data);
+    } catch (e: any) {
+      setCard(null);
+      setCardError(formatUserError(e));
+    } finally {
+      setCardLoading(false);
+    }
+  }
+
   async function onCreate() {
     setCardError(null);
     setCardLoading(true);
@@ -368,6 +480,7 @@ export default function RegularTasksPage() {
       const res = await apiCreateRegularTask({ devUserId: userId, payload });
       const newId = Number(res?.regular_task_id ?? res?.id ?? 0);
 
+      showToast("success", "Шаблон создан.");
       await reloadList(userId);
 
       if (newId > 0) {
@@ -378,9 +491,9 @@ export default function RegularTasksPage() {
         setMode("view");
       }
     } catch (e: any) {
-      const statusCode = e?.status;
-      const msg = e?.message || String(e) || "Create failed";
-      setCardError(statusCode ? `(${statusCode}) ${msg}` : msg);
+      const msg = formatUserError(e);
+      setCardError(msg);
+      showToast("error", "Не удалось создать шаблон.");
     } finally {
       setCardLoading(false);
     }
@@ -398,12 +511,14 @@ export default function RegularTasksPage() {
       if (err) throw new Error(err);
 
       await apiPatchRegularTask({ devUserId: userId, id: selectedId, payload });
+
       setMode("view");
+      showToast("success", "Изменения сохранены.");
       await Promise.all([reloadCard(selectedId, userId), reloadList(userId)]);
     } catch (e: any) {
-      const statusCode = e?.status;
-      const msg = e?.message || String(e) || "Update failed";
-      setCardError(statusCode ? `(${statusCode}) ${msg}` : msg);
+      const msg = formatUserError(e);
+      setCardError(msg);
+      showToast("error", "Не удалось сохранить изменения.");
     } finally {
       setCardLoading(false);
     }
@@ -417,29 +532,16 @@ export default function RegularTasksPage() {
 
     try {
       await apiActivateRegularTask({ devUserId: userId, id: selectedId, active });
+      showToast("success", active ? "Шаблон активирован." : "Шаблон деактивирован.");
       await Promise.all([reloadCard(selectedId, userId), reloadList(userId)]);
     } catch (e: any) {
-      const statusCode = e?.status;
-      const msg = e?.message || "Action failed";
-      setCardError(statusCode ? `(${statusCode}) ${msg}` : msg);
+      const msg = formatUserError(e);
+      setCardError(msg);
+      showToast("error", "Не удалось выполнить действие.");
     } finally {
       setCardLoading(false);
     }
   }
-
-  // Inline form state
-  const draftPayload = useMemo(() => buildPayload(), [
-    fTitle,
-    fDescription,
-    fCode,
-    fExecutorRoleId,
-    fScheduleType,
-    fScheduleParams,
-    fCreateOffsetDays,
-    fDueOffsetDays,
-  ]);
-
-  const draftError = useMemo(() => validatePayload(draftPayload), [draftPayload]);
 
   useEffect(() => {
     const uid = getDevUserId();
@@ -468,7 +570,7 @@ export default function RegularTasksPage() {
 
   const cardTitle =
     mode === "create"
-      ? "Создание"
+      ? "Создание шаблона"
       : mode === "edit"
         ? `Редактирование • #${selectedId ?? "—"}`
         : card?.title ?? selectedFromList?.title ?? (selectedId ? `#${selectedId}` : "Карточка");
@@ -495,44 +597,74 @@ export default function RegularTasksPage() {
       resetFormFromTask(null);
       return;
     }
-    // edit
     setMode("view");
     setCardError(null);
     if (selectedId) resetFormFromTask(card ?? selectedFromList);
   }
 
+  function applyFilters() {
+    void reloadList(userId);
+  }
+
+  const toastBorder =
+    toast?.kind === "success"
+      ? "border-emerald-900/50"
+      : toast?.kind === "error"
+        ? "border-red-900/50"
+        : "border-zinc-800";
+
+  const toastText =
+    toast?.kind === "success"
+      ? "text-emerald-200"
+      : toast?.kind === "error"
+        ? "text-red-200"
+        : "text-zinc-200";
+
+  const canShowDevControls = DEV_UI;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="text-xl font-semibold">Corpsite / Regular tasks</div>
+          <div className="text-xl font-semibold">Corpsite / Регулярные задачи</div>
 
-          <div className="flex items-center gap-2">
-            <div className="text-xs text-zinc-400">
-              <div>Dev</div>
-              <div>User ID</div>
+          {canShowDevControls ? (
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-zinc-400" title="Только для отладки прав доступа">
+                <div>DEV</div>
+                <div>User ID</div>
+              </div>
+
+              <input
+                value={String(userId)}
+                onChange={(e) => setUserIdState(Number(e.target.value || "0"))}
+                className="w-28 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none"
+                inputMode="numeric"
+              />
+
+              <button
+                onClick={() => {
+                  setDevUserId(userId);
+                  void reloadList(userId);
+                  if (selectedId) void reloadCard(selectedId, userId);
+                  setCardError(null);
+                  showToast("info", "Применён Dev User ID.");
+                }}
+                className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+                disabled={listLoading || cardLoading}
+                title="Применить Dev User ID (только для DEV)"
+              >
+                {listLoading || cardLoading ? "Применение…" : "Применить"}
+              </button>
             </div>
-
-            <input
-              value={String(userId)}
-              onChange={(e) => setUserIdState(Number(e.target.value || "0"))}
-              className="w-28 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none"
-              inputMode="numeric"
-            />
-
-            <button
-              onClick={() => {
-                setDevUserId(userId);
-                void reloadList(userId);
-                if (selectedId) void reloadCard(selectedId, userId);
-                setCardError(null);
-              }}
-              className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800"
-            >
-              Apply
-            </button>
-          </div>
+          ) : null}
         </div>
+
+        {toast ? (
+          <div className={`mt-4 rounded-lg border ${toastBorder} bg-zinc-950/40 p-3 text-sm ${toastText}`}>
+            {toast.text}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* LIST */}
@@ -541,10 +673,11 @@ export default function RegularTasksPage() {
               <div className="text-sm uppercase tracking-wide text-zinc-300">Шаблоны</div>
               <button
                 onClick={() => void reloadList(userId)}
-                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800"
+                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800 disabled:opacity-60"
                 disabled={listLoading}
+                title="Обновить список шаблонов"
               >
-                Refresh
+                {listLoading ? "Обновление…" : "Обновить"}
               </button>
             </div>
 
@@ -554,43 +687,58 @@ export default function RegularTasksPage() {
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none"
               >
-                <option value="active">active</option>
-                <option value="inactive">inactive</option>
-                <option value="all">all</option>
+                <option value="active">Активные</option>
+                <option value="inactive">Неактивные</option>
+                <option value="all">Все</option>
               </select>
 
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none sm:col-span-2"
-                placeholder="Поиск (q)"
-              />
+              <div className="sm:col-span-2">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") applyFilters();
+                  }}
+                  className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none"
+                  placeholder="Поиск"
+                />
+                <div className="mt-1 text-[11px] text-zinc-500">Введите запрос и нажмите «Применить фильтры» (или Enter).</div>
+              </div>
             </div>
 
             <div className="mb-3 flex gap-2">
               <button
                 onClick={openCreate}
                 className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800"
+                title="Создать новый шаблон"
               >
-                + Create
+                + Создать
               </button>
 
               <button
-                onClick={() => void reloadList(userId)}
-                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800"
+                onClick={applyFilters}
+                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800 disabled:opacity-60"
+                disabled={listLoading || !filtersChanged}
+                title={!filtersChanged ? "Фильтры не менялись" : "Применить фильтры"}
               >
-                Apply filters
+                Применить фильтры
               </button>
             </div>
 
-            {listError ? <div className="mb-3 text-sm text-red-400">Ошибка списка: {listError}</div> : null}
-            {listLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
+            {listError ? <div className="mb-3 text-sm text-red-300">Ошибка списка: {listError}</div> : null}
+            {listLoading ? <div className="text-sm text-zinc-400">Загрузка списка…</div> : null}
+
+            {!listLoading && !listError && items.length === 0 ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-sm text-zinc-400">
+                Шаблоны не найдены. Измените фильтры или нажмите «Создать».
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               {items.map((t) => {
                 const id = t.regular_task_id;
                 const active = selectedId === id;
-                const isActive = t.is_active === true ? "active" : t.is_active === false ? "inactive" : "—";
+                const isActive = uiActiveLabel(t.is_active === true ? true : t.is_active === false ? false : undefined);
                 return (
                   <button
                     key={id}
@@ -603,15 +751,16 @@ export default function RegularTasksPage() {
                       "w-full rounded-lg border px-3 py-2 text-left",
                       active ? "border-zinc-600 bg-zinc-900" : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/60",
                     ].join(" ")}
+                    title="Открыть карточку шаблона"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="font-medium">{t.title || `RegularTask #${id}`}</div>
+                      <div className="font-medium">{t.title || `Шаблон #${id}`}</div>
                       <div className="text-xs text-zinc-400">{isActive}</div>
                     </div>
                     <div className="mt-1 text-xs text-zinc-500">
                       #{id}
-                      {t.code ? ` • code: ${t.code}` : ""}
-                      {t.executor_role_id != null ? ` • role: ${t.executor_role_id}` : ""}
+                      {t.code ? ` • код: ${t.code}` : ""}
+                      {t.executor_role_id != null ? ` • роль: ${t.executor_role_id}` : ""}
                     </div>
                   </button>
                 );
@@ -625,15 +774,16 @@ export default function RegularTasksPage() {
               <div className="text-sm uppercase tracking-wide text-zinc-300">Карточка</div>
               <button
                 onClick={() => (selectedId ? void reloadCard(selectedId, userId) : null)}
-                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800"
+                className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800 disabled:opacity-60"
                 disabled={!selectedId || cardLoading}
+                title={!selectedId ? "Сначала выберите шаблон" : "Обновить карточку"}
               >
-                Refresh
+                {cardLoading ? "Обновление…" : "Обновить"}
               </button>
             </div>
 
-            {cardError ? <div className="mb-3 text-sm text-red-400">Ошибка: {cardError}</div> : null}
-            {cardLoading ? <div className="mb-3 text-sm text-zinc-400">Загрузка…</div> : null}
+            {cardError ? <div className="mb-3 text-sm text-red-300">Ошибка: {cardError}</div> : null}
+            {cardLoading ? <div className="mb-3 text-sm text-zinc-400">Загрузка карточки…</div> : null}
 
             {/* Header */}
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
@@ -642,30 +792,36 @@ export default function RegularTasksPage() {
               {mode === "view" && selectedId ? (
                 <>
                   <div className="mt-1 text-sm text-zinc-400">
-                    Статус:{" "}
-                    <span className="text-zinc-200">
-                      {activeFlag === true ? "active" : activeFlag === false ? "inactive" : "—"}
-                    </span>{" "}
-                    • #{selectedId}
+                    Статус: <span className="text-zinc-200">{uiActiveLabel(activeFlag)}</span> • #{selectedId}
                   </div>
                   <div className="mt-2 text-xs text-zinc-400">
-                    code: <span className="text-zinc-200">{card?.code ?? selectedFromList?.code ?? "—"}</span> •
-                    schedule_type:{" "}
-                    <span className="text-zinc-200">{card?.schedule_type ?? selectedFromList?.schedule_type ?? "—"}</span>{" "}
-                    • role:{" "}
-                    <span className="text-zinc-200">{card?.executor_role_id ?? selectedFromList?.executor_role_id ?? "—"}</span>
+                    Код: <span className="text-zinc-200">{card?.code ?? selectedFromList?.code ?? "—"}</span> • Тип
+                    расписания:{" "}
+                    <span className="text-zinc-200">
+                      {uiScheduleTypeLabel(card?.schedule_type ?? selectedFromList?.schedule_type)}
+                    </span>{" "}
+                    • Роль:{" "}
+                    <span className="text-zinc-200">
+                      {card?.executor_role_id ?? selectedFromList?.executor_role_id ?? "—"}
+                    </span>
                   </div>
                 </>
               ) : mode === "create" ? (
                 <div className="mt-1 text-sm text-zinc-400">
-                  Поля соответствуют public.regular_tasks (title, description, code, executor_role_id, schedule_type, schedule_params, create_offset_days, due_offset_days).
+                  Заполните поля и нажмите «Создать». Обязательное поле: название.
                 </div>
               ) : mode === "edit" ? (
-                <div className="mt-1 text-sm text-zinc-400">
-                  Редактирование полей public.regular_tasks для шаблона #{selectedId}.
-                </div>
+                <div className="mt-1 text-sm text-zinc-400">Редактирование параметров шаблона #{selectedId}.</div>
               ) : (
-                <div className="mt-1 text-sm text-zinc-400">Выберите шаблон слева или нажмите Create.</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+                  <span>Выберите шаблон слева или создайте новый.</span>
+                  <button
+                    onClick={openCreate}
+                    className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs hover:bg-zinc-800"
+                  >
+                    Создать шаблон
+                  </button>
+                </div>
               )}
             </div>
 
@@ -675,7 +831,29 @@ export default function RegularTasksPage() {
                 <div className="mb-2 text-sm font-semibold">Действия</div>
 
                 {!selectedId ? (
-                  <div className="text-sm text-zinc-400">Нет выбранного шаблона.</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      disabled
+                      className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm opacity-60"
+                      title="Сначала выберите шаблон"
+                    >
+                      Редактировать
+                    </button>
+                    <button
+                      disabled
+                      className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm opacity-60"
+                      title="Сначала выберите шаблон"
+                    >
+                      Активировать
+                    </button>
+                    <button
+                      disabled
+                      className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm opacity-60"
+                      title="Сначала выберите шаблон"
+                    >
+                      Деактивировать
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <div className="flex flex-wrap gap-2">
@@ -683,29 +861,32 @@ export default function RegularTasksPage() {
                         onClick={openEdit}
                         disabled={!selectedId || cardLoading}
                         className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+                        title="Редактировать шаблон"
                       >
-                        Edit
+                        Редактировать
                       </button>
 
                       <button
                         onClick={() => void onToggleActive(true)}
                         disabled={!selectedId || cardLoading}
                         className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+                        title="Активировать шаблон"
                       >
-                        Activate
+                        Активировать
                       </button>
 
                       <button
                         onClick={() => void onToggleActive(false)}
                         disabled={!selectedId || cardLoading}
                         className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+                        title="Деактивировать шаблон"
                       >
-                        Deactivate
+                        Деактивировать
                       </button>
                     </div>
 
                     <div className="mt-2 text-xs text-zinc-500">
-                      Примечание: список/карточка используют /regular-tasks и /regular-tasks/{`{id}`} из OpenAPI.
+                      После действия карточка и список обновляются автоматически.
                     </div>
                   </>
                 )}
@@ -718,7 +899,7 @@ export default function RegularTasksPage() {
                 <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <label className="block text-xs text-zinc-400">title *</label>
+                      <label className="block text-xs text-zinc-400">Название *</label>
                       <input
                         value={fTitle}
                         onChange={(e) => setFTitle(e.target.value)}
@@ -728,7 +909,7 @@ export default function RegularTasksPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs text-zinc-400">description</label>
+                      <label className="block text-xs text-zinc-400">Описание</label>
                       <textarea
                         value={fDescription}
                         onChange={(e) => setFDescription(e.target.value)}
@@ -739,7 +920,7 @@ export default function RegularTasksPage() {
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs text-zinc-400">code</label>
+                        <label className="block text-xs text-zinc-400">Код</label>
                         <input
                           value={fCode}
                           onChange={(e) => setFCode(e.target.value)}
@@ -748,7 +929,7 @@ export default function RegularTasksPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-400">executor_role_id</label>
+                        <label className="block text-xs text-zinc-400">ID роли исполнителя</label>
                         <input
                           value={fExecutorRoleId}
                           onChange={(e) => setFExecutorRoleId(e.target.value)}
@@ -761,18 +942,21 @@ export default function RegularTasksPage() {
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs text-zinc-400">schedule_type</label>
+                        <label className="block text-xs text-zinc-400">Тип расписания</label>
                         <input
                           value={fScheduleType}
                           onChange={(e) => setFScheduleType(e.target.value)}
                           className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none"
                           placeholder='Напр: "weekly" / "monthly"'
                         />
+                        <div className="mt-1 text-[11px] text-zinc-500">
+                          Поддерживается, например: weekly, monthly, yearly.
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-xs text-zinc-400">create_offset_days</label>
+                          <label className="block text-xs text-zinc-400">Смещение создания (дней)</label>
                           <input
                             value={fCreateOffsetDays}
                             onChange={(e) => setFCreateOffsetDays(e.target.value)}
@@ -782,7 +966,7 @@ export default function RegularTasksPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-zinc-400">due_offset_days</label>
+                          <label className="block text-xs text-zinc-400">Срок сдачи (смещение, дней)</label>
                           <input
                             value={fDueOffsetDays}
                             onChange={(e) => setFDueOffsetDays(e.target.value)}
@@ -795,7 +979,7 @@ export default function RegularTasksPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs text-zinc-400">schedule_params (JSON)</label>
+                      <label className="block text-xs text-zinc-400">Параметры расписания (JSON)</label>
                       <textarea
                         value={fScheduleParams}
                         onChange={(e) => setFScheduleParams(e.target.value)}
@@ -803,7 +987,9 @@ export default function RegularTasksPage() {
                         placeholder='Напр: {"weekday":1} или {"bymonthday":[27]}'
                       />
                       {draftError ? (
-                        <div className="mt-2 text-xs text-red-400">Ошибка: {draftError}</div>
+                        <div className="mt-2 text-xs text-red-300">
+                          Ошибка: {draftError}
+                        </div>
                       ) : (
                         <div className="mt-2 text-xs text-zinc-500">JSON валиден. Можно сохранять.</div>
                       )}
@@ -814,8 +1000,11 @@ export default function RegularTasksPage() {
                         onClick={() => void (mode === "create" ? onCreate() : onSaveEdit())}
                         disabled={cardLoading || !!draftError}
                         className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+                        title={
+                          draftError ? "Исправьте ошибки формы" : mode === "create" ? "Создать шаблон" : "Сохранить изменения"
+                        }
                       >
-                        {mode === "create" ? "Create" : "Save"}
+                        {cardLoading ? "Выполняется…" : mode === "create" ? "Создать" : "Сохранить"}
                       </button>
 
                       <button
@@ -823,26 +1012,30 @@ export default function RegularTasksPage() {
                         disabled={cardLoading}
                         className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
                       >
-                        Cancel
+                        Отмена
                       </button>
                     </div>
 
-                    <details className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-                      <summary className="cursor-pointer text-sm text-zinc-300">Draft payload</summary>
-                      <pre className="mt-2 overflow-auto text-xs text-zinc-200">
-                        {JSON.stringify(draftPayload, null, 2)}
-                      </pre>
-                    </details>
+                    {DEV_UI ? (
+                      <details className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <summary className="cursor-pointer text-sm text-zinc-300">Draft payload (DEV)</summary>
+                        <pre className="mt-2 overflow-auto text-xs text-zinc-200">
+                          {JSON.stringify(draftPayload, null, 2)}
+                        </pre>
+                      </details>
+                    ) : null}
                   </div>
                 </div>
               </div>
             ) : null}
 
-            {/* Raw JSON (view only) */}
-            {mode === "view" ? (
+            {/* Raw JSON (view only, DEV only) */}
+            {mode === "view" && DEV_UI ? (
               <details className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-                <summary className="cursor-pointer text-sm text-zinc-300">Raw JSON</summary>
-                <pre className="mt-2 overflow-auto text-xs text-zinc-200">{JSON.stringify(card ?? selectedFromList, null, 2)}</pre>
+                <summary className="cursor-pointer text-sm text-zinc-300">Raw JSON (DEV)</summary>
+                <pre className="mt-2 overflow-auto text-xs text-zinc-200">
+                  {JSON.stringify(card ?? selectedFromList, null, 2)}
+                </pre>
               </details>
             ) : null}
           </div>
