@@ -83,11 +83,13 @@ def _should_drop_self(event_type: str) -> bool:
 def _channels_for_event_type(event_type: str) -> List[str]:
     et = (event_type or "").upper().strip()
 
+    # строгий режим: если список задан — используем только его
     if TELEGRAM_FOR_TYPES:
         if et in TELEGRAM_FOR_TYPES:
             return ["telegram"]
         return []
 
+    # режим по умолчанию: известные типы идут в telegram
     if et in {
         "REPORT_SUBMITTED",
         "REPORT_APPROVED",
@@ -314,7 +316,10 @@ def create_task_event_tx(
         {"audit_id": int(audit_id), "uids": recipients},
     )
 
+    # вычисляем каналы ровно один раз
     channels = _channels_for_event_type(et)
+
+    # telegram — только если тип разрешён (канал включён) + есть tg_bindings для пользователей
     if "telegram" in channels:
         filtered_uids = recipients
         if TELEGRAM_DELIVERY_ALLOW_USER_IDS:

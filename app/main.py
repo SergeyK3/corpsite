@@ -7,11 +7,20 @@ from typing import Dict, Any, List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+
+from app.errors import raise_error, ErrorCode
+
+# -----------------------
+# Env (single source of truth)
+# IMPORTANT: load .env BEFORE importing app.* modules that may read os.getenv at import time
+# -----------------------
+ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(dotenv_path=ROOT_ENV)
 
 from app.db.engine import engine
 from app.meta import router as meta_router
@@ -23,15 +32,6 @@ from app.directory import router as directory_router
 # regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
 from app.services.regular_tasks_public_router import router as regular_tasks_router
-
-from app.errors import raise_error, ErrorCode
-
-
-# -----------------------
-# Env (single source of truth)
-# -----------------------
-ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(dotenv_path=ROOT_ENV)
 
 
 class UTF8JSONResponse(JSONResponse):
