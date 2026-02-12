@@ -59,8 +59,7 @@ class JsonFileStore:
         if not self.path.exists():
             return {}
         try:
-            # ВАЖНО: PowerShell/Set-Content может писать UTF-8 с BOM.
-            # json.loads падает на BOM, поэтому читаем как utf-8-sig.
+            # PowerShell/Set-Content может писать UTF-8 с BOM -> читаем utf-8-sig
             raw = self.path.read_text(encoding="utf-8-sig").strip()
             if not raw:
                 return {}
@@ -97,7 +96,7 @@ class JsonFileStore:
 
 def _iter_bindings(bindings: Dict[str, Any]) -> Tuple[Tuple[int, int], ...]:
     """
-    bindings store format (existing):
+    bindings store format:
       { "<chat_id>": <user_id>, ... }
     """
     out: List[Tuple[int, int]] = []
@@ -149,7 +148,7 @@ def _extract_items_and_delivery_cursor(
     payload: Any,
 ) -> Tuple[List[Dict[str, Any]], Optional[int], Optional[int], Optional[int]]:
     """
-    Delivery queue response (new):
+    Delivery queue response:
       {"items":[...], "next_cursor_audit_id": int, "next_cursor_user_id": int, "next_cursor": int(legacy)}
     Also supports legacy:
       {"items":[...], "next_cursor": int}
@@ -171,11 +170,6 @@ def _extract_items_and_delivery_cursor(
         next_user = 0
 
     return items, next_cursor, next_audit, next_user
-
-
-def _use_delivery_queue_mode() -> bool:
-    # recommended: EVENTS_USE_DELIVERY_QUEUE=1
-    return _truthy_env("EVENTS_USE_DELIVERY_QUEUE")
 
 
 def _delivery_internal_user_id() -> int:
@@ -201,7 +195,6 @@ def _ack_on_partial_success() -> bool:
 
 
 def _data_dir() -> Path:
-    # backend style: DATA_DIR, но у бота может быть не задан — дефолт ./data
     raw = (os.getenv("DATA_DIR") or "").strip()
     if raw:
         return Path(raw)
@@ -209,8 +202,9 @@ def _data_dir() -> Path:
 
 
 def _delivery_cursor_file(channel: str) -> JsonFileStore:
-    # совместимо с тем, что ты руками создавал: events_cursor_telegram.json
-    fname = f"events_cursor_{(channel or 'telegram').strip().lower()}.json"
+    # Отдельно от CursorStore.events_cursor.json, чтобы не путаться.
+    # Пример: deliveries_cursor_telegram.json
+    fname = f"deliveries_cursor_{(channel or 'telegram').strip().lower()}.json"
     return JsonFileStore(_data_dir() / fname)
 
 
@@ -230,13 +224,30 @@ def _save_delivery_cursor(store: JsonFileStore, audit_id: int, user_id: int) -> 
 
 
 def _cursor_gt(a1: Tuple[int, int], a2: Tuple[int, int]) -> bool:
-    # True if a1 > a2 lexicographically (audit_id, user_id)
     return a1[0] > a2[0] or (a1[0] == a2[0] and a1[1] > a2[1])
 
 
 def _cursor_le(a1: Tuple[int, int], a2: Tuple[int, int]) -> bool:
-    # True if a1 <= a2
     return (a1[0] < a2[0]) or (a1[0] == a2[0] and a1[1] <= a2[1])
+
+
+def _use_delivery_queue_mode() -> bool:
+    """
+    Долгосрок: delivery-queue = основной режим.
+    Включается, если:
+      - EVENTS_USE_DELIVERY_QUEUE=1
+      - ИЛИ уже настроены internal delivery переменные (как у тебя сейчас в .env)
+    Откат в per-user можно сделать явным: EVENTS_USE_DELIVERY_QUEUE=0 и EVENTS_FORCE_PER_USER=1
+    """
+    if _truthy_env("EVENTS_FORCE_PER_USER"):
+        return False
+    if _truthy_env("EVENTS_USE_DELIVERY_QUEUE"):
+        return True
+
+    # Авто-включение по факту наличия настроек очереди
+    ch = (os.getenv("EVENTS_DELIVERY_CHANNEL") or "").strip()
+    uid = _safe_int(os.getenv("EVENTS_INTERNAL_API_USER_ID"))
+    return bool(ch) and bool(uid and uid > 0)
 
 
 async def _poll_per_user_events(
@@ -384,10 +395,10 @@ async def _poll_delivery_queue(
 ) -> None:
     """
     Delivery-queue mode:
-      - fetch pending deliveries for channel=telegram via internal endpoint
-      - send to chat_id resolved by payload.telegram_chat_id (preferred) or bindings fallback
-      - ack SENT/FAILED in backend to resolve telegram/PENDING
-      - maintain shared composite cursor (audit_id,user_id) in DATA_DIR/events_cursor_<channel>.json
+      - fetch pending deliveries via internal endpoint
+      - send to telegram_chat_id (preferred) or bindings fallback
+      - ack SENT/FAILED in backend
+      - maintain shared composite cursor (audit_id,user_id) in DATA_DIR/deliveries_cursor_<channel>.json
     """
     last_no_bindings_log_ts = 0.0
     did_reset = False
@@ -435,26 +446,20 @@ async def _poll_delivery_queue(
             cur_audit, cur_user = _load_delivery_cursor(cursor_file)
             since_tuple = (int(cur_audit), int(cur_user))
 
+            # миграция/совместимость: если раньше кто-то двигал только audit_id в CursorStore
             legacy_since = int(cursor_store.get(int(cursor_key), default=0) or 0)
             if legacy_since > since_tuple[0]:
                 since_tuple = (legacy_since, 0)
                 _save_delivery_cursor(cursor_file, since_tuple[0], since_tuple[1])
 
-            try:
-                resp = await backend.get_pending_deliveries(
-                    user_id=int(internal_user_id),
-                    channel=str(channel),
-                    cursor_from=int(since_tuple[0]),
-                    cursor_user_id=int(since_tuple[1]),
-                    limit=int(per_user_limit),
-                )
-            except TypeError:
-                resp = await backend.get_pending_deliveries(
-                    user_id=int(internal_user_id),
-                    channel=str(channel),
-                    cursor_from=int(since_tuple[0]),
-                    limit=int(per_user_limit),
-                )
+            # важно: передаём cursor_user_id, иначе возможно "залипание" на одном audit_id
+            resp = await backend.get_pending_deliveries(
+                user_id=int(internal_user_id),
+                channel=str(channel),
+                cursor_from=int(since_tuple[0]),
+                cursor_user_id=int(since_tuple[1]),
+                limit=int(per_user_limit),
+            )
 
             if resp.status_code != 200:
                 log.warning(
@@ -589,7 +594,7 @@ async def _poll_delivery_queue(
                     except Exception:
                         log.exception("ack_delivery failed: audit_id=%s delivery_user_id=%s status=FAILED", audit_id, delivery_user_id)
 
-                # ВАЖНО: курсор двигаем после обработки элемента (успех/ошибка) — чтобы не слать повторно
+                # курсор двигаем после обработки элемента
                 current_cursor = item_tuple
                 _save_delivery_cursor(cursor_file, current_cursor[0], current_cursor[1])
                 cursor_store.set(int(cursor_key), int(current_cursor[0]))
@@ -633,16 +638,18 @@ async def events_polling_loop(
 ) -> None:
     allowed_types_norm = {t.upper().strip() for t in (allowed_types or set()) if str(t).strip()}
 
+    mode = "delivery-queue" if _use_delivery_queue_mode() else "per-user"
+
     log.info(
         "Events polling started. mode=%s interval=%ss limit=%s allowed_types=%s cursor_file=%s",
-        "delivery-queue" if _use_delivery_queue_mode() else "per-user",
+        mode,
         poll_interval_s,
         per_user_limit,
         sorted(allowed_types_norm) if allowed_types_norm else "ALL",
         str(cursor_store.path),
     )
 
-    if _use_delivery_queue_mode():
+    if mode == "delivery-queue":
         await _poll_delivery_queue(
             application=application,
             backend=backend,

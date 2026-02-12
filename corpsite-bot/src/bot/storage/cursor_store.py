@@ -16,7 +16,6 @@ def _utc_now_iso() -> str:
 
 
 def _utc_now_compact() -> str:
-    # для имени файла бэкапа
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
@@ -39,11 +38,10 @@ class CursorStore:
 
         raw_text = ""
         try:
-            raw_text = self.path.read_text(encoding="utf-8")
+            # utf-8-sig: на случай BOM (PowerShell/редакторы)
+            raw_text = self.path.read_text(encoding="utf-8-sig")
             raw = json.loads(raw_text)
         except Exception:
-            # если файл повреждён — делаем бэкап и стартуем с пустого,
-            # чтобы не сломать поллер
             try:
                 bad = self.path.with_name(f"{self.path.name}.bad.{_utc_now_compact()}")
                 bad.write_text(raw_text or "", encoding="utf-8")
@@ -60,8 +58,7 @@ class CursorStore:
             try:
                 uid = int(k)
                 cur = int(v)
-                # Важно: разрешаем uid == 0 для shared cursor (delivery-queue mode).
-                # Отрицательные ключи запрещены.
+                # разрешаем uid == 0 для shared cursor (delivery-queue mode)
                 if uid >= 0 and cur >= 0:
                     out[uid] = cur
             except Exception:
@@ -76,7 +73,6 @@ class CursorStore:
         user_id = int(user_id)
         cursor = int(cursor)
 
-        # Важно: разрешаем user_id == 0 (shared cursor).
         if user_id < 0 or cursor < 0:
             return
 
@@ -100,7 +96,6 @@ class CursorStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
-        # атомарная запись: tmp -> replace
         with tempfile.NamedTemporaryFile(
             "w",
             delete=False,

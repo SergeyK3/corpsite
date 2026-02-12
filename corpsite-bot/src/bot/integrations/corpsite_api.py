@@ -387,24 +387,28 @@ class CorpsiteAPI:
     # -----------------------
     # Deliveries (telegram channel ack)
     # -----------------------
+
     async def get_pending_deliveries(
         self,
         *,
         user_id: int,
         channel: str,
         cursor_from: int = 0,
+        cursor_user_id: int = 0,
         limit: int = 200,
     ) -> APIResponse:
         """
-        GET /tasks/internal/task-event-deliveries/pending?channel=telegram&cursor_from=0&limit=200
+        GET /tasks/internal/task-event-deliveries/pending?channel=telegram&cursor_from=0&cursor_user_id=0&limit=200
 
         Возвращает:
-          { "items": [...], "next_cursor": <int> }
-        items содержат audit_id, user_id, task_id, event_type, payload, created_at, channel, status
+          { "items": [...], "next_cursor": <int>, "next_cursor_audit_id": <int>, "next_cursor_user_id": <int> }
+        items содержат audit_id, user_id, task_id, event_type, payload, created_at, channel, status, telegram_chat_id
         """
+        ch = str(channel).strip() or "telegram"
         params: Dict[str, Any] = {
-            "channel": str(channel).strip(),
+            "channel": ch,
             "cursor_from": int(cursor_from),
+            "cursor_user_id": int(cursor_user_id),
             "limit": int(limit),
         }
         return await self._request(
