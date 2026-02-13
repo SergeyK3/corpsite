@@ -96,11 +96,20 @@ function normalizeList<T>(body: any): T[] {
  * TASKS
  * ============================================================ */
 
-export async function apiGetTasks(params: { devUserId: number; limit?: number; offset?: number }): Promise<TaskListItem[]> {
+export async function apiGetTasks(params: {
+  devUserId: number;
+  limit?: number;
+  offset?: number;
+  executor_role_id?: number; // NEW: filter by executor role
+}): Promise<TaskListItem[]> {
   const limit = params.limit ?? 50;
   const offset = params.offset ?? 0;
 
-  const url = buildUrl("/tasks", { limit, offset });
+  const url = buildUrl("/tasks", {
+    limit,
+    offset,
+    executor_role_id: params.executor_role_id ?? undefined, // NEW
+  });
 
   const res = await fetch(url.toString(), {
     method: "GET",
@@ -115,6 +124,7 @@ export async function apiGetTasks(params: { devUserId: number; limit?: number; o
       url: url.toString(),
       limit,
       offset,
+      executor_role_id: params.executor_role_id ?? null, // NEW
       devUserId: params.devUserId,
     });
   }

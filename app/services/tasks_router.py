@@ -76,6 +76,8 @@ def list_tasks(
     status_code: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
+    # filter by executor role
+    executor_role_id: Optional[int] = Query(None, ge=1),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
@@ -92,34 +94,33 @@ def list_tasks(
         if not allowed:
             raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
 
+        # keep these for compatibility (not strictly needed anymore, but harmless)
         functional_lbl = scope_label_or_none(allowed, "functional")
         admin_lbl = scope_label_or_none(allowed, "admin")
+        _ = functional_lbl, admin_lbl  # silence linters
 
         where: List[str] = []
 
         # RBAC-фильтр: суперв/деп видят всё (текущее поведение системы)
         if not is_supervisor_or_deputy(role_id):
-            params["functional_scope"] = functional_lbl
-            params["admin_scope"] = admin_lbl
+            # IMPORTANT: list visibility must match ensure_task_visible_or_404():
+            # - initiator sees own tasks
+            # - executor by role sees tasks regardless of assignment_scope
+            where.append(
+                "("
+                "(t.executor_role_id = :role_id) "
+                "OR (t.initiator_user_id = :current_user_id)"
+                ")"
+            )
 
-            if functional_lbl and admin_lbl:
-                where.append(
-                    "("
-                    "(t.executor_role_id = :role_id AND t.assignment_scope = :functional_scope) "
-                    "OR (t.initiator_user_id = :current_user_id)"
-                    ")"
-                )
-            else:
-                where.append(
-                    "("
-                    "(t.executor_role_id = :role_id) "
-                    "OR (t.initiator_user_id = :current_user_id)"
-                    ")"
-                )
+        # executor_role_id filter (applies for everyone, including supervisor/deputy)
+        if executor_role_id is not None:
+            where.append("t.executor_role_id = :executor_role_id")
+            params["executor_role_id"] = int(executor_role_id)
 
         if period_id is not None:
             where.append("t.period_id = :period_id")
-            params["period_id"] = period_id
+            params["period_id"] = int(period_id)
 
         if status_code:
             where.append("ts.code = :status_code")
@@ -284,7 +285,6 @@ def submit_report(
         raise HTTPException(status_code=422, detail="report_link is required")
 
     current_comment = _pick_str(payload, ["current_comment", "comment"])
-    # optional: reason can be carried too (UI sometimes uses reason field)
     reason = _pick_str(payload, ["reason"])
 
     with engine.begin() as conn:
@@ -346,7 +346,6 @@ def approve_report(
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
-    Approve task report.
     UI contract: POST /tasks/{id}/approve { reason? }
     Backward-compat: supports { approve: true|false, current_comment? } and will route approve=false to REJECT.
     """
@@ -397,7 +396,6 @@ def reject_report(
     x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
 ) -> Dict[str, Any]:
     """
-    Explicit endpoint for rejection (UX / clear contract).
     UI contract: POST /tasks/{id}/reject { reason? }
     """
     current_user_id = get_current_user_id(x_user_id)

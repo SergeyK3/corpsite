@@ -45,9 +45,7 @@ DEPUTY_ROLE_IDS = _parse_int_set("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS = _parse_int_set("DIRECTOR_ROLE_IDS")
 
 # allow-list Telegram (если пусто — ограничения нет)
-TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set(
-    "TELEGRAM_DELIVERY_ALLOW_USER_IDS"
-)
+TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set("TELEGRAM_DELIVERY_ALLOW_USER_IDS")
 
 # optional: какие события не отправлять самому актору
 DROP_SELF_FOR_TYPES: Set[str] = _parse_str_set("TASK_EVENTS_DROP_SELF_TYPES")
@@ -193,9 +191,7 @@ def resolve_recipients_for_task_event_tx(
             {"rid": int(task.executor_role_id)},
         ).scalars().all()
 
-        mgmt_role_ids = sorted(
-            set(SUPERVISOR_ROLE_IDS) | set(DEPUTY_ROLE_IDS) | set(DIRECTOR_ROLE_IDS)
-        )
+        mgmt_role_ids = sorted(set(SUPERVISOR_ROLE_IDS) | set(DEPUTY_ROLE_IDS) | set(DIRECTOR_ROLE_IDS))
         mgmt_users: List[int] = []
         if mgmt_role_ids:
             mgmt_users = conn.execute(
@@ -211,9 +207,7 @@ def resolve_recipients_for_task_event_tx(
             ).scalars().all()
 
         recipients = _uniq_ints(
-            [task.initiator_user_id]
-            + [int(x) for x in executor_users]
-            + [int(x) for x in mgmt_users]
+            [task.initiator_user_id] + [int(x) for x in executor_users] + [int(x) for x in mgmt_users]
         )
 
     if _should_drop_self(et):
@@ -235,12 +229,16 @@ def create_task_event_tx(
     if not et:
         raise ValueError("event_type is required")
 
-    payload = payload or {}
+    # payload должен быть dict (на всякий случай)
+    if payload is None:
+        payload = {}
+    elif not isinstance(payload, dict):
+        payload = {"payload": payload}
 
     row = conn.execute(
         text(
             """
-            SELECT task_id, initiator_user_id, executor_role_id
+            SELECT task_id, initiator_user_id, executor_role_id, title
             FROM public.tasks
             WHERE task_id = :tid
             """
@@ -255,6 +253,15 @@ def create_task_event_tx(
         initiator_user_id=int(row["initiator_user_id"]),
         executor_role_id=int(row["executor_role_id"]),
     )
+
+    # UX enrichment: task_title в payload (для Telegram/UI)
+    try:
+        t = str(row.get("title") or "").strip()
+        if t and not str(payload.get("task_title") or "").strip():
+            payload["task_title"] = t
+    except Exception:
+        # не ломаем событие из-за UX
+        pass
 
     recipients = resolve_recipients_for_task_event_tx(
         conn,
@@ -323,9 +330,7 @@ def create_task_event_tx(
     if "telegram" in channels:
         filtered_uids = recipients
         if TELEGRAM_DELIVERY_ALLOW_USER_IDS:
-            filtered_uids = [
-                uid for uid in recipients if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS
-            ]
+            filtered_uids = [uid for uid in recipients if uid in TELEGRAM_DELIVERY_ALLOW_USER_IDS]
 
         if filtered_uids:
             tg_rows = conn.execute(

@@ -202,9 +202,9 @@ def _data_dir() -> Path:
 
 
 def _delivery_cursor_file(channel: str) -> JsonFileStore:
-    # Отдельно от CursorStore.events_cursor.json, чтобы не путаться.
-    # Пример: deliveries_cursor_telegram.json
-    fname = f"deliveries_cursor_{(channel or 'telegram').strip().lower()}.json"
+    # Отдельно от CursorStore.bot_events_cursor.json, чтобы не путаться.
+    # Пример: bot_deliveries_cursor_telegram.json
+    fname = f"bot_deliveries_cursor_{(channel or 'telegram').strip().lower()}.json"
     return JsonFileStore(_data_dir() / fname)
 
 
@@ -398,7 +398,7 @@ async def _poll_delivery_queue(
       - fetch pending deliveries via internal endpoint
       - send to telegram_chat_id (preferred) or bindings fallback
       - ack SENT/FAILED in backend
-      - maintain shared composite cursor (audit_id,user_id) in DATA_DIR/deliveries_cursor_<channel>.json
+      - maintain shared composite cursor (audit_id,user_id) in DATA_DIR/bot_deliveries_cursor_<channel>.json
     """
     last_no_bindings_log_ts = 0.0
     did_reset = False

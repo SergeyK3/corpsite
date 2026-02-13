@@ -30,7 +30,8 @@ class CursorStore:
             data_dir = os.path.join(os.getcwd(), "data")
         p = Path(data_dir).resolve()
         p.mkdir(parents=True, exist_ok=True)
-        return p / "events_cursor.json"
+        # IMPORTANT: bot-prefixed runtime file to avoid collisions with backend/runtime artifacts
+        return p / "bot_events_cursor.json"
 
     def load_all(self) -> Dict[int, int]:
         if not self.path.exists():

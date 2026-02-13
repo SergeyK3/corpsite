@@ -1,37 +1,51 @@
+# -----------------------
 # Python
+# -----------------------
 venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
+
+# -----------------------
 # IDE / Editor
+# -----------------------
 .vscode/
 .idea/
 
+
+# -----------------------
 # OS
+# -----------------------
 .DS_Store
 Thumbs.db
 
-# Environment 
+
+# -----------------------
+# Environment
+# -----------------------
 .env
 .env.*
 
+
+# -----------------------
 # Logs
+# -----------------------
 *.log
 
-# Docker
+
+# -----------------------
+# Docker / runtime
+# -----------------------
 *.pid
 
-# Project docs (если не версионируются)
-docs0/
+
+# -----------------------
+# Documentation
+# -----------------------
+# Ignore docs by default
 docs/
-
-# Manual PowerShell scripts (local smoke tests)
-scripts/*.ps1
-
-bindings.json
-bindings.json.tmp
 
 # Allow ADRs in repo even if docs/ is ignored
 !docs/
@@ -39,13 +53,33 @@ docs/*
 !docs/adr/
 !docs/adr/**
 
+
+# -----------------------
+# Manual PowerShell scripts (local smoke tests)
+# -----------------------
+scripts/*.ps1
+
+
+# -----------------------
+# Legacy bot runtime (deprecated)
+# -----------------------
 .botdata/
 
-# local test artifacts
+
+# -----------------------
+# Local runtime state (single source of truth)
+# -----------------------
+.data/
+
+
+# -----------------------
+# Local test artifacts
+# -----------------------
 /tmp_*.xlsx
 /*.xlsx
 
 
-# local runtime data
-data/
-
+# -----------------------
+# Temporary imports
+# -----------------------
+tmp/

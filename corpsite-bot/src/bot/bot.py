@@ -53,9 +53,12 @@ ADMIN_TG_IDS_RAW = (os.getenv("ADMIN_TG_IDS") or "").strip()
 
 POLL_INTERVAL_S = float((os.getenv("EVENTS_POLL_INTERVAL_S", "5") or "5").strip())
 
-DATA_DIR = Path((os.getenv("DATA_DIR") or "").strip() or str(Path(__file__).resolve().parents[3] / ".botdata")).resolve()
-BINDINGS_PATH = Path(os.getenv("BINDINGS_PATH", str(DATA_DIR / "bindings.json")))
-EVENTS_STATE_PATH = Path(os.getenv("EVENTS_STATE_PATH", str(DATA_DIR / "events_state.json")))
+# IMPORTANT: unified runtime directory (shared across project)
+DATA_DIR = Path((os.getenv("DATA_DIR") or "").strip() or str(Path(__file__).resolve().parents[3] / ".data")).resolve()
+
+# IMPORTANT: bot-prefixed files to avoid collisions with backend artifacts
+BINDINGS_PATH = Path(os.getenv("BINDINGS_PATH", str(DATA_DIR / "bot_bindings.json")))
+EVENTS_STATE_PATH = Path(os.getenv("EVENTS_STATE_PATH", str(DATA_DIR / "bot_events_state.json")))
 
 EVENTS_POLL_TYPES_RAW = (os.getenv("EVENTS_POLL_TYPES") or "").strip()
 
@@ -154,7 +157,8 @@ async def _post_init(application: Application) -> None:
 
     application.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
 
-    cursor_store = CursorStore((DATA_DIR / "events_cursor.json").resolve())
+    # IMPORTANT: default_path already points to DATA_DIR/bot_events_cursor.json
+    cursor_store = CursorStore(CursorStore.default_path())
     application.bot_data["cursor_store"] = cursor_store
 
     from .events_poller import JsonFileStore
