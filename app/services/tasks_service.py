@@ -1,4 +1,4 @@
-# app/services/tasks_service.py
+# FILE: app/services/tasks_service.py
 from __future__ import annotations
 
 import json
@@ -21,6 +21,7 @@ def parse_int_set_env(name: str) -> Set[int]:
         try:
             out.add(int(p))
         except Exception:
+            # ignore invalid pieces
             pass
     return out
 
@@ -30,15 +31,25 @@ DEPUTY_ROLE_IDS: Set[int] = parse_int_set_env("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS: Set[int] = parse_int_set_env("DIRECTOR_ROLE_IDS")
 
 
-def is_supervisor_or_deputy(role_id: int) -> bool:
-    rid = int(role_id)
+def is_supervisor_or_deputy(role_id: Any) -> bool:
+    try:
+        rid = int(role_id)
+    except Exception:
+        return False
     return rid in SUPERVISOR_ROLE_IDS or rid in DEPUTY_ROLE_IDS
 
 
 def get_current_user_id(x_user_id: Optional[int]) -> int:
-    if not x_user_id:
+    # do not treat 0/"" as "missing" silently; validate explicitly
+    if x_user_id is None:
         raise HTTPException(status_code=401, detail="X-User-Id header is required")
-    return int(x_user_id)
+    try:
+        uid = int(x_user_id)
+    except Exception:
+        raise HTTPException(status_code=401, detail="X-User-Id header must be an integer")
+    if uid <= 0:
+        raise HTTPException(status_code=401, detail="X-User-Id header must be a positive integer")
+    return uid
 
 
 def get_user_role_id(conn, user_id: int) -> int:
@@ -86,8 +97,10 @@ def scope_label_or_none(allowed: Set[str], wanted_lower: str) -> Optional[str]:
 
 
 def _pick_default_scope(allowed: Set[str]) -> str:
-    if any(lbl.lower() == "functional" for lbl in allowed):
-        return next(lbl for lbl in allowed if lbl.lower() == "functional")
+    # Prefer functional if present; otherwise first stable label
+    for lbl in allowed:
+        if lbl.lower() == "functional":
+            return lbl
     return sorted(allowed)[0]
 
 
@@ -109,12 +122,17 @@ def normalize_assignment_scope(conn, value: Any) -> str:
         if lbl.lower() == raw_l:
             return lbl
 
-    legacy_map = {"role": "functional", "any": "functional", "user": "admin"}
+    # legacy aliases
+    legacy_map = {
+        "role": "functional",
+        "any": "functional",
+        "user": "admin",
+    }
     if raw_l in legacy_map:
-        target = legacy_map[raw_l]
-        for lbl in allowed:
-            if lbl.lower() == target:
-                return lbl
+        target_l = legacy_map[raw_l].lower()
+        mapped = scope_label_or_none(allowed, target_l)
+        if mapped:
+            return mapped
 
     raise HTTPException(
         status_code=422,
@@ -163,8 +181,11 @@ def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool
 
 
 def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    # Initiator sees own tasks
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
+
+    # Global privileged view (current behavior)
     if is_supervisor_or_deputy(current_role_id):
         return True
 
@@ -172,6 +193,7 @@ def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str,
     if scope == "functional":
         return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
+    # Other scopes currently not viewable unless initiator/supervisor/deputy
     return False
 
 
@@ -195,15 +217,44 @@ def ensure_task_visible_or_404(
 
 
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
-        return False
-    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
+    """
+    Кто может отправлять/обновлять отчёт.
+
+    Ранее: инициатор всегда запрещён.
+    Проблема: тестовый пайплайн, когда инициатор = исполнитель по роли (executor_role_id),
+    нельзя было сдать отчёт.
+
+    Новое правило:
+      - если пользователь является исполнителем по роли (executor_role_id == current_role_id) -> можно
+      - иначе (в т.ч. инициатор без роли исполнителя) -> нельзя
+    """
+    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
+        return True
+    return False
 
 
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
     if is_supervisor_or_deputy(current_role_id):
+        return True
+    return False
+
+
+def can_reject_task(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    """
+    Кто может делать reject задачи (не review-reject отчёта, а task-level reject из IN_PROGRESS/WAITING_REPORT).
+
+    Политика (минимальная, практичная):
+      - инициатор может отклонить задачу
+      - supervisor/deputy может отклонить задачу
+      - исполнитель по роли может отклонить (если это нужно как "отказ исполнителя")
+    """
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return True
+    if is_supervisor_or_deputy(current_role_id):
+        return True
+    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
         return True
     return False
 
@@ -217,21 +268,45 @@ def _allowed_actions_for_user(
     code = str(task_row.get("status_code") or "")
     actions: List[str] = []
 
-    if code == "IN_PROGRESS":
-        if can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
-            actions.append("update")
+    if code in ("IN_PROGRESS", "WAITING_REPORT"):
+        if can_report_or_update(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            task_row=task_row,
+        ):
             actions.append("report")
 
-    elif code == "WAITING_REPORT":
-        if can_report_or_update(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
-            actions.append("report")
-
-    elif code == "WAITING_APPROVAL":
-        if can_approve(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
-            actions.append("approve")
+        # NEW: task-level reject из IN_PROGRESS/WAITING_REPORT
+        if can_reject_task(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            task_row=task_row,
+        ):
             actions.append("reject")
 
-    return actions
+    if code == "WAITING_APPROVAL":
+        if can_approve(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            task_row=task_row,
+        ):
+            actions.append("approve")
+            # review-reject: WAITING_APPROVAL -> WAITING_REPORT (отклонить отчёт)
+            actions.append("reject")
+
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row) and code != "ARCHIVED":
+        actions.append("archive")
+
+    # стабильный порядок для UI/тестов (необязательно, но удобно)
+    # убираем дубли на всякий случай
+    seen: Set[str] = set()
+    out: List[str] = []
+    for a in actions:
+        if a in seen:
+            continue
+        seen.add(a)
+        out.append(a)
+    return out
 
 
 def attach_allowed_actions(
@@ -242,7 +317,9 @@ def attach_allowed_actions(
 ) -> Dict[str, Any]:
     t = dict(task)
     t["allowed_actions"] = _allowed_actions_for_user(
-        task_row=t, current_user_id=current_user_id, current_role_id=current_role_id
+        task_row=t,
+        current_user_id=current_user_id,
+        current_role_id=current_role_id,
     )
     return t
 
@@ -299,6 +376,6 @@ def write_task_audit(
             "event_type": event_type,
             "actor_id": int(actor_user_id),
             "actor_role": str(actor_role_id) if actor_role_id is not None else None,
-            "payload": json.dumps(event_payload or {}) if (event_type is not None) else json.dumps({}),
+            "payload": json.dumps(event_payload or {}) if event_type is not None else json.dumps({}),
         },
     )

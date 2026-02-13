@@ -1,4 +1,4 @@
-# corpsite-bot/src/bot/bot.py
+# FILE: corpsite-bot/src/bot/bot.py
 from __future__ import annotations
 
 import os
@@ -25,7 +25,8 @@ from .handlers.whoami import cmd_whoami
 from .handlers.unbind import cmd_unbind
 from .handlers.events import cmd_events
 
-from .events_poller import events_polling_loop, JsonFileStore
+from .events_poller import events_polling_loop
+from .storage.cursor_store import CursorStore
 
 
 # -----------------------
@@ -43,7 +44,7 @@ log = logging.getLogger("corpsite-bot")
 # Env (single source of truth)
 # -----------------------
 ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
-loaded = load_dotenv(dotenv_path=ROOT_ENV, override=True)
+loaded = load_dotenv(dotenv_path=ROOT_ENV, override=False)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -52,9 +53,12 @@ ADMIN_TG_IDS_RAW = (os.getenv("ADMIN_TG_IDS") or "").strip()
 
 POLL_INTERVAL_S = float((os.getenv("EVENTS_POLL_INTERVAL_S", "5") or "5").strip())
 
-DATA_DIR = Path(__file__).resolve().parents[3] / ".botdata"
-BINDINGS_PATH = Path(os.getenv("BINDINGS_PATH", str(DATA_DIR / "bindings.json")))
-EVENTS_STATE_PATH = Path(os.getenv("EVENTS_STATE_PATH", str(DATA_DIR / "events_state.json")))
+# IMPORTANT: unified runtime directory (shared across project)
+DATA_DIR = Path((os.getenv("DATA_DIR") or "").strip() or str(Path(__file__).resolve().parents[3] / ".data")).resolve()
+
+# IMPORTANT: bot-prefixed files to avoid collisions with backend artifacts
+BINDINGS_PATH = Path(os.getenv("BINDINGS_PATH", str(DATA_DIR / "bot_bindings.json")))
+EVENTS_STATE_PATH = Path(os.getenv("EVENTS_STATE_PATH", str(DATA_DIR / "bot_events_state.json")))
 
 EVENTS_POLL_TYPES_RAW = (os.getenv("EVENTS_POLL_TYPES") or "").strip()
 
@@ -85,6 +89,7 @@ ADMIN_TG_IDS = _parse_admin_ids(ADMIN_TG_IDS_RAW)
 ALLOWED_EVENT_TYPES = _parse_poll_types(EVENTS_POLL_TYPES_RAW)
 
 log.info("ENV ROOT_ENV=%s (exists=%s loaded=%s)", str(ROOT_ENV), ROOT_ENV.exists(), loaded)
+log.info("DATA_DIR=%s", str(DATA_DIR))
 log.info("ADMIN_TG_IDS parsed=%s", sorted(ADMIN_TG_IDS))
 log.info("EVENTS_POLL_TYPES parsed=%s", sorted(ALLOWED_EVENT_TYPES))
 
@@ -139,15 +144,6 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # Lifecycle hooks
 # -----------------------
 async def _post_init(application: Application) -> None:
-    """
-    Инициализация зависимостей и запуск poller.
-
-    VARIANT A:
-    - НЕ делаем блокирующий healthcheck (из-за рассинхрона методов клиента это ломало запуск).
-    - poller стартует всегда; доступ/ACL/релевантность аудитории контролируется backend.
-    - ошибки/недоступность backend обрабатываются внутри polling-цикла (лог + backoff).
-    """
-    # ensure data dir exists
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -155,12 +151,17 @@ async def _post_init(application: Application) -> None:
 
     backend = CorpsiteAPI(base_url=API_BASE_URL, timeout_s=15.0)
 
-    # Единая регистрация API-клиента для всех хендлеров.
     application.bot_data["backend"] = backend
     application.bot_data["api"] = backend
     application.bot_data["corpsite_api"] = backend
 
     application.bot_data["admin_tg_ids"] = ADMIN_TG_IDS
+
+    # IMPORTANT: default_path already points to DATA_DIR/bot_events_cursor.json
+    cursor_store = CursorStore(CursorStore.default_path())
+    application.bot_data["cursor_store"] = cursor_store
+
+    from .events_poller import JsonFileStore
 
     bindings_store = JsonFileStore(BINDINGS_PATH)
     state_store = JsonFileStore(EVENTS_STATE_PATH)
@@ -172,19 +173,18 @@ async def _post_init(application: Application) -> None:
 
     log.info("Initialized backend client. API_BASE_URL=%s", API_BASE_URL)
     log.info(
-        "Events polling configured. interval=%ss bindings=%s state=%s",
+        "Events polling configured. interval=%ss bindings=%s state=%s cursor=%s",
         POLL_INTERVAL_S,
         BINDINGS_PATH,
         EVENTS_STATE_PATH,
+        str(cursor_store.path),
     )
 
-    # защита от повторного запуска
     existing: Any = application.bot_data.get("events_poll_task")
     if existing is not None and getattr(existing, "done", lambda: True)() is False:
         log.info("Events polling already running; skip start")
         return
 
-    # VARIANT A: always start poller (no blocking healthcheck)
     task = asyncio.create_task(
         events_polling_loop(
             application=application,
@@ -192,19 +192,17 @@ async def _post_init(application: Application) -> None:
             poll_interval_s=POLL_INTERVAL_S,
             bindings_store=bindings_store,
             state_store=state_store,
+            cursor_store=cursor_store,
             per_user_limit=200,
             allowed_types=ALLOWED_EVENT_TYPES,
         ),
         name="events-poller",
     )
     application.bot_data["events_poll_task"] = task
-    log.info("Events polling started (healthcheck skipped).")
+    log.info("Events polling started.")
 
 
 async def _post_stop(application: Application) -> None:
-    """
-    Корректная остановка фоновых задач.
-    """
     t: Any = application.bot_data.get("events_poll_task")
     if t is None:
         return
@@ -219,9 +217,6 @@ async def _post_stop(application: Application) -> None:
 
 
 async def _post_shutdown(application: Application) -> None:
-    """
-    Закрытие ресурсов.
-    """
     backend: Optional[CorpsiteAPI] = application.bot_data.get("backend")  # type: ignore[assignment]
     if backend is not None:
         try:

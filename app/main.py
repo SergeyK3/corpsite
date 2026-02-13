@@ -1,4 +1,4 @@
-# app/main.py
+# FILE: app/main.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,11 +7,20 @@ from typing import Dict, Any, List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+
+from app.errors import raise_error, ErrorCode
+
+# -----------------------
+# Env (single source of truth)
+# IMPORTANT: load .env BEFORE importing app.* modules that may read os.getenv at import time
+# -----------------------
+ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(dotenv_path=ROOT_ENV)
 
 from app.db.engine import engine
 from app.meta import router as meta_router
@@ -19,14 +28,10 @@ from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
 from app.directory import router as directory_router
-from app.errors import raise_error, ErrorCode
 
-
-# -----------------------
-# Env (single source of truth)
-# -----------------------
-ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(dotenv_path=ROOT_ENV)
+# regular tasks
+from app.services.regular_tasks_router import router as internal_regular_tasks_router
+from app.services.regular_tasks_public_router import router as regular_tasks_router
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -46,12 +51,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
+# -----------------------
+# Routers (public)
+# -----------------------
 app.include_router(meta_router)
 app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any
 app.include_router(tg_bind_router)
 app.include_router(directory_router)
+
+# Regular tasks (PUBLIC CRUD)
+app.include_router(regular_tasks_router)
+
+# -----------------------
+# Routers (internal)
+# -----------------------
+app.include_router(internal_regular_tasks_router)
 
 
 # -----------------------
@@ -177,4 +192,4 @@ def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, A
                 extra={"period_id": int(period_id)},
             )
 
-    return {"period_id": period_id, "created_tasks": created_count}
+    return {"period_id": int(period_id), "created_tasks": int(created_count)}

@@ -383,3 +383,78 @@ class CorpsiteAPI:
             params["event_type"] = str(event_type).strip()
 
         return await self._request("GET", "/tasks/me/events", user_id=user_id, params=params)
+
+    # -----------------------
+    # Deliveries (telegram channel ack)
+    # -----------------------
+
+    async def get_pending_deliveries(
+        self,
+        *,
+        user_id: int,
+        channel: str,
+        cursor_from: int = 0,
+        cursor_user_id: int = 0,
+        limit: int = 200,
+    ) -> APIResponse:
+        """
+        GET /tasks/internal/task-event-deliveries/pending?channel=telegram&cursor_from=0&cursor_user_id=0&limit=200
+
+        Возвращает:
+          { "items": [...], "next_cursor": <int>, "next_cursor_audit_id": <int>, "next_cursor_user_id": <int> }
+        items содержат audit_id, user_id, task_id, event_type, payload, created_at, channel, status, telegram_chat_id
+        """
+        ch = str(channel).strip() or "telegram"
+        params: Dict[str, Any] = {
+            "channel": ch,
+            "cursor_from": int(cursor_from),
+            "cursor_user_id": int(cursor_user_id),
+            "limit": int(limit),
+        }
+        return await self._request(
+            "GET",
+            "/tasks/internal/task-event-deliveries/pending",
+            user_id=user_id,
+            params=params,
+        )
+
+    async def ack_delivery(
+        self,
+        *,
+        user_id: int,
+        audit_id: int,
+        delivery_user_id: int,
+        channel: str,
+        status: str,
+        error_code: Optional[str] = None,
+        error_text: Optional[str] = None,
+    ) -> APIResponse:
+        """
+        POST /tasks/internal/task-event-deliveries/ack
+        JSON:
+          {
+            "audit_id": 44,
+            "user_id": 34,
+            "channel": "telegram",
+            "status": "SENT" | "FAILED",
+            "error_code": "...",
+            "error_text": "..."
+          }
+        """
+        body: Dict[str, Any] = {
+            "audit_id": int(audit_id),
+            "user_id": int(delivery_user_id),
+            "channel": str(channel).strip(),
+            "status": str(status or "").strip().upper(),
+        }
+        if error_code:
+            body["error_code"] = str(error_code).strip()
+        if error_text:
+            body["error_text"] = str(error_text).strip()
+
+        return await self._request(
+            "POST",
+            "/tasks/internal/task-event-deliveries/ack",
+            user_id=user_id,
+            json_body=body,
+        )
