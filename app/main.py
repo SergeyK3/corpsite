@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +41,31 @@ class UTF8JSONResponse(JSONResponse):
 
 
 app = FastAPI(title="Corpsite MVP", default_response_class=UTF8JSONResponse)
+
+
+# -----------------------
+# OpenAPI
+# IMPORTANT:
+# Не добавляем securitySchemes вручную (BearerAuth удалён).
+# FastAPI сам сформирует securitySchemes из Security(HTTPBearer) зависимостей (JWTBearer).
+# -----------------------
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version="0.1.0",
+        description=app.description,
+        routes=app.routes,
+    )
+
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
 
 app.add_middleware(
     CORSMiddleware,

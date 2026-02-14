@@ -9,7 +9,8 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Security, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -17,6 +18,33 @@ from app.db.engine import engine
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# -----------------------
+# Swagger / OpenAPI security
+# -----------------------
+# We need Swagger to ALWAYS attach Authorization header to secured endpoints.
+# Using HTTPBearer(auto_error=False) makes the scheme optional in OpenAPI in many setups,
+# so Swagger won't add the header. We make it required, but keep your 401 messages.
+class JWTBearer(HTTPBearer):
+    def __init__(self) -> None:
+        # auto_error=True => OpenAPI marks it as security requirement (Swagger will inject header)
+        super().__init__(auto_error=True)
+
+    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
+        try:
+            creds = await super().__call__(request)
+        except HTTPException:
+            # Normalize any "not authenticated" to your 401 wording
+            raise HTTPException(status_code=401, detail="Missing Authorization: Bearer token")
+
+        if not creds or (creds.scheme or "").lower() != "bearer" or not (creds.credentials or "").strip():
+            raise HTTPException(status_code=401, detail="Missing Authorization: Bearer token")
+
+        return creds
+
+
+_bearer = JWTBearer()
 
 
 # -----------------------
@@ -119,21 +147,6 @@ def decode_and_verify_token(token: str) -> Dict[str, Any]:
     return payload
 
 
-def _auth_header_to_token(authorization: Optional[str]) -> Optional[str]:
-    if not authorization:
-        return None
-    a = authorization.strip()
-    if not a:
-        return None
-    parts = a.split(None, 1)
-    if len(parts) != 2:
-        return None
-    scheme, token = parts[0].lower(), parts[1].strip()
-    if scheme != "bearer" or not token:
-        return None
-    return token
-
-
 def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     with engine.connect() as conn:
         row = conn.execute(
@@ -189,9 +202,9 @@ def _get_user_auth_row_by_login(login: str) -> Optional[Dict[str, Any]]:
 # Dependencies (for other routers)
 # -----------------------
 def get_current_user(
-    authorization: Optional[str] = Header(default=None),
+    creds: HTTPAuthorizationCredentials = Security(_bearer),
 ) -> Dict[str, Any]:
-    token = _auth_header_to_token(authorization)
+    token = (creds.credentials or "").strip()
     if not token:
         raise HTTPException(status_code=401, detail="Missing Authorization: Bearer token")
 

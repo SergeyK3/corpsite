@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Security
 from fastapi.responses import Response
 from sqlalchemy import text
 
@@ -82,7 +82,7 @@ def list_tasks(
     executor_role_id: Optional[int] = Query(None, ge=1),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     current_user_id = int(user["user_id"])
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
@@ -190,7 +190,7 @@ def list_tasks(
 def get_task(
     task_id: int = Path(..., ge=1),
     include_archived: bool = Query(False),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     current_user_id = int(user["user_id"])
 
@@ -213,7 +213,7 @@ def get_task(
 @router.post("/")
 def create_task(
     payload: Dict[str, Any],
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     current_user_id = int(user["user_id"])
 
@@ -288,7 +288,7 @@ def create_task(
 def submit_report(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     current_user_id = int(user["user_id"])
 
@@ -355,7 +355,7 @@ def submit_report(
 def approve_report(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     """
     UI contract: POST /tasks/{id}/approve { reason? }
@@ -405,7 +405,7 @@ def approve_report(
 def reject_report(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     """
     UI contract: POST /tasks/{id}/reject { reason? }
@@ -451,7 +451,7 @@ def reject_report(
 def archive_task(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     """
     UI contract: POST /tasks/{id}/archive { reason? }
@@ -495,7 +495,7 @@ def archive_task(
 @router.delete("/{task_id}", status_code=204)
 def delete_task(
     task_id: int = Path(..., ge=1),
-    user: Dict[str, Any] = Depends(get_current_user),
+    user: Dict[str, Any] = Security(get_current_user),
 ) -> Response:
     """
     Legacy archive endpoint (kept).
