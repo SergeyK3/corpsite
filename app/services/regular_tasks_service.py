@@ -24,7 +24,7 @@ def _env_int(name: str, default: int) -> int:
 SYSTEM_USER_ID: int = _env_int("REGULAR_TASKS_SYSTEM_USER_ID", 1)
 TZ_OFFSET_HOURS: int = _env_int("REGULAR_TASKS_TZ_OFFSET_HOURS", 5)
 
-# fallback для проектов, где модель periods ещё не расширена:
+# оставляем на всякий случай, но для вашей схемы мы используем reporting_periods
 FALLBACK_PERIOD_ID: int = _env_int("REGULAR_TASKS_FALLBACK_PERIOD_ID", 1)
 
 
@@ -39,7 +39,6 @@ class RunStats:
 
 def _now_local() -> datetime:
     # фиксируем UTC+5 как в проекте (простая модель)
-    # timezone-aware UTC, затем сдвиг
     return datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET_HOURS)
 
 
@@ -90,9 +89,7 @@ def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict
         byweekday = schedule_params.get("byweekday")
         if not isinstance(byweekday, list) or not byweekday:
             return None
-        # выбираем ближайший день недели В ТЕКУЩЕЙ неделе (ISO), который соответствует byweekday
         # v1 policy: "точка" = первый совпадающий день недели, начиная с понедельника текущей недели
-        # (простая и предсказуемая модель)
         week_start = d - timedelta(days=_weekday_iso(d) - 1)
         candidates: List[date] = []
         for x in byweekday:
@@ -120,7 +117,6 @@ def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict
             if md == -1:
                 return _last_day_of_month(d)
             if 1 <= md <= 31:
-                # ограничиваем в рамках месяца
                 first = _first_day_of_month(d)
                 last = _last_day_of_month(d)
                 cand = date(d.year, d.month, min(md, last.day))
@@ -153,7 +149,6 @@ def _validate_template_schedule(schedule_type: str, schedule_params: Dict[str, A
 
     tt = schedule_params.get("time")
     if tt is not None:
-        # если time задан — он должен парситься как HH:MM
         if _parse_time_hhmm(str(tt)) is None:
             return "schedule_params.time must be HH:MM (e.g. '10:00') if provided"
 
@@ -172,13 +167,10 @@ def _is_due_today_or_with_offset(
     if target_date is None:
         return False
 
-    # если offset=0, создаём в день "точки"
-    # если offset>0, создаём заранее (target - offset)
     create_day = target_date - timedelta(days=max(int(create_offset_days), 0))
     if today != create_day:
         return False
 
-    # если задано время, создаём не раньше этого времени
     tt = _parse_time_hhmm(str(schedule_params.get("time") or ""))
     if tt is not None:
         if now_local.time() < tt:
@@ -187,61 +179,71 @@ def _is_due_today_or_with_offset(
     return True
 
 
-def _period_resolve(conn: Connection, *, schedule_type: str, for_date: date) -> int:
+def _prev_month_period_bounds(for_date: date) -> Tuple[date, date]:
+    # предыдущий месяц относительно for_date
+    first_cur = _first_day_of_month(for_date)
+    last_prev = first_cur - timedelta(days=1)
+    return _first_day_of_month(last_prev), _last_day_of_month(last_prev)
+
+
+def _prev_week_period_bounds(for_date: date) -> Tuple[date, date]:
+    # предыдущая ISO-неделя относительно for_date: Mon..Sun
+    week_start_cur = for_date - timedelta(days=_weekday_iso(for_date) - 1)
+    week_start_prev = week_start_cur - timedelta(days=7)
+    week_end_prev = week_start_prev + timedelta(days=6)
+    return week_start_prev, week_end_prev
+
+
+def _reporting_period_resolve(conn: Connection, *, schedule_type: str, for_date: date) -> int:
     """
-    v1: пытаемся использовать periods(period_type, period_key) если они существуют.
-    иначе fallback на REGULAR_TASKS_FALLBACK_PERIOD_ID (для запуска уже сейчас).
+    Основная модель для вашей БД:
+      tasks.period_id -> reporting_periods.period_id
+
+    Правило: создаём отчёт ЗА ПРЕДЫДУЩИЙ период.
+      - monthly: предыдущий месяц
+      - weekly:  предыдущая неделя (Mon..Sun)
+
+    Если периода нет — создаём (по uq_period).
     """
-    cols = conn.execute(
+    st = (schedule_type or "").strip().lower()
+    if st == "weekly":
+        d0, d1 = _prev_week_period_bounds(for_date)
+        kind = "WEEK"
+        label = f"{d0.isoformat()}..{d1.isoformat()}"
+    else:
+        d0, d1 = _prev_month_period_bounds(for_date)
+        kind = "MONTH"
+        label = f"{d0.strftime('%B %Y')}"  # технический label; у вас могут быть свои тестовые лейблы
+
+    row = conn.execute(
         text(
             """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'periods'
-              AND column_name IN ('period_type', 'period_key')
+            SELECT period_id
+            FROM public.reporting_periods
+            WHERE kind = (:kind)::period_kind_t
+              AND date_start = :ds
+              AND date_end = :de
             """
-        )
-    ).scalars().all()
-    has_period_type = "period_type" in cols
-    has_period_key = "period_key" in cols
+        ),
+        {"kind": kind, "ds": d0, "de": d1},
+    ).mappings().first()
+    if row and row.get("period_id"):
+        return int(row["period_id"])
 
-    st = (schedule_type or "").strip().lower()
-    if has_period_type and has_period_key:
-        if st == "weekly":
-            iso_year, iso_week, _ = for_date.isocalendar()
-            period_type = "week"
-            period_key = f"{iso_year}-W{iso_week:02d}"
-        else:
-            period_type = "month"
-            period_key = f"{for_date.year}-{for_date.month:02d}"
+    created = conn.execute(
+        text(
+            """
+            INSERT INTO public.reporting_periods (kind, date_start, date_end, label, is_closed)
+            VALUES ((:kind)::period_kind_t, :ds, :de, :label, false)
+            ON CONFLICT (kind, date_start, date_end)
+            DO UPDATE SET label = EXCLUDED.label
+            RETURNING period_id
+            """
+        ),
+        {"kind": kind, "ds": d0, "de": d1, "label": label},
+    ).scalar_one()
 
-        row = conn.execute(
-            text(
-                """
-                SELECT period_id
-                FROM public.periods
-                WHERE period_type = :pt AND period_key = :pk
-                """
-            ),
-            {"pt": period_type, "pk": period_key},
-        ).mappings().first()
-        if row and row.get("period_id"):
-            return int(row["period_id"])
-
-        created = conn.execute(
-            text(
-                """
-                INSERT INTO public.periods (period_type, period_key)
-                VALUES (:pt, :pk)
-                RETURNING period_id
-                """
-            ),
-            {"pt": period_type, "pk": period_key},
-        ).scalar_one()
-        return int(created)
-
-    return int(FALLBACK_PERIOD_ID)
+    return int(created)
 
 
 def _log_run_item_safe(
@@ -257,13 +259,6 @@ def _log_run_item_safe(
     error: Optional[str],
     meta: Dict[str, Any],
 ) -> None:
-    """
-    Пишем подробный журнал по шаблону в рамках запуска.
-
-    ВАЖНО: просто try/except недостаточно, потому что ошибка INSERT внутри транзакции
-    помечает транзакцию как failed. Поэтому пишем через SAVEPOINT (begin_nested),
-    чтобы сбой логирования не валил основной run.
-    """
     try:
         with conn.begin_nested():  # SAVEPOINT
             conn.execute(
@@ -306,7 +301,6 @@ def _log_run_item_safe(
                 },
             )
     except Exception:
-        # intentionally swallow (and SAVEPOINT rollback already handled)
         return
 
 
@@ -316,10 +310,6 @@ def run_regular_tasks_generation_tx(
     run_at_local: Optional[datetime] = None,
     dry_run: bool = False,
 ) -> Tuple[int, Dict[str, Any]]:
-    """
-    Запуск генерации (в текущей транзакции).
-    Возвращает (run_id, stats_dict).
-    """
     now_local = run_at_local or _now_local()
 
     run_id = conn.execute(
@@ -366,7 +356,6 @@ def run_regular_tasks_generation_tx(
             errors.append({"regular_task_id": None, "error": "regular_task_id is not an int"})
             continue
 
-        # Базовый meta для журнала
         base_meta: Dict[str, Any] = {
             "dry_run": bool(dry_run),
             "now_local": now_local.isoformat(),
@@ -379,16 +368,17 @@ def run_regular_tasks_generation_tx(
                 schedule_params = {}
 
             create_offset_days = _safe_int(t.get("create_offset_days")) or 0
+            due_offset_days = _safe_int(t.get("due_offset_days")) or 0
+
             base_meta.update(
                 {
                     "schedule_type": schedule_type,
                     "schedule_params": schedule_params,
                     "create_offset_days": int(create_offset_days),
-                    "due_offset_days": int(_safe_int(t.get("due_offset_days")) or 0),
+                    "due_offset_days": int(due_offset_days),
                 }
             )
 
-            # Валидация расписания. Если конфиг битый — фиксируем ошибку, но не падаем.
             sched_err = _validate_template_schedule(schedule_type, schedule_params)
             if sched_err:
                 errors.append({"regular_task_id": rid, "error": sched_err})
@@ -418,7 +408,6 @@ def run_regular_tasks_generation_tx(
 
             due += 1
 
-            # Если "пора создавать", то требуем executor_role_id
             executor_role_id = _safe_int(t.get("executor_role_id"))
             if executor_role_id is None:
                 msg = "executor_role_id is required (cannot be NULL) when template is due"
@@ -437,7 +426,29 @@ def run_regular_tasks_generation_tx(
                 )
                 continue
 
-            period_id = _period_resolve(conn, schedule_type=schedule_type, for_date=now_local.date())
+            # ВАЖНО: period_id берём из reporting_periods (предыдущий период)
+            try:
+                period_id = _reporting_period_resolve(conn, schedule_type=schedule_type, for_date=now_local.date())
+            except Exception:
+                # если что-то сломалось — не блокируем run целиком, fallback как раньше
+                period_id = int(FALLBACK_PERIOD_ID)
+
+            # Берём date_end для вычисления due_date
+            rp = conn.execute(
+                text("SELECT date_end FROM public.reporting_periods WHERE period_id = :pid"),
+                {"pid": int(period_id)},
+            ).mappings().first()
+            period_end = rp["date_end"] if rp and rp.get("date_end") is not None else None
+
+            # due_date = period_end + due_offset_days (для первичного уровня)
+            due_date_val = (period_end + timedelta(days=int(due_offset_days))) if period_end else None
+            base_meta.update(
+                {
+                    "period_id": int(period_id),
+                    "period_end": period_end.isoformat() if period_end else None,
+                    "deadline_date": due_date_val.isoformat() if due_date_val else None,
+                }
+            )
 
             if dry_run:
                 _log_run_item_safe(
@@ -463,7 +474,8 @@ def run_regular_tasks_generation_tx(
                         initiator_user_id,
                         executor_role_id,
                         assignment_scope,
-                        status_id
+                        status_id,
+                        due_date
                     )
                     VALUES (
                         :period_id, :regular_task_id,
@@ -471,11 +483,13 @@ def run_regular_tasks_generation_tx(
                         :initiator_user_id,
                         :executor_role_id,
                         :assignment_scope,
-                        (SELECT status_id FROM public.task_statuses WHERE code = 'IN_PROGRESS')
+                        (SELECT status_id FROM public.task_statuses WHERE code = 'IN_PROGRESS'),
+                        :due_date
                     )
                     ON CONFLICT (regular_task_id, period_id, executor_role_id)
-                    DO NOTHING
-                    RETURNING task_id
+                    DO UPDATE SET
+                        due_date = COALESCE(public.tasks.due_date, EXCLUDED.due_date)
+                    RETURNING task_id, (xmax = 0) AS inserted, due_date
                     """
                 ),
                 {
@@ -486,11 +500,17 @@ def run_regular_tasks_generation_tx(
                     "initiator_user_id": int(SYSTEM_USER_ID),
                     "executor_role_id": int(executor_role_id),
                     "assignment_scope": str(t.get("assignment_scope") or "functional"),
+                    "due_date": due_date_val,
                 },
             ).mappings().first()
 
             if row and row.get("task_id"):
-                created += 1
+                inserted = bool(row.get("inserted"))
+                if inserted:
+                    created += 1
+                else:
+                    deduped += 1
+
                 _log_run_item_safe(
                     conn,
                     run_id=int(run_id),
@@ -498,12 +518,18 @@ def run_regular_tasks_generation_tx(
                     period_id=int(period_id),
                     executor_role_id=int(executor_role_id),
                     is_due=True,
-                    created_tasks=1,
+                    created_tasks=1 if inserted else 0,
                     status="ok",
                     error=None,
-                    meta={**base_meta, "task_id": int(row["task_id"]), "deduped": False},
+                    meta={
+                        **base_meta,
+                        "task_id": int(row["task_id"]),
+                        "deduped": (not inserted),
+                        "due_date_set": (row.get("due_date") is not None),
+                    },
                 )
             else:
+                # Теоретически не должно случиться из-за RETURNING, но оставим защиту
                 deduped += 1
                 _log_run_item_safe(
                     conn,

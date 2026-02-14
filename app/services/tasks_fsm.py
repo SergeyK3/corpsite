@@ -10,6 +10,8 @@ from app.errors import ErrorCode, raise_error
 from app.events import create_task_event_tx
 from app.services.tasks_service import get_status_id_by_code, write_task_audit
 
+LOCAL_TZ = "Asia/Qyzylorda"
+
 
 class TaskFSMError(Exception):
     pass
@@ -100,7 +102,6 @@ def _get_latest_report_id(conn: Connection, task_id: int) -> int:
 
 
 def _ensure_report_exists(conn: Connection, task_id: int) -> None:
-    # просто проверка наличия (для инварианта)
     _get_latest_report_id(conn, task_id)
 
 
@@ -123,7 +124,6 @@ def _set_status(
         )
 
     # Инвариант: WAITING_APPROVAL допустим ТОЛЬКО если уже есть task_reports
-    # (это закрывает дыру "статус выставили, отчёта нет").
     if to_status == "WAITING_APPROVAL":
         _ensure_report_exists(conn, task_id)
 
@@ -136,12 +136,9 @@ def _set_status(
 
 
 def _extract_report_link(payload: Dict[str, Any], *, task_id: int, from_status: str) -> str:
-    # контракт: report_link обязателен для action=report
     v = payload.get("report_link")
     s = (v or "").strip()
     if not s:
-        # ВАЖНО: не добавляем "самодельные" поля code/message,
-        # чтобы не провоцировать 500 в обработчике ошибок.
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
             extra={
@@ -153,6 +150,162 @@ def _extract_report_link(payload: Dict[str, Any], *, task_id: int, from_status: 
             },
         )
     return s
+
+
+def _maybe_create_or_update_next_task_after_approved(
+    conn: Connection,
+    *,
+    source_task_id: int,
+    approved_at_ts: str,
+) -> None:
+    """
+    Каскад: после APPROVED по задаче, созданной из regular_tasks (regular_task_id != NULL),
+    создаём (или обновляем, если уже существует) задачу для target_role_id из public.regular_tasks.
+
+    Идемпотентность:
+      - если задача для (period_id, regular_task_id, executor_role_id=target_role_id) уже есть —
+        НЕ создаём дубль, а:
+          - если due_date IS NULL -> заполняем;
+          - иначе оставляем как есть.
+
+    due_date = local_date(approved_at) + escalation_offset_days (TZ Asia/Qyzylorda).
+    """
+    src = conn.execute(
+        text(
+            """
+            SELECT
+                t.task_id,
+                t.period_id,
+                t.regular_task_id,
+                t.initiator_user_id,
+                t.assignment_scope,
+                t.title AS src_title
+            FROM tasks t
+            WHERE t.task_id = :tid
+            """
+        ),
+        {"tid": int(source_task_id)},
+    ).mappings().first()
+
+    if not src:
+        return
+
+    regular_task_id = src.get("regular_task_id")
+    if regular_task_id is None:
+        return
+
+    rt = conn.execute(
+        text(
+            """
+            SELECT
+                regular_task_id,
+                title,
+                target_role_id,
+                escalation_offset_days
+            FROM regular_tasks
+            WHERE regular_task_id = :rid
+              AND is_active = TRUE
+            """
+        ),
+        {"rid": int(regular_task_id)},
+    ).mappings().first()
+
+    if not rt:
+        return
+
+    target_role_id = int(rt["target_role_id"])
+    offset_days = int(rt.get("escalation_offset_days") or 0)
+
+    # Ищем существующую задачу зама
+    existing = conn.execute(
+        text(
+            """
+            SELECT t.task_id, t.due_date
+            FROM tasks t
+            WHERE t.period_id = :period_id
+              AND t.regular_task_id = :regular_task_id
+              AND t.executor_role_id = :executor_role_id
+            ORDER BY t.task_id DESC
+            LIMIT 1
+            """
+        ),
+        {
+            "period_id": int(src["period_id"]),
+            "regular_task_id": int(regular_task_id),
+            "executor_role_id": int(target_role_id),
+        },
+    ).mappings().first()
+
+    # due_date рассчитываем в SQL (локальная дата + offset)
+    if existing:
+        if existing.get("due_date") is None:
+            conn.execute(
+                text(
+                    """
+                    UPDATE tasks
+                    SET due_date = (
+                        ((:approved_at_ts)::timestamptz AT TIME ZONE :tz)::date
+                        + :offset_days
+                    )
+                    WHERE task_id = :tid
+                      AND due_date IS NULL
+                    """
+                ),
+                {
+                    "tid": int(existing["task_id"]),
+                    "approved_at_ts": approved_at_ts,
+                    "tz": LOCAL_TZ,
+                    "offset_days": int(offset_days),
+                },
+            )
+        return
+
+    status_id = get_status_id_by_code(conn, "IN_PROGRESS")
+
+    conn.execute(
+        text(
+            """
+            INSERT INTO tasks (
+                period_id,
+                regular_task_id,
+                title,
+                description,
+                initiator_user_id,
+                executor_role_id,
+                assignment_scope,
+                status_id,
+                due_date
+            )
+            VALUES (
+                :period_id,
+                :regular_task_id,
+                :title,
+                :description,
+                :initiator_user_id,
+                :executor_role_id,
+                :assignment_scope,
+                :status_id,
+                (
+                    ((:approved_at_ts)::timestamptz AT TIME ZONE :tz)::date
+                    + :offset_days
+                )
+            )
+            """
+        ),
+        {
+            "period_id": int(src["period_id"]),
+            "regular_task_id": int(regular_task_id),
+            "title": str(rt["title"]),
+            "description": f"Основание: APPROVED по задаче #{int(source_task_id)} ({str(src.get('src_title') or '').strip()})",
+            "initiator_user_id": int(src["initiator_user_id"]),
+            "executor_role_id": int(target_role_id),
+            "assignment_scope": src["assignment_scope"],
+            "status_id": int(status_id),
+            "approved_at_ts": approved_at_ts,
+            "tz": LOCAL_TZ,
+            "offset_days": int(offset_days),
+        },
+    )
 
 
 # ---------------------------
@@ -167,7 +320,6 @@ def _report(
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
-    # 1) сначала валидируем from_status
     allowed_from = {"WAITING_REPORT", "IN_PROGRESS"}
     if from_status not in allowed_from:
         raise_error(
@@ -180,9 +332,6 @@ def _report(
             },
         )
 
-    # 2) создаём/обновляем запись отчёта (ФАКТ отчёта)
-    # В БД стоит unique constraint task_reports_task_id_key, значит на 1 task_id может быть только 1 report.
-    # Поэтому делаем UPSERT по task_id, чтобы /report был идемпотентным и не падал на ретраях.
     report_link = _extract_report_link(payload, task_id=task_id, from_status=from_status)
     comment = _normalize_comment(payload)
 
@@ -203,7 +352,6 @@ def _report(
 
     report_id = int(ins["report_id"]) if ins and ins.get("report_id") is not None else None
 
-    # 3) теперь переводим задачу в WAITING_APPROVAL (инвариант уже выполняется)
     _set_status(
         conn,
         task_id,
@@ -212,7 +360,6 @@ def _report(
         allowed_from=allowed_from,
     )
 
-    # 4) audit + event
     write_task_audit(
         conn,
         task_id=int(task_id),
@@ -258,7 +405,8 @@ def _approve(
     report_id = _get_latest_report_id(conn, task_id)
     comment = _normalize_comment(payload)
 
-    conn.execute(
+    # Получаем approved_at, чтобы считать due_date следующего уровня.
+    upd = conn.execute(
         text(
             f"""
             UPDATE task_reports
@@ -266,10 +414,13 @@ def _approve(
                 approved_by = :by,
                 {_apply_comment_sql()}
             WHERE report_id = :rid
+            RETURNING approved_at
             """
         ),
         {"by": int(actor_user_id), "rid": int(report_id), "comment": comment},
-    )
+    ).mappings().first()
+
+    approved_at = str(upd["approved_at"]) if upd and upd.get("approved_at") is not None else None
 
     _set_status(
         conn,
@@ -301,6 +452,14 @@ def _approve(
         payload={**payload, "status_to": "DONE", "report_id": int(report_id)},
     )
 
+    # КАСКАД (upsert due_date): создаём или обновляем задачу зама
+    if approved_at:
+        _maybe_create_or_update_next_task_after_approved(
+            conn,
+            source_task_id=int(task_id),
+            approved_at_ts=approved_at,
+        )
+
 
 def _reject(
     conn: Connection,
@@ -311,15 +470,11 @@ def _reject(
     payload: Dict[str, Any],
 ) -> None:
     """
-    reject имеет ДВА допустимых смысла (на текущий момент):
-    1) Review reject: WAITING_APPROVAL -> WAITING_REPORT (отклонить отчёт, вернуть в работу).
-    2) Task reject:   IN_PROGRESS/WAITING_REPORT -> REJECTED (отказ/отклонение задачи как сущности).
-
-    Это сделано намеренно, чтобы поддержать "новый endpoint reject" без введения нового action-кода.
-    Клиентам рекомендуется передавать reason (или current_comment) для обоих случаев.
+    reject имеет ДВА допустимых смысла:
+    1) Review reject: WAITING_APPROVAL -> WAITING_REPORT
+    2) Task reject:   IN_PROGRESS/WAITING_REPORT -> REJECTED
     """
 
-    # 1) Review reject: отклонение отчёта
     if from_status == "WAITING_APPROVAL":
         report_id = _get_latest_report_id(conn, task_id)
 
@@ -373,7 +528,6 @@ def _reject(
         )
         return
 
-    # 2) Task reject: отказ/отклонение задачи как сущности
     _set_status(
         conn,
         task_id,
@@ -384,8 +538,6 @@ def _reject(
 
     comment = _normalize_comment(payload)
 
-    # Если есть task_reports — сохраним комментарий в current_comment (не создаём отчёт, если его нет).
-    # Это даёт единое место хранения причины в UI.
     conn.execute(
         text(
             f"""
@@ -448,8 +600,6 @@ def _archive(
         allowed_from={"IN_PROGRESS", "WAITING_REPORT", "WAITING_APPROVAL", "DONE"},
     )
 
-    # ВАЖНО: ранее считалось, что события ARCHIVED в enum task_event_type НЕТ.
-    # Но по факту в БД task_events уже есть event_type='ARCHIVED', и доставки в telegram существуют.
     write_task_audit(
         conn,
         task_id=int(task_id),
@@ -463,7 +613,6 @@ def _archive(
         event_payload=None,
     )
 
-    # Создаём task_event, чтобы работали recipients/deliveries (в т.ч. telegram) по правилам routing.
     create_task_event_tx(
         conn,
         task_id=int(task_id),

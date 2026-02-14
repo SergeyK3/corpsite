@@ -3,14 +3,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, List
 
-from fastapi import APIRouter, Header, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import text
 
+from app.auth import get_current_user
 from app.db.engine import engine
-from app.security.directory_scope import (
-    require_user_id as _require_user_id,
-    load_user_ctx as _load_user_ctx,
-)
+
 from app.services.directory_service import (
     list_departments as svc_list_departments,
     list_positions as svc_list_positions,
@@ -28,13 +26,11 @@ router = APIRouter()
 def list_departments(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
-
-        scope = compute_scope(uid, user_ctx)
+        uid = int(user["user_id"])
+        scope = compute_scope(uid, user)
 
         dept_scope_id: Optional[int] = scope["scope_unit_id"]
         dept_scope_ids: Optional[List[int]] = scope["scope_unit_ids"]
@@ -57,10 +53,10 @@ def list_departments(
 def list_positions(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        _ = _require_user_id(x_user_id)
+        _ = int(user["user_id"])
         return call_service(svc_list_positions, limit=limit, offset=offset)
 
     except HTTPException:
@@ -71,10 +67,10 @@ def list_positions(
 
 @router.get("/roles")
 def list_roles(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     status: str = Query(default="active", pattern="^(active|inactive|all)$"),
     limit: int = Query(default=500, ge=1, le=2000),
     offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Contract: {"items":[{"id": role_id, "code": "...", "name": "...", "is_active": true}]}
@@ -84,7 +80,7 @@ def list_roles(
     status is accepted but cannot be applied without the column.
     """
     try:
-        _ = _require_user_id(x_user_id)
+        _ = int(user["user_id"])
         _ = (status or "").strip().lower()  # keep accepted for compatibility
 
         sql = text(
@@ -119,7 +115,6 @@ def list_roles(
 
 @router.get("/employees")
 def list_employees(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     status: str = Query(default="active", pattern="^(active|inactive|all)$"),
     q: Optional[str] = Query(default=None),
     department_id: Optional[int] = Query(default=None, ge=1),
@@ -130,12 +125,11 @@ def list_employees(
     offset: int = Query(default=0, ge=0),
     sort: Optional[str] = Query(default=None),
     order: Optional[str] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
-
-        scope = compute_scope(uid, user_ctx)
+        uid = int(user["user_id"])
+        scope = compute_scope(uid, user)
 
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
@@ -165,13 +159,11 @@ def list_employees(
 @router.get("/employees/{employee_id}")
 def get_employee(
     employee_id: str = Path(..., min_length=1),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
-
-        scope = compute_scope(uid, user_ctx)
+        uid = int(user["user_id"])
+        scope = compute_scope(uid, user)
 
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]

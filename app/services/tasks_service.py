@@ -154,6 +154,7 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
                 t.executor_role_id,
                 t.assignment_scope,
                 t.status_id,
+                t.due_date,
                 ts.code AS status_code,
                 ts.name_ru AS status_name_ru
             FROM tasks t
@@ -220,13 +221,9 @@ def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row
     """
     Кто может отправлять/обновлять отчёт.
 
-    Ранее: инициатор всегда запрещён.
-    Проблема: тестовый пайплайн, когда инициатор = исполнитель по роли (executor_role_id),
-    нельзя было сдать отчёт.
-
     Новое правило:
       - если пользователь является исполнителем по роли (executor_role_id == current_role_id) -> можно
-      - иначе (в т.ч. инициатор без роли исполнителя) -> нельзя
+      - иначе -> нельзя
     """
     if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
         return True
@@ -245,10 +242,10 @@ def can_reject_task(*, current_user_id: int, current_role_id: int, task_row: Dic
     """
     Кто может делать reject задачи (не review-reject отчёта, а task-level reject из IN_PROGRESS/WAITING_REPORT).
 
-    Политика (минимальная, практичная):
+    Политика:
       - инициатор может отклонить задачу
       - supervisor/deputy может отклонить задачу
-      - исполнитель по роли может отклонить (если это нужно как "отказ исполнителя")
+      - исполнитель по роли может отклонить
     """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
@@ -276,7 +273,6 @@ def _allowed_actions_for_user(
         ):
             actions.append("report")
 
-        # NEW: task-level reject из IN_PROGRESS/WAITING_REPORT
         if can_reject_task(
             current_user_id=current_user_id,
             current_role_id=current_role_id,
@@ -291,14 +287,11 @@ def _allowed_actions_for_user(
             task_row=task_row,
         ):
             actions.append("approve")
-            # review-reject: WAITING_APPROVAL -> WAITING_REPORT (отклонить отчёт)
             actions.append("reject")
 
     if _is_initiator(current_user_id=current_user_id, task_row=task_row) and code != "ARCHIVED":
         actions.append("archive")
 
-    # стабильный порядок для UI/тестов (необязательно, но удобно)
-    # убираем дубли на всякий случай
     seen: Set[str] = set()
     out: List[str] = []
     for a in actions:

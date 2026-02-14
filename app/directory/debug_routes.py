@@ -4,14 +4,13 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional, List
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Query, Depends
 
+from app.auth import get_current_user
 from app.security.directory_scope import (
     rbac_mode as _rbac_mode,
     privileged_user_ids as _privileged_user_ids,
     privileged_role_ids as _privileged_role_ids,
-    require_user_id as _require_user_id,
-    load_user_ctx as _load_user_ctx,
     is_privileged as _is_privileged,
 )
 
@@ -23,12 +22,12 @@ router = APIRouter()
 
 @router.get("/_debug/rbac")
 def debug_rbac(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        uid = int(user["user_id"])
+        user_ctx = user  # уже получен из JWT через get_current_user
 
         try:
             scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
@@ -43,7 +42,10 @@ def debug_rbac(
 
         assigned_units: List[int] = []
         try:
-            assigned_units = org_units.list_group_unit_ids_for_deputy(uid, include_inactive=include_inactive)
+            assigned_units = org_units.list_group_unit_ids_for_deputy(
+                uid,
+                include_inactive=include_inactive,
+            )
         except Exception:
             assigned_units = []
 
@@ -64,6 +66,7 @@ def debug_rbac(
                 "role_id": int(user_ctx.get("role_id")) if user_ctx.get("role_id") is not None else None,
                 "unit_id": int(user_ctx.get("unit_id")) if user_ctx.get("unit_id") is not None else None,
                 "is_active": bool(user_ctx.get("is_active")),
+                "login": user_ctx.get("login"),
             },
             "computed": {
                 "is_privileged": bool(scope["privileged"]),

@@ -1,4 +1,4 @@
-# app/security/directory_scope.py
+# FILE: app/security/directory_scope.py
 
 from __future__ import annotations
 
@@ -9,6 +9,12 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from app.db.engine import engine
+
+# JWT decoder (единый, как в app/auth.py)
+try:
+    from app.auth import decode_and_verify_token  # type: ignore
+except Exception:  # pragma: no cover
+    decode_and_verify_token = None  # type: ignore
 
 
 # ---------------------------
@@ -65,9 +71,48 @@ def deputy_role_ids() -> Set[int]:
 
 
 # ---------------------------
-# Requester context (RBAC)
+# Requester context (JWT/X-User-Id)
 # ---------------------------
+def _token_from_authorization(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    a = str(authorization).strip()
+    if not a:
+        return None
+    parts = a.split(None, 1)
+    if len(parts) != 2:
+        return None
+    scheme, token = parts[0].lower(), parts[1].strip()
+    if scheme != "bearer" or not token:
+        return None
+    return token
+
+
+def user_id_from_authorization(authorization: Optional[str]) -> Optional[int]:
+    """
+    Возвращает user_id из Authorization: Bearer <jwt>.
+    """
+    if decode_and_verify_token is None:
+        return None
+    token = _token_from_authorization(authorization)
+    if not token:
+        return None
+    try:
+        payload = decode_and_verify_token(token) or {}
+        sub = (payload.get("sub") or "").strip()
+        if not sub:
+            return None
+        uid = int(sub)
+        return uid if uid > 0 else None
+    except Exception:
+        return None
+
+
 def require_user_id(x_user_id: Optional[str]) -> int:
+    """
+    LEGACY: X-User-Id.
+    Оставлено для обратной совместимости на время миграции.
+    """
     if not x_user_id:
         raise HTTPException(status_code=401, detail="Missing X-User-Id header.")
     s = str(x_user_id).strip()
@@ -79,10 +124,25 @@ def require_user_id(x_user_id: Optional[str]) -> int:
         raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
 
 
+def require_uid(
+    *,
+    authorization: Optional[str],
+    x_user_id: Optional[str] = None,
+) -> int:
+    """
+    JWT-first (взрослый режим). X-User-Id — только fallback на период миграции.
+    """
+    uid = user_id_from_authorization(authorization)
+    if uid is not None:
+        return uid
+    # fallback legacy
+    return require_user_id(x_user_id)
+
+
 def load_user_ctx(user_id: int) -> Dict[str, Any]:
     q = text(
         """
-        SELECT user_id, role_id, unit_id, is_active
+        SELECT user_id, role_id, unit_id, is_active, login
         FROM public.users
         WHERE user_id = :uid
         LIMIT 1

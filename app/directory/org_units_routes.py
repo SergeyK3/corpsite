@@ -3,11 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, List
 
-from fastapi import APIRouter, Header, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
-from app.security.directory_scope import require_user_id as _require_user_id, load_user_ctx as _load_user_ctx
-
+from app.auth import get_current_user  # JWT
 from .common import as_http500
 from .rbac import compute_scope, require_privileged_or_403, load_ancestor_chain_units, org_units
 from app.services.org_units_service import OrgUnit
@@ -17,9 +16,9 @@ router = APIRouter()
 
 @router.get("/org-units/tree")
 def org_units_tree(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
     status: Optional[str] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
         if status is not None:
@@ -29,8 +28,8 @@ def org_units_tree(
             elif s == "all":
                 include_inactive = True
 
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        uid = int(user["user_id"])
+        user_ctx = user  # compat with existing RBAC helpers
 
         scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
@@ -101,9 +100,9 @@ def org_units_tree(
 
 @router.get("/org-units")
 def list_org_units_flat(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
     status: Optional[str] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
         if status is not None:
@@ -113,8 +112,8 @@ def list_org_units_flat(
             elif s == "all":
                 include_inactive = True
 
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        uid = int(user["user_id"])
+        user_ctx = user
         scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
 
         units = org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive)
@@ -139,10 +138,10 @@ def list_org_units_flat(
 
 @router.get("/departments/tree")
 def departments_tree(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     include_inactive: bool = Query(default=True),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    return org_units_tree(x_user_id=x_user_id, include_inactive=include_inactive)
+    return org_units_tree(include_inactive=include_inactive, status=None, user=user)
 
 
 class OrgUnitRenameIn(BaseModel):
@@ -163,17 +162,17 @@ class OrgUnitCreateIn(BaseModel):
 @router.patch("/org-units/{unit_id}/rename")
 async def org_unit_rename(
     unit_id: int = Path(..., ge=1),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     body: OrgUnitRenameIn = None,  # type: ignore[assignment]
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
         if body is None or not getattr(body, "name", None):
             raise HTTPException(status_code=400, detail="name is required")
 
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        user_ctx = user
         require_privileged_or_403(user_ctx)
 
+        uid = int(user["user_id"])
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.rename_org_unit(unit_id=int(unit_id), new_name=body.name)
@@ -192,26 +191,26 @@ async def org_unit_rename(
 @router.patch("/org-units/{unit_id}")
 async def org_unit_patch_compat(
     unit_id: int = Path(..., ge=1),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     body: OrgUnitRenameIn = None,  # type: ignore[assignment]
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    return await org_unit_rename(unit_id=unit_id, x_user_id=x_user_id, body=body)
+    return await org_unit_rename(unit_id=unit_id, body=body, user=user)
 
 
 @router.patch("/org-units/{unit_id}/move")
 async def org_unit_move(
     unit_id: int = Path(..., ge=1),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     body: OrgUnitMoveIn = None,  # type: ignore[assignment]
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
         if body is None:
             raise HTTPException(status_code=400, detail="body is required")
 
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        user_ctx = user
         require_privileged_or_403(user_ctx)
 
+        uid = int(user["user_id"])
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.move_org_unit(unit_id=int(unit_id), parent_unit_id=body.parent_unit_id)
@@ -230,13 +229,13 @@ async def org_unit_move(
 @router.patch("/org-units/{unit_id}/deactivate")
 async def org_unit_deactivate(
     unit_id: int = Path(..., ge=1),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        user_ctx = user
         require_privileged_or_403(user_ctx)
 
+        uid = int(user["user_id"])
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.deactivate_org_unit(unit_id=int(unit_id))
@@ -255,13 +254,13 @@ async def org_unit_deactivate(
 @router.patch("/org-units/{unit_id}/activate")
 async def org_unit_activate(
     unit_id: int = Path(..., ge=1),
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        user_ctx = user
         require_privileged_or_403(user_ctx)
 
+        uid = int(user["user_id"])
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.activate_org_unit(unit_id=int(unit_id))
@@ -279,17 +278,17 @@ async def org_unit_activate(
 
 @router.post("/org-units")
 async def org_unit_create(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     body: OrgUnitCreateIn = None,  # type: ignore[assignment]
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
         if body is None or not getattr(body, "name", None):
             raise HTTPException(status_code=400, detail="name is required")
 
-        uid = _require_user_id(x_user_id)
-        user_ctx = _load_user_ctx(uid)
+        user_ctx = user
         require_privileged_or_403(user_ctx)
 
+        uid = int(user["user_id"])
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.create_org_unit(

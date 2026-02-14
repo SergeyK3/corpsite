@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
 from sqlalchemy import text
 
@@ -15,7 +15,6 @@ from app.services.tasks_service import (
     can_approve,
     can_report_or_update,
     ensure_task_visible_or_404,
-    get_current_user_id,
     get_status_id_by_code,
     get_user_role_id,
     is_supervisor_or_deputy,
@@ -24,6 +23,9 @@ from app.services.tasks_service import (
     normalize_assignment_scope,
     scope_label_or_none,
 )
+
+from app.auth import get_current_user  # JWT dependency
+
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -80,9 +82,9 @@ def list_tasks(
     executor_role_id: Optional[int] = Query(None, ge=1),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
     with engine.begin() as conn:
@@ -162,6 +164,7 @@ def list_tasks(
                     t.executor_role_id,
                     t.assignment_scope,
                     t.status_id,
+                    t.due_date,
                     ts.code AS status_code,
                     ts.name_ru AS status_name_ru
                 FROM tasks t
@@ -187,9 +190,9 @@ def list_tasks(
 def get_task(
     task_id: int = Path(..., ge=1),
     include_archived: bool = Query(False),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
@@ -210,9 +213,9 @@ def get_task(
 @router.post("/")
 def create_task(
     payload: Dict[str, Any],
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     title = (payload.get("title") or "").strip()
     if not title:
@@ -230,6 +233,9 @@ def create_task(
     regular_task_id = _as_int_or_none(payload.get("regular_task_id"))
     description = _as_str_or_none(payload.get("description"))
 
+    # Optional: allow API callers to set due_date explicitly (YYYY-MM-DD).
+    due_date = _as_str_or_none(payload.get("due_date"))
+
     with engine.begin() as conn:
         assignment_scope = normalize_assignment_scope(conn, payload.get("assignment_scope"))
         status_id = get_status_id_by_code(conn, status_code)
@@ -239,11 +245,16 @@ def create_task(
                 """
                 INSERT INTO tasks (
                     period_id, regular_task_id, title, description,
-                    initiator_user_id, executor_role_id, assignment_scope, status_id
+                    initiator_user_id, executor_role_id, assignment_scope, status_id,
+                    due_date
                 )
                 VALUES (
                     :period_id, :regular_task_id, :title, :description,
-                    :initiator_user_id, :executor_role_id, :assignment_scope, :status_id
+                    :initiator_user_id, :executor_role_id, :assignment_scope, :status_id,
+                    CASE
+                        WHEN :due_date IS NULL OR :due_date = '' THEN NULL
+                        ELSE (:due_date)::date
+                    END
                 )
                 RETURNING task_id
                 """
@@ -257,6 +268,7 @@ def create_task(
                 "executor_role_id": int(executor_role_id),
                 "assignment_scope": assignment_scope,
                 "status_id": int(status_id),
+                "due_date": due_date,
             },
         ).mappings().first()
 
@@ -276,9 +288,9 @@ def create_task(
 def submit_report(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     report_link = (payload.get("report_link") or "").strip()
     if not report_link:
@@ -343,13 +355,13 @@ def submit_report(
 def approve_report(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     UI contract: POST /tasks/{id}/approve { reason? }
     Backward-compat: supports { approve: true|false, current_comment? } and will route approve=false to REJECT.
     """
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     approve_raw = payload.get("approve", True)
     approve = bool(approve_raw) if isinstance(approve_raw, bool) else True
@@ -393,12 +405,12 @@ def approve_report(
 def reject_report(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     UI contract: POST /tasks/{id}/reject { reason? }
     """
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     reason = _pick_str(payload, ["reason", "current_comment", "comment"])
     current_comment = _pick_str(payload, ["current_comment", "comment"])
@@ -439,13 +451,13 @@ def reject_report(
 def archive_task(
     payload: Dict[str, Any],
     task_id: int = Path(..., ge=1),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     UI contract: POST /tasks/{id}/archive { reason? }
     Keeps legacy DELETE /tasks/{id} for backward compatibility.
     """
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     reason = _pick_str(payload, ["reason", "current_comment", "comment"])
     current_comment = _pick_str(payload, ["current_comment", "comment"])
@@ -483,13 +495,13 @@ def archive_task(
 @router.delete("/{task_id}", status_code=204)
 def delete_task(
     task_id: int = Path(..., ge=1),
-    x_user_id: Optional[int] = Header(default=None, alias="X-User-Id"),
+    user: Dict[str, Any] = Depends(get_current_user),
 ) -> Response:
     """
     Legacy archive endpoint (kept).
     Prefer POST /tasks/{id}/archive for UI.
     """
-    current_user_id = get_current_user_id(x_user_id)
+    current_user_id = int(user["user_id"])
 
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
