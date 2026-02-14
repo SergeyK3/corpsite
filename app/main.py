@@ -28,6 +28,7 @@ from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
 from app.directory import router as directory_router
+from app.auth import router as auth_router  # NEW
 
 # regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
@@ -55,6 +56,7 @@ app.add_middleware(
 # Routers (public)
 # -----------------------
 app.include_router(meta_router)
+app.include_router(auth_router)  # NEW: /auth/login, /auth/me
 app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any
 app.include_router(tg_bind_router)
