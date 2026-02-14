@@ -28,10 +28,55 @@ function truthyEnv(name: string): boolean {
 
 const API_TRACE = truthyEnv("NEXT_PUBLIC_API_TRACE");
 
-/**
- * Умеет читать JSON/текст и не падать при пустом теле.
- * Если тело не JSON — возвращает { message: <text> }.
- */
+// единые ключи sessionStorage
+const AUTH_ACCESS_TOKEN_KEY = "access_token";
+const SESSION_USER_ID_KEY = "user_id";
+
+function readAccessToken(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return (window.sessionStorage.getItem(AUTH_ACCESS_TOKEN_KEY) ?? "").toString().trim();
+  } catch {
+    return "";
+  }
+}
+
+function readSessionUserId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = (window.sessionStorage.getItem(SESSION_USER_ID_KEY) ?? "").toString().trim();
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return String(Math.floor(n));
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function setAccessToken(token: string): void {
+  if (typeof window === "undefined") return;
+  const t = (token ?? "").toString().trim();
+  if (!t) return;
+  try {
+    window.sessionStorage.setItem(AUTH_ACCESS_TOKEN_KEY, t);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearAccessToken(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function isAuthed(): boolean {
+  return !!readAccessToken();
+}
+
 async function readJsonSafe(res: Response): Promise<any> {
   const text = await res.text();
   if (!text) return null;
@@ -57,7 +102,10 @@ function toApiError(status: number, body: any, meta?: Record<string, any>): APIE
   return err;
 }
 
-function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined | null>): URL {
+function buildUrl(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+): URL {
   const url = new URL(path, API_BASE_URL);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
@@ -68,11 +116,30 @@ function buildUrl(path: string, query?: Record<string, string | number | boolean
   return url;
 }
 
-function buildHeaders(devUserId: number, extra?: Record<string, string>): HeadersInit {
-  return {
-    "X-User-Id": String(devUserId),
+/**
+ * JWT-only headers builder + X-User-Id (если есть в sessionStorage).
+ * Для /auth/login можно отключить Authorization через opts.noAuth.
+ */
+function buildHeaders(
+  extra?: Record<string, string>,
+  opts?: { noAuth?: boolean },
+): HeadersInit {
+  const tok = opts?.noAuth ? "" : readAccessToken();
+  const uid = readSessionUserId();
+
+  const headers: Record<string, string> = {
     ...(extra ?? {}),
   };
+
+  if (tok) {
+    headers["Authorization"] = `Bearer ${tok}`;
+  }
+
+  if (uid) {
+    headers["X-User-Id"] = uid;
+  }
+
+  return headers;
 }
 
 function pickString(payload: Record<string, any>, keys: string[]): string {
@@ -92,15 +159,82 @@ function normalizeList<T>(body: any): T[] {
   return [];
 }
 
+function handleAuthFailureIfNeeded(status: number): void {
+  if (status === 401) {
+    clearAccessToken();
+  }
+}
+
+/* ============================================================
+ * AUTH
+ * ============================================================ */
+
+export async function apiAuthLogin(params: {
+  login: string;
+  password: string;
+}): Promise<{ access_token: string; token_type: string }> {
+  const login = (params.login ?? "").toString().trim().toLowerCase();
+  const password = (params.password ?? "").toString();
+
+  const url = buildUrl("/auth/login");
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: buildHeaders({ "Content-Type": "application/json" }, { noAuth: true }),
+    body: JSON.stringify({ login, password }),
+    cache: "no-store",
+  });
+
+  const body = await readJsonSafe(res);
+  if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
+    throw toApiError(res.status, body, {
+      method: "POST",
+      url: url.toString(),
+      login: API_TRACE ? login : undefined,
+    });
+  }
+
+  const token = (body?.access_token ?? "").toString().trim();
+  if (!token) {
+    throw toApiError(
+      500,
+      { message: "Backend did not return access_token" },
+      { method: "POST", url: url.toString() },
+    );
+  }
+
+  setAccessToken(token);
+  return body as any;
+}
+
+export async function apiAuthMe(): Promise<any> {
+  const url = buildUrl("/auth/me");
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+
+  const body = await readJsonSafe(res);
+  if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
+    throw toApiError(res.status, body, { method: "GET", url: url.toString() });
+  }
+
+  return body;
+}
+
 /* ============================================================
  * TASKS
  * ============================================================ */
 
 export async function apiGetTasks(params: {
-  devUserId: number;
+  devUserId?: number;
   limit?: number;
   offset?: number;
-  executor_role_id?: number; // NEW: filter by executor role
+  executor_role_id?: number;
 }): Promise<TaskListItem[]> {
   const limit = params.limit ?? 50;
   const offset = params.offset ?? 0;
@@ -108,24 +242,25 @@ export async function apiGetTasks(params: {
   const url = buildUrl("/tasks", {
     limit,
     offset,
-    executor_role_id: params.executor_role_id ?? undefined, // NEW
+    executor_role_id: params.executor_role_id ?? undefined,
   });
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "GET",
       url: url.toString(),
       limit,
       offset,
-      executor_role_id: params.executor_role_id ?? null, // NEW
-      devUserId: params.devUserId,
+      executor_role_id: params.executor_role_id ?? null,
+      devUserId: params.devUserId ?? null,
     });
   }
 
@@ -133,7 +268,7 @@ export async function apiGetTasks(params: {
 }
 
 export async function apiGetTask(params: {
-  devUserId: number;
+  devUserId?: number;
   taskId: number;
   includeArchived?: boolean;
 }): Promise<TaskDetails> {
@@ -143,32 +278,26 @@ export async function apiGetTask(params: {
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "GET",
       url: url.toString(),
       taskId: params.taskId,
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
     });
   }
 
   return body as TaskDetails;
 }
 
-/**
- * Backend endpoints:
- * - POST /tasks/{id}/report    { report_link, current_comment? }
- * - POST /tasks/{id}/approve   { reason? }
- * - POST /tasks/{id}/reject    { reason? }
- * - POST /tasks/{id}/archive   { reason? }
- */
 export async function apiPostTaskAction(params: {
-  devUserId: number;
+  devUserId?: number;
   taskId: number;
   action: TaskAction;
   payload?: TaskActionPayload;
@@ -177,7 +306,7 @@ export async function apiPostTaskAction(params: {
 
   const currentComment = pickString(payloadObj, ["current_comment", "comment"]);
   const reportLink = pickString(payloadObj, ["report_link", "reportLink", "link", "url"]);
-  const reason = pickString(payloadObj, ["reason", "current_comment", "comment"]); // reason по умолчанию можно брать из comment
+  const reason = pickString(payloadObj, ["reason", "current_comment", "comment"]);
 
   let url: URL;
   let body: string | undefined;
@@ -203,30 +332,28 @@ export async function apiPostTaskAction(params: {
     if (reason) out.reason = reason;
     body = JSON.stringify(out);
   } else {
-    // safety fallback: approve
     url = buildUrl(`/tasks/${params.taskId}/approve`);
     const out: Record<string, any> = {};
     if (reason) out.reason = reason;
     body = JSON.stringify(out);
   }
 
-  const headers = buildHeaders(params.devUserId, { "Content-Type": "application/json" });
-
   const res = await fetch(url.toString(), {
     method: "POST",
-    headers,
+    headers: buildHeaders({ "Content-Type": "application/json" }),
     body,
     cache: "no-store",
   });
 
   const resBody = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, resBody, {
       method: "POST",
       url: url.toString(),
       taskId: params.taskId,
       action: params.action,
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
       payload: API_TRACE ? payloadObj : undefined,
     });
   }
@@ -239,7 +366,7 @@ export async function apiPostTaskAction(params: {
  * ============================================================ */
 
 export async function apiGetRegularTasks(params: {
-  devUserId: number;
+  devUserId?: number;
   status?: RegularTaskStatus;
   q?: string;
   schedule_type?: string;
@@ -261,70 +388,69 @@ export async function apiGetRegularTasks(params: {
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "GET",
       url: url.toString(),
-      devUserId: params.devUserId,
-      query: API_TRACE
-        ? {
-            status: params.status ?? "active",
-            q: params.q ?? null,
-            schedule_type: params.schedule_type ?? null,
-            executor_role_id: params.executor_role_id ?? null,
-            limit,
-            offset,
-          }
-        : undefined,
+      devUserId: params.devUserId ?? null,
     });
   }
 
   return normalizeList<RegularTask>(body);
 }
 
-export async function apiGetRegularTask(params: { devUserId: number; regularTaskId: number }): Promise<RegularTask> {
+export async function apiGetRegularTask(params: {
+  devUserId?: number;
+  regularTaskId: number;
+}): Promise<RegularTask> {
   const url = buildUrl(`/regular-tasks/${params.regularTaskId}`);
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "GET",
       url: url.toString(),
       regularTaskId: params.regularTaskId,
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
     });
   }
 
   return body as RegularTask;
 }
 
-export async function apiCreateRegularTask(params: { devUserId: number; payload: Record<string, any> }): Promise<any> {
+export async function apiCreateRegularTask(params: {
+  devUserId?: number;
+  payload: Record<string, any>;
+}): Promise<any> {
   const url = buildUrl("/regular-tasks");
 
   const res = await fetch(url.toString(), {
     method: "POST",
-    headers: buildHeaders(params.devUserId, { "Content-Type": "application/json" }),
+    headers: buildHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(params.payload ?? {}),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "POST",
       url: url.toString(),
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
       payload: API_TRACE ? params.payload : undefined,
     });
   }
@@ -333,7 +459,7 @@ export async function apiCreateRegularTask(params: { devUserId: number; payload:
 }
 
 export async function apiPatchRegularTask(params: {
-  devUserId: number;
+  devUserId?: number;
   regularTaskId: number;
   payload: Record<string, any>;
 }): Promise<any> {
@@ -341,18 +467,19 @@ export async function apiPatchRegularTask(params: {
 
   const res = await fetch(url.toString(), {
     method: "PATCH",
-    headers: buildHeaders(params.devUserId, { "Content-Type": "application/json" }),
+    headers: buildHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(params.payload ?? {}),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "PATCH",
       url: url.toString(),
       regularTaskId: params.regularTaskId,
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
       payload: API_TRACE ? params.payload : undefined,
     });
   }
@@ -360,56 +487,60 @@ export async function apiPatchRegularTask(params: {
   return body;
 }
 
-export async function apiActivateRegularTask(params: { devUserId: number; regularTaskId: number }): Promise<any> {
+export async function apiActivateRegularTask(params: {
+  devUserId?: number;
+  regularTaskId: number;
+}): Promise<any> {
   const url = buildUrl(`/regular-tasks/${params.regularTaskId}/activate`);
 
   const res = await fetch(url.toString(), {
     method: "POST",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "POST",
       url: url.toString(),
       regularTaskId: params.regularTaskId,
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
     });
   }
 
   return body;
 }
 
-export async function apiDeactivateRegularTask(params: { devUserId: number; regularTaskId: number }): Promise<any> {
+export async function apiDeactivateRegularTask(params: {
+  devUserId?: number;
+  regularTaskId: number;
+}): Promise<any> {
   const url = buildUrl(`/regular-tasks/${params.regularTaskId}/deactivate`);
 
   const res = await fetch(url.toString(), {
     method: "POST",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "POST",
       url: url.toString(),
       regularTaskId: params.regularTaskId,
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
     });
   }
 
   return body;
 }
 
-/**
- * Если вдруг понадобится сырое тело list-ответа (total/limit/offset),
- * оставляю отдельную функцию, но UI может и не использовать её.
- */
 export async function apiGetRegularTasksRaw(params: {
-  devUserId: number;
+  devUserId?: number;
   status?: RegularTaskStatus;
   q?: string;
   schedule_type?: string;
@@ -431,16 +562,17 @@ export async function apiGetRegularTasksRaw(params: {
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: buildHeaders(params.devUserId),
+    headers: buildHeaders(),
     cache: "no-store",
   });
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
     throw toApiError(res.status, body, {
       method: "GET",
       url: url.toString(),
-      devUserId: params.devUserId,
+      devUserId: params.devUserId ?? null,
     });
   }
 

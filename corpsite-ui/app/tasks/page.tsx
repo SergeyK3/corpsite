@@ -2,18 +2,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGetTask, apiGetTasks, apiPostTaskAction } from "@/lib/api";
-import type { AllowedAction, TaskAction, TaskDetails, TaskListItem } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
-/**
- * UI: русифицированная страница задач.
- * - Заголовок: "Система личных кабинетов / Задачи"
- * - Нет "Dev" в тексте интерфейса (внутри остаётся только ключ localStorage).
- * - Есть фильтр по роли исполнителя (executor_role_id) + кнопка "Применить фильтры".
- * - Роли подтягиваются с backend: GET /directory/roles
- */
-
-const DEV_USER_ID_KEY = "system.devUserId"; // ключ в localStorage (не показываем в UI)
+import { apiAuthMe, apiGetTask, apiGetTasks, apiPostTaskAction, clearAccessToken, isAuthed } from "@/lib/api";
+import type { AllowedAction, TaskAction, TaskListItem } from "@/lib/types";
 
 const ACTION_RU: Record<string, string> = {
   report: "Отправить отчёт",
@@ -29,21 +21,14 @@ type RoleItem = {
   is_active?: boolean;
 };
 
+function env(name: string, fallback = ""): string {
+  const v = process.env[name];
+  return (v ?? fallback).toString().trim();
+}
+
 function actionsRu(actions: AllowedAction[] | undefined | null): string {
   if (!actions || actions.length === 0) return "—";
   return actions.map((a) => ACTION_RU[String(a)] ?? String(a)).join(" / ");
-}
-
-function getStoredUserId(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = window.localStorage.getItem(DEV_USER_ID_KEY);
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
-function setStoredUserId(v: number): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(DEV_USER_ID_KEY, String(v));
 }
 
 function taskIdOf(t: any): number {
@@ -81,17 +66,27 @@ function roleLabel(r: RoleItem): string {
   return name || code || `Роль №${r.id}`;
 }
 
-function normalizeUserNotFound(msg: string): string {
+function normalizeMsg(msg: string): string {
   const s = String(msg || "").trim();
-  if (!s) return "Ошибка запроса";
-  if (/User not found/i.test(s)) return "Пользователь с таким ID не найден (нужно указывать user_id).";
-  if (/\(404\)/.test(s) && /not found/i.test(s)) return "Пользователь с таким ID не найден (нужно указывать user_id).";
-  return s;
+  return s || "Ошибка запроса";
+}
+
+function isUnauthorized(e: any): boolean {
+  const st = Number(e?.status ?? 0);
+  return st === 401;
+}
+
+function getBearer(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return (window.sessionStorage.getItem("access_token") ?? "").toString().trim();
+  } catch {
+    return "";
+  }
 }
 
 export default function TasksPage() {
-  // "Режим разработчика" (фактически: выбор user_id для тестов)
-  const [userId, setUserIdState] = useState<number>(1);
+  const router = useRouter();
 
   // paging
   const [limit, setLimit] = useState<number>(50);
@@ -110,7 +105,7 @@ export default function TasksPage() {
 
   // selection + details
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [item, setItem] = useState<TaskDetails | null>(null);
+  const [item, setItem] = useState<any | null>(null);
   const [itemLoading, setItemLoading] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
 
@@ -137,21 +132,37 @@ export default function TasksPage() {
     return effectiveAllowed.includes(action);
   }
 
-  async function reloadRoles(uid?: number) {
-    const currentUserId = uid ?? userId;
+  function logout() {
+    clearAccessToken();
+    router.push("/login");
+  }
 
+  function redirectToLogin() {
+    clearAccessToken();
+    router.push("/login");
+  }
+
+  async function reloadRoles() {
     setRolesLoading(true);
     setRolesError(null);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/directory/roles", {
+      const base = env("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000");
+      const url = new URL("/directory/roles", base);
+
+      const tok = getBearer();
+      const res = await fetch(url.toString(), {
         method: "GET",
-        headers: { "X-User-Id": String(currentUserId) },
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
         cache: "no-store",
       });
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
+        if (res.status === 401) {
+          redirectToLogin();
+          return;
+        }
         throw { status: res.status, message: text || "Не удалось загрузить роли" };
       }
 
@@ -160,9 +171,9 @@ export default function TasksPage() {
 
       const parsed: RoleItem[] = items
         .map((x) => ({
-          id: Number(x?.id ?? 0),
+          id: Number(x?.id ?? x?.role_id ?? 0),
           code: x?.code ?? null,
-          name: String(x?.name ?? "").trim(),
+          name: String(x?.name ?? x?.name_ru ?? "").trim(),
           is_active: Boolean(x?.is_active ?? true),
         }))
         .filter((x) => Number.isFinite(x.id) && x.id > 0);
@@ -171,7 +182,7 @@ export default function TasksPage() {
       setRoles(parsed);
     } catch (e: any) {
       const st = e?.status;
-      const msg = normalizeUserNotFound(e?.message || "Не удалось загрузить роли");
+      const msg = normalizeMsg(e?.message || "Не удалось загрузить роли");
       setRoles([]);
       setRolesError(st ? `(${st}) ${msg}` : msg);
     } finally {
@@ -179,15 +190,13 @@ export default function TasksPage() {
     }
   }
 
-  async function reloadList(uid?: number) {
-    const currentUserId = uid ?? userId;
-
+  async function reloadList() {
     setListLoading(true);
     setListError(null);
 
     try {
       const data = await apiGetTasks({
-        devUserId: currentUserId,
+        devUserId: 0,
         limit,
         offset,
         executor_role_id: executorRoleId === "" ? undefined : Number(executorRoleId),
@@ -200,8 +209,12 @@ export default function TasksPage() {
         setItem(null);
       }
     } catch (e: any) {
+      if (isUnauthorized(e)) {
+        redirectToLogin();
+        return;
+      }
       const st = e?.status;
-      const msg = normalizeUserNotFound(e?.message || "Не удалось загрузить список задач");
+      const msg = normalizeMsg(e?.message || "Не удалось загрузить список задач");
       setList([]);
       setSelectedId(null);
       setItem(null);
@@ -211,18 +224,20 @@ export default function TasksPage() {
     }
   }
 
-  async function reloadItem(id: number, uid?: number) {
-    const currentUserId = uid ?? userId;
-
+  async function reloadItem(id: number) {
     setItemLoading(true);
     setItemError(null);
 
     try {
-      const data = await apiGetTask({ devUserId: currentUserId, taskId: id, includeArchived: true });
+      const data = await apiGetTask({ devUserId: 0, taskId: id, includeArchived: true });
       setItem(data);
     } catch (e: any) {
+      if (isUnauthorized(e)) {
+        redirectToLogin();
+        return;
+      }
       const st = e?.status;
-      const msg = normalizeUserNotFound(e?.message || "Не удалось загрузить задачу");
+      const msg = normalizeMsg(e?.message || "Не удалось загрузить задачу");
       setItem(null);
       setItemError(st ? `(${st}) ${msg}` : msg);
     } finally {
@@ -232,8 +247,6 @@ export default function TasksPage() {
 
   async function runAction(action: TaskAction) {
     if (!selectedId) return;
-
-    const currentUserId = userId;
 
     setItemError(null);
     setItemLoading(true);
@@ -247,7 +260,7 @@ export default function TasksPage() {
         }
 
         await apiPostTaskAction({
-          devUserId: currentUserId,
+          devUserId: 0,
           taskId: selectedId,
           action,
           payload: {
@@ -258,17 +271,21 @@ export default function TasksPage() {
         });
       } else if (action === "approve" || action === "reject" || action === "archive") {
         await apiPostTaskAction({
-          devUserId: currentUserId,
+          devUserId: 0,
           taskId: selectedId,
           action,
-          payload: reason.trim() ? ({ reason: reason.trim() } as any) : undefined,
+          payload: reason.trim() ? ({ reason: reason.trim() as any } as any) : undefined,
         });
       }
 
-      await Promise.all([reloadItem(selectedId, currentUserId), reloadList(currentUserId)]);
+      await Promise.all([reloadItem(selectedId), reloadList()]);
     } catch (e: any) {
+      if (isUnauthorized(e)) {
+        redirectToLogin();
+        return;
+      }
       const st = e?.status;
-      const msg = normalizeUserNotFound(e?.message || "Не удалось выполнить действие");
+      const msg = normalizeMsg(e?.message || "Не удалось выполнить действие");
       setItemError(st ? `(${st}) ${msg}` : msg);
     } finally {
       setItemLoading(false);
@@ -276,11 +293,25 @@ export default function TasksPage() {
   }
 
   useEffect(() => {
-    const uid = getStoredUserId();
-    setUserIdState(uid);
+    // единый guard + первичная загрузка (один раз)
+    (async () => {
+      if (!isAuthed()) {
+        router.push("/login");
+        return;
+      }
+      try {
+        await apiAuthMe();
+      } catch (e: any) {
+        if (isUnauthorized(e)) {
+          redirectToLogin();
+          return;
+        }
+        setListError(normalizeMsg(e?.message || "Ошибка авторизации"));
+        return;
+      }
 
-    void reloadRoles(uid);
-    void reloadList(uid);
+      await Promise.all([reloadRoles(), reloadList()]);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -290,9 +321,9 @@ export default function TasksPage() {
       setItemError(null);
       return;
     }
-    void reloadItem(selectedId, userId);
+    void reloadItem(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, userId]);
+  }, [selectedId]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -301,37 +332,14 @@ export default function TasksPage() {
           <div className="text-xl font-semibold">Система личных кабинетов / Задачи</div>
 
           <div className="flex items-center gap-2">
-            <div className="text-xs text-zinc-400">
-              <div>Режим разработчика</div>
-              <div>User ID</div>
-            </div>
-
-            <input
-              value={String(userId)}
-              onChange={(e) => setUserIdState(Number(e.target.value || "0"))}
-              className="w-28 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none"
-              inputMode="numeric"
-            />
-
             <button
-              onClick={() => {
-                setStoredUserId(userId);
-                setOffset(0);
-                void reloadRoles(userId);
-                void reloadList(userId);
-                if (selectedId) void reloadItem(selectedId, userId);
-                setItemError(null);
-              }}
+              onClick={logout}
               className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800"
+              title="Сбросить токен и перейти на страницу входа"
             >
-              Применить
+              Выйти
             </button>
           </div>
-        </div>
-
-        <div className="mt-2 text-xs text-zinc-400">
-          Режим разработчика: вводится <span className="text-zinc-200">user_id</span> (не role_id). Фильтр “Роль исполнителя” — это{" "}
-          <span className="text-zinc-200">executor_role_id</span>.
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -341,7 +349,7 @@ export default function TasksPage() {
               <div className="text-sm uppercase tracking-wide text-zinc-300">Список задач</div>
 
               <button
-                onClick={() => void reloadList(userId)}
+                onClick={() => void reloadList()}
                 className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800"
                 disabled={listLoading}
               >
@@ -402,7 +410,7 @@ export default function TasksPage() {
                   <button
                     onClick={() => {
                       setOffset(0);
-                      void reloadList(userId);
+                      void reloadList();
                     }}
                     className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
                     disabled={listLoading}
@@ -414,7 +422,7 @@ export default function TasksPage() {
                     onClick={() => {
                       setExecutorRoleId("");
                       setOffset(0);
-                      void reloadList(userId);
+                      void reloadList();
                     }}
                     className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
                     disabled={listLoading}
@@ -465,7 +473,7 @@ export default function TasksPage() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-sm uppercase tracking-wide text-zinc-300">Карточка / действия</div>
               <button
-                onClick={() => (selectedId ? void reloadItem(selectedId, userId) : null)}
+                onClick={() => (selectedId ? void reloadItem(selectedId) : null)}
                 className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs hover:bg-zinc-800"
                 disabled={!selectedId || itemLoading}
               >
