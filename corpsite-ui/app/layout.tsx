@@ -1,11 +1,13 @@
 // FILE: corpsite-ui/app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
-import DevUserBadge from "../components/DevUserBadge";
+
+import TenantTitle from "../components/TenantTitle";
+import AppShell from "../components/AppShell";
 
 export const metadata: Metadata = {
-  title: "corpsite-ui",
-  description: "Corpsite UI",
+  title: "Система личных кабинетов",
+  description: "Личный кабинет",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,8 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             position: "sticky",
             top: 0,
             zIndex: 10,
-            borderBottom: "1px solid rgba(0,0,0,0.12)",
-            background: "white",
+            borderBottom: "1px solid rgba(255,255,255,0.10)",
+            background: "rgb(9 9 11)",
+            color: "rgb(244 244 245)",
           }}
         >
           <div
@@ -32,23 +35,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               gap: 12,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <a href="/" style={{ fontWeight: 700, textDecoration: "none", color: "inherit" }}>
-                corpsite
-              </a>
+            <a
+              href="/"
+              style={{
+                fontWeight: 700,
+                textDecoration: "none",
+                color: "inherit",
+                letterSpacing: 0.2,
+              }}
+            >
+              <TenantTitle />
+            </a>
 
-              <nav style={{ display: "flex", gap: 12, fontSize: 14, opacity: 0.9 }}>
-                <a href="/tasks">Tasks</a>
-                <a href="/regular-tasks">Regular Tasks</a>
-                <a href="/directory">Directory</a>
-              </nav>
-            </div>
-
-            <DevUserBadge />
+            {/* Reserved: right side (DEV badge / user menu) */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }} />
           </div>
         </header>
 
-        <main style={{ maxWidth: 1200, margin: "0 auto", padding: "16px" }}>{children}</main>
+        <main>
+          <AppShell>{children}</AppShell>
+        </main>
       </body>
     </html>
   );

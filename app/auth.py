@@ -152,21 +152,32 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         row = conn.execute(
             text(
                 """
-                SELECT user_id, role_id, unit_id, is_active, login
-                FROM public.users
-                WHERE user_id = :uid
+                SELECT 
+                    u.user_id,
+                    u.role_id,
+                    r.name AS role_name_ru,
+                    u.unit_id,
+                    u.is_active,
+                    u.login
+                FROM public.users u
+                LEFT JOIN public.roles r 
+                    ON r.role_id = u.role_id
+                WHERE u.user_id = :uid
                 """
             ),
             {"uid": int(user_id)},
         ).fetchone()
+
     if not row:
         return None
+
     return {
         "user_id": int(row[0]),
         "role_id": int(row[1]) if row[1] is not None else None,
-        "unit_id": int(row[2]) if row[2] is not None else None,
-        "is_active": bool(row[3]),
-        "login": str(row[4]) if row[4] is not None else None,
+        "role_name_ru": str(row[2]) if row[2] is not None else None,
+        "unit_id": int(row[3]) if row[3] is not None else None,
+        "is_active": bool(row[4]),
+        "login": str(row[5]) if row[5] is not None else None,
     }
 
 

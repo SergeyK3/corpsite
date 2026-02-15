@@ -29,11 +29,11 @@ from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
 from app.directory import router as directory_router
-from app.auth import router as auth_router  # NEW
+from app.auth import router as auth_router  # /auth/login, /auth/me
 
 # regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
-from app.services.regular_tasks_public_router import router as regular_tasks_router
+from app.api.regular_tasks import router as regular_tasks_router  # /regular-tasks, /regular-task-runs, /regular-task-runs/{run_id}/items
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -82,13 +82,13 @@ app.add_middleware(
 # Routers (public)
 # -----------------------
 app.include_router(meta_router)
-app.include_router(auth_router)  # NEW: /auth/login, /auth/me
+app.include_router(auth_router)  # /auth/login, /auth/me
 app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any
 app.include_router(tg_bind_router)
 app.include_router(directory_router)
 
-# Regular tasks (PUBLIC CRUD)
+# Regular tasks (public read)
 app.include_router(regular_tasks_router)
 
 # -----------------------

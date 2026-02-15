@@ -1,134 +1,174 @@
 // FILE: corpsite-ui/app/login/page.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
-import { apiAuthLogin } from "../../lib/api";
-import { LOGIN_TO_USER_ID } from "../../lib/auth";
+import { apiAuthLogin } from "@/lib/api";
+
+const LAST_LOGIN_KEY = "corpsite.lastLogin";
+
+function normalizeLogin(v: string): string {
+  return (v || "").trim().toLowerCase();
+}
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const knownLogins = useMemo(() => {
-    // Подсказки логинов (dev), но сам вход — через backend /auth/login.
-    return Object.keys(LOGIN_TO_USER_ID)
-      .filter((k) => k && k.trim().length > 0)
-      .sort((a, b) => a.localeCompare(b));
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+
+  // Load last login
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_LOGIN_KEY);
+      if (saved) {
+        setLogin(saved);
+        setTimeout(() => passwordRef.current?.focus(), 0);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
+
+  // Persist last login (debounced)
+  useEffect(() => {
+    try {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        localStorage.setItem(LAST_LOGIN_KEY, normalizeLogin(login));
+      }, 250);
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      } catch {
+        // ignore
+      }
+    };
+  }, [login]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy) return;
+    setError(null);
+    setBusy(true);
 
-    const l = (login ?? "").trim();
-    const p = (password ?? "").trim();
+    const l = normalizeLogin(login);
+    const p = (password ?? "").toString();
 
     if (!l) {
-      setError("Введите логин");
+      setBusy(false);
+      setError("Введите логин.");
       return;
     }
     if (!p) {
-      setError("Введите пароль");
+      setBusy(false);
+      setError("Введите пароль.");
       return;
     }
 
-    setError("");
-    setBusy(true);
-
     try {
+      // backend auth
       await apiAuthLogin({ login: l, password: p });
-      router.push("/tasks");
+
+      // store last login for convenience
+      try {
+        localStorage.setItem(LAST_LOGIN_KEY, l);
+      } catch {
+        // ignore
+      }
+
+      router.replace("/");
     } catch (e: any) {
       const msg =
-        e?.message ||
-        e?.details?.detail ||
-        e?.details?.message ||
-        "Ошибка входа";
-      setError(String(msg));
+        String(e?.details?.detail ?? e?.message ?? "Не удалось выполнить вход").trim() ||
+        "Не удалось выполнить вход";
+      setError(msg);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-md px-4 py-12">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <div className="text-xl font-semibold">Вход</div>
-          <div className="mt-1 text-sm text-zinc-400">
-            Авторизация через backend (/auth/login → JWT).
+    <div className="min-h-[calc(100vh-0px)] flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold">Вход</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Введите свой логин и пароль.</p>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="login" className="text-sm font-medium">
+              Логин
+            </label>
+            <input
+              id="login"
+              name="login"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              autoComplete="username"
+              placeholder="Введите логин"
+              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/10"
+              disabled={busy}
+            />
           </div>
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-3">
-            <div>
-              <div className="text-xs text-zinc-400">Логин</div>
-              <input
-                value={login}
-                onChange={(e) => setLogin(e.target.value)}
-                placeholder="например: director@corp.local"
-                autoComplete="username"
-                className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
-              />
-              {knownLogins.length > 0 ? (
-                <div className="mt-2 text-xs text-zinc-500">
-                  Быстрый выбор:&nbsp;
-                  {knownLogins.map((l, idx) => (
-                    <button
-                      type="button"
-                      key={l}
-                      onClick={() => setLogin(l)}
-                      className="underline decoration-zinc-700 hover:decoration-zinc-300"
-                    >
-                      {l}
-                      {idx < knownLogins.length - 1 ? ", " : ""}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-sm font-medium">
+              Пароль
+            </label>
 
-            <div>
-              <div className="text-xs text-zinc-400">Пароль</div>
+            <div className="relative">
               <input
+                ref={passwordRef}
+                id="password"
+                name="password"
+                type={showPwd ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                type="password"
                 autoComplete="current-password"
-                className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                placeholder="Введите пароль"
+                className="w-full rounded-xl border px-3 py-2 pr-12 outline-none focus:ring-2 focus:ring-black/10"
+                disabled={busy}
               />
-            </div>
 
-            {error ? (
-              <div className="rounded-xl border border-red-900/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-                {error}
-              </div>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-2 text-sm font-semibold hover:bg-zinc-900/70 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy ? "Вход..." : "Войти"}
-            </button>
-
-            <div className="text-xs text-zinc-500">
-              <Link
-                className="underline decoration-zinc-700 hover:decoration-zinc-300"
-                href="/"
+              <button
+                type="button"
+                onClick={() => setShowPwd((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border px-2 py-1 text-xs hover:bg-black/5 disabled:opacity-60"
+                disabled={busy}
+                aria-label={showPwd ? "Скрыть пароль" : "Показать пароль"}
+                title={showPwd ? "Скрыть пароль" : "Показать пароль"}
               >
-                На главную
-              </Link>
+                {showPwd ? "🙈" : "👁"}
+              </button>
             </div>
-          </form>
-        </div>
+          </div>
+
+          {error ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            className="w-full rounded-xl bg-black px-3 py-2 text-white disabled:opacity-60"
+            disabled={busy}
+          >
+            {busy ? "Входим..." : "Войти"}
+          </button>
+        </form>
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 // corpsite-ui/app/directory/employees/_components/EmployeesTable.tsx
 "use client";
 
-import Link from "next/link";
 import type { EmployeeListItem } from "../_lib/types";
 
 type Props = {
@@ -16,21 +15,18 @@ type Props = {
 
 function formatDate(d: string | null): string {
   if (!d) return "—";
-  // API returns YYYY-MM-DD; render as DD.MM.YYYY for RU UX
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return d;
   return dt.toLocaleDateString("ru-RU");
 }
 
 function computeIsActive(it: any): boolean {
-  // Prefer normalized API field: status ("active" | "inactive" | "unknown")
   if (typeof it?.status === "string") {
     const s = String(it.status).toLowerCase();
     if (s === "active") return true;
     if (s === "inactive") return false;
   }
 
-  // Fallbacks for other payloads
   if (typeof it.is_active === "boolean") return it.is_active;
   if (typeof it.isActive === "boolean") return it.isActive;
   if ("date_to" in it) return it.date_to == null;
@@ -101,9 +97,6 @@ export default function EmployeesTable({
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(total / limit));
 
-  const hrefOf = (employee_id: string) =>
-    `/directory/employees/${encodeURIComponent(employee_id)}`;
-
   return (
     <div className="border rounded bg-white overflow-hidden">
       <div className="overflow-x-auto">
@@ -139,7 +132,6 @@ export default function EmployeesTable({
                 const active = computeIsActive(it);
                 const rowCls = !active ? "text-gray-600" : "text-gray-900";
 
-                // Если по какой-то причине id пустой, не строим кликабельные ссылки.
                 const canOpen = Boolean(employee_id);
 
                 return (
@@ -150,17 +142,13 @@ export default function EmployeesTable({
 
                     <td className="px-3 py-2">
                       {canOpen ? (
-                        <Link
-                          href={hrefOf(employee_id)}
+                        <button
+                          type="button"
                           className="underline text-blue-700 hover:text-blue-900"
-                          onClick={() => {
-                            try {
-                              onOpenEmployee(employee_id);
-                            } catch {}
-                          }}
+                          onClick={() => onOpenEmployee(employee_id)}
                         >
                           {fio}
-                        </Link>
+                        </button>
                       ) : (
                         <span>{fio}</span>
                       )}
@@ -172,9 +160,11 @@ export default function EmployeesTable({
                     <td className="px-3 py-2 whitespace-nowrap">
                       {it.employment_rate ?? it.rate ?? "—"}
                     </td>
+
                     <td className="px-3 py-2 whitespace-nowrap">
                       {formatDate(it.date_from ?? it.dateFrom ?? null)}
                     </td>
+
                     <td className="px-3 py-2 whitespace-nowrap">
                       {formatDate(it.date_to ?? it.dateTo ?? null)}
                     </td>
@@ -185,17 +175,13 @@ export default function EmployeesTable({
 
                     <td className="px-3 py-2 text-right">
                       {canOpen ? (
-                        <Link
-                          href={hrefOf(employee_id)}
+                        <button
+                          type="button"
                           className="underline text-blue-700 hover:text-blue-900"
-                          onClick={() => {
-                            try {
-                              onOpenEmployee(employee_id);
-                            } catch {}
-                          }}
+                          onClick={() => onOpenEmployee(employee_id)}
                         >
                           Просмотр
-                        </Link>
+                        </button>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}

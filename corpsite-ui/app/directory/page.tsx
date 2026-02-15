@@ -1,4 +1,5 @@
-// ROUTE: /directory  FILE: corpsite-ui/app/directory/page.tsx
+// ROUTE: /directory
+// FILE: corpsite-ui/app/directory/page.tsx
 
 "use client";
 
@@ -34,7 +35,6 @@ function DirectoryHomeInner() {
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string>("");
 
-  // Если URL меняется (навигация), синхронизируем init параметры
   useEffect(() => {
     setOrgUnitId(initOrgUnitId);
     setIncludeChildren(initIncludeChildren);
@@ -83,92 +83,59 @@ function DirectoryHomeInner() {
   }, [offset, limit, total]);
 
   return (
-    <div style={{ padding: 16, display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Сотрудники</div>
-        <a href="/directory/org" style={{ fontSize: 13, opacity: 0.75 }}>
-          перейти к оргструктуре
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      {/* TITLE */}
+      <div className="mb-6">
+        <div className="text-2xl font-semibold text-zinc-100">Оргструктура</div>
+        <div className="mt-1 text-sm text-zinc-400">
+          Просмотр подразделений и сотрудников (только для чтения)
+        </div>
+      </div>
+
+      {/* LINKS */}
+      <div className="mb-6 flex flex-wrap gap-4 text-sm">
+        <a href="/directory/org" className="text-blue-400 hover:underline">
+          Открыть дерево подразделений
         </a>
-        <a href="/directory/employees" style={{ fontSize: 13, opacity: 0.75 }}>
-          открыть полный справочник
+        <a href="/directory/employees" className="text-blue-400 hover:underline">
+          Полный справочник сотрудников
         </a>
       </div>
 
-      <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 220px 160px", gap: 10 }}>
+      {/* SEARCH BLOCK */}
+      <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Поиск</div>
+            <div className="mb-1 text-xs text-zinc-400">Поиск</div>
             <input
               value={q}
               onChange={(e) => {
                 setOffset(0);
                 setQ(e.target.value);
               }}
-              placeholder="ФИО или табельный"
-              style={{
-                width: "100%",
-                padding: "10px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.15)",
-              }}
+              placeholder="ФИО или табельный номер"
+              className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
             />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Статус</div>
+            <div className="mb-1 text-xs text-zinc-400">Статус</div>
             <select
               value={status}
               onChange={(e) => {
                 setOffset(0);
                 setStatus(e.target.value as Status);
               }}
-              style={{
-                width: "100%",
-                padding: "10px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.15)",
-                background: "white",
-              }}
+              className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
             >
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-              <option value="all">all</option>
+              <option value="active">Активные</option>
+              <option value="inactive">Неактивные</option>
+              <option value="all">Все</option>
             </select>
           </div>
 
-          <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>org_unit_id</div>
-            <input
-              value={orgUnitId}
-              onChange={(e) => {
-                setOffset(0);
-                setOrgUnitId(e.target.value.replace(/[^\d]/g, ""));
-              }}
-              placeholder="например 44"
-              style={{
-                width: "100%",
-                padding: "10px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.15)",
-              }}
-            />
-            <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={includeChildren}
-                onChange={(e) => {
-                  setOffset(0);
-                  setIncludeChildren(e.target.checked);
-                }}
-                disabled={!orgUnitId}
-              />
-              включая подотделы
-            </label>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
+          <div className="flex items-end">
             <button
-              type="button"
               onClick={() => {
                 setQ("");
                 setStatus("active");
@@ -176,83 +143,53 @@ function DirectoryHomeInner() {
                 setIncludeChildren(false);
                 setOffset(0);
               }}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.15)",
-                background: "white",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
+              className="w-full rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60"
             >
-              Сброс
+              Сбросить фильтры
             </button>
           </div>
         </div>
       </div>
 
-      <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
-        {loading && <div>Загрузка…</div>}
-        {err && <div style={{ color: "crimson", whiteSpace: "pre-wrap" }}>Ошибка: {err}</div>}
+      {/* TABLE */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        {loading && <div className="text-sm text-zinc-400">Загрузка…</div>}
+        {err && <div className="text-sm text-red-400">Ошибка: {err}</div>}
 
         {!loading && !err && (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>
+            <div className="mb-4 flex justify-between text-xs text-zinc-400">
+              <div>
                 Показано {pageInfo.from}–{pageInfo.to} из {total}
               </div>
 
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="flex gap-2">
                 <button
-                  type="button"
                   onClick={() => setOffset((v) => Math.max(0, v - limit))}
                   disabled={offset === 0}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(0,0,0,0.15)",
-                    background: "white",
-                    cursor: "pointer",
-                    opacity: offset === 0 ? 0.5 : 1,
-                  }}
+                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 disabled:opacity-50"
                 >
                   Назад
                 </button>
                 <button
-                  type="button"
                   onClick={() => setOffset((v) => (v + limit < total ? v + limit : v))}
                   disabled={offset + limit >= total}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(0,0,0,0.15)",
-                    background: "white",
-                    cursor: "pointer",
-                    opacity: offset + limit >= total ? 0.5 : 1,
-                  }}
+                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 disabled:opacity-50"
                 >
                   Вперёд
                 </button>
               </div>
             </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr style={{ textAlign: "left" }}>
-                    {["Таб№", "ФИО", "Подразделение", "Должность", "Ставка", "Активен", ""].map((h) => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: "10px 8px",
-                          borderBottom: "1px solid rgba(0,0,0,0.12)",
-                          fontSize: 12,
-                          opacity: 0.75,
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
+                  <tr className="text-left text-xs text-zinc-400">
+                    <th className="border-b border-zinc-800 px-2 py-2">Таб№</th>
+                    <th className="border-b border-zinc-800 px-2 py-2">ФИО</th>
+                    <th className="border-b border-zinc-800 px-2 py-2">Подразделение</th>
+                    <th className="border-b border-zinc-800 px-2 py-2">Должность</th>
+                    <th className="border-b border-zinc-800 px-2 py-2">Активен</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -260,32 +197,18 @@ function DirectoryHomeInner() {
                     const fio = pickName(e);
                     const unitName = e?.org_unit?.name || "";
                     const posName = e?.position?.name || "";
-                    const rate = (e?.employment_rate ?? e?.rate) ?? null;
                     const active = e?.is_active;
 
                     return (
                       <tr key={e.id}>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-                          <a
-                            href={`/directory/employees/${encodeURIComponent(e.id)}`}
-                            style={{ textDecoration: "none", fontWeight: 700 }}
-                          >
-                            {e.id}
-                          </a>
+                        <td className="border-b border-zinc-800 px-2 py-2 font-medium text-zinc-200">
+                          {e.id}
                         </td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{fio}</td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{unitName}</td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>{posName}</td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-                          {rate === null || rate === undefined ? "—" : String(rate)}
-                        </td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                        <td className="border-b border-zinc-800 px-2 py-2 text-zinc-100">{fio}</td>
+                        <td className="border-b border-zinc-800 px-2 py-2 text-zinc-300">{unitName}</td>
+                        <td className="border-b border-zinc-800 px-2 py-2 text-zinc-300">{posName}</td>
+                        <td className="border-b border-zinc-800 px-2 py-2 text-zinc-300">
                           {active === true ? "да" : active === false ? "нет" : "—"}
-                        </td>
-                        <td style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-                          <a href={`/directory/employees/${encodeURIComponent(e.id)}`} style={{ textDecoration: "none" }}>
-                            открыть
-                          </a>
                         </td>
                       </tr>
                     );
@@ -293,8 +216,8 @@ function DirectoryHomeInner() {
 
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
-                        Нет данных по текущим фильтрам.
+                      <td colSpan={5} className="px-3 py-4 text-center text-zinc-500">
+                        Нет данных.
                       </td>
                     </tr>
                   )}
@@ -309,7 +232,6 @@ function DirectoryHomeInner() {
 }
 
 export default function DirectoryHomePage() {
-  // Важно: useSearchParams() должен быть внутри Suspense boundary для prerender/SSG
   return (
     <Suspense fallback={<div style={{ padding: 16 }}>Загрузка…</div>}>
       <DirectoryHomeInner />

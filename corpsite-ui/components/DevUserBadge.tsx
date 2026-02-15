@@ -11,11 +11,7 @@ export default function DevUserBadge() {
     const read = () => setUid(getDevUserId(1));
     read();
 
-    // обновлять при возврате во вкладку
     window.addEventListener("focus", read);
-
-    // обновлять при смене ключа в sessionStorage (в пределах текущей вкладки это событие не стреляет,
-    // но пусть будет на случай иных сценариев)
     window.addEventListener("storage", read);
 
     return () => {

@@ -1,18 +1,24 @@
-// corpsite-ui/app/directory/org/page.tsx
+// FILE: corpsite-ui/app/directory/org/page.tsx
 import * as React from "react";
 import OrgPageClient from "./_components/OrgPageClient";
 
 export default function OrgPage() {
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded border p-4">
-        <div className="text-lg font-semibold">Оргструктура</div>
-        <div className="text-sm text-gray-600">
-          Выберите подразделение слева, чтобы увидеть сотрудников справа.
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="mb-6">
+        <div className="text-2xl font-semibold text-zinc-100">Оргструктура</div>
+        <div className="mt-1 text-sm text-zinc-400">
+          Выберите подразделение, чтобы увидеть список сотрудников.
         </div>
       </div>
 
-      <React.Suspense fallback={<div className="rounded border bg-white p-4 text-sm text-gray-700">Загрузка…</div>}>
+      <React.Suspense
+        fallback={
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-400">
+            Загрузка…
+          </div>
+        }
+      >
         <OrgPageClient />
       </React.Suspense>
     </div>

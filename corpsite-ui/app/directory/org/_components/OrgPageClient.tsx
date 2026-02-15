@@ -1,4 +1,4 @@
-// corpsite-ui/app/directory/org/_components/OrgPageClient.tsx
+// FILE: corpsite-ui/app/directory/org/_components/OrgPageClient.tsx
 "use client";
 
 import * as React from "react";
@@ -76,10 +76,14 @@ function safeRate(e: any): string {
   if (v === null || v === undefined || v === "") return "—";
   return String(v);
 }
-function safeStatus(e: any): string {
+function safeActive(e: any): string {
+  const active = e?.is_active;
+  if (active === true) return "активен";
+  if (active === false) return "неактивен";
+  // fallback
   const s = String(e?.status ?? "").toLowerCase();
-  if (s === "active") return "Работает";
-  if (s === "inactive") return "Не работает";
+  if (s === "active") return "активен";
+  if (s === "inactive") return "неактивен";
   return "—";
 }
 
@@ -92,25 +96,14 @@ type RoleRule = {
 };
 
 const DEFAULT_ROLE_ORDER: RoleRule[] = [
-  // 1) заведующий
   { rank: 10, keywords: ["завед", "зав."] },
-
-  // 2) врачи (прочие)
   { rank: 20, keywords: ["врач", "доктор"] },
-
-  // 3) старшая медсестра / старший фельдшер
   {
     rank: 30,
     keywords: ["старшая медсестра", "ст. медсестра", "старший фельдшер", "ст. фельдшер"],
   },
-
-  // 4) прочие медсестры (детализацию уточним позже)
   { rank: 40, keywords: ["медсестра", "м/с", "сестра"] },
-
-  // 5) сестра-хозяйка
   { rank: 50, keywords: ["сестра-хозяйка", "сестра хозяйка", "с-х"] },
-
-  // 6) санитарки
   { rank: 60, keywords: ["санитар", "санитарка"] },
 ];
 
@@ -272,10 +265,7 @@ export default function OrgPageClient() {
 
   // URL state
   const urlOrgUnitId = React.useMemo(() => parseIntOrNull(sp.get("org_unit_id")), [sp]);
-  const urlEmployeeId = React.useMemo(
-    () => (sp.get("employee_id") || "").trim() || null,
-    [sp]
-  );
+  const urlEmployeeId = React.useMemo(() => (sp.get("employee_id") || "").trim() || null, [sp]);
   const urlExpanded = React.useMemo(() => parseExpanded(sp.get("expanded")), [sp]);
 
   const [orgLoading, setOrgLoading] = React.useState(false);
@@ -306,13 +296,10 @@ export default function OrgPageClient() {
     router.replace(`/directory/org?${p.toString()}`);
   }
 
-  // sync expandedSet from URL
   React.useEffect(() => {
-    // создаём новый Set чтобы React видел изменение
     setExpandedSet(new Set<number>(Array.from(urlExpanded.values())));
   }, [urlExpanded]);
 
-  // parent map for auto-expansion of selected org_unit
   const parentMap = React.useMemo(() => buildParentMap(orgItems), [orgItems]);
 
   // 1) load org tree
@@ -351,8 +338,6 @@ export default function OrgPageClient() {
           const found = flat.find((u) => u.unit_id === urlOrgUnitId);
           if (found) {
             setSelectedUnit(found);
-            // expanded: раскрываем предков выбранного узла (без изменения существующего expanded, если он уже есть)
-            // если expanded отсутствует — записываем минимально необходимое
             if (!sp.get("expanded")) {
               const pm = buildParentMap(items);
               const need = new Set<number>();
@@ -452,7 +437,6 @@ export default function OrgPageClient() {
     };
   }, [apiBase, headers, selectedUnit]);
 
-  // Sorted employees within the org unit
   const sortedEmployees = React.useMemo(() => {
     const items = Array.isArray(empData?.items) ? [...empData.items] : [];
     items.sort((a: any, b: any) => {
@@ -480,7 +464,6 @@ export default function OrgPageClient() {
     setDrawerEmployeeId(null);
   }, [urlEmployeeId]);
 
-  // Tree filter (context-preserving)
   const searchActive = Boolean(filterText.trim());
   const treeForRender = React.useMemo(() => {
     if (!searchActive) return orgItems;
@@ -488,7 +471,6 @@ export default function OrgPageClient() {
   }, [orgItems, filterText, searchActive]);
 
   function isExpanded(unitId: number): boolean {
-    // при поиске показываем ветки раскрытыми визуально, не трогая expanded в URL
     if (searchActive) return true;
     return expandedSet.has(unitId);
   }
@@ -513,11 +495,7 @@ export default function OrgPageClient() {
 
   function onSelectUnit(u: UnitPick) {
     setSelectedUnit(u);
-
-    // раскрыть предков выбранного узла и зафиксировать expanded в URL
     ensureExpandedForSelection(u.unit_id);
-
-    // смена подразделения сбрасывает employee_id
     replaceUrl({
       org_unit_id: String(u.unit_id),
       employee_id: null,
@@ -544,32 +522,25 @@ export default function OrgPageClient() {
   }
 
   async function onTerminate(_details: EmployeeDetails) {
-    // пока без бизнес-логики: только закрываем
     closeEmployeeDrawer();
   }
 
   function renderTree(nodes: OrgTreeNode[], depth: number): React.ReactNode {
-    const sorted = [...nodes].sort((a, b) =>
-      (a.name || "").localeCompare(b.name || "", "ru")
-    );
+    const sorted = [...nodes].sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
 
     return sorted.map((n) => {
       const hasChildren = Array.isArray(n.children) && n.children.length > 0;
       const expanded = hasChildren ? isExpanded(n.unit_id) : false;
-
       const active = selectedUnit?.unit_id === n.unit_id;
 
       return (
         <div key={n.unit_id}>
           <div className="flex items-stretch">
-            <div
-              className="flex items-center"
-              style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}
-            >
+            <div className="flex items-center" style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}>
               {hasChildren ? (
                 <button
                   type="button"
-                  className="mr-2 w-6 h-6 rounded border border-gray-200 hover:bg-gray-50 text-gray-900"
+                  className="mr-2 h-6 w-6 rounded border border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:bg-zinc-900/60"
                   onClick={(ev) => {
                     ev.stopPropagation();
                     toggleExpanded(n.unit_id);
@@ -580,16 +551,16 @@ export default function OrgPageClient() {
                   <span className="text-xs">{expanded ? "▾" : "▸"}</span>
                 </button>
               ) : (
-                <div className="mr-2 w-6 h-6" />
+                <div className="mr-2 h-6 w-6" />
               )}
             </div>
 
             <button
               type="button"
               className={[
-                "flex-1 text-left px-3 py-2 rounded border text-sm",
-                "text-gray-900",
-                active ? "bg-gray-100 border-gray-400" : "bg-white border-gray-200 hover:bg-gray-50",
+                "flex-1 rounded-lg border px-3 py-2 text-left text-sm",
+                "border-zinc-800 bg-zinc-950/40 text-zinc-100 hover:bg-zinc-900/60",
+                active ? "outline outline-1 outline-zinc-600" : "",
               ].join(" ")}
               onClick={() => onSelectUnit({ unit_id: n.unit_id, name: n.name })}
               title="Выбрать подразделение"
@@ -607,14 +578,15 @@ export default function OrgPageClient() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      {/* LEFT: tree */}
       <div className="lg:col-span-5">
-        <div className="bg-white rounded border">
-          <div className="p-3 border-b">
-            <div className="font-semibold text-gray-900">Подразделения</div>
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40">
+          <div className="border-b border-zinc-800 p-4">
+            <div className="text-sm font-semibold text-zinc-100">Подразделения</div>
             <div className="mt-2">
               <input
-                className="w-full border rounded px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
+                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
                 placeholder="Поиск по подразделениям"
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
@@ -622,19 +594,19 @@ export default function OrgPageClient() {
             </div>
           </div>
 
-          <div className="p-3">
+          <div className="p-4">
             {orgError ? (
-              <div className="border rounded p-3 text-sm text-red-700">{orgError}</div>
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {orgError}
+              </div>
             ) : null}
 
-            {orgLoading ? <div className="text-sm text-gray-700">Загрузка…</div> : null}
+            {orgLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
 
             {!orgLoading && !orgError ? (
-              <div className="space-y-1 max-h-[70vh] overflow-auto">
-                {treeForRender.length > 0 ? (
-                  renderTree(treeForRender, 0)
-                ) : (
-                  <div className="text-sm text-gray-700">Ничего не найдено.</div>
+              <div className="max-h-[70vh] space-y-1 overflow-auto">
+                {treeForRender.length > 0 ? renderTree(treeForRender, 0) : (
+                  <div className="text-sm text-zinc-400">Ничего не найдено.</div>
                 )}
               </div>
             ) : null}
@@ -642,88 +614,83 @@ export default function OrgPageClient() {
         </div>
       </div>
 
+      {/* RIGHT: employees */}
       <div className="lg:col-span-7">
-        <div className="bg-white rounded border">
-          <div className="p-3 border-b">
-            <div className="font-semibold text-gray-900">
-              {selectedUnit ? `Сотрудники — ${selectedUnit.name}` : "Сотрудники"}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40">
+          <div className="border-b border-zinc-800 p-4">
+            <div className="text-sm font-semibold text-zinc-100">
+              {selectedUnit ? selectedUnit.name : "Сотрудники"}
             </div>
-            <div className="text-xs text-gray-700 mt-1">
-              {selectedUnit ? `Фильтр: org_unit_id=${selectedUnit.unit_id}` : null}
-              {drawerEmployeeId ? ` · employee_id=${drawerEmployeeId}` : null}
-              {!searchActive && expandedSet.size > 0
-                ? ` · expanded=${serializeExpanded(expandedSet)}`
-                : null}
+            <div className="mt-1 text-xs text-zinc-400">
+              {selectedUnit ? `Сотрудников: ${empData.total}` : "Выберите подразделение слева."}
             </div>
           </div>
 
-          <div className="p-3">
+          <div className="p-4">
             {empError ? (
-              <div className="border rounded p-3 text-sm text-red-700">{empError}</div>
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {empError}
+              </div>
             ) : null}
 
-            {empLoading ? <div className="text-sm text-gray-700">Загрузка…</div> : null}
+            {empLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
 
             {!empLoading && !empError ? (
-              <>
-                <div className="text-sm text-gray-800 mb-2">Найдено: {empData.total}</div>
+              <div className="overflow-auto rounded-xl border border-zinc-800">
+                <table className="min-w-full text-sm text-zinc-100">
+                  <thead className="bg-zinc-950/40 text-xs text-zinc-400">
+                    <tr>
+                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Таб. №</th>
+                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">ФИО</th>
+                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Подразделение</th>
+                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Должность</th>
+                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Ставка</th>
+                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedEmployees.map((e: any) => {
+                      const id = String(e?.id ?? "");
+                      const isSelected = drawerEmployeeId && id === drawerEmployeeId;
 
-                <div className="overflow-auto border rounded">
-                  <table className="min-w-full text-sm text-gray-900">
-                    <thead className="bg-gray-50 text-gray-900">
-                      <tr>
-                        <th className="text-left font-semibold p-2 border-b">Таб. №</th>
-                        <th className="text-left font-semibold p-2 border-b">ФИО</th>
-                        <th className="text-left font-semibold p-2 border-b">Отдел</th>
-                        <th className="text-left font-semibold p-2 border-b">Должность</th>
-                        <th className="text-left font-semibold p-2 border-b">Ставка</th>
-                        <th className="text-left font-semibold p-2 border-b">Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedEmployees.map((e: any) => {
-                        const id = String(e?.id ?? "");
-                        const isSelected = drawerEmployeeId && id === drawerEmployeeId;
-
-                        return (
-                          <tr
-                            key={id}
-                            className={[
-                              "hover:bg-gray-50 cursor-pointer",
-                              isSelected ? "bg-gray-50" : "",
-                            ].join(" ")}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => openEmployeeDrawer(id)}
-                            onKeyDown={(ev) => {
-                              if (ev.key === "Enter" || ev.key === " ") {
-                                ev.preventDefault();
-                                openEmployeeDrawer(id);
-                              }
-                            }}
-                            title="Открыть карточку сотрудника"
-                          >
-                            <td className="p-2 border-b whitespace-nowrap">{id}</td>
-                            <td className="p-2 border-b">{safeFio(e)}</td>
-                            <td className="p-2 border-b">{safeDept(e)}</td>
-                            <td className="p-2 border-b">{safePos(e)}</td>
-                            <td className="p-2 border-b whitespace-nowrap">{safeRate(e)}</td>
-                            <td className="p-2 border-b whitespace-nowrap">{safeStatus(e)}</td>
-                          </tr>
-                        );
-                      })}
-
-                      {sortedEmployees.length === 0 ? (
-                        <tr>
-                          <td className="p-3 text-gray-700" colSpan={6}>
-                            Нет сотрудников в выбранном подразделении.
-                          </td>
+                      return (
+                        <tr
+                          key={id}
+                          className={[
+                            "cursor-pointer hover:bg-zinc-900/60",
+                            isSelected ? "bg-zinc-900/60" : "",
+                          ].join(" ")}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openEmployeeDrawer(id)}
+                          onKeyDown={(ev) => {
+                            if (ev.key === "Enter" || ev.key === " ") {
+                              ev.preventDefault();
+                              openEmployeeDrawer(id);
+                            }
+                          }}
+                          title="Открыть карточку сотрудника"
+                        >
+                          <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{id}</td>
+                          <td className="border-b border-zinc-800 p-2">{safeFio(e)}</td>
+                          <td className="border-b border-zinc-800 p-2">{safeDept(e)}</td>
+                          <td className="border-b border-zinc-800 p-2">{safePos(e)}</td>
+                          <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{safeRate(e)}</td>
+                          <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{safeActive(e)}</td>
                         </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                      );
+                    })}
+
+                    {sortedEmployees.length === 0 ? (
+                      <tr>
+                        <td className="p-3 text-zinc-400" colSpan={6}>
+                          Нет сотрудников в выбранном подразделении.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             ) : null}
           </div>
         </div>
