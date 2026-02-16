@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,6 +27,10 @@ TZ_OFFSET_HOURS: int = _env_int("REGULAR_TASKS_TZ_OFFSET_HOURS", 5)
 
 # оставляем на всякий случай, но для вашей схемы мы используем reporting_periods
 FALLBACK_PERIOD_ID: int = _env_int("REGULAR_TASKS_FALLBACK_PERIOD_ID", 1)
+
+# Task statuses (public.task_statuses)
+ARCHIVED_STATUS_ID: int = _env_int("TASK_STATUS_ID_ARCHIVED", 5)
+IN_PROGRESS_STATUS_CODE: str = os.getenv("TASK_STATUS_CODE_IN_PROGRESS") or "IN_PROGRESS"
 
 
 @dataclass(frozen=True)
@@ -82,6 +87,51 @@ def _last_day_of_month(d: date) -> date:
     return first_next - timedelta(days=1)
 
 
+def _first_day_of_year(y: int) -> date:
+    return date(y, 1, 1)
+
+
+def _last_day_of_year(y: int) -> date:
+    return date(y, 12, 31)
+
+
+# ---------------------------
+# Custom weekly window: Thu..Mon
+# ---------------------------
+def _week_start_thu(d: date) -> date:
+    # ISO weekday: Mon=1..Sun=7; Thu=4
+    # start = ближайший четверг <= d (в рамках 0..6 дней назад)
+    delta = (_weekday_iso(d) - 4) % 7
+    return d - timedelta(days=delta)
+
+
+def _week_end_mon_from_thu(thu: date) -> date:
+    # Thu + 4 days = Mon
+    return thu + timedelta(days=4)
+
+
+def _prev_week_period_bounds_thu_mon(for_date: date) -> Tuple[date, date]:
+    # "предыдущая" неделя в вашей модели: Thu..Mon
+    cur_thu = _week_start_thu(for_date)
+    prev_thu = cur_thu - timedelta(days=7)
+    prev_mon = _week_end_mon_from_thu(prev_thu)
+    return prev_thu, prev_mon
+
+
+def _anchor_monday_for_thu_week(thu: date) -> date:
+    # Thu..Mon window anchor = Monday inside this window
+    return thu + timedelta(days=4)
+
+
+def _suffix_for_week_thu_mon(period_start_thu: date) -> str:
+    anchor = _anchor_monday_for_thu_week(period_start_thu)
+    iso_year, iso_week, _ = anchor.isocalendar()
+    return f"{iso_year}-W{int(iso_week):02d}"
+
+
+# ---------------------------
+# Schedule target date
+# ---------------------------
 def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict[str, Any]) -> Optional[date]:
     st = (schedule_type or "").strip().lower()
 
@@ -89,20 +139,26 @@ def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict
         byweekday = schedule_params.get("byweekday")
         if not isinstance(byweekday, list) or not byweekday:
             return None
-        # v1 policy: "точка" = первый совпадающий день недели, начиная с понедельника текущей недели
-        week_start = d - timedelta(days=_weekday_iso(d) - 1)
-        candidates: List[date] = []
+
+        # v2 policy (project): week window = Thu..Mon, but we allow any ISO weekday 1..7;
+        # target date = earliest date >= week_start_thu within 7 days that matches any byweekday.
+        week_start = _week_start_thu(d)
+        wanted: set[int] = set()
         for x in byweekday:
             try:
                 wd = int(x)
             except Exception:
                 continue
-            if wd < 1 or wd > 7:
-                continue
-            candidates.append(week_start + timedelta(days=wd - 1))
-        if not candidates:
+            if 1 <= wd <= 7:
+                wanted.add(wd)
+        if not wanted:
             return None
-        return min(candidates)
+
+        for i in range(0, 7):
+            cand = week_start + timedelta(days=i)
+            if _weekday_iso(cand) in wanted:
+                return cand
+        return None
 
     if st == "monthly":
         bymonthday = schedule_params.get("bymonthday")
@@ -117,12 +173,52 @@ def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict
             if md == -1:
                 return _last_day_of_month(d)
             if 1 <= md <= 31:
-                first = _first_day_of_month(d)
                 last = _last_day_of_month(d)
                 cand = date(d.year, d.month, min(md, last.day))
-                if first <= cand <= last:
-                    return cand
+                return cand
         return None
+
+    if st == "yearly":
+        bymonth = schedule_params.get("bymonth")
+        bymonthday = schedule_params.get("bymonthday")
+        if not isinstance(bymonth, list) or not bymonth:
+            return None
+        if not isinstance(bymonthday, list) or not bymonthday:
+            return None
+
+        # v1 policy: берём первый валидный месяц и первый валидный день месяца
+        mm: Optional[int] = None
+        for x in bymonth:
+            try:
+                m = int(x)
+            except Exception:
+                continue
+            if 1 <= m <= 12:
+                mm = m
+                break
+        if mm is None:
+            return None
+
+        md: Optional[int] = None
+        for x in bymonthday:
+            try:
+                dday = int(x)
+            except Exception:
+                continue
+            if dday == -1:
+                md = -1
+                break
+            if 1 <= dday <= 31:
+                md = dday
+                break
+        if md is None:
+            return None
+
+        if md == -1:
+            return _last_day_of_month(date(d.year, mm, 1))
+
+        last = _last_day_of_month(date(d.year, mm, 1))
+        return date(d.year, mm, min(int(md), last.day))
 
     return None
 
@@ -134,7 +230,7 @@ def _validate_template_schedule(schedule_type: str, schedule_params: Dict[str, A
     st = (schedule_type or "").strip().lower()
     if not st:
         return "schedule_type is required"
-    if st not in ("weekly", "monthly"):
+    if st not in ("weekly", "monthly", "yearly"):
         return f"unsupported schedule_type: {st}"
 
     if st == "weekly":
@@ -146,6 +242,14 @@ def _validate_template_schedule(schedule_type: str, schedule_params: Dict[str, A
         bymonthday = schedule_params.get("bymonthday")
         if not isinstance(bymonthday, list) or not bymonthday:
             return "schedule_params.bymonthday must be a non-empty list for schedule_type=monthly"
+
+    if st == "yearly":
+        bymonth = schedule_params.get("bymonth")
+        bymonthday = schedule_params.get("bymonthday")
+        if not isinstance(bymonth, list) or not bymonth:
+            return "schedule_params.bymonth must be a non-empty list for schedule_type=yearly"
+        if not isinstance(bymonthday, list) or not bymonthday:
+            return "schedule_params.bymonthday must be a non-empty list for schedule_type=yearly"
 
     tt = schedule_params.get("time")
     if tt is not None:
@@ -186,34 +290,42 @@ def _prev_month_period_bounds(for_date: date) -> Tuple[date, date]:
     return _first_day_of_month(last_prev), _last_day_of_month(last_prev)
 
 
-def _prev_week_period_bounds(for_date: date) -> Tuple[date, date]:
-    # предыдущая ISO-неделя относительно for_date: Mon..Sun
-    week_start_cur = for_date - timedelta(days=_weekday_iso(for_date) - 1)
-    week_start_prev = week_start_cur - timedelta(days=7)
-    week_end_prev = week_start_prev + timedelta(days=6)
-    return week_start_prev, week_end_prev
+def _prev_year_period_bounds(for_date: date) -> Tuple[date, date]:
+    # предыдущий календарный год относительно for_date
+    y = for_date.year - 1
+    return _first_day_of_year(y), _last_day_of_year(y)
 
 
-def _reporting_period_resolve(conn: Connection, *, schedule_type: str, for_date: date) -> int:
+def _reporting_period_resolve(
+    conn: Connection,
+    *,
+    schedule_type: str,
+    for_date: date,
+) -> Tuple[int, date, date]:
     """
     Основная модель для вашей БД:
       tasks.period_id -> reporting_periods.period_id
 
     Правило: создаём отчёт ЗА ПРЕДЫДУЩИЙ период.
       - monthly: предыдущий месяц
-      - weekly:  предыдущая неделя (Mon..Sun)
+      - weekly:  предыдущая неделя (Thu..Mon)
+      - yearly:  предыдущий год (Jan..Dec)
 
     Если периода нет — создаём (по uq_period).
     """
     st = (schedule_type or "").strip().lower()
     if st == "weekly":
-        d0, d1 = _prev_week_period_bounds(for_date)
+        d0, d1 = _prev_week_period_bounds_thu_mon(for_date)
         kind = "WEEK"
         label = f"{d0.isoformat()}..{d1.isoformat()}"
+    elif st == "yearly":
+        d0, d1 = _prev_year_period_bounds(for_date)
+        kind = "YEAR"
+        label = f"{d0.year}"
     else:
         d0, d1 = _prev_month_period_bounds(for_date)
         kind = "MONTH"
-        label = f"{d0.strftime('%B %Y')}"  # технический label; у вас могут быть свои тестовые лейблы
+        label = f"{d0.strftime('%B %Y')}"  # технический label
 
     row = conn.execute(
         text(
@@ -228,7 +340,7 @@ def _reporting_period_resolve(conn: Connection, *, schedule_type: str, for_date:
         {"kind": kind, "ds": d0, "de": d1},
     ).mappings().first()
     if row and row.get("period_id"):
-        return int(row["period_id"])
+        return int(row["period_id"]), d0, d1
 
     created = conn.execute(
         text(
@@ -243,7 +355,105 @@ def _reporting_period_resolve(conn: Connection, *, schedule_type: str, for_date:
         {"kind": kind, "ds": d0, "de": d1, "label": label},
     ).scalar_one()
 
-    return int(created)
+    return int(created), d0, d1
+
+
+def _append_period_suffix(base_title: str, suffix: str) -> str:
+    bt = (base_title or "").strip()
+    if not bt:
+        bt = "Без названия"
+
+    # If already has exact suffix at end -> keep
+    if re.search(rf"\(\s*{re.escape(suffix)}\s*\)\s*$", bt):
+        return bt
+
+    return f"{bt} ({suffix})"
+
+
+def _period_suffix_for_template(schedule_type: str, period_start: date) -> str:
+    st = (schedule_type or "").strip().lower()
+    if st == "monthly":
+        return f"{int(period_start.month):02d}"
+    if st == "yearly":
+        return f"{int(period_start.year)}"
+    if st == "weekly":
+        # period_start is Thu for weekly periods in our model
+        return _suffix_for_week_thu_mon(period_start_thu=period_start)
+    # fallback
+    return f"{int(period_start.year)}"
+
+
+def _due_date_from_reporting_period_end(*, period_end: date, due_offset_days: int) -> date:
+    # Policy (фиксируем): due_date = reporting_period.date_end + due_offset_days
+    return period_end + timedelta(days=int(due_offset_days or 0))
+
+
+def _get_status_id(conn: Connection, code: str) -> int:
+    # легковесный lookup (в run вызовов немного)
+    sid = conn.execute(
+        text("SELECT status_id FROM public.task_statuses WHERE code = :code"),
+        {"code": str(code)},
+    ).scalar_one()
+    return int(sid)
+
+
+def _select_active_task_for_template(
+    conn: Connection,
+    *,
+    regular_task_id: int,
+    period_id: int,
+    assignment_scope: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Возвращает одну активную (не ARCHIVED) задачу по ключу:
+      (regular_task_id, period_id, assignment_scope)
+    Берём FOR UPDATE, чтобы сериализовать миграции исполнителя внутри одного run.
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT task_id, executor_role_id, status_id, due_date
+            FROM public.tasks
+            WHERE regular_task_id = :regular_task_id
+              AND period_id = :period_id
+              AND assignment_scope = :assignment_scope
+              AND status_id <> :archived_status_id
+            ORDER BY created_at DESC, task_id DESC
+            LIMIT 1
+            FOR UPDATE
+            """
+        ),
+        {
+            "regular_task_id": int(regular_task_id),
+            "period_id": int(period_id),
+            "assignment_scope": str(assignment_scope),
+            "archived_status_id": int(ARCHIVED_STATUS_ID),
+        },
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _archive_task_by_id(conn: Connection, task_id: int) -> int:
+    r = conn.execute(
+        text("UPDATE public.tasks SET status_id = :arch WHERE task_id = :tid AND status_id <> :arch"),
+        {"arch": int(ARCHIVED_STATUS_ID), "tid": int(task_id)},
+    )
+    return int(getattr(r, "rowcount", 0) or 0)
+
+
+def _update_due_date_if_needed(conn: Connection, task_id: int, due_date_val: date) -> int:
+    r = conn.execute(
+        text(
+            """
+            UPDATE public.tasks
+            SET due_date = :due_date
+            WHERE task_id = :task_id
+              AND (due_date IS DISTINCT FROM :due_date)
+            """
+        ),
+        {"task_id": int(task_id), "due_date": due_date_val},
+    )
+    return int(getattr(r, "rowcount", 0) or 0)
 
 
 def _log_run_item_safe(
@@ -426,27 +636,35 @@ def run_regular_tasks_generation_tx(
                 )
                 continue
 
-            # ВАЖНО: period_id берём из reporting_periods (предыдущий период)
+            assignment_scope = str(t.get("assignment_scope") or "functional")
+
+            # period_id берём из reporting_periods (предыдущий период)
             try:
-                period_id = _reporting_period_resolve(conn, schedule_type=schedule_type, for_date=now_local.date())
+                period_id, period_start, period_end = _reporting_period_resolve(
+                    conn, schedule_type=schedule_type, for_date=now_local.date()
+                )
             except Exception:
                 # если что-то сломалось — не блокируем run целиком, fallback как раньше
                 period_id = int(FALLBACK_PERIOD_ID)
+                period_start, period_end = _prev_month_period_bounds(now_local.date())
 
-            # Берём date_end для вычисления due_date
-            rp = conn.execute(
-                text("SELECT date_end FROM public.reporting_periods WHERE period_id = :pid"),
-                {"pid": int(period_id)},
-            ).mappings().first()
-            period_end = rp["date_end"] if rp and rp.get("date_end") is not None else None
+            # Policy (фиксируем): due_date = reporting_period.date_end + due_offset_days
+            due_date_val = _due_date_from_reporting_period_end(period_end=period_end, due_offset_days=due_offset_days)
 
-            # due_date = period_end + due_offset_days (для первичного уровня)
-            due_date_val = (period_end + timedelta(days=int(due_offset_days))) if period_end else None
+            # title suffix policy: based on reporting period identity
+            suffix = _period_suffix_for_template(schedule_type, period_start)
+            base_title = str(t.get("title") or "").strip() or f"Regular task #{rid}"
+            title_with_suffix = _append_period_suffix(base_title, suffix)
+
             base_meta.update(
                 {
                     "period_id": int(period_id),
-                    "period_end": period_end.isoformat() if period_end else None,
-                    "deadline_date": due_date_val.isoformat() if due_date_val else None,
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "due_date": due_date_val.isoformat() if due_date_val else None,
+                    "title_suffix": suffix,
+                    "title_final": title_with_suffix,
+                    "assignment_scope": assignment_scope,
                 }
             )
 
@@ -464,6 +682,53 @@ def run_regular_tasks_generation_tx(
                     meta={**base_meta, "reason": "dry_run"},
                 )
                 continue
+
+            # New rule:
+            #   Key for one ACTIVE task = (regular_task_id, period_id, assignment_scope)
+            #   If active exists with different executor -> archive it; then insert new.
+            #   If active exists with same executor -> dedupe (and align due_date to policy).
+            archived_conflicts = 0
+            active_row = _select_active_task_for_template(
+                conn,
+                regular_task_id=int(rid),
+                period_id=int(period_id),
+                assignment_scope=assignment_scope,
+            )
+
+            if active_row and active_row.get("task_id"):
+                active_task_id = int(active_row["task_id"])
+                active_exec = _safe_int(active_row.get("executor_role_id"))
+                if active_exec == int(executor_role_id):
+                    # same executor: treat as dedup; align due_date to policy
+                    updated = _update_due_date_if_needed(conn, task_id=active_task_id, due_date_val=due_date_val)
+                    deduped += 1
+                    _log_run_item_safe(
+                        conn,
+                        run_id=int(run_id),
+                        regular_task_id=int(rid),
+                        period_id=int(period_id),
+                        executor_role_id=int(executor_role_id),
+                        is_due=True,
+                        created_tasks=0,
+                        status="ok",
+                        error=None,
+                        meta={
+                            **base_meta,
+                            "task_id": active_task_id,
+                            "deduped": True,
+                            "archived_conflicts": 0,
+                            "due_date_updated": bool(updated > 0),
+                        },
+                    )
+                    continue
+
+                # different executor: archive existing active, then continue to insert
+                archived_conflicts = _archive_task_by_id(conn, task_id=active_task_id)
+
+            # Insert new task. We keep the older per-executor unique constraint,
+            # but the new partial unique index (ux_tasks_regular_period_scope_active)
+            # will prevent second ACTIVE task for same template/period/scope.
+            in_progress_status_id = _get_status_id(conn, IN_PROGRESS_STATUS_CODE)
 
             row = conn.execute(
                 text(
@@ -483,23 +748,26 @@ def run_regular_tasks_generation_tx(
                         :initiator_user_id,
                         :executor_role_id,
                         :assignment_scope,
-                        (SELECT status_id FROM public.task_statuses WHERE code = 'IN_PROGRESS'),
+                        :status_id,
                         :due_date
                     )
-                    ON CONFLICT (regular_task_id, period_id, executor_role_id)
+                    ON CONFLICT ON CONSTRAINT uq_task_period_regular_role
                     DO UPDATE SET
-                        due_date = COALESCE(public.tasks.due_date, EXCLUDED.due_date)
+                        -- title не трогаем (может быть отредактирован человеком),
+                        -- due_date приводим к нашей политике
+                        due_date = EXCLUDED.due_date
                     RETURNING task_id, (xmax = 0) AS inserted, due_date
                     """
                 ),
                 {
                     "period_id": int(period_id),
                     "regular_task_id": int(rid),
-                    "title": str(t.get("title") or "").strip() or f"Regular task #{rid}",
+                    "title": title_with_suffix,
                     "description": t.get("description"),
                     "initiator_user_id": int(SYSTEM_USER_ID),
                     "executor_role_id": int(executor_role_id),
-                    "assignment_scope": str(t.get("assignment_scope") or "functional"),
+                    "assignment_scope": assignment_scope,
+                    "status_id": int(in_progress_status_id),
                     "due_date": due_date_val,
                 },
             ).mappings().first()
@@ -525,11 +793,11 @@ def run_regular_tasks_generation_tx(
                         **base_meta,
                         "task_id": int(row["task_id"]),
                         "deduped": (not inserted),
+                        "archived_conflicts": int(archived_conflicts),
                         "due_date_set": (row.get("due_date") is not None),
                     },
                 )
             else:
-                # Теоретически не должно случиться из-за RETURNING, но оставим защиту
                 deduped += 1
                 _log_run_item_safe(
                     conn,
@@ -541,7 +809,7 @@ def run_regular_tasks_generation_tx(
                     created_tasks=0,
                     status="ok",
                     error=None,
-                    meta={**base_meta, "task_id": None, "deduped": True},
+                    meta={**base_meta, "task_id": None, "deduped": True, "archived_conflicts": int(archived_conflicts)},
                 )
 
         except Exception as e:
