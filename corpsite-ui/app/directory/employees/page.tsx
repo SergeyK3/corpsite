@@ -1,79 +1,30 @@
-// ROUTE: /directory/employees
 // FILE: corpsite-ui/app/directory/employees/page.tsx
 
 import EmployeesPageClient from "./_components/EmployeesPageClient";
-import { normalizeFilters, type EmployeesFilters } from "./_lib/query";
-import { getEmployees, getDepartments, getPositions } from "./_lib/api.server";
+import type { EmployeesFilters } from "./_lib/query";
+import type { Department, Position, EmployeesResponse } from "./_lib/types";
 
-type SearchParams = Record<string, string | string[] | undefined>;
+export const dynamic = "force-dynamic";
 
-function toStr(v: string | string[] | undefined): string | undefined {
-  if (Array.isArray(v)) return v[0];
-  return v;
-}
-
-function toInt(v: string | string[] | undefined): number | undefined {
-  const s = toStr(v);
-  if (!s) return undefined;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-export default async function EmployeesPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
-  const sp = await searchParams;
-
-  const rawFilters: Partial<EmployeesFilters> = {
-    q: toStr(sp.q),
-    department_id: toInt(sp.department_id),
-    position_id: toInt(sp.position_id),
-    status: (toStr(sp.status) as any) ?? undefined,
-    limit: toInt(sp.limit),
-    offset: toInt(sp.offset),
+export default function EmployeesPage() {
+  const initialFilters: EmployeesFilters = {
+    status: "all",
+    limit: 50,
+    offset: 0,
+    // department_id / position_id / q не задаём (будут undefined)
   };
 
-  const filters = normalizeFilters(rawFilters);
+  const initialDepartments: Department[] = [];
+  const initialPositions: Position[] = [];
+  const initialEmployees: EmployeesResponse = { items: [], total: 0 };
 
-  try {
-    const [initialDepartments, initialPositions, initialEmployees] =
-      await Promise.all([
-        getDepartments(),
-        getPositions(),
-        getEmployees({
-          q: filters.q,
-          department_id: filters.department_id,
-          position_id: filters.position_id,
-          status: filters.status,
-          limit: filters.limit,
-          offset: filters.offset,
-          // FIX: backend contract uses fio (not full_name)
-          sort: "fio",
-          order: "asc",
-        }),
-      ]);
-
-    return (
-      <EmployeesPageClient
-        initialFilters={filters}
-        initialDepartments={initialDepartments}
-        initialPositions={initialPositions}
-        initialEmployees={initialEmployees}
-      />
-    );
-  } catch (e: any) {
-    const msg = e?.message ? String(e.message) : "Directory SSR fetch failed";
-
-    return (
-      <EmployeesPageClient
-        initialFilters={filters}
-        initialDepartments={[]}
-        initialPositions={[]}
-        initialEmployees={{ items: [], total: 0 }}
-        initialError={msg as any}
-      />
-    );
-  }
+  return (
+    <EmployeesPageClient
+      initialFilters={initialFilters}
+      initialDepartments={initialDepartments}
+      initialPositions={initialPositions}
+      initialEmployees={initialEmployees}
+      initialError={null}
+    />
+  );
 }

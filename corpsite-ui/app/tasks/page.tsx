@@ -149,7 +149,6 @@ export default function TasksPage() {
 
     try {
       const data = await apiGetTasks({
-        devUserId: 0,
         limit,
         offset: typeof nextOffset === "number" ? nextOffset : offset,
         executor_role_id: roleId,
@@ -182,7 +181,7 @@ export default function TasksPage() {
     setItemError(null);
 
     try {
-      const data = await apiGetTask({ devUserId: 0, taskId: id, includeArchived: true });
+      const data = await apiGetTask({ taskId: id, includeArchived: true });
       setItem(data);
     } catch (e: any) {
       if (isUnauthorized(e)) {
@@ -213,7 +212,6 @@ export default function TasksPage() {
         }
 
         await apiPostTaskAction({
-          devUserId: 0,
           taskId: selectedId,
           action,
           payload: {
@@ -224,7 +222,6 @@ export default function TasksPage() {
         });
       } else if (action === "approve" || action === "reject" || action === "archive") {
         await apiPostTaskAction({
-          devUserId: 0,
           taskId: selectedId,
           action,
           payload: reason.trim() ? ({ reason: reason.trim() as any } as any) : undefined,

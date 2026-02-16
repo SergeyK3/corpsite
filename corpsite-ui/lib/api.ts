@@ -15,20 +15,11 @@ function env(name: string, fallback = ""): string {
   return (v ?? fallback).toString().trim();
 }
 
-const API_BASE_URL = env(
-  "NEXT_PUBLIC_API_BASE_URL",
-  "http://127.0.0.1:8000",
-);
+const API_BASE_URL = env("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000");
 
 function truthyEnv(name: string): boolean {
   const v = env(name, "").toLowerCase();
-  return (
-    v === "1" ||
-    v === "true" ||
-    v === "yes" ||
-    v === "y" ||
-    v === "on"
-  );
+  return v === "1" || v === "true" || v === "yes" || v === "y" || v === "on";
 }
 
 const API_TRACE = truthyEnv("NEXT_PUBLIC_API_TRACE");
@@ -42,13 +33,7 @@ const AUTH_ACCESS_TOKEN_KEY = "access_token";
 function readAccessToken(): string {
   if (typeof window === "undefined") return "";
   try {
-    return (
-      window.sessionStorage.getItem(
-        AUTH_ACCESS_TOKEN_KEY,
-      ) ?? ""
-    )
-      .toString()
-      .trim();
+    return (window.sessionStorage.getItem(AUTH_ACCESS_TOKEN_KEY) ?? "").toString().trim();
   } catch {
     return "";
   }
@@ -59,19 +44,14 @@ function setAccessToken(token: string): void {
   const t = (token ?? "").toString().trim();
   if (!t) return;
   try {
-    window.sessionStorage.setItem(
-      AUTH_ACCESS_TOKEN_KEY,
-      t,
-    );
+    window.sessionStorage.setItem(AUTH_ACCESS_TOKEN_KEY, t);
   } catch {}
 }
 
 export function clearAccessToken(): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.removeItem(
-      AUTH_ACCESS_TOKEN_KEY,
-    );
+    window.sessionStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
   } catch {}
 }
 
@@ -80,12 +60,10 @@ export function isAuthed(): boolean {
 }
 
 /* ============================================================
- * HELPERS
+ * HELPERS (exported for shared API clients)
  * ============================================================ */
 
-async function readJsonSafe(
-  res: Response,
-): Promise<any> {
+export async function readJsonSafe(res: Response): Promise<any> {
   const text = await res.text();
   if (!text) return null;
   try {
@@ -95,7 +73,7 @@ async function readJsonSafe(
   }
 }
 
-function toApiError(
+export function toApiError(
   status: number,
   body: any,
   meta?: Record<string, any>,
@@ -103,11 +81,7 @@ function toApiError(
   const err: APIError = {
     status,
     code: body?.code,
-    message:
-      body?.message ??
-      body?.detail ??
-      body?.error ??
-      "Request failed",
+    message: body?.message ?? body?.detail ?? body?.error ?? "Request failed",
     details: body,
   };
 
@@ -118,12 +92,9 @@ function toApiError(
   return err;
 }
 
-function buildUrl(
+export function buildUrl(
   path: string,
-  query?: Record<
-    string,
-    string | number | boolean | undefined | null
-  >,
+  query?: Record<string, string | number | boolean | undefined | null>,
 ): URL {
   const url = new URL(path, API_BASE_URL);
   if (query) {
@@ -135,7 +106,7 @@ function buildUrl(
   return url;
 }
 
-function buildHeaders(
+export function buildHeaders(
   extra?: Record<string, string>,
   opts?: { noAuth?: boolean },
 ): HeadersInit {
@@ -152,10 +123,7 @@ function buildHeaders(
   return headers;
 }
 
-function pickString(
-  payload: Record<string, any>,
-  keys: string[],
-): string {
+function pickString(payload: Record<string, any>, keys: string[]): string {
   for (const k of keys) {
     const v = payload[k];
     if (typeof v === "string") {
@@ -168,17 +136,58 @@ function pickString(
 
 function normalizeList<T>(body: any): T[] {
   if (Array.isArray(body)) return body as T[];
-  if (body?.items && Array.isArray(body.items))
-    return body.items as T[];
+  if (body?.items && Array.isArray(body.items)) return body.items as T[];
   return [];
 }
 
-function handleAuthFailureIfNeeded(
-  status: number,
-): void {
+export function handleAuthFailureIfNeeded(status: number): void {
   if (status === 401) {
     clearAccessToken();
   }
+}
+
+/**
+ * Универсальный fetch JSON с Bearer-токеном (один источник правды).
+ * Используй его в directory/* клиентах вместо прямого fetch().
+ */
+export async function apiFetchJson<T>(
+  path: string,
+  opts?: {
+    method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+    query?: Record<string, string | number | boolean | undefined | null>;
+    body?: any;
+    noAuth?: boolean;
+    headers?: Record<string, string>;
+  },
+): Promise<T> {
+  const method = opts?.method ?? "GET";
+  const url = buildUrl(path, opts?.query);
+
+  const headers: Record<string, string> = {
+    ...(opts?.headers ?? {}),
+  };
+
+  let bodyStr: string | undefined = undefined;
+  if (opts?.body !== undefined) {
+    headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+    bodyStr = JSON.stringify(opts.body);
+  }
+
+  const res = await fetch(url.toString(), {
+    method,
+    headers: buildHeaders(headers, { noAuth: !!opts?.noAuth }),
+    body: bodyStr,
+    cache: "no-store",
+  });
+
+  const body = await readJsonSafe(res);
+
+  if (!res.ok) {
+    handleAuthFailureIfNeeded(res.status);
+    throw toApiError(res.status, body, { method, url: url.toString() });
+  }
+
+  return body as T;
 }
 
 /* ============================================================
@@ -192,45 +201,18 @@ export async function apiAuthLogin(params: {
   access_token: string;
   token_type: string;
 }> {
-  const login = (params.login ?? "")
-    .toString()
-    .trim()
-    .toLowerCase();
+  const login = (params.login ?? "").toString().trim().toLowerCase();
   const password = (params.password ?? "").toString();
 
-  const url = buildUrl("/auth/login");
-
-  const res = await fetch(url.toString(), {
+  const body = await apiFetchJson<any>("/auth/login", {
     method: "POST",
-    headers: buildHeaders(
-      { "Content-Type": "application/json" },
-      { noAuth: true },
-    ),
-    body: JSON.stringify({ login, password }),
-    cache: "no-store",
+    noAuth: true,
+    body: { login, password },
   });
 
-  const body = await readJsonSafe(res);
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "POST",
-      url: url.toString(),
-    });
-  }
-
-  const token = (
-    body?.access_token ?? ""
-  )
-    .toString()
-    .trim();
-
+  const token = (body?.access_token ?? "").toString().trim();
   if (!token) {
-    throw toApiError(
-      500,
-      { message: "Backend did not return access_token" },
-      { method: "POST", url: url.toString() },
-    );
+    throw toApiError(500, { message: "Backend did not return access_token" }, { method: "POST", url: "/auth/login" });
   }
 
   setAccessToken(token);
@@ -238,25 +220,7 @@ export async function apiAuthLogin(params: {
 }
 
 export async function apiAuthMe(): Promise<any> {
-  const url = buildUrl("/auth/me");
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
-
-  return body;
+  return apiFetchJson<any>("/auth/me");
 }
 
 /* ============================================================
@@ -272,28 +236,13 @@ export async function apiGetTasks(params: {
   const limit = params.limit ?? 50;
   const offset = params.offset ?? 0;
 
-  const url = buildUrl("/tasks", {
-    limit,
-    offset,
-    executor_role_id:
-      params.executor_role_id ?? undefined,
+  const body = await apiFetchJson<any>("/tasks", {
+    query: {
+      limit,
+      offset,
+      executor_role_id: params.executor_role_id ?? undefined,
+    },
   });
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
 
   return normalizeList<TaskListItem>(body);
 }
@@ -302,27 +251,9 @@ export async function apiGetTask(params: {
   taskId: number;
   includeArchived?: boolean;
 }): Promise<TaskDetails> {
-  const url = buildUrl(`/tasks/${params.taskId}`, {
-    include_archived: !!params.includeArchived,
+  return apiFetchJson<TaskDetails>(`/tasks/${params.taskId}`, {
+    query: { include_archived: !!params.includeArchived },
   });
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
-
-  return body as TaskDetails;
 }
 
 export async function apiPostTaskAction(params: {
@@ -330,63 +261,21 @@ export async function apiPostTaskAction(params: {
   action: TaskAction;
   payload?: TaskActionPayload;
 }): Promise<any> {
-  const payloadObj = (params.payload ??
-    {}) as Record<string, any>;
+  const payloadObj = (params.payload ?? {}) as Record<string, any>;
 
-  const currentComment = pickString(
-    payloadObj,
-    ["current_comment", "comment"],
-  );
-  const reportLink = pickString(
-    payloadObj,
-    ["report_link", "reportLink", "link", "url"],
-  );
-  const reason = pickString(payloadObj, [
-    "reason",
-    "current_comment",
-    "comment",
-  ]);
-
-  let url: URL;
-  let body: string | undefined;
+  const currentComment = pickString(payloadObj, ["current_comment", "comment"]);
+  const reportLink = pickString(payloadObj, ["report_link", "reportLink", "link", "url"]);
+  const reason = pickString(payloadObj, ["reason", "current_comment", "comment"]);
 
   if (params.action === "report") {
-    url = buildUrl(`/tasks/${params.taskId}/report`);
-    const out: Record<string, any> = {
-      report_link: reportLink,
-    };
-    if (currentComment)
-      out.current_comment = currentComment;
-    body = JSON.stringify(out);
-  } else {
-    url = buildUrl(
-      `/tasks/${params.taskId}/${params.action}`,
-    );
-    const out: Record<string, any> = {};
-    if (reason) out.reason = reason;
-    body = JSON.stringify(out);
+    const out: Record<string, any> = { report_link: reportLink };
+    if (currentComment) out.current_comment = currentComment;
+    return apiFetchJson<any>(`/tasks/${params.taskId}/report`, { method: "POST", body: out });
   }
 
-  const res = await fetch(url.toString(), {
-    method: "POST",
-    headers: buildHeaders({
-      "Content-Type": "application/json",
-    }),
-    body,
-    cache: "no-store",
-  });
-
-  const resBody = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, resBody, {
-      method: "POST",
-      url: url.toString(),
-    });
-  }
-
-  return resBody;
+  const out: Record<string, any> = {};
+  if (reason) out.reason = reason;
+  return apiFetchJson<any>(`/tasks/${params.taskId}/${params.action}`, { method: "POST", body: out });
 }
 
 /* ============================================================
@@ -404,169 +293,38 @@ export async function apiGetRegularTasks(params: {
   const limit = params.limit ?? 50;
   const offset = params.offset ?? 0;
 
-  const url = buildUrl("/regular-tasks", {
-    status: params.status ?? "active",
-    q: params.q ?? undefined,
-    schedule_type:
-      params.schedule_type ?? undefined,
-    executor_role_id:
-      params.executor_role_id ?? undefined,
-    limit,
-    offset,
+  const body = await apiFetchJson<any>("/regular-tasks", {
+    query: {
+      status: params.status ?? "active",
+      q: params.q ?? undefined,
+      schedule_type: params.schedule_type ?? undefined,
+      executor_role_id: params.executor_role_id ?? undefined,
+      limit,
+      offset,
+    },
   });
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
 
   return normalizeList<RegularTask>(body);
 }
 
-export async function apiGetRegularTask(params: {
-  regularTaskId: number;
-}): Promise<RegularTask> {
-  const url = buildUrl(
-    `/regular-tasks/${params.regularTaskId}`,
-  );
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
-
-  return body as RegularTask;
+export async function apiGetRegularTask(params: { regularTaskId: number }): Promise<RegularTask> {
+  return apiFetchJson<RegularTask>(`/regular-tasks/${params.regularTaskId}`);
 }
 
-export async function apiCreateRegularTask(params: {
-  payload: Record<string, any>;
-}): Promise<any> {
-  const url = buildUrl("/regular-tasks");
-
-  const res = await fetch(url.toString(), {
-    method: "POST",
-    headers: buildHeaders({
-      "Content-Type": "application/json",
-    }),
-    body: JSON.stringify(params.payload ?? {}),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "POST",
-      url: url.toString(),
-    });
-  }
-
-  return body;
+export async function apiCreateRegularTask(params: { payload: Record<string, any> }): Promise<any> {
+  return apiFetchJson<any>("/regular-tasks", { method: "POST", body: params.payload ?? {} });
 }
 
-export async function apiPatchRegularTask(params: {
-  regularTaskId: number;
-  payload: Record<string, any>;
-}): Promise<any> {
-  const url = buildUrl(
-    `/regular-tasks/${params.regularTaskId}`,
-  );
-
-  const res = await fetch(url.toString(), {
-    method: "PATCH",
-    headers: buildHeaders({
-      "Content-Type": "application/json",
-    }),
-    body: JSON.stringify(params.payload ?? {}),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "PATCH",
-      url: url.toString(),
-    });
-  }
-
-  return body;
+export async function apiPatchRegularTask(params: { regularTaskId: number; payload: Record<string, any> }): Promise<any> {
+  return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}`, { method: "PATCH", body: params.payload ?? {} });
 }
 
-export async function apiActivateRegularTask(params: {
-  regularTaskId: number;
-}): Promise<any> {
-  const url = buildUrl(
-    `/regular-tasks/${params.regularTaskId}/activate`,
-  );
-
-  const res = await fetch(url.toString(), {
-    method: "POST",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "POST",
-      url: url.toString(),
-    });
-  }
-
-  return body;
+export async function apiActivateRegularTask(params: { regularTaskId: number }): Promise<any> {
+  return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}/activate`, { method: "POST" });
 }
 
-export async function apiDeactivateRegularTask(params: {
-  regularTaskId: number;
-}): Promise<any> {
-  const url = buildUrl(
-    `/regular-tasks/${params.regularTaskId}/deactivate`,
-  );
-
-  const res = await fetch(url.toString(), {
-    method: "POST",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "POST",
-      url: url.toString(),
-    });
-  }
-
-  return body;
+export async function apiDeactivateRegularTask(params: { regularTaskId: number }): Promise<any> {
+  return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}/deactivate`, { method: "POST" });
 }
 
 export async function apiGetRegularTasksRaw(params: {
@@ -576,40 +334,20 @@ export async function apiGetRegularTasksRaw(params: {
   executor_role_id?: number;
   limit?: number;
   offset?: number;
-}): Promise<
-  RegularTasksListResponse | RegularTask[]
-> {
+}): Promise<RegularTasksListResponse | RegularTask[]> {
   const limit = params.limit ?? 50;
   const offset = params.offset ?? 0;
 
-  const url = buildUrl("/regular-tasks", {
-    status: params.status ?? "active",
-    q: params.q ?? undefined,
-    schedule_type:
-      params.schedule_type ?? undefined,
-    executor_role_id:
-      params.executor_role_id ?? undefined,
-    limit,
-    offset,
+  return apiFetchJson<any>("/regular-tasks", {
+    query: {
+      status: params.status ?? "active",
+      q: params.q ?? undefined,
+      schedule_type: params.schedule_type ?? undefined,
+      executor_role_id: params.executor_role_id ?? undefined,
+      limit,
+      offset,
+    },
   });
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
-
-  return body as any;
 }
 
 /* ============================================================
@@ -639,52 +377,12 @@ export type RegularTaskRunItem = {
   error?: string | null;
 };
 
-export async function apiGetRegularTaskRuns(): Promise<
-  RegularTaskRun[]
-> {
-  const url = buildUrl("/regular-task-runs");
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
-
+export async function apiGetRegularTaskRuns(): Promise<RegularTaskRun[]> {
+  const body = await apiFetchJson<any>("/regular-task-runs");
   return normalizeList<RegularTaskRun>(body);
 }
 
-export async function apiGetRegularTaskRunItems(
-  params: { run_id: number },
-): Promise<RegularTaskRunItem[]> {
-  const url = buildUrl(
-    `/regular-task-runs/${params.run_id}/items`,
-  );
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
-
-  const body = await readJsonSafe(res);
-
-  if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, {
-      method: "GET",
-      url: url.toString(),
-    });
-  }
-
+export async function apiGetRegularTaskRunItems(params: { run_id: number }): Promise<RegularTaskRunItem[]> {
+  const body = await apiFetchJson<any>(`/regular-task-runs/${params.run_id}/items`);
   return normalizeList<RegularTaskRunItem>(body);
 }

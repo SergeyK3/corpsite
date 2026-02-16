@@ -1,3 +1,4 @@
+// FILE: corpsite-ui/components/TaskPanel.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -17,8 +18,14 @@ function renderError(e: APIError) {
   return `Ошибка (${e.status}): ${e.message ?? "Request failed"}`;
 }
 
+function normalizeAllowedActions(v: any): string[] {
+  if (Array.isArray(v)) return v.filter((x) => typeof x === "string" && x.trim().length > 0);
+  return [];
+}
+
 export default function TaskPanel({ task, loading, error, onAction }: Props) {
-  const allowed = useMemo(() => new Set(task?.allowed_actions ?? []), [task?.allowed_actions]);
+  const allowedActions = useMemo(() => normalizeAllowedActions(task?.allowed_actions), [task?.allowed_actions]);
+  const allowed = useMemo(() => new Set<string>(allowedActions), [allowedActions]);
 
   const [reportLink, setReportLink] = useState("");
   const [comment, setComment] = useState("");
@@ -62,7 +69,7 @@ export default function TaskPanel({ task, loading, error, onAction }: Props) {
           {task.description ? <div className="panel__desc">{task.description}</div> : <div className="muted">Описание: —</div>}
 
           <div className="panel__section">
-            <div className="muted">Allowed actions: {(task.allowed_actions ?? []).join(", ") || "—"}</div>
+            <div className="muted">Allowed actions: {allowedActions.join(", ") || "—"}</div>
           </div>
 
           {showReport && (
