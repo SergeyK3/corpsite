@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import bindparam, text
@@ -64,7 +65,15 @@ class OrgUnitsService:
     # RBAC helpers
     # ---------------------------
     @staticmethod
-    def _parse_int_set_env(name: str) -> Set[int]:
+    def _trim_opt(v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = v.strip()
+        return s if s else None
+
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _parse_int_set_env_cached(name: str) -> Set[int]:
         raw = (os.getenv(name) or "").strip()
         if not raw:
             return set()
@@ -79,17 +88,15 @@ class OrgUnitsService:
                 pass
         return out
 
-    @staticmethod
-    def _rbac_mode() -> str:
-        v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
-        return v if v in ("off", "dept", "groups") else "dept"
+    # Backward-friendly wrapper (keeps call sites simple)
+    def _parse_int_set_env(self, name: str) -> Set[int]:
+        return set(self._parse_int_set_env_cached(name))
 
     @staticmethod
-    def _trim_opt(v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        s = v.strip()
-        return s if s else None
+    @lru_cache(maxsize=8)
+    def _rbac_mode_cached() -> str:
+        v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
+        return v if v in ("off", "dept", "groups") else "dept"
 
     def _fallback_dept_scope_or_raise(self, *, user_id: int, unit_id: Optional[int], include_inactive: bool) -> Set[int]:
         if unit_id is None:
@@ -152,16 +159,35 @@ class OrgUnitsService:
             for r in rows
         ]
 
-    def get_scope_unit_ids(self, root_unit_id: int, include_inactive: bool = False) -> Set[int]:
-        edges = self._load_unit_edges(include_inactive=include_inactive)
-
+    @staticmethod
+    def _children_map(edges: List[Tuple[int, Optional[int]]]) -> Dict[int, List[int]]:
         children: Dict[int, List[int]] = {}
         for uid, pid in edges:
             if pid is not None:
                 children.setdefault(pid, []).append(uid)
+        return children
 
-        result: Set[int] = {int(root_unit_id)}
-        stack: List[int] = [int(root_unit_id)]
+    def get_scope_unit_ids(self, root_unit_id: int, include_inactive: bool = False) -> Set[int]:
+        edges = self._load_unit_edges(include_inactive=include_inactive)
+        return self._get_scope_unit_ids_from_edges([int(root_unit_id)], edges)
+
+    def get_scope_unit_ids_many(self, root_unit_ids: List[int], include_inactive: bool = False) -> Set[int]:
+        if not root_unit_ids:
+            return set()
+        edges = self._load_unit_edges(include_inactive=include_inactive)
+        return self._get_scope_unit_ids_from_edges([int(x) for x in root_unit_ids], edges)
+
+    def _get_scope_unit_ids_from_edges(self, roots: List[int], edges: List[Tuple[int, Optional[int]]]) -> Set[int]:
+        children = self._children_map(edges)
+
+        result: Set[int] = set()
+        stack: List[int] = []
+
+        for r in roots:
+            rr = int(r)
+            if rr not in result:
+                result.add(rr)
+                stack.append(rr)
 
         while stack:
             cur = stack.pop()
@@ -172,17 +198,12 @@ class OrgUnitsService:
 
         return result
 
-    def get_scope_unit_ids_many(self, root_unit_ids: List[int], include_inactive: bool = False) -> Set[int]:
-        out: Set[int] = set()
-        for rid in root_unit_ids:
-            out |= self.get_scope_unit_ids(int(rid), include_inactive=include_inactive)
-        return out
-
     # ---------------------------
     # RBAC (groups): deputy -> group -> units
     # ---------------------------
     def list_group_unit_ids_for_deputy(self, deputy_user_id: int, include_inactive: bool = False) -> List[int]:
-        where_active_g = "AND COALESCE(g.is_active, true) = true"
+        # ВАЖНО: include_inactive теперь влияет и на активность групп, и на активность подразделений
+        where_active_g = "" if include_inactive else "AND COALESCE(g.is_active, true) = true"
         where_active_u = "" if include_inactive else "AND COALESCE(u.is_active, true) = true"
 
         sql = text(
@@ -209,12 +230,12 @@ class OrgUnitsService:
         user_id: int,
         include_inactive: bool = False,
     ) -> Optional[Set[int]]:
-        mode = self._rbac_mode()
+        mode = self._rbac_mode_cached()
         if mode == "off":
             return None
 
-        privileged_users = self._parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
-        privileged_roles = self._parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
+        privileged_users = self._parse_int_set_env_cached("DIRECTORY_PRIVILEGED_USER_IDS")
+        privileged_roles = self._parse_int_set_env_cached("DIRECTORY_PRIVILEGED_ROLE_IDS")
 
         unit_id, role_id, is_active = self.get_user_unit_and_role(int(user_id))
 
@@ -243,6 +264,148 @@ class OrgUnitsService:
             )
 
         return self.get_scope_unit_ids_many(assigned, include_inactive=include_inactive)
+
+    # ---------------------------
+    # ROLE-SCOPE for tasks (2-level policy)
+    # ---------------------------
+    def _list_child_unit_ids(self, parent_unit_id: int, *, include_inactive_units: bool) -> List[int]:
+        where_active = "" if include_inactive_units else "AND COALESCE(is_active, true) = true"
+        sql = text(
+            f"""
+            SELECT unit_id
+            FROM {self._schema}.{self._org_units_table}
+            WHERE parent_unit_id = :pid
+              {where_active}
+            ORDER BY unit_id
+            """
+        )
+        with self._engine.begin() as c:
+            rows = c.execute(sql, {"pid": int(parent_unit_id)}).mappings().all()
+        return [int(r["unit_id"]) for r in rows]
+
+    def _list_user_role_ids_by_unit_ids(
+        self,
+        unit_ids: List[int],
+        *,
+        role_ids_filter: Optional[Set[int]] = None,
+        include_inactive_users: bool = False,
+    ) -> List[int]:
+        if not unit_ids:
+            return []
+
+        where_user_active = "" if include_inactive_users else "AND COALESCE(u.is_active, true) = true"
+
+        if role_ids_filter is not None:
+            sql = (
+                text(
+                    f"""
+                    SELECT DISTINCT u.role_id
+                    FROM {self._schema}.{self._users_table} u
+                    WHERE u.unit_id IN :unit_ids
+                      AND u.role_id IN :role_ids
+                      {where_user_active}
+                    ORDER BY u.role_id
+                    """
+                )
+                .bindparams(bindparam("unit_ids", expanding=True))
+                .bindparams(bindparam("role_ids", expanding=True))
+            )
+            params: Dict[str, Any] = {
+                "unit_ids": [int(x) for x in unit_ids],
+                "role_ids": [int(x) for x in role_ids_filter],
+            }
+        else:
+            sql = (
+                text(
+                    f"""
+                    SELECT DISTINCT u.role_id
+                    FROM {self._schema}.{self._users_table} u
+                    WHERE u.unit_id IN :unit_ids
+                      {where_user_active}
+                    ORDER BY u.role_id
+                    """
+                ).bindparams(bindparam("unit_ids", expanding=True))
+            )
+            params = {"unit_ids": [int(x) for x in unit_ids]}
+
+        with self._engine.begin() as c:
+            rows = c.execute(sql, params).mappings().all()
+
+        out: List[int] = []
+        for r in rows:
+            if r.get("role_id") is None:
+                continue
+            out.append(int(r["role_id"]))
+        return out
+
+    def compute_visible_executor_role_ids_for_tasks(
+        self,
+        *,
+        user_id: int,
+        include_inactive_units: bool = False,
+        include_inactive_users: bool = False,
+    ) -> Set[int]:
+        """
+        STRICT role-scope for tasks (two levels):
+          - Director: own role + deputy roles (ONLY deputies)
+          - Deputy: own role + supervisor roles assigned to deputy via groups (ONLY supervisors)
+          - Supervisor: own role + roles of direct subordinates (ANY roles in direct child units)
+          - Others: own role only
+
+        Env sets:
+          DIRECTOR_ROLE_IDS, DEPUTY_ROLE_IDS, SUPERVISOR_ROLE_IDS
+        """
+        uid = int(user_id)
+
+        director_role_ids = self._parse_int_set_env("DIRECTOR_ROLE_IDS")
+        deputy_role_ids = self._parse_int_set_env("DEPUTY_ROLE_IDS")
+        supervisor_role_ids = self._parse_int_set_env("SUPERVISOR_ROLE_IDS")
+
+        unit_id, role_id, is_active = self.get_user_unit_and_role(uid)
+        if not is_active or role_id is None:
+            raise PermissionError(f"user_id={uid} inactive or not found")
+
+        my_role_id = int(role_id)
+        out: Set[int] = {my_role_id}
+
+        # Director -> deputies (only deputy roles in direct child units)
+        if my_role_id in director_role_ids:
+            if unit_id is None:
+                return out
+            child_units = self._list_child_unit_ids(int(unit_id), include_inactive_units=include_inactive_units)
+            dep_roles = self._list_user_role_ids_by_unit_ids(
+                child_units,
+                role_ids_filter=deputy_role_ids,
+                include_inactive_users=include_inactive_users,
+            )
+            out |= set(dep_roles)
+            return out
+
+        # Deputy -> supervisors assigned to deputy via groups (only supervisor roles)
+        if my_role_id in deputy_role_ids:
+            assigned_units = self.list_group_unit_ids_for_deputy(uid, include_inactive=include_inactive_units)
+            head_roles = self._list_user_role_ids_by_unit_ids(
+                assigned_units,
+                role_ids_filter=supervisor_role_ids,
+                include_inactive_users=include_inactive_users,
+            )
+            out |= set(head_roles)
+            return out
+
+        # Supervisor -> direct subordinates (any roles in direct child units)
+        if my_role_id in supervisor_role_ids:
+            if unit_id is None:
+                return out
+            child_units = self._list_child_unit_ids(int(unit_id), include_inactive_units=include_inactive_units)
+            sub_roles = self._list_user_role_ids_by_unit_ids(
+                child_units,
+                role_ids_filter=None,
+                include_inactive_users=include_inactive_users,
+            )
+            out |= set(sub_roles)
+            return out
+
+        return out
 
     # ---------------------------
     # Org units (full rows)
@@ -275,8 +438,7 @@ class OrgUnitsService:
                       {where_active}
                     ORDER BY unit_id
                     """
-                )
-                .bindparams(bindparam("ids", expanding=True))
+                ).bindparams(bindparam("ids", expanding=True))
             )
             params = {"ids": [int(x) for x in scope_unit_ids]}
 

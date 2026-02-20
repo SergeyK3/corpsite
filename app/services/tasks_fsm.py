@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Set
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
@@ -135,20 +136,12 @@ def _set_status(
     )
 
 
-def _extract_report_link(payload: Dict[str, Any], *, task_id: int, from_status: str) -> str:
+def _extract_report_link(payload: Dict[str, Any]) -> str:
     v = payload.get("report_link")
     s = (v or "").strip()
     if not s:
-        raise_error(
-            ErrorCode.TASK_CONFLICT_ACTION_STATUS,
-            extra={
-                "task_id": int(task_id),
-                "current_status": from_status,
-                "allowed_from": ["WAITING_REPORT", "IN_PROGRESS"],
-                "status_to": "WAITING_APPROVAL",
-                "hint": "report_link is required",
-            },
-        )
+        # payload validation (не конфликт статуса)
+        raise HTTPException(status_code=422, detail="report_link is required")
     return s
 
 
@@ -216,7 +209,6 @@ def _maybe_create_or_update_next_task_after_approved(
     target_role_id = int(rt["target_role_id"])
     offset_days = int(rt.get("escalation_offset_days") or 0)
 
-    # Ищем существующую задачу зама
     existing = conn.execute(
         text(
             """
@@ -236,7 +228,6 @@ def _maybe_create_or_update_next_task_after_approved(
         },
     ).mappings().first()
 
-    # due_date рассчитываем в SQL (локальная дата + offset)
     if existing:
         if existing.get("due_date") is None:
             conn.execute(
@@ -332,18 +323,22 @@ def _report(
             },
         )
 
-    report_link = _extract_report_link(payload, task_id=task_id, from_status=from_status)
+    report_link = _extract_report_link(payload)
     comment = _normalize_comment(payload)
 
+    # Идемпотентный upsert отчёта (совместимо с текущим router, даже если он тоже пишет report)
     ins = conn.execute(
         text(
             """
-            INSERT INTO task_reports (task_id, report_link, submitted_by, current_comment)
-            VALUES (:tid, :link, :by, :comment)
+            INSERT INTO task_reports (task_id, report_link, submitted_by, current_comment, submitted_at)
+            VALUES (:tid, :link, :by, :comment, now())
             ON CONFLICT (task_id) DO UPDATE SET
                 report_link = EXCLUDED.report_link,
                 submitted_by = EXCLUDED.submitted_by,
-                current_comment = EXCLUDED.current_comment
+                current_comment = EXCLUDED.current_comment,
+                submitted_at = now(),
+                approved_at = NULL,
+                approved_by = NULL
             RETURNING report_id
             """
         ),
@@ -405,7 +400,6 @@ def _approve(
     report_id = _get_latest_report_id(conn, task_id)
     comment = _normalize_comment(payload)
 
-    # Получаем approved_at, чтобы считать due_date следующего уровня.
     upd = conn.execute(
         text(
             f"""
@@ -452,7 +446,6 @@ def _approve(
         payload={**payload, "status_to": "DONE", "report_id": int(report_id)},
     )
 
-    # КАСКАД (upsert due_date): создаём или обновляем задачу зама
     if approved_at:
         _maybe_create_or_update_next_task_after_approved(
             conn,

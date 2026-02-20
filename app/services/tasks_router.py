@@ -1,11 +1,11 @@
 # FILE: app/services/tasks_router.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Security
+from fastapi import APIRouter, HTTPException, Path, Query, Security
 from fastapi.responses import Response
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
 from app.errors import ErrorCode, raise_error
@@ -14,10 +14,10 @@ from app.services.tasks_service import (
     attach_allowed_actions,
     can_approve,
     can_report_or_update,
+    compute_visible_executor_role_ids_for_tasks,
     ensure_task_visible_or_404,
     get_status_id_by_code,
     get_user_role_id,
-    is_supervisor_or_deputy,
     load_assignment_scope_enum_labels,
     load_task_full,
     normalize_assignment_scope,
@@ -30,6 +30,9 @@ from app.auth import get_current_user  # JWT dependency
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
+# -----------------------
+# small parsing helpers
+# -----------------------
 def _as_int_or_none(v: Any) -> Optional[int]:
     if v is None:
         return None
@@ -70,6 +73,10 @@ def _pick_str(payload: Dict[str, Any], keys: List[str]) -> str:
     return ""
 
 
+# -----------------------
+# endpoints
+# -----------------------
+
 # Support both /tasks and /tasks/ to avoid 307 redirects in some clients.
 @router.get("")
 @router.get("/")
@@ -80,45 +87,59 @@ def list_tasks(
     include_archived: bool = Query(False),
     # filter by executor role
     executor_role_id: Optional[int] = Query(None, ge=1),
+    # filter by assignment scope: admin|functional|all
+    assignment_scope: Optional[str] = Query(
+        None,
+        description="Filter by assignment scope: admin|functional|all. If omitted or 'all' -> no filtering.",
+    ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
     current_user_id = int(user["user_id"])
-    params: Dict[str, Any] = {"limit": limit, "offset": offset}
+    params: Dict[str, Any] = {"limit": int(limit), "offset": int(offset)}
 
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
-        params["role_id"] = role_id
-        params["current_user_id"] = current_user_id
+        params["role_id"] = int(role_id)
+        params["current_user_id"] = int(current_user_id)
+
+        # Role-scope (2-level) for task visibility
+        visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+        visible_roles_list = sorted({int(x) for x in visible_roles if int(x) > 0})
+        if not visible_roles_list:
+            # как минимум собственная роль должна быть, но если в БД мусор — деградируем безопасно
+            visible_roles_list = [int(role_id)]
+        params["visible_role_ids"] = visible_roles_list
 
         allowed = load_assignment_scope_enum_labels(conn)
         if not allowed:
             raise HTTPException(status_code=500, detail="assignment_scope_t enum not found in DB")
 
-        # keep these for compatibility (not strictly needed anymore, but harmless)
         functional_lbl = scope_label_or_none(allowed, "functional")
         admin_lbl = scope_label_or_none(allowed, "admin")
         _ = functional_lbl, admin_lbl  # silence linters
 
         where: List[str] = []
 
-        # RBAC-фильтр: суперв/деп видят всё (текущее поведение системы)
-        if not is_supervisor_or_deputy(role_id):
-            # IMPORTANT: list visibility must match ensure_task_visible_or_404():
-            # - initiator sees own tasks
-            # - executor by role sees tasks regardless of assignment_scope
-            where.append(
-                "("
-                "(t.executor_role_id = :role_id) "
-                "OR (t.initiator_user_id = :current_user_id)"
-                ")"
-            )
+        # ЕДИНОЕ правило видимости:
+        # - инициатор видит свои
+        # - видит, если executor_role_id в role-scope (director->deputies; deputy->supervisors; supervisor->subordinates)
+        where.append(
+            "("
+            "(t.initiator_user_id = :current_user_id) "
+            "OR (t.executor_role_id IN :visible_role_ids)"
+            ")"
+        )
 
-        # executor_role_id filter (applies for everyone, including supervisor/deputy)
+        # explicit executor_role_id filter (does NOT bypass RBAC)
         if executor_role_id is not None:
+            erid = int(executor_role_id)
+            if erid not in set(visible_roles_list):
+                # фильтр просит чужую роль — гарантированно пусто
+                return {"total": 0, "limit": int(limit), "offset": int(offset), "items": []}
             where.append("t.executor_role_id = :executor_role_id")
-            params["executor_role_id"] = int(executor_role_id)
+            params["executor_role_id"] = erid
 
         if period_id is not None:
             where.append("t.period_id = :period_id")
@@ -131,6 +152,12 @@ def list_tasks(
         if (not status_code) and (not include_archived):
             where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
 
+        scope_raw = (assignment_scope or "").strip().lower()
+        if scope_raw and scope_raw != "all":
+            norm_scope = normalize_assignment_scope(conn, scope_raw)
+            where.append("t.assignment_scope = :assignment_scope")
+            params["assignment_scope"] = norm_scope
+
         if search:
             q = search.strip()
             if q:
@@ -139,7 +166,7 @@ def list_tasks(
 
         where_sql = " AND ".join(where) if where else "1=1"
 
-        total = conn.execute(
+        count_sql = (
             text(
                 f"""
                 SELECT COUNT(1)
@@ -147,11 +174,13 @@ def list_tasks(
                 LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
                 WHERE {where_sql}
                 """
-            ),
-            params,
-        ).scalar() or 0
+            )
+            .bindparams(bindparam("visible_role_ids", expanding=True))
+        )
 
-        rows = conn.execute(
+        total = (conn.execute(count_sql, params).scalar() or 0)
+
+        select_sql = (
             text(
                 f"""
                 SELECT
@@ -173,9 +202,11 @@ def list_tasks(
                 ORDER BY t.task_id DESC
                 LIMIT :limit OFFSET :offset
                 """
-            ),
-            params,
-        ).mappings().all()
+            )
+            .bindparams(bindparam("visible_role_ids", expanding=True))
+        )
+
+        rows = conn.execute(select_sql, params).mappings().all()
 
         items: List[Dict[str, Any]] = []
         for r in rows:
@@ -183,7 +214,7 @@ def list_tasks(
             t = attach_allowed_actions(task=t, current_user_id=current_user_id, current_role_id=role_id)
             items.append(t)
 
-    return {"total": int(total), "limit": limit, "offset": offset, "items": items}
+    return {"total": int(total), "limit": int(limit), "offset": int(offset), "items": items}
 
 
 @router.get("/{task_id}")
@@ -473,7 +504,7 @@ def archive_task(
             include_archived=True,
         )
 
-        # текущая политика: скрываем существование, если не инициатор
+        # current policy: hide existence if not initiator
         if int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
 
@@ -514,7 +545,6 @@ def delete_task(
             include_archived=True,
         )
 
-        # скрываем существование: не инициатор -> 404
         if int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
 

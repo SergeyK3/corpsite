@@ -4,7 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { apiAuthMe, clearAccessToken, isAuthed } from "@/lib/api";
+import { apiAuthMe } from "@/lib/api";
+import { isAuthed, logout as authLogout } from "@/lib/auth";
 
 type MeInfo = {
   user_id?: number;
@@ -71,12 +72,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [err, setErr] = useState<string | null>(null);
 
   function redirectToLogin() {
-    clearAccessToken();
+    authLogout();
     router.replace("/login");
   }
 
-  function logout() {
-    clearAccessToken();
+  function onLogoutClick() {
+    authLogout();
     router.push("/login");
   }
 
@@ -149,7 +150,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <button
-            onClick={logout}
+            onClick={onLogoutClick}
             className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60"
           >
             Выйти

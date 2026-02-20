@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { apiAuthLogin } from "@/lib/api";
+import { isAuthed, setSessionLogin } from "@/lib/auth";
 
 const LAST_LOGIN_KEY = "corpsite.lastLogin";
 
@@ -24,6 +25,13 @@ export default function LoginPage() {
 
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+
+  // If already authed -> go home
+  useEffect(() => {
+    if (isAuthed()) {
+      router.replace("/");
+    }
+  }, [router]);
 
   // Load last login
   useEffect(() => {
@@ -77,15 +85,15 @@ export default function LoginPage() {
     }
 
     try {
-      // backend auth
       await apiAuthLogin({ login: l, password: p });
 
-      // store last login for convenience
+      // store login for convenience / diagnostics
       try {
         localStorage.setItem(LAST_LOGIN_KEY, l);
       } catch {
         // ignore
       }
+      setSessionLogin(l);
 
       router.replace("/");
     } catch (e: any) {
@@ -150,7 +158,7 @@ export default function LoginPage() {
                 aria-label={showPwd ? "Скрыть пароль" : "Показать пароль"}
                 title={showPwd ? "Скрыть пароль" : "Показать пароль"}
               >
-                {showPwd ? "🙈" : "👁"}
+                {showPwd ? "Скрыть" : "Показать"}
               </button>
             </div>
           </div>

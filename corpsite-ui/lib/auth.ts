@@ -35,6 +35,10 @@ export const LOGIN_TO_USER_ID: Record<string, number> = {
   "econ_3@corp.local": 283,
 };
 
+function normalizeLogin(v: string): string {
+  return (v ?? "").toString().trim().toLowerCase();
+}
+
 // -------------------- session storage helpers --------------------
 
 export function getSessionAccessToken(): string {
@@ -68,7 +72,7 @@ export function clearSessionAccessToken(): void {
 
 export function setSessionLogin(login: string): void {
   if (typeof window === "undefined") return;
-  const l = (login ?? "").toString().trim().toLowerCase();
+  const l = normalizeLogin(login);
   if (!l) return;
   try {
     window.sessionStorage.setItem(AUTH_SESSION_LOGIN_KEY, l);
@@ -80,7 +84,7 @@ export function setSessionLogin(login: string): void {
 export function getSessionLogin(): string {
   if (typeof window === "undefined") return "";
   try {
-    return (window.sessionStorage.getItem(AUTH_SESSION_LOGIN_KEY) ?? "").toString();
+    return normalizeLogin(window.sessionStorage.getItem(AUTH_SESSION_LOGIN_KEY) ?? "");
   } catch {
     return "";
   }

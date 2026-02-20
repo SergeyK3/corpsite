@@ -8,6 +8,9 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import HTTPException
 from sqlalchemy import text
 
+from app.db.engine import engine
+from app.services.org_units_service import OrgUnitsService
+
 
 def parse_int_set_env(name: str) -> Set[int]:
     raw = (os.getenv(name) or "").strip()
@@ -31,16 +34,8 @@ DEPUTY_ROLE_IDS: Set[int] = parse_int_set_env("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS: Set[int] = parse_int_set_env("DIRECTOR_ROLE_IDS")
 
 
-def is_supervisor_or_deputy(role_id: Any) -> bool:
-    try:
-        rid = int(role_id)
-    except Exception:
-        return False
-    return rid in SUPERVISOR_ROLE_IDS or rid in DEPUTY_ROLE_IDS
-
-
 def get_current_user_id(x_user_id: Optional[int]) -> int:
-    # do not treat 0/"" as "missing" silently; validate explicitly
+    # legacy helper (X-User-Id). Сейчас UI ходит через JWT, но оставляем для совместимости.
     if x_user_id is None:
         raise HTTPException(status_code=401, detail="X-User-Id header is required")
     try:
@@ -140,6 +135,25 @@ def normalize_assignment_scope(conn, value: Any) -> str:
     )
 
 
+# ---------------------------
+# Role-scope visibility (2-level policy)
+# ---------------------------
+def compute_visible_executor_role_ids_for_tasks(
+    *,
+    user_id: int,
+    include_inactive_units: bool = False,
+    include_inactive_users: bool = False,
+) -> Set[int]:
+    svc = OrgUnitsService(engine)
+    return set(
+        svc.compute_visible_executor_role_ids_for_tasks(
+            user_id=int(user_id),
+            include_inactive_units=bool(include_inactive_units),
+            include_inactive_users=bool(include_inactive_users),
+        )
+    )
+
+
 def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
     row = conn.execute(
         text(
@@ -181,21 +195,29 @@ def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool
         return False
 
 
-def _can_view(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    # Initiator sees own tasks
+def _can_view(
+    *,
+    current_user_id: int,
+    current_role_id: int,
+    visible_executor_role_ids: Set[int],
+    task_row: Dict[str, Any],
+) -> bool:
+    """
+    ЕДИНОЕ правило видимости (должно совпадать с list_tasks):
+
+    - Инициатор видит свои задачи (всегда).
+    - Любая задача видна, если executor_role_id входит в role-scope пользователя
+      (director -> deputies; deputy -> supervisors (по группам); supervisor -> direct subordinates).
+    """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
-    # Global privileged view (current behavior)
-    if is_supervisor_or_deputy(current_role_id):
-        return True
+    try:
+        erid = int(task_row.get("executor_role_id") or 0)
+    except Exception:
+        erid = 0
 
-    scope = str(task_row.get("assignment_scope") or "").lower()
-    if scope == "functional":
-        return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
-
-    # Other scopes currently not viewable unless initiator/supervisor/deputy
-    return False
+    return erid in visible_executor_role_ids
 
 
 def ensure_task_visible_or_404(
@@ -208,7 +230,13 @@ def ensure_task_visible_or_404(
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if not _can_view(current_user_id=current_user_id, current_role_id=current_role_id, task_row=task_row):
+    visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+    if not _can_view(
+        current_user_id=current_user_id,
+        current_role_id=current_role_id,
+        visible_executor_role_ids=visible,
+        task_row=task_row,
+    ):
         raise HTTPException(status_code=404, detail="Task not found")
 
     if (not include_archived) and (str(task_row.get("status_code") or "") == "ARCHIVED"):
@@ -220,40 +248,49 @@ def ensure_task_visible_or_404(
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     """
     Кто может отправлять/обновлять отчёт.
-
-    Новое правило:
-      - если пользователь является исполнителем по роли (executor_role_id == current_role_id) -> можно
-      - иначе -> нельзя
+    - исполнитель по роли может
     """
-    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
-        return True
-    return False
+    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
 
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    """
+    Кто может approve/reject отчёт в WAITING_APPROVAL:
+    - инициатор
+    - руководитель по role-scope (executor_role_id входит в visible roles текущего пользователя)
+    """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
-    if is_supervisor_or_deputy(current_role_id):
-        return True
-    return False
+
+    visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+    try:
+        erid = int(task_row.get("executor_role_id") or 0)
+    except Exception:
+        erid = 0
+    return erid in visible
 
 
 def can_reject_task(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     """
-    Кто может делать reject задачи (не review-reject отчёта, а task-level reject из IN_PROGRESS/WAITING_REPORT).
+    Кто может делать reject задачи (task-level reject из IN_PROGRESS/WAITING_REPORT).
 
     Политика:
-      - инициатор может отклонить задачу
-      - supervisor/deputy может отклонить задачу
-      - исполнитель по роли может отклонить
+      - инициатор
+      - руководитель по role-scope
+      - исполнитель по роли
     """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
-    if is_supervisor_or_deputy(current_role_id):
-        return True
+
     if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
         return True
-    return False
+
+    visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+    try:
+        erid = int(task_row.get("executor_role_id") or 0)
+    except Exception:
+        erid = 0
+    return erid in visible
 
 
 def _allowed_actions_for_user(

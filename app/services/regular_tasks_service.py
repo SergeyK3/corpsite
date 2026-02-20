@@ -32,6 +32,8 @@ FALLBACK_PERIOD_ID: int = _env_int("REGULAR_TASKS_FALLBACK_PERIOD_ID", 1)
 ARCHIVED_STATUS_ID: int = _env_int("TASK_STATUS_ID_ARCHIVED", 5)
 IN_PROGRESS_STATUS_CODE: str = os.getenv("TASK_STATUS_CODE_IN_PROGRESS") or "IN_PROGRESS"
 
+_LOCAL_TZ = timezone(timedelta(hours=TZ_OFFSET_HOURS))
+
 
 @dataclass(frozen=True)
 class RunStats:
@@ -44,7 +46,7 @@ class RunStats:
 
 def _now_local() -> datetime:
     # фиксируем UTC+5 как в проекте (простая модель)
-    return datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET_HOURS)
+    return datetime.now(_LOCAL_TZ)
 
 
 def _safe_int(v: Any) -> Optional[int]:

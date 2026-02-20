@@ -1,6 +1,20 @@
 // FILE: corpsite-ui/app/page.tsx
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isAuthed } from "@/lib/auth";
 
 export default function HomePage() {
-  redirect("/tasks");
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthed()) {
+      router.replace("/login");
+      return;
+    }
+    router.replace("/tasks");
+  }, [router]);
+
+  return null;
 }

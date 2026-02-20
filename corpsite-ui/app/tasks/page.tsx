@@ -4,14 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import {
-  apiAuthMe,
-  apiGetTask,
-  apiGetTasks,
-  apiPostTaskAction,
-  clearAccessToken,
-  isAuthed,
-} from "@/lib/api";
+import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
+import { isAuthed, logout } from "@/lib/auth";
 import type { AllowedAction, TaskAction, TaskListItem } from "@/lib/types";
 
 const ACTION_RU: Record<string, string> = {
@@ -21,15 +15,7 @@ const ACTION_RU: Record<string, string> = {
   archive: "В архив",
 };
 
-type MeInfo = {
-  user_id?: number;
-  role_id?: number;
-  role_name_ru?: string;
-  role_name?: string;
-  unit_id?: number | null;
-  full_name?: string;
-  login?: string;
-};
+type ScopeMode = "all" | "admin" | "functional";
 
 function actionsRu(actions: AllowedAction[] | undefined | null): string {
   if (!actions || actions.length === 0) return "—";
@@ -70,8 +56,7 @@ function normalizeMsg(msg: string): string {
 }
 
 function isUnauthorized(e: any): boolean {
-  const st = Number(e?.status ?? 0);
-  return st === 401;
+  return Number(e?.status ?? 0) === 401;
 }
 
 function formatDeadline(t: any): string {
@@ -83,6 +68,7 @@ function formatDeadline(t: any): string {
     t?.deadline_date ??
     t?.due ??
     null;
+
   if (!raw) return "—";
   const s = String(raw).trim();
   if (!s) return "—";
@@ -98,14 +84,28 @@ function formatDeadline(t: any): string {
   }
 }
 
+function scopeRu(v: ScopeMode): string {
+  if (v === "admin") return "Админ";
+  if (v === "functional") return "Функционал";
+  return "Все";
+}
+
+function normalizeList<T>(body: any): T[] {
+  if (Array.isArray(body)) return body as T[];
+  if (body?.items && Array.isArray(body.items)) return body.items as T[];
+  return [];
+}
+
 export default function TasksPage() {
   const router = useRouter();
 
-  const [me, setMe] = useState<MeInfo | null>(null);
-  const [myRoleId, setMyRoleId] = useState<number | null>(null);
+  // guard: do not load list until auth/me finished successfully
+  const [ready, setReady] = useState(false);
 
   const [limit, setLimit] = useState<number>(50);
   const [offset, setOffset] = useState<number>(0);
+
+  const [scope, setScope] = useState<ScopeMode>("all");
 
   const [list, setList] = useState<TaskListItem[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -139,21 +139,26 @@ export default function TasksPage() {
   }
 
   function redirectToLogin() {
-    clearAccessToken();
-    router.push("/login");
+    logout();
+    router.replace("/login");
   }
 
-  async function reloadList(roleId: number, nextOffset?: number) {
+  async function reloadList(nextOffset?: number) {
     setListLoading(true);
     setListError(null);
 
     try {
-      const data = await apiGetTasks({
-        limit,
-        offset: typeof nextOffset === "number" ? nextOffset : offset,
-        executor_role_id: roleId,
-      } as any);
+      const qOffset = typeof nextOffset === "number" ? nextOffset : offset;
 
+      const body = await apiFetchJson<any>("/tasks", {
+        query: {
+          limit,
+          offset: qOffset,
+          assignment_scope: scope === "all" ? undefined : scope, // admin|functional|undefined
+        } as any,
+      });
+
+      const data = normalizeList<TaskListItem>(body);
       setList(data);
 
       if (selectedId && !data.some((x: any) => taskIdOf(x) === selectedId)) {
@@ -228,7 +233,7 @@ export default function TasksPage() {
         });
       }
 
-      await Promise.all([reloadItem(selectedId), myRoleId ? reloadList(myRoleId) : Promise.resolve()]);
+      await Promise.all([reloadItem(selectedId), reloadList()]);
     } catch (e: any) {
       if (isUnauthorized(e)) {
         redirectToLogin();
@@ -242,16 +247,16 @@ export default function TasksPage() {
     }
   }
 
+  // bootstrap: auth + me (only once)
   useEffect(() => {
-    (async () => {
+    void (async () => {
       if (!isAuthed()) {
-        router.push("/login");
+        router.replace("/login");
         return;
       }
 
-      let meData: any;
       try {
-        meData = await apiAuthMe();
+        await apiAuthMe(); // validate token + set server-side context
       } catch (e: any) {
         if (isUnauthorized(e)) {
           redirectToLogin();
@@ -261,27 +266,21 @@ export default function TasksPage() {
         return;
       }
 
-      const roleId = Number(meData?.role_id ?? 0);
-      setMe(meData as MeInfo);
-
-      if (roleId > 0) {
-        setMyRoleId(roleId);
-        await reloadList(roleId, 0);
-        setOffset(0);
-      } else {
-        setMyRoleId(null);
-        setListError("Не удалось определить роль пользователя (/me).");
-      }
+      setReady(true);
+      setOffset(0);
+      await reloadList(0);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // reload list on params change (only after bootstrap)
   useEffect(() => {
-    if (!myRoleId) return;
-    void reloadList(myRoleId);
+    if (!ready) return;
+    void reloadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myRoleId, limit, offset]);
+  }, [ready, limit, offset, scope]);
 
+  // load selected item
   useEffect(() => {
     if (!selectedId) {
       setItem(null);
@@ -328,10 +327,27 @@ export default function TasksPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-950/40 p-1">
+            {(["all", "admin", "functional"] as ScopeMode[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setScope(v)}
+                className={[
+                  "rounded-md px-3 py-2 text-xs",
+                  scope === v ? "bg-zinc-900 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900/60",
+                ].join(" ")}
+                disabled={listLoading}
+                title="Контур задач"
+              >
+                {scopeRu(v)}
+              </button>
+            ))}
+          </div>
+
           <button
-            onClick={() => void (myRoleId ? reloadList(myRoleId) : Promise.resolve())}
+            onClick={() => void reloadList()}
             className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-            disabled={listLoading || !myRoleId}
+            disabled={listLoading}
           >
             Обновить
           </button>
@@ -469,7 +485,8 @@ export default function TasksPage() {
                 </div>
 
                 <div className="mt-2 text-xs text-zinc-500">
-                  Доступные действия: <span className="text-zinc-200">{actionsRu(effectiveAllowed)}</span>
+                  Доступные действия:{" "}
+                  <span className="text-zinc-200">{actionsRu(effectiveAllowed)}</span>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3">

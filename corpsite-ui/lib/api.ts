@@ -10,6 +10,8 @@ import type {
   RegularTasksListResponse,
 } from "./types";
 
+import { getSessionAccessToken, logout, setSessionAccessToken } from "./auth";
+
 function env(name: string, fallback = ""): string {
   const v = process.env[name];
   return (v ?? fallback).toString().trim();
@@ -25,41 +27,6 @@ function truthyEnv(name: string): boolean {
 const API_TRACE = truthyEnv("NEXT_PUBLIC_API_TRACE");
 
 /* ============================================================
- * JWT STORAGE
- * ============================================================ */
-
-const AUTH_ACCESS_TOKEN_KEY = "access_token";
-
-function readAccessToken(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return (window.sessionStorage.getItem(AUTH_ACCESS_TOKEN_KEY) ?? "").toString().trim();
-  } catch {
-    return "";
-  }
-}
-
-function setAccessToken(token: string): void {
-  if (typeof window === "undefined") return;
-  const t = (token ?? "").toString().trim();
-  if (!t) return;
-  try {
-    window.sessionStorage.setItem(AUTH_ACCESS_TOKEN_KEY, t);
-  } catch {}
-}
-
-export function clearAccessToken(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
-  } catch {}
-}
-
-export function isAuthed(): boolean {
-  return !!readAccessToken();
-}
-
-/* ============================================================
  * HELPERS (exported for shared API clients)
  * ============================================================ */
 
@@ -73,11 +40,7 @@ export async function readJsonSafe(res: Response): Promise<any> {
   }
 }
 
-export function toApiError(
-  status: number,
-  body: any,
-  meta?: Record<string, any>,
-): APIError {
+export function toApiError(status: number, body: any, meta?: Record<string, any>): APIError {
   const err: APIError = {
     status,
     code: body?.code,
@@ -110,7 +73,7 @@ export function buildHeaders(
   extra?: Record<string, string>,
   opts?: { noAuth?: boolean },
 ): HeadersInit {
-  const tok = opts?.noAuth ? "" : readAccessToken();
+  const tok = opts?.noAuth ? "" : getSessionAccessToken();
 
   const headers: Record<string, string> = {
     ...(extra ?? {}),
@@ -142,7 +105,7 @@ function normalizeList<T>(body: any): T[] {
 
 export function handleAuthFailureIfNeeded(status: number): void {
   if (status === 401) {
-    clearAccessToken();
+    logout();
   }
 }
 
@@ -212,10 +175,14 @@ export async function apiAuthLogin(params: {
 
   const token = (body?.access_token ?? "").toString().trim();
   if (!token) {
-    throw toApiError(500, { message: "Backend did not return access_token" }, { method: "POST", url: "/auth/login" });
+    throw toApiError(
+      500,
+      { message: "Backend did not return access_token" },
+      { method: "POST", url: "/auth/login" },
+    );
   }
 
-  setAccessToken(token);
+  setSessionAccessToken(token);
   return body;
 }
 
@@ -228,7 +195,6 @@ export async function apiAuthMe(): Promise<any> {
  * ============================================================ */
 
 export async function apiGetTasks(params: {
-  devUserId?: number;
   limit?: number;
   offset?: number;
   executor_role_id?: number;
@@ -275,7 +241,10 @@ export async function apiPostTaskAction(params: {
 
   const out: Record<string, any> = {};
   if (reason) out.reason = reason;
-  return apiFetchJson<any>(`/tasks/${params.taskId}/${params.action}`, { method: "POST", body: out });
+  return apiFetchJson<any>(`/tasks/${params.taskId}/${params.action}`, {
+    method: "POST",
+    body: out,
+  });
 }
 
 /* ============================================================
