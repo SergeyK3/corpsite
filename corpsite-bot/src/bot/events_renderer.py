@@ -137,6 +137,7 @@ def render_event(event: Dict[str, Any]) -> str:
         if title:
             lines.append(title)
         lines.append("")
+        _add_line(lines, "Отчёт", report_link)
         _add_line(lines, "Комментарий", current_comment)
         _add_line(lines, "Статус", "DONE")
         lines.append("")
@@ -150,6 +151,7 @@ def render_event(event: Dict[str, Any]) -> str:
         if title:
             lines.append(title)
         lines.append("")
+        _add_line(lines, "Отчёт", report_link)
         _add_line(lines, "Причина/комментарий", current_comment)
         _add_line(lines, "Статус", "WAITING_REPORT")
         lines.append("")

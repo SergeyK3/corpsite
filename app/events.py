@@ -1,10 +1,9 @@
-# FILE: app/events.py
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from sqlalchemy import text
 
@@ -164,6 +163,60 @@ def _resolve_bindings_to_user_ids_tx(conn, bindings: List[Dict[str, Any]]) -> Li
     return out
 
 
+def _latest_report_info_tx(conn, task_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Последний отчёт по задаче (для Telegram/UX).
+    Возвращает: report_id, report_link, submitted_at, submitted_by, approved_at, approved_by.
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT
+              tr.report_id,
+              tr.report_link,
+              tr.submitted_at,
+              tr.submitted_by,
+              tr.approved_at,
+              tr.approved_by
+            FROM public.task_reports tr
+            WHERE tr.task_id = :tid
+            ORDER BY tr.submitted_at DESC NULLS LAST, tr.report_id DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": int(task_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _latest_report_submitted_by_tx(conn, task_id: int) -> Optional[int]:
+    """
+    Возвращает submitted_by по последнему отчёту в task_reports для task_id.
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT tr.submitted_by
+            FROM public.task_reports tr
+            WHERE tr.task_id = :tid
+            ORDER BY tr.submitted_at DESC NULLS LAST, tr.report_id DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": int(task_id)},
+    ).mappings().first()
+    if not row:
+        return None
+    v = row.get("submitted_by")
+    try:
+        iv = int(v) if v is not None else None
+    except Exception:
+        return None
+    if iv is None or iv <= 0:
+        return None
+    return iv
+
+
 def resolve_recipients_for_task_event_tx(
     conn,
     *,
@@ -209,6 +262,20 @@ def resolve_recipients_for_task_event_tx(
         recipients = _uniq_ints(
             [task.initiator_user_id] + [int(x) for x in executor_users] + [int(x) for x in mgmt_users]
         )
+
+    # ----------------------------------------
+    # IMPORTANT UX RULE:
+    # For APPROVED/REJECTED notify the report author (last submitted_by)
+    # so the expert sees the outcome (approved or rejected).
+    # ----------------------------------------
+    if et in {"APPROVED", "REJECTED"}:
+        try:
+            submitted_by = _latest_report_submitted_by_tx(conn, task.task_id)
+            if submitted_by is not None:
+                recipients = _uniq_ints(list(recipients) + [int(submitted_by)])
+        except Exception:
+            # do not break delivery because of UX rule
+            pass
 
     if _should_drop_self(et):
         recipients = [uid for uid in recipients if uid != int(actor_user_id)]
@@ -260,8 +327,22 @@ def create_task_event_tx(
         if t and not str(payload.get("task_title") or "").strip():
             payload["task_title"] = t
     except Exception:
-        # не ломаем событие из-за UX
         pass
+
+    # UX enrichment: report_link/report_id в payload (для Telegram)
+    # Важно: не перетираем, если уже передали явно.
+    if et in {"REPORT_SUBMITTED", "APPROVED", "REJECTED", "ARCHIVED", "REPORT_APPROVED", "REPORT_REJECTED"}:
+        try:
+            if not str(payload.get("report_link") or "").strip() or not payload.get("report_id"):
+                info = _latest_report_info_tx(conn, task.task_id)
+                if info:
+                    if not str(payload.get("report_link") or "").strip():
+                        payload["report_link"] = info.get("report_link")
+                    if not payload.get("report_id"):
+                        payload["report_id"] = info.get("report_id")
+        except Exception:
+            # не ломаем события из-за UX enrichment
+            pass
 
     recipients = resolve_recipients_for_task_event_tx(
         conn,
@@ -323,10 +404,8 @@ def create_task_event_tx(
         {"audit_id": int(audit_id), "uids": recipients},
     )
 
-    # вычисляем каналы ровно один раз
     channels = _channels_for_event_type(et)
 
-    # telegram — только если тип разрешён (канал включён) + есть tg_bindings для пользователей
     if "telegram" in channels:
         filtered_uids = recipients
         if TELEGRAM_DELIVERY_ALLOW_USER_IDS:
