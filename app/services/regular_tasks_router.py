@@ -33,14 +33,14 @@ def run_regular_tasks(
         # наивный ISO (без tz); мы интерпретируем как локальное проекта (UTC+5)
         run_at_local = datetime.fromisoformat(run_at_local_iso.strip())
 
-    # минимальная защита: не пускать без X-User-Id, но это internal — решишь сам
-    if not x_user_id:
-        # можно ослабить: убрать проверку и запускать вообще без заголовка
-        raise Exception("X-User-Id is required for internal run (adjust policy if needed)")
+    # Проверку X-User-Id убрали.
+    # Internal endpoint разрешён без заголовка.
 
     with engine.begin() as conn:
-        # (опционально) можно проверять роль/админов — пока не фиксируем
-        # Просто пишем в meta run_id, stats.
-        run_id, stats = run_regular_tasks_generation_tx(conn, run_at_local=run_at_local, dry_run=dry_run)
+        run_id, stats = run_regular_tasks_generation_tx(
+            conn,
+            run_at_local=run_at_local,
+            dry_run=dry_run
+        )
 
         return {"run_id": int(run_id), "dry_run": dry_run, "stats": stats}

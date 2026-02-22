@@ -360,18 +360,6 @@ def _reporting_period_resolve(
     return int(created), d0, d1
 
 
-def _append_period_suffix(base_title: str, suffix: str) -> str:
-    bt = (base_title or "").strip()
-    if not bt:
-        bt = "Без названия"
-
-    # If already has exact suffix at end -> keep
-    if re.search(rf"\(\s*{re.escape(suffix)}\s*\)\s*$", bt):
-        return bt
-
-    return f"{bt} ({suffix})"
-
-
 def _period_suffix_for_template(schedule_type: str, period_start: date) -> str:
     st = (schedule_type or "").strip().lower()
     if st == "monthly":
@@ -516,6 +504,21 @@ def _log_run_item_safe(
         return
 
 
+def _compose_task_title(*, base_title: str, role_name: str, suffix: str) -> str:
+    bt = (base_title or "").strip() or "Без названия"
+    rn = (role_name or "").strip() or "Без роли"
+    suf = (suffix or "").strip()
+
+    # Убираем существующий " (suffix)" на конце, чтобы не получить дубли
+    if suf and re.search(rf"\(\s*{re.escape(suf)}\s*\)\s*$", bt):
+        bt = re.sub(rf"\(\s*{re.escape(suf)}\s*\)\s*$", "", bt).strip()
+
+    # Итоговая политика: "<Отчёт> → <Роль> (<suffix>)"
+    if suf:
+        return f"{bt} → {rn} ({suf})"
+    return f"{bt} → {rn}"
+
+
 def run_regular_tasks_generation_tx(
     conn: Connection,
     *,
@@ -540,19 +543,22 @@ def run_regular_tasks_generation_tx(
         text(
             """
             SELECT
-                regular_task_id,
-                is_active,
-                title,
-                description,
-                executor_role_id,
-                assignment_scope,
-                schedule_type,
-                schedule_params,
-                create_offset_days,
-                due_offset_days
-            FROM public.regular_tasks
-            WHERE COALESCE(is_active, true) = true
-            ORDER BY regular_task_id
+                rt.regular_task_id,
+                rt.is_active,
+                rt.title,
+                rt.description,
+                rt.executor_role_id,
+                rt.assignment_scope,
+                rt.schedule_type,
+                rt.schedule_params,
+                rt.create_offset_days,
+                rt.due_offset_days,
+                r.name AS executor_role_name,
+                r.code AS executor_role_code
+            FROM public.regular_tasks rt
+            LEFT JOIN public.roles r ON r.role_id = rt.executor_role_id
+            WHERE COALESCE(rt.is_active, true) = true
+            ORDER BY rt.regular_task_id
             """
         )
     ).mappings().all()
@@ -653,10 +659,16 @@ def run_regular_tasks_generation_tx(
             # Policy (фиксируем): due_date = reporting_period.date_end + due_offset_days
             due_date_val = _due_date_from_reporting_period_end(period_end=period_end, due_offset_days=due_offset_days)
 
-            # title suffix policy: based on reporting period identity
+            # suffix policy: based on reporting period identity
             suffix = _period_suffix_for_template(schedule_type, period_start)
+
             base_title = str(t.get("title") or "").strip() or f"Regular task #{rid}"
-            title_with_suffix = _append_period_suffix(base_title, suffix)
+            role_name = str(t.get("executor_role_name") or "").strip()
+            if not role_name:
+                # fallback: хотя бы role_code (если name пустой)
+                role_name = str(t.get("executor_role_code") or "").strip() or f"role#{executor_role_id}"
+
+            title_final = _compose_task_title(base_title=base_title, role_name=role_name, suffix=suffix)
 
             base_meta.update(
                 {
@@ -665,8 +677,9 @@ def run_regular_tasks_generation_tx(
                     "period_end": period_end.isoformat(),
                     "due_date": due_date_val.isoformat() if due_date_val else None,
                     "title_suffix": suffix,
-                    "title_final": title_with_suffix,
+                    "title_final": title_final,
                     "assignment_scope": assignment_scope,
+                    "executor_role_name": role_name,
                 }
             )
 
@@ -764,7 +777,7 @@ def run_regular_tasks_generation_tx(
                 {
                     "period_id": int(period_id),
                     "regular_task_id": int(rid),
-                    "title": title_with_suffix,
+                    "title": title_final,
                     "description": t.get("description"),
                     "initiator_user_id": int(SYSTEM_USER_ID),
                     "executor_role_id": int(executor_role_id),
