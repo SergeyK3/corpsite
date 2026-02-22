@@ -55,7 +55,33 @@ def _env(name: str, default: str = "") -> str:
 
 
 AUTH_JWT_SECRET = _env("AUTH_JWT_SECRET", "dev-secret-change-me")
-AUTH_JWT_EXPIRES_MIN = int(_env("AUTH_JWT_EXPIRES_MIN", "720"))  # 12h
+
+# Backward-compat:
+# - Old config: AUTH_JWT_EXPIRES_MIN (minutes)
+# - New preferred config: AUTH_JWT_EXPIRES_DAYS (days)
+#
+# If AUTH_JWT_EXPIRES_DAYS is set (or defaulted), we use it.
+# If it's empty/invalid, we fall back to minutes.
+def _jwt_ttl_seconds() -> int:
+    days_raw = _env("AUTH_JWT_EXPIRES_DAYS", "10")  # default: 10 days (as requested)
+    try:
+        days = int(days_raw)
+        if days > 0:
+            return days * 24 * 60 * 60
+    except Exception:
+        pass
+
+    # fallback to minutes (legacy)
+    min_raw = _env("AUTH_JWT_EXPIRES_MIN", "720")  # legacy default 12h
+    try:
+        mins = int(min_raw)
+        if mins > 0:
+            return mins * 60
+    except Exception:
+        pass
+
+    # last resort
+    return 10 * 24 * 60 * 60
 
 
 # -----------------------
@@ -115,7 +141,7 @@ def _sign(message: bytes, secret: str) -> bytes:
 
 def create_access_token(user_id: int) -> str:
     now = int(time.time())
-    exp = now + AUTH_JWT_EXPIRES_MIN * 60
+    exp = now + _jwt_ttl_seconds()
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {"sub": str(int(user_id)), "iat": now, "exp": exp}
 
