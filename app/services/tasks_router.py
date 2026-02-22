@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Security
 from fastapi.responses import Response
 from sqlalchemy import bindparam, text
 
+from app.auth import get_current_user  # JWT dependency
 from app.db.engine import engine
 from app.errors import ErrorCode, raise_error
 from app.services.tasks_fsm import transition
@@ -23,9 +24,6 @@ from app.services.tasks_service import (
     normalize_assignment_scope,
     scope_label_or_none,
 )
-
-from app.auth import get_current_user  # JWT dependency
-
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -180,6 +178,14 @@ def list_tasks(
 
         total = (conn.execute(count_sql, params).scalar() or 0)
 
+        # IMPORTANT:
+        # task_reports должен быть доступен в списке задач (UI).
+        # Даже если когда-нибудь task_reports станет "много строк на task_id" (история),
+        # мы всё равно должны возвращать "последний" отчёт. Поэтому используем LATERAL.
+        #
+        # Дополнительно:
+        # - отдаём role_name/role_code отправителя отчёта (submitted_by),
+        #   чтобы UI показывал "кто отправил" не как ID.
         select_sql = (
             text(
                 f"""
@@ -195,9 +201,38 @@ def list_tasks(
                     t.status_id,
                     t.due_date,
                     ts.code AS status_code,
-                    ts.name_ru AS status_name_ru
+                    ts.name_ru AS status_name_ru,
+
+                    tr.report_link AS report_link,
+                    tr.submitted_at AS report_submitted_at,
+                    tr.submitted_by AS report_submitted_by,
+                    tr.submitted_by_role_name AS report_submitted_by_role_name,
+                    tr.submitted_by_role_code AS report_submitted_by_role_code,
+
+                    tr.approved_at AS report_approved_at,
+                    tr.approved_by AS report_approved_by,
+                    tr.current_comment AS report_current_comment
                 FROM tasks t
                 LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                LEFT JOIN LATERAL (
+                    SELECT
+                        r.report_link,
+                        r.submitted_at,
+                        r.submitted_by,
+                        rs.name AS submitted_by_role_name,
+                        rs.code AS submitted_by_role_code,
+                        r.approved_at,
+                        r.approved_by,
+                        r.current_comment
+                    FROM task_reports r
+                    LEFT JOIN users us ON us.user_id = r.submitted_by
+                    LEFT JOIN roles rs ON rs.role_id = us.role_id
+                    WHERE r.task_id = t.task_id
+                    ORDER BY
+                        r.submitted_at DESC NULLS LAST,
+                        r.approved_at  DESC NULLS LAST
+                    LIMIT 1
+                ) tr ON TRUE
                 WHERE {where_sql}
                 ORDER BY t.task_id DESC
                 LIMIT :limit OFFSET :offset

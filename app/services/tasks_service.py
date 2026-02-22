@@ -170,9 +170,47 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
                 t.status_id,
                 t.due_date,
                 ts.code AS status_code,
-                ts.name_ru AS status_name_ru
+                ts.name_ru AS status_name_ru,
+
+                tr.report_link AS report_link,
+                tr.submitted_at AS report_submitted_at,
+                tr.submitted_by AS report_submitted_by,
+                tr.submitted_by_role_name AS report_submitted_by_role_name,
+                tr.submitted_by_role_code AS report_submitted_by_role_code,
+
+                tr.approved_at AS report_approved_at,
+                tr.approved_by AS report_approved_by,
+                tr.approved_by_role_name AS report_approved_by_role_name,
+                tr.approved_by_role_code AS report_approved_by_role_code,
+
+                tr.current_comment AS report_current_comment
             FROM tasks t
             LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    r.report_link,
+                    r.submitted_at,
+                    r.submitted_by,
+                    rs.name AS submitted_by_role_name,
+                    rs.code AS submitted_by_role_code,
+
+                    r.approved_at,
+                    r.approved_by,
+                    ra.name AS approved_by_role_name,
+                    ra.code AS approved_by_role_code,
+
+                    r.current_comment
+                FROM task_reports r
+                LEFT JOIN users us ON us.user_id = r.submitted_by
+                LEFT JOIN roles rs ON rs.role_id = us.role_id
+                LEFT JOIN users ua ON ua.user_id = r.approved_by
+                LEFT JOIN roles ra ON ra.role_id = ua.role_id
+                WHERE r.task_id = t.task_id
+                ORDER BY
+                    r.submitted_at DESC NULLS LAST,
+                    r.approved_at  DESC NULLS LAST
+                LIMIT 1
+            ) tr ON TRUE
             WHERE t.task_id = :task_id
             """
         ),
@@ -195,6 +233,21 @@ def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool
         return False
 
 
+def _is_report_author(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
+    """
+    IMPORTANT POLICY (MVP):
+    Когда задача уходит на согласование, executor_role_id переезжает на согласующего.
+    При этом автор отчёта (submitted_by) должен продолжать видеть задачу и результат согласования.
+    """
+    try:
+        submitted_by = task_row.get("report_submitted_by")
+        if submitted_by is None:
+            return False
+        return int(submitted_by) == int(current_user_id)
+    except Exception:
+        return False
+
+
 def _can_view(
     *,
     current_user_id: int,
@@ -202,14 +255,11 @@ def _can_view(
     visible_executor_role_ids: Set[int],
     task_row: Dict[str, Any],
 ) -> bool:
-    """
-    ЕДИНОЕ правило видимости (должно совпадать с list_tasks):
-
-    - Инициатор видит свои задачи (всегда).
-    - Любая задача видна, если executor_role_id входит в role-scope пользователя
-      (director -> deputies; deputy -> supervisors (по группам); supervisor -> direct subordinates).
-    """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    # NEW: автор отчёта видит задачу независимо от текущего executor_role_id (пока живёт отчёт)
+    if _is_report_author(current_user_id=current_user_id, task_row=task_row):
         return True
 
     try:
@@ -246,44 +296,44 @@ def ensure_task_visible_or_404(
 
 
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    """
-    Кто может отправлять/обновлять отчёт.
-    - исполнитель по роли может
-    """
     return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
 
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     """
-    Кто может approve/reject отчёт в WAITING_APPROVAL:
-    - инициатор
-    - руководитель по role-scope (executor_role_id входит в visible roles текущего пользователя)
+    approve/reject в WAITING_APPROVAL:
+    - инициатор может
+    - исполнитель по роли может
+    - НО: запрещаем согласование собственного отчёта (submitted_by == current_user_id)
     """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
-    visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+    # запрет self-approve (важно: чтобы UI не показывал кнопки, и backend не пускал)
     try:
-        erid = int(task_row.get("executor_role_id") or 0)
+        submitted_by = task_row.get("report_submitted_by")
+        if submitted_by is not None and int(submitted_by) == int(current_user_id):
+            return False
     except Exception:
-        erid = 0
-    return erid in visible
+        pass
+
+    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
 
 
 def can_reject_task(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     """
-    Кто может делать reject задачи (task-level reject из IN_PROGRESS/WAITING_REPORT).
-
-    Политика:
-      - инициатор
-      - руководитель по role-scope
-      - исполнитель по роли
+    IMPORTANT POLICY (MVP):
+    - В IN_PROGRESS / WAITING_REPORT исполнитель (executor_role) НЕ должен иметь REJECT.
+      Это действие зарезервировано для согласующего (в WAITING_APPROVAL) и/или вышестоящих ролей.
+    - Оставляем возможность REJECT для инициатора и для ролей, которые видят задачу по RBAC (role-scope),
+      но НЕ для исполнителя по роли.
     """
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
+    # Убираем право reject у исполнителя (это как раз твой кейс: эксперт не должен "отклонять").
     if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
-        return True
+        return False
 
     visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
     try:
@@ -310,6 +360,7 @@ def _allowed_actions_for_user(
         ):
             actions.append("report")
 
+        # reject в этих статусах НЕ должен появляться у исполнителя.
         if can_reject_task(
             current_user_id=current_user_id,
             current_role_id=current_role_id,

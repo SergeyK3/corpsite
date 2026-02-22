@@ -1,7 +1,7 @@
 # FILE: app/services/tasks_fsm.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -70,7 +70,6 @@ def transition(
 # ---------------------------
 
 def _apply_comment_sql() -> str:
-    # если comment пустой — не перезаписываем существующий current_comment
     return """
         current_comment = CASE
             WHEN :comment IS NULL OR :comment = '' THEN current_comment
@@ -80,30 +79,32 @@ def _apply_comment_sql() -> str:
 
 
 def _normalize_comment(payload: Dict[str, Any]) -> str:
-    # Поддержка обоих ключей: current_comment (старый контракт) и reason (новый/долгосрок).
     v = payload.get("current_comment")
     if v is None or str(v).strip() == "":
         v = payload.get("reason")
     return (v or "").strip()
 
 
-def _get_latest_report_id(conn: Connection, task_id: int) -> int:
-    rid = conn.execute(
-        text("SELECT max(report_id) AS rid FROM task_reports WHERE task_id = :tid"),
+def _get_latest_report_row(conn: Connection, task_id: int) -> Dict[str, Any]:
+    row = conn.execute(
+        text(
+            """
+            SELECT report_id, submitted_by
+            FROM public.task_reports
+            WHERE task_id = :tid
+            ORDER BY report_id DESC
+            LIMIT 1
+            """
+        ),
         {"tid": int(task_id)},
     ).mappings().first()
-
-    v = rid["rid"] if rid else None
-    if v is None:
-        raise_error(
-            ErrorCode.TASK_CONFLICT_APPROVE_NO_REPORT,
-            extra={"task_id": int(task_id)},
-        )
-    return int(v)
+    if not row or row.get("report_id") is None:
+        raise_error(ErrorCode.TASK_CONFLICT_APPROVE_NO_REPORT, extra={"task_id": int(task_id)})
+    return dict(row)
 
 
 def _ensure_report_exists(conn: Connection, task_id: int) -> None:
-    _get_latest_report_id(conn, task_id)
+    _get_latest_report_row(conn, task_id)
 
 
 def _set_status(
@@ -124,7 +125,6 @@ def _set_status(
             },
         )
 
-    # Инвариант: WAITING_APPROVAL допустим ТОЛЬКО если уже есть task_reports
     if to_status == "WAITING_APPROVAL":
         _ensure_report_exists(conn, task_id)
 
@@ -140,9 +140,98 @@ def _extract_report_link(payload: Dict[str, Any]) -> str:
     v = payload.get("report_link")
     s = (v or "").strip()
     if not s:
-        # payload validation (не конфликт статуса)
         raise HTTPException(status_code=422, detail="report_link is required")
     return s
+
+
+def _get_roles_for_task_flow(conn: Connection, task_id: int) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    """
+    Возвращает (regular_task_id, performer_role_id, approver_role_id).
+
+    Правило (долгосрок):
+    - performer_role_id = regular_tasks.executor_role_id
+    - approver_role_id  = regular_tasks.target_role_id
+
+    Если regular_task_id NULL или записи нет — вернём (None, None, None).
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT t.regular_task_id
+            FROM public.tasks t
+            WHERE t.task_id = :tid
+            """
+        ),
+        {"tid": int(task_id)},
+    ).mappings().first()
+    if not row or row.get("regular_task_id") is None:
+        return None, None, None
+
+    rid = int(row["regular_task_id"])
+    rt = conn.execute(
+        text(
+            """
+            SELECT regular_task_id, executor_role_id, target_role_id
+            FROM public.regular_tasks
+            WHERE regular_task_id = :rid
+            """
+        ),
+        {"rid": int(rid)},
+    ).mappings().first()
+    if not rt:
+        return rid, None, None
+
+    performer = rt.get("executor_role_id")
+    approver = rt.get("target_role_id")
+    try:
+        performer_id = int(performer) if performer is not None else None
+    except Exception:
+        performer_id = None
+    try:
+        approver_id = int(approver) if approver is not None else None
+    except Exception:
+        approver_id = None
+
+    return rid, performer_id, approver_id
+
+
+def _set_executor_role_if_needed(conn: Connection, task_id: int, role_id: Optional[int]) -> None:
+    if role_id is None or int(role_id) <= 0:
+        return
+    conn.execute(
+        text("UPDATE public.tasks SET executor_role_id = :rid WHERE task_id = :tid"),
+        {"rid": int(role_id), "tid": int(task_id)},
+    )
+
+
+def _find_active_task_by_regular_period_scope(
+    conn: Connection,
+    *,
+    period_id: int,
+    regular_task_id: int,
+    assignment_scope: str,
+) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT t.task_id, t.due_date
+            FROM tasks t
+            JOIN task_statuses ts ON ts.status_id = t.status_id
+            WHERE t.period_id = :period_id
+              AND t.regular_task_id = :regular_task_id
+              AND t.assignment_scope = :assignment_scope
+              AND COALESCE(ts.code,'') <> 'ARCHIVED'
+            ORDER BY t.created_at DESC, t.task_id DESC
+            LIMIT 1
+            """
+        ),
+        {
+            "period_id": int(period_id),
+            "regular_task_id": int(regular_task_id),
+            "assignment_scope": str(assignment_scope),
+        },
+    ).mappings().first()
+    return dict(row) if row else None
 
 
 def _maybe_create_or_update_next_task_after_approved(
@@ -151,18 +240,6 @@ def _maybe_create_or_update_next_task_after_approved(
     source_task_id: int,
     approved_at_ts: str,
 ) -> None:
-    """
-    Каскад: после APPROVED по задаче, созданной из regular_tasks (regular_task_id != NULL),
-    создаём (или обновляем, если уже существует) задачу для target_role_id из public.regular_tasks.
-
-    Идемпотентность:
-      - если задача для (period_id, regular_task_id, executor_role_id=target_role_id) уже есть —
-        НЕ создаём дубль, а:
-          - если due_date IS NULL -> заполняем;
-          - иначе оставляем как есть.
-
-    due_date = local_date(approved_at) + escalation_offset_days (TZ Asia/Qyzylorda).
-    """
     src = conn.execute(
         text(
             """
@@ -209,46 +286,49 @@ def _maybe_create_or_update_next_task_after_approved(
     target_role_id = int(rt["target_role_id"])
     offset_days = int(rt.get("escalation_offset_days") or 0)
 
-    existing = conn.execute(
-        text(
-            """
-            SELECT t.task_id, t.due_date
-            FROM tasks t
-            WHERE t.period_id = :period_id
-              AND t.regular_task_id = :regular_task_id
-              AND t.executor_role_id = :executor_role_id
-            ORDER BY t.task_id DESC
-            LIMIT 1
-            """
-        ),
-        {
-            "period_id": int(src["period_id"]),
-            "regular_task_id": int(regular_task_id),
-            "executor_role_id": int(target_role_id),
-        },
-    ).mappings().first()
+    period_id = int(src["period_id"])
+    assignment_scope = str(src.get("assignment_scope") or "functional")
 
-    if existing:
-        if existing.get("due_date") is None:
-            conn.execute(
-                text(
-                    """
-                    UPDATE tasks
-                    SET due_date = (
-                        ((:approved_at_ts)::timestamptz AT TIME ZONE :tz)::date
-                        + :offset_days
-                    )
-                    WHERE task_id = :tid
-                      AND due_date IS NULL
-                    """
-                ),
-                {
-                    "tid": int(existing["task_id"]),
-                    "approved_at_ts": approved_at_ts,
-                    "tz": LOCAL_TZ,
-                    "offset_days": int(offset_days),
-                },
-            )
+    existing = _find_active_task_by_regular_period_scope(
+        conn,
+        period_id=period_id,
+        regular_task_id=int(regular_task_id),
+        assignment_scope=assignment_scope,
+    )
+
+    description = (
+        f"Основание: APPROVED по задаче #{int(source_task_id)} "
+        f"({str(src.get('src_title') or '').strip()})"
+    )
+
+    if existing and existing.get("task_id"):
+        conn.execute(
+            text(
+                """
+                UPDATE tasks
+                SET
+                    due_date = CASE
+                        WHEN due_date IS NULL THEN (
+                            ((:approved_at_ts)::timestamptz AT TIME ZONE :tz)::date
+                            + :offset_days
+                        )
+                        ELSE due_date
+                    END,
+                    description = CASE
+                        WHEN (description IS NULL OR description = '') THEN :description
+                        ELSE description
+                    END
+                WHERE task_id = :tid
+                """
+            ),
+            {
+                "tid": int(existing["task_id"]),
+                "approved_at_ts": approved_at_ts,
+                "tz": LOCAL_TZ,
+                "offset_days": int(offset_days),
+                "description": description,
+            },
+        )
         return
 
     status_id = get_status_id_by_code(conn, "IN_PROGRESS")
@@ -284,13 +364,13 @@ def _maybe_create_or_update_next_task_after_approved(
             """
         ),
         {
-            "period_id": int(src["period_id"]),
+            "period_id": int(period_id),
             "regular_task_id": int(regular_task_id),
             "title": str(rt["title"]),
-            "description": f"Основание: APPROVED по задаче #{int(source_task_id)} ({str(src.get('src_title') or '').strip()})",
+            "description": description,
             "initiator_user_id": int(src["initiator_user_id"]),
             "executor_role_id": int(target_role_id),
-            "assignment_scope": src["assignment_scope"],
+            "assignment_scope": assignment_scope,
             "status_id": int(status_id),
             "approved_at_ts": approved_at_ts,
             "tz": LOCAL_TZ,
@@ -326,7 +406,6 @@ def _report(
     report_link = _extract_report_link(payload)
     comment = _normalize_comment(payload)
 
-    # Идемпотентный upsert отчёта (совместимо с текущим router, даже если он тоже пишет report)
     ins = conn.execute(
         text(
             """
@@ -346,6 +425,12 @@ def _report(
     ).mappings().first()
 
     report_id = int(ins["report_id"]) if ins and ins.get("report_id") is not None else None
+
+    # ВАЖНО: на этапе согласования задача должна "висеть" на согласующем (approver_role_id).
+    # Берём из regular_tasks.target_role_id.
+    _, performer_role_id, approver_role_id = _get_roles_for_task_flow(conn, task_id)
+    if approver_role_id is not None:
+        _set_executor_role_if_needed(conn, task_id, approver_role_id)
 
     _set_status(
         conn,
@@ -397,7 +482,20 @@ def _approve(
             },
         )
 
-    report_id = _get_latest_report_id(conn, task_id)
+    rr = _get_latest_report_row(conn, task_id)
+    report_id = int(rr["report_id"])
+    submitted_by = rr.get("submitted_by")
+
+    # Запрет self-approve: согласующий не может быть автором отчёта.
+    try:
+        if submitted_by is not None and int(submitted_by) == int(actor_user_id):
+            raise HTTPException(status_code=403, detail="Cannot approve own report")
+    except HTTPException:
+        raise
+    except Exception:
+        # если не смогли корректно сравнить — не ломаем approve
+        pass
+
     comment = _normalize_comment(payload)
 
     upd = conn.execute(
@@ -462,14 +560,9 @@ def _reject(
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
-    """
-    reject имеет ДВА допустимых смысла:
-    1) Review reject: WAITING_APPROVAL -> WAITING_REPORT
-    2) Task reject:   IN_PROGRESS/WAITING_REPORT -> REJECTED
-    """
-
     if from_status == "WAITING_APPROVAL":
-        report_id = _get_latest_report_id(conn, task_id)
+        rr = _get_latest_report_row(conn, task_id)
+        report_id = int(rr["report_id"])
 
         _set_status(
             conn,
@@ -478,6 +571,11 @@ def _reject(
             to_status="WAITING_REPORT",
             allowed_from={"WAITING_APPROVAL"},
         )
+
+        # ВАЖНО: при возврате на доработку задача должна снова "висеть" на исполнителе (performer_role_id).
+        _, performer_role_id, _ = _get_roles_for_task_flow(conn, task_id)
+        if performer_role_id is not None:
+            _set_executor_role_if_needed(conn, task_id, performer_role_id)
 
         comment = _normalize_comment(payload)
         conn.execute(
