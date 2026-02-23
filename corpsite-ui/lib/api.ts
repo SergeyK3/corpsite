@@ -27,6 +27,37 @@ function truthyEnv(name: string): boolean {
 const API_TRACE = truthyEnv("NEXT_PUBLIC_API_TRACE");
 
 /* ============================================================
+ * TOKEN SANITIZATION (critical for "Failed to fetch")
+ * ============================================================ */
+
+/**
+ * Удаляет управляющие символы (включая CR/LF), BOM/нулевой символ,
+ * лишние пробелы, и убирает "Bearer " если он уже внутри токена.
+ *
+ * Причина: если в Authorization попадает \r или \n — браузер не отправляет запрос
+ * и UI получает "Failed to fetch".
+ */
+function sanitizeBearerToken(raw: any): string {
+  if (!raw) return "";
+  let s = String(raw);
+
+  // убрать BOM (U+FEFF) и NUL
+  s = s.replace(/\uFEFF/g, "").replace(/\u0000/g, "");
+
+  // убрать ВСЕ ASCII control chars: 0x00-0x1F и 0x7F (включая \r \n \t)
+  s = s.replace(/[\u0000-\u001F\u007F]/g, "");
+
+  s = s.trim();
+
+  // если токен уже содержит "Bearer " — вычистим, чтобы не получить "Bearer Bearer ..."
+  if (/^bearer\s+/i.test(s)) {
+    s = s.replace(/^bearer\s+/i, "").trim();
+  }
+
+  return s;
+}
+
+/* ============================================================
  * HELPERS (exported for shared API clients)
  * ============================================================ */
 
@@ -73,7 +104,8 @@ export function buildHeaders(
   extra?: Record<string, string>,
   opts?: { noAuth?: boolean },
 ): HeadersInit {
-  const tok = opts?.noAuth ? "" : getSessionAccessToken();
+  const rawTok = opts?.noAuth ? "" : getSessionAccessToken();
+  const tok = sanitizeBearerToken(rawTok);
 
   const headers: Record<string, string> = {
     ...(extra ?? {}),
@@ -173,7 +205,8 @@ export async function apiAuthLogin(params: {
     body: { login, password },
   });
 
-  const token = (body?.access_token ?? "").toString().trim();
+  // на вход в storage кладём уже нормализованный токен
+  const token = sanitizeBearerToken(body?.access_token);
   if (!token) {
     throw toApiError(
       500,
@@ -183,6 +216,8 @@ export async function apiAuthLogin(params: {
   }
 
   setSessionAccessToken(token);
+
+  // возвращаем body как есть (контракт с UI)
   return body;
 }
 

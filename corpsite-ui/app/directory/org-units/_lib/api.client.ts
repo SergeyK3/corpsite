@@ -2,7 +2,7 @@
 "use client";
 
 import type { OrgUnitsTreeResponse, OrgUnitTreeNode } from "./types";
-import { apiFetchJson } from "../../../lib/api";
+import { apiFetchJson } from "../../../../lib/api";
 
 /**
  * apiFetchJson уже добавляет Authorization (Bearer) из sessionStorage,
