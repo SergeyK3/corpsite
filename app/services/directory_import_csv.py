@@ -31,17 +31,25 @@ def _decode_csv_bytes(b: bytes) -> str:
     if b[:200].count(b"\x00") > 10:
         for enc in ("utf-16le", "utf-16be", "utf-16"):
             try:
-                return b.decode(enc)
+                return b.decode(enc, errors="strict")
             except UnicodeDecodeError:
                 pass
 
+    # Common encodings in RU/KZ exports
     for enc in ("utf-8", "utf-8-sig", "cp1251", "cp866", "koi8-r"):
         try:
-            return b.decode(enc)
+            return b.decode(enc, errors="strict")
         except UnicodeDecodeError:
             continue
 
-    return b.decode("utf-8", errors="replace")
+    # FAIL FAST: do NOT corrupt data with replacement characters.
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Cannot decode CSV bytes as UTF-8/UTF-16/CP1251/CP866/KOI8-R without data loss. "
+            "Re-export the CSV as UTF-8 (UTF-8 with BOM is OK) or provide a properly encoded file."
+        ),
+    )
 
 
 def _sniff_delimiter(sample: str) -> str:
