@@ -12,6 +12,9 @@ from app.db.engine import engine
 from app.errors import ErrorCode, raise_error
 from app.services.tasks_fsm import transition
 from app.services.tasks_service import (
+    SUPERVISOR_ROLE_IDS,
+    DEPUTY_ROLE_IDS,
+    DIRECTOR_ROLE_IDS,
     attach_allowed_actions,
     can_approve,
     can_report_or_update,
@@ -22,6 +25,7 @@ from app.services.tasks_service import (
     load_assignment_scope_enum_labels,
     load_task_full,
     normalize_assignment_scope,
+    parse_int_set_env,
     scope_label_or_none,
 )
 
@@ -102,12 +106,43 @@ def list_tasks(
         params["role_id"] = int(role_id)
         params["current_user_id"] = int(current_user_id)
 
-        # Role-scope (2-level) for task visibility
+        # ---------------------------------------------------------
+        # Visibility policy:
+        # - Managers (director/deputy/supervisor) and privileged users:
+        #     initiator can see tasks they created for subordinates
+        #     + can see tasks by role-scope (expanded)
+        # - Regular executors:
+        #     STRICT list by own executor role only (no initiator visibility)
+        #
+        # FIX:
+        #   "manager-ness" must follow real org-scope, not only hardcoded role sets.
+        # ---------------------------------------------------------
+        privileged_role_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
+        privileged_user_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
+
+        is_privileged = (int(current_user_id) in privileged_user_ids) or (int(role_id) in privileged_role_ids)
+
+        # compute org-scope roles once (safe for both manager & regular)
         visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
         visible_roles_list = sorted({int(x) for x in visible_roles if int(x) > 0})
+
+        # fallback: at least own role
         if not visible_roles_list:
-            # как минимум собственная роль должна быть, но если в БД мусор — деградируем безопасно
             visible_roles_list = [int(role_id)]
+
+        # manager if privileged OR explicitly managerial role OR actually has expanded org-scope
+        is_manager = (
+            is_privileged
+            or (int(role_id) in DIRECTOR_ROLE_IDS)
+            or (int(role_id) in DEPUTY_ROLE_IDS)
+            or (int(role_id) in SUPERVISOR_ROLE_IDS)
+            or (len(visible_roles_list) > 1)
+        )
+
+        # for regular executors enforce strict own role
+        if not is_manager:
+            visible_roles_list = [int(role_id)]
+
         params["visible_role_ids"] = visible_roles_list
 
         allowed = load_assignment_scope_enum_labels(conn)
@@ -120,21 +155,20 @@ def list_tasks(
 
         where: List[str] = []
 
-        # ЕДИНОЕ правило видимости:
-        # - инициатор видит свои
-        # - видит, если executor_role_id в role-scope (director->deputies; deputy->supervisors; supervisor->subordinates)
-        where.append(
-            "("
-            "(t.initiator_user_id = :current_user_id) "
-            "OR (t.executor_role_id IN :visible_role_ids)"
-            ")"
-        )
+        if is_manager:
+            where.append(
+                "("
+                "(t.initiator_user_id = :current_user_id) "
+                "OR (t.executor_role_id IN :visible_role_ids)"
+                ")"
+            )
+        else:
+            where.append("(t.executor_role_id IN :visible_role_ids)")
 
         # explicit executor_role_id filter (does NOT bypass RBAC)
         if executor_role_id is not None:
             erid = int(executor_role_id)
             if erid not in set(visible_roles_list):
-                # фильтр просит чужую роль — гарантированно пусто
                 return {"total": 0, "limit": int(limit), "offset": int(offset), "items": []}
             where.append("t.executor_role_id = :executor_role_id")
             params["executor_role_id"] = erid
@@ -178,14 +212,6 @@ def list_tasks(
 
         total = (conn.execute(count_sql, params).scalar() or 0)
 
-        # IMPORTANT:
-        # task_reports должен быть доступен в списке задач (UI).
-        # Даже если когда-нибудь task_reports станет "много строк на task_id" (история),
-        # мы всё равно должны возвращать "последний" отчёт. Поэтому используем LATERAL.
-        #
-        # Дополнительно:
-        # - отдаём role_name/role_code отправителя отчёта (submitted_by),
-        #   чтобы UI показывал "кто отправил" не как ID.
         select_sql = (
             text(
                 f"""
@@ -298,8 +324,6 @@ def create_task(
     status_code = (payload.get("status_code") or "IN_PROGRESS").strip()
     regular_task_id = _as_int_or_none(payload.get("regular_task_id"))
     description = _as_str_or_none(payload.get("description"))
-
-    # Optional: allow API callers to set due_date explicitly (YYYY-MM-DD).
     due_date = _as_str_or_none(payload.get("due_date"))
 
     with engine.begin() as conn:
