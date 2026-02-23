@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.services.regular_tasks_import_xlsx import import_regular_task_templates_xlsx_bytes
 
 
 router = APIRouter(prefix="", tags=["Regular Tasks"])
@@ -31,7 +32,6 @@ class RegularTaskOut(BaseModel):
     schedule_type: Optional[str] = None
     schedule_params: Dict[str, Any] = {}
 
-    # Диагностика (чтобы в UI сразу видеть проблему)
     schedule_issue: Optional[str] = None
 
 
@@ -40,8 +40,6 @@ class RegularTaskRunOut(BaseModel):
     started_at: str
     finished_at: Optional[str] = None
     status: str
-
-    # jsonb может быть чем угодно (объект/массив/число/строка/null)
     stats: Any = {}
     errors: Any = None
 
@@ -85,6 +83,13 @@ def _detect_schedule_issue(schedule_type: Optional[str], schedule_params: Option
 # =========================
 # Endpoints
 # =========================
+
+@router.post("/import-xlsx")
+def import_regular_tasks_xlsx(
+    raw: bytes = Body(..., media_type="application/octet-stream")
+) -> Dict[str, Any]:
+    return import_regular_task_templates_xlsx_bytes(raw=raw)
+
 
 @router.get("/regular-tasks", response_model=List[RegularTaskOut])
 def list_regular_tasks() -> List[RegularTaskOut]:

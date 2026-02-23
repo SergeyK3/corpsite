@@ -1,3 +1,4 @@
+# FILE: alembic/versions/02b0d99063cd_baseline.py
 """baseline
 
 Revision ID: 02b0d99063cd
@@ -107,7 +108,7 @@ def upgrade() -> None:
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             description TEXT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            code TEXT NULL,
+            code TEXT NOT NULL,
             executor_role_id BIGINT NULL,
             schedule_type TEXT NULL,
             schedule_params JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -118,6 +119,7 @@ def upgrade() -> None:
             owner_unit_id BIGINT NULL,
             deadline_offset_days INTEGER NOT NULL DEFAULT 0,
             escalation_offset_days INTEGER NOT NULL DEFAULT 0,
+            CONSTRAINT uq_regular_tasks_code UNIQUE (code),
             CONSTRAINT fk_regular_tasks_initiator_role FOREIGN KEY (initiator_role_id) REFERENCES public.roles(role_id),
             CONSTRAINT fk_regular_tasks_target_role FOREIGN KEY (target_role_id) REFERENCES public.roles(role_id),
             CONSTRAINT fk_regular_tasks_executor_role FOREIGN KEY (executor_role_id) REFERENCES public.roles(role_id),
