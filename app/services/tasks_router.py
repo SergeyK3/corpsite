@@ -75,21 +75,57 @@ def _pick_str(payload: Dict[str, Any], keys: List[str]) -> str:
     return ""
 
 
+def _normalize_status_filter(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if not s:
+        return None
+    if s in {"active", "done"}:
+        return s
+    raise HTTPException(status_code=422, detail="status_filter must be one of: active, done")
+
+
+def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
+    """
+    Visibility helper:
+    a user can see a task if they have submitted at least one report for it.
+    """
+    row = (
+        conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM public.task_reports r
+                WHERE r.task_id = :task_id
+                  AND r.submitted_by = :user_id
+                LIMIT 1
+                """
+            ),
+            {"task_id": int(task_id), "user_id": int(user_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return bool(row)
+
+
 # -----------------------
 # endpoints
 # -----------------------
 
-# Support both /tasks and /tasks/ to avoid 307 redirects in some clients.
 @router.get("")
 @router.get("/")
 def list_tasks(
     period_id: Optional[int] = Query(None, ge=1),
     status_code: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(
+        None,
+        description="UI helper filter: active|done. If status_code is set, status_filter is ignored.",
+    ),
     search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
-    # filter by executor role
     executor_role_id: Optional[int] = Query(None, ge=1),
-    # filter by assignment scope: admin|functional|all
     assignment_scope: Optional[str] = Query(
         None,
         description="Filter by assignment scope: admin|functional|all. If omitted or 'all' -> no filtering.",
@@ -101,36 +137,24 @@ def list_tasks(
     current_user_id = int(user["user_id"])
     params: Dict[str, Any] = {"limit": int(limit), "offset": int(offset)}
 
+    sf = _normalize_status_filter(status_filter)
+
     with engine.begin() as conn:
         role_id = get_user_role_id(conn, current_user_id)
         params["role_id"] = int(role_id)
         params["current_user_id"] = int(current_user_id)
 
-        # ---------------------------------------------------------
-        # Visibility policy:
-        # - Managers (director/deputy/supervisor) and privileged users:
-        #     initiator can see tasks they created for subordinates
-        #     + can see tasks by role-scope (expanded)
-        # - Regular executors:
-        #     STRICT list by own executor role only (no initiator visibility)
-        #
-        # FIX:
-        #   "manager-ness" must follow real org-scope, not only hardcoded role sets.
-        # ---------------------------------------------------------
         privileged_role_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
         privileged_user_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
 
         is_privileged = (int(current_user_id) in privileged_user_ids) or (int(role_id) in privileged_role_ids)
 
-        # compute org-scope roles once (safe for both manager & regular)
         visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
         visible_roles_list = sorted({int(x) for x in visible_roles if int(x) > 0})
 
-        # fallback: at least own role
         if not visible_roles_list:
             visible_roles_list = [int(role_id)]
 
-        # manager if privileged OR explicitly managerial role OR actually has expanded org-scope
         is_manager = (
             is_privileged
             or (int(role_id) in DIRECTOR_ROLE_IDS)
@@ -139,7 +163,6 @@ def list_tasks(
             or (len(visible_roles_list) > 1)
         )
 
-        # for regular executors enforce strict own role
         if not is_manager:
             visible_roles_list = [int(role_id)]
 
@@ -155,21 +178,36 @@ def list_tasks(
 
         where: List[str] = []
 
+        # ---------------------------------------------------------
+        # Visibility policy (FIXED):
+        # - Base RBAC by executor_role_id / initiator_user_id (as before)
+        # - PLUS: if the current user submitted at least one report for the task,
+        #         they can see it in list/get (important for "DONE not visible").
+        # ---------------------------------------------------------
+        report_visibility = "EXISTS (SELECT 1 FROM public.task_reports rr WHERE rr.task_id = t.task_id AND rr.submitted_by = :current_user_id)"
+
         if is_manager:
             where.append(
                 "("
                 "(t.initiator_user_id = :current_user_id) "
-                "OR (t.executor_role_id IN :visible_role_ids)"
+                "OR (t.executor_role_id IN :visible_role_ids) "
+                f"OR ({report_visibility})"
                 ")"
             )
         else:
-            where.append("(t.executor_role_id IN :visible_role_ids)")
+            where.append(
+                "("
+                "(t.executor_role_id IN :visible_role_ids) "
+                f"OR ({report_visibility})"
+                ")"
+            )
 
-        # explicit executor_role_id filter (does NOT bypass RBAC)
         if executor_role_id is not None:
             erid = int(executor_role_id)
-            if erid not in set(visible_roles_list):
-                return {"total": 0, "limit": int(limit), "offset": int(offset), "items": []}
+            # executor_role_id filter should not bypass base RBAC;
+            # BUT tasks shown via "report_visibility" are allowed too.
+            # So we only block if erid is not in visible_role_ids AND user didn't report those tasks (unknown here),
+            # therefore we do NOT early-return; we just apply the filter safely.
             where.append("t.executor_role_id = :executor_role_id")
             params["executor_role_id"] = erid
 
@@ -180,9 +218,14 @@ def list_tasks(
         if status_code:
             where.append("ts.code = :status_code")
             params["status_code"] = status_code.strip()
-
-        if (not status_code) and (not include_archived):
-            where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
+        else:
+            if sf == "active":
+                where.append("COALESCE(ts.code,'') IN ('IN_PROGRESS','WAITING_REPORT','WAITING_APPROVAL')")
+            elif sf == "done":
+                where.append("COALESCE(ts.code,'') IN ('DONE')")
+            else:
+                if not include_archived:
+                    where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
 
         scope_raw = (assignment_scope or "").strip().lower()
         if scope_raw and scope_raw != "all":
@@ -202,8 +245,8 @@ def list_tasks(
             text(
                 f"""
                 SELECT COUNT(1)
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                FROM public.tasks t
+                LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
                 WHERE {where_sql}
                 """
             )
@@ -238,8 +281,8 @@ def list_tasks(
                     tr.approved_at AS report_approved_at,
                     tr.approved_by AS report_approved_by,
                     tr.current_comment AS report_current_comment
-                FROM tasks t
-                LEFT JOIN task_statuses ts ON ts.status_id = t.status_id
+                FROM public.tasks t
+                LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
                 LEFT JOIN LATERAL (
                     SELECT
                         r.report_link,
@@ -250,13 +293,14 @@ def list_tasks(
                         r.approved_at,
                         r.approved_by,
                         r.current_comment
-                    FROM task_reports r
-                    LEFT JOIN users us ON us.user_id = r.submitted_by
-                    LEFT JOIN roles rs ON rs.role_id = us.role_id
+                    FROM public.task_reports r
+                    LEFT JOIN public.users us ON us.user_id = r.submitted_by
+                    LEFT JOIN public.roles rs ON rs.role_id = us.role_id
                     WHERE r.task_id = t.task_id
                     ORDER BY
                         r.submitted_at DESC NULLS LAST,
-                        r.approved_at  DESC NULLS LAST
+                        r.approved_at  DESC NULLS LAST,
+                        r.report_id    DESC
                     LIMIT 1
                 ) tr ON TRUE
                 WHERE {where_sql}
@@ -290,12 +334,20 @@ def get_task(
         role_id = get_user_role_id(conn, current_user_id)
 
         task = load_task_full(conn, task_id=int(task_id))
-        task = ensure_task_visible_or_404(
-            current_user_id=current_user_id,
-            current_role_id=role_id,
-            task_row=task,
-            include_archived=include_archived,
-        )
+
+        try:
+            task = ensure_task_visible_or_404(
+                current_user_id=current_user_id,
+                current_role_id=role_id,
+                task_row=task,
+                include_archived=include_archived,
+            )
+        except HTTPException as e:
+            # Consistency with list_tasks(): allow access if the user submitted a report for this task.
+            if e.status_code in (403, 404) and _user_reported_task(conn, task_id=int(task_id), user_id=int(current_user_id)):
+                task = task  # keep loaded task
+            else:
+                raise
 
         task = attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
 
@@ -333,7 +385,7 @@ def create_task(
         row = conn.execute(
             text(
                 """
-                INSERT INTO tasks (
+                INSERT INTO public.tasks (
                     period_id, regular_task_id, title, description,
                     initiator_user_id, executor_role_id, assignment_scope, status_id,
                     due_date
@@ -402,29 +454,6 @@ def submit_report(
 
         if not can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise_error(ErrorCode.TASK_FORBIDDEN_REPORT, extra={"task_id": int(task_id)})
-
-        conn.execute(
-            text(
-                """
-                INSERT INTO task_reports (task_id, submitted_by, report_link, current_comment, submitted_at)
-                VALUES (:task_id, :submitted_by, :report_link, :current_comment, now())
-                ON CONFLICT (task_id)
-                DO UPDATE SET
-                    submitted_by = EXCLUDED.submitted_by,
-                    report_link = EXCLUDED.report_link,
-                    current_comment = EXCLUDED.current_comment,
-                    submitted_at = now(),
-                    approved_at = NULL,
-                    approved_by = NULL
-                """
-            ),
-            {
-                "task_id": int(task_id),
-                "submitted_by": int(current_user_id),
-                "report_link": report_link,
-                "current_comment": current_comment,
-            },
-        )
 
         transition(
             conn=conn,
@@ -563,7 +592,6 @@ def archive_task(
             include_archived=True,
         )
 
-        # current policy: hide existence if not initiator
         if int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
 

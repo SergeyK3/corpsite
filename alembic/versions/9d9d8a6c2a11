@@ -1,0 +1,61 @@
+"""seed task statuses and task_event_type enum
+
+Revision ID: 9d9d8a6c2a11
+Revises: b17f7f69c7d5
+Create Date: 2026-02-27 00:00:00.000000
+
+"""
+from __future__ import annotations
+
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision: str = "9d9d8a6c2a11"
+down_revision: str | None = "b17f7f69c7d5"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # 1) Enum type for audit/events (write_task_audit casts to ::task_event_type)
+    op.execute(
+        r"""
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'task_event_type') THEN
+            CREATE TYPE public.task_event_type AS ENUM (
+              'REPORT_SUBMITTED',
+              'APPROVED',
+              'REJECTED',
+              'ARCHIVED'
+            );
+          END IF;
+        END $$;
+        """
+    )
+
+    # 2) Task statuses dictionary (FSM uses these codes)
+    # Use WHERE NOT EXISTS to avoid relying on UNIQUE constraints.
+    op.execute(
+        r"""
+        INSERT INTO public.task_statuses (code, name_ru)
+        SELECT v.code, v.name_ru
+        FROM (VALUES
+          ('IN_PROGRESS',      'В работе'),
+          ('WAITING_REPORT',   'Ожидает отчёт'),
+          ('WAITING_APPROVAL', 'Ожидает согласование'),
+          ('DONE',             'Выполнено'),
+          ('REJECTED',         'Отклонено'),
+          ('ARCHIVED',         'В архиве')
+        ) AS v(code, name_ru)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM public.task_statuses ts WHERE ts.code = v.code
+        );
+        """
+    )
+
+
+def downgrade() -> None:
+    # Safe downgrade: do not drop enum/type or delete statuses,
+    # because they may already be referenced by data.
+    pass

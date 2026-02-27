@@ -16,6 +16,7 @@ const ACTION_RU: Record<string, string> = {
 };
 
 type ScopeMode = "all" | "admin" | "functional";
+type StatusTab = "active" | "done";
 
 function actionsRu(actions: AllowedAction[] | undefined | null): string {
   if (!actions || actions.length === 0) return "—";
@@ -88,6 +89,11 @@ function scopeRu(v: ScopeMode): string {
   if (v === "admin") return "Админ";
   if (v === "functional") return "Функционал";
   return "Все";
+}
+
+function tabRu(v: StatusTab): string {
+  if (v === "done") return "Отработано";
+  return "В работе";
 }
 
 function normalizeList<T>(body: any): T[] {
@@ -177,20 +183,14 @@ function computeReportUiState(src: any): ReportUiState {
   const approvedAt = src?.report_approved_at ?? null;
 
   if (statusCode === "ARCHIVED") return "rejected_or_archived";
-
   if (approvedAt) return "approved";
 
-  // "sent" = есть submitted_at или хотя бы link (на ранних данных link может быть, submitted_at нет)
   const sent = Boolean(submittedAt) || Boolean(link);
-
   if (sent) {
-    // если по статусу ждём согласование — явно показываем
     if (statusCode === "WAITING_APPROVAL") return "sent_waiting";
-    // если статус не WAITING_APPROVAL, но отчёт уже отправлен — всё равно показываем как "отправлен"
     return "sent_waiting";
   }
 
-  // отчёта нет, но можно отправлять — это "черновик" (ввод)
   return "draft";
 }
 
@@ -203,7 +203,6 @@ function reportStatusBadgeText(st: ReportUiState): string {
 }
 
 function reportStatusBadgeClass(st: ReportUiState): string {
-  // без “ярких” цветов, но с лёгким различием
   if (st === "approved") return "border-zinc-700 bg-zinc-950/40 text-zinc-200";
   if (st === "sent_waiting") return "border-zinc-700 bg-zinc-950/40 text-zinc-200";
   if (st === "draft") return "border-zinc-800 bg-zinc-950/20 text-zinc-300";
@@ -220,6 +219,9 @@ export default function TasksPage() {
   const [offset, setOffset] = useState<number>(0);
 
   const [scope, setScope] = useState<ScopeMode>("all");
+
+  // NEW: вкладки статуса
+  const [tab, setTab] = useState<StatusTab>("active");
 
   const [list, setList] = useState<TaskListItem[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -274,6 +276,8 @@ export default function TasksPage() {
           limit,
           offset: qOffset,
           assignment_scope: scope === "all" ? undefined : scope,
+          // NEW: вкладка
+          status_filter: tab,
         } as any,
       });
 
@@ -377,7 +381,6 @@ export default function TasksPage() {
           payload: reason.trim() ? ({ reason: reason.trim() } as any) : undefined,
         });
         setUiNotice("Отчёт отклонён.");
-        // reason оставляем (это полезно видеть), но можно сбросить — по желанию
       } else if (action === "archive") {
         await apiPostTaskAction({
           taskId: selectedId,
@@ -430,10 +433,22 @@ export default function TasksPage() {
     if (!ready) return;
     void reloadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, limit, offset, scope]);
+  }, [ready, limit, offset, scope, tab]);
+
+  // NEW: при переключении вкладки — сбрасываем страницу/выбор, чтобы не было “не найдено”
+  useEffect(() => {
+    if (!ready) return;
+    setOffset(0);
+    setSelectedId(null);
+    setItem(null);
+    setList([]);
+    setListError(null);
+    setItemError(null);
+    void reloadList(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   useEffect(() => {
-    // при смене выбранной задачи — сбрасываем локальные поля формы
     setCopyHint("");
     setUiNotice("");
     setReason("");
@@ -447,20 +462,17 @@ export default function TasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // после загрузки item: подставляем report_link в поле ввода (чтобы явно видеть, что хранится)
   useEffect(() => {
     const src: any = item ?? selectedFromList ?? null;
     const existing = String(src?.report_link || "").trim();
     if (!selectedId) return;
 
-    // если поле пустое — заполним из БД
     if (!reportLink.trim() && existing) {
       setReportLink(existing);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, selectedFromList, selectedId]);
 
-  // если пришло approved_at — покажем явный сигнал эксперту (ключевой кейс: "не дошло что согласовано")
   useEffect(() => {
     const src: any = item ?? selectedFromList ?? null;
     if (!selectedId || !src) return;
@@ -473,7 +485,6 @@ export default function TasksPage() {
       return;
     }
     if (submittedAt) {
-      // если уже отправляли — показываем “на согласовании”
       setUiNotice("Отчёт отправлен на согласование.");
       return;
     }
@@ -528,9 +539,28 @@ export default function TasksPage() {
         <div className="text-sm text-zinc-400">
           Показано: <span className="text-zinc-200">{list.length}</span>
           {listLoading ? <span className="ml-2">• загрузка…</span> : null}
+          <span className="ml-2 text-zinc-500">• {tabRu(tab)}</span>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* NEW: вкладки */}
+          <div className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-950/40 p-1">
+            {(["active", "done"] as StatusTab[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setTab(v)}
+                className={[
+                  "rounded-md px-3 py-2 text-xs",
+                  tab === v ? "bg-zinc-900 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900/60",
+                ].join(" ")}
+                disabled={listLoading}
+                title="Список задач"
+              >
+                {tabRu(v)}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-950/40 p-1">
             {(["all", "admin", "functional"] as ScopeMode[]).map((v) => (
               <button

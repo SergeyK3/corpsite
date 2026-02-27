@@ -11,7 +11,7 @@ from app.errors import ErrorCode, raise_error
 from app.events import create_task_event_tx
 from app.services.tasks_service import get_status_id_by_code, write_task_audit
 
-LOCAL_TZ = "Asia/Qyzylorda"
+LOCAL_TZ = "Asia/Almaty"
 
 
 class TaskFSMError(Exception):
@@ -204,6 +204,121 @@ def _set_executor_role_if_needed(conn: Connection, task_id: int, role_id: Option
     )
 
 
+def _resolve_approver_role_id_by_actor(conn: Connection, actor_user_id: int) -> Optional[int]:
+    """
+    Вычисляет согласующего по оргструктуре:
+      - берём unit_id автора отчёта (users.unit_id)
+      - ищем активного HEAD в org_unit_managers для этого unit_id
+      - если HEAD == автор отчёта -> поднимаемся на parent_unit_id и повторяем
+      - если нашли HEAD != автор -> возвращаем role_id этого HEAD-пользователя
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT u.unit_id
+            FROM public.users u
+            WHERE u.user_id = :uid
+            """
+        ),
+        {"uid": int(actor_user_id)},
+    ).mappings().first()
+
+    if not row or row.get("unit_id") is None:
+        return None
+
+    unit_id = int(row["unit_id"])
+
+    while unit_id:
+        head = conn.execute(
+            text(
+                """
+                SELECT m.user_id AS head_user_id
+                FROM public.org_unit_managers m
+                WHERE m.unit_id = :unit_id
+                  AND m.manager_type = 'HEAD'
+                  AND m.is_active = TRUE
+                LIMIT 1
+                """
+            ),
+            {"unit_id": int(unit_id)},
+        ).mappings().first()
+
+        if head and head.get("head_user_id") is not None:
+            head_user_id = int(head["head_user_id"])
+
+            # self-approve нельзя: если сам руководитель отправил отчёт — ищем руководителя выше
+            if head_user_id != int(actor_user_id):
+                rr = conn.execute(
+                    text("SELECT role_id FROM public.users WHERE user_id = :uid"),
+                    {"uid": int(head_user_id)},
+                ).mappings().first()
+                if rr and rr.get("role_id") is not None:
+                    try:
+                        return int(rr["role_id"])
+                    except Exception:
+                        return None
+
+        parent = conn.execute(
+            text("SELECT parent_unit_id FROM public.org_units WHERE unit_id = :unit_id"),
+            {"unit_id": int(unit_id)},
+        ).mappings().first()
+
+        unit_id = int(parent["parent_unit_id"]) if parent and parent.get("parent_unit_id") is not None else 0
+
+    return None
+
+
+def _lookup_role_id_by_code(conn: Connection, role_code: str) -> Optional[int]:
+    r = conn.execute(
+        text("SELECT role_id FROM public.roles WHERE code = :code"),
+        {"code": str(role_code)},
+    ).mappings().first()
+    if not r or r.get("role_id") is None:
+        return None
+    try:
+        rid = int(r["role_id"])
+        return rid if rid > 0 else None
+    except Exception:
+        return None
+
+
+def _resolve_qm_head_fallback_role_id(conn: Connection, actor_role_id: int) -> Optional[int]:
+    """
+    Доменное правило для ОВЭиПП:
+    согласующий для ролей экспертов ОВЭиПП = QM_HEAD.
+
+    Здесь deliberately делаем простой fallback по коду роли,
+    чтобы не зависеть от заполненности org_unit_managers для этого отдела.
+    """
+    qm_expert_role_ids = {1, 8, 11, 17}  # QM_COMPLAINT_PAT/REG, QM_HOSP, QM_AMB (по твоему справочнику)
+    if int(actor_role_id) not in qm_expert_role_ids:
+        return None
+    return _lookup_role_id_by_code(conn, "QM_HEAD")
+
+
+def _maybe_persist_target_role_id(conn: Connection, regular_task_id: Optional[int], target_role_id: Optional[int]) -> None:
+    """
+    Кэшируем вычисленного согласующего в regular_tasks.target_role_id, если там пусто.
+    Это убирает ручные правки и делает поведение стабильным для будущих задач.
+    """
+    if regular_task_id is None or target_role_id is None:
+        return
+    if int(regular_task_id) <= 0 or int(target_role_id) <= 0:
+        return
+
+    conn.execute(
+        text(
+            """
+            UPDATE public.regular_tasks
+            SET target_role_id = :target_role_id
+            WHERE regular_task_id = :rid
+              AND (target_role_id IS NULL OR target_role_id <= 0)
+            """
+        ),
+        {"rid": int(regular_task_id), "target_role_id": int(target_role_id)},
+    )
+
+
 def _find_active_task_by_regular_period_scope(
     conn: Connection,
     *,
@@ -283,7 +398,17 @@ def _maybe_create_or_update_next_task_after_approved(
     if not rt:
         return
 
-    target_role_id = int(rt["target_role_id"])
+    # если target_role_id не задан — пропускаем автосоздание
+    tr = rt.get("target_role_id")
+    if tr is None:
+        return
+    try:
+        target_role_id = int(tr)
+    except Exception:
+        return
+    if target_role_id <= 0:
+        return
+
     offset_days = int(rt.get("escalation_offset_days") or 0)
 
     period_id = int(src["period_id"])
@@ -411,13 +536,6 @@ def _report(
             """
             INSERT INTO task_reports (task_id, report_link, submitted_by, current_comment, submitted_at)
             VALUES (:tid, :link, :by, :comment, now())
-            ON CONFLICT (task_id) DO UPDATE SET
-                report_link = EXCLUDED.report_link,
-                submitted_by = EXCLUDED.submitted_by,
-                current_comment = EXCLUDED.current_comment,
-                submitted_at = now(),
-                approved_at = NULL,
-                approved_by = NULL
             RETURNING report_id
             """
         ),
@@ -426,11 +544,28 @@ def _report(
 
     report_id = int(ins["report_id"]) if ins and ins.get("report_id") is not None else None
 
-    # ВАЖНО: на этапе согласования задача должна "висеть" на согласующем (approver_role_id).
-    # Берём из regular_tasks.target_role_id.
-    _, performer_role_id, approver_role_id = _get_roles_for_task_flow(conn, task_id)
+    # На этапе согласования задача должна "висеть" на согласующем (approver_role_id).
+    regular_task_id, _performer_role_id, approver_role_id = _get_roles_for_task_flow(conn, task_id)
+
+    # 1) пытаемся вычислить согласующего через org_unit_managers (HEAD)
+    if approver_role_id is None:
+        approver_role_id = _resolve_approver_role_id_by_actor(conn, actor_user_id)
+
+    # 2) доменный fallback для ОВЭиПП (эксперты -> QM_HEAD)
+    if approver_role_id is None:
+        approver_role_id = _resolve_qm_head_fallback_role_id(conn, actor_role_id)
+
+    # 3) кэшируем в regular_tasks.target_role_id, если было NULL
     if approver_role_id is not None:
-        _set_executor_role_if_needed(conn, task_id, approver_role_id)
+        _maybe_persist_target_role_id(conn, regular_task_id, approver_role_id)
+
+    if approver_role_id is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Cannot resolve approver: regular_tasks.target_role_id is NULL and org_unit_managers HEAD not found (or users.unit_id is NULL)",
+        )
+
+    _set_executor_role_if_needed(conn, task_id, approver_role_id)
 
     _set_status(
         conn,
@@ -493,7 +628,6 @@ def _approve(
     except HTTPException:
         raise
     except Exception:
-        # если не смогли корректно сравнить — не ломаем approve
         pass
 
     comment = _normalize_comment(payload)
@@ -572,7 +706,7 @@ def _reject(
             allowed_from={"WAITING_APPROVAL"},
         )
 
-        # ВАЖНО: при возврате на доработку задача должна снова "висеть" на исполнителе (performer_role_id).
+        # При возврате на доработку задача должна снова "висеть" на исполнителе (performer_role_id).
         _, performer_role_id, _ = _get_roles_for_task_flow(conn, task_id)
         if performer_role_id is not None:
             _set_executor_role_if_needed(conn, task_id, performer_role_id)
