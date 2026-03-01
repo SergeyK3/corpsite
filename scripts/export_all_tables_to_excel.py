@@ -1,3 +1,5 @@
+# FILE: scripts/export_all_tables_to_excel.py
+
 import os
 import psycopg2
 import openpyxl

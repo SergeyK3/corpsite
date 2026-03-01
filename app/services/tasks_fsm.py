@@ -516,7 +516,7 @@ def _report(
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
-    allowed_from = {"WAITING_REPORT", "IN_PROGRESS"}
+    allowed_from = {"WAITING_REPORT", "IN_PROGRESS", "REJECTED"}
     if from_status not in allowed_from:
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
@@ -565,7 +565,8 @@ def _report(
             detail="Cannot resolve approver: regular_tasks.target_role_id is NULL and org_unit_managers HEAD not found (or users.unit_id is NULL)",
         )
 
-    _set_executor_role_if_needed(conn, task_id, approver_role_id)
+    # Во время согласования задача должна висеть на согласующем
+    _set_executor_role_if_needed(conn, task_id, approver_role_id)    
 
     _set_status(
         conn,

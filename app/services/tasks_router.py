@@ -81,9 +81,9 @@ def _normalize_status_filter(v: Optional[str]) -> Optional[str]:
     s = str(v).strip().lower()
     if not s:
         return None
-    if s in {"active", "done"}:
+    if s in {"active", "done", "rejected"}:
         return s
-    raise HTTPException(status_code=422, detail="status_filter must be one of: active, done")
+    raise HTTPException(status_code=422, detail="status_filter must be one of: active, done, rejected")
 
 
 def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
@@ -110,6 +110,33 @@ def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
     return bool(row)
 
 
+def _user_is_approver_for_task(conn, task_id: int, role_id: int) -> bool:
+    """
+    Approver visibility helper:
+    user can see/act if task is WAITING_APPROVAL and regular_tasks.target_role_id == current role.
+    """
+    row = (
+        conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM public.tasks t
+                LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
+                LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
+                WHERE t.task_id = :task_id
+                  AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
+                  AND COALESCE(rt.target_role_id, 0) = :role_id
+                LIMIT 1
+                """
+            ),
+            {"task_id": int(task_id), "role_id": int(role_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return bool(row)
+
+
 # -----------------------
 # endpoints
 # -----------------------
@@ -121,7 +148,7 @@ def list_tasks(
     status_code: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(
         None,
-        description="UI helper filter: active|done. If status_code is set, status_filter is ignored.",
+        description="UI helper filter: active|done|rejected. If status_code is set, status_filter is ignored.",
     ),
     search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
@@ -179,35 +206,42 @@ def list_tasks(
         where: List[str] = []
 
         # ---------------------------------------------------------
-        # Visibility policy (FIXED):
-        # - Base RBAC by executor_role_id / initiator_user_id (as before)
-        # - PLUS: if the current user submitted at least one report for the task,
-        #         they can see it in list/get (important for "DONE not visible").
+        # Visibility policy:
+        # - Base RBAC by executor_role_id / initiator_user_id
+        # - PLUS: report author sees their reported tasks
+        # - PLUS: approver sees WAITING_APPROVAL tasks where rt.target_role_id == current role_id
         # ---------------------------------------------------------
         report_visibility = "EXISTS (SELECT 1 FROM public.task_reports rr WHERE rr.task_id = t.task_id AND rr.submitted_by = :current_user_id)"
+        approver_visibility = """
+            EXISTS (
+                SELECT 1
+                FROM public.regular_tasks rt
+                WHERE rt.regular_task_id = t.regular_task_id
+                  AND COALESCE(rt.target_role_id, 0) = :role_id
+            )
+            AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
+        """.strip()
 
         if is_manager:
             where.append(
                 "("
                 "(t.initiator_user_id = :current_user_id) "
                 "OR (t.executor_role_id IN :visible_role_ids) "
-                f"OR ({report_visibility})"
+                f"OR ({report_visibility}) "
+                f"OR ({approver_visibility})"
                 ")"
             )
         else:
             where.append(
                 "("
                 "(t.executor_role_id IN :visible_role_ids) "
-                f"OR ({report_visibility})"
+                f"OR ({report_visibility}) "
+                f"OR ({approver_visibility})"
                 ")"
             )
 
         if executor_role_id is not None:
             erid = int(executor_role_id)
-            # executor_role_id filter should not bypass base RBAC;
-            # BUT tasks shown via "report_visibility" are allowed too.
-            # So we only block if erid is not in visible_role_ids AND user didn't report those tasks (unknown here),
-            # therefore we do NOT early-return; we just apply the filter safely.
             where.append("t.executor_role_id = :executor_role_id")
             params["executor_role_id"] = erid
 
@@ -223,6 +257,8 @@ def list_tasks(
                 where.append("COALESCE(ts.code,'') IN ('IN_PROGRESS','WAITING_REPORT','WAITING_APPROVAL')")
             elif sf == "done":
                 where.append("COALESCE(ts.code,'') IN ('DONE')")
+            elif sf == "rejected":
+                where.append("COALESCE(ts.code,'') IN ('REJECTED')")
             else:
                 if not include_archived:
                     where.append("COALESCE(ts.code,'') <> 'ARCHIVED'")
@@ -343,9 +379,15 @@ def get_task(
                 include_archived=include_archived,
             )
         except HTTPException as e:
-            # Consistency with list_tasks(): allow access if the user submitted a report for this task.
-            if e.status_code in (403, 404) and _user_reported_task(conn, task_id=int(task_id), user_id=int(current_user_id)):
-                task = task  # keep loaded task
+            # Consistency with list_tasks(): allow access if the user submitted a report for this task
+            # OR if user is approver for WAITING_APPROVAL (rt.target_role_id == current role_id).
+            if e.status_code in (403, 404):
+                if _user_reported_task(conn, task_id=int(task_id), user_id=int(current_user_id)):
+                    task = task
+                elif _user_is_approver_for_task(conn, task_id=int(task_id), role_id=int(role_id)):
+                    task = task
+                else:
+                    raise
             else:
                 raise
 
@@ -492,12 +534,18 @@ def approve_report(
         role_id = get_user_role_id(conn, current_user_id)
 
         task = load_task_full(conn, task_id=int(task_id))
-        task = ensure_task_visible_or_404(
-            current_user_id=current_user_id,
-            current_role_id=role_id,
-            task_row=task,
-            include_archived=False,
-        )
+        try:
+            task = ensure_task_visible_or_404(
+                current_user_id=current_user_id,
+                current_role_id=role_id,
+                task_row=task,
+                include_archived=False,
+            )
+        except HTTPException as e:
+            if e.status_code in (403, 404) and _user_is_approver_for_task(conn, task_id=int(task_id), role_id=int(role_id)):
+                task = task
+            else:
+                raise
 
         if not can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise_error(
@@ -538,12 +586,18 @@ def reject_report(
         role_id = get_user_role_id(conn, current_user_id)
 
         task = load_task_full(conn, task_id=int(task_id))
-        task = ensure_task_visible_or_404(
-            current_user_id=current_user_id,
-            current_role_id=role_id,
-            task_row=task,
-            include_archived=False,
-        )
+        try:
+            task = ensure_task_visible_or_404(
+                current_user_id=current_user_id,
+                current_role_id=role_id,
+                task_row=task,
+                include_archived=False,
+            )
+        except HTTPException as e:
+            if e.status_code in (403, 404) and _user_is_approver_for_task(conn, task_id=int(task_id), role_id=int(role_id)):
+                task = task
+            else:
+                raise
 
         if not can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise_error(

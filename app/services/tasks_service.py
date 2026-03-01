@@ -1,4 +1,3 @@
-# FILE: app/services/tasks_service.py
 from __future__ import annotations
 
 import json
@@ -24,7 +23,6 @@ def parse_int_set_env(name: str) -> Set[int]:
         try:
             out.add(int(p))
         except Exception:
-            # ignore invalid pieces
             pass
     return out
 
@@ -35,7 +33,6 @@ DIRECTOR_ROLE_IDS: Set[int] = parse_int_set_env("DIRECTOR_ROLE_IDS")
 
 
 def get_current_user_id(x_user_id: Optional[int]) -> int:
-    # legacy helper (X-User-Id). Сейчас UI ходит через JWT, но оставляем для совместимости.
     if x_user_id is None:
         raise HTTPException(status_code=401, detail="X-User-Id header is required")
     try:
@@ -60,10 +57,24 @@ def get_user_role_id(conn, user_id: int) -> int:
 
 
 def get_status_id_by_code(conn, code: str) -> int:
+    if code is None:
+        raise HTTPException(status_code=400, detail="Unknown status code: None")
+
+    normalized = str(code).strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Unknown status code: ''")
+
     row = conn.execute(
-        text("SELECT status_id FROM task_statuses WHERE code = :code"),
-        {"code": code},
+        text(
+            """
+            SELECT status_id
+            FROM task_statuses
+            WHERE upper(trim(code)) = upper(trim(:code))
+            """
+        ),
+        {"code": normalized},
     ).mappings().first()
+
     if not row:
         raise HTTPException(status_code=400, detail=f"Unknown status code: {code}")
     return int(row["status_id"])
@@ -92,7 +103,6 @@ def scope_label_or_none(allowed: Set[str], wanted_lower: str) -> Optional[str]:
 
 
 def _pick_default_scope(allowed: Set[str]) -> str:
-    # Prefer functional if present; otherwise first stable label
     for lbl in allowed:
         if lbl.lower() == "functional":
             return lbl
@@ -117,7 +127,6 @@ def normalize_assignment_scope(conn, value: Any) -> str:
         if lbl.lower() == raw_l:
             return lbl
 
-    # legacy aliases
     legacy_map = {
         "role": "functional",
         "any": "functional",
@@ -135,9 +144,6 @@ def normalize_assignment_scope(conn, value: Any) -> str:
     )
 
 
-# ---------------------------
-# Role-scope visibility (2-level policy)
-# ---------------------------
 def compute_visible_executor_role_ids_for_tasks(
     *,
     user_id: int,
@@ -228,11 +234,6 @@ def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool
 
 
 def _is_report_author(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
-    """
-    IMPORTANT POLICY (MVP):
-    Когда задача уходит на согласование, executor_role_id переезжает на согласующего.
-    При этом автор отчёта (submitted_by) должен продолжать видеть задачу и результат согласования.
-    """
     try:
         submitted_by = task_row.get("report_submitted_by")
         if submitted_by is None:
@@ -289,18 +290,19 @@ def ensure_task_visible_or_404(
 
 
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
+    if not _is_executor_role(current_role_id=current_role_id, task_row=task_row):
+        return False
+
+    code = str(task_row.get("status_code") or "")
+    return code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED")
 
 
+# ✅ ИЗМЕНЕНО ЗДЕСЬ: approve/reject для руководителя идут через regular_tasks.target_role_id,
+# а НЕ через executor_role_id задачи.
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
-    """
-    approve/reject в WAITING_APPROVAL:
-    - инициатор может
-    - исполнитель по роли может
-    - НО: запрещаем согласование собственного отчёта (submitted_by == current_user_id)
-    """
-    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
-        return True
+    code = str(task_row.get("status_code") or "")
+    if code != "WAITING_APPROVAL":
+        return False
 
     # запрет self-approve
     try:
@@ -308,9 +310,38 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
         if submitted_by is not None and int(submitted_by) == int(current_user_id):
             return False
     except Exception:
-        pass
+        return False
 
-    return _is_executor_role(current_role_id=current_role_id, task_row=task_row)
+    rid = task_row.get("regular_task_id")
+    if rid is None:
+        return False
+
+    try:
+        rid_i = int(rid)
+    except Exception:
+        return False
+    if rid_i <= 0:
+        return False
+
+    with engine.begin() as conn:
+        r = conn.execute(
+            text(
+                """
+                SELECT target_role_id
+                FROM public.regular_tasks
+                WHERE regular_task_id = :rid
+                """
+            ),
+            {"rid": int(rid_i)},
+        ).mappings().first()
+
+    if not r or r.get("target_role_id") is None:
+        return False
+
+    try:
+        return int(r["target_role_id"]) == int(current_role_id)
+    except Exception:
+        return False
 
 
 def _allowed_actions_for_user(
@@ -322,8 +353,7 @@ def _allowed_actions_for_user(
     code = str(task_row.get("status_code") or "")
     actions: List[str] = []
 
-    # RULE: "reject" only in WAITING_APPROVAL
-    if code in ("IN_PROGRESS", "WAITING_REPORT"):
+    if code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED"):
         if can_report_or_update(
             current_user_id=current_user_id,
             current_role_id=current_role_id,

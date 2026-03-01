@@ -16,7 +16,7 @@ const ACTION_RU: Record<string, string> = {
 };
 
 type ScopeMode = "all" | "admin" | "functional";
-type StatusTab = "active" | "done";
+type StatusTab = "active" | "done" | "rejected";
 
 function actionsRu(actions: AllowedAction[] | undefined | null): string {
   if (!actions || actions.length === 0) return "—";
@@ -93,6 +93,7 @@ function scopeRu(v: ScopeMode): string {
 
 function tabRu(v: StatusTab): string {
   if (v === "done") return "Отработано";
+  if (v === "rejected") return "Отклонено";
   return "В работе";
 }
 
@@ -183,6 +184,7 @@ function computeReportUiState(src: any): ReportUiState {
   const approvedAt = src?.report_approved_at ?? null;
 
   if (statusCode === "ARCHIVED") return "rejected_or_archived";
+  if (statusCode === "REJECTED") return "rejected_or_archived";
   if (approvedAt) return "approved";
 
   const sent = Boolean(submittedAt) || Boolean(link);
@@ -198,7 +200,7 @@ function reportStatusBadgeText(st: ReportUiState): string {
   if (st === "approved") return "Отчёт согласован";
   if (st === "sent_waiting") return "Отчёт отправлен на согласование";
   if (st === "draft") return "Отчёт не отправлен";
-  if (st === "rejected_or_archived") return "Задача в архиве";
+  if (st === "rejected_or_archived") return "Задача отклонена/в архиве";
   return "—";
 }
 
@@ -220,7 +222,7 @@ export default function TasksPage() {
 
   const [scope, setScope] = useState<ScopeMode>("all");
 
-  // NEW: вкладки статуса
+  // вкладки статуса
   const [tab, setTab] = useState<StatusTab>("active");
 
   const [list, setList] = useState<TaskListItem[]>([]);
@@ -276,7 +278,6 @@ export default function TasksPage() {
           limit,
           offset: qOffset,
           assignment_scope: scope === "all" ? undefined : scope,
-          // NEW: вкладка
           status_filter: tab,
         } as any,
       });
@@ -435,7 +436,7 @@ export default function TasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, limit, offset, scope, tab]);
 
-  // NEW: при переключении вкладки — сбрасываем страницу/выбор, чтобы не было “не найдено”
+  // при переключении вкладки — сбрасываем страницу/выбор, чтобы не было “не найдено”
   useEffect(() => {
     if (!ready) return;
     setOffset(0);
@@ -543,9 +544,9 @@ export default function TasksPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* NEW: вкладки */}
+          {/* вкладки */}
           <div className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-950/40 p-1">
-            {(["active", "done"] as StatusTab[]).map((v) => (
+            {(["active", "done", "rejected"] as StatusTab[]).map((v) => (
               <button
                 key={v}
                 onClick={() => setTab(v)}
