@@ -87,3 +87,7 @@ chk_utf8.txt
 regular_tasks.csv
 regular_tasks_utf8.csv
 sql/fix_titles.sql
+
+# Temporary exports
+*.csv
+__tmp__*
