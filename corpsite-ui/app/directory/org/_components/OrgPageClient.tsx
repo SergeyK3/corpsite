@@ -4,64 +4,350 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import type {
-  OrgTreeNode,
-  OrgTreeResponse,
-  EmployeeDTO,
-  EmployeesResponse,
-  EmployeeDetails,
-} from "../../employees/_lib/types";
+import type { EmployeeDTO, EmployeeDetails, EmployeesResponse } from "../../employees/_lib/types";
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
+import { apiFetchJson } from "../../../../lib/api";
 
 type UnitPick = {
-  unit_id: number;
+  key: string; // идентификатор узла в дереве (может быть строковым)
+  unit_id: number | null; // числовой unit_id для запросов /directory/employees
   name: string;
 };
 
-function getApiBase(): string {
-  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  return v || "http://127.0.0.1:8000";
-}
+// ---------------------------
+// Backend: /directory/org-units/tree
+// На практике узлы могут быть:
+// - id: number | string (часто code)
+// - unit_id: number (реальный bigint из БД) — может присутствовать
+// - title/name
+// - children
+// Иногда дерево может прийти "плоским" (items + parent_id), поэтому делаем fallback.
+// ---------------------------
+type ApiOrgUnitNode = {
+  id?: string | number;
+  code?: string;
+  unit_id?: number;
+  unitId?: number;
+
+  title?: string;
+  name?: string;
+
+  parent_id?: string | number | null;
+  parentId?: string | number | null;
+  parent_unit_id?: number | null;
+  parentUnitId?: number | null;
+
+  children?: ApiOrgUnitNode[];
+};
+
+type ApiOrgUnitsTreeResponse = {
+  items?: ApiOrgUnitNode[];
+  total?: number;
+  root_id?: string | number | null;
+};
+
+type OrgTreeNode = {
+  key: string; // стабильный ключ для React + expanded
+  unit_id: number | null; // bigint из БД, если есть
+  name: string;
+  children: OrgTreeNode[];
+};
+
+type OrgTreeResponse = {
+  items: OrgTreeNode[];
+  total?: number;
+};
 
 function getDevUserId(): string | null {
   const v = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
   return v ? v : null;
 }
 
+function normalizeText(v: any): string {
+  return String(v ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[ё]/g, "е")
+    .trim();
+}
+
 function mapApiErrorToMessage(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
-  const mStatus = msg.match(/\b(?:HTTP|failed:)\s*(\d{3})\b/i);
-  const status = mStatus ? Number(mStatus[1]) : undefined;
+  const anyE = e as any;
+
+  const status =
+    typeof anyE?.status === "number"
+      ? anyE.status
+      : (() => {
+          const msg = e instanceof Error ? e.message : String(e ?? "");
+          const m = msg.match(/\b(?:HTTP|failed:)\s*(\d{3})\b/i);
+          return m ? Number(m[1]) : undefined;
+        })();
 
   if (status === 401) return "Нет доступа (401).";
   if (status === 403) return "Недостаточно прав (403).";
   if (status === 404) return "Не найдено (404).";
   if (status && status >= 500) return "Ошибка сервера. Попробуйте позже.";
+
+  const msg =
+    typeof anyE?.message === "string"
+      ? anyE.message
+      : e instanceof Error
+        ? e.message
+        : String(e ?? "Unknown error");
+
   return msg || "Ошибка запроса.";
 }
 
-function buildQuery(params: Record<string, string | number | null | undefined>): string {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === undefined || v === null) return;
-    const s = String(v).trim();
-    if (!s) return;
-    q.set(k, s);
-  });
-  return q.toString();
+// ---------------------------
+// expanded tree in URL: expanded=a,b,c (строковые ключи)
+// ---------------------------
+function parseExpanded(raw: string | null): Set<string> {
+  const out = new Set<string>();
+  const s = (raw || "").trim();
+  if (!s) return out;
+
+  for (const part of s.split(",")) {
+    const k = String(part).trim();
+    if (k) out.add(k);
+  }
+  return out;
+}
+
+function serializeExpanded(set: Set<string>): string {
+  const arr = Array.from(set.values()).filter((x) => String(x).trim().length > 0);
+  arr.sort((a, b) => a.localeCompare(b));
+  return arr.join(",");
+}
+
+function parseIntOrNull(v: string | null): number | null {
+  if (!v) return null;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function buildParentMap(nodes: OrgTreeNode[]): Map<string, string | null> {
+  const parent = new Map<string, string | null>();
+  const walk = (n: OrgTreeNode, p: string | null) => {
+    parent.set(n.key, p);
+    (n.children || []).forEach((ch) => walk(ch, n.key));
+  };
+  nodes.forEach((n) => walk(n, null));
+  return parent;
+}
+
+function ancestorsOf(key: string, parentMap: Map<string, string | null>): string[] {
+  const out: string[] = [];
+  let cur: string | null | undefined = key;
+
+  while (cur != null) {
+    const p = parentMap.get(cur);
+    if (p == null) break;
+    out.push(p);
+    cur = p;
+  }
+  return out;
+}
+
+function filterOrgTree(nodes: OrgTreeNode[], termRaw: string): OrgTreeNode[] {
+  const term = normalizeText(termRaw);
+  if (!term) return nodes;
+
+  const walk = (n: OrgTreeNode): OrgTreeNode | null => {
+    const nameMatch = normalizeText(n.name).includes(term);
+
+    const keptChildren: OrgTreeNode[] = [];
+    for (const ch of n.children || []) {
+      const r = walk(ch);
+      if (r) keptChildren.push(r);
+    }
+
+    if (nameMatch || keptChildren.length > 0) {
+      return { ...n, children: keptChildren };
+    }
+    return null;
+  };
+
+  const out: OrgTreeNode[] = [];
+  for (const n of nodes) {
+    const r = walk(n);
+    if (r) out.push(r);
+  }
+  return out;
 }
 
 function flattenUnits(nodes: OrgTreeNode[]): UnitPick[] {
   const out: UnitPick[] = [];
   const walk = (n: OrgTreeNode) => {
-    out.push({ unit_id: n.unit_id, name: n.name });
+    out.push({ key: n.key, unit_id: n.unit_id, name: n.name });
     if (Array.isArray(n.children)) n.children.forEach(walk);
   };
   nodes.forEach(walk);
   return out;
 }
 
+// ---------------------------
+// Normalize API node -> OrgTreeNode
+// key: строковый идентификатор дерева (id/code/unit_id)
+// unit_id: числовой (unit_id/unitId/если id числовой)
+// ---------------------------
+function nodeKey(raw: ApiOrgUnitNode): string {
+  const v = raw?.id ?? raw?.code ?? raw?.unit_id ?? raw?.unitId;
+  return String(v ?? "").trim() || "unknown";
+}
+
+function nodeUnitId(raw: ApiOrgUnitNode): number | null {
+  const v = raw?.unit_id ?? raw?.unitId ?? raw?.parent_unit_id ?? raw?.parentUnitId;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+
+  // иногда id бывает числом в строке
+  const id = raw?.unit_id ?? raw?.unitId ?? raw?.id;
+  const n = Number(id);
+  return Number.isFinite(n) ? n : null;
+}
+
+function nodeTitle(raw: ApiOrgUnitNode): string {
+  return String(raw?.title ?? raw?.name ?? raw?.code ?? raw?.id ?? "—").trim() || "—";
+}
+
+function normalizeOrgUnitNodeTree(raw: ApiOrgUnitNode): OrgTreeNode {
+  const key = nodeKey(raw);
+  const unit_id = (() => {
+    const u = raw?.unit_id ?? raw?.unitId;
+    if (typeof u === "number" && Number.isFinite(u)) return u;
+    const n = Number(raw?.id);
+    return Number.isFinite(n) ? n : null;
+  })();
+
+  const childrenRaw = Array.isArray(raw?.children) ? raw.children : [];
+  const children = childrenRaw.map(normalizeOrgUnitNodeTree);
+
+  return {
+    key,
+    unit_id,
+    name: nodeTitle(raw),
+    children,
+  };
+}
+
+// fallback: если items плоский список с parent_id/parent_unit_id
+function buildTreeFromFlat(itemsRaw: ApiOrgUnitNode[]): OrgTreeNode[] {
+  const nodes = itemsRaw.map((x) => ({
+    raw: x,
+    key: nodeKey(x),
+    unit_id: (() => {
+      const u = x?.unit_id ?? x?.unitId;
+      if (typeof u === "number" && Number.isFinite(u)) return u;
+      const n = Number(x?.id);
+      return Number.isFinite(n) ? n : null;
+    })(),
+    name: nodeTitle(x),
+  }));
+
+  const byKey = new Map<string, OrgTreeNode>();
+  nodes.forEach((n) => {
+    byKey.set(n.key, { key: n.key, unit_id: n.unit_id, name: n.name, children: [] });
+  });
+
+  const parentOf = (x: ApiOrgUnitNode): string | null => {
+    const p =
+      x?.parentId ??
+      x?.parent_id ??
+      x?.parent_unit_id ??
+      x?.parentUnitId;
+
+    if (p === null || p === undefined) return null;
+    return String(p).trim() || null;
+  };
+
+  const roots: OrgTreeNode[] = [];
+
+  nodes.forEach((n) => {
+    const pKey = parentOf(n.raw);
+    const cur = byKey.get(n.key)!;
+
+    if (pKey && byKey.has(pKey)) {
+      byKey.get(pKey)!.children.push(cur);
+    } else {
+      roots.push(cur);
+    }
+  });
+
+  return roots;
+}
+
+// ---------------------------
+// API wrappers
+// ---------------------------
+async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTreeResponse> {
+  const raw = await apiFetchJson<ApiOrgUnitsTreeResponse>("/directory/org-units/tree", {
+    method: "GET",
+    headers: extraHeaders,
+  });
+
+  const itemsRaw = Array.isArray(raw?.items) ? raw.items : [];
+
+  // 1) если есть children в данных — используем как дерево
+  const looksTree = itemsRaw.some((x) => Array.isArray(x?.children) && (x!.children!.length > 0));
+  if (looksTree) {
+    return {
+      items: itemsRaw.map(normalizeOrgUnitNodeTree),
+      total: raw?.total,
+    };
+  }
+
+  // 2) иначе пробуем собрать из плоского списка
+  const flatHasParents = itemsRaw.some(
+    (x) =>
+      x?.parentId != null ||
+      x?.parent_id != null ||
+      x?.parent_unit_id != null ||
+      x?.parentUnitId != null
+  );
+
+  if (flatHasParents) {
+    return {
+      items: buildTreeFromFlat(itemsRaw),
+      total: raw?.total,
+    };
+  }
+
+  // 3) иначе как есть (список верхнего уровня)
+  return {
+    items: itemsRaw.map(normalizeOrgUnitNodeTree),
+    total: raw?.total,
+  };
+}
+
+async function fetchEmployeesByOrgUnit(args: {
+  extraHeaders: Record<string, string>;
+  orgUnitId: number;
+  status: string;
+  limit: number;
+  offset: number;
+}): Promise<EmployeesResponse> {
+  const { extraHeaders, orgUnitId, status, limit, offset } = args;
+
+  const json = await apiFetchJson<EmployeesResponse>("/directory/employees", {
+    method: "GET",
+    headers: extraHeaders,
+    query: {
+      status,
+      limit,
+      offset,
+      org_unit_id: orgUnitId,
+    },
+  });
+
+  const items = Array.isArray((json as any)?.items) ? ((json as any).items as EmployeeDTO[]) : [];
+  const total = Number((json as any)?.total ?? items.length);
+
+  return { items, total };
+}
+
+// ---------------------------
+// UI helpers
+// ---------------------------
 function safeFio(e: any): string {
   return e?.fio ?? e?.full_name ?? e?.fullName ?? "—";
 }
@@ -80,7 +366,6 @@ function safeActive(e: any): string {
   const active = e?.is_active;
   if (active === true) return "активен";
   if (active === false) return "неактивен";
-  // fallback
   const s = String(e?.status ?? "").toLowerCase();
   if (s === "active") return "активен";
   if (s === "inactive") return "неактивен";
@@ -98,22 +383,11 @@ type RoleRule = {
 const DEFAULT_ROLE_ORDER: RoleRule[] = [
   { rank: 10, keywords: ["завед", "зав."] },
   { rank: 20, keywords: ["врач", "доктор"] },
-  {
-    rank: 30,
-    keywords: ["старшая медсестра", "ст. медсестра", "старший фельдшер", "ст. фельдшер"],
-  },
+  { rank: 30, keywords: ["старшая медсестра", "ст. медсестра", "старший фельдшер", "ст. фельдшер"] },
   { rank: 40, keywords: ["медсестра", "м/с", "сестра"] },
   { rank: 50, keywords: ["сестра-хозяйка", "сестра хозяйка", "с-х"] },
   { rank: 60, keywords: ["санитар", "санитарка"] },
 ];
-
-function normalizeText(v: any): string {
-  return String(v ?? "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[ё]/g, "е")
-    .trim();
-}
 
 function getPositionName(e: any): string {
   return e?.position?.name ?? e?.position_name ?? "";
@@ -135,129 +409,13 @@ function fioForSort(e: any): string {
   return normalizeText(safeFio(e));
 }
 
-// ---------------------------
-// Expanded tree in URL
-// expanded=44,28,29
-// ---------------------------
-function parseExpanded(raw: string | null): Set<number> {
-  const out = new Set<number>();
-  const s = (raw || "").trim();
-  if (!s) return out;
-
-  for (const part of s.split(",")) {
-    const n = Number(String(part).trim());
-    if (Number.isFinite(n)) out.add(n);
-  }
-  return out;
-}
-
-function serializeExpanded(set: Set<number>): string {
-  const arr = Array.from(set.values()).filter((n) => Number.isFinite(n));
-  arr.sort((a, b) => a - b);
-  return arr.join(",");
-}
-
-function buildParentMap(nodes: OrgTreeNode[]): Map<number, number | null> {
-  const parent = new Map<number, number | null>();
-  const walk = (n: OrgTreeNode, p: number | null) => {
-    parent.set(n.unit_id, p);
-    (n.children || []).forEach((ch) => walk(ch, n.unit_id));
-  };
-  nodes.forEach((n) => walk(n, null));
-  return parent;
-}
-
-function ancestorsOf(unitId: number, parentMap: Map<number, number | null>): number[] {
-  const out: number[] = [];
-  let cur: number | null | undefined = unitId;
-
-  while (cur != null) {
-    const p = parentMap.get(cur);
-    if (p == null) break;
-    out.push(p);
-    cur = p;
-  }
-  return out;
-}
-
-function filterOrgTree(nodes: OrgTreeNode[], termRaw: string): OrgTreeNode[] {
-  const term = normalizeText(termRaw);
-  if (!term) return nodes;
-
-  const walk = (n: OrgTreeNode): OrgTreeNode | null => {
-    const nameMatch = normalizeText(n.name).includes(term);
-    const children = Array.isArray(n.children) ? n.children : [];
-
-    const keptChildren: OrgTreeNode[] = [];
-    for (const ch of children) {
-      const r = walk(ch);
-      if (r) keptChildren.push(r);
-    }
-
-    if (nameMatch || keptChildren.length > 0) {
-      return { ...n, children: keptChildren };
-    }
-    return null;
-  };
-
-  const out: OrgTreeNode[] = [];
-  for (const n of nodes) {
-    const r = walk(n);
-    if (r) out.push(r);
-  }
-  return out;
-}
-
-function parseIntOrNull(v: string | null): number | null {
-  if (!v) return null;
-  const n = Number(String(v).trim());
-  return Number.isFinite(n) ? n : null;
-}
-
-// ---------------------------
-// Backend fetch
-// ---------------------------
-async function fetchEmployeesByOrgUnit(args: {
-  apiBase: string;
-  headers: Record<string, string>;
-  orgUnitId: number;
-  status: string;
-  limit: number;
-  offset: number;
-}): Promise<EmployeesResponse> {
-  const { apiBase, headers, orgUnitId, status, limit, offset } = args;
-
-  const qs = buildQuery({
-    status,
-    limit,
-    offset,
-    org_unit_id: orgUnitId,
-  });
-
-  const res = await fetch(`${apiBase}/directory/employees?${qs}`, {
-    method: "GET",
-    headers,
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
-  }
-
-  const json = (await res.json()) as EmployeesResponse;
-  const items = Array.isArray(json?.items) ? (json.items as EmployeeDTO[]) : [];
-  const total = Number(json?.total ?? items.length);
-  return { items, total };
-}
-
 export default function OrgPageClient() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  const apiBase = React.useMemo(() => getApiBase(), []);
   const devUserId = getDevUserId();
 
-  const headers = React.useMemo(() => {
+  const extraHeaders = React.useMemo(() => {
     const h: Record<string, string> = { Accept: "application/json" };
     if (devUserId) h["X-User-Id"] = devUserId;
     return h;
@@ -280,7 +438,7 @@ export default function OrgPageClient() {
   const [empData, setEmpData] = React.useState<EmployeesResponse>({ items: [], total: 0 });
 
   // expanded tree state (synced with URL)
-  const [expandedSet, setExpandedSet] = React.useState<Set<number>>(new Set<number>());
+  const [expandedSet, setExpandedSet] = React.useState<Set<string>>(new Set<string>());
 
   // Drawer state (управляем через URL + локальный state для UX)
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -297,7 +455,7 @@ export default function OrgPageClient() {
   }
 
   React.useEffect(() => {
-    setExpandedSet(new Set<number>(Array.from(urlExpanded.values())));
+    setExpandedSet(new Set<string>(Array.from(urlExpanded.values())));
   }, [urlExpanded]);
 
   const parentMap = React.useMemo(() => buildParentMap(orgItems), [orgItems]);
@@ -311,60 +469,57 @@ export default function OrgPageClient() {
       setOrgError(null);
 
       try {
-        const res = await fetch(`${apiBase}/directory/org-units/tree`, {
-          method: "GET",
-          headers,
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
-        }
-
-        const json = (await res.json()) as OrgTreeResponse;
-        const items = Array.isArray(json?.items) ? json.items : [];
-
+        const data = await fetchOrgTree(extraHeaders);
         if (cancelled) return;
 
+        const items = Array.isArray(data?.items) ? data.items : [];
         setOrgItems(items);
 
         const flat = flattenUnits(items);
 
         // priority:
-        // 1) org_unit_id from URL
-        // 2) first unit
+        // 1) org_unit_id from URL (числовой)
+        // 2) first node with numeric unit_id
         if (urlOrgUnitId != null) {
           const found = flat.find((u) => u.unit_id === urlOrgUnitId);
           if (found) {
             setSelectedUnit(found);
+
             if (!sp.get("expanded")) {
               const pm = buildParentMap(items);
-              const need = new Set<number>();
-              ancestorsOf(found.unit_id, pm).forEach((x) => need.add(x));
-              need.add(found.unit_id);
+              const need = new Set<string>();
+              ancestorsOf(found.key, pm).forEach((x) => need.add(x));
+              need.add(found.key);
               replaceUrl({ expanded: serializeExpanded(need) });
             }
             return;
           }
         }
 
-        if (!selectedUnit && flat.length > 0) {
-          const first = flat[0];
-          setSelectedUnit(first);
+        if (!selectedUnit) {
+          const firstSelectable = flat.find((u) => typeof u.unit_id === "number" && u.unit_id != null);
+          const first = firstSelectable ?? flat[0];
 
-          const next: Partial<Record<string, string | null>> = {};
-          if (sp.get("org_unit_id") == null) next.org_unit_id = String(first.unit_id);
+          if (first) {
+            setSelectedUnit(first);
 
-          if (sp.get("expanded") == null) {
-            const pm = buildParentMap(items);
-            const need = new Set<number>();
-            ancestorsOf(first.unit_id, pm).forEach((x) => need.add(x));
-            need.add(first.unit_id);
-            next.expanded = serializeExpanded(need);
+            const next: Partial<Record<string, string | null>> = {};
+
+            // org_unit_id пишем только если он числовой
+            if (first.unit_id != null && sp.get("org_unit_id") == null) {
+              next.org_unit_id = String(first.unit_id);
+            }
+
+            if (sp.get("expanded") == null) {
+              const pm = buildParentMap(items);
+              const need = new Set<string>();
+              ancestorsOf(first.key, pm).forEach((x) => need.add(x));
+              need.add(first.key);
+              next.expanded = serializeExpanded(need);
+            }
+
+            if (Object.keys(next).length > 0) replaceUrl(next);
           }
-
-          if (Object.keys(next).length > 0) replaceUrl(next);
         }
       } catch (e) {
         if (cancelled) return;
@@ -380,9 +535,9 @@ export default function OrgPageClient() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiBase, devUserId]);
+  }, [extraHeaders, devUserId]);
 
-  // 1b) sync selectedUnit from URL on navigation
+  // 1b) sync selectedUnit from URL on navigation (по numeric unit_id)
   React.useEffect(() => {
     if (orgItems.length === 0) return;
     if (urlOrgUnitId == null) return;
@@ -402,7 +557,7 @@ export default function OrgPageClient() {
     let cancelled = false;
 
     async function loadEmployees() {
-      if (!selectedUnit) {
+      if (!selectedUnit || selectedUnit.unit_id == null) {
         setEmpData({ items: [], total: 0 });
         return;
       }
@@ -412,8 +567,7 @@ export default function OrgPageClient() {
 
       try {
         const data = await fetchEmployeesByOrgUnit({
-          apiBase,
-          headers,
+          extraHeaders,
           orgUnitId: selectedUnit.unit_id,
           status: "all",
           limit: 200,
@@ -435,7 +589,7 @@ export default function OrgPageClient() {
     return () => {
       cancelled = true;
     };
-  }, [apiBase, headers, selectedUnit]);
+  }, [extraHeaders, selectedUnit]);
 
   const sortedEmployees = React.useMemo(() => {
     const items = Array.isArray(empData?.items) ? [...empData.items] : [];
@@ -470,24 +624,24 @@ export default function OrgPageClient() {
     return filterOrgTree(orgItems, filterText);
   }, [orgItems, filterText, searchActive]);
 
-  function isExpanded(unitId: number): boolean {
+  function isExpanded(key: string): boolean {
     if (searchActive) return true;
-    return expandedSet.has(unitId);
+    return expandedSet.has(key);
   }
 
-  function toggleExpanded(unitId: number) {
-    const next = new Set<number>(Array.from(expandedSet.values()));
-    if (next.has(unitId)) next.delete(unitId);
-    else next.add(unitId);
+  function toggleExpanded(key: string) {
+    const next = new Set<string>(Array.from(expandedSet.values()));
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
 
     setExpandedSet(next);
     replaceUrl({ expanded: serializeExpanded(next) });
   }
 
-  function ensureExpandedForSelection(unitId: number) {
-    const next = new Set<number>(Array.from(expandedSet.values()));
-    ancestorsOf(unitId, parentMap).forEach((x) => next.add(x));
-    next.add(unitId);
+  function ensureExpandedForSelection(key: string) {
+    const next = new Set<string>(Array.from(expandedSet.values()));
+    ancestorsOf(key, parentMap).forEach((x) => next.add(x));
+    next.add(key);
 
     setExpandedSet(next);
     replaceUrl({ expanded: serializeExpanded(next) });
@@ -495,9 +649,11 @@ export default function OrgPageClient() {
 
   function onSelectUnit(u: UnitPick) {
     setSelectedUnit(u);
-    ensureExpandedForSelection(u.unit_id);
+    ensureExpandedForSelection(u.key);
+
+    // org_unit_id пишем/обновляем только если он числовой
     replaceUrl({
-      org_unit_id: String(u.unit_id),
+      org_unit_id: u.unit_id != null ? String(u.unit_id) : null,
       employee_id: null,
     });
   }
@@ -510,7 +666,7 @@ export default function OrgPageClient() {
     setDrawerOpen(true);
 
     replaceUrl({
-      org_unit_id: selectedUnit ? String(selectedUnit.unit_id) : sp.get("org_unit_id") || null,
+      org_unit_id: selectedUnit?.unit_id != null ? String(selectedUnit.unit_id) : sp.get("org_unit_id") || null,
       employee_id: id,
     });
   }
@@ -530,11 +686,14 @@ export default function OrgPageClient() {
 
     return sorted.map((n) => {
       const hasChildren = Array.isArray(n.children) && n.children.length > 0;
-      const expanded = hasChildren ? isExpanded(n.unit_id) : false;
-      const active = selectedUnit?.unit_id === n.unit_id;
+      const expanded = hasChildren ? isExpanded(n.key) : false;
+
+      const active =
+        (selectedUnit?.key && selectedUnit.key === n.key) ||
+        (selectedUnit?.unit_id != null && n.unit_id != null && selectedUnit.unit_id === n.unit_id);
 
       return (
-        <div key={n.unit_id}>
+        <div key={n.key}>
           <div className="flex items-stretch">
             <div className="flex items-center" style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}>
               {hasChildren ? (
@@ -543,7 +702,7 @@ export default function OrgPageClient() {
                   className="mr-2 h-6 w-6 rounded border border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:bg-zinc-900/60"
                   onClick={(ev) => {
                     ev.stopPropagation();
-                    toggleExpanded(n.unit_id);
+                    toggleExpanded(n.key);
                   }}
                   aria-label={expanded ? "Свернуть" : "Развернуть"}
                   title={expanded ? "Свернуть" : "Развернуть"}
@@ -562,8 +721,8 @@ export default function OrgPageClient() {
                 "border-zinc-800 bg-zinc-950/40 text-zinc-100 hover:bg-zinc-900/60",
                 active ? "outline outline-1 outline-zinc-600" : "",
               ].join(" ")}
-              onClick={() => onSelectUnit({ unit_id: n.unit_id, name: n.name })}
-              title="Выбрать подразделение"
+              onClick={() => onSelectUnit({ key: n.key, unit_id: n.unit_id, name: n.name })}
+              title={n.unit_id == null ? "Узел без numeric unit_id (только для навигации)" : "Выбрать подразделение"}
             >
               {n.name}
             </button>
@@ -622,7 +781,13 @@ export default function OrgPageClient() {
               {selectedUnit ? selectedUnit.name : "Сотрудники"}
             </div>
             <div className="mt-1 text-xs text-zinc-400">
-              {selectedUnit ? `Сотрудников: ${empData.total}` : "Выберите подразделение слева."}
+              {!selectedUnit ? (
+                "Выберите подразделение слева."
+              ) : selectedUnit.unit_id == null ? (
+                "Это узел навигации. Выберите дочернее подразделение."
+              ) : (
+                `Сотрудников: ${empData.total}`
+              )}
             </div>
           </div>
 
@@ -655,7 +820,7 @@ export default function OrgPageClient() {
 
                       return (
                         <tr
-                          key={id}
+                          key={id || `${safeFio(e)}-${safePos(e)}-${safeDept(e)}`}
                           className={[
                             "cursor-pointer hover:bg-zinc-900/60",
                             isSelected ? "bg-zinc-900/60" : "",
