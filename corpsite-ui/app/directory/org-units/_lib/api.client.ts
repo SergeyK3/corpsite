@@ -1,13 +1,9 @@
-// FILE: corpsite-ui/app/directory/org-units/_lib/api.client.ts
+// FILE: corpsite-ui/app/directory/employees/_lib/api.client.ts
+
 "use client";
 
-import type { OrgUnitsTreeResponse, OrgUnitTreeNode } from "./types";
+import type { EmployeesResponse, EmployeeDetails } from "./types";
 import { apiFetchJson } from "../../../../lib/api";
-
-/**
- * apiFetchJson уже добавляет Authorization (Bearer) из sessionStorage,
- * поэтому здесь НЕЛЬЗЯ делать raw fetch без заголовков.
- */
 
 function buildQuery(params: Record<string, string | number | boolean | null | undefined>): Record<string, any> {
   const out: Record<string, any> = {};
@@ -19,15 +15,6 @@ function buildQuery(params: Record<string, string | number | boolean | null | un
   }
   return out;
 }
-
-function toStringId(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  return String(v);
-}
-
-// ---------------------------
-// Error mapping
-// ---------------------------
 
 function extractStatus(e: any): number | undefined {
   const s =
@@ -55,7 +42,6 @@ export function mapApiErrorToMessage(e: unknown): string {
   if (status === 404) return "Не найдено (404).";
   if (status && status >= 500) return "Ошибка сервера. Попробуйте позже.";
 
-  // prefer APIError.message
   const msg =
     (typeof anyErr?.message === "string" && anyErr.message.trim()) ||
     (typeof anyErr?.detail === "string" && anyErr.detail.trim()) ||
@@ -64,127 +50,89 @@ export function mapApiErrorToMessage(e: unknown): string {
   return msg || "Ошибка запроса.";
 }
 
-// ---------------------------
-// Tree normalization (UI expects string ids)
-// ---------------------------
+/**
+ * Список сотрудников
+ * Backend: GET /directory/employees
+ *
+ * ВАЖНО:
+ * apiFetchJson уже добавляет Authorization (Bearer) из sessionStorage,
+ * поэтому здесь нельзя делать raw fetch без заголовков.
+ */
+export async function getEmployees(args: {
+  status?: string;
+  department_id?: number | string | null;
+  position_id?: number | string | null;
+  org_unit_id?: number | string | null;
+  include_children?: boolean;
+  q?: string | null;
+  limit?: number | string;
+  offset?: number | string;
+}): Promise<EmployeesResponse> {
+  const statusNorm = String(args.status ?? "all").trim().toLowerCase();
 
-function normalizeTreeNode(node: any): OrgUnitTreeNode {
-  const childrenRaw = Array.isArray(node?.children) ? node.children : [];
-  return {
-    ...node,
-    id: toStringId(node?.id),
-    children: childrenRaw.map(normalizeTreeNode),
-  } as OrgUnitTreeNode;
-}
+  const query = buildQuery({
+    // "all" — НЕ отправляем (часто бекенд не понимает 'all' и возвращает 0)
+    status: statusNorm === "all" ? undefined : statusNorm,
 
-function normalizeTreeResponse(raw: any): OrgUnitsTreeResponse {
-  const itemsRaw = Array.isArray(raw?.items) ? raw.items : [];
-  const inactiveRaw = Array.isArray(raw?.inactive_ids) ? raw.inactive_ids : [];
+    department_id: args.department_id ?? undefined,
+    position_id: args.position_id ?? undefined,
+    org_unit_id: args.org_unit_id ?? undefined,
 
-  return {
-    ...raw,
-    items: itemsRaw.map(normalizeTreeNode),
-    inactive_ids: inactiveRaw.map((x: any) => toStringId(x)).filter((s: string) => s !== ""),
-    root_id: raw?.root_id === null || raw?.root_id === undefined ? null : toStringId(raw.root_id),
-  } as OrgUnitsTreeResponse;
+    // если бекенд поддерживает include_children для employees — передаём
+    include_children: args.include_children ?? undefined,
+
+    q: args.q ?? undefined,
+    limit: args.limit ?? 50,
+    offset: args.offset ?? 0,
+  });
+
+  return await apiFetchJson<EmployeesResponse>("/directory/employees", { query });
 }
 
 /**
- * UI-дерево оргструктуры
- * Backend: GET /directory/org-units/tree
+ * Детали сотрудника
  */
-export async function getOrgUnitsTree(args?: {
-  status?: "all" | "active";
-  include_inactive?: boolean; // legacy
-}): Promise<OrgUnitsTreeResponse> {
-  const hasLegacy = args?.include_inactive !== undefined && args?.include_inactive !== null;
-
-  const query = hasLegacy
-    ? buildQuery({ include_inactive: args?.include_inactive })
-    : buildQuery({ status: args?.status ?? "all" });
-
-  const raw = await apiFetchJson<any>("/directory/org-units/tree", { query });
-  return normalizeTreeResponse(raw);
+export async function getEmployee(employeeId: string): Promise<EmployeeDetails> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+  return await apiFetchJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}`, { method: "GET" });
 }
 
 /**
- * Общий формат item, который возвращает backend для rename/move/activate/deactivate/create.
+ * Завершение работы сотрудника
+ * Backend: POST /directory/employees/{id}/terminate
  */
-export type OrgUnitMutationItem = {
-  id: number;
-  parent_id: number | null;
-  name: string;
-  code: string | null;
-  is_active: boolean;
-};
+export async function terminateEmployee(employeeId: string, dateTo?: string): Promise<EmployeeDetails> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
 
-export type OrgUnitMutationResponse = {
-  item: OrgUnitMutationItem;
-};
+  const dt = (dateTo ?? "").trim();
+  const body = dt ? { date_to: dt } : undefined;
 
-export async function renameOrgUnit(args: { unit_id: string | number; name: string }): Promise<OrgUnitMutationResponse> {
-  const id = String(args.unit_id);
-  const payload = { name: args.name };
-
-  try {
-    // preferred
-    return await apiFetchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/rename`, {
-      method: "PATCH",
-      body: payload,
-    });
-  } catch (e: any) {
-    const status = extractStatus(e);
-    if (status === 404) {
-      // fallback (older contract)
-      return await apiFetchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}`, {
-        method: "PATCH",
-        body: payload,
-      });
-    }
-    throw e;
-  }
-}
-
-export async function moveOrgUnit(args: {
-  unit_id: string | number;
-  parent_unit_id: number | null;
-}): Promise<OrgUnitMutationResponse> {
-  const id = String(args.unit_id);
-  return await apiFetchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/move`, {
-    method: "PATCH",
-    body: { parent_unit_id: args.parent_unit_id },
-  });
-}
-
-export async function deactivateOrgUnit(args: { unit_id: string | number }): Promise<OrgUnitMutationResponse> {
-  const id = String(args.unit_id);
-  return await apiFetchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/deactivate`, {
-    method: "PATCH",
-    body: {},
-  });
-}
-
-export async function activateOrgUnit(args: { unit_id: string | number }): Promise<OrgUnitMutationResponse> {
-  const id = String(args.unit_id);
-  return await apiFetchJson<OrgUnitMutationResponse>(`/directory/org-units/${id}/activate`, {
-    method: "PATCH",
-    body: {},
-  });
-}
-
-export async function createOrgUnit(args: {
-  name: string;
-  parent_unit_id?: number | null;
-  code?: string | null;
-  is_active?: boolean;
-}): Promise<OrgUnitMutationResponse> {
-  return await apiFetchJson<OrgUnitMutationResponse>(`/directory/org-units`, {
+  return await apiFetchJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}/terminate`, {
     method: "POST",
-    body: {
-      name: args.name,
-      parent_unit_id: args.parent_unit_id ?? null,
-      code: args.code ?? null,
-      is_active: args.is_active ?? true,
-    },
+    body,
   });
+}
+
+/**
+ * Должности
+ */
+export async function getPositions(args?: { limit?: number; offset?: number }): Promise<any> {
+  const query = buildQuery({
+    limit: args?.limit ?? 200,
+    offset: args?.offset ?? 0,
+  });
+  return await apiFetchJson<any>("/directory/positions", { query });
+}
+
+/**
+ * Отделы
+ */
+export async function getDepartments(args?: { limit?: number; offset?: number }): Promise<any> {
+  const query = buildQuery({
+    limit: args?.limit ?? 200,
+    offset: args?.offset ?? 0,
+  });
+  return await apiFetchJson<any>("/directory/departments", { query });
 }

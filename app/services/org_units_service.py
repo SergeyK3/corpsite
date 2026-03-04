@@ -17,6 +17,7 @@ class OrgUnit:
     parent_unit_id: Optional[int]
     name: str
     code: Optional[str]
+    group_id: Optional[int]
     is_active: bool
 
 
@@ -420,7 +421,7 @@ class OrgUnitsService:
         if scope_unit_ids is None:
             sql = text(
                 f"""
-                SELECT unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+                SELECT unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
                 FROM {self._schema}.{self._org_units_table}
                 WHERE 1=1
                   {where_active}
@@ -432,7 +433,7 @@ class OrgUnitsService:
             sql = (
                 text(
                     f"""
-                    SELECT unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+                    SELECT unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
                     FROM {self._schema}.{self._org_units_table}
                     WHERE unit_id IN :ids
                       {where_active}
@@ -453,6 +454,7 @@ class OrgUnitsService:
                     parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
                     name=str(r["name"]) if r["name"] is not None else "",
                     code=str(r["code"]) if r["code"] is not None else None,
+                    group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
                     is_active=bool(r["is_active"]),
                 )
             )
@@ -462,7 +464,7 @@ class OrgUnitsService:
         where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
         sql = text(
             f"""
-            SELECT unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            SELECT unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
             FROM {self._schema}.{self._org_units_table}
             WHERE unit_id = :unit_id
               {where_active}
@@ -480,6 +482,7 @@ class OrgUnitsService:
             parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
             name=str(r["name"]) if r["name"] is not None else "",
             code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )
 
@@ -542,6 +545,7 @@ class OrgUnitsService:
                 "parent_unit_id": u.parent_unit_id,
                 "name": u.name,
                 "code": u.code,
+                "group_id": u.group_id,
                 "is_active": bool(u.is_active),
                 "children": [],
             }
@@ -587,6 +591,7 @@ class OrgUnitsService:
                 "id": str(u.unit_id),
                 "title": u.name,
                 "type": "unit",
+                "group_id": u.group_id,
                 "is_active": bool(u.is_active),
                 "children": [],
             }
@@ -640,7 +645,7 @@ class OrgUnitsService:
             UPDATE {self._schema}.{self._org_units_table}
             SET name = :name
             WHERE unit_id = :unit_id
-            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
             """
         )
 
@@ -661,6 +666,7 @@ class OrgUnitsService:
             parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
             name=str(r["name"]) if r["name"] is not None else "",
             code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )
 
@@ -702,7 +708,7 @@ class OrgUnitsService:
             UPDATE {self._schema}.{self._org_units_table}
             SET parent_unit_id = :parent_unit_id
             WHERE unit_id = :unit_id
-            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
             """
         )
 
@@ -723,6 +729,7 @@ class OrgUnitsService:
             parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
             name=str(r["name"]) if r["name"] is not None else "",
             code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )
 
@@ -742,7 +749,7 @@ class OrgUnitsService:
             UPDATE {self._schema}.{self._org_units_table}
             SET is_active = :is_active
             WHERE unit_id = :unit_id
-            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
             """
         )
 
@@ -763,6 +770,7 @@ class OrgUnitsService:
             parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
             name=str(r["name"]) if r["name"] is not None else "",
             code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )
 
@@ -802,7 +810,7 @@ class OrgUnitsService:
             f"""
             INSERT INTO {self._schema}.{self._org_units_table} (parent_unit_id, name, code, is_active)
             VALUES (:parent_unit_id, :name, :code, :is_active)
-            RETURNING unit_id, parent_unit_id, name, code, COALESCE(is_active, true) AS is_active
+            RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
             """
         )
 
@@ -825,5 +833,6 @@ class OrgUnitsService:
             parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
             name=str(r["name"]) if r["name"] is not None else "",
             code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )

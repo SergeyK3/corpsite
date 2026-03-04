@@ -10,20 +10,11 @@ import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
 import { apiFetchJson } from "../../../../lib/api";
 
 type UnitPick = {
-  key: string; // идентификатор узла в дереве (может быть строковым)
-  unit_id: number | null; // числовой unit_id для запросов /directory/employees
+  key: string;
+  unit_id: number | null;
   name: string;
 };
 
-// ---------------------------
-// Backend: /directory/org-units/tree
-// На практике узлы могут быть:
-// - id: number | string (часто code)
-// - unit_id: number (реальный bigint из БД) — может присутствовать
-// - title/name
-// - children
-// Иногда дерево может прийти "плоским" (items + parent_id), поэтому делаем fallback.
-// ---------------------------
 type ApiOrgUnitNode = {
   id?: string | number;
   code?: string;
@@ -48,8 +39,8 @@ type ApiOrgUnitsTreeResponse = {
 };
 
 type OrgTreeNode = {
-  key: string; // стабильный ключ для React + expanded
-  unit_id: number | null; // bigint из БД, если есть
+  key: string;
+  unit_id: number | null;
   name: string;
   children: OrgTreeNode[];
 };
@@ -99,81 +90,10 @@ function mapApiErrorToMessage(e: unknown): string {
   return msg || "Ошибка запроса.";
 }
 
-// ---------------------------
-// expanded tree in URL: expanded=a,b,c (строковые ключи)
-// ---------------------------
-function parseExpanded(raw: string | null): Set<string> {
-  const out = new Set<string>();
-  const s = (raw || "").trim();
-  if (!s) return out;
-
-  for (const part of s.split(",")) {
-    const k = String(part).trim();
-    if (k) out.add(k);
-  }
-  return out;
-}
-
-function serializeExpanded(set: Set<string>): string {
-  const arr = Array.from(set.values()).filter((x) => String(x).trim().length > 0);
-  arr.sort((a, b) => a.localeCompare(b));
-  return arr.join(",");
-}
-
 function parseIntOrNull(v: string | null): number | null {
   if (!v) return null;
   const n = Number(String(v).trim());
   return Number.isFinite(n) ? n : null;
-}
-
-function buildParentMap(nodes: OrgTreeNode[]): Map<string, string | null> {
-  const parent = new Map<string, string | null>();
-  const walk = (n: OrgTreeNode, p: string | null) => {
-    parent.set(n.key, p);
-    (n.children || []).forEach((ch) => walk(ch, n.key));
-  };
-  nodes.forEach((n) => walk(n, null));
-  return parent;
-}
-
-function ancestorsOf(key: string, parentMap: Map<string, string | null>): string[] {
-  const out: string[] = [];
-  let cur: string | null | undefined = key;
-
-  while (cur != null) {
-    const p = parentMap.get(cur);
-    if (p == null) break;
-    out.push(p);
-    cur = p;
-  }
-  return out;
-}
-
-function filterOrgTree(nodes: OrgTreeNode[], termRaw: string): OrgTreeNode[] {
-  const term = normalizeText(termRaw);
-  if (!term) return nodes;
-
-  const walk = (n: OrgTreeNode): OrgTreeNode | null => {
-    const nameMatch = normalizeText(n.name).includes(term);
-
-    const keptChildren: OrgTreeNode[] = [];
-    for (const ch of n.children || []) {
-      const r = walk(ch);
-      if (r) keptChildren.push(r);
-    }
-
-    if (nameMatch || keptChildren.length > 0) {
-      return { ...n, children: keptChildren };
-    }
-    return null;
-  };
-
-  const out: OrgTreeNode[] = [];
-  for (const n of nodes) {
-    const r = walk(n);
-    if (r) out.push(r);
-  }
-  return out;
 }
 
 function flattenUnits(nodes: OrgTreeNode[]): UnitPick[] {
@@ -186,30 +106,13 @@ function flattenUnits(nodes: OrgTreeNode[]): UnitPick[] {
   return out;
 }
 
-// ---------------------------
-// Normalize API node -> OrgTreeNode
-// key: строковый идентификатор дерева (id/code/unit_id)
-// unit_id: числовой (unit_id/unitId/если id числовой)
-// ---------------------------
 function nodeKey(raw: ApiOrgUnitNode): string {
   const v = raw?.id ?? raw?.code ?? raw?.unit_id ?? raw?.unitId;
   return String(v ?? "").trim() || "unknown";
 }
-
-function nodeUnitId(raw: ApiOrgUnitNode): number | null {
-  const v = raw?.unit_id ?? raw?.unitId ?? raw?.parent_unit_id ?? raw?.parentUnitId;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-
-  // иногда id бывает числом в строке
-  const id = raw?.unit_id ?? raw?.unitId ?? raw?.id;
-  const n = Number(id);
-  return Number.isFinite(n) ? n : null;
-}
-
 function nodeTitle(raw: ApiOrgUnitNode): string {
   return String(raw?.title ?? raw?.name ?? raw?.code ?? raw?.id ?? "—").trim() || "—";
 }
-
 function normalizeOrgUnitNodeTree(raw: ApiOrgUnitNode): OrgTreeNode {
   const key = nodeKey(raw);
   const unit_id = (() => {
@@ -218,19 +121,10 @@ function normalizeOrgUnitNodeTree(raw: ApiOrgUnitNode): OrgTreeNode {
     const n = Number(raw?.id);
     return Number.isFinite(n) ? n : null;
   })();
-
   const childrenRaw = Array.isArray(raw?.children) ? raw.children : [];
   const children = childrenRaw.map(normalizeOrgUnitNodeTree);
-
-  return {
-    key,
-    unit_id,
-    name: nodeTitle(raw),
-    children,
-  };
+  return { key, unit_id, name: nodeTitle(raw), children };
 }
-
-// fallback: если items плоский список с parent_id/parent_unit_id
 function buildTreeFromFlat(itemsRaw: ApiOrgUnitNode[]): OrgTreeNode[] {
   const nodes = itemsRaw.map((x) => ({
     raw: x,
@@ -245,40 +139,25 @@ function buildTreeFromFlat(itemsRaw: ApiOrgUnitNode[]): OrgTreeNode[] {
   }));
 
   const byKey = new Map<string, OrgTreeNode>();
-  nodes.forEach((n) => {
-    byKey.set(n.key, { key: n.key, unit_id: n.unit_id, name: n.name, children: [] });
-  });
+  nodes.forEach((n) => byKey.set(n.key, { key: n.key, unit_id: n.unit_id, name: n.name, children: [] }));
 
   const parentOf = (x: ApiOrgUnitNode): string | null => {
-    const p =
-      x?.parentId ??
-      x?.parent_id ??
-      x?.parent_unit_id ??
-      x?.parentUnitId;
-
+    const p = x?.parentId ?? x?.parent_id ?? x?.parent_unit_id ?? x?.parentUnitId;
     if (p === null || p === undefined) return null;
     return String(p).trim() || null;
   };
 
   const roots: OrgTreeNode[] = [];
-
   nodes.forEach((n) => {
     const pKey = parentOf(n.raw);
     const cur = byKey.get(n.key)!;
-
-    if (pKey && byKey.has(pKey)) {
-      byKey.get(pKey)!.children.push(cur);
-    } else {
-      roots.push(cur);
-    }
+    if (pKey && byKey.has(pKey)) byKey.get(pKey)!.children.push(cur);
+    else roots.push(cur);
   });
 
   return roots;
 }
 
-// ---------------------------
-// API wrappers
-// ---------------------------
 async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTreeResponse> {
   const raw = await apiFetchJson<ApiOrgUnitsTreeResponse>("/directory/org-units/tree", {
     method: "GET",
@@ -286,37 +165,15 @@ async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTr
   });
 
   const itemsRaw = Array.isArray(raw?.items) ? raw.items : [];
-
-  // 1) если есть children в данных — используем как дерево
   const looksTree = itemsRaw.some((x) => Array.isArray(x?.children) && (x!.children!.length > 0));
-  if (looksTree) {
-    return {
-      items: itemsRaw.map(normalizeOrgUnitNodeTree),
-      total: raw?.total,
-    };
-  }
+  if (looksTree) return { items: itemsRaw.map(normalizeOrgUnitNodeTree), total: raw?.total };
 
-  // 2) иначе пробуем собрать из плоского списка
   const flatHasParents = itemsRaw.some(
-    (x) =>
-      x?.parentId != null ||
-      x?.parent_id != null ||
-      x?.parent_unit_id != null ||
-      x?.parentUnitId != null
+    (x) => x?.parentId != null || x?.parent_id != null || x?.parent_unit_id != null || x?.parentUnitId != null
   );
+  if (flatHasParents) return { items: buildTreeFromFlat(itemsRaw), total: raw?.total };
 
-  if (flatHasParents) {
-    return {
-      items: buildTreeFromFlat(itemsRaw),
-      total: raw?.total,
-    };
-  }
-
-  // 3) иначе как есть (список верхнего уровня)
-  return {
-    items: itemsRaw.map(normalizeOrgUnitNodeTree),
-    total: raw?.total,
-  };
+  return { items: itemsRaw.map(normalizeOrgUnitNodeTree), total: raw?.total };
 }
 
 async function fetchEmployeesByOrgUnit(args: {
@@ -336,18 +193,16 @@ async function fetchEmployeesByOrgUnit(args: {
       limit,
       offset,
       org_unit_id: orgUnitId,
+      include_children: true,
     },
   });
 
   const items = Array.isArray((json as any)?.items) ? ((json as any).items as EmployeeDTO[]) : [];
   const total = Number((json as any)?.total ?? items.length);
-
   return { items, total };
 }
 
-// ---------------------------
 // UI helpers
-// ---------------------------
 function safeFio(e: any): string {
   return e?.fio ?? e?.full_name ?? e?.fullName ?? "—";
 }
@@ -372,14 +227,8 @@ function safeActive(e: any): string {
   return "—";
 }
 
-// ---------------------------
-// Sorting within org unit
-// ---------------------------
-type RoleRule = {
-  rank: number;
-  keywords: string[];
-};
-
+// Sorting
+type RoleRule = { rank: number; keywords: string[] };
 const DEFAULT_ROLE_ORDER: RoleRule[] = [
   { rank: 10, keywords: ["завед", "зав."] },
   { rank: 20, keywords: ["врач", "доктор"] },
@@ -388,15 +237,12 @@ const DEFAULT_ROLE_ORDER: RoleRule[] = [
   { rank: 50, keywords: ["сестра-хозяйка", "сестра хозяйка", "с-х"] },
   { rank: 60, keywords: ["санитар", "санитарка"] },
 ];
-
 function getPositionName(e: any): string {
   return e?.position?.name ?? e?.position_name ?? "";
 }
-
 function roleRankByPositionName(posName: string): number {
   const t = normalizeText(posName);
   if (!t) return 999;
-
   for (const rule of DEFAULT_ROLE_ORDER) {
     for (const kw of rule.keywords) {
       if (t.includes(normalizeText(kw))) return rule.rank;
@@ -404,7 +250,6 @@ function roleRankByPositionName(posName: string): number {
   }
   return 999;
 }
-
 function fioForSort(e: any): string {
   return normalizeText(safeFio(e));
 }
@@ -414,33 +259,22 @@ export default function OrgPageClient() {
   const sp = useSearchParams();
 
   const devUserId = getDevUserId();
-
   const extraHeaders = React.useMemo(() => {
     const h: Record<string, string> = { Accept: "application/json" };
     if (devUserId) h["X-User-Id"] = devUserId;
     return h;
   }, [devUserId]);
 
-  // URL state
   const urlOrgUnitId = React.useMemo(() => parseIntOrNull(sp.get("org_unit_id")), [sp]);
   const urlEmployeeId = React.useMemo(() => (sp.get("employee_id") || "").trim() || null, [sp]);
-  const urlExpanded = React.useMemo(() => parseExpanded(sp.get("expanded")), [sp]);
 
-  const [orgLoading, setOrgLoading] = React.useState(false);
-  const [orgError, setOrgError] = React.useState<string | null>(null);
   const [orgItems, setOrgItems] = React.useState<OrgTreeNode[]>([]);
-  const [filterText, setFilterText] = React.useState("");
-
   const [selectedUnit, setSelectedUnit] = React.useState<UnitPick | null>(null);
 
   const [empLoading, setEmpLoading] = React.useState(false);
   const [empError, setEmpError] = React.useState<string | null>(null);
   const [empData, setEmpData] = React.useState<EmployeesResponse>({ items: [], total: 0 });
 
-  // expanded tree state (synced with URL)
-  const [expandedSet, setExpandedSet] = React.useState<Set<string>>(new Set<string>());
-
-  // Drawer state (управляем через URL + локальный state для UX)
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
 
@@ -454,20 +288,11 @@ export default function OrgPageClient() {
     router.replace(`/directory/org?${p.toString()}`);
   }
 
-  React.useEffect(() => {
-    setExpandedSet(new Set<string>(Array.from(urlExpanded.values())));
-  }, [urlExpanded]);
-
-  const parentMap = React.useMemo(() => buildParentMap(orgItems), [orgItems]);
-
-  // 1) load org tree
+  // load org tree only to map org_unit_id -> name and to set default org_unit_id
   React.useEffect(() => {
     let cancelled = false;
 
-    async function loadOrg() {
-      setOrgLoading(true);
-      setOrgError(null);
-
+    (async () => {
       try {
         const data = await fetchOrgTree(extraHeaders);
         if (cancelled) return;
@@ -477,67 +302,34 @@ export default function OrgPageClient() {
 
         const flat = flattenUnits(items);
 
-        // priority:
-        // 1) org_unit_id from URL (числовой)
-        // 2) first node with numeric unit_id
         if (urlOrgUnitId != null) {
           const found = flat.find((u) => u.unit_id === urlOrgUnitId);
           if (found) {
             setSelectedUnit(found);
-
-            if (!sp.get("expanded")) {
-              const pm = buildParentMap(items);
-              const need = new Set<string>();
-              ancestorsOf(found.key, pm).forEach((x) => need.add(x));
-              need.add(found.key);
-              replaceUrl({ expanded: serializeExpanded(need) });
-            }
             return;
           }
         }
 
-        if (!selectedUnit) {
-          const firstSelectable = flat.find((u) => typeof u.unit_id === "number" && u.unit_id != null);
-          const first = firstSelectable ?? flat[0];
-
-          if (first) {
-            setSelectedUnit(first);
-
-            const next: Partial<Record<string, string | null>> = {};
-
-            // org_unit_id пишем только если он числовой
-            if (first.unit_id != null && sp.get("org_unit_id") == null) {
-              next.org_unit_id = String(first.unit_id);
-            }
-
-            if (sp.get("expanded") == null) {
-              const pm = buildParentMap(items);
-              const need = new Set<string>();
-              ancestorsOf(first.key, pm).forEach((x) => need.add(x));
-              need.add(first.key);
-              next.expanded = serializeExpanded(need);
-            }
-
-            if (Object.keys(next).length > 0) replaceUrl(next);
-          }
+        // default: first node with numeric unit_id
+        const firstSelectable = flat.find((u) => typeof u.unit_id === "number" && u.unit_id != null);
+        if (firstSelectable) {
+          setSelectedUnit(firstSelectable);
+          if (sp.get("org_unit_id") == null) replaceUrl({ org_unit_id: String(firstSelectable.unit_id) });
         }
-      } catch (e) {
+      } catch {
         if (cancelled) return;
-        setOrgError(mapApiErrorToMessage(e));
         setOrgItems([]);
-      } finally {
-        if (!cancelled) setOrgLoading(false);
+        setSelectedUnit(null);
       }
-    }
+    })();
 
-    loadOrg();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extraHeaders, devUserId]);
 
-  // 1b) sync selectedUnit from URL on navigation (по numeric unit_id)
+  // sync selected from URL
   React.useEffect(() => {
     if (orgItems.length === 0) return;
     if (urlOrgUnitId == null) return;
@@ -546,17 +338,15 @@ export default function OrgPageClient() {
     const found = flat.find((u) => u.unit_id === urlOrgUnitId);
     if (!found) return;
 
-    if (selectedUnit?.unit_id !== found.unit_id) {
-      setSelectedUnit(found);
-    }
+    if (selectedUnit?.unit_id !== found.unit_id) setSelectedUnit(found);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlOrgUnitId, orgItems]);
 
-  // 2) load employees by selected unit
+  // load employees
   React.useEffect(() => {
     let cancelled = false;
 
-    async function loadEmployees() {
+    (async () => {
       if (!selectedUnit || selectedUnit.unit_id == null) {
         setEmpData({ items: [], total: 0 });
         return;
@@ -573,7 +363,6 @@ export default function OrgPageClient() {
           limit: 200,
           offset: 0,
         });
-
         if (cancelled) return;
         setEmpData(data);
       } catch (e) {
@@ -583,9 +372,8 @@ export default function OrgPageClient() {
       } finally {
         if (!cancelled) setEmpLoading(false);
       }
-    }
+    })();
 
-    loadEmployees();
     return () => {
       cancelled = true;
     };
@@ -618,57 +406,12 @@ export default function OrgPageClient() {
     setDrawerEmployeeId(null);
   }, [urlEmployeeId]);
 
-  const searchActive = Boolean(filterText.trim());
-  const treeForRender = React.useMemo(() => {
-    if (!searchActive) return orgItems;
-    return filterOrgTree(orgItems, filterText);
-  }, [orgItems, filterText, searchActive]);
-
-  function isExpanded(key: string): boolean {
-    if (searchActive) return true;
-    return expandedSet.has(key);
-  }
-
-  function toggleExpanded(key: string) {
-    const next = new Set<string>(Array.from(expandedSet.values()));
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-
-    setExpandedSet(next);
-    replaceUrl({ expanded: serializeExpanded(next) });
-  }
-
-  function ensureExpandedForSelection(key: string) {
-    const next = new Set<string>(Array.from(expandedSet.values()));
-    ancestorsOf(key, parentMap).forEach((x) => next.add(x));
-    next.add(key);
-
-    setExpandedSet(next);
-    replaceUrl({ expanded: serializeExpanded(next) });
-  }
-
-  function onSelectUnit(u: UnitPick) {
-    setSelectedUnit(u);
-    ensureExpandedForSelection(u.key);
-
-    // org_unit_id пишем/обновляем только если он числовой
-    replaceUrl({
-      org_unit_id: u.unit_id != null ? String(u.unit_id) : null,
-      employee_id: null,
-    });
-  }
-
   function openEmployeeDrawer(employeeId: string) {
     const id = String(employeeId ?? "").trim();
     if (!id) return;
-
     setDrawerEmployeeId(id);
     setDrawerOpen(true);
-
-    replaceUrl({
-      org_unit_id: selectedUnit?.unit_id != null ? String(selectedUnit.unit_id) : sp.get("org_unit_id") || null,
-      employee_id: id,
-    });
+    replaceUrl({ employee_id: id });
   }
 
   function closeEmployeeDrawer() {
@@ -681,184 +424,80 @@ export default function OrgPageClient() {
     closeEmployeeDrawer();
   }
 
-  function renderTree(nodes: OrgTreeNode[], depth: number): React.ReactNode {
-    const sorted = [...nodes].sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
-
-    return sorted.map((n) => {
-      const hasChildren = Array.isArray(n.children) && n.children.length > 0;
-      const expanded = hasChildren ? isExpanded(n.key) : false;
-
-      const active =
-        (selectedUnit?.key && selectedUnit.key === n.key) ||
-        (selectedUnit?.unit_id != null && n.unit_id != null && selectedUnit.unit_id === n.unit_id);
-
-      return (
-        <div key={n.key}>
-          <div className="flex items-stretch">
-            <div className="flex items-center" style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}>
-              {hasChildren ? (
-                <button
-                  type="button"
-                  className="mr-2 h-6 w-6 rounded border border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:bg-zinc-900/60"
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    toggleExpanded(n.key);
-                  }}
-                  aria-label={expanded ? "Свернуть" : "Развернуть"}
-                  title={expanded ? "Свернуть" : "Развернуть"}
-                >
-                  <span className="text-xs">{expanded ? "▾" : "▸"}</span>
-                </button>
-              ) : (
-                <div className="mr-2 h-6 w-6" />
-              )}
-            </div>
-
-            <button
-              type="button"
-              className={[
-                "flex-1 rounded-lg border px-3 py-2 text-left text-sm",
-                "border-zinc-800 bg-zinc-950/40 text-zinc-100 hover:bg-zinc-900/60",
-                active ? "outline outline-1 outline-zinc-600" : "",
-              ].join(" ")}
-              onClick={() => onSelectUnit({ key: n.key, unit_id: n.unit_id, name: n.name })}
-              title={n.unit_id == null ? "Узел без numeric unit_id (только для навигации)" : "Выбрать подразделение"}
-            >
-              {n.name}
-            </button>
-          </div>
-
-          {hasChildren && expanded ? (
-            <div className="mt-1 space-y-1">{renderTree(n.children, depth + 1)}</div>
-          ) : null}
-        </div>
-      );
-    });
-  }
-
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-      {/* LEFT: tree */}
-      <div className="lg:col-span-5">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40">
-          <div className="border-b border-zinc-800 p-4">
-            <div className="text-sm font-semibold text-zinc-100">Подразделения</div>
-            <div className="mt-2">
-              <input
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
-                placeholder="Поиск по подразделениям"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="p-4">
-            {orgError ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {orgError}
-              </div>
-            ) : null}
-
-            {orgLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
-
-            {!orgLoading && !orgError ? (
-              <div className="max-h-[70vh] space-y-1 overflow-auto">
-                {treeForRender.length > 0 ? renderTree(treeForRender, 0) : (
-                  <div className="text-sm text-zinc-400">Ничего не найдено.</div>
-                )}
-              </div>
-            ) : null}
-          </div>
+    <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/40">
+      <div className="border-b border-zinc-800 p-4">
+        <div className="text-sm font-semibold text-zinc-100">{selectedUnit ? selectedUnit.name : "Сотрудники"}</div>
+        <div className="mt-1 text-xs text-zinc-400">
+          {!selectedUnit
+            ? "Выберите подразделение слева."
+            : selectedUnit.unit_id == null
+              ? "Выберите дочернее подразделение."
+              : `Сотрудников: ${empData.total}`}
         </div>
       </div>
 
-      {/* RIGHT: employees */}
-      <div className="lg:col-span-7">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40">
-          <div className="border-b border-zinc-800 p-4">
-            <div className="text-sm font-semibold text-zinc-100">
-              {selectedUnit ? selectedUnit.name : "Сотрудники"}
-            </div>
-            <div className="mt-1 text-xs text-zinc-400">
-              {!selectedUnit ? (
-                "Выберите подразделение слева."
-              ) : selectedUnit.unit_id == null ? (
-                "Это узел навигации. Выберите дочернее подразделение."
-              ) : (
-                `Сотрудников: ${empData.total}`
-              )}
-            </div>
-          </div>
+      <div className="p-4">
+        {empError ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{empError}</div>
+        ) : null}
 
-          <div className="p-4">
-            {empError ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {empError}
-              </div>
-            ) : null}
+        {empLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
 
-            {empLoading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
+        {!empLoading && !empError ? (
+          <div className="overflow-auto rounded-xl border border-zinc-800">
+            <table className="min-w-full text-sm text-zinc-100">
+              <thead className="bg-zinc-950/40 text-xs text-zinc-400">
+                <tr>
+                  <th className="border-b border-zinc-800 p-2 text-left font-semibold">Таб. №</th>
+                  <th className="border-b border-zinc-800 p-2 text-left font-semibold">ФИО</th>
+                  <th className="border-b border-zinc-800 p-2 text-left font-semibold">Подразделение</th>
+                  <th className="border-b border-zinc-800 p-2 text-left font-semibold">Должность</th>
+                  <th className="border-b border-zinc-800 p-2 text-left font-semibold">Ставка</th>
+                  <th className="border-b border-zinc-800 p-2 text-left font-semibold">Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedEmployees.map((e: any) => {
+                  const id = String(e?.id ?? "");
+                  const isSelected = drawerEmployeeId && id === drawerEmployeeId;
 
-            {!empLoading && !empError ? (
-              <div className="overflow-auto rounded-xl border border-zinc-800">
-                <table className="min-w-full text-sm text-zinc-100">
-                  <thead className="bg-zinc-950/40 text-xs text-zinc-400">
-                    <tr>
-                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Таб. №</th>
-                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">ФИО</th>
-                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Подразделение</th>
-                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Должность</th>
-                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Ставка</th>
-                      <th className="border-b border-zinc-800 p-2 text-left font-semibold">Статус</th>
+                  return (
+                    <tr
+                      key={id || `${safeFio(e)}-${safePos(e)}-${safeDept(e)}`}
+                      className={["cursor-pointer hover:bg-zinc-900/60", isSelected ? "bg-zinc-900/60" : ""].join(" ")}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openEmployeeDrawer(id)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter" || ev.key === " ") {
+                          ev.preventDefault();
+                          openEmployeeDrawer(id);
+                        }
+                      }}
+                      title="Открыть карточку сотрудника"
+                    >
+                      <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{id}</td>
+                      <td className="border-b border-zinc-800 p-2">{safeFio(e)}</td>
+                      <td className="border-b border-zinc-800 p-2">{safeDept(e)}</td>
+                      <td className="border-b border-zinc-800 p-2">{safePos(e)}</td>
+                      <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{safeRate(e)}</td>
+                      <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{safeActive(e)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {sortedEmployees.map((e: any) => {
-                      const id = String(e?.id ?? "");
-                      const isSelected = drawerEmployeeId && id === drawerEmployeeId;
+                  );
+                })}
 
-                      return (
-                        <tr
-                          key={id || `${safeFio(e)}-${safePos(e)}-${safeDept(e)}`}
-                          className={[
-                            "cursor-pointer hover:bg-zinc-900/60",
-                            isSelected ? "bg-zinc-900/60" : "",
-                          ].join(" ")}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openEmployeeDrawer(id)}
-                          onKeyDown={(ev) => {
-                            if (ev.key === "Enter" || ev.key === " ") {
-                              ev.preventDefault();
-                              openEmployeeDrawer(id);
-                            }
-                          }}
-                          title="Открыть карточку сотрудника"
-                        >
-                          <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{id}</td>
-                          <td className="border-b border-zinc-800 p-2">{safeFio(e)}</td>
-                          <td className="border-b border-zinc-800 p-2">{safeDept(e)}</td>
-                          <td className="border-b border-zinc-800 p-2">{safePos(e)}</td>
-                          <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{safeRate(e)}</td>
-                          <td className="border-b border-zinc-800 p-2 whitespace-nowrap">{safeActive(e)}</td>
-                        </tr>
-                      );
-                    })}
-
-                    {sortedEmployees.length === 0 ? (
-                      <tr>
-                        <td className="p-3 text-zinc-400" colSpan={6}>
-                          Нет сотрудников в выбранном подразделении.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
+                {sortedEmployees.length === 0 ? (
+                  <tr>
+                    <td className="p-3 text-zinc-400" colSpan={6}>
+                      Нет сотрудников в выбранном подразделении.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
-        </div>
+        ) : null}
       </div>
 
       <EmployeeDrawer

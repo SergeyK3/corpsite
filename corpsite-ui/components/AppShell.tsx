@@ -1,4 +1,5 @@
 // FILE: corpsite-ui/components/AppShell.tsx
+// FILE: corpsite-ui/components/AppShell.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -6,6 +7,8 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
+
+import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
 
 type MeInfo = {
   user_id?: number;
@@ -28,7 +31,7 @@ function isUnauthorized(e: any): boolean {
 function sectionTitle(pathname: string): string {
   if (pathname.startsWith("/tasks")) return "Задачи";
   if (pathname.startsWith("/regular-tasks")) return "Шаблоны задач";
-  if (pathname.startsWith("/directory/org")) return "Оргструктура";
+  if (pathname.startsWith("/directory/org")) return "Отделения";
   if (pathname.startsWith("/directory/employees")) return "Сотрудники";
   if (pathname.startsWith("/directory")) return "Справочники";
   return "";
@@ -114,23 +117,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return t || "Сотрудник";
   }, [me]);
 
-  // IMPORTANT: do not show any identity line under role title (no login, no ID)
   const whoLine = "";
-
   const isSupport = Number(me?.role_id ?? 0) === 1;
 
-  const navItems = useMemo(() => {
-    const base: NavItem[] = [
-      { href: "/tasks", title: "Задачи" },
-      { href: "/directory/org", title: "Оргструктура" },
-      { href: "/directory/employees", title: "Сотрудники" },
-    ];
+  // Слева сверху — только "Задачи"
+  const navTop = useMemo<NavItem[]>(() => [{ href: "/tasks", title: "Задачи" }], []);
 
+  // Куда вести кликом по отделению:
+  // - если пользователь на /directory/org — остаёмся там
+  // - иначе ведём на /directory/employees (там реально нужна реакция на org_unit_id)
+  const orgTreeBasePath = pathname.startsWith("/directory/org") ? "/directory/org" : "/directory/employees";
+
+  // Админские ссылки (если надо) — можно оставить справа/в будущем.
+  // Сейчас НЕ показываем их отдельным блоком в сайдбаре, чтобы не было дублей "Сотрудники".
+  const _supportLinks = useMemo<NavItem[]>(() => {
+    const base: NavItem[] = [];
     if (isSupport) {
       base.push({ href: "/regular-tasks", title: "Шаблоны задач" });
       base.push({ href: "/directory", title: "Справочники" });
     }
-
     return base;
   }, [isSupport]);
 
@@ -140,8 +145,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-[calc(100vh-52px)] bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        {/* Верхняя строка */}
+      <div className="w-full px-4 py-6">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-2xl font-semibold">{roleTitle}</div>
@@ -158,26 +162,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-400">
-            Загрузка…
-          </div>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-400">Загрузка…</div>
         ) : err ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {err}
-          </div>
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            {/* Sidebar */}
-            <aside className="lg:col-span-3">
+            <aside className="lg:col-span-3 space-y-4">
+              {/* 1) Задачи */}
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
-                <SidebarNav pathname={pathname} items={navItems} />
+                <SidebarNav pathname={pathname} items={navTop} />
               </div>
+
+              {/* 2) Отделения (дерево) — всегда показываем, кроме /login */}
+              <OrgUnitsSidebarPanel basePath={orgTreeBasePath} />
+
+              {/* 3) Нижний блок "Сотрудники" — УБРАН, чтобы не дублировать */}
+              {/* Если потом понадобится — вернём отдельной задачей. */}
             </aside>
 
-            {/* Контент */}
-            <section className="lg:col-span-9">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">{children}</div>
-            </section>
+            <section className="lg:col-span-9 min-w-0">{children}</section>
           </div>
         )}
       </div>

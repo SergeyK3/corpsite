@@ -1,6 +1,7 @@
-// corpsite-ui/app/directory/employees/_lib/api.client.ts
+// FILE: corpsite-ui/app/directory/employees/_lib/api.client.ts
 
 import type { EmployeesResponse, EmployeeDetails } from "./types";
+import { getSessionAccessToken } from "@/lib/auth";
 
 function getApiBase(): string {
   const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
@@ -40,12 +41,18 @@ export function mapApiErrorToMessage(e: unknown): string {
   return msg || "Ошибка запроса.";
 }
 
+function maybeAddAuthHeader(headers: Record<string, string>) {
+  const token = String(getSessionAccessToken?.() ?? "").trim();
+  if (token) headers.Authorization = `Bearer ${token}`;
+}
+
 async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
   const apiBase = getApiBase();
   const devUserId = getDevUserId();
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (devUserId) headers["X-User-Id"] = devUserId;
+  maybeAddAuthHeader(headers);
 
   const url = qs ? `${apiBase}${path}?${qs}` : `${apiBase}${path}`;
 
@@ -72,6 +79,7 @@ async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
     "Content-Type": "application/json",
   };
   if (devUserId) headers["X-User-Id"] = devUserId;
+  maybeAddAuthHeader(headers);
 
   const res = await fetch(`${apiBase}${path}`, {
     method: "POST",

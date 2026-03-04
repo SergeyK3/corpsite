@@ -1,5 +1,4 @@
-// corpsite-ui/app/directory/employees/_components/EmployeesPageClient.tsx
-
+// FILE: corpsite-ui/app/directory/employees/_components/EmployeesPageClient.tsx
 "use client";
 
 import * as React from "react";
@@ -8,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 
-import { getEmployees, getPositions, mapApiErrorToMessage } from "../_lib/api.client";
+import { getEmployees, getPositions, getDepartments, mapApiErrorToMessage } from "../_lib/api.client";
 import type { EmployeeDTO, Position, Department, EmployeesResponse, EmployeeDetails } from "../_lib/types";
 import type { EmployeesFilters } from "../_lib/query";
 
@@ -22,16 +21,6 @@ type Props = {
   initialEmployees: EmployeesResponse;
   initialError?: string | null;
 };
-
-function getApiBase(): string {
-  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  return v || "http://127.0.0.1:8000";
-}
-
-function getDevUserId(): string | null {
-  const v = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
-  return v ? v : null;
-}
 
 function normalizeItems<T>(v: any): T[] {
   if (Array.isArray(v)) return v as T[];
@@ -53,14 +42,14 @@ export default function EmployeesPageClient(props: Props) {
   const status = sp.get("status") ?? "all";
   const qText = sp.get("q") ?? "";
 
+  // ВАЖНО: связь с деревом отделений
+  const orgUnitId = sp.get("org_unit_id") ?? "";
+
   const limitStr = sp.get("limit") ?? "50";
   const offsetStr = sp.get("offset") ?? "0";
 
   const limitNum = React.useMemo(() => Math.max(1, toInt(limitStr, 50)), [limitStr]);
   const offsetNum = React.useMemo(() => Math.max(0, toInt(offsetStr, 0)), [offsetStr]);
-
-  const apiBase = React.useMemo(() => getApiBase(), []);
-  const devUserId = getDevUserId();
 
   const [departments, setDepartments] = React.useState<Dept[]>(
     Array.isArray(props.initialDepartments) ? props.initialDepartments : []
@@ -107,22 +96,25 @@ export default function EmployeesPageClient(props: Props) {
     router.replace(`/directory/employees?${nextParams.toString()}`);
   }
 
+  // При смене org_unit_id (клик по дереву) сбросим offset на 0.
+  // (Если будет раздражать мигание "обновление...", лучше сбрасывать offset прямо в OrgUnitsSidebarPanel при клике.)
+  const prevOrgUnitRef = React.useRef<string>(orgUnitId);
+  React.useEffect(() => {
+    if (prevOrgUnitRef.current !== orgUnitId) {
+      prevOrgUnitRef.current = orgUnitId;
+      if (offsetNum !== 0) setPageOffset(0);
+    }
+  }, [orgUnitId, offsetNum]);
+
   // 1) справочники
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadRefs() {
       try {
-        const headers: Record<string, string> = { Accept: "application/json" };
-        if (devUserId) headers["X-User-Id"] = devUserId;
+        const [dObj, pObj] = await Promise.all([getDepartments({ limit: 200, offset: 0 }), getPositions({ limit: 200, offset: 0 })]);
 
-        const [dRes, pObj] = await Promise.all([
-          fetch(`${apiBase}/directory/departments`, { headers, cache: "no-store" }),
-          getPositions({ limit: 200, offset: 0 }),
-        ]);
-
-        const dJson = await dRes.json().catch(() => ({} as any));
-        const deps = normalizeItems<Dept>(dJson);
+        const deps = normalizeItems<Dept>(dObj);
         const pos = normalizeItems<Pos>(pObj);
 
         if (cancelled) return;
@@ -131,7 +123,6 @@ export default function EmployeesPageClient(props: Props) {
         setPositions(pos);
       } catch {
         if (cancelled) return;
-        // справочники не критичны
         setDepartments([]);
         setPositions([]);
       }
@@ -141,7 +132,7 @@ export default function EmployeesPageClient(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [apiBase, devUserId]);
+  }, []);
 
   // 2) список сотрудников
   React.useEffect(() => {
@@ -156,6 +147,7 @@ export default function EmployeesPageClient(props: Props) {
           status,
           department_id: departmentId || null,
           position_id: positionId || null,
+          org_unit_id: orgUnitId || null, // <-- ВАЖНО
           q: qText || null,
           limit: String(limitNum),
           offset: String(offsetNum),
@@ -180,7 +172,7 @@ export default function EmployeesPageClient(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [departmentId, positionId, status, qText, limitNum, offsetNum]);
+  }, [departmentId, positionId, orgUnitId, status, qText, limitNum, offsetNum]);
 
   function onRowClick(id: string) {
     setDrawerEmployeeId(id);
@@ -259,9 +251,7 @@ export default function EmployeesPageClient(props: Props) {
         </div>
       </div>
 
-      {error ? (
-        <div className="bg-white rounded border p-4 text-red-700 text-sm">Ошибка загрузки: {error}</div>
-      ) : null}
+      {error ? <div className="bg-white rounded border p-4 text-red-700 text-sm">Ошибка загрузки: {error}</div> : null}
 
       <EmployeesTable
         items={data.items}
