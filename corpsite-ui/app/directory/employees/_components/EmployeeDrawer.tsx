@@ -1,3 +1,4 @@
+// corpsite-ui/app/directory/employees/_components/EmployeeDrawer.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -78,10 +79,18 @@ export default function EmployeeDrawer({
     ? (details as any)?.id ?? (details as any)?.employee_id ?? employeeId
     : "";
 
+  const orgUnitName =
+    (details as any)?.org_unit?.name ??
+    (details as any)?.orgUnit?.name ??
+    (details as any)?.org_unit_name ??
+    (details as any)?.orgUnitName ??
+    null;
+
   const departmentName =
     (details as any)?.department?.name ??
     (details as any)?.department_name ??
     (details as any)?.departmentName ??
+    orgUnitName ??
     "—";
 
   const positionName =
@@ -128,9 +137,7 @@ export default function EmployeeDrawer({
                 <div className="font-semibold mb-2 text-gray-900">Текущие данные</div>
 
                 <div className="grid grid-cols-2 gap-2">
-                  {/* ЛЕВАЯ колонка — подписи */}
                   <div className="text-gray-700">Статус</div>
-                  {/* ПРАВАЯ колонка — значения (делаем темнее) */}
                   <div className="text-gray-900 font-medium">{statusLabel(details)}</div>
 
                   <div className="text-gray-700">Отдел</div>

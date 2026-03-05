@@ -70,7 +70,7 @@ function getDepartmentName(it: any): string {
     it?.department_name ??
     it?.departmentName ??
     it?.department?.name ??
-    it?.department?.title ??
+    it?.org_unit?.name ??
     "—"
   );
 }

@@ -1,13 +1,21 @@
 // corpsite-ui/app/directory/employees/_lib/types.ts
 
 export type Department = {
-  id: number;
+  id: number | null;
   name: string | null;
 };
 
 export type Position = {
-  id: number;
+  id: number | null;
   name: string | null;
+};
+
+export type OrgUnitRef = {
+  unit_id: number | null;
+  name: string | null;
+  code: string | null;
+  parent_unit_id: number | null;
+  is_active: boolean | null;
 };
 
 /**
@@ -15,10 +23,12 @@ export type Position = {
  */
 export type EmployeeDTO = {
   id: string;
-  fio: string;
+  fio: string | null;
 
-  department: Department;
-  position: Position;
+  department: Department | null;
+  position: Position | null;
+
+  org_unit: OrgUnitRef | null;
 
   rate: string | number | null;
   status: "active" | "inactive" | string;
@@ -50,13 +60,17 @@ export type EmployeeListItem = EmployeeDTO;
  */
 export type Employee = {
   id: string;
-  fio: string;
+  fio: string | null;
 
-  departmentId: number;
+  departmentId: number | null;
   departmentName: string | null;
 
-  positionId: number;
+  positionId: number | null;
   positionName: string | null;
+
+  orgUnitId: number | null;
+  orgUnitName: string | null;
+  orgUnitCode: string | null;
 
   rate: number | null;
 
@@ -98,13 +112,17 @@ export function mapEmployee(dto: EmployeeDTO): Employee {
 
   return {
     id: dto.id,
-    fio: dto.fio,
+    fio: dto.fio ?? null,
 
-    departmentId: dto.department?.id ?? 0,
+    departmentId: dto.department?.id ?? null,
     departmentName: dto.department?.name ?? null,
 
-    positionId: dto.position?.id ?? 0,
+    positionId: dto.position?.id ?? null,
     positionName: dto.position?.name ?? null,
+
+    orgUnitId: dto.org_unit?.unit_id ?? null,
+    orgUnitName: dto.org_unit?.name ?? null,
+    orgUnitCode: dto.org_unit?.code ?? null,
 
     rate: toNumber(dto.rate),
     status: dto.status,

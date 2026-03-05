@@ -230,6 +230,41 @@ function groupKeyByRank(rank: number): string {
   return `g${rank}`;
 }
 
+function buildKeyMaps(nodes: OrgTreeNode[]): { keyByUnitId: Map<number, string>; nodeByKey: Map<string, OrgTreeNode> } {
+  const keyByUnitId = new Map<number, string>();
+  const nodeByKey = new Map<string, OrgTreeNode>();
+
+  const walk = (n: OrgTreeNode) => {
+    nodeByKey.set(n.key, n);
+    if (typeof n.unit_id === "number" && Number.isFinite(n.unit_id)) keyByUnitId.set(n.unit_id, n.key);
+    (n.children || []).forEach(walk);
+  };
+  nodes.forEach(walk);
+  return { keyByUnitId, nodeByKey };
+}
+
+/**
+ * Возвращает "групповой" узел (тот, который лежит на уровне группировки, т.е. depth=1).
+ * Типовая структура: один корень (ORG_MAIN) -> его дети (group_id=1/2/3) -> далее подразделения.
+ */
+function groupNodeKeyForSelected(opts: {
+  selectedKey: string;
+  parentMap: Map<string, string | null>;
+}): string {
+  const { selectedKey, parentMap } = opts;
+
+  let cur = selectedKey;
+
+  // поднимаемся пока не придем к узлу, чей родитель имеет parent=null (то есть это "ребенок корня")
+  while (true) {
+    const p = parentMap.get(cur) ?? null;
+    if (p == null) return cur; // сам корень или одиночный кейс
+    const pp = parentMap.get(p) ?? null;
+    if (pp == null) return cur; // cur — ребенок корня (depth=1)
+    cur = p;
+  }
+}
+
 export default function OrgUnitsTree() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -264,6 +299,7 @@ export default function OrgUnitsTree() {
   }, [urlGroupsOpen]);
 
   const parentMap = React.useMemo(() => buildParentMap(orgItems), [orgItems]);
+  const { keyByUnitId, nodeByKey } = React.useMemo(() => buildKeyMaps(orgItems), [orgItems]);
 
   function replaceUrl(next: Partial<Record<string, string | null>>) {
     const p = new URLSearchParams(sp.toString());
@@ -319,19 +355,55 @@ export default function OrgUnitsTree() {
     replaceUrl({ expanded: serializeSet(next) });
   }
 
-  function ensureExpandedForSelection(key: string) {
-    const next = new Set<string>(Array.from(expandedSet.values()));
-    ancestorsOf(key, parentMap).forEach((x) => next.add(x));
-    next.add(key);
+  /**
+   * Раскрывает:
+   * - цепочку родителей (expanded)
+   * - нужную группу (groups), чтобы выбранный узел был виден даже при "свернутых группах по умолчанию"
+   */
+  function ensureExpandedForSelectionByKey(key: string, opts?: { syncUrl?: boolean }) {
+    const syncUrl = opts?.syncUrl !== false; // default true
 
-    setExpandedSet(next);
-    replaceUrl({ expanded: serializeSet(next) });
+    // expanded
+    const nextExpanded = new Set<string>(Array.from(expandedSet.values()));
+    ancestorsOf(key, parentMap).forEach((x) => nextExpanded.add(x));
+    nextExpanded.add(key);
+
+    // groups (открываем группу уровня depth=1)
+    const gNodeKey = groupNodeKeyForSelected({ selectedKey: key, parentMap });
+    const gNode = nodeByKey.get(gNodeKey);
+    const gk = groupKeyByRank(groupRank(gNode?.group_id ?? null));
+
+    const nextGroups = new Set<string>(Array.from(groupsOpenSet.values()));
+    nextGroups.add(gk);
+
+    setExpandedSet(nextExpanded);
+    setGroupsOpenSet(nextGroups);
+
+    if (syncUrl) {
+      replaceUrl({
+        expanded: serializeSet(nextExpanded),
+        groups: serializeSet(nextGroups),
+      });
+    }
   }
 
   function onSelectUnit(n: OrgTreeNode) {
-    ensureExpandedForSelection(n.key);
+    ensureExpandedForSelectionByKey(n.key, { syncUrl: true });
     replaceUrl({ org_unit_id: n.unit_id != null ? String(n.unit_id) : null });
   }
+
+  // Автораскрытие при заходе по ссылке с org_unit_id
+  React.useEffect(() => {
+    if (searchActive) return;
+    if (urlOrgUnitId == null) return;
+    if (orgItems.length === 0) return;
+
+    const k = keyByUnitId.get(urlOrgUnitId);
+    if (!k) return;
+
+    ensureExpandedForSelectionByKey(k, { syncUrl: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlOrgUnitId, orgItems.length, searchActive, keyByUnitId]);
 
   function isGroupOpen(groupKey: string): boolean {
     if (searchActive) return true; // поиск раскрывает все группы
@@ -461,7 +533,9 @@ export default function OrgUnitsTree() {
 
         {!orgLoading && !orgError ? (
           <div className="max-h-[70vh] space-y-1 overflow-auto">
-            {treeForRender.length > 0 ? renderTree(treeForRender, 0) : (
+            {treeForRender.length > 0 ? (
+              renderTree(treeForRender, 0)
+            ) : (
               <div className="text-sm text-zinc-400">Ничего не найдено.</div>
             )}
           </div>
