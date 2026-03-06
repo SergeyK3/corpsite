@@ -78,6 +78,7 @@ def load_ancestor_chain_units(
                 ou.parent_unit_id,
                 ou.name,
                 ou.code,
+                ou.group_id,
                 COALESCE(ou.is_active, true) AS is_active
             FROM {schema}.{table} ou
             WHERE ou.unit_id = :leaf_unit_id
@@ -90,12 +91,13 @@ def load_ancestor_chain_units(
                 p.parent_unit_id,
                 p.name,
                 p.code,
+                p.group_id,
                 COALESCE(p.is_active, true) AS is_active
             FROM {schema}.{table} p
             JOIN up ON up.parent_unit_id = p.unit_id
             {where_p}
         )
-        SELECT unit_id, parent_unit_id, name, code, is_active
+        SELECT unit_id, parent_unit_id, name, code, group_id, is_active
         FROM up
         """
     )
@@ -111,6 +113,7 @@ def load_ancestor_chain_units(
                 parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
                 name=str(r["name"]) if r["name"] is not None else "",
                 code=str(r["code"]) if r["code"] is not None else None,
+                group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
                 is_active=bool(r["is_active"]),
             )
         )

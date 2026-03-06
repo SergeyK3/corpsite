@@ -204,14 +204,7 @@ def _set_executor_role_if_needed(conn: Connection, task_id: int, role_id: Option
     )
 
 
-def _resolve_approver_role_id_by_actor(conn: Connection, actor_user_id: int) -> Optional[int]:
-    """
-    Вычисляет согласующего по оргструктуре:
-      - берём unit_id автора отчёта (users.unit_id)
-      - ищем активного HEAD в org_unit_managers для этого unit_id
-      - если HEAD == автор отчёта -> поднимаемся на parent_unit_id и повторяем
-      - если нашли HEAD != автор -> возвращаем role_id этого HEAD-пользователя
-    """
+def _get_user_unit_id(conn: Connection, user_id: int) -> Optional[int]:
     row = conn.execute(
         text(
             """
@@ -220,52 +213,156 @@ def _resolve_approver_role_id_by_actor(conn: Connection, actor_user_id: int) -> 
             WHERE u.user_id = :uid
             """
         ),
-        {"uid": int(actor_user_id)},
+        {"uid": int(user_id)},
     ).mappings().first()
-
     if not row or row.get("unit_id") is None:
         return None
+    try:
+        unit_id = int(row["unit_id"])
+        return unit_id if unit_id > 0 else None
+    except Exception:
+        return None
 
-    unit_id = int(row["unit_id"])
 
-    while unit_id:
-        head = conn.execute(
-            text(
-                """
-                SELECT m.user_id AS head_user_id
-                FROM public.org_unit_managers m
-                WHERE m.unit_id = :unit_id
-                  AND m.manager_type = 'HEAD'
-                  AND m.is_active = TRUE
-                LIMIT 1
-                """
-            ),
-            {"unit_id": int(unit_id)},
-        ).mappings().first()
+def _get_user_role_id(conn: Connection, user_id: int) -> Optional[int]:
+    rr = conn.execute(
+        text(
+            """
+            SELECT role_id
+            FROM public.users
+            WHERE user_id = :uid
+              AND is_active = TRUE
+            """
+        ),
+        {"uid": int(user_id)},
+    ).mappings().first()
+    if not rr or rr.get("role_id") is None:
+        return None
+    try:
+        rid = int(rr["role_id"])
+        return rid if rid > 0 else None
+    except Exception:
+        return None
 
-        if head and head.get("head_user_id") is not None:
-            head_user_id = int(head["head_user_id"])
 
-            # self-approve нельзя: если сам руководитель отправил отчёт — ищем руководителя выше
-            if head_user_id != int(actor_user_id):
-                rr = conn.execute(
-                    text("SELECT role_id FROM public.users WHERE user_id = :uid"),
-                    {"uid": int(head_user_id)},
-                ).mappings().first()
-                if rr and rr.get("role_id") is not None:
-                    try:
-                        return int(rr["role_id"])
-                    except Exception:
-                        return None
+def _get_parent_unit_id(conn: Connection, unit_id: int) -> Optional[int]:
+    parent = conn.execute(
+        text(
+            """
+            SELECT parent_unit_id
+            FROM public.org_units
+            WHERE unit_id = :unit_id
+            """
+        ),
+        {"unit_id": int(unit_id)},
+    ).mappings().first()
+    if not parent or parent.get("parent_unit_id") is None:
+        return None
+    try:
+        pid = int(parent["parent_unit_id"])
+        return pid if pid > 0 else None
+    except Exception:
+        return None
 
-        parent = conn.execute(
-            text("SELECT parent_unit_id FROM public.org_units WHERE unit_id = :unit_id"),
-            {"unit_id": int(unit_id)},
-        ).mappings().first()
 
-        unit_id = int(parent["parent_unit_id"]) if parent and parent.get("parent_unit_id") is not None else 0
+def _find_active_head_user_id(conn: Connection, unit_id: int) -> Optional[int]:
+    """
+    Ищет активного HEAD для подразделения с учетом:
+    - manager_type может быть в разном регистре / с пробелами
+    - дата действия может быть задана через date_from/date_to
+    - сам пользователь должен быть active
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT m.user_id
+            FROM public.org_unit_managers m
+            JOIN public.users u
+              ON u.user_id = m.user_id
+            WHERE m.unit_id = :unit_id
+              AND upper(btrim(COALESCE(m.manager_type, ''))) = 'HEAD'
+              AND m.is_active = TRUE
+              AND u.is_active = TRUE
+              AND (m.date_from IS NULL OR m.date_from <= CURRENT_DATE)
+              AND (m.date_to   IS NULL OR m.date_to   >= CURRENT_DATE)
+            ORDER BY
+                CASE WHEN m.date_from IS NULL THEN 1 ELSE 0 END,
+                m.date_from DESC NULLS LAST,
+                m.manager_id DESC
+            LIMIT 1
+            """
+        ),
+        {"unit_id": int(unit_id)},
+    ).mappings().first()
+    if not row or row.get("user_id") is None:
+        return None
+    try:
+        uid = int(row["user_id"])
+        return uid if uid > 0 else None
+    except Exception:
+        return None
+
+
+def _resolve_approver_role_id_by_actor(conn: Connection, actor_user_id: int) -> Optional[int]:
+    """
+    Вычисляет согласующего по оргструктуре:
+      - берём unit_id автора отчёта (users.unit_id)
+      - ищем активного HEAD в org_unit_managers для этого unit_id
+      - если HEAD == автор отчёта -> поднимаемся на parent_unit_id и повторяем
+      - если нашли HEAD != автор -> возвращаем role_id этого HEAD-пользователя
+    """
+    unit_id = _get_user_unit_id(conn, actor_user_id)
+    if unit_id is None:
+        return None
+
+    visited: Set[int] = set()
+
+    while unit_id and unit_id not in visited:
+        visited.add(int(unit_id))
+
+        head_user_id = _find_active_head_user_id(conn, int(unit_id))
+        if head_user_id is not None and int(head_user_id) != int(actor_user_id):
+            return _get_user_role_id(conn, int(head_user_id))
+
+        unit_id = _get_parent_unit_id(conn, int(unit_id))
 
     return None
+
+
+def _resolve_approver_role_id_by_task_initiator(
+    conn: Connection,
+    *,
+    task_id: int,
+    actor_user_id: int,
+) -> Optional[int]:
+    """
+    Fallback:
+    если по org-цепочке согласующего не нашли, пытаемся взять роль инициатора задачи.
+    Это полезно для случаев, когда target_role_id ещё не заполнен, а задача уже создана
+    и у неё есть реальный initiator_user_id.
+    """
+    row = conn.execute(
+        text(
+            """
+            SELECT t.initiator_user_id
+            FROM public.tasks t
+            WHERE t.task_id = :tid
+            """
+        ),
+        {"tid": int(task_id)},
+    ).mappings().first()
+    if not row or row.get("initiator_user_id") is None:
+        return None
+
+    try:
+        initiator_user_id = int(row["initiator_user_id"])
+    except Exception:
+        return None
+
+    if initiator_user_id <= 0 or initiator_user_id == int(actor_user_id):
+        return None
+
+    return _get_user_role_id(conn, initiator_user_id)
 
 
 def _lookup_role_id_by_code(conn: Connection, role_code: str) -> Optional[int]:
@@ -290,7 +387,7 @@ def _resolve_qm_head_fallback_role_id(conn: Connection, actor_role_id: int) -> O
     Здесь deliberately делаем простой fallback по коду роли,
     чтобы не зависеть от заполненности org_unit_managers для этого отдела.
     """
-    qm_expert_role_ids = {1, 8, 11, 17}  # QM_COMPLAINT_PAT/REG, QM_HOSP, QM_AMB (по твоему справочнику)
+    qm_expert_role_ids = {1, 8, 11, 17}
     if int(actor_role_id) not in qm_expert_role_ids:
         return None
     return _lookup_role_id_by_code(conn, "QM_HEAD")
@@ -398,7 +495,6 @@ def _maybe_create_or_update_next_task_after_approved(
     if not rt:
         return
 
-    # если target_role_id не задан — пропускаем автосоздание
     tr = rt.get("target_role_id")
     if tr is None:
         return
@@ -544,29 +640,34 @@ def _report(
 
     report_id = int(ins["report_id"]) if ins and ins.get("report_id") is not None else None
 
-    # На этапе согласования задача должна "висеть" на согласующем (approver_role_id).
     regular_task_id, _performer_role_id, approver_role_id = _get_roles_for_task_flow(conn, task_id)
 
-    # 1) пытаемся вычислить согласующего через org_unit_managers (HEAD)
     if approver_role_id is None:
         approver_role_id = _resolve_approver_role_id_by_actor(conn, actor_user_id)
 
-    # 2) доменный fallback для ОВЭиПП (эксперты -> QM_HEAD)
+    if approver_role_id is None:
+        approver_role_id = _resolve_approver_role_id_by_task_initiator(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(actor_user_id),
+        )
+
     if approver_role_id is None:
         approver_role_id = _resolve_qm_head_fallback_role_id(conn, actor_role_id)
 
-    # 3) кэшируем в regular_tasks.target_role_id, если было NULL
     if approver_role_id is not None:
         _maybe_persist_target_role_id(conn, regular_task_id, approver_role_id)
 
     if approver_role_id is None:
         raise HTTPException(
             status_code=500,
-            detail="Cannot resolve approver: regular_tasks.target_role_id is NULL and org_unit_managers HEAD not found (or users.unit_id is NULL)",
+            detail=(
+                "Cannot resolve approver: regular_tasks.target_role_id is NULL, "
+                "org chain HEAD not found, and task initiator fallback is empty"
+            ),
         )
 
-    # Во время согласования задача должна висеть на согласующем
-    _set_executor_role_if_needed(conn, task_id, approver_role_id)    
+    _set_executor_role_if_needed(conn, task_id, approver_role_id)
 
     _set_status(
         conn,
@@ -622,7 +723,6 @@ def _approve(
     report_id = int(rr["report_id"])
     submitted_by = rr.get("submitted_by")
 
-    # Запрет self-approve: согласующий не может быть автором отчёта.
     try:
         if submitted_by is not None and int(submitted_by) == int(actor_user_id):
             raise HTTPException(status_code=403, detail="Cannot approve own report")
@@ -707,7 +807,6 @@ def _reject(
             allowed_from={"WAITING_APPROVAL"},
         )
 
-        # При возврате на доработку задача должна снова "висеть" на исполнителе (performer_role_id).
         _, performer_role_id, _ = _get_roles_for_task_flow(conn, task_id)
         if performer_role_id is not None:
             _set_executor_role_if_needed(conn, task_id, performer_role_id)
