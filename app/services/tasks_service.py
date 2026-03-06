@@ -297,8 +297,6 @@ def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row
     return code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED")
 
 
-# ✅ ИЗМЕНЕНО ЗДЕСЬ: approve/reject для руководителя идут через regular_tasks.target_role_id,
-# а НЕ через executor_role_id задачи.
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     code = str(task_row.get("status_code") or "")
     if code != "WAITING_APPROVAL":
@@ -312,6 +310,17 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     except Exception:
         return False
 
+    # для вручную созданных / нестандартных задач:
+    # если задача уже "висит" на текущей роли, разрешаем approve/reject
+    try:
+        erid = int(task_row.get("executor_role_id") or 0)
+        if erid > 0 and erid == int(current_role_id):
+            return True
+    except Exception:
+        pass
+
+    # для задач с regular_task_id:
+    # согласующий определяется через regular_tasks.target_role_id
     rid = task_row.get("regular_task_id")
     if rid is None:
         return False

@@ -266,12 +266,6 @@ def _get_parent_unit_id(conn: Connection, unit_id: int) -> Optional[int]:
 
 
 def _find_active_head_user_id(conn: Connection, unit_id: int) -> Optional[int]:
-    """
-    Ищет активного HEAD для подразделения с учетом:
-    - manager_type может быть в разном регистре / с пробелами
-    - дата действия может быть задана через date_from/date_to
-    - сам пользователь должен быть active
-    """
     row = conn.execute(
         text(
             """
@@ -380,13 +374,6 @@ def _lookup_role_id_by_code(conn: Connection, role_code: str) -> Optional[int]:
 
 
 def _resolve_qm_head_fallback_role_id(conn: Connection, actor_role_id: int) -> Optional[int]:
-    """
-    Доменное правило для ОВЭиПП:
-    согласующий для ролей экспертов ОВЭиПП = QM_HEAD.
-
-    Здесь deliberately делаем простой fallback по коду роли,
-    чтобы не зависеть от заполненности org_unit_managers для этого отдела.
-    """
     qm_expert_role_ids = {1, 8, 11, 17}
     if int(actor_role_id) not in qm_expert_role_ids:
         return None
@@ -394,10 +381,6 @@ def _resolve_qm_head_fallback_role_id(conn: Connection, actor_role_id: int) -> O
 
 
 def _maybe_persist_target_role_id(conn: Connection, regular_task_id: Optional[int], target_role_id: Optional[int]) -> None:
-    """
-    Кэшируем вычисленного согласующего в regular_tasks.target_role_id, если там пусто.
-    Это убирает ручные правки и делает поведение стабильным для будущих задач.
-    """
     if regular_task_id is None or target_role_id is None:
         return
     if int(regular_task_id) <= 0 or int(target_role_id) <= 0:
@@ -807,7 +790,30 @@ def _reject(
             allowed_from={"WAITING_APPROVAL"},
         )
 
+        # При возврате на доработку задача должна снова "висеть" на исполнителе.
+        # Для regular_tasks берём executor_role_id из regular_tasks.
+        # Для вручную созданных задач fallback = роль автора последнего отчёта.
         _, performer_role_id, _ = _get_roles_for_task_flow(conn, task_id)
+
+        if performer_role_id is None:
+            try:
+                submitted_by = rr.get("submitted_by")
+                if submitted_by is not None:
+                    rrow = conn.execute(
+                        text(
+                            """
+                            SELECT role_id
+                            FROM public.users
+                            WHERE user_id = :uid
+                            """
+                        ),
+                        {"uid": int(submitted_by)},
+                    ).mappings().first()
+                    if rrow and rrow.get("role_id") is not None:
+                        performer_role_id = int(rrow["role_id"])
+            except Exception:
+                performer_role_id = None
+
         if performer_role_id is not None:
             _set_executor_role_if_needed(conn, task_id, performer_role_id)
 

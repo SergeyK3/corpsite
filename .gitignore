@@ -91,3 +91,4 @@ sql/fix_titles.sql
 # Temporary exports
 *.csv
 __tmp__*
+tmp/
