@@ -1,3 +1,4 @@
+# FILE: app/services/tasks_service.py
 from __future__ import annotations
 
 import json
@@ -171,9 +172,16 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
                 t.title,
                 t.description,
                 t.initiator_user_id,
+                t.created_by_user_id,
+                t.approver_user_id,
                 t.executor_role_id,
                 t.assignment_scope,
                 t.status_id,
+                t.task_kind,
+                t.requires_report,
+                t.requires_approval,
+                t.source_kind,
+                t.source_note,
                 t.due_date,
                 ts.code AS status_code,
                 ts.name_ru AS status_name_ru,
@@ -204,7 +212,8 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
                 WHERE r.task_id = t.task_id
                 ORDER BY
                     r.submitted_at DESC NULLS LAST,
-                    r.approved_at  DESC NULLS LAST
+                    r.approved_at  DESC NULLS LAST,
+                    r.report_id    DESC
                 LIMIT 1
             ) tr ON TRUE
             LEFT JOIN users us ON us.user_id = tr.submitted_by
@@ -226,6 +235,13 @@ def _is_initiator(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
         return False
 
 
+def _is_created_by(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
+    try:
+        return int(task_row.get("created_by_user_id") or 0) == int(current_user_id)
+    except Exception:
+        return False
+
+
 def _is_executor_role(*, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     try:
         return int(task_row["executor_role_id"]) == int(current_role_id)
@@ -243,6 +259,57 @@ def _is_report_author(*, current_user_id: int, task_row: Dict[str, Any]) -> bool
         return False
 
 
+def _is_explicit_approver_user(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
+    try:
+        approver_user_id = task_row.get("approver_user_id")
+        if approver_user_id is None:
+            return False
+        return int(approver_user_id) == int(current_user_id)
+    except Exception:
+        return False
+
+
+def _task_requires_report(task_row: Dict[str, Any]) -> bool:
+    v = task_row.get("requires_report")
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return True
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {"false", "0", "no", "off"}:
+            return False
+        if s in {"true", "1", "yes", "on"}:
+            return True
+    try:
+        return bool(v)
+    except Exception:
+        return True
+
+
+def _task_requires_approval(task_row: Dict[str, Any]) -> bool:
+    v = task_row.get("requires_approval")
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return True
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {"false", "0", "no", "off"}:
+            return False
+        if s in {"true", "1", "yes", "on"}:
+            return True
+    try:
+        return bool(v)
+    except Exception:
+        return True
+
+
+def _task_kind(task_row: Dict[str, Any]) -> str:
+    raw = str(task_row.get("task_kind") or "").strip().lower()
+    return raw if raw in {"regular", "adhoc"} else "regular"
+
+
 def _can_view(
     *,
     current_user_id: int,
@@ -253,7 +320,13 @@ def _can_view(
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
+    if _is_created_by(current_user_id=current_user_id, task_row=task_row):
+        return True
+
     if _is_report_author(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    if _is_explicit_approver_user(current_user_id=current_user_id, task_row=task_row):
         return True
 
     try:
@@ -290,6 +363,9 @@ def ensure_task_visible_or_404(
 
 
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    if not _task_requires_report(task_row):
+        return False
+
     if not _is_executor_role(current_role_id=current_role_id, task_row=task_row):
         return False
 
@@ -302,6 +378,9 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     if code != "WAITING_APPROVAL":
         return False
 
+    if not _task_requires_approval(task_row):
+        return False
+
     # запрет self-approve
     try:
         submitted_by = task_row.get("report_submitted_by")
@@ -310,7 +389,39 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     except Exception:
         return False
 
-    # для вручную созданных / нестандартных задач:
+    # 1. Явный approver_user_id для adhoc/manual задач
+    if _is_explicit_approver_user(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    # 2. Для задач с regular_task_id согласующий определяется через regular_tasks.target_role_id
+    rid = task_row.get("regular_task_id")
+    if rid is not None:
+        try:
+            rid_i = int(rid)
+        except Exception:
+            rid_i = 0
+
+        if rid_i > 0:
+            with engine.begin() as conn:
+                r = conn.execute(
+                    text(
+                        """
+                        SELECT target_role_id
+                        FROM public.regular_tasks
+                        WHERE regular_task_id = :rid
+                        """
+                    ),
+                    {"rid": int(rid_i)},
+                ).mappings().first()
+
+            if r and r.get("target_role_id") is not None:
+                try:
+                    if int(r["target_role_id"]) == int(current_role_id):
+                        return True
+                except Exception:
+                    pass
+
+    # 3. Fallback для старых нестандартных кейсов:
     # если задача уже "висит" на текущей роли, разрешаем approve/reject
     try:
         erid = int(task_row.get("executor_role_id") or 0)
@@ -319,38 +430,7 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     except Exception:
         pass
 
-    # для задач с regular_task_id:
-    # согласующий определяется через regular_tasks.target_role_id
-    rid = task_row.get("regular_task_id")
-    if rid is None:
-        return False
-
-    try:
-        rid_i = int(rid)
-    except Exception:
-        return False
-    if rid_i <= 0:
-        return False
-
-    with engine.begin() as conn:
-        r = conn.execute(
-            text(
-                """
-                SELECT target_role_id
-                FROM public.regular_tasks
-                WHERE regular_task_id = :rid
-                """
-            ),
-            {"rid": int(rid_i)},
-        ).mappings().first()
-
-    if not r or r.get("target_role_id") is None:
-        return False
-
-    try:
-        return int(r["target_role_id"]) == int(current_role_id)
-    except Exception:
-        return False
+    return False
 
 
 def _allowed_actions_for_user(
@@ -362,7 +442,7 @@ def _allowed_actions_for_user(
     code = str(task_row.get("status_code") or "")
     actions: List[str] = []
 
-    if code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED"):
+    if _task_requires_report(task_row) and code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED"):
         if can_report_or_update(
             current_user_id=current_user_id,
             current_role_id=current_role_id,
@@ -370,7 +450,7 @@ def _allowed_actions_for_user(
         ):
             actions.append("report")
 
-    if code == "WAITING_APPROVAL":
+    if _task_requires_approval(task_row) and code == "WAITING_APPROVAL":
         if can_approve(
             current_user_id=current_user_id,
             current_role_id=current_role_id,

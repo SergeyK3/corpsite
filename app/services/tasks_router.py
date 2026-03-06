@@ -56,6 +56,22 @@ def _as_int_or_none(v: Any) -> Optional[int]:
         return None
 
 
+def _as_bool(v: Any, default: bool) -> bool:
+    if v is None:
+        return bool(default)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return bool(v)
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {"1", "true", "yes", "y", "on"}:
+            return True
+        if s in {"0", "false", "no", "n", "off"}:
+            return False
+    return bool(default)
+
+
 def _as_str_or_none(v: Any) -> Optional[str]:
     if v is None:
         return None
@@ -110,10 +126,12 @@ def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
     return bool(row)
 
 
-def _user_is_approver_for_task(conn, task_id: int, role_id: int) -> bool:
+def _user_is_approver_for_task(conn, task_id: int, user_id: int, role_id: int) -> bool:
     """
     Approver visibility helper:
-    user can see/act if task is WAITING_APPROVAL and regular_tasks.target_role_id == current role.
+    user can see/act if task is WAITING_APPROVAL and either:
+    - tasks.approver_user_id == current user_id
+    - or legacy regular_tasks.target_role_id == current role_id
     """
     row = (
         conn.execute(
@@ -125,11 +143,14 @@ def _user_is_approver_for_task(conn, task_id: int, role_id: int) -> bool:
                 LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
                 WHERE t.task_id = :task_id
                   AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
-                  AND COALESCE(rt.target_role_id, 0) = :role_id
+                  AND (
+                        COALESCE(t.approver_user_id, 0) = :user_id
+                        OR COALESCE(rt.target_role_id, 0) = :role_id
+                  )
                 LIMIT 1
                 """
             ),
-            {"task_id": int(task_id), "role_id": int(role_id)},
+            {"task_id": int(task_id), "user_id": int(user_id), "role_id": int(role_id)},
         )
         .mappings()
         .first()
@@ -156,6 +177,10 @@ def list_tasks(
     assignment_scope: Optional[str] = Query(
         None,
         description="Filter by assignment scope: admin|functional|all. If omitted or 'all' -> no filtering.",
+    ),
+    task_kind: Optional[str] = Query(
+        None,
+        description="Filter by task kind: regular|adhoc",
     ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -209,10 +234,24 @@ def list_tasks(
         # Visibility policy:
         # - Base RBAC by executor_role_id / initiator_user_id
         # - PLUS: report author sees their reported tasks
-        # - PLUS: approver sees WAITING_APPROVAL tasks where rt.target_role_id == current role_id
+        # - PLUS: explicit approver_user_id sees WAITING_APPROVAL tasks
+        # - PLUS: legacy regular-task approver sees WAITING_APPROVAL tasks
         # ---------------------------------------------------------
-        report_visibility = "EXISTS (SELECT 1 FROM public.task_reports rr WHERE rr.task_id = t.task_id AND rr.submitted_by = :current_user_id)"
-        approver_visibility = """
+        report_visibility = """
+            EXISTS (
+                SELECT 1
+                FROM public.task_reports rr
+                WHERE rr.task_id = t.task_id
+                  AND rr.submitted_by = :current_user_id
+            )
+        """.strip()
+
+        explicit_approver_visibility = """
+            COALESCE(t.approver_user_id, 0) = :current_user_id
+            AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
+        """.strip()
+
+        legacy_approver_visibility = """
             EXISTS (
                 SELECT 1
                 FROM public.regular_tasks rt
@@ -226,9 +265,11 @@ def list_tasks(
             where.append(
                 "("
                 "(t.initiator_user_id = :current_user_id) "
+                "OR (t.created_by_user_id = :current_user_id) "
                 "OR (t.executor_role_id IN :visible_role_ids) "
                 f"OR ({report_visibility}) "
-                f"OR ({approver_visibility})"
+                f"OR ({explicit_approver_visibility}) "
+                f"OR ({legacy_approver_visibility})"
                 ")"
             )
         else:
@@ -236,7 +277,8 @@ def list_tasks(
                 "("
                 "(t.executor_role_id IN :visible_role_ids) "
                 f"OR ({report_visibility}) "
-                f"OR ({approver_visibility})"
+                f"OR ({explicit_approver_visibility}) "
+                f"OR ({legacy_approver_visibility})"
                 ")"
             )
 
@@ -268,6 +310,13 @@ def list_tasks(
             norm_scope = normalize_assignment_scope(conn, scope_raw)
             where.append("t.assignment_scope = :assignment_scope")
             params["assignment_scope"] = norm_scope
+
+        kind_raw = (task_kind or "").strip().lower()
+        if kind_raw:
+            if kind_raw not in {"regular", "adhoc"}:
+                raise HTTPException(status_code=422, detail="task_kind must be one of: regular, adhoc")
+            where.append("COALESCE(t.task_kind, 'regular') = :task_kind")
+            params["task_kind"] = kind_raw
 
         if search:
             q = search.strip()
@@ -301,9 +350,16 @@ def list_tasks(
                     t.title,
                     t.description,
                     t.initiator_user_id,
+                    t.created_by_user_id,
+                    t.approver_user_id,
                     t.executor_role_id,
                     t.assignment_scope,
                     t.status_id,
+                    t.task_kind,
+                    t.requires_report,
+                    t.requires_approval,
+                    t.source_kind,
+                    t.source_note,
                     t.due_date,
                     ts.code AS status_code,
                     ts.name_ru AS status_name_ru,
@@ -379,18 +435,133 @@ def get_task(
                 include_archived=include_archived,
             )
         except HTTPException as e:
-            # Consistency with list_tasks(): allow access if the user submitted a report for this task
-            # OR if user is approver for WAITING_APPROVAL (rt.target_role_id == current role_id).
             if e.status_code in (403, 404):
                 if _user_reported_task(conn, task_id=int(task_id), user_id=int(current_user_id)):
                     task = task
-                elif _user_is_approver_for_task(conn, task_id=int(task_id), role_id=int(role_id)):
+                elif _user_is_approver_for_task(
+                    conn,
+                    task_id=int(task_id),
+                    user_id=int(current_user_id),
+                    role_id=int(role_id),
+                ):
                     task = task
                 else:
                     raise
             else:
                 raise
 
+        task = attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
+
+    return dict(task)
+
+
+@router.post("/manual")
+def create_manual_task(
+    payload: Dict[str, Any],
+    user: Dict[str, Any] = Security(get_current_user),
+) -> Dict[str, Any]:
+    current_user_id = int(user["user_id"])
+
+    title = (payload.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="title is required")
+
+    period_id = _as_int_or_none(payload.get("period_id"))
+    if period_id is None or period_id < 1:
+        raise HTTPException(status_code=422, detail="period_id is required")
+
+    executor_role_id = _as_int_or_none(payload.get("executor_role_id"))
+    if executor_role_id is None or executor_role_id < 1:
+        raise HTTPException(status_code=422, detail="executor_role_id is required")
+
+    initiator_user_id = _as_int_or_none(payload.get("initiator_user_id"))
+    if initiator_user_id is None or initiator_user_id < 1:
+        raise HTTPException(status_code=422, detail="initiator_user_id is required")
+
+    requires_report = _as_bool(payload.get("requires_report"), True)
+    requires_approval = _as_bool(payload.get("requires_approval"), True)
+
+    approver_user_id = _as_int_or_none(payload.get("approver_user_id"))
+    if requires_approval and (approver_user_id is None or approver_user_id < 1):
+        raise HTTPException(status_code=422, detail="approver_user_id is required when requires_approval=true")
+
+    description = _as_str_or_none(payload.get("description"))
+    due_date = _as_str_or_none(payload.get("due_date"))
+    source_note = _as_str_or_none(payload.get("source_note"))
+
+    with engine.begin() as conn:
+        assignment_scope = normalize_assignment_scope(conn, payload.get("assignment_scope"))
+        status_id = get_status_id_by_code(conn, "IN_PROGRESS")
+
+        row = conn.execute(
+            text(
+                """
+                INSERT INTO public.tasks (
+                    period_id,
+                    regular_task_id,
+                    title,
+                    description,
+                    initiator_user_id,
+                    created_by_user_id,
+                    approver_user_id,
+                    executor_role_id,
+                    assignment_scope,
+                    status_id,
+                    task_kind,
+                    requires_report,
+                    requires_approval,
+                    source_kind,
+                    source_note,
+                    due_date
+                )
+                VALUES (
+                    :period_id,
+                    NULL,
+                    :title,
+                    :description,
+                    :initiator_user_id,
+                    :created_by_user_id,
+                    :approver_user_id,
+                    :executor_role_id,
+                    :assignment_scope,
+                    :status_id,
+                    'adhoc',
+                    :requires_report,
+                    :requires_approval,
+                    'manual',
+                    :source_note,
+                    CASE
+                        WHEN :due_date IS NULL OR :due_date = '' THEN NULL
+                        ELSE (:due_date)::date
+                    END
+                )
+                RETURNING task_id
+                """
+            ),
+            {
+                "period_id": int(period_id),
+                "title": title,
+                "description": description,
+                "initiator_user_id": int(initiator_user_id),
+                "created_by_user_id": int(current_user_id),
+                "approver_user_id": int(approver_user_id) if approver_user_id is not None else None,
+                "executor_role_id": int(executor_role_id),
+                "assignment_scope": assignment_scope,
+                "status_id": int(status_id),
+                "requires_report": bool(requires_report),
+                "requires_approval": bool(requires_approval),
+                "source_note": source_note,
+                "due_date": due_date,
+            },
+        ).mappings().first()
+
+        if not row or row.get("task_id") is None:
+            raise HTTPException(status_code=500, detail="Failed to create manual task")
+
+        task_id = int(row["task_id"])
+        role_id = get_user_role_id(conn, current_user_id)
+
+        task = load_task_full(conn, task_id=task_id)
         task = attach_allowed_actions(task=task, current_user_id=current_user_id, current_role_id=role_id)
 
     return dict(task)
@@ -420,6 +591,25 @@ def create_task(
     description = _as_str_or_none(payload.get("description"))
     due_date = _as_str_or_none(payload.get("due_date"))
 
+    created_by_user_id = _as_int_or_none(payload.get("created_by_user_id")) or int(current_user_id)
+    initiator_user_id = _as_int_or_none(payload.get("initiator_user_id")) or int(current_user_id)
+    approver_user_id = _as_int_or_none(payload.get("approver_user_id"))
+    task_kind = (_as_str_or_none(payload.get("task_kind")) or ("regular" if regular_task_id is not None else "adhoc")).lower()
+    requires_report = _as_bool(payload.get("requires_report"), True)
+    requires_approval = _as_bool(payload.get("requires_approval"), True)
+    source_kind = (_as_str_or_none(payload.get("source_kind")) or ("regular_task" if regular_task_id is not None else "manual")).lower()
+    source_note = _as_str_or_none(payload.get("source_note"))
+
+    if task_kind not in {"regular", "adhoc"}:
+        raise HTTPException(status_code=422, detail="task_kind must be one of: regular, adhoc")
+
+    if source_kind not in {"regular_task", "manual", "bot", "import"}:
+        raise HTTPException(status_code=422, detail="source_kind must be one of: regular_task, manual, bot, import")
+
+    if requires_approval and (approver_user_id is None or approver_user_id < 1):
+        if task_kind == "adhoc":
+            raise HTTPException(status_code=422, detail="approver_user_id is required when requires_approval=true for adhoc task")
+
     with engine.begin() as conn:
         assignment_scope = normalize_assignment_scope(conn, payload.get("assignment_scope"))
         status_id = get_status_id_by_code(conn, status_code)
@@ -428,13 +618,39 @@ def create_task(
             text(
                 """
                 INSERT INTO public.tasks (
-                    period_id, regular_task_id, title, description,
-                    initiator_user_id, executor_role_id, assignment_scope, status_id,
+                    period_id,
+                    regular_task_id,
+                    title,
+                    description,
+                    initiator_user_id,
+                    created_by_user_id,
+                    approver_user_id,
+                    executor_role_id,
+                    assignment_scope,
+                    status_id,
+                    task_kind,
+                    requires_report,
+                    requires_approval,
+                    source_kind,
+                    source_note,
                     due_date
                 )
                 VALUES (
-                    :period_id, :regular_task_id, :title, :description,
-                    :initiator_user_id, :executor_role_id, :assignment_scope, :status_id,
+                    :period_id,
+                    :regular_task_id,
+                    :title,
+                    :description,
+                    :initiator_user_id,
+                    :created_by_user_id,
+                    :approver_user_id,
+                    :executor_role_id,
+                    :assignment_scope,
+                    :status_id,
+                    :task_kind,
+                    :requires_report,
+                    :requires_approval,
+                    :source_kind,
+                    :source_note,
                     CASE
                         WHEN :due_date IS NULL OR :due_date = '' THEN NULL
                         ELSE (:due_date)::date
@@ -448,10 +664,17 @@ def create_task(
                 "regular_task_id": int(regular_task_id) if regular_task_id is not None else None,
                 "title": title,
                 "description": description,
-                "initiator_user_id": int(current_user_id),
+                "initiator_user_id": int(initiator_user_id),
+                "created_by_user_id": int(created_by_user_id),
+                "approver_user_id": int(approver_user_id) if approver_user_id is not None else None,
                 "executor_role_id": int(executor_role_id),
                 "assignment_scope": assignment_scope,
                 "status_id": int(status_id),
+                "task_kind": task_kind,
+                "requires_report": bool(requires_report),
+                "requires_approval": bool(requires_approval),
+                "source_kind": source_kind,
+                "source_note": source_note,
                 "due_date": due_date,
             },
         ).mappings().first()
@@ -542,7 +765,12 @@ def approve_report(
                 include_archived=False,
             )
         except HTTPException as e:
-            if e.status_code in (403, 404) and _user_is_approver_for_task(conn, task_id=int(task_id), role_id=int(role_id)):
+            if e.status_code in (403, 404) and _user_is_approver_for_task(
+                conn,
+                task_id=int(task_id),
+                user_id=int(current_user_id),
+                role_id=int(role_id),
+            ):
                 task = task
             else:
                 raise
@@ -594,7 +822,12 @@ def reject_report(
                 include_archived=False,
             )
         except HTTPException as e:
-            if e.status_code in (403, 404) and _user_is_approver_for_task(conn, task_id=int(task_id), role_id=int(role_id)):
+            if e.status_code in (403, 404) and _user_is_approver_for_task(
+                conn,
+                task_id=int(task_id),
+                user_id=int(current_user_id),
+                role_id=int(role_id),
+            ):
                 task = task
             else:
                 raise

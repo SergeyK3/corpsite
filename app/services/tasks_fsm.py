@@ -32,7 +32,16 @@ def transition(
     row = conn.execute(
         text(
             """
-            SELECT t.task_id, ts.code AS status_code
+            SELECT
+                t.task_id,
+                t.regular_task_id,
+                t.initiator_user_id,
+                t.approver_user_id,
+                t.executor_role_id,
+                t.requires_report,
+                t.requires_approval,
+                t.task_kind,
+                ts.code AS status_code
             FROM tasks t
             JOIN task_statuses ts ON ts.status_id = t.status_id
             WHERE t.task_id = :tid
@@ -44,22 +53,23 @@ def transition(
     if not row:
         raise TaskFSMError("Task not found")
 
-    from_status = str(row["status_code"] or "")
+    task_row = dict(row)
+    from_status = str(task_row["status_code"] or "")
 
     if action == "report":
-        _report(conn, task_id, from_status, actor_user_id, actor_role_id, payload)
+        _report(conn, task_row, from_status, actor_user_id, actor_role_id, payload)
         return
 
     if action == "approve":
-        _approve(conn, task_id, from_status, actor_user_id, actor_role_id, payload)
+        _approve(conn, task_row, from_status, actor_user_id, actor_role_id, payload)
         return
 
     if action == "reject":
-        _reject(conn, task_id, from_status, actor_user_id, actor_role_id, payload)
+        _reject(conn, task_row, from_status, actor_user_id, actor_role_id, payload)
         return
 
     if action == "archive":
-        _archive(conn, task_id, from_status, actor_user_id, actor_role_id)
+        _archive(conn, task_row, from_status, actor_user_id, actor_role_id)
         return
 
     raise TaskFSMError(f"Unknown action: {action}")
@@ -83,6 +93,23 @@ def _normalize_comment(payload: Dict[str, Any]) -> str:
     if v is None or str(v).strip() == "":
         v = payload.get("reason")
     return (v or "").strip()
+
+
+def _as_bool(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in {"true", "1", "yes", "on"}:
+            return True
+        if s in {"false", "0", "no", "off"}:
+            return False
+    try:
+        return bool(value)
+    except Exception:
+        return bool(default)
 
 
 def _get_latest_report_row(conn: Connection, task_id: int) -> Dict[str, Any]:
@@ -148,11 +175,12 @@ def _get_roles_for_task_flow(conn: Connection, task_id: int) -> Tuple[Optional[i
     """
     Возвращает (regular_task_id, performer_role_id, approver_role_id).
 
-    Правило (долгосрок):
+    Правило:
     - performer_role_id = regular_tasks.executor_role_id
     - approver_role_id  = regular_tasks.target_role_id
 
-    Если regular_task_id NULL или записи нет — вернём (None, None, None).
+    Если regular_task_id NULL или записи нет — вернём (None, None, None)
+    либо (rid, None, None), если regular_task_id есть, но шаблон не найден.
     """
     row = conn.execute(
         text(
@@ -300,8 +328,8 @@ def _find_active_head_user_id(conn: Connection, unit_id: int) -> Optional[int]:
 def _resolve_approver_role_id_by_actor(conn: Connection, actor_user_id: int) -> Optional[int]:
     """
     Вычисляет согласующего по оргструктуре:
-      - берём unit_id автора отчёта (users.unit_id)
-      - ищем активного HEAD в org_unit_managers для этого unit_id
+      - берём unit_id автора отчёта
+      - ищем активного HEAD
       - если HEAD == автор отчёта -> поднимаемся на parent_unit_id и повторяем
       - если нашли HEAD != автор -> возвращаем role_id этого HEAD-пользователя
     """
@@ -332,8 +360,6 @@ def _resolve_approver_role_id_by_task_initiator(
     """
     Fallback:
     если по org-цепочке согласующего не нашли, пытаемся взять роль инициатора задачи.
-    Это полезно для случаев, когда target_role_id ещё не заполнен, а задача уже создана
-    и у неё есть реальный initiator_user_id.
     """
     row = conn.execute(
         text(
@@ -397,6 +423,22 @@ def _maybe_persist_target_role_id(conn: Connection, regular_task_id: Optional[in
         ),
         {"rid": int(regular_task_id), "target_role_id": int(target_role_id)},
     )
+
+
+def _resolve_explicit_approver_role_id(conn: Connection, approver_user_id: Optional[int], actor_user_id: int) -> Optional[int]:
+    """
+    Для adhoc/manual задач сначала пытаемся взять role_id явного approver_user_id.
+    Если approver_user_id пустой или совпадает с автором отчёта — вернём None.
+    """
+    if approver_user_id is None:
+        return None
+    try:
+        uid = int(approver_user_id)
+    except Exception:
+        return None
+    if uid <= 0 or uid == int(actor_user_id):
+        return None
+    return _get_user_role_id(conn, uid)
 
 
 def _find_active_task_by_regular_period_scope(
@@ -589,12 +631,13 @@ def _maybe_create_or_update_next_task_after_approved(
 
 def _report(
     conn: Connection,
-    task_id: int,
+    task_row: Dict[str, Any],
     from_status: str,
     actor_user_id: int,
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
+    task_id = int(task_row["task_id"])
     allowed_from = {"WAITING_REPORT", "IN_PROGRESS", "REJECTED"}
     if from_status not in allowed_from:
         raise_error(
@@ -606,6 +649,12 @@ def _report(
                 "status_to": "WAITING_APPROVAL",
             },
         )
+
+    requires_report = _as_bool(task_row.get("requires_report"), True)
+    requires_approval = _as_bool(task_row.get("requires_approval"), True)
+
+    if not requires_report:
+        raise HTTPException(status_code=409, detail="Task does not require report")
 
     report_link = _extract_report_link(payload)
     comment = _normalize_comment(payload)
@@ -623,11 +672,50 @@ def _report(
 
     report_id = int(ins["report_id"]) if ins and ins.get("report_id") is not None else None
 
+    # Если approval не требуется — завершаем сразу
+    if not requires_approval:
+        _set_status(
+            conn,
+            task_id,
+            from_status,
+            to_status="DONE",
+            allowed_from=allowed_from,
+        )
+
+        write_task_audit(
+            conn,
+            task_id=int(task_id),
+            actor_user_id=int(actor_user_id),
+            actor_role_id=int(actor_role_id),
+            action="REPORT_SUBMIT",
+            fields_changed={"status_code": {"from": from_status, "to": "DONE"}},
+            request_body=payload,
+            meta={"report_id": report_id} if report_id is not None else None,
+            event_type="REPORT_SUBMITTED",
+            event_payload={**payload, "status_to": "DONE", "report_id": report_id},
+        )
+
+        create_task_event_tx(
+            conn,
+            task_id=int(task_id),
+            event_type="REPORT_SUBMITTED",
+            actor_user_id=int(actor_user_id),
+            actor_role_id=int(actor_role_id),
+            payload={**payload, "status_to": "DONE", "report_id": report_id},
+        )
+        return
+
     regular_task_id, _performer_role_id, approver_role_id = _get_roles_for_task_flow(conn, task_id)
 
+    # 1. Явный approver_user_id для adhoc/manual задач
     if approver_role_id is None:
-        approver_role_id = _resolve_approver_role_id_by_actor(conn, actor_user_id)
+        approver_role_id = _resolve_explicit_approver_role_id(
+            conn,
+            task_row.get("approver_user_id"),
+            actor_user_id=int(actor_user_id),
+        )
 
+    # 2. Инициатор задачи
     if approver_role_id is None:
         approver_role_id = _resolve_approver_role_id_by_task_initiator(
             conn,
@@ -635,6 +723,11 @@ def _report(
             actor_user_id=int(actor_user_id),
         )
 
+    # 3. Оргцепочка
+    if approver_role_id is None:
+        approver_role_id = _resolve_approver_role_id_by_actor(conn, actor_user_id)
+
+    # 4. Спец-fallback для QM
     if approver_role_id is None:
         approver_role_id = _resolve_qm_head_fallback_role_id(conn, actor_role_id)
 
@@ -643,10 +736,12 @@ def _report(
 
     if approver_role_id is None:
         raise HTTPException(
-            status_code=500,
+            status_code=409,
             detail=(
-                "Cannot resolve approver: regular_tasks.target_role_id is NULL, "
-                "org chain HEAD not found, and task initiator fallback is empty"
+                "Cannot resolve approver: approver_user_id is empty, "
+                "task initiator fallback is empty, "
+                "regular_tasks.target_role_id is NULL, "
+                "and org chain HEAD not found"
             ),
         )
 
@@ -685,12 +780,14 @@ def _report(
 
 def _approve(
     conn: Connection,
-    task_id: int,
+    task_row: Dict[str, Any],
     from_status: str,
     actor_user_id: int,
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
+    task_id = int(task_row["task_id"])
+
     if from_status != "WAITING_APPROVAL":
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
@@ -772,12 +869,14 @@ def _approve(
 
 def _reject(
     conn: Connection,
-    task_id: int,
+    task_row: Dict[str, Any],
     from_status: str,
     actor_user_id: int,
     actor_role_id: int,
     payload: Dict[str, Any],
 ) -> None:
+    task_id = int(task_row["task_id"])
+
     if from_status == "WAITING_APPROVAL":
         rr = _get_latest_report_row(conn, task_id)
         report_id = int(rr["report_id"])
@@ -790,9 +889,9 @@ def _reject(
             allowed_from={"WAITING_APPROVAL"},
         )
 
-        # При возврате на доработку задача должна снова "висеть" на исполнителе.
+        # При возврате на доработку задача снова "висит" на исполнителе.
         # Для regular_tasks берём executor_role_id из regular_tasks.
-        # Для вручную созданных задач fallback = роль автора последнего отчёта.
+        # Для adhoc/manual fallback = роль автора последнего отчёта.
         _, performer_role_id, _ = _get_roles_for_task_flow(conn, task_id)
 
         if performer_role_id is None:
@@ -907,11 +1006,13 @@ def _reject(
 
 def _archive(
     conn: Connection,
-    task_id: int,
+    task_row: Dict[str, Any],
     from_status: str,
     actor_user_id: int,
     actor_role_id: int,
 ) -> None:
+    task_id = int(task_row["task_id"])
+
     if from_status == "ARCHIVED":
         raise_error(
             ErrorCode.TASK_CONFLICT_ACTION_STATUS,
