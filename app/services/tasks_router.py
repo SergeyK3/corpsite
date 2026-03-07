@@ -20,6 +20,7 @@ from app.services.tasks_service import (
     can_report_or_update,
     compute_visible_executor_role_ids_for_tasks,
     ensure_task_visible_or_404,
+    get_manual_task_role_options_for_user,
     get_status_id_by_code,
     get_user_role_id,
     load_assignment_scope_enum_labels,
@@ -226,17 +227,10 @@ def list_tasks(
 
         functional_lbl = scope_label_or_none(allowed, "functional")
         admin_lbl = scope_label_or_none(allowed, "admin")
-        _ = functional_lbl, admin_lbl  # silence linters
+        _ = functional_lbl, admin_lbl
 
         where: List[str] = []
 
-        # ---------------------------------------------------------
-        # Visibility policy:
-        # - Base RBAC by executor_role_id / initiator_user_id
-        # - PLUS: report author sees their reported tasks
-        # - PLUS: explicit approver_user_id sees WAITING_APPROVAL tasks
-        # - PLUS: legacy regular-task approver sees WAITING_APPROVAL tasks
-        # ---------------------------------------------------------
         report_visibility = """
             EXISTS (
                 SELECT 1
@@ -414,6 +408,23 @@ def list_tasks(
     return {"total": int(total), "limit": int(limit), "offset": int(offset), "items": items}
 
 
+@router.get("/manual/available-roles")
+def get_manual_task_available_roles(
+    period_id: Optional[int] = Query(None, ge=1),
+    user: Dict[str, Any] = Security(get_current_user),
+) -> Dict[str, Any]:
+    current_user_id = int(user["user_id"])
+
+    with engine.begin() as conn:
+        result = get_manual_task_role_options_for_user(conn, current_user_id=int(current_user_id))
+
+    return {
+        "period_id": int(period_id) if period_id is not None else None,
+        "can_create_manual_task": bool(result["can_create_manual_task"]),
+        "items": result["items"],
+    }
+
+
 @router.get("/{task_id}")
 def get_task(
     task_id: int = Path(..., ge=1),
@@ -474,24 +485,29 @@ def create_manual_task(
     if executor_role_id is None or executor_role_id < 1:
         raise HTTPException(status_code=422, detail="executor_role_id is required")
 
-    initiator_user_id = _as_int_or_none(payload.get("initiator_user_id"))
-    if initiator_user_id is None or initiator_user_id < 1:
-        raise HTTPException(status_code=422, detail="initiator_user_id is required")
-
     requires_report = _as_bool(payload.get("requires_report"), True)
     requires_approval = _as_bool(payload.get("requires_approval"), True)
 
     approver_user_id = _as_int_or_none(payload.get("approver_user_id"))
-    if requires_approval and (approver_user_id is None or approver_user_id < 1):
-        raise HTTPException(status_code=422, detail="approver_user_id is required when requires_approval=true")
-
     description = _as_str_or_none(payload.get("description"))
     due_date = _as_str_or_none(payload.get("due_date"))
     source_note = _as_str_or_none(payload.get("source_note"))
 
     with engine.begin() as conn:
+        manual_options = get_manual_task_role_options_for_user(conn, current_user_id=int(current_user_id))
+        allowed_role_ids = {
+            int(x["role_id"])
+            for x in manual_options.get("items", [])
+            if int(x.get("role_id") or 0) > 0
+        }
+
+        if int(executor_role_id) not in allowed_role_ids:
+            raise HTTPException(status_code=403, detail="You cannot create manual task for this executor_role_id")
+
         assignment_scope = normalize_assignment_scope(conn, payload.get("assignment_scope"))
         status_id = get_status_id_by_code(conn, "IN_PROGRESS")
+
+        initiator_user_id = int(current_user_id)
 
         row = conn.execute(
             text(

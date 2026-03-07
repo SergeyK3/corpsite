@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
 import type { AllowedAction, TaskAction, TaskListItem } from "@/lib/types";
+import CreateManualTaskModal, { type ManualTaskRoleOption } from "./_components/CreateManualTaskModal";
 
 const ACTION_RU: Record<string, string> = {
   report: "Отправить отчёт",
@@ -15,8 +16,20 @@ const ACTION_RU: Record<string, string> = {
   archive: "В архив",
 };
 
-type ScopeMode = "all" | "admin" | "functional";
 type StatusTab = "active" | "done" | "rejected";
+
+type CurrentPeriodDto = {
+  period_id?: number;
+  id?: number;
+  name?: string;
+  date_from?: string;
+  date_to?: string;
+};
+
+type ManualRolesResponse = {
+  can_create_manual_task?: boolean;
+  items?: ManualTaskRoleOption[];
+};
 
 function actionsRu(actions: AllowedAction[] | undefined | null): string {
   if (!actions || actions.length === 0) return "—";
@@ -85,12 +98,6 @@ function formatDeadline(t: any): string {
   }
 }
 
-function scopeRu(v: ScopeMode): string {
-  if (v === "admin") return "Админ";
-  if (v === "functional") return "Функционал";
-  return "Все";
-}
-
 function tabRu(v: StatusTab): string {
   if (v === "done") return "Отработано";
   if (v === "rejected") return "Отклонено";
@@ -133,7 +140,6 @@ function roleLabelOfReport(src: any, kind: "submitted" | "approved"): string {
   return "—";
 }
 
-// --- report_link helpers (http(s) vs UNC/local path) ---
 function isHttpUrl(s: string): boolean {
   const v = (s || "").trim();
   return /^https?:\/\//i.test(v);
@@ -188,10 +194,7 @@ function computeReportUiState(src: any): ReportUiState {
   if (approvedAt) return "approved";
 
   const sent = Boolean(submittedAt) || Boolean(link);
-  if (sent) {
-    if (statusCode === "WAITING_APPROVAL") return "sent_waiting";
-    return "sent_waiting";
-  }
+  if (sent) return "sent_waiting";
 
   return "draft";
 }
@@ -212,17 +215,31 @@ function reportStatusBadgeClass(st: ReportUiState): string {
   return "border-zinc-800 bg-zinc-950/20 text-zinc-400";
 }
 
+function currentPeriodIdOf(body: any): number {
+  const raw = body?.period_id ?? body?.id ?? 0;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return n;
+  return 3;
+}
+
+function normalizeManualRoleOptions(body: any): ManualTaskRoleOption[] {
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return items
+    .map((x: any) => ({
+      role_id: Number(x?.role_id ?? 0),
+      role_code: x?.role_code ?? null,
+      role_name: x?.role_name ?? null,
+      role_name_ru: x?.role_name_ru ?? null,
+    }))
+    .filter((x: ManualTaskRoleOption) => Number.isFinite(x.role_id) && x.role_id > 0);
+}
+
 export default function TasksPage() {
   const router = useRouter();
 
   const [ready, setReady] = useState(false);
 
-  const [limit, setLimit] = useState<number>(50);
   const [offset, setOffset] = useState<number>(0);
-
-  const [scope, setScope] = useState<ScopeMode>("all");
-
-  // вкладки статуса
   const [tab, setTab] = useState<StatusTab>("active");
 
   const [list, setList] = useState<TaskListItem[]>([]);
@@ -238,9 +255,16 @@ export default function TasksPage() {
   const [reason, setReason] = useState<string>("");
 
   const [copyHint, setCopyHint] = useState<string>("");
-
-  // UI hint after actions (so user sees what happened even if they forget)
   const [uiNotice, setUiNotice] = useState<string>("");
+
+  const [currentPeriodId, setCurrentPeriodId] = useState<number>(3);
+  const [currentPeriodName, setCurrentPeriodName] = useState<string>("");
+
+  const [manualRoleOptions, setManualRoleOptions] = useState<ManualTaskRoleOption[]>([]);
+  const [canCreateManualTask, setCanCreateManualTask] = useState<boolean>(false);
+  const [manualRolesLoading, setManualRolesLoading] = useState<boolean>(false);
+
+  const [createOpen, setCreateOpen] = useState(false);
 
   const selectedFromList = useMemo(() => {
     if (!selectedId) return null;
@@ -266,6 +290,55 @@ export default function TasksPage() {
     router.replace("/login");
   }
 
+  async function loadCurrentPeriod(): Promise<number> {
+    try {
+      const body = await apiFetchJson<CurrentPeriodDto>("/periods/current");
+      const pid = currentPeriodIdOf(body);
+      setCurrentPeriodId(pid);
+      setCurrentPeriodName(String(body?.name ?? "").trim());
+      return pid;
+    } catch (e: any) {
+      if (isUnauthorized(e)) {
+        redirectToLogin();
+        return 0;
+      }
+      setCurrentPeriodId(3);
+      setCurrentPeriodName("");
+      return 3;
+    }
+  }
+
+  async function loadManualRoleOptions(periodId: number) {
+    if (!periodId || periodId <= 0) {
+      setManualRoleOptions([]);
+      setCanCreateManualTask(false);
+      return;
+    }
+
+    setManualRolesLoading(true);
+
+    try {
+      const body = await apiFetchJson<ManualRolesResponse>("/tasks/manual/available-roles", {
+        query: { period_id: periodId },
+      });
+
+      const items = normalizeManualRoleOptions(body);
+      const canCreate = Boolean(body?.can_create_manual_task) && items.length > 0;
+
+      setManualRoleOptions(items);
+      setCanCreateManualTask(canCreate);
+    } catch (e: any) {
+      if (isUnauthorized(e)) {
+        redirectToLogin();
+        return;
+      }
+      setManualRoleOptions([]);
+      setCanCreateManualTask(false);
+    } finally {
+      setManualRolesLoading(false);
+    }
+  }
+
   async function reloadList(nextOffset?: number) {
     setListLoading(true);
     setListError(null);
@@ -275,9 +348,8 @@ export default function TasksPage() {
 
       const body = await apiFetchJson<any>("/tasks", {
         query: {
-          limit,
+          limit: 50,
           offset: qOffset,
-          assignment_scope: scope === "all" ? undefined : scope,
           status_filter: tab,
         } as any,
       });
@@ -423,20 +495,22 @@ export default function TasksPage() {
         return;
       }
 
+      const pid = await loadCurrentPeriod();
+      if (pid > 0) {
+        await loadManualRoleOptions(pid);
+      }
+
       setReady(true);
       setOffset(0);
       await reloadList(0);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     void reloadList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, limit, offset, scope, tab]);
+  }, [ready, offset, tab]);
 
-  // при переключении вкладки — сбрасываем страницу/выбор, чтобы не было “не найдено”
   useEffect(() => {
     if (!ready) return;
     setOffset(0);
@@ -446,7 +520,6 @@ export default function TasksPage() {
     setListError(null);
     setItemError(null);
     void reloadList(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   useEffect(() => {
@@ -460,7 +533,6 @@ export default function TasksPage() {
       return;
     }
     void reloadItem(selectedId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
@@ -471,7 +543,6 @@ export default function TasksPage() {
     if (!reportLink.trim() && existing) {
       setReportLink(existing);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, selectedFromList, selectedId]);
 
   useEffect(() => {
@@ -515,36 +586,31 @@ export default function TasksPage() {
     return { map: m, keys };
   }, [list]);
 
-  const selectedTitle = taskTitleOf(item ?? selectedFromList);
-  const selectedDeadline = selectedId ? formatDeadline(item ?? selectedFromList) : "—";
-
-  const reportSrc: any = item ?? selectedFromList ?? {};
-  const reportLinkExisting = String(reportSrc?.report_link || "").trim();
-  const reportSubmittedAt = reportSrc?.report_submitted_at ?? null;
-  const reportSubmittedBy = reportSrc?.report_submitted_by ?? null;
-  const reportApprovedAt = reportSrc?.report_approved_at ?? null;
-  const reportApprovedBy = reportSrc?.report_approved_by ?? null;
-  const reportCurrentComment = String(reportSrc?.report_current_comment || "").trim();
-
-  const submittedByLabel = roleLabelOfReport(reportSrc, "submitted");
-  const approvedByLabel = roleLabelOfReport(reportSrc, "approved");
-
-  const reportIsHttp = reportLinkExisting ? isHttpUrl(reportLinkExisting) : false;
-  const reportIsUncOrLocal = reportLinkExisting ? isUncPath(reportLinkExisting) || isWindowsDrivePath(reportLinkExisting) : false;
-
-  const reportUiState = computeReportUiState(reportSrc);
-
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-zinc-400">
           Показано: <span className="text-zinc-200">{list.length}</span>
           {listLoading ? <span className="ml-2">• загрузка…</span> : null}
+          {manualRolesLoading ? <span className="ml-2">• роли…</span> : null}
           <span className="ml-2 text-zinc-500">• {tabRu(tab)}</span>
+          <span className="ml-2 text-zinc-500">
+            • период: {currentPeriodName ? `${currentPeriodName} (#${currentPeriodId})` : `#${currentPeriodId}`}
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* вкладки */}
+          {canCreateManualTask ? (
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
+              disabled={!currentPeriodId || manualRolesLoading}
+              title="Создать разовую задачу"
+            >
+              Создать задачу
+            </button>
+          ) : null}
+
           <div className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-950/40 p-1">
             {(["active", "done", "rejected"] as StatusTab[]).map((v) => (
               <button
@@ -561,41 +627,34 @@ export default function TasksPage() {
               </button>
             ))}
           </div>
-
-          <div className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-950/40 p-1">
-            {(["all", "admin", "functional"] as ScopeMode[]).map((v) => (
-              <button
-                key={v}
-                onClick={() => setScope(v)}
-                className={[
-                  "rounded-md px-3 py-2 text-xs",
-                  scope === v ? "bg-zinc-900 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900/60",
-                ].join(" ")}
-                disabled={listLoading}
-                title="Контур задач"
-              >
-                {scopeRu(v)}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => void reloadList()}
-            className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-            disabled={listLoading}
-          >
-            Обновить
-          </button>
-
-          <input
-            value={String(limit)}
-            onChange={(e) => setLimit(Number(e.target.value || "0"))}
-            className="w-20 rounded-md border border-zinc-800 bg-zinc-950/40 px-2 py-2 text-sm text-zinc-200 outline-none"
-            inputMode="numeric"
-            title="limit"
-          />
         </div>
       </div>
+
+      {createOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-zinc-100">Создание разовой задачи</div>
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900/60"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <CreateManualTaskModal
+              periodId={currentPeriodId}
+              roleOptions={manualRoleOptions}
+              onCreated={() => {
+                setCreateOpen(false);
+                setOffset(0);
+                void reloadList(0);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {listError ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -603,14 +662,14 @@ export default function TasksPage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950/20 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="text-sm font-semibold text-zinc-100">Список</div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setOffset((v) => Math.max(0, v - limit))}
+                onClick={() => setOffset((v) => Math.max(0, v - 50))}
                 className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
                 disabled={listLoading || offset <= 0}
                 title="Предыдущая страница"
@@ -618,9 +677,9 @@ export default function TasksPage() {
                 Назад
               </button>
               <button
-                onClick={() => setOffset((v) => v + limit)}
+                onClick={() => setOffset((v) => v + 50)}
                 className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-                disabled={listLoading || list.length < limit}
+                disabled={listLoading || list.length < 50}
                 title="Следующая страница"
               >
                 Далее
@@ -645,29 +704,225 @@ export default function TasksPage() {
                         const id = taskIdOf(t);
                         const isSel = selectedId === id;
                         const deadline = formatDeadline(t);
-                        const actions = allowedActionsOf(t);
+
+                        const detailsSrc: any = isSel ? (item ?? t) : t;
+                        const detailsAllowed = isSel ? effectiveAllowed : allowedActionsOf(t);
+                        const detailsStatus = isSel ? effectiveStatus : statusTextOf(t);
+
+                        const detailsReportLinkExisting = String(detailsSrc?.report_link || "").trim();
+                        const detailsReportSubmittedAt = detailsSrc?.report_submitted_at ?? null;
+                        const detailsReportSubmittedBy = detailsSrc?.report_submitted_by ?? null;
+                        const detailsReportApprovedAt = detailsSrc?.report_approved_at ?? null;
+                        const detailsReportApprovedBy = detailsSrc?.report_approved_by ?? null;
+                        const detailsReportCurrentComment = String(detailsSrc?.report_current_comment || "").trim();
+
+                        const detailsSubmittedByLabel = roleLabelOfReport(detailsSrc, "submitted");
+                        const detailsApprovedByLabel = roleLabelOfReport(detailsSrc, "approved");
+
+                        const detailsReportIsHttp = detailsReportLinkExisting ? isHttpUrl(detailsReportLinkExisting) : false;
+                        const detailsReportIsUncOrLocal = detailsReportLinkExisting
+                          ? isUncPath(detailsReportLinkExisting) || isWindowsDrivePath(detailsReportLinkExisting)
+                          : false;
+
+                        const detailsReportUiState = computeReportUiState(detailsSrc);
 
                         return (
-                          <button
+                          <div
                             key={id}
-                            onClick={() => setSelectedId(id)}
                             className={[
-                              "w-full rounded-lg border px-3 py-2 text-left",
-                              isSel
-                                ? "border-zinc-600 bg-zinc-900"
-                                : "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/60",
+                              "rounded-lg border",
+                              isSel ? "border-zinc-600 bg-zinc-900" : "border-zinc-800 bg-zinc-950/40",
                             ].join(" ")}
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="font-medium text-zinc-100">{taskTitleOf(t)}</div>
-                              <div className="text-xs text-zinc-400">Дедлайн: {deadline}</div>
-                            </div>
+                            <button
+                              onClick={() => setSelectedId(isSel ? null : id)}
+                              className="w-full px-3 py-2 text-left hover:bg-zinc-900/60"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="font-medium text-zinc-100">{taskTitleOf(t)}</div>
+                                <div className="text-xs text-zinc-400">Дедлайн: {deadline}</div>
+                              </div>
 
-                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                              <span>№{id}</span>
-                              <span>доступно: {actionsRu(actions)}</span>
-                            </div>
-                          </button>
+                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                                <span>№{id}</span>
+                              </div>
+                            </button>
+
+                            {isSel ? (
+                              <div className="border-t border-zinc-800 px-3 py-3">
+                                {itemError ? (
+                                  <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {itemError}
+                                  </div>
+                                ) : null}
+
+                                <div className="mb-2 flex items-center justify-end gap-2">
+                                  <div className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200">
+                                    {detailsStatus}
+                                  </div>
+
+                                  <div className={["rounded-md border px-2 py-1 text-xs", reportStatusBadgeClass(detailsReportUiState)].join(" ")}>
+                                    {reportStatusBadgeText(detailsReportUiState)}
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 text-xs text-zinc-500">
+                                  Дедлайн: <span className="text-zinc-200">{formatDeadline(detailsSrc)}</span>
+                                </div>
+
+                                <div className="mt-2 text-xs text-zinc-500">
+                                  Доступные действия: <span className="text-zinc-400">{actionsRu(detailsAllowed)}</span>
+                                </div>
+
+                                {uiNotice && selectedId === id ? (
+                                  <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-200">
+                                    {uiNotice}
+                                  </div>
+                                ) : null}
+
+                                <div className="mt-4 grid grid-cols-1 gap-3">
+                                  {detailsReportLinkExisting ? (
+                                    <div className="rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+                                      <div className="mb-1 text-xs text-zinc-400">Отчёт</div>
+
+                                      {detailsReportIsHttp ? (
+                                        <a
+                                          href={detailsReportLinkExisting}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="break-all text-sm text-blue-400 underline"
+                                        >
+                                          Открыть отчёт
+                                        </a>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          <div className="break-all text-sm text-zinc-200">{detailsReportLinkExisting}</div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <button
+                                              onClick={async () => {
+                                                const ok = await copyToClipboard(detailsReportLinkExisting);
+                                                setCopyHint(ok ? "Путь скопирован" : "Не удалось скопировать");
+                                                window.setTimeout(() => setCopyHint(""), 1500);
+                                              }}
+                                              className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900/60"
+                                            >
+                                              Скопировать путь
+                                            </button>
+                                            {detailsReportIsUncOrLocal ? (
+                                              <div className="text-xs text-zinc-500">UNC/локальный путь не открывается браузером напрямую.</div>
+                                            ) : (
+                                              <div className="text-xs text-zinc-500">Ссылка не является http(s).</div>
+                                            )}
+                                            {copyHint ? <div className="text-xs text-zinc-400">• {copyHint}</div> : null}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {detailsReportSubmittedAt ? (
+                                        <div className="mt-2 text-xs text-zinc-400">
+                                          Отчёт отправлен: <span className="text-zinc-200">{fmtDtRu(detailsReportSubmittedAt)}</span>
+                                        </div>
+                                      ) : null}
+
+                                      {detailsReportSubmittedBy ? (
+                                        <div className="text-xs text-zinc-400">
+                                          Отправил: <span className="text-zinc-200">{detailsSubmittedByLabel}</span>
+                                        </div>
+                                      ) : null}
+
+                                      {detailsReportApprovedAt ? (
+                                        <div className="mt-2 text-xs text-zinc-400">
+                                          Решение принято: <span className="text-zinc-200">{fmtDtRu(detailsReportApprovedAt)}</span>
+                                        </div>
+                                      ) : null}
+
+                                      {detailsReportApprovedBy ? (
+                                        <div className="text-xs text-zinc-400">
+                                          Принял решение: <span className="text-zinc-200">{detailsApprovedByLabel}</span>
+                                        </div>
+                                      ) : null}
+
+                                      {detailsReportCurrentComment ? (
+                                        <div className="mt-2 text-xs text-zinc-400">
+                                          Комментарий: <span className="text-zinc-200">{detailsReportCurrentComment}</span>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+
+                                  {selectedId === id && can("report") ? (
+                                    <div>
+                                      <label className="block text-xs text-zinc-400">Ссылка/путь на отчёт</label>
+                                      <input
+                                        value={reportLink}
+                                        onChange={(e) => setReportLink(e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
+                                        placeholder="https://... или \\server\share\... или d:\..."
+                                      />
+                                    </div>
+                                  ) : null}
+
+                                  {selectedId === id ? (
+                                    <div>
+                                      <textarea
+                                        value={reason}
+                                        onChange={(e) => setReason(e.target.value)}
+                                        className="mt-1 w-full min-h-[44px] resize-y rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
+                                        placeholder="Причина / комментарий…"
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                {selectedId === id ? (
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                    {can("report") ? (
+                                      <button
+                                        onClick={() => void runAction("report")}
+                                        disabled={itemLoading}
+                                        className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
+                                      >
+                                        {ACTION_RU.report}
+                                      </button>
+                                    ) : null}
+
+                                    {can("approve") ? (
+                                      <button
+                                        onClick={() => void runAction("approve")}
+                                        disabled={itemLoading}
+                                        className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
+                                      >
+                                        {ACTION_RU.approve}
+                                      </button>
+                                    ) : null}
+
+                                    {can("reject") ? (
+                                      <button
+                                        onClick={() => void runAction("reject")}
+                                        disabled={itemLoading}
+                                        className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
+                                      >
+                                        {ACTION_RU.reject}
+                                      </button>
+                                    ) : null}
+
+                                    {can("archive") ? (
+                                      <button
+                                        onClick={() => {
+                                          const ok = window.confirm("Переместить в архив — точно?");
+                                          if (ok) void runAction("archive");
+                                        }}
+                                        disabled={itemLoading}
+                                        className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
+                                      >
+                                        {ACTION_RU.archive}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </div>
@@ -675,209 +930,6 @@ export default function TasksPage() {
                 );
               })}
             </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/20 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold text-zinc-100">Карточка</div>
-
-            <button
-              onClick={() => (selectedId ? void reloadItem(selectedId) : null)}
-              className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-              disabled={!selectedId || itemLoading}
-            >
-              Обновить
-            </button>
-          </div>
-
-          {itemError ? (
-            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {itemError}
-            </div>
-          ) : null}
-
-          {!selectedId ? (
-            <div className="text-sm text-zinc-400">Выберите задачу слева.</div>
-          ) : (
-            <>
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold text-zinc-100">{selectedTitle}</div>
-                    <div className="mt-1 text-sm text-zinc-400">№{selectedId}</div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200">
-                      {effectiveStatus}
-                    </div>
-
-                    <div className={["rounded-md border px-2 py-1 text-xs", reportStatusBadgeClass(reportUiState)].join(" ")}>
-                      {reportStatusBadgeText(reportUiState)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 text-xs text-zinc-500">
-                  Дедлайн: <span className="text-zinc-200">{selectedDeadline}</span>
-                </div>
-
-                <div className="mt-2 text-xs text-zinc-500">
-                  Доступные действия: <span className="text-zinc-400">{actionsRu(effectiveAllowed)}</span>
-                </div>
-
-                {uiNotice ? (
-                  <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-200">
-                    {uiNotice}
-                  </div>
-                ) : null}
-
-                <div className="mt-4 grid grid-cols-1 gap-3">
-                  {reportLinkExisting ? (
-                    <div className="rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
-                      <div className="mb-1 text-xs text-zinc-400">Отчёт</div>
-
-                      {reportIsHttp ? (
-                        <a
-                          href={reportLinkExisting}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="break-all text-sm text-blue-400 underline"
-                        >
-                          Открыть отчёт
-                        </a>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="break-all text-sm text-zinc-200">{reportLinkExisting}</div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={async () => {
-                                const ok = await copyToClipboard(reportLinkExisting);
-                                setCopyHint(ok ? "Путь скопирован" : "Не удалось скопировать");
-                                window.setTimeout(() => setCopyHint(""), 1500);
-                              }}
-                              className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900/60"
-                            >
-                              Скопировать путь
-                            </button>
-                            {reportIsUncOrLocal ? (
-                              <div className="text-xs text-zinc-500">UNC/локальный путь не открывается браузером напрямую.</div>
-                            ) : (
-                              <div className="text-xs text-zinc-500">Ссылка не является http(s).</div>
-                            )}
-                            {copyHint ? <div className="text-xs text-zinc-400">• {copyHint}</div> : null}
-                          </div>
-                        </div>
-                      )}
-
-                      {reportSubmittedAt ? (
-                        <div className="mt-2 text-xs text-zinc-400">
-                          Отчёт отправлен: <span className="text-zinc-200">{fmtDtRu(reportSubmittedAt)}</span>
-                        </div>
-                      ) : null}
-
-                      {reportSubmittedBy ? (
-                        <div className="text-xs text-zinc-400">
-                          Отправил: <span className="text-zinc-200">{submittedByLabel}</span>
-                        </div>
-                      ) : null}
-
-                      {reportApprovedAt ? (
-                        <div className="mt-2 text-xs text-zinc-400">
-                          Решение принято: <span className="text-zinc-200">{fmtDtRu(reportApprovedAt)}</span>
-                        </div>
-                      ) : null}
-
-                      {reportApprovedBy ? (
-                        <div className="text-xs text-zinc-400">
-                          Принял решение: <span className="text-zinc-200">{approvedByLabel}</span>
-                        </div>
-                      ) : null}
-
-                      {reportCurrentComment ? (
-                        <div className="mt-2 text-xs text-zinc-400">
-                          Комментарий: <span className="text-zinc-200">{reportCurrentComment}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {can("report") ? (
-                    <div>
-                      <label className="block text-xs text-zinc-400">Ссылка/путь на отчёт</label>
-                      <input
-                        value={reportLink}
-                        onChange={(e) => setReportLink(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
-                        placeholder="https://... или \\server\share\... или d:\..."
-                      />
-                    </div>
-                  ) : null}
-
-                  <div>
-                    <label className="block text-xs text-zinc-400">
-                      Примечание{can("reject") ? " (обязательно для “Отклонить”) " : " (опционально) "}
-                    </label>
-                    <textarea
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      className="mt-1 w-full min-h-[90px] resize-y rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
-                      placeholder="Причина / комментарий…"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {can("report") ? (
-                    <button
-                      onClick={() => void runAction("report")}
-                      disabled={itemLoading}
-                      className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-                    >
-                      {ACTION_RU.report}
-                    </button>
-                  ) : null}
-
-                  {can("approve") ? (
-                    <button
-                      onClick={() => void runAction("approve")}
-                      disabled={itemLoading}
-                      className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-                    >
-                      {ACTION_RU.approve}
-                    </button>
-                  ) : null}
-
-                  {can("reject") ? (
-                    <button
-                      onClick={() => void runAction("reject")}
-                      disabled={itemLoading}
-                      className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-                    >
-                      {ACTION_RU.reject}
-                    </button>
-                  ) : null}
-
-                  {can("archive") ? (
-                    <button
-                      onClick={() => {
-                        const ok = window.confirm("Переместить в архив — точно?");
-                        if (ok) void runAction("archive");
-                      }}
-                      disabled={itemLoading}
-                      className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
-                    >
-                      {ACTION_RU.archive}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <details className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/20 p-3">
-                <summary className="cursor-pointer text-sm text-zinc-300">Детали (JSON)</summary>
-                <pre className="mt-2 overflow-auto text-xs text-zinc-200">{JSON.stringify(item ?? selectedFromList, null, 2)}</pre>
-              </details>
-            </>
           )}
         </div>
       </div>

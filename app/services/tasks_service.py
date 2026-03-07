@@ -6,7 +6,7 @@ import os
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
 from app.services.org_units_service import OrgUnitsService
@@ -159,6 +159,159 @@ def compute_visible_executor_role_ids_for_tasks(
             include_inactive_users=bool(include_inactive_users),
         )
     )
+
+
+def get_manual_task_role_options_for_user(
+    conn,
+    *,
+    current_user_id: int,
+) -> Dict[str, Any]:
+    current_user_id = int(current_user_id)
+
+    user_row = conn.execute(
+        text(
+            """
+            SELECT user_id, role_id, unit_id, is_active
+            FROM public.users
+            WHERE user_id = :uid
+            """
+        ),
+        {"uid": current_user_id},
+    ).mappings().first()
+
+    if not user_row:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    current_role_id = int(user_row["role_id"])
+    current_unit_id = int(user_row["unit_id"]) if user_row.get("unit_id") is not None else None
+
+    privileged_role_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
+    privileged_user_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
+
+    is_privileged = (
+        current_user_id in privileged_user_ids
+        or current_role_id in privileged_role_ids
+    )
+
+    visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=current_user_id)
+    visible_role_ids = sorted({int(x) for x in visible_roles if int(x) > 0})
+
+    if not visible_role_ids:
+        visible_role_ids = [int(current_role_id)]
+
+    is_manager = (
+        is_privileged
+        or (int(current_role_id) in DIRECTOR_ROLE_IDS)
+        or (int(current_role_id) in DEPUTY_ROLE_IDS)
+        or (int(current_role_id) in SUPERVISOR_ROLE_IDS)
+        or (len(visible_role_ids) > 1)
+    )
+
+    if not is_manager:
+        return {
+            "can_create_manual_task": False,
+            "items": [],
+        }
+
+    # Fallback:
+    # если пользователь распознан как руководитель, но visibility не вернула подчинённых ролей,
+    # берём роли активных пользователей из текущего подразделения и всех дочерних подразделений,
+    # кроме его собственной роли.
+    if len(visible_role_ids) <= 1 and current_unit_id is not None:
+        fallback_rows = (
+            conn.execute(
+                text(
+                    """
+                    WITH RECURSIVE subtree AS (
+                        SELECT ou.unit_id
+                        FROM public.org_units ou
+                        WHERE ou.unit_id = :unit_id
+
+                        UNION ALL
+
+                        SELECT child.unit_id
+                        FROM public.org_units child
+                        JOIN subtree s ON s.unit_id = child.parent_unit_id
+                    )
+                    SELECT DISTINCT
+                        u.role_id,
+                        r.code AS role_code,
+                        r.name AS role_name,
+                        r.name AS role_name_ru
+                    FROM public.users u
+                    JOIN public.roles r ON r.role_id = u.role_id
+                    WHERE u.unit_id IN (SELECT unit_id FROM subtree)
+                      AND COALESCE(u.is_active, TRUE) = TRUE
+                      AND u.role_id IS NOT NULL
+                      AND u.role_id <> :current_role_id
+                    ORDER BY r.name
+                    """
+                ),
+                {
+                    "unit_id": int(current_unit_id),
+                    "current_role_id": int(current_role_id),
+                },
+            )
+            .mappings()
+            .all()
+        )
+
+        fallback_items: List[Dict[str, Any]] = []
+        for row in fallback_rows:
+            rid = int(row["role_id"])
+            fallback_items.append(
+                {
+                    "role_id": rid,
+                    "role_code": row.get("role_code"),
+                    "role_name": row.get("role_name"),
+                    "role_name_ru": row.get("role_name_ru"),
+                }
+            )
+
+        return {
+            "can_create_manual_task": bool(fallback_items),
+            "items": fallback_items,
+        }
+
+    rows = (
+        conn.execute(
+            text(
+                """
+                SELECT
+                    r.role_id,
+                    r.code AS role_code,
+                    r.name AS role_name,
+                    r.name AS role_name_ru
+                FROM public.roles r
+                WHERE r.role_id IN :role_ids
+                ORDER BY r.name
+                """
+            ).bindparams(bindparam("role_ids", expanding=True)),
+            {"role_ids": visible_role_ids},
+        )
+        .mappings()
+        .all()
+    )
+
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        rid = int(row["role_id"])
+        if rid == int(current_role_id):
+            continue
+
+        items.append(
+            {
+                "role_id": rid,
+                "role_code": row.get("role_code"),
+                "role_name": row.get("role_name"),
+                "role_name_ru": row.get("role_name_ru"),
+            }
+        )
+
+    return {
+        "can_create_manual_task": bool(items),
+        "items": items,
+    }
 
 
 def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
@@ -381,7 +534,6 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     if not _task_requires_approval(task_row):
         return False
 
-    # запрет self-approve
     try:
         submitted_by = task_row.get("report_submitted_by")
         if submitted_by is not None and int(submitted_by) == int(current_user_id):
@@ -389,11 +541,9 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
     except Exception:
         return False
 
-    # 1. Явный approver_user_id для adhoc/manual задач
     if _is_explicit_approver_user(current_user_id=current_user_id, task_row=task_row):
         return True
 
-    # 2. Для задач с regular_task_id согласующий определяется через regular_tasks.target_role_id
     rid = task_row.get("regular_task_id")
     if rid is not None:
         try:
@@ -421,8 +571,6 @@ def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[st
                 except Exception:
                     pass
 
-    # 3. Fallback для старых нестандартных кейсов:
-    # если задача уже "висит" на текущей роли, разрешаем approve/reject
     try:
         erid = int(task_row.get("executor_role_id") or 0)
         if erid > 0 and erid == int(current_role_id):
@@ -459,7 +607,10 @@ def _allowed_actions_for_user(
             actions.append("approve")
             actions.append("reject")
 
-    if _is_initiator(current_user_id=current_user_id, task_row=task_row) and code != "ARCHIVED":
+    if (
+        _is_initiator(current_user_id=current_user_id, task_row=task_row)
+        and code not in ("ARCHIVED", "DONE")
+    ):
         actions.append("archive")
 
     seen: Set[str] = set()
