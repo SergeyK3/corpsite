@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -43,7 +44,6 @@ def _env_date(name: str) -> Optional[date]:
     if not v:
         return None
     try:
-        # YYYY-MM-DD
         return date.fromisoformat(v)
     except Exception:
         return None
@@ -58,6 +58,10 @@ FALLBACK_PERIOD_ID: int = _env_int("REGULAR_TASKS_FALLBACK_PERIOD_ID", 1)
 # Task statuses (public.task_statuses)
 ARCHIVED_STATUS_ID: int = _env_int("TASK_STATUS_ID_ARCHIVED", 5)
 IN_PROGRESS_STATUS_CODE: str = os.getenv("TASK_STATUS_CODE_IN_PROGRESS") or "IN_PROGRESS"
+
+# Task metadata for generated regular tasks
+REGULAR_TASK_KIND: str = (os.getenv("REGULAR_TASKS_TASK_KIND") or "regular").strip()
+REGULAR_TASKS_SOURCE_KIND: str = (os.getenv("REGULAR_TASKS_SOURCE_KIND") or "regular_task").strip()
 
 # Force-run helpers:
 # - REGULAR_TASKS_RUN_FOR_DATE=YYYY-MM-DD  -> считать, что "сегодня" = эта дата (для due-check + period-resolve)
@@ -86,7 +90,6 @@ def _compute_base_title_from_template(*, report_code: str, template_title: str) 
     if code:
         return f"Подготовить {code}"
 
-    # last resort
     return "Подготовить отчёт"
 
 
@@ -100,7 +103,6 @@ class RunStats:
 
 
 def _now_local() -> datetime:
-    # фиксируем UTC+5 как в проекте (простая модель)
     return datetime.now(_LOCAL_TZ)
 
 
@@ -245,7 +247,6 @@ def _weekday_token_to_iso(x: Any) -> Optional[int]:
     s = str(x).strip()
     if not s:
         return None
-    # numeric string?
     try:
         v = int(s)
         return v if 1 <= v <= 7 else None
@@ -266,7 +267,6 @@ def _as_int_list(v: Any) -> List[int]:
             except Exception:
                 continue
         return out
-    # allow scalar: 15, "15"
     try:
         return [int(v)]
     except Exception:
@@ -291,7 +291,6 @@ def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict
                 if wd is not None:
                     wanted.add(wd)
         else:
-            # allow scalar
             wd = _weekday_token_to_iso(byweekday_raw)
             if wd is not None:
                 wanted.add(wd)
@@ -299,7 +298,6 @@ def _target_date_for_template(d: date, schedule_type: str, schedule_params: Dict
         if not wanted:
             return None
 
-        # find next day in [d..d+6] matching wanted weekday
         for i in range(0, 7):
             cand = d + timedelta(days=i)
             if cand.isoweekday() in wanted:
@@ -367,7 +365,6 @@ def _validate_template_schedule(schedule_type: str, schedule_params: Dict[str, A
         byweekday = schedule_params.get("byweekday")
         if byweekday is None:
             return "schedule_params.byweekday must be provided for schedule_type=weekly"
-        # accept scalar or list; validate after normalization
         wanted: List[int] = []
         if isinstance(byweekday, list):
             for x in byweekday:
@@ -405,6 +402,31 @@ def _validate_template_schedule(schedule_type: str, schedule_params: Dict[str, A
     return None
 
 
+def _normalize_assignment_scope(value: Any) -> str:
+    s = str(value or "").strip().lower()
+
+    if not s:
+        return "functional"
+
+    aliases = {
+        "functional": "functional",
+        "func": "functional",
+        "role": "functional",
+        "structural": "structural",
+        "structure": "structural",
+        "dept": "structural",
+        "department": "structural",
+        "unit": "structural",
+        "org_unit": "structural",
+        "admin": "admin",
+    }
+
+    normalized = aliases.get(s)
+    if not normalized:
+        raise ValueError(f"unsupported assignment_scope: {s}")
+    return normalized
+
+
 def _is_due_today_or_with_offset(
     *,
     now_local: datetime,
@@ -426,9 +448,8 @@ def _is_due_today_or_with_offset(
 
     if not ignore_time_gate:
         tt = _parse_time_hhmm(str(schedule_params.get("time") or ""))
-        if tt is not None:
-            if now_local.time() < tt:
-                return False
+        if tt is not None and now_local.time() < tt:
+            return False
 
     return True
 
@@ -512,13 +533,16 @@ def _reporting_period_resolve(
     return int(row2), d0, d1
 
 
+def _fallback_period_bounds(schedule_type: str, for_date: date) -> Tuple[date, date]:
+    st = (schedule_type or "").strip().lower()
+    if st == "weekly":
+        return _prev_week_period_bounds_simple(for_date)
+    if st == "yearly":
+        return _prev_year_period_bounds(for_date)
+    return _prev_month_period_bounds(for_date)
+
+
 def _period_suffix_for_template(schedule_type: str, period_start: date, period_end: date) -> str:
-    """
-    Unified suffix policy:
-      weekly  -> DD.MM.YYYY–DD.MM.YYYY
-      monthly -> MM.YYYY
-      yearly  -> YYYY
-    """
     st = (schedule_type or "").strip().lower()
 
     if st == "weekly":
@@ -647,7 +671,7 @@ def _log_run_item_safe(
     meta: Dict[str, Any],
 ) -> None:
     try:
-        with conn.begin_nested():  # SAVEPOINT
+        with conn.begin_nested():
             conn.execute(
                 text(
                     """
@@ -704,6 +728,36 @@ def _compose_task_title(*, base_title: str, role_name: str, suffix: str) -> str:
     return f"{bt} → {rn}"
 
 
+def _advisory_lock_key(
+    *,
+    regular_task_id: int,
+    period_id: int,
+    assignment_scope: str,
+    executor_role_id: int,
+) -> int:
+    raw = f"{int(regular_task_id)}|{int(period_id)}|{assignment_scope}|{int(executor_role_id)}".encode("utf-8")
+    digest = hashlib.sha1(raw).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=False) & 0x7FFFFFFFFFFFFFFF
+
+
+def _acquire_task_slot_lock(
+    conn: Connection,
+    *,
+    regular_task_id: int,
+    period_id: int,
+    assignment_scope: str,
+    executor_role_id: int,
+) -> int:
+    lock_key = _advisory_lock_key(
+        regular_task_id=regular_task_id,
+        period_id=period_id,
+        assignment_scope=assignment_scope,
+        executor_role_id=executor_role_id,
+    )
+    conn.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": int(lock_key)})
+    return lock_key
+
+
 def run_regular_tasks_generation_tx(
     conn: Connection,
     *,
@@ -712,10 +766,7 @@ def run_regular_tasks_generation_tx(
 ) -> Tuple[int, Dict[str, Any]]:
     now_local = run_at_local or _now_local()
 
-    # "сегодня" для due-check + period-resolve
     today_effective: date = FORCE_RUN_FOR_DATE or now_local.date()
-
-    # если задан REGULAR_TASKS_RUN_FOR_DATE — по умолчанию игнорируем time-gate, чтобы можно было прогонять ретроспективно
     ignore_time_gate: bool = IGNORE_TIME_GATE_ENV or (FORCE_RUN_FOR_DATE is not None)
 
     run_id = conn.execute(
@@ -736,18 +787,15 @@ def run_regular_tasks_generation_tx(
             SELECT
                 rt.regular_task_id,
                 rt.is_active,
-
                 rt.code AS report_code,
                 rt.title,
                 rt.description,
-
                 rt.executor_role_id,
                 rt.assignment_scope,
                 rt.schedule_type,
                 rt.schedule_params,
                 rt.create_offset_days,
                 rt.due_offset_days,
-
                 r.name AS executor_role_name,
                 r.code AS executor_role_code
             FROM public.regular_tasks rt
@@ -848,18 +896,40 @@ def run_regular_tasks_generation_tx(
                 )
                 continue
 
-            assignment_scope = str(t.get("assignment_scope") or "functional")
+            try:
+                assignment_scope = _normalize_assignment_scope(t.get("assignment_scope"))
+            except Exception as e:
+                msg = str(e)
+                errors.append({"regular_task_id": rid, "error": msg})
+                _log_run_item_safe(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=None,
+                    executor_role_id=int(executor_role_id),
+                    is_due=True,
+                    created_tasks=0,
+                    status="error",
+                    error=msg,
+                    meta=base_meta,
+                )
+                continue
 
             with conn.begin_nested():
                 try:
                     period_id, period_start, period_end = _reporting_period_resolve(
-                        conn, schedule_type=schedule_type, for_date=today_effective
+                        conn,
+                        schedule_type=schedule_type,
+                        for_date=today_effective,
                     )
                 except Exception:
                     period_id = int(FALLBACK_PERIOD_ID)
-                    period_start, period_end = _prev_month_period_bounds(today_effective)
+                    period_start, period_end = _fallback_period_bounds(schedule_type, today_effective)
 
-                due_date_val = _due_date_from_reporting_period_end(period_end=period_end, due_offset_days=due_offset_days)
+                due_date_val = _due_date_from_reporting_period_end(
+                    period_end=period_end,
+                    due_offset_days=due_offset_days,
+                )
                 suffix = _period_suffix_for_template(schedule_type, period_start, period_end)
 
                 report_code = str(t.get("report_code") or "").strip()
@@ -874,7 +944,19 @@ def run_regular_tasks_generation_tx(
                 if not role_name:
                     role_name = str(t.get("executor_role_code") or "").strip() or f"role#{executor_role_id}"
 
-                title_final = _compose_task_title(base_title=base_title, role_name=role_name, suffix=suffix)
+                title_final = _compose_task_title(
+                    base_title=base_title,
+                    role_name=role_name,
+                    suffix=suffix,
+                )
+
+                lock_key = _acquire_task_slot_lock(
+                    conn,
+                    regular_task_id=int(rid),
+                    period_id=int(period_id),
+                    assignment_scope=assignment_scope,
+                    executor_role_id=int(executor_role_id),
+                )
 
                 base_meta.update(
                     {
@@ -888,6 +970,11 @@ def run_regular_tasks_generation_tx(
                         "executor_role_name": role_name,
                         "report_code": report_code,
                         "template_title": template_title,
+                        "advisory_lock_key": int(lock_key),
+                        "task_kind": REGULAR_TASK_KIND,
+                        "source_kind": REGULAR_TASKS_SOURCE_KIND,
+                        "requires_report": True,
+                        "requires_approval": True,
                     }
                 )
 
@@ -906,7 +993,6 @@ def run_regular_tasks_generation_tx(
                     )
                     continue
 
-                # 1) Если уже есть активная задача ровно под этого исполнителя — обновляем due_date (dedupe)
                 same_exec_row = _select_active_task_same_executor(
                     conn,
                     regular_task_id=int(rid),
@@ -939,7 +1025,6 @@ def run_regular_tasks_generation_tx(
                     )
                     continue
 
-                # 2) Если есть активная задача по шаблону/периоду/скоупу, но на другого исполнителя — архивируем конфликт
                 archived_conflicts = 0
                 active_row = _select_active_task_for_template(
                     conn,
@@ -953,29 +1038,38 @@ def run_regular_tasks_generation_tx(
 
                 in_progress_status_id = _get_status_id(conn, IN_PROGRESS_STATUS_CODE)
 
-                # ВАЖНО:
-                # Раньше был ON CONFLICT(period_id, regular_task_id, executor_role_id) — у тебя в БД нет соответствующего unique/exclusion.
-                # Поэтому вставляем без ON CONFLICT и дедупим через SELECT выше.
                 row = conn.execute(
                     text(
                         """
                         INSERT INTO public.tasks (
-                            period_id, regular_task_id,
-                            title, description,
+                            period_id,
+                            regular_task_id,
+                            task_kind,
+                            source_kind,
+                            title,
+                            description,
                             initiator_user_id,
                             executor_role_id,
                             assignment_scope,
                             status_id,
-                            due_date
+                            due_date,
+                            requires_report,
+                            requires_approval
                         )
                         VALUES (
-                            :period_id, :regular_task_id,
-                            :title, :description,
+                            :period_id,
+                            :regular_task_id,
+                            :task_kind,
+                            :source_kind,
+                            :title,
+                            :description,
                             :initiator_user_id,
                             :executor_role_id,
                             :assignment_scope,
                             :status_id,
-                            :due_date
+                            :due_date,
+                            :requires_report,
+                            :requires_approval
                         )
                         RETURNING task_id, due_date
                         """
@@ -983,6 +1077,8 @@ def run_regular_tasks_generation_tx(
                     {
                         "period_id": int(period_id),
                         "regular_task_id": int(rid),
+                        "task_kind": REGULAR_TASK_KIND,
+                        "source_kind": REGULAR_TASKS_SOURCE_KIND,
                         "title": title_final,
                         "description": t.get("description"),
                         "initiator_user_id": int(SYSTEM_USER_ID),
@@ -990,6 +1086,8 @@ def run_regular_tasks_generation_tx(
                         "assignment_scope": assignment_scope,
                         "status_id": int(in_progress_status_id),
                         "due_date": due_date_val,
+                        "requires_report": True,
+                        "requires_approval": True,
                     },
                 ).mappings().first()
 
