@@ -20,6 +20,10 @@ except Exception:  # pragma: no cover
 # ---------------------------
 # Config
 # ---------------------------
+
+SYSTEM_ADMIN_ROLE_ID = 2
+
+
 def rbac_mode() -> str:
     # off | dept | groups
     v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
@@ -53,7 +57,10 @@ def privileged_user_ids() -> Set[int]:
 
 def privileged_role_ids() -> Set[int]:
     # Preferred: DIRECTORY_PRIVILEGED_ROLE_IDS
-    return _parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
+    # Tech admin role is always privileged by code.
+    s = _parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
+    s.add(SYSTEM_ADMIN_ROLE_ID)
+    return s
 
 
 def deputy_user_ids() -> Set[int]:
@@ -68,6 +75,17 @@ def deputy_user_ids() -> Set[int]:
 def deputy_role_ids() -> Set[int]:
     # New: DIRECTORY_DEPUTY_ROLE_IDS
     return _parse_int_set_env("DIRECTORY_DEPUTY_ROLE_IDS")
+
+
+def is_system_admin_role_id(role_id: Any) -> bool:
+    try:
+        return int(role_id) == SYSTEM_ADMIN_ROLE_ID
+    except Exception:
+        return False
+
+
+def is_system_admin(user_ctx: Dict[str, Any]) -> bool:
+    return is_system_admin_role_id(user_ctx.get("role_id"))
 
 
 # ---------------------------
@@ -159,6 +177,9 @@ def load_user_ctx(user_id: int) -> Dict[str, Any]:
 
 
 def is_privileged(user_ctx: Dict[str, Any]) -> bool:
+    if is_system_admin(user_ctx):
+        return True
+
     uid = int(user_ctx["user_id"])
     rid = int(user_ctx["role_id"]) if user_ctx.get("role_id") is not None else -1
     if uid in privileged_user_ids():
@@ -174,6 +195,9 @@ def is_deputy(user_ctx: Dict[str, Any]) -> bool:
       - DIRECTORY_DEPUTY_USER_IDS
       - DIRECTORY_DEPUTY_ROLE_IDS
     """
+    if is_system_admin(user_ctx):
+        return False
+
     uid = int(user_ctx["user_id"])
     rid = int(user_ctx["role_id"]) if user_ctx.get("role_id") is not None else -1
     if uid in deputy_user_ids():
@@ -209,15 +233,17 @@ def _resolve_parent_unit_id(unit_id: int) -> Optional[int]:
         return None
 
 
-def require_dept_scope(user_ctx: Dict[str, Any]) -> int:
+def require_dept_scope(user_ctx: Dict[str, Any]) -> Optional[int]:
     """
-    For RBAC_MODE=dept: non-privileged users must have unit_id.
+    For RBAC_MODE=dept:
 
-    Effective scope rule:
-      - privileged        -> scope is handled outside (no restriction)
-      - deputy (зам)      -> scope = parent(unit_id) if exists else unit_id
-      - regular user      -> scope = unit_id
+      - privileged / system admin -> no restriction (None)
+      - deputy                   -> scope = parent(unit_id) if exists else unit_id
+      - regular user             -> scope = unit_id
     """
+    if is_privileged(user_ctx):
+        return None
+
     unit_id = user_ctx.get("unit_id")
     if unit_id is None:
         raise HTTPException(

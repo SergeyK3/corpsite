@@ -12,6 +12,9 @@ from app.db.engine import engine
 from app.services.org_units_service import OrgUnitsService
 
 
+SYSTEM_ADMIN_ROLE_ID = 2
+
+
 def parse_int_set_env(name: str) -> Set[int]:
     raw = (os.getenv(name) or "").strip()
     if not raw:
@@ -31,6 +34,13 @@ def parse_int_set_env(name: str) -> Set[int]:
 SUPERVISOR_ROLE_IDS: Set[int] = parse_int_set_env("SUPERVISOR_ROLE_IDS")
 DEPUTY_ROLE_IDS: Set[int] = parse_int_set_env("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS: Set[int] = parse_int_set_env("DIRECTOR_ROLE_IDS")
+
+
+def is_system_admin_role_id(role_id: Any) -> bool:
+    try:
+        return int(role_id) == SYSTEM_ADMIN_ROLE_ID
+    except Exception:
+        return False
 
 
 def get_current_user_id(x_user_id: Optional[int]) -> int:
@@ -189,9 +199,49 @@ def get_manual_task_role_options_for_user(
     privileged_user_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
 
     is_privileged = (
-        current_user_id in privileged_user_ids
+        is_system_admin_role_id(current_role_id)
+        or current_user_id in privileged_user_ids
         or current_role_id in privileged_role_ids
     )
+
+    if is_system_admin_role_id(current_role_id):
+        rows = (
+            conn.execute(
+                text(
+                    """
+                    SELECT
+                        r.role_id,
+                        r.code AS role_code,
+                        r.name AS role_name,
+                        r.name AS role_name_ru
+                    FROM public.roles r
+                    WHERE r.role_id IS NOT NULL
+                    ORDER BY r.name
+                    """
+                )
+            )
+            .mappings()
+            .all()
+        )
+
+        items: List[Dict[str, Any]] = []
+        for row in rows:
+            rid = int(row["role_id"])
+            if rid == int(current_role_id):
+                continue
+            items.append(
+                {
+                    "role_id": rid,
+                    "role_code": row.get("role_code"),
+                    "role_name": row.get("role_name"),
+                    "role_name_ru": row.get("role_name_ru"),
+                }
+            )
+
+        return {
+            "can_create_manual_task": bool(items),
+            "items": items,
+        }
 
     visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=current_user_id)
     visible_role_ids = sorted({int(x) for x in visible_roles if int(x) > 0})
@@ -213,10 +263,6 @@ def get_manual_task_role_options_for_user(
             "items": [],
         }
 
-    # Fallback:
-    # если пользователь распознан как руководитель, но visibility не вернула подчинённых ролей,
-    # берём роли активных пользователей из текущего подразделения и всех дочерних подразделений,
-    # кроме его собственной роли.
     if len(visible_role_ids) <= 1 and current_unit_id is not None:
         fallback_rows = (
             conn.execute(
@@ -470,6 +516,9 @@ def _can_view(
     visible_executor_role_ids: Set[int],
     task_row: Dict[str, Any],
 ) -> bool:
+    if is_system_admin_role_id(current_role_id):
+        return True
+
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
 
@@ -500,6 +549,9 @@ def ensure_task_visible_or_404(
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    if is_system_admin_role_id(current_role_id):
+        return task_row
+
     visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
     if not _can_view(
         current_user_id=current_user_id,
@@ -516,6 +568,10 @@ def ensure_task_visible_or_404(
 
 
 def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
+    if is_system_admin_role_id(current_role_id):
+        code = str(task_row.get("status_code") or "")
+        return code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED")
+
     if not _task_requires_report(task_row):
         return False
 
@@ -528,6 +584,12 @@ def can_report_or_update(*, current_user_id: int, current_role_id: int, task_row
 
 def can_approve(*, current_user_id: int, current_role_id: int, task_row: Dict[str, Any]) -> bool:
     code = str(task_row.get("status_code") or "")
+
+    if is_system_admin_role_id(current_role_id):
+        if code != "WAITING_APPROVAL":
+            return False
+        return bool(_task_requires_approval(task_row))
+
     if code != "WAITING_APPROVAL":
         return False
 
@@ -588,6 +650,29 @@ def _allowed_actions_for_user(
     current_role_id: int,
 ) -> List[str]:
     code = str(task_row.get("status_code") or "")
+
+    if is_system_admin_role_id(current_role_id):
+        actions: List[str] = ["delete"]
+
+        if code not in ("ARCHIVED", "DONE"):
+            actions.append("archive")
+
+        if code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED") and _task_requires_report(task_row):
+            actions.append("report")
+
+        if code == "WAITING_APPROVAL" and _task_requires_approval(task_row):
+            actions.append("approve")
+            actions.append("reject")
+
+        seen_admin: Set[str] = set()
+        out_admin: List[str] = []
+        for a in actions:
+            if a in seen_admin:
+                continue
+            seen_admin.add(a)
+            out_admin.append(a)
+        return out_admin
+
     actions: List[str] = []
 
     if _task_requires_report(task_row) and code in ("IN_PROGRESS", "WAITING_REPORT", "REJECTED"):

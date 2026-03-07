@@ -12,6 +12,7 @@ from app.db.engine import engine
 from app.errors import ErrorCode, raise_error
 from app.services.tasks_fsm import transition
 from app.services.tasks_service import (
+    SYSTEM_ADMIN_ROLE_ID,
     SUPERVISOR_ROLE_IDS,
     DEPUTY_ROLE_IDS,
     DIRECTOR_ROLE_IDS,
@@ -33,9 +34,13 @@ from app.services.tasks_service import (
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-# -----------------------
-# small parsing helpers
-# -----------------------
+def _is_system_admin_role_id(role_id: Any) -> bool:
+    try:
+        return int(role_id) == int(SYSTEM_ADMIN_ROLE_ID)
+    except Exception:
+        return False
+
+
 def _as_int_or_none(v: Any) -> Optional[int]:
     if v is None:
         return None
@@ -104,10 +109,6 @@ def _normalize_status_filter(v: Optional[str]) -> Optional[str]:
 
 
 def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
-    """
-    Visibility helper:
-    a user can see a task if they have submitted at least one report for it.
-    """
     row = (
         conn.execute(
             text(
@@ -128,12 +129,6 @@ def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
 
 
 def _user_is_approver_for_task(conn, task_id: int, user_id: int, role_id: int) -> bool:
-    """
-    Approver visibility helper:
-    user can see/act if task is WAITING_APPROVAL and either:
-    - tasks.approver_user_id == current user_id
-    - or legacy regular_tasks.target_role_id == current role_id
-    """
     row = (
         conn.execute(
             text(
@@ -158,10 +153,6 @@ def _user_is_approver_for_task(conn, task_id: int, user_id: int, role_id: int) -
     )
     return bool(row)
 
-
-# -----------------------
-# endpoints
-# -----------------------
 
 @router.get("")
 @router.get("/")
@@ -200,26 +191,35 @@ def list_tasks(
         privileged_role_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_ROLE_IDS")
         privileged_user_ids = parse_int_set_env("DIRECTORY_PRIVILEGED_USER_IDS")
 
-        is_privileged = (int(current_user_id) in privileged_user_ids) or (int(role_id) in privileged_role_ids)
-
-        visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
-        visible_roles_list = sorted({int(x) for x in visible_roles if int(x) > 0})
-
-        if not visible_roles_list:
-            visible_roles_list = [int(role_id)]
-
-        is_manager = (
-            is_privileged
-            or (int(role_id) in DIRECTOR_ROLE_IDS)
-            or (int(role_id) in DEPUTY_ROLE_IDS)
-            or (int(role_id) in SUPERVISOR_ROLE_IDS)
-            or (len(visible_roles_list) > 1)
+        is_system_admin = _is_system_admin_role_id(role_id)
+        is_privileged = (
+            is_system_admin
+            or (int(current_user_id) in privileged_user_ids)
+            or (int(role_id) in privileged_role_ids)
         )
 
-        if not is_manager:
-            visible_roles_list = [int(role_id)]
+        if is_system_admin:
+            visible_roles_list: List[int] = []
+            is_manager = True
+        else:
+            visible_roles: Set[int] = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+            visible_roles_list = sorted({int(x) for x in visible_roles if int(x) > 0})
 
-        params["visible_role_ids"] = visible_roles_list
+            if not visible_roles_list:
+                visible_roles_list = [int(role_id)]
+
+            is_manager = (
+                is_privileged
+                or (int(role_id) in DIRECTOR_ROLE_IDS)
+                or (int(role_id) in DEPUTY_ROLE_IDS)
+                or (int(role_id) in SUPERVISOR_ROLE_IDS)
+                or (len(visible_roles_list) > 1)
+            )
+
+            if not is_manager:
+                visible_roles_list = [int(role_id)]
+
+            params["visible_role_ids"] = visible_roles_list
 
         allowed = load_assignment_scope_enum_labels(conn)
         if not allowed:
@@ -231,50 +231,51 @@ def list_tasks(
 
         where: List[str] = []
 
-        report_visibility = """
-            EXISTS (
-                SELECT 1
-                FROM public.task_reports rr
-                WHERE rr.task_id = t.task_id
-                  AND rr.submitted_by = :current_user_id
-            )
-        """.strip()
+        if not is_system_admin:
+            report_visibility = """
+                EXISTS (
+                    SELECT 1
+                    FROM public.task_reports rr
+                    WHERE rr.task_id = t.task_id
+                      AND rr.submitted_by = :current_user_id
+                )
+            """.strip()
 
-        explicit_approver_visibility = """
-            COALESCE(t.approver_user_id, 0) = :current_user_id
-            AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
-        """.strip()
+            explicit_approver_visibility = """
+                COALESCE(t.approver_user_id, 0) = :current_user_id
+                AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
+            """.strip()
 
-        legacy_approver_visibility = """
-            EXISTS (
-                SELECT 1
-                FROM public.regular_tasks rt
-                WHERE rt.regular_task_id = t.regular_task_id
-                  AND COALESCE(rt.target_role_id, 0) = :role_id
-            )
-            AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
-        """.strip()
+            legacy_approver_visibility = """
+                EXISTS (
+                    SELECT 1
+                    FROM public.regular_tasks rt
+                    WHERE rt.regular_task_id = t.regular_task_id
+                      AND COALESCE(rt.target_role_id, 0) = :role_id
+                )
+                AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
+            """.strip()
 
-        if is_manager:
-            where.append(
-                "("
-                "(t.initiator_user_id = :current_user_id) "
-                "OR (t.created_by_user_id = :current_user_id) "
-                "OR (t.executor_role_id IN :visible_role_ids) "
-                f"OR ({report_visibility}) "
-                f"OR ({explicit_approver_visibility}) "
-                f"OR ({legacy_approver_visibility})"
-                ")"
-            )
-        else:
-            where.append(
-                "("
-                "(t.executor_role_id IN :visible_role_ids) "
-                f"OR ({report_visibility}) "
-                f"OR ({explicit_approver_visibility}) "
-                f"OR ({legacy_approver_visibility})"
-                ")"
-            )
+            if is_manager:
+                where.append(
+                    "("
+                    "(t.initiator_user_id = :current_user_id) "
+                    "OR (t.created_by_user_id = :current_user_id) "
+                    "OR (t.executor_role_id IN :visible_role_ids) "
+                    f"OR ({report_visibility}) "
+                    f"OR ({explicit_approver_visibility}) "
+                    f"OR ({legacy_approver_visibility})"
+                    ")"
+                )
+            else:
+                where.append(
+                    "("
+                    "(t.executor_role_id IN :visible_role_ids) "
+                    f"OR ({report_visibility}) "
+                    f"OR ({explicit_approver_visibility}) "
+                    f"OR ({legacy_approver_visibility})"
+                    ")"
+                )
 
         if executor_role_id is not None:
             erid = int(executor_role_id)
@@ -320,83 +321,78 @@ def list_tasks(
 
         where_sql = " AND ".join(where) if where else "1=1"
 
-        count_sql = (
-            text(
-                f"""
-                SELECT COUNT(1)
-                FROM public.tasks t
-                LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
-                WHERE {where_sql}
-                """
-            )
-            .bindparams(bindparam("visible_role_ids", expanding=True))
-        )
+        count_text = f"""
+            SELECT COUNT(1)
+            FROM public.tasks t
+            LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
+            WHERE {where_sql}
+        """
+        select_text = f"""
+            SELECT
+                t.task_id,
+                t.period_id,
+                t.regular_task_id,
+                t.title,
+                t.description,
+                t.initiator_user_id,
+                t.created_by_user_id,
+                t.approver_user_id,
+                t.executor_role_id,
+                t.assignment_scope,
+                t.status_id,
+                t.task_kind,
+                t.requires_report,
+                t.requires_approval,
+                t.source_kind,
+                t.source_note,
+                t.due_date,
+                ts.code AS status_code,
+                ts.name_ru AS status_name_ru,
+
+                tr.report_link AS report_link,
+                tr.submitted_at AS report_submitted_at,
+                tr.submitted_by AS report_submitted_by,
+                tr.submitted_by_role_name AS report_submitted_by_role_name,
+                tr.submitted_by_role_code AS report_submitted_by_role_code,
+
+                tr.approved_at AS report_approved_at,
+                tr.approved_by AS report_approved_by,
+                tr.current_comment AS report_current_comment
+            FROM public.tasks t
+            LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    r.report_link,
+                    r.submitted_at,
+                    r.submitted_by,
+                    rs.name AS submitted_by_role_name,
+                    rs.code AS submitted_by_role_code,
+                    r.approved_at,
+                    r.approved_by,
+                    r.current_comment
+                FROM public.task_reports r
+                LEFT JOIN public.users us ON us.user_id = r.submitted_by
+                LEFT JOIN public.roles rs ON rs.role_id = us.role_id
+                WHERE r.task_id = t.task_id
+                ORDER BY
+                    r.submitted_at DESC NULLS LAST,
+                    r.approved_at  DESC NULLS LAST,
+                    r.report_id    DESC
+                LIMIT 1
+            ) tr ON TRUE
+            WHERE {where_sql}
+            ORDER BY t.task_id DESC
+            LIMIT :limit OFFSET :offset
+        """
+
+        if is_system_admin:
+            count_sql = text(count_text)
+            select_sql = text(select_text)
+        else:
+            count_sql = text(count_text).bindparams(bindparam("visible_role_ids", expanding=True))
+            select_sql = text(select_text).bindparams(bindparam("visible_role_ids", expanding=True))
 
         total = (conn.execute(count_sql, params).scalar() or 0)
-
-        select_sql = (
-            text(
-                f"""
-                SELECT
-                    t.task_id,
-                    t.period_id,
-                    t.regular_task_id,
-                    t.title,
-                    t.description,
-                    t.initiator_user_id,
-                    t.created_by_user_id,
-                    t.approver_user_id,
-                    t.executor_role_id,
-                    t.assignment_scope,
-                    t.status_id,
-                    t.task_kind,
-                    t.requires_report,
-                    t.requires_approval,
-                    t.source_kind,
-                    t.source_note,
-                    t.due_date,
-                    ts.code AS status_code,
-                    ts.name_ru AS status_name_ru,
-
-                    tr.report_link AS report_link,
-                    tr.submitted_at AS report_submitted_at,
-                    tr.submitted_by AS report_submitted_by,
-                    tr.submitted_by_role_name AS report_submitted_by_role_name,
-                    tr.submitted_by_role_code AS report_submitted_by_role_code,
-
-                    tr.approved_at AS report_approved_at,
-                    tr.approved_by AS report_approved_by,
-                    tr.current_comment AS report_current_comment
-                FROM public.tasks t
-                LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
-                LEFT JOIN LATERAL (
-                    SELECT
-                        r.report_link,
-                        r.submitted_at,
-                        r.submitted_by,
-                        rs.name AS submitted_by_role_name,
-                        rs.code AS submitted_by_role_code,
-                        r.approved_at,
-                        r.approved_by,
-                        r.current_comment
-                    FROM public.task_reports r
-                    LEFT JOIN public.users us ON us.user_id = r.submitted_by
-                    LEFT JOIN public.roles rs ON rs.role_id = us.role_id
-                    WHERE r.task_id = t.task_id
-                    ORDER BY
-                        r.submitted_at DESC NULLS LAST,
-                        r.approved_at  DESC NULLS LAST,
-                        r.report_id    DESC
-                    LIMIT 1
-                ) tr ON TRUE
-                WHERE {where_sql}
-                ORDER BY t.task_id DESC
-                LIMIT :limit OFFSET :offset
-                """
-            )
-            .bindparams(bindparam("visible_role_ids", expanding=True))
-        )
-
         rows = conn.execute(select_sql, params).mappings().all()
 
         items: List[Dict[str, Any]] = []
@@ -757,10 +753,6 @@ def approve_report(
     task_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
-    """
-    UI contract: POST /tasks/{id}/approve { reason? }
-    Backward-compat: supports { approve: true|false, current_comment? } and will route approve=false to REJECT.
-    """
     current_user_id = int(user["user_id"])
 
     approve_raw = payload.get("approve", True)
@@ -818,9 +810,6 @@ def reject_report(
     task_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
-    """
-    UI contract: POST /tasks/{id}/reject { reason? }
-    """
     current_user_id = int(user["user_id"])
 
     reason = _pick_str(payload, ["reason", "current_comment", "comment"])
@@ -875,10 +864,6 @@ def archive_task(
     task_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Security(get_current_user),
 ) -> Dict[str, Any]:
-    """
-    UI contract: POST /tasks/{id}/archive { reason? }
-    Keeps legacy DELETE /tasks/{id} for backward compatibility.
-    """
     current_user_id = int(user["user_id"])
 
     reason = _pick_str(payload, ["reason", "current_comment", "comment"])
@@ -895,7 +880,7 @@ def archive_task(
             include_archived=True,
         )
 
-        if int(task.get("initiator_user_id") or 0) != int(current_user_id):
+        if (not _is_system_admin_role_id(role_id)) and int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
 
         transition(
@@ -916,12 +901,9 @@ def archive_task(
 @router.delete("/{task_id}", status_code=204)
 def delete_task(
     task_id: int = Path(..., ge=1),
+    hard: bool = Query(False, description="For ADMIN: hard delete task and related reports/audit rows."),
     user: Dict[str, Any] = Security(get_current_user),
 ) -> Response:
-    """
-    Legacy archive endpoint (kept).
-    Prefer POST /tasks/{id}/archive for UI.
-    """
     current_user_id = int(user["user_id"])
 
     with engine.begin() as conn:
@@ -935,7 +917,55 @@ def delete_task(
             include_archived=True,
         )
 
-        if int(task.get("initiator_user_id") or 0) != int(current_user_id):
+        if hard:
+            if not _is_system_admin_role_id(role_id):
+                raise HTTPException(status_code=403, detail="Only ADMIN can hard-delete tasks")
+
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM public.task_event_deliveries
+                    WHERE audit_id IN (
+                        SELECT e.audit_id
+                        FROM public.task_events e
+                        WHERE e.task_id = :task_id
+                    )
+                    """
+                ),
+                {"task_id": int(task_id)},
+            )
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM public.task_event_recipients
+                    WHERE audit_id IN (
+                        SELECT e.audit_id
+                        FROM public.task_events e
+                        WHERE e.task_id = :task_id
+                    )
+                    """
+                ),
+                {"task_id": int(task_id)},
+            )
+            conn.execute(
+                text("DELETE FROM public.task_reports WHERE task_id = :task_id"),
+                {"task_id": int(task_id)},
+            )
+            conn.execute(
+                text("DELETE FROM public.task_audit_log WHERE task_id = :task_id"),
+                {"task_id": int(task_id)},
+            )
+            conn.execute(
+                text("DELETE FROM public.task_events WHERE task_id = :task_id"),
+                {"task_id": int(task_id)},
+            )
+            conn.execute(
+                text("DELETE FROM public.tasks WHERE task_id = :task_id"),
+                {"task_id": int(task_id)},
+            )
+            return Response(status_code=204)
+
+        if (not _is_system_admin_role_id(role_id)) and int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
 
         transition(
