@@ -33,7 +33,8 @@ from app.auth import router as auth_router  # /auth/login, /auth/me
 
 # regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
-from app.api.regular_tasks import router as regular_tasks_router  # /regular-tasks, /regular-task-runs, /regular-task-runs/{run_id}/items
+from app.services.regular_tasks_public_router import router as regular_tasks_public_router
+from app.api.regular_tasks import router as regular_tasks_router  # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -88,8 +89,9 @@ app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events
 app.include_router(tg_bind_router)
 app.include_router(directory_router)
 
-# Regular tasks (public read)
-app.include_router(regular_tasks_router)
+# Regular tasks
+app.include_router(regular_tasks_public_router)  # /regular-tasks
+app.include_router(regular_tasks_router)         # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
 
 # -----------------------
 # Routers (internal)
