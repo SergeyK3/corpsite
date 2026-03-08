@@ -788,6 +788,7 @@ class OrgUnitsService:
         *,
         name: str,
         parent_unit_id: Optional[int] = None,
+        group_id: int,
         code: Optional[str] = None,
         is_active: bool = True,
     ) -> OrgUnit:
@@ -796,6 +797,7 @@ class OrgUnitsService:
             raise ValueError("name must not be empty")
 
         pid = int(parent_unit_id) if parent_unit_id is not None else None
+        gid = int(group_id)
 
         if pid is None:
             self._ensure_single_root_on_create(include_inactive=True)
@@ -808,8 +810,8 @@ class OrgUnitsService:
 
         sql = text(
             f"""
-            INSERT INTO {self._schema}.{self._org_units_table} (parent_unit_id, name, code, is_active)
-            VALUES (:parent_unit_id, :name, :code, :is_active)
+            INSERT INTO {self._schema}.{self._org_units_table} (parent_unit_id, name, code, group_id, is_active)
+            VALUES (:parent_unit_id, :name, :code, :group_id, :is_active)
             RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
             """
         )
@@ -821,6 +823,7 @@ class OrgUnitsService:
                     "parent_unit_id": pid,
                     "name": nm,
                     "code": cd,
+                    "group_id": gid,
                     "is_active": bool(is_active),
                 },
             ).mappings().first()
@@ -836,3 +839,37 @@ class OrgUnitsService:
             group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )
+    
+    def delete_org_unit(self, *, unit_id: int) -> None:
+        uid = int(unit_id)
+
+        current = self.get_org_unit(unit_id=uid, include_inactive=True)
+        if current is None:
+            raise LookupError(f"org unit not found: unit_id={uid}")
+
+        child_sql = text(
+            f"""
+            SELECT 1
+            FROM {self._schema}.{self._org_units_table}
+            WHERE parent_unit_id = :unit_id
+            LIMIT 1
+            """
+        )
+
+        with self._engine.begin() as c:
+            child_row = c.execute(child_sql, {"unit_id": uid}).first()
+            if child_row is not None:
+                raise ValueError("cannot delete org unit with child units")
+
+            deleted = c.execute(
+                text(
+                    f"""
+                    DELETE FROM {self._schema}.{self._org_units_table}
+                    WHERE unit_id = :unit_id
+                    """
+                ),
+                {"unit_id": uid},
+            )
+
+        if not deleted.rowcount:
+            raise LookupError(f"org unit not found: unit_id={uid}")

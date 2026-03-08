@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
-from app.auth import get_current_user  # JWT
+from app.auth import get_current_user
 from .common import as_http500
 from .rbac import compute_scope, require_privileged_or_403, load_ancestor_chain_units, org_units
 from app.services.org_units_service import OrgUnit
@@ -29,7 +29,7 @@ def org_units_tree(
                 include_inactive = True
 
         uid = int(user["user_id"])
-        user_ctx = user  # compat with existing RBAC helpers
+        user_ctx = user
 
         scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
@@ -121,9 +121,12 @@ def list_org_units_flat(
             "items": [
                 {
                     "id": u.unit_id,
+                    "unit_id": u.unit_id,
                     "parent_id": u.parent_unit_id,
+                    "parent_unit_id": u.parent_unit_id,
                     "name": u.name,
                     "code": u.code,
+                    "group_id": u.group_id,
                     "is_active": u.is_active,
                 }
                 for u in units
@@ -155,6 +158,7 @@ class OrgUnitMoveIn(BaseModel):
 class OrgUnitCreateIn(BaseModel):
     name: str
     parent_unit_id: Optional[int] = None
+    group_id: Optional[int] = None
     code: Optional[str] = None
     is_active: bool = True
 
@@ -176,7 +180,18 @@ async def org_unit_rename(
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.rename_org_unit(unit_id=int(unit_id), new_name=body.name)
-        return {"item": {"id": u.unit_id, "parent_id": u.parent_unit_id, "name": u.name, "code": u.code, "is_active": u.is_active}}
+        return {
+            "item": {
+                "id": u.unit_id,
+                "unit_id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "parent_unit_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "group_id": u.group_id,
+                "is_active": u.is_active,
+            }
+        }
 
     except HTTPException:
         raise
@@ -214,7 +229,18 @@ async def org_unit_move(
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.move_org_unit(unit_id=int(unit_id), parent_unit_id=body.parent_unit_id)
-        return {"item": {"id": u.unit_id, "parent_id": u.parent_unit_id, "name": u.name, "code": u.code, "is_active": u.is_active}}
+        return {
+            "item": {
+                "id": u.unit_id,
+                "unit_id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "parent_unit_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "group_id": u.group_id,
+                "is_active": u.is_active,
+            }
+        }
 
     except HTTPException:
         raise
@@ -239,7 +265,18 @@ async def org_unit_deactivate(
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.deactivate_org_unit(unit_id=int(unit_id))
-        return {"item": {"id": u.unit_id, "parent_id": u.parent_unit_id, "name": u.name, "code": u.code, "is_active": u.is_active}}
+        return {
+            "item": {
+                "id": u.unit_id,
+                "unit_id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "parent_unit_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "group_id": u.group_id,
+                "is_active": u.is_active,
+            }
+        }
 
     except HTTPException:
         raise
@@ -264,7 +301,18 @@ async def org_unit_activate(
         _ = compute_scope(uid, user_ctx, include_inactive=True)
 
         u = org_units.activate_org_unit(unit_id=int(unit_id))
-        return {"item": {"id": u.unit_id, "parent_id": u.parent_unit_id, "name": u.name, "code": u.code, "is_active": u.is_active}}
+        return {
+            "item": {
+                "id": u.unit_id,
+                "unit_id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "parent_unit_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "group_id": u.group_id,
+                "is_active": u.is_active,
+            }
+        }
 
     except HTTPException:
         raise
@@ -285,6 +333,9 @@ async def org_unit_create(
         if body is None or not getattr(body, "name", None):
             raise HTTPException(status_code=400, detail="name is required")
 
+        if body.group_id is None:
+            raise HTTPException(status_code=400, detail="group_id is required")
+
         user_ctx = user
         require_privileged_or_403(user_ctx)
 
@@ -294,10 +345,47 @@ async def org_unit_create(
         u = org_units.create_org_unit(
             name=body.name,
             parent_unit_id=body.parent_unit_id,
+            group_id=body.group_id,
             code=body.code,
             is_active=bool(body.is_active),
         )
-        return {"item": {"id": u.unit_id, "parent_id": u.parent_unit_id, "name": u.name, "code": u.code, "is_active": u.is_active}}
+        return {
+            "item": {
+                "id": u.unit_id,
+                "unit_id": u.unit_id,
+                "parent_id": u.parent_unit_id,
+                "parent_unit_id": u.parent_unit_id,
+                "name": u.name,
+                "code": u.code,
+                "group_id": u.group_id,
+                "is_active": u.is_active,
+            }
+        }
+
+    except HTTPException:
+        raise
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.delete("/org-units/{unit_id}")
+async def org_unit_delete(
+    unit_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        user_ctx = user
+        require_privileged_or_403(user_ctx)
+
+        uid = int(user["user_id"])
+        _ = compute_scope(uid, user_ctx, include_inactive=True)
+
+        org_units.delete_org_unit(unit_id=int(unit_id))
+        return {"ok": True}
 
     except HTTPException:
         raise
