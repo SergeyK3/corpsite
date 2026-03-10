@@ -898,6 +898,158 @@ def archive_task(
     return dict(updated)
 
 
+@router.patch("/{task_id}")
+def patch_task(
+    payload: Dict[str, Any],
+    task_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Security(get_current_user),
+) -> Dict[str, Any]:
+    current_user_id = int(user["user_id"])
+
+    with engine.begin() as conn:
+        role_id = get_user_role_id(conn, current_user_id)
+
+        task = load_task_full(conn, task_id=int(task_id))
+        task = ensure_task_visible_or_404(
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+            task_row=task,
+            include_archived=False,
+        )
+
+        is_admin = _is_system_admin_role_id(role_id)
+        is_initiator = int(task.get("initiator_user_id") or 0) == int(current_user_id)
+
+        if not is_admin and not is_initiator:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task_kind = str(task.get("task_kind") or "").strip().lower()
+        source_kind = str(task.get("source_kind") or "").strip().lower()
+
+        if is_admin:
+            if task_kind not in {"adhoc", "regular"}:
+                raise HTTPException(status_code=409, detail="This task cannot be edited")
+        else:
+            if task_kind != "adhoc":
+                raise HTTPException(status_code=409, detail="Only adhoc tasks can be edited")
+
+            if source_kind not in {"manual", "bot", "import", ""}:
+                raise HTTPException(status_code=409, detail="This task cannot be edited")
+
+        sets: List[str] = []
+        params: Dict[str, Any] = {"task_id": int(task_id)}
+
+        if "title" in payload:
+            title = _as_str_or_none(payload.get("title"))
+            if not title:
+                raise HTTPException(status_code=422, detail="title cannot be empty")
+            sets.append("title = :title")
+            params["title"] = title
+
+        if "description" in payload:
+            sets.append("description = :description")
+            params["description"] = _as_str_or_none(payload.get("description"))
+
+        if "source_note" in payload:
+            sets.append("source_note = :source_note")
+            params["source_note"] = _as_str_or_none(payload.get("source_note"))
+
+        if "due_date" in payload or "due_at" in payload:
+            due_raw = payload.get("due_date")
+            if due_raw is None and "due_at" in payload:
+                due_raw = payload.get("due_at")
+
+            due_date = _as_str_or_none(due_raw)
+
+            sets.append(
+                """
+                due_date = CASE
+                    WHEN :due_date IS NULL OR :due_date = '' THEN NULL
+                    ELSE (:due_date)::timestamp::date
+                END
+                """.strip()
+            )
+            params["due_date"] = due_date
+
+        if "approver_user_id" in payload:
+            approver_user_id = _as_int_or_none(payload.get("approver_user_id"))
+            sets.append("approver_user_id = :approver_user_id")
+            params["approver_user_id"] = int(approver_user_id) if approver_user_id is not None else None
+
+        if "requires_report" in payload:
+            sets.append("requires_report = :requires_report")
+            params["requires_report"] = _as_bool(payload.get("requires_report"), True)
+
+        if "requires_approval" in payload:
+            requires_approval = _as_bool(payload.get("requires_approval"), True)
+            sets.append("requires_approval = :requires_approval")
+            params["requires_approval"] = requires_approval
+
+            if requires_approval:
+                incoming_approver = (
+                    _as_int_or_none(payload.get("approver_user_id"))
+                    if "approver_user_id" in payload
+                    else _as_int_or_none(task.get("approver_user_id"))
+                )
+                if incoming_approver is None or incoming_approver < 1:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="approver_user_id is required when requires_approval=true",
+                    )
+
+        if "executor_role_id" in payload:
+            executor_role_id = _as_int_or_none(payload.get("executor_role_id"))
+            if executor_role_id is None or executor_role_id < 1:
+                raise HTTPException(status_code=422, detail="executor_role_id must be positive int")
+
+            if not is_admin:
+                manual_options = get_manual_task_role_options_for_user(conn, current_user_id=int(current_user_id))
+                allowed_role_ids = {
+                    int(x["role_id"])
+                    for x in manual_options.get("items", [])
+                    if int(x.get("role_id") or 0) > 0
+                }
+                if int(executor_role_id) not in allowed_role_ids:
+                    raise HTTPException(status_code=403, detail="You cannot set this executor_role_id")
+
+            sets.append("executor_role_id = :executor_role_id")
+            params["executor_role_id"] = int(executor_role_id)
+
+        if "assignment_scope" in payload:
+            assignment_scope = normalize_assignment_scope(conn, payload.get("assignment_scope"))
+            sets.append("assignment_scope = :assignment_scope")
+            params["assignment_scope"] = assignment_scope
+
+        if not sets:
+            updated = load_task_full(conn, task_id=int(task_id))
+            updated = attach_allowed_actions(
+                task=updated,
+                current_user_id=current_user_id,
+                current_role_id=role_id,
+            )
+            return dict(updated)
+
+        conn.execute(
+            text(
+                f"""
+                UPDATE public.tasks
+                SET {", ".join(sets)}
+                WHERE task_id = :task_id
+                """
+            ),
+            params,
+        )
+
+        updated = load_task_full(conn, task_id=int(task_id))
+        updated = attach_allowed_actions(
+            task=updated,
+            current_user_id=current_user_id,
+            current_role_id=role_id,
+        )
+
+    return dict(updated)
+
+
 @router.delete("/{task_id}", status_code=204)
 def delete_task(
     task_id: int = Path(..., ge=1),
