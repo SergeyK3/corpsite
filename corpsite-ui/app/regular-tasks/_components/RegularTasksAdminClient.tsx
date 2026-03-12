@@ -1,4 +1,4 @@
-// FILE: corpsite-ui/app/admin/regular-tasks/RegularTasksAdminClient.tsx
+// FILE: corpsite-ui/app/regular-tasks/_components/RegularTasksAdminClient.tsx
 "use client";
 
 import * as React from "react";
@@ -69,6 +69,26 @@ type RunResult = {
 
 type MainTab = "templates" | "runs";
 type DrawerMode = "create" | "view" | "edit";
+type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
+
+function readEnvGroupId(name: string, fallback: number): number {
+  const raw = String(process.env[name] ?? "").trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+const ORG_GROUP_ID_CLINICAL = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_CLINICAL", 1);
+const ORG_GROUP_ID_PARACLINICAL = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_PARACLINICAL", 2);
+const ORG_GROUP_ID_ADMIN = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3);
+
+const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string; id?: number }> = [
+  { value: "all", label: "Все группы" },
+  { value: "clinical", label: "Клинические", id: ORG_GROUP_ID_CLINICAL },
+  { value: "paraclinical", label: "Параклинические", id: ORG_GROUP_ID_PARACLINICAL },
+  { value: "admin", label: "Административно-хозяйственные", id: ORG_GROUP_ID_ADMIN },
+];
 
 function fmtDateTime(value?: string | null): string {
   if (!value) return "—";
@@ -200,6 +220,7 @@ export default function RegularTasksAdminClient() {
 
   const [query, setQuery] = React.useState("");
   const [activeFilter, setActiveFilter] = React.useState<"all" | "active" | "inactive">("all");
+  const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
 
   const [runAtLocalIso, setRunAtLocalIso] = React.useState("");
   const [dryRun, setDryRun] = React.useState(true);
@@ -207,22 +228,52 @@ export default function RegularTasksAdminClient() {
   const [runSubmitError, setRunSubmitError] = React.useState<string | null>(null);
   const [lastRunResult, setLastRunResult] = React.useState<RunResult | null>(null);
 
+  const selectedOrgGroupId = React.useMemo(() => {
+    const found = ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup);
+    return found?.id;
+  }, [orgGroup]);
+
+  const selectedOrgGroupLabel = React.useMemo(() => {
+    const found = ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup);
+    return found?.label ?? "Все группы";
+  }, [orgGroup]);
+
   const loadTemplates = React.useCallback(async () => {
     setTemplatesLoading(true);
     setTemplatesError(null);
 
     try {
       const data = await apiFetchJson<RegularTasksListResponse>("/regular-tasks", {
-        query: { status: "all", limit: 200, offset: 0 },
+        query: {
+          status: "all",
+          limit: 200,
+          offset: 0,
+          org_group_id: selectedOrgGroupId ?? undefined,
+        },
       });
-      setTemplates(normalizeTemplateList(data));
+
+      const rows = normalizeTemplateList(data);
+      setTemplates(rows);
+
+      if (
+        selectedTemplateId != null &&
+        drawerOpen &&
+        drawerMode !== "create" &&
+        !rows.some((x) => x.regular_task_id === selectedTemplateId)
+      ) {
+        setDrawerOpen(false);
+        setDrawerMode("view");
+        setSelectedTemplateId(null);
+        setSelectedTemplate(null);
+        setDrawerError(null);
+      }
     } catch (err) {
       setTemplatesError(errorText(err, "Не удалось загрузить шаблоны."));
       setTemplates([]);
     } finally {
       setTemplatesLoading(false);
     }
-  }, []);
+  }, [selectedOrgGroupId, selectedTemplateId, drawerOpen, drawerMode]);
 
   const loadTemplateCard = React.useCallback(async (regularTaskId: number) => {
     setDrawerLoading(true);
@@ -244,35 +295,52 @@ export default function RegularTasksAdminClient() {
     setRunsError(null);
 
     try {
-      const data = await apiFetchJson<RegularTaskRun[]>("/regular-task-runs");
+      const data = await apiFetchJson<RegularTaskRun[]>("/regular-task-runs", {
+        query: {
+          org_group_id: selectedOrgGroupId ?? undefined,
+        },
+      });
       const rows = Array.isArray(data) ? data : [];
       setRuns(rows);
 
-      if (rows.length > 0 && selectedRunId == null) {
+      if (rows.length === 0) {
+        setSelectedRunId(null);
+        return;
+      }
+
+      if (selectedRunId == null || !rows.some((x) => x.run_id === selectedRunId)) {
         setSelectedRunId(rows[0].run_id);
       }
     } catch (err) {
       setRunsError(errorText(err, "Не удалось загрузить историю запусков."));
       setRuns([]);
+      setSelectedRunId(null);
     } finally {
       setRunsLoading(false);
     }
-  }, [selectedRunId]);
+  }, [selectedOrgGroupId, selectedRunId]);
 
-  const loadRunItems = React.useCallback(async (runId: number) => {
-    setRunItemsLoading(true);
-    setRunItemsError(null);
+  const loadRunItems = React.useCallback(
+    async (runId: number) => {
+      setRunItemsLoading(true);
+      setRunItemsError(null);
 
-    try {
-      const data = await apiFetchJson<RunItem[]>(`/regular-task-runs/${runId}/items`);
-      setRunItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setRunItemsError(errorText(err, "Не удалось загрузить детали запуска."));
-      setRunItems([]);
-    } finally {
-      setRunItemsLoading(false);
-    }
-  }, []);
+      try {
+        const data = await apiFetchJson<RunItem[]>(`/regular-task-runs/${runId}/items`, {
+          query: {
+            org_group_id: selectedOrgGroupId ?? undefined,
+          },
+        });
+        setRunItems(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setRunItemsError(errorText(err, "Не удалось загрузить детали запуска."));
+        setRunItems([]);
+      } finally {
+        setRunItemsLoading(false);
+      }
+    },
+    [selectedOrgGroupId],
+  );
 
   React.useEffect(() => {
     void Promise.all([loadTemplates(), loadRuns()]);
@@ -621,32 +689,49 @@ export default function RegularTasksAdminClient() {
       </section>
 
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 shadow-sm">
-        <div className="mb-5 flex flex-wrap gap-2 border-b border-zinc-800 pb-4">
-          <button
-            type="button"
-            onClick={() => setActiveTab("templates")}
-            className={[
-              "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
-              activeTab === "templates"
-                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
-            ].join(" ")}
-          >
-            Шаблоны · {filteredTemplates.length}
-          </button>
+        <div className="mb-5 flex flex-col gap-3 border-b border-zinc-800 pb-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("templates")}
+              className={[
+                "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
+                activeTab === "templates"
+                  ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                  : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
+              ].join(" ")}
+            >
+              Шаблоны · {filteredTemplates.length}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("runs")}
-            className={[
-              "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
-              activeTab === "runs"
-                ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
-            ].join(" ")}
-          >
-            Запуски · {runs.length}
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("runs")}
+              className={[
+                "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
+                activeTab === "runs"
+                  ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                  : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
+              ].join(" ")}
+            >
+              Запуски · {runs.length}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="text-sm text-zinc-400">Группа отделений</div>
+            <select
+              className="min-w-[280px] rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-zinc-500"
+              value={orgGroup}
+              onChange={(e) => setOrgGroup(e.target.value as OrgGroupFilter)}
+            >
+              {ORG_GROUP_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {activeTab === "templates" ? (
@@ -655,7 +740,7 @@ export default function RegularTasksAdminClient() {
               <div>
                 <h2 className="text-2xl font-semibold text-zinc-100">Шаблоны регулярных задач</h2>
                 <p className="mt-1 text-sm text-zinc-400">
-                  Всего: {templates.length} · Активных: {templatesActiveCount}
+                  Всего: {templates.length} · Активных: {templatesActiveCount} · Группа: {selectedOrgGroupLabel}
                 </p>
               </div>
 
@@ -798,7 +883,9 @@ export default function RegularTasksAdminClient() {
           <section className="flex flex-col gap-4">
             <div>
               <h2 className="text-2xl font-semibold text-zinc-100">История запусков</h2>
-              <p className="mt-1 text-sm text-zinc-400">Последние записи по генератору регулярных задач</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                Последние записи по генератору регулярных задач · Группа: {selectedOrgGroupLabel}
+              </p>
             </div>
 
             {runsLoading ? (

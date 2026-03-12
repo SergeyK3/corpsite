@@ -1,7 +1,7 @@
-// FILE: corpsite-ui/app/directory/roles/_components/RolesPageClient.tsx
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetchJson } from "../../../../lib/api";
 import RoleDrawer from "./RoleDrawer";
 import type { RoleFormValues } from "./RoleForm";
@@ -26,6 +26,7 @@ type RolesResponse =
   | {
       items?: RoleItem[];
       data?: RoleItem[];
+      total?: number;
     };
 
 const API_BASE = "/directory/roles";
@@ -56,6 +57,12 @@ function extractErrorMessage(error: unknown): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parsePositiveInt(value: string | null): number | null {
+  const n = Number(String(value ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
 }
 
 function matchesSearch(role: RoleItem, rawQuery: string): boolean {
@@ -93,6 +100,9 @@ function matchesSearch(role: RoleItem, rawQuery: string): boolean {
 }
 
 export default function RolesPageClient() {
+  const sp = useSearchParams();
+  const orgUnitId = React.useMemo(() => parsePositiveInt(sp.get("org_unit_id")), [sp]);
+
   const [items, setItems] = React.useState<RoleItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -111,18 +121,32 @@ export default function RolesPageClient() {
 
     try {
       const params = new URLSearchParams();
+
       if (onlyActive) params.set("is_active", "true");
+      if (orgUnitId != null) params.set("org_unit_id", String(orgUnitId));
 
       const url = params.toString() ? `${API_BASE}?${params.toString()}` : API_BASE;
       const data = await apiFetchJson<RolesResponse>(url);
-      setItems(normalizeRoles(data));
+      const normalized = normalizeRoles(data);
+
+      setItems(normalized);
+
+      if (selectedRole) {
+        const selectedId = roleIdOf(selectedRole);
+        const stillVisible = normalized.some((role) => roleIdOf(role) === selectedId);
+        if (!stillVisible) {
+          setDrawerOpen(false);
+          setSelectedRole(null);
+          setDrawerError(null);
+        }
+      }
     } catch (error) {
       setPageError(extractErrorMessage(error));
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [onlyActive]);
+  }, [onlyActive, orgUnitId, selectedRole]);
 
   React.useEffect(() => {
     void loadRoles();
@@ -260,6 +284,11 @@ export default function RolesPageClient() {
                 {pageError}
               </div>
             )}
+
+            <div className="mb-3 text-sm text-zinc-400">
+              Всего: {items.length} · Показано: {filteredItems.length}
+              {orgUnitId != null ? <span className="ml-2">· Оргфильтр: unit #{orgUnitId}</span> : null}
+            </div>
 
             <div className="overflow-hidden rounded-2xl border border-zinc-800">
               <div className="overflow-x-auto">

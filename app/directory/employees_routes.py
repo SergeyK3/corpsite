@@ -13,7 +13,6 @@ from app.db.engine import engine
 
 from app.services.directory_service import (
     list_departments as svc_list_departments,
-    list_positions as svc_list_positions,
     list_employees as svc_list_employees,
     get_employee as svc_get_employee,
 )
@@ -38,6 +37,16 @@ class DepartmentGroupPatchIn(BaseModel):
     is_active: bool = True
 
 
+def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "group_id": int(row["group_id"]),
+        "code": None,
+        "group_name": str(row["group_name"]) if row.get("group_name") is not None else "",
+        "description": None,
+        "is_active": True,
+    }
+
+
 @router.get("/departments")
 def list_departments(
     limit: int = Query(default=200, ge=1, le=1000),
@@ -58,22 +67,6 @@ def list_departments(
             dept_scope_id=dept_scope_id,
             dept_scope_ids=dept_scope_ids,
         )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise as_http500(e)
-
-
-@router.get("/positions")
-def list_positions(
-    limit: int = Query(default=200, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-    user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
-    try:
-        _ = int(user["user_id"])
-        return call_service(svc_list_positions, limit=limit, offset=offset)
 
     except HTTPException:
         raise
@@ -164,15 +157,7 @@ def list_department_groups(
             total = int(c.execute(sql_total).scalar_one())
 
         return {
-            "items": [
-                {
-                    "group_id": int(r["group_id"]),
-                    "code": None,
-                    "group_name": str(r["group_name"]) if r.get("group_name") is not None else "",
-                    "is_active": True,
-                }
-                for r in rows
-            ],
+            "items": [_map_department_group_row(r) for r in rows],
             "total": total,
         }
 
@@ -209,14 +194,7 @@ def create_department_group(
         if not row:
             raise HTTPException(status_code=500, detail="create department group failed")
 
-        return {
-            "item": {
-                "group_id": int(row["group_id"]),
-                "code": None,
-                "group_name": str(row["group_name"]) if row.get("group_name") is not None else "",
-                "is_active": True,
-            }
-        }
+        return {"item": _map_department_group_row(row)}
 
     except HTTPException:
         raise
@@ -229,15 +207,12 @@ def create_department_group(
 @router.patch("/department-groups/{group_id}")
 def update_department_group(
     group_id: int = Path(..., ge=1),
-    body: DepartmentGroupPatchIn = None,  # type: ignore[assignment]
+    body: DepartmentGroupPatchIn = ...,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
         require_privileged_or_403(user)
         _ = int(user["user_id"])
-
-        if body is None:
-            raise HTTPException(status_code=400, detail="body is required")
 
         group_name = (body.group_name or "").strip()
         if not group_name:
@@ -264,14 +239,7 @@ def update_department_group(
         if not row:
             raise HTTPException(status_code=404, detail=f"department group not found: group_id={group_id}")
 
-        return {
-            "item": {
-                "group_id": int(row["group_id"]),
-                "code": None,
-                "group_name": str(row["group_name"]) if row.get("group_name") is not None else "",
-                "is_active": True,
-            }
-        }
+        return {"item": _map_department_group_row(row)}
 
     except HTTPException:
         raise

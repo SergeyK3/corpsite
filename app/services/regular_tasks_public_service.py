@@ -55,8 +55,10 @@ def _row_to_out(r: Any) -> Dict[str, Any]:
         "regular_task_id": int(r["regular_task_id"]),
         "code": r.get("code"),
         "title": r.get("title"),
+        "description": r.get("description"),
         "is_active": bool(r.get("is_active")),
         "executor_role_id": _as_int_or_none(r.get("executor_role_id")),
+        "assignment_scope": r.get("assignment_scope"),
         "schedule_type": r.get("schedule_type"),
         "schedule_params": r.get("schedule_params") or {},
         "create_offset_days": int(r.get("create_offset_days") or 0),
@@ -73,6 +75,7 @@ def list_regular_tasks_tx(
     q: Optional[str] = None,
     schedule_type: Optional[str] = None,
     executor_role_id: Optional[int] = None,
+    org_group_id: Optional[int] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -93,7 +96,13 @@ def list_regular_tasks_tx(
 
     if q:
         params["q"] = f"%{q.strip()}%"
-        filters.append("(t.title ILIKE :q OR t.code ILIKE :q)")
+        filters.append(
+            "("
+            "t.title ILIKE :q "
+            "OR COALESCE(t.description, '') ILIKE :q "
+            "OR COALESCE(t.code, '') ILIKE :q"
+            ")"
+        )
 
     if schedule_type:
         params["schedule_type"] = schedule_type.strip()
@@ -102,6 +111,23 @@ def list_regular_tasks_tx(
     if executor_role_id is not None:
         params["executor_role_id"] = int(executor_role_id)
         filters.append("t.executor_role_id = :executor_role_id")
+
+    if org_group_id is not None:
+        params["org_group_id"] = int(org_group_id)
+        filters.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM public.users ux
+                JOIN public.org_units oux
+                  ON oux.unit_id = ux.unit_id
+                WHERE ux.role_id = t.executor_role_id
+                  AND COALESCE(ux.is_active, TRUE) = TRUE
+                  AND COALESCE(oux.is_active, TRUE) = TRUE
+                  AND oux.group_id = :org_group_id
+            )
+            """.strip()
+        )
 
     where_sql = ""
     if filters:
@@ -116,8 +142,10 @@ def list_regular_tasks_tx(
           t.regular_task_id,
           t.code,
           t.title,
+          t.description,
           t.is_active,
           t.executor_role_id,
+          t.assignment_scope,
           t.schedule_type,
           t.schedule_params,
           t.create_offset_days,
@@ -131,6 +159,7 @@ def list_regular_tasks_tx(
         """
     )
     rows = conn.execute(sql, params).mappings().all()
+
     return {
         "total": total,
         "limit": limit,
@@ -146,8 +175,10 @@ def get_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any
           t.regular_task_id,
           t.code,
           t.title,
+          t.description,
           t.is_active,
           t.executor_role_id,
+          t.assignment_scope,
           t.schedule_type,
           t.schedule_params,
           t.create_offset_days,
@@ -175,6 +206,8 @@ def create_regular_task_tx(
         raise ValueError("title is required")
 
     code = _as_str_or_none(payload.get("code"))
+    description = _as_str_or_none(payload.get("description"))
+
     is_active = _as_bool_or_none(payload.get("is_active"))
     if is_active is None:
         is_active = True
@@ -196,6 +229,7 @@ def create_regular_task_tx(
         INSERT INTO public.regular_tasks (
           code,
           title,
+          description,
           is_active,
           executor_role_id,
           schedule_type,
@@ -207,6 +241,7 @@ def create_regular_task_tx(
         ) VALUES (
           :code,
           :title,
+          :description,
           :is_active,
           :executor_role_id,
           :schedule_type,
@@ -224,6 +259,7 @@ def create_regular_task_tx(
         {
             "code": code,
             "title": title,
+            "description": description,
             "is_active": bool(is_active),
             "executor_role_id": executor_role_id,
             "schedule_type": schedule_type,
@@ -233,6 +269,7 @@ def create_regular_task_tx(
             "created_by_user_id": int(created_by_user_id) if created_by_user_id is not None else None,
         },
     ).scalar()
+
     return get_regular_task_tx(conn, int(rid))
 
 
@@ -257,6 +294,10 @@ def patch_regular_task_tx(
         code = _as_str_or_none(payload.get("code"))
         sets.append("code = :code")
         params["code"] = code
+
+    if "description" in payload:
+        sets.append("description = :description")
+        params["description"] = _as_str_or_none(payload.get("description"))
 
     if "is_active" in payload:
         b = _as_bool_or_none(payload.get("is_active"))
@@ -309,6 +350,7 @@ def patch_regular_task_tx(
     res = conn.execute(sql, params)
     if res.rowcount == 0:
         raise KeyError("regular_task not found")
+
     return get_regular_task_tx(conn, rid)
 
 

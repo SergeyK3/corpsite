@@ -166,6 +166,11 @@ def list_tasks(
     search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
     executor_role_id: Optional[int] = Query(None, ge=1),
+    org_unit_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="Filter by selected org unit subtree.",
+    ),
     assignment_scope: Optional[str] = Query(
         None,
         description="Filter by assignment scope: admin|functional|all. If omitted or 'all' -> no filtering.",
@@ -281,6 +286,32 @@ def list_tasks(
             erid = int(executor_role_id)
             where.append("t.executor_role_id = :executor_role_id")
             params["executor_role_id"] = erid
+
+        if org_unit_id is not None:
+            where.append(
+                """
+                EXISTS (
+                    WITH RECURSIVE subtree AS (
+                        SELECT ou.unit_id
+                        FROM public.org_units ou
+                        WHERE ou.unit_id = :org_unit_id
+
+                        UNION ALL
+
+                        SELECT child.unit_id
+                        FROM public.org_units child
+                        JOIN subtree s ON s.unit_id = child.parent_unit_id
+                        WHERE COALESCE(child.is_active, TRUE) = TRUE
+                    )
+                    SELECT 1
+                    FROM public.users ux
+                    WHERE ux.role_id = t.executor_role_id
+                      AND COALESCE(ux.is_active, TRUE) = TRUE
+                      AND ux.unit_id IN (SELECT unit_id FROM subtree)
+                )
+                """.strip()
+            )
+            params["org_unit_id"] = int(org_unit_id)
 
         if period_id is not None:
             where.append("t.period_id = :period_id")

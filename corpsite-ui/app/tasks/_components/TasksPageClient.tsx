@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
@@ -364,6 +364,7 @@ const TASK_KIND_OPTIONS: Array<{ value: TaskKindFilter; label: string }> = [
 
 export default function TasksPageClient() {
   const router = useRouter();
+  const sp = useSearchParams();
   const detailsRequestRef = React.useRef(0);
 
   const [ready, setReady] = React.useState(false);
@@ -380,7 +381,7 @@ export default function TasksPageClient() {
   const [pageError, setPageError] = React.useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [drawerMode, setDrawerMode] = React.useState<DrawerMode>("view");
+  const [drawerMode, setDrawerMode] = React.useState<DrawerMode>("create");
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [selectedItem, setSelectedItem] = React.useState<any | null>(null);
   const [drawerLoading, setDrawerLoading] = React.useState(false);
@@ -398,6 +399,9 @@ export default function TasksPageClient() {
   const [manualRoleOptions, setManualRoleOptions] = React.useState<ManualTaskRoleOption[]>([]);
   const [canCreateManualTask, setCanCreateManualTask] = React.useState(false);
   const [manualRolesLoading, setManualRolesLoading] = React.useState(false);
+
+  const orgUnitId = sp.get("org_unit_id") ?? "";
+  const prevOrgUnitRef = React.useRef<string>(orgUnitId);
 
   const isSystemAdmin = React.useMemo(() => detectSystemAdmin(me), [me]);
 
@@ -500,6 +504,7 @@ export default function TasksPageClient() {
             limit: LIST_LIMIT,
             offset: qOffset,
             status_filter: tab,
+            org_unit_id: orgUnitId || undefined,
           } as any,
         });
 
@@ -525,7 +530,7 @@ export default function TasksPageClient() {
         setListLoading(false);
       }
     },
-    [offset, tab, selectedId, drawerMode, redirectToLogin],
+    [offset, tab, selectedId, drawerMode, redirectToLogin, orgUnitId],
   );
 
   const loadTaskDetails = React.useCallback(
@@ -589,6 +594,13 @@ export default function TasksPageClient() {
       setReady(true);
     })();
   }, [router, redirectToLogin, loadCurrentPeriod, loadManualRoleOptions]);
+
+  React.useEffect(() => {
+    if (prevOrgUnitRef.current !== orgUnitId) {
+      prevOrgUnitRef.current = orgUnitId;
+      setOffset(0);
+    }
+  }, [orgUnitId]);
 
   React.useEffect(() => {
     if (!ready) return;
@@ -855,24 +867,24 @@ export default function TasksPageClient() {
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
         <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-[#050816]">
           <div className="border-b border-zinc-800 px-4 py-3">
-            <h1 className="text-xl font-semibold text-zinc-100">Задачи</h1>
+            <h1 className="text-2xl font-semibold text-zinc-100">Задачи</h1>
           </div>
 
-          <div className="border-b border-zinc-800 px-4 py-2.5">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          <div className="border-b border-zinc-800 px-4 py-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Поиск по названию задачи"
-                  className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                  className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
                 />
               </div>
 
               <select
                 value={taskKind}
                 onChange={(e) => setTaskKind(e.target.value as TaskKindFilter)}
-                className="h-9 min-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-100 outline-none transition focus:border-zinc-600"
+                className="h-10 min-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-100 outline-none transition focus:border-zinc-600"
               >
                 {TASK_KIND_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
@@ -891,7 +903,7 @@ export default function TasksPageClient() {
                       setOffset(0);
                     }}
                     className={[
-                      "rounded-md px-3 py-1.5 text-[12px] transition",
+                      "rounded-md px-3 py-2 text-sm transition",
                       tab === v ? "bg-zinc-900 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900/60",
                     ].join(" ")}
                   >
@@ -903,7 +915,7 @@ export default function TasksPageClient() {
               <button
                 type="button"
                 onClick={() => void loadItems()}
-                className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60"
+                className="h-10 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
               </button>
@@ -913,7 +925,7 @@ export default function TasksPageClient() {
                   type="button"
                   onClick={openCreate}
                   disabled={!currentPeriodId || manualRolesLoading}
-                  className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-10 rounded-lg bg-blue-600 px-5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Создать
                 </button>
@@ -921,14 +933,14 @@ export default function TasksPageClient() {
             </div>
           </div>
 
-          <div className="px-4 py-3">
+          <div className="px-4 py-4">
             {!!pageError && (
-              <div className="mb-3 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+              <div className="mb-4 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-400">
               <div>
                 Всего: {total} · Показано: {filteredItems.length}
                 {listLoading ? <span className="ml-2">· загрузка…</span> : null}
@@ -945,22 +957,22 @@ export default function TasksPageClient() {
                 <table className="min-w-full border-collapse">
                   <thead>
                     <tr className="bg-white/[0.03] text-left">
-                      <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[72px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         ID
                       </th>
-                      <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Название
                       </th>
-                      <th className="w-[170px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[170px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Статус
                       </th>
-                      <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[120px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Тип
                       </th>
-                      <th className="w-[140px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[140px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Дедлайн
                       </th>
-                      <th className="w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[220px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -969,13 +981,13 @@ export default function TasksPageClient() {
                   <tbody>
                     {listLoading ? (
                       <tr>
-                        <td colSpan={6} className="px-3 py-2.5 text-[13px] text-zinc-400">
+                        <td colSpan={6} className="px-3 py-3 text-sm text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : filteredItems.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-3 py-2.5 text-[13px] text-zinc-500">
+                        <td colSpan={6} className="px-3 py-3 text-sm text-zinc-500">
                           Записи не найдены.
                         </td>
                       </tr>
@@ -990,28 +1002,28 @@ export default function TasksPageClient() {
                             className="cursor-pointer border-t border-zinc-800 align-middle transition hover:bg-white/[0.02]"
                             onClick={() => openView(item)}
                           >
-                            <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-100">{id}</td>
-                            <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-100">
+                            <td className="px-3 py-2 text-sm leading-5 text-zinc-100">{id}</td>
+                            <td className="px-3 py-2 text-sm leading-5 text-zinc-100">
                               {taskTitleOf(item)}
                             </td>
-                            <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                            <td className="px-3 py-2 text-sm leading-5 text-zinc-400">
                               {statusTextOf(item)}
                             </td>
-                            <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                            <td className="px-3 py-2 text-sm leading-5 text-zinc-400">
                               {taskKindLabelOf(item)}
                             </td>
-                            <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                            <td className="px-3 py-2 text-sm leading-5 text-zinc-400">
                               {formatDeadline(item)}
                             </td>
-                            <td className="px-3 py-1.5">
-                              <div className="flex items-center gap-1.5">
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openView(item);
                                   }}
-                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
+                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-sm leading-5 text-zinc-100 transition hover:bg-zinc-900/60"
                                 >
                                   Открыть
                                 </button>
@@ -1024,7 +1036,7 @@ export default function TasksPageClient() {
                                   }}
                                   disabled={!editable}
                                   title={editButtonTitle(item, isSystemAdmin)}
-                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-sm leading-5 text-zinc-100 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Изменить
                                 </button>
@@ -1035,7 +1047,7 @@ export default function TasksPageClient() {
                                     e.stopPropagation();
                                     void handleDelete(item, false);
                                   }}
-                                  className="rounded-md border border-red-800 bg-transparent px-2.5 py-1 text-[12px] leading-4 text-red-300 transition hover:bg-red-950/30"
+                                  className="rounded-md border border-red-800 bg-transparent px-3 py-1.5 text-sm leading-5 text-red-300 transition hover:bg-red-950/30"
                                 >
                                   Удалить
                                 </button>
@@ -1050,11 +1062,11 @@ export default function TasksPageClient() {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-end gap-2">
+            <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setOffset((v) => Math.max(0, v - LIST_LIMIT))}
-                className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+                className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
                 disabled={listLoading || offset <= 0}
               >
                 Назад
@@ -1063,7 +1075,7 @@ export default function TasksPageClient() {
               <button
                 type="button"
                 onClick={() => setOffset((v) => v + LIST_LIMIT)}
-                className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+                className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
                 disabled={listLoading || items.length < LIST_LIMIT}
               >
                 Далее
@@ -1077,16 +1089,15 @@ export default function TasksPageClient() {
         {drawerMode === "create" ? (
           <div className="h-full px-6 py-5">
             <CreateManualTaskModal
-                periodId={currentPeriodId}
-                roleOptions={manualRoleOptions}
-                onCreated={() => {
+              periodId={currentPeriodId}
+              roleOptions={manualRoleOptions}
+              onCreated={() => {
                 resetDrawerState();
                 setOffset(0);
                 void loadItems(0);
-                }}
+              }}
             />
-            </div>
-            
+          </div>
         ) : drawerMode === "edit" ? (
           drawerLoading && !selectedItem ? (
             <div className="px-6 py-5 text-sm text-zinc-400">Загрузка...</div>
@@ -1303,7 +1314,7 @@ export default function TasksPageClient() {
 
             {selectedItem ? (
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 px-6 py-4">
-                <div className="text-xs text-zinc-500">{actionsRu(selectedAllowed)}</div>
+                <div className="text-sm text-zinc-500">{actionsRu(selectedAllowed)}</div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   {selectedEditable ? (

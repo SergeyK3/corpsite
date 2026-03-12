@@ -57,9 +57,11 @@ function nodeKey(raw: ApiOrgUnitNode): string {
   const v = raw?.id ?? raw?.code ?? raw?.unit_id ?? raw?.unitId;
   return String(v ?? "").trim() || "unknown";
 }
+
 function nodeTitle(raw: ApiOrgUnitNode): string {
   return String(raw?.title ?? raw?.name ?? raw?.code ?? raw?.id ?? "—").trim() || "—";
 }
+
 function nodeGroupId(raw: ApiOrgUnitNode): number | null {
   const g = raw?.group_id ?? raw?.groupId;
   return typeof g === "number" && Number.isFinite(g) ? g : null;
@@ -95,7 +97,13 @@ function buildTreeFromFlat(itemsRaw: ApiOrgUnitNode[]): OrgTreeNode[] {
 
   const byKey = new Map<string, OrgTreeNode>();
   nodes.forEach((n) =>
-    byKey.set(n.key, { key: n.key, unit_id: n.unit_id, name: n.name, group_id: n.group_id, children: [] })
+    byKey.set(n.key, {
+      key: n.key,
+      unit_id: n.unit_id,
+      name: n.name,
+      group_id: n.group_id,
+      children: [],
+    })
   );
 
   const parentOf = (x: ApiOrgUnitNode): string | null => {
@@ -121,6 +129,8 @@ const GROUP_NAMES: Record<number, string> = {
   3: "Адмхоз",
 };
 
+const HIDDEN_VISIBLE_ROOT_NAME = "Многопрофильный медицинский центр";
+
 function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
   const buckets = new Map<number, OrgTreeNode[]>();
   const rest: OrgTreeNode[] = [];
@@ -142,10 +152,15 @@ function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
       unit_id: null,
       name: GROUP_NAMES[gid] ?? `Группа ${gid}`,
       group_id: gid,
-      children: (buckets.get(gid) ?? []).sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name), "ru")),
+      children: (buckets.get(gid) ?? []).sort((a, b) =>
+        normalizeText(a.name).localeCompare(normalizeText(b.name), "ru")
+      ),
     }));
 
-  const restSorted = rest.sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name), "ru"));
+  const restSorted = rest.sort((a, b) =>
+    normalizeText(a.name).localeCompare(normalizeText(b.name), "ru")
+  );
+
   return [...grouped, ...restSorted];
 }
 
@@ -166,6 +181,20 @@ function injectGroupsIfPossible(tree: OrgTreeNode[]): OrgTreeNode[] {
   return tree;
 }
 
+function stripVisibleRootIfNeeded(tree: OrgTreeNode[]): OrgTreeNode[] {
+  if (!Array.isArray(tree) || tree.length !== 1) return tree;
+
+  const root = tree[0];
+  const hasChildren = Array.isArray(root.children) && root.children.length > 0;
+  if (!hasChildren) return tree;
+
+  if (normalizeText(root.name) === normalizeText(HIDDEN_VISIBLE_ROOT_NAME)) {
+    return root.children;
+  }
+
+  return tree;
+}
+
 async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTreeNode[]> {
   const raw = await apiFetchJson<ApiOrgUnitsTreeResponse>("/directory/org-units/tree", {
     method: "GET",
@@ -175,14 +204,18 @@ async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTr
   const itemsRaw = Array.isArray(raw?.items) ? raw.items : [];
 
   const looksTree = itemsRaw.some((x) => Array.isArray(x?.children) && (x.children?.length ?? 0) > 0);
-  if (looksTree) return injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree));
+  if (looksTree) {
+    return stripVisibleRootIfNeeded(injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree)));
+  }
 
   const flatHasParents = itemsRaw.some(
     (x) => x?.parentId != null || x?.parent_id != null || x?.parent_unit_id != null || x?.parentUnitId != null
   );
-  if (flatHasParents) return injectGroupsIfPossible(buildTreeFromFlat(itemsRaw));
+  if (flatHasParents) {
+    return stripVisibleRootIfNeeded(injectGroupsIfPossible(buildTreeFromFlat(itemsRaw)));
+  }
 
-  return injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree));
+  return stripVisibleRootIfNeeded(injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree)));
 }
 
 export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string }) {
@@ -217,14 +250,17 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
         const nextItems = Array.isArray(data) ? data : [];
         setItems(nextItems);
 
-        // откроем только корень (группы останутся свернуты)
-        if (nextItems.length === 1) {
-          setExpanded((prev) => {
-            const n = new Set(prev);
-            n.add(nextItems[0].key);
-            return n;
-          });
-        }
+        setExpanded(() => {
+          const opened = new Set<string>();
+
+          for (const n of nextItems) {
+            if (n.key.startsWith("group-")) {
+              opened.add(n.key);
+            }
+          }
+
+          return opened;
+        });
       } catch (e: any) {
         if (cancelled) return;
         setErr(String(e?.message ?? e ?? "Ошибка загрузки дерева"));
@@ -281,30 +317,30 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
     const hasChildren = Array.isArray(n.children) && n.children.length > 0;
     const isOpen = expanded.has(n.key);
     const isSelected = selectedId != null && n.unit_id === selectedId;
-    const selectable = n.unit_id != null; // <-- только реальные отделения выбираются
+    const selectable = n.unit_id != null;
 
     return (
       <div key={n.key}>
         <div
           className={[
-            "flex items-center gap-2 rounded-lg border px-2 py-2 text-sm",
+            "flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm",
             "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/60",
-            isSelected ? "bg-zinc-900/60 border-zinc-600" : "",
+            isSelected ? "border-zinc-600 bg-zinc-900/60" : "",
           ].join(" ")}
-          style={{ paddingLeft: 8 + depth * 12 }}
+          style={{ paddingLeft: 8 + depth * 10 }}
         >
           {hasChildren ? (
             <button
               type="button"
               onClick={() => toggle(n.key)}
-              className="h-6 w-6 rounded-md border border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:bg-zinc-900/60"
+              className="h-5 w-5 rounded-md border border-zinc-800 bg-zinc-950/40 text-[11px] text-zinc-200 hover:bg-zinc-900/60"
               aria-label={isOpen ? "Свернуть" : "Развернуть"}
               title={isOpen ? "Свернуть" : "Развернуть"}
             >
               {isOpen ? "▾" : "▸"}
             </button>
           ) : (
-            <span className="inline-block h-6 w-6" />
+            <span className="inline-block h-5 w-5" />
           )}
 
           <button
@@ -314,7 +350,6 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
               selectable ? "text-zinc-100" : "text-zinc-300",
             ].join(" ")}
             onClick={() => {
-              // НОВОЕ: группы/корень не “выбираем”, а только раскрываем
               if (!selectable) {
                 if (hasChildren) toggle(n.key);
                 return;
@@ -335,7 +370,7 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-2.5">
       <div className="mb-2 text-sm font-semibold text-zinc-100">Отделения</div>
 
       <div>
@@ -347,7 +382,7 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
         />
       </div>
 
-      <div className="mt-3 max-h-[calc(100vh-260px)] overflow-auto pr-1 space-y-1">
+      <div className="mt-3 max-h-[calc(100vh-260px)] space-y-1 overflow-auto pr-1">
         {loading ? <div className="text-sm text-zinc-400">Загрузка…</div> : null}
         {err ? <div className="text-sm text-red-400">Ошибка: {err}</div> : null}
 

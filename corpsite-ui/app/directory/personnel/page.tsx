@@ -1,20 +1,29 @@
 // FILE: corpsite-ui/app/directory/personnel/page.tsx
-export default function PersonnelPage() {
-  return (
-    <div className="bg-[#04070f] text-zinc-100">
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-4">
-        <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-[#050816]">
-          <div className="border-b border-zinc-800 px-6 py-6">
-            <h1 className="text-2xl font-semibold text-zinc-100">Персонал</h1>
-          </div>
+import EmployeesPageClient from "../employees/_components/EmployeesPageClient";
+import type { EmployeesFilters } from "../employees/_lib/query";
+import type { Department, Position, EmployeesResponse } from "../employees/_lib/types";
 
-          <div className="px-6 py-6">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-4 py-4 text-sm text-zinc-300">
-              Раздел в подготовке. Здесь будет общий кадровый реестр и CRUD по персоналу.
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+export const dynamic = "force-dynamic";
+
+export default function PersonnelPage() {
+  const initialFilters: EmployeesFilters = {
+    status: "all",
+    limit: 50,
+    offset: 0,
+  };
+
+  const initialDepartments: Department[] = [];
+  const initialPositions: Position[] = [];
+  const initialEmployees: EmployeesResponse = { items: [], total: 0 };
+
+  return (
+    <EmployeesPageClient
+      pageTitle="Персонал"
+      initialFilters={initialFilters}
+      initialDepartments={initialDepartments}
+      initialPositions={initialPositions}
+      initialEmployees={initialEmployees}
+      initialError={null}
+    />
   );
 }

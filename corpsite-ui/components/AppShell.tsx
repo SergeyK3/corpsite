@@ -141,7 +141,7 @@ function DictionariesSidebarGroup({ pathname }: { pathname: string }) {
                 key={item.href}
                 href={item.href}
                 className={[
-                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition",
+                  "flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition",
                   active
                     ? "bg-zinc-800 text-zinc-100"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
@@ -253,8 +253,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ) : err ? (
           <div className="rounded-2xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200">{err}</div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <aside className="space-y-4 lg:col-span-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+            <aside className="space-y-4">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
                 <div className="space-y-3">
                   <SidebarNav pathname={pathname} items={navTop} />
@@ -265,7 +265,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <OrgUnitsSidebarPanel basePath={orgTreeBasePath} />
             </aside>
 
-            <section className="min-w-0 lg:col-span-9">{children}</section>
+            <section className="min-w-0">{children}</section>
           </div>
         )}
       </div>

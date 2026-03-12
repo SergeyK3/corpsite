@@ -1,3 +1,4 @@
+# FILE: app/directory/roles_routes.py
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -171,6 +172,7 @@ def _build_select_sql(meta: Dict[str, Optional[str]]) -> str:
 def list_roles(
     q: Optional[str] = Query(default=None),
     is_active: Optional[bool] = Query(default=None),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -181,33 +183,63 @@ def list_roles(
     meta = _roles_meta()
     base_sql = _build_select_sql(meta)
 
-    where_parts: List[str] = ["TRUE"]
+    filters: List[str] = []
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
+    with_prefix = ""
 
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
-        where_parts.append(
+        filters.append(
             "(LOWER(CAST(role_code AS TEXT)) LIKE :q OR LOWER(CAST(role_name AS TEXT)) LIKE :q)"
         )
 
     if is_active is not None:
         if meta["active_col"] == "status":
             if is_active:
-                where_parts.append(
+                filters.append(
                     "LOWER(CAST(is_active AS TEXT)) IN ('1','true','yes','y','on','active','активна','активен')"
                 )
             else:
-                where_parts.append(
+                filters.append(
                     "LOWER(CAST(is_active AS TEXT)) IN ('0','false','no','n','off','inactive','неактивна','неактивен')"
                 )
         elif meta["active_col"]:
-            where_parts.append("CAST(is_active AS BOOLEAN) = :is_active")
+            filters.append("CAST(is_active AS BOOLEAN) = :is_active")
             params["is_active"] = bool(is_active)
 
-    where_sql = " AND ".join(where_parts)
+    if org_unit_id is not None:
+        params["org_unit_id"] = int(org_unit_id)
+        with_prefix = """
+        WITH RECURSIVE subtree AS (
+            SELECT ou.unit_id
+            FROM public.org_units ou
+            WHERE ou.unit_id = :org_unit_id
+
+            UNION ALL
+
+            SELECT child.unit_id
+            FROM public.org_units child
+            JOIN subtree s ON s.unit_id = child.parent_unit_id
+        )
+        """
+        filters.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM public.users u
+                WHERE u.role_id = t.role_id
+                  AND u.unit_id IN (SELECT unit_id FROM subtree)
+            )
+            """.strip()
+        )
+
+    where_sql = "TRUE"
+    if filters:
+        where_sql = " AND ".join(filters)
 
     q_total = text(
         f"""
+        {with_prefix}
         SELECT COUNT(*) AS cnt
         FROM ({base_sql}) t
         WHERE {where_sql}
@@ -216,6 +248,7 @@ def list_roles(
 
     q_list = text(
         f"""
+        {with_prefix}
         SELECT *
         FROM ({base_sql}) t
         WHERE {where_sql}
