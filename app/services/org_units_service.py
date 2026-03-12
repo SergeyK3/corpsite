@@ -89,7 +89,6 @@ class OrgUnitsService:
                 pass
         return out
 
-    # Backward-friendly wrapper (keeps call sites simple)
     def _parse_int_set_env(self, name: str) -> Set[int]:
         return set(self._parse_int_set_env_cached(name))
 
@@ -203,7 +202,6 @@ class OrgUnitsService:
     # RBAC (groups): deputy -> group -> units
     # ---------------------------
     def list_group_unit_ids_for_deputy(self, deputy_user_id: int, include_inactive: bool = False) -> List[int]:
-        # ВАЖНО: include_inactive теперь влияет и на активность групп, и на активность подразделений
         where_active_g = "" if include_inactive else "AND COALESCE(g.is_active, true) = true"
         where_active_u = "" if include_inactive else "AND COALESCE(u.is_active, true) = true"
 
@@ -369,7 +367,6 @@ class OrgUnitsService:
         my_role_id = int(role_id)
         out: Set[int] = {my_role_id}
 
-        # Director -> deputies (only deputy roles in direct child units)
         if my_role_id in director_role_ids:
             if unit_id is None:
                 return out
@@ -382,7 +379,6 @@ class OrgUnitsService:
             out |= set(dep_roles)
             return out
 
-        # Deputy -> supervisors assigned to deputy via groups (only supervisor roles)
         if my_role_id in deputy_role_ids:
             assigned_units = self.list_group_unit_ids_for_deputy(uid, include_inactive=include_inactive_units)
             head_roles = self._list_user_role_ids_by_unit_ids(
@@ -393,7 +389,6 @@ class OrgUnitsService:
             out |= set(head_roles)
             return out
 
-        # Supervisor -> direct subordinates (any roles in direct child units)
         if my_role_id in supervisor_role_ids:
             if unit_id is None:
                 return out
@@ -839,7 +834,7 @@ class OrgUnitsService:
             group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
         )
-    
+
     def delete_org_unit(self, *, unit_id: int) -> None:
         uid = int(unit_id)
 

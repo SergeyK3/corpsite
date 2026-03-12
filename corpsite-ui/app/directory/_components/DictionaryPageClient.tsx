@@ -16,6 +16,15 @@ type DictListResponse =
     }
   | Record<string, any>[];
 
+type DictMutationResponse =
+  | {
+      item?: Record<string, any>;
+      items?: Record<string, any>[];
+      data?: Record<string, any>;
+      ok?: boolean;
+    }
+  | Record<string, any>;
+
 type SelectOption = {
   value: string;
   label: string;
@@ -25,6 +34,20 @@ function normalizeListPayload(payload: DictListResponse): Record<string, any>[] 
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.items)) return payload.items;
   return [];
+}
+
+function normalizeMutationItem(payload: DictMutationResponse | null | undefined): Record<string, any> | null {
+  if (!payload || Array.isArray(payload)) return null;
+  if (payload && typeof payload === "object" && payload.item && typeof payload.item === "object") {
+    return payload.item;
+  }
+  if (payload && typeof payload === "object" && payload.data && typeof payload.data === "object") {
+    return payload.data;
+  }
+  if (payload && typeof payload === "object") {
+    return payload as Record<string, any>;
+  }
+  return null;
 }
 
 function errorToText(err: any): string {
@@ -128,6 +151,47 @@ function getRowKey(row: Record<string, any>, config: DictionaryConfig, index: nu
   return String(fallback);
 }
 
+function getEntityId(row: Record<string, any> | null | undefined, config: DictionaryConfig): string {
+  if (!row) return "";
+  const raw =
+    row?.[config.idField] ??
+    row?.unit_id ??
+    row?.role_id ??
+    row?.group_id ??
+    row?.id ??
+    row?.code ??
+    "";
+  return String(raw ?? "").trim();
+}
+
+function upsertRow(
+  current: Record<string, any>[],
+  nextRow: Record<string, any>,
+  config: DictionaryConfig
+): Record<string, any>[] {
+  const nextId = getEntityId(nextRow, config);
+  if (!nextId) return current;
+
+  const idx = current.findIndex((row) => getEntityId(row, config) === nextId);
+  if (idx < 0) {
+    return [nextRow, ...current];
+  }
+
+  const copy = [...current];
+  copy[idx] = { ...copy[idx], ...nextRow };
+  return copy;
+}
+
+function removeRow(
+  current: Record<string, any>[],
+  rowToDelete: Record<string, any>,
+  config: DictionaryConfig
+): Record<string, any>[] {
+  const targetId = getEntityId(rowToDelete, config);
+  if (!targetId) return current;
+  return current.filter((row) => getEntityId(row, config) !== targetId);
+}
+
 function toNullableNumber(value: any): number | null {
   if (value === null || value === undefined) return null;
   const s = String(value).trim();
@@ -157,6 +221,38 @@ function labelForDepartmentGroup(row: Record<string, any>): string {
   const code = String(row?.code ?? "").trim();
   if (name && code) return `${name} (${code})`;
   return name || code || String(row?.group_id ?? row?.id ?? "");
+}
+
+function sanitizePayload(config: DictionaryConfig, form: Record<string, any>, isEdit: boolean, currentId: any) {
+  const payload: Record<string, any> = {};
+
+  for (const field of config.formFields) {
+    const raw = form[field.key];
+
+    if (field.type === "checkbox") {
+      payload[field.key] = Boolean(raw);
+      continue;
+    }
+
+    const value = typeof raw === "string" ? raw.trim() : raw;
+    payload[field.key] = value;
+  }
+
+  if (isOrgUnitsConfig(config)) {
+    payload.parent_unit_id = toNullableNumber(form.parent_unit_id);
+    payload.group_id = toNullableNumber(form.group_id);
+
+    if (isEdit) {
+      const currentNumericId = toNullableNumber(currentId);
+      if (currentNumericId !== null && payload.parent_unit_id === currentNumericId) {
+        payload.parent_unit_id = null;
+      }
+    }
+
+    delete payload.name_ru;
+  }
+
+  return payload;
 }
 
 export default function DictionaryPageClient({ config }: Props) {
@@ -285,31 +381,38 @@ export default function DictionaryPageClient({ config }: Props) {
       editingItem?.group_id ??
       editingItem?.id;
 
-    const payload: Record<string, any> = { ...form };
-
-    if (isOrgUnitsConfig(config)) {
-      payload.parent_unit_id = toNullableNumber(form.parent_unit_id);
-      payload.group_id = toNullableNumber(form.group_id);
-
-      if (isEdit) {
-        const currentId = toNullableNumber(id);
-        if (currentId !== null && payload.parent_unit_id === currentId) {
-          payload.parent_unit_id = null;
-        }
-      }
-
-      delete payload.name_ru;
-    }
+    const payload = sanitizePayload(config, form, isEdit, id);
 
     try {
-      await apiFetchJson(isEdit ? `${config.apiBase}/${id}` : config.apiBase, {
+      const response = await apiFetchJson<DictMutationResponse>(isEdit ? `${config.apiBase}/${id}` : config.apiBase, {
         method: isEdit ? "PATCH" : "POST",
         body: payload,
       });
 
+      const savedItem = normalizeMutationItem(response);
+
+      if (savedItem) {
+        setItems((prev) => upsertRow(prev, savedItem, config));
+      } else if (isEdit && editingItem) {
+        setItems((prev) => upsertRow(prev, { ...editingItem, ...payload }, config));
+      } else {
+        setItems((prev) => [
+          {
+            ...payload,
+            ...response,
+          },
+          ...prev,
+        ]);
+      }
+
       forceCloseDrawer();
-      await loadItems();
-      await loadReferenceOptions();
+
+      try {
+        await loadItems();
+        await loadReferenceOptions();
+      } catch {
+        setError("Запись сохранена, но список не удалось обновить автоматически.");
+      }
     } catch (e: any) {
       setError(errorToText(e));
     } finally {
@@ -335,8 +438,14 @@ export default function DictionaryPageClient({ config }: Props) {
 
     try {
       await apiFetchJson(`${config.apiBase}/${id}`, { method: "DELETE" });
-      await loadItems();
-      await loadReferenceOptions();
+      setItems((prev) => removeRow(prev, item, config));
+
+      try {
+        await loadItems();
+        await loadReferenceOptions();
+      } catch {
+        setError("Запись удалена, но список не удалось обновить автоматически.");
+      }
     } catch (e: any) {
       setError(errorToText(e));
     }

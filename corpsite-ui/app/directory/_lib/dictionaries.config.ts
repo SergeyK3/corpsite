@@ -54,18 +54,13 @@ export const DICTIONARIES: DictionaryConfig[] = [
     description: "Группировка отделений по крупным категориям.",
     apiBase: "/directory/department-groups",
     idField: "group_id",
-    searchPlaceholder: "Поиск по коду и наименованию",
+    searchPlaceholder: "Поиск по наименованию",
     columns: [
       { key: "group_id", title: "ID", width: "90px" },
-      { key: "code", title: "Код", width: "150px" },
-      { key: "group_name", title: "Наименование", width: "320px" },
-      { key: "is_active", title: "Активна", width: "110px", format: "boolean" },
+      { key: "group_name", title: "Наименование", width: "420px" },
     ],
     formFields: [
-      { key: "code", label: "Код", type: "text", placeholder: "Например: CLINICAL" },
       { key: "group_name", label: "Наименование", type: "text", required: true, placeholder: "Например: Клинические" },
-      { key: "description", label: "Описание", type: "textarea", placeholder: "Краткое описание группы" },
-      { key: "is_active", label: "Активна", type: "checkbox" },
     ],
   },
   {

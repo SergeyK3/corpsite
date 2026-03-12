@@ -1,4 +1,3 @@
-// FILE: corpsite-ui/app/tasks/_components/CreateManualTaskModal.tsx
 "use client";
 
 import * as React from "react";
@@ -91,6 +90,13 @@ function defaultDueDateValue(): string {
   return toDateInputValue(addDays(new Date(), 2));
 }
 
+const ASSIGNMENT_SCOPE_OPTIONS: Array<{ value: AssignmentScope; label: string }> = [
+  { value: "role", label: "По роли" },
+  { value: "unit", label: "По отделению" },
+  { value: "group", label: "По группе" },
+  { value: "dept", label: "По департаменту" },
+];
+
 export default function CreateManualTaskModal({ periodId, roleOptions, onCreated }: Props) {
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -102,7 +108,6 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
   const [requiresApproval, setRequiresApproval] = React.useState(true);
 
   const [sourceNote, setSourceNote] = React.useState("");
-
   const [currentUserId, setCurrentUserId] = React.useState<number | null>(null);
 
   const [loading, setLoading] = React.useState(false);
@@ -133,7 +138,8 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
     };
   }, []);
 
-  async function handleSubmit() {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (loading || bootstrapLoading) return;
 
     setError("");
@@ -217,146 +223,171 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/20">
-      <div className="max-h-[75vh] overflow-y-auto p-4">
-        <div className="mb-4">
-          <div className="text-lg font-semibold text-zinc-100">Создать разовую задачу</div>
-          <div className="mt-1 text-xs text-zinc-500">
-            Текущий период: <span className="text-zinc-300">#{periodId}</span>{" "}
-            <span className="text-zinc-500">(недельный)</span>
-          </div>
-        </div>
-
-        {error ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
-
-        {success ? (
-          <div className="mb-4 rounded-xl border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200">
-            {success}
-          </div>
-        ) : null}
-
-        {!hasRoles ? (
-          <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-400">
-            Для вашей роли сейчас нет доступных исполнителей, которым можно поставить разовую задачу.
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <label className="block text-xs text-zinc-400">* Название новой задачи (обязательно)</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 italic"
-              placeholder="Введите название новой задачи. Например, сделать сводку по отделению"
-              disabled={loading || bootstrapLoading}
-            />
+    <form onSubmit={handleSubmit} className="flex min-h-full flex-col bg-[#050816] text-zinc-100">
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-300">
+            <div>
+              Текущий период: <span className="text-zinc-100">#{periodId}</span>
+            </div>
+            <div className="mt-1 text-xs text-zinc-500">
+              По умолчанию дедлайн ставится на 2 дня вперёд.
+            </div>
           </div>
 
-          <div>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 min-h-[72px] w-full resize-y rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
-              placeholder="Описание задачи"
-              disabled={loading || bootstrapLoading}
-            />
-          </div>
+          {!!error && (
+            <div className="rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
 
-          <div>
-            <label className="block text-xs text-zinc-300">
-              Дедлайн. По умолчанию: дата назначения + 2 дня. Изменить дату можно через значок календаря справа.
+          {!!success && (
+            <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
+              {success}
+            </div>
+          )}
+
+          {!hasRoles && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-400">
+              Для вашей роли сейчас нет доступных исполнителей, которым можно поставить разовую задачу.
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="manual-task-title" className="text-sm font-medium text-zinc-200">
+              Название задачи <span className="text-red-400">*</span>
             </label>
             <input
+              id="manual-task-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Например: Подготовить сводку по отделению"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={loading || bootstrapLoading}
+              className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:opacity-60"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="manual-task-description" className="text-sm font-medium text-zinc-200">
+              Описание
+            </label>
+            <textarea
+              id="manual-task-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Описание задачи"
+              rows={5}
+              disabled={loading || bootstrapLoading}
+              className="min-h-[120px] resize-y rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:opacity-60"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="manual-task-due-date" className="text-sm font-medium text-zinc-200">
+              Дедлайн <span className="text-red-400">*</span>
+            </label>
+            <input
+              id="manual-task-due-date"
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="mt-1 w-full cursor-pointer rounded-md border border-zinc-700 bg-zinc-900 px-3 py-3 text-sm text-zinc-100 outline-none hover:border-zinc-500 focus:border-zinc-400"
-              style={{ colorScheme: "dark" }}
               disabled={loading || bootstrapLoading}
-              title="Нажмите на значок календаря справа, чтобы изменить дату дедлайна"
+              style={{ colorScheme: "dark" }}
+              className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-600 disabled:opacity-60"
             />
           </div>
 
-          <div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="manual-task-role" className="text-sm font-medium text-zinc-200">
+              Исполнитель <span className="text-red-400">*</span>
+            </label>
             <select
+              id="manual-task-role"
               value={executorRoleId}
               onChange={(e) => setExecutorRoleId(e.target.value ? Number(e.target.value) : "")}
-              className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
               disabled={loading || bootstrapLoading || !hasRoles}
+              className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-600 disabled:opacity-60"
             >
               <option value="">Выберите роль исполнителя</option>
               {roleOptions.map((role) => (
-                <option key={role.role_id} value={role.role_id}>
+                <option key={role.role_id} value={role.role_id} className="bg-zinc-950 text-zinc-100">
                   {roleLabelOf(role)}
                 </option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs text-zinc-400">Тип назначения</label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="manual-task-scope" className="text-sm font-medium text-zinc-200">
+              Тип назначения
+            </label>
             <select
+              id="manual-task-scope"
               value={assignmentScope}
               onChange={(e) => setAssignmentScope(e.target.value as AssignmentScope)}
-              className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
               disabled={loading || bootstrapLoading}
+              className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-600 disabled:opacity-60"
             >
-              <option value="role">role</option>
-              <option value="unit">unit</option>
-              <option value="group">group</option>
-              <option value="dept">dept</option>
+              {ASSIGNMENT_SCOPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <label className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-200">
               <input
                 type="checkbox"
                 checked={requiresReport}
                 onChange={(e) => setRequiresReport(e.target.checked)}
                 disabled={loading || bootstrapLoading}
+                className="h-4 w-4"
               />
               <span>Требуется отчёт</span>
             </label>
 
-            <label className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200">
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-200">
               <input
                 type="checkbox"
                 checked={requiresApproval}
                 onChange={(e) => setRequiresApproval(e.target.checked)}
                 disabled={loading || bootstrapLoading}
+                className="h-4 w-4"
               />
               <span>Требуется согласование</span>
             </label>
           </div>
 
-          <div>
-            <label className="block text-xs text-zinc-400">Комментарий</label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="manual-task-note" className="text-sm font-medium text-zinc-200">
+              Комментарий
+            </label>
             <textarea
+              id="manual-task-note"
               value={sourceNote}
               onChange={(e) => setSourceNote(e.target.value)}
-              className="mt-1 min-h-[90px] w-full resize-y rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
-              placeholder="Служебная пометка / основание постановки задачи"
+              placeholder="Служебная пометка или основание постановки задачи"
+              rows={4}
               disabled={loading || bootstrapLoading}
+              className="min-h-[96px] resize-y rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:opacity-60"
             />
           </div>
         </div>
       </div>
 
-      <div className="sticky bottom-0 flex flex-wrap gap-2 rounded-b-2xl border-t border-zinc-800 bg-zinc-950/95 px-4 py-3">
+      <div className="mt-6 flex items-center justify-end gap-3 border-t border-zinc-800 pt-4">
         <button
-          onClick={handleSubmit}
+          type="submit"
           disabled={loading || bootstrapLoading || !hasRoles}
-          className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60 disabled:opacity-60"
+          className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Создание..." : "Создать задачу"}
+          {loading ? "Создание..." : "Создать"}
         </button>
       </div>
-    </div>
+    </form>
   );
 }

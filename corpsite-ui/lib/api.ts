@@ -205,7 +205,6 @@ export async function apiAuthLogin(params: {
     body: { login, password },
   });
 
-  // на вход в storage кладём уже нормализованный токен
   const token = sanitizeBearerToken(body?.access_token);
   if (!token) {
     throw toApiError(
@@ -217,7 +216,6 @@ export async function apiAuthLogin(params: {
 
   setSessionAccessToken(token);
 
-  // возвращаем body как есть (контракт с UI)
   return body;
 }
 
@@ -319,8 +317,14 @@ export async function apiCreateRegularTask(params: { payload: Record<string, any
   return apiFetchJson<any>("/regular-tasks", { method: "POST", body: params.payload ?? {} });
 }
 
-export async function apiPatchRegularTask(params: { regularTaskId: number; payload: Record<string, any> }): Promise<any> {
-  return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}`, { method: "PATCH", body: params.payload ?? {} });
+export async function apiPatchRegularTask(params: {
+  regularTaskId: number;
+  payload: Record<string, any>;
+}): Promise<any> {
+  return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}`, {
+    method: "PATCH",
+    body: params.payload ?? {},
+  });
 }
 
 export async function apiActivateRegularTask(params: { regularTaskId: number }): Promise<any> {
@@ -329,6 +333,10 @@ export async function apiActivateRegularTask(params: { regularTaskId: number }):
 
 export async function apiDeactivateRegularTask(params: { regularTaskId: number }): Promise<any> {
   return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}/deactivate`, { method: "POST" });
+}
+
+export async function apiDeleteRegularTask(params: { regularTaskId: number }): Promise<any> {
+  return apiFetchJson<any>(`/regular-tasks/${params.regularTaskId}`, { method: "DELETE" });
 }
 
 export async function apiGetRegularTasksRaw(params: {

@@ -277,7 +277,6 @@ def patch_regular_task_tx(
         sp = _as_dict_or_none(payload.get("schedule_params"))
         if sp is None:
             raise ValueError("schedule_params must be an object")
-        # ВАЖНО: Postgres + SQLAlchemy безопаснее через CAST(:param AS jsonb), чем через :param::jsonb
         sets.append("schedule_params = CAST(:schedule_params AS jsonb)")
         params["schedule_params"] = json.dumps(sp, ensure_ascii=False)
 
@@ -326,3 +325,43 @@ def set_regular_task_active_tx(conn: Connection, regular_task_id: int, is_active
     if res.rowcount == 0:
         raise KeyError("regular_task not found")
     return get_regular_task_tx(conn, rid)
+
+
+def delete_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any]:
+    rid = int(regular_task_id)
+
+    existing = conn.execute(
+        text(
+            """
+            SELECT regular_task_id, code, title
+            FROM public.regular_tasks
+            WHERE regular_task_id = :rid
+            """
+        ),
+        {"rid": rid},
+    ).mappings().first()
+
+    if not existing:
+        raise KeyError("regular_task not found")
+
+    res = conn.execute(
+        text(
+            """
+            DELETE FROM public.regular_tasks
+            WHERE regular_task_id = :rid
+            """
+        ),
+        {"rid": rid},
+    )
+
+    if res.rowcount == 0:
+        raise KeyError("regular_task not found")
+
+    return {
+        "ok": True,
+        "deleted": {
+            "regular_task_id": int(existing["regular_task_id"]),
+            "code": existing.get("code"),
+            "title": existing.get("title"),
+        },
+    }

@@ -24,15 +24,14 @@ type NavItem = { href: string; title: string };
 type DictionaryNavItem = {
   href: string;
   title: string;
-  isStub?: boolean;
 };
 
 const DICTIONARY_ITEMS: DictionaryNavItem[] = [
   { href: "/directory/roles", title: "Роли" },
-  { href: "/directory/positions", title: "Должности", isStub: true },
-  { href: "/directory/contacts", title: "Контакты", isStub: true },
-  { href: "/directory/personnel", title: "Персонал", isStub: true },
-  { href: "/directory/working-contacts", title: "Рабочие контакты", isStub: true },
+  { href: "/directory/positions", title: "Должности" },
+  { href: "/directory/contacts", title: "Контакты" },
+  { href: "/directory/personnel", title: "Персонал" },
+  { href: "/directory/working-contacts", title: "Рабочие контакты" },
   { href: "/directory/department-groups", title: "Группы отделений" },
   { href: "/directory/org-unit-types", title: "Отделения" },
 ];
@@ -149,11 +148,6 @@ function DictionariesSidebarGroup({ pathname }: { pathname: string }) {
                 ].join(" ")}
               >
                 <span>{item.title}</span>
-                {item.isStub ? (
-                  <span className="ml-3 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
-                    stub
-                  </span>
-                ) : null}
               </Link>
             );
           })}
