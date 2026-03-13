@@ -1,5 +1,7 @@
 // FILE: corpsite-ui/lib/types.ts
 
+export type TaskScope = "mine" | "team";
+
 // UI actions we show as buttons
 export type AllowedAction = "report" | "approve" | "reject" | "archive";
 
@@ -17,12 +19,36 @@ export type TaskListItem = {
   description?: string | null;
 
   initiator_user_id?: number;
+  created_by_user_id?: number | null;
+  approver_user_id?: number | null;
+
   executor_role_id?: number;
+  executor_user_id?: number | null;
+  executor_name?: string | null;
+
   assignment_scope?: string;
 
   status_id?: number;
   status_code?: string;
   status_name_ru?: string;
+
+  task_kind?: string | null;
+  requires_report?: boolean;
+  requires_approval?: boolean;
+  source_kind?: string | null;
+  source_note?: string | null;
+
+  due_date?: string | null;
+
+  report_link?: string | null;
+  report_submitted_at?: string | null;
+  report_submitted_by?: number | null;
+  report_submitted_by_role_name?: string | null;
+  report_submitted_by_role_code?: string | null;
+
+  report_approved_at?: string | null;
+  report_approved_by?: number | null;
+  report_current_comment?: string | null;
 
   // legacy/optional
   status?: string;
@@ -40,12 +66,36 @@ export type TaskDetails = {
   description?: string | null;
 
   initiator_user_id?: number;
+  created_by_user_id?: number | null;
+  approver_user_id?: number | null;
+
   executor_role_id?: number;
+  executor_user_id?: number | null;
+  executor_name?: string | null;
+
   assignment_scope?: string;
 
   status_id?: number;
   status_code?: string;
   status_name_ru?: string;
+
+  task_kind?: string | null;
+  requires_report?: boolean;
+  requires_approval?: boolean;
+  source_kind?: string | null;
+  source_note?: string | null;
+
+  due_date?: string | null;
+
+  report_link?: string | null;
+  report_submitted_at?: string | null;
+  report_submitted_by?: number | null;
+  report_submitted_by_role_name?: string | null;
+  report_submitted_by_role_code?: string | null;
+
+  report_approved_at?: string | null;
+  report_approved_by?: number | null;
+  report_current_comment?: string | null;
 
   // legacy/optional
   status?: string;
@@ -53,6 +103,14 @@ export type TaskDetails = {
 
   // accept backend shapes
   allowed_actions?: AllowedActionsRaw;
+};
+
+export type TasksListResponse = {
+  scope?: TaskScope;
+  total?: number;
+  limit?: number;
+  offset?: number;
+  items?: TaskListItem[];
 };
 
 export type TaskAction = AllowedAction;

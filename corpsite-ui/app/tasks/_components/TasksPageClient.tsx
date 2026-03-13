@@ -25,6 +25,7 @@ type TaskAction = AllowedAction;
 type StatusTab = "active" | "done" | "rejected";
 type DrawerMode = "create" | "view" | "edit";
 type TaskKindFilter = "all" | "adhoc" | "regular" | "other";
+type TaskScope = "mine" | "team";
 
 type MeInfo = {
   user_id?: number;
@@ -92,8 +93,19 @@ function statusTextOf(t: any): string {
 }
 
 function allowedActionsOf(t: any): AllowedAction[] {
-  const a = t?.allowed_actions;
-  if (Array.isArray(a)) return a.filter(Boolean) as AllowedAction[];
+  const raw = t?.allowed_actions;
+  const all: AllowedAction[] = ["report", "approve", "reject", "archive"];
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map((x) => String(x ?? "").trim().toLowerCase())
+      .filter((x): x is AllowedAction => all.includes(x as AllowedAction));
+  }
+
+  if (raw && typeof raw === "object") {
+    return all.filter((key) => Boolean(raw[key]));
+  }
+
   return [];
 }
 
@@ -151,6 +163,10 @@ function tabRu(v: StatusTab): string {
   if (v === "done") return "Отработано";
   if (v === "rejected") return "Отклонено";
   return "В работе";
+}
+
+function scopeRu(v: TaskScope): string {
+  return v === "team" ? "Все задачи" : "Мои задачи";
 }
 
 function fmtDtRu(raw: any): string {
@@ -284,7 +300,7 @@ function detectSystemAdmin(me: MeInfo | null): boolean {
   const roleName = String(me?.role_name ?? "").trim().toLowerCase();
   const roleNameRu = String(me?.role_name_ru ?? "").trim().toLowerCase();
 
-  if (roleId === 1) return true;
+  if (roleId === 2) return true;
   if (roleCode === "ADMIN" || roleCode === "SYSTEM_ADMIN") return true;
   if (roleName.includes("system administrator")) return true;
   if (roleNameRu.includes("системный администратор")) return true;
@@ -292,38 +308,44 @@ function detectSystemAdmin(me: MeInfo | null): boolean {
   return false;
 }
 
-function canEditTask(src: any, isSystemAdmin: boolean): boolean {
+function detectCanSeeTeamTasks(me: MeInfo | null): boolean {
+  const roleId = Number(me?.role_id ?? 0);
+  const roleCode = String(me?.role_code ?? "").trim().toUpperCase();
+  const roleName = String(me?.role_name ?? "").trim().toLowerCase();
+  const roleNameRu = String(me?.role_name_ru ?? "").trim().toLowerCase();
+
+  if (roleId === 2) return true;
+  if (roleCode.includes("DIRECTOR")) return true;
+  if (roleCode.includes("DEPUTY")) return true;
+  if (roleCode.endsWith("_HEAD")) return true;
+  if (roleNameRu.includes("руководител")) return true;
+  if (roleNameRu.includes("директор")) return true;
+  if (roleNameRu.includes("заместител")) return true;
+  if (roleName.includes("head")) return true;
+  if (roleName.includes("director")) return true;
+  if (roleName.includes("deputy")) return true;
+
+  return false;
+}
+
+function canEditTask(src: any): boolean {
   const taskKind = String(src?.task_kind ?? "").trim().toLowerCase();
-  const sourceKind = String(src?.source_kind ?? "").trim().toLowerCase();
   const statusCode = String(src?.status_code ?? "").trim().toUpperCase();
 
   if (!src) return false;
   if (statusCode === "ARCHIVED") return false;
 
-  if (isSystemAdmin) {
-    return taskKind === "adhoc" || taskKind === "regular";
-  }
-
-  if (taskKind !== "adhoc") return false;
-  if (sourceKind && !["manual", "bot", "import"].includes(sourceKind)) return false;
-
-  return true;
+  return taskKind === "adhoc" || taskKind === "regular";
 }
 
-function editButtonTitle(src: any, isSystemAdmin: boolean): string {
+function editButtonTitle(src: any): string {
   const taskKind = String(src?.task_kind ?? "").trim().toLowerCase();
   const statusCode = String(src?.status_code ?? "").trim().toUpperCase();
 
   if (!src) return "Сначала выберите задачу";
   if (statusCode === "ARCHIVED") return "Архивная задача не редактируется";
-
-  if (isSystemAdmin) {
-    if (taskKind === "adhoc" || taskKind === "regular") return "Редактировать выбранную задачу";
-    return "Этот тип задачи не поддерживает редактирование";
-  }
-
-  if (taskKind !== "adhoc") return "Только разовые задачи доступны для редактирования";
-  return "Редактировать выбранную задачу";
+  if (taskKind === "adhoc" || taskKind === "regular") return "Редактировать выбранную задачу";
+  return "Этот тип задачи не поддерживает редактирование";
 }
 
 function normalizeText(value: string): string {
@@ -355,6 +377,44 @@ function taskKindLabelOf(src: any): string {
   return "—";
 }
 
+function executorRoleLabelOf(src: any): string {
+  const roleRu = String(
+    src?.executor_role_name_ru ??
+      src?.role_name_ru ??
+      src?.target_role_name_ru ??
+      src?.executor_role_ru ??
+      "",
+  ).trim();
+  if (roleRu) return roleRu;
+
+  const roleName = String(
+    src?.executor_role_name ??
+      src?.role_name ??
+      src?.target_role_name ??
+      src?.executor_role ??
+      "",
+  ).trim();
+  if (roleName) return roleName;
+
+  const roleCode = String(
+    src?.executor_role_code ??
+      src?.role_code ??
+      src?.target_role_code ??
+      "",
+  ).trim();
+  if (roleCode) return roleCode;
+
+  const roleId = Number(src?.executor_role_id ?? src?.role_id ?? 0);
+  if (Number.isFinite(roleId) && roleId > 0) return `Роль #${roleId}`;
+
+  const person = String(src?.executor_name ?? "").trim();
+  return person || "—";
+}
+
+function executorPersonLabelOf(src: any): string {
+  return String(src?.executor_name ?? "").trim();
+}
+
 const TASK_KIND_OPTIONS: Array<{ value: TaskKindFilter; label: string }> = [
   { value: "all", label: "Все типы" },
   { value: "adhoc", label: "Разовые" },
@@ -372,6 +432,7 @@ export default function TasksPageClient() {
 
   const [offset, setOffset] = React.useState(0);
   const [tab, setTab] = React.useState<StatusTab>("active");
+  const [taskScope, setTaskScope] = React.useState<TaskScope>("team");
   const [search, setSearch] = React.useState("");
   const [taskKind, setTaskKind] = React.useState<TaskKindFilter>("all");
 
@@ -404,15 +465,28 @@ export default function TasksPageClient() {
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
 
   const isSystemAdmin = React.useMemo(() => detectSystemAdmin(me), [me]);
+  const canSeeTeamTasks = React.useMemo(() => detectCanSeeTeamTasks(me), [me]);
+
+  const readOnlyTeamMode = taskScope === "team" && !isSystemAdmin;
+  const showExecutorColumn = taskScope === "team";
+  const showDeleteButtons = isSystemAdmin;
+  const actionsColWidth = showDeleteButtons ? "w-[170px]" : "w-[138px]";
 
   const filteredItems = React.useMemo(() => {
     return items.filter((item) => {
-      const bySearch = matchesSearch(taskTitleOf(item), search);
+      const q = search.trim();
+      const bySearch = !q
+        ? true
+        : matchesSearch(taskTitleOf(item), q) ||
+          (taskScope === "team" &&
+            (matchesSearch(executorRoleLabelOf(item), q) ||
+              matchesSearch(String(item?.executor_name ?? ""), q)));
+
       const kindValue = normalizeTaskKind(item?.task_kind);
       const byTaskKind = taskKind === "all" ? true : kindValue === taskKind;
       return bySearch && byTaskKind;
     });
-  }, [items, search, taskKind]);
+  }, [items, search, taskKind, taskScope]);
 
   function resetDrawerState() {
     detailsRequestRef.current += 1;
@@ -501,6 +575,7 @@ export default function TasksPageClient() {
 
         const body = await apiFetchJson<any>("/tasks", {
           query: {
+            scope: taskScope,
             limit: LIST_LIMIT,
             offset: qOffset,
             status_filter: tab,
@@ -525,12 +600,17 @@ export default function TasksPageClient() {
         const msg = normalizeMsg(e?.message || "Не удалось загрузить список задач");
         setItems([]);
         setTotal(0);
-        setPageError(st ? `(${st}) ${msg}` : msg);
+
+        if (st === 403 && taskScope === "team") {
+          setPageError("Доступ к вкладке «Все задачи» запрещён.");
+        } else {
+          setPageError(st ? `(${st}) ${msg}` : msg);
+        }
       } finally {
         setListLoading(false);
       }
     },
-    [offset, tab, selectedId, drawerMode, redirectToLogin, orgUnitId],
+    [offset, tab, taskScope, selectedId, drawerMode, redirectToLogin, orgUnitId],
   );
 
   const loadTaskDetails = React.useCallback(
@@ -604,6 +684,13 @@ export default function TasksPageClient() {
 
   React.useEffect(() => {
     if (!ready) return;
+    if (!canSeeTeamTasks && taskScope === "team") {
+      setTaskScope("mine");
+    }
+  }, [ready, canSeeTeamTasks, taskScope]);
+
+  React.useEffect(() => {
+    if (!ready) return;
     void loadItems();
   }, [ready, loadItems]);
 
@@ -651,7 +738,8 @@ export default function TasksPageClient() {
   }
 
   function openEdit(task: any) {
-    if (!canEditTask(task, isSystemAdmin)) return;
+    if (readOnlyTeamMode) return;
+    if (!canEditTask(task)) return;
 
     const taskId = taskIdOf(task);
     setDrawerError(null);
@@ -680,13 +768,16 @@ export default function TasksPageClient() {
     setUiNotice("");
 
     try {
+      const dueDate = values.due_date.trim() || null;
+
       await apiFetchJson(`/tasks/${selectedId}`, {
         method: "PATCH",
         body: {
           title,
           description: values.description.trim() || null,
           source_note: values.source_note.trim() || null,
-          due_date: values.due_date.trim() || null,
+          due_date: dueDate,
+          due_at: dueDate ? `${dueDate}T00:00:00` : null,
         },
       });
 
@@ -708,6 +799,8 @@ export default function TasksPageClient() {
   }
 
   async function handleDelete(task: any, hard = false) {
+    if (!isSystemAdmin) return;
+
     const taskId = taskIdOf(task);
     const ok = window.confirm(
       hard
@@ -848,13 +941,14 @@ export default function TasksPageClient() {
     return selectedItem ? taskTitleOf(selectedItem) : "Карточка задачи";
   }, [drawerMode, selectedItem]);
 
-  const drawerSubtitle = drawerMode === "create" ? "Задачи" : "Должности процесса";
+  const drawerSubtitle =
+    drawerMode === "create" ? "Задачи" : taskScope === "team" ? "Все задачи" : "Мои задачи";
 
   const selectedAllowed = React.useMemo(() => allowedActionsOf(selectedItem), [selectedItem]);
   const selectedStatus = React.useMemo(() => statusTextOf(selectedItem), [selectedItem]);
   const selectedEditable = React.useMemo(
-    () => canEditTask(selectedItem, isSystemAdmin),
-    [selectedItem, isSystemAdmin],
+    () => canEditTask(selectedItem) && !readOnlyTeamMode,
+    [selectedItem, readOnlyTeamMode],
   );
 
   const selectedReportUiState = React.useMemo(
@@ -862,21 +956,65 @@ export default function TasksPageClient() {
     [selectedItem],
   );
 
+  const tableColSpan = showExecutorColumn ? 6 : 5;
+  const selectedExecutorRole = React.useMemo(() => executorRoleLabelOf(selectedItem), [selectedItem]);
+  const selectedExecutorPerson = React.useMemo(() => executorPersonLabelOf(selectedItem), [selectedItem]);
+
   return (
     <div className="bg-[#04070f] text-zinc-100">
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
+      <div className="w-full px-0 py-0">
         <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-[#050816]">
           <div className="border-b border-zinc-800 px-4 py-3">
             <h1 className="text-2xl font-semibold text-zinc-100">Задачи</h1>
           </div>
 
           <div className="border-b border-zinc-800 px-4 py-3">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950/40 p-1">
+                {canSeeTeamTasks ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskScope("team");
+                      setOffset(0);
+                      resetDrawerState();
+                    }}
+                    className={[
+                      "rounded-md px-3 py-2 text-sm transition",
+                      taskScope === "team" ? "bg-zinc-900 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900/60",
+                    ].join(" ")}
+                  >
+                    Все задачи
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTaskScope("mine");
+                    setOffset(0);
+                    resetDrawerState();
+                  }}
+                  className={[
+                    "rounded-md px-3 py-2 text-sm transition",
+                    taskScope === "mine" ? "bg-zinc-900 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900/60",
+                  ].join(" ")}
+                >
+                  Мои задачи
+                </button>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск по названию задачи"
+                  placeholder={
+                    taskScope === "team"
+                      ? "Поиск по задаче, роли или исполнителю"
+                      : "Поиск по названию задачи"
+                  }
                   className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
                 />
               </div>
@@ -884,7 +1022,7 @@ export default function TasksPageClient() {
               <select
                 value={taskKind}
                 onChange={(e) => setTaskKind(e.target.value as TaskKindFilter)}
-                className="h-10 min-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-100 outline-none transition focus:border-zinc-600"
+                className="h-10 min-w-[180px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-100 outline-none transition focus:border-zinc-600"
               >
                 {TASK_KIND_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
@@ -920,7 +1058,7 @@ export default function TasksPageClient() {
                 Обновить
               </button>
 
-              {canCreateManualTask ? (
+              {canCreateManualTask && taskScope === "mine" ? (
                 <button
                   type="button"
                   onClick={openCreate}
@@ -942,7 +1080,7 @@ export default function TasksPageClient() {
 
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-400">
               <div>
-                Всего: {total} · Показано: {filteredItems.length}
+                {scopeRu(taskScope)} · Всего: {total} · Показано: {filteredItems.length}
                 {listLoading ? <span className="ml-2">· загрузка…</span> : null}
                 {manualRolesLoading ? <span className="ml-2">· роли…</span> : null}
               </div>
@@ -954,25 +1092,38 @@ export default function TasksPageClient() {
 
             <div className="overflow-hidden rounded-xl border border-zinc-800">
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
+                <table className="w-full table-fixed border-collapse">
+                  <colgroup>
+                    <col className="w-[48px]" />
+                    <col className="w-[300px]" />
+                    {showExecutorColumn ? <col className="w-[200px]" /> : null}
+                    <col className="w-[92px]" />
+                    <col className="w-[92px]" />
+                    <col className={actionsColWidth} />
+                  </colgroup>
+
                   <thead>
                     <tr className="bg-white/[0.03] text-left">
-                      <th className="w-[72px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         ID
                       </th>
-                      <th className="px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Название
                       </th>
-                      <th className="w-[170px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+
+                      {showExecutorColumn ? (
+                        <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                          Роль
+                        </th>
+                      ) : null}
+
+                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Статус
                       </th>
-                      <th className="w-[120px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
-                        Тип
-                      </th>
-                      <th className="w-[140px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Дедлайн
                       </th>
-                      <th className="w-[220px] px-3 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="px-2 py-3 text-center text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -981,20 +1132,20 @@ export default function TasksPageClient() {
                   <tbody>
                     {listLoading ? (
                       <tr>
-                        <td colSpan={6} className="px-3 py-3 text-sm text-zinc-400">
+                        <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : filteredItems.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-3 py-3 text-sm text-zinc-500">
+                        <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-500">
                           Записи не найдены.
                         </td>
                       </tr>
                     ) : (
                       filteredItems.map((item) => {
                         const id = taskIdOf(item);
-                        const editable = canEditTask(item, isSystemAdmin);
+                        const editable = canEditTask(item) && !readOnlyTeamMode;
 
                         return (
                           <tr
@@ -1002,55 +1153,67 @@ export default function TasksPageClient() {
                             className="cursor-pointer border-t border-zinc-800 align-middle transition hover:bg-white/[0.02]"
                             onClick={() => openView(item)}
                           >
-                            <td className="px-3 py-2 text-sm leading-5 text-zinc-100">{id}</td>
-                            <td className="px-3 py-2 text-sm leading-5 text-zinc-100">
-                              {taskTitleOf(item)}
+                            <td className="px-1.5 py-2 text-sm leading-5 text-zinc-100">{id}</td>
+
+                            <td className="px-2 py-2 text-sm leading-5 text-zinc-100">
+                              <div className="max-w-full whitespace-normal break-words">{taskTitleOf(item)}</div>
                             </td>
-                            <td className="px-3 py-2 text-sm leading-5 text-zinc-400">
+
+                            {showExecutorColumn ? (
+                              <td className="px-1.5 py-2 text-sm leading-5 text-zinc-300">
+                                <div className="whitespace-normal break-words">
+                                  {executorRoleLabelOf(item)}
+                                </div>
+                              </td>
+                            ) : null}
+
+                            <td className="px-2 py-2 text-sm leading-5 text-zinc-400">
                               {statusTextOf(item)}
                             </td>
-                            <td className="px-3 py-2 text-sm leading-5 text-zinc-400">
-                              {taskKindLabelOf(item)}
-                            </td>
-                            <td className="px-3 py-2 text-sm leading-5 text-zinc-400">
+
+                            <td className="px-2 py-2 text-sm leading-5 text-zinc-400">
                               {formatDeadline(item)}
                             </td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
+
+                            <td className="px-2 py-2">
+                              <div className="flex items-center justify-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openView(item);
                                   }}
-                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-sm leading-5 text-zinc-100 transition hover:bg-zinc-900/60"
+                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2 py-1.5 text-[13px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
                                 >
                                   Открыть
                                 </button>
 
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openEdit(item);
-                                  }}
-                                  disabled={!editable}
-                                  title={editButtonTitle(item, isSystemAdmin)}
-                                  className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-sm leading-5 text-zinc-100 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  Изменить
-                                </button>
+                                {editable ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openEdit(item);
+                                    }}
+                                    title={editButtonTitle(item)}
+                                    className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1.5 text-sm leading-5 text-zinc-100 transition hover:bg-zinc-900/60"
+                                  >
+                                    Изменить
+                                  </button>
+                                ) : null}
 
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleDelete(item, false);
-                                  }}
-                                  className="rounded-md border border-red-800 bg-transparent px-3 py-1.5 text-sm leading-5 text-red-300 transition hover:bg-red-950/30"
-                                >
-                                  Удалить
-                                </button>
+                                {showDeleteButtons ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleDelete(item, false);
+                                    }}
+                                    className="rounded-md border border-red-800 bg-transparent px-2 py-1.5 text-[13px] leading-4 text-red-300 transition hover:bg-red-950/30"
+                                  >
+                                    Удалить
+                                  </button>
+                                ) : null}
                               </div>
                             </td>
                           </tr>
@@ -1169,6 +1332,16 @@ export default function TasksPageClient() {
                         {String(selectedItem?.source_kind ?? "—")}
                       </div>
                     </div>
+
+                    {showExecutorColumn ? (
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4 sm:col-span-2">
+                        <div className="text-xs text-zinc-500">Роль</div>
+                        <div className="mt-1 text-sm text-zinc-100">{selectedExecutorRole}</div>
+                        {selectedExecutorPerson && selectedExecutorPerson !== selectedExecutorRole ? (
+                          <div className="mt-1 text-xs text-zinc-400">{selectedExecutorPerson}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   {String(selectedItem?.description ?? "").trim() ? (
@@ -1328,14 +1501,16 @@ export default function TasksPageClient() {
                     </button>
                   ) : null}
 
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(selectedItem, false)}
-                    disabled={saving || drawerLoading}
-                    className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
-                  >
-                    Удалить
-                  </button>
+                  {showDeleteButtons ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(selectedItem, false)}
+                      disabled={saving || drawerLoading}
+                      className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+                    >
+                      Удалить
+                    </button>
+                  ) : null}
 
                   {isSystemAdmin ? (
                     <button

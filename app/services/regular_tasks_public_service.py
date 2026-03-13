@@ -58,6 +58,8 @@ def _row_to_out(r: Any) -> Dict[str, Any]:
         "description": r.get("description"),
         "is_active": bool(r.get("is_active")),
         "executor_role_id": _as_int_or_none(r.get("executor_role_id")),
+        "executor_role_name": r.get("executor_role_name"),
+        "executor_role_code": r.get("executor_role_code"),
         "assignment_scope": r.get("assignment_scope"),
         "schedule_type": r.get("schedule_type"),
         "schedule_params": r.get("schedule_params") or {},
@@ -76,6 +78,7 @@ def list_regular_tasks_tx(
     schedule_type: Optional[str] = None,
     executor_role_id: Optional[int] = None,
     org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -100,7 +103,9 @@ def list_regular_tasks_tx(
             "("
             "t.title ILIKE :q "
             "OR COALESCE(t.description, '') ILIKE :q "
-            "OR COALESCE(t.code, '') ILIKE :q"
+            "OR COALESCE(t.code, '') ILIKE :q "
+            "OR COALESCE(r.name, '') ILIKE :q "
+            "OR COALESCE(r.code, '') ILIKE :q"
             ")"
         )
 
@@ -129,11 +134,49 @@ def list_regular_tasks_tx(
             """.strip()
         )
 
+    if org_unit_id is not None:
+        params["org_unit_id"] = int(org_unit_id)
+        filters.append(
+            """
+            EXISTS (
+                WITH RECURSIVE subtree AS (
+                    SELECT ou.unit_id
+                    FROM public.org_units ou
+                    WHERE ou.unit_id = :org_unit_id
+
+                    UNION ALL
+
+                    SELECT child.unit_id
+                    FROM public.org_units child
+                    JOIN subtree s
+                      ON s.unit_id = child.parent_unit_id
+                    WHERE COALESCE(child.is_active, TRUE) = TRUE
+                )
+                SELECT 1
+                FROM public.users ux
+                JOIN public.org_units oux
+                  ON oux.unit_id = ux.unit_id
+                WHERE ux.role_id = t.executor_role_id
+                  AND COALESCE(ux.is_active, TRUE) = TRUE
+                  AND COALESCE(oux.is_active, TRUE) = TRUE
+                  AND ux.unit_id IN (SELECT unit_id FROM subtree)
+            )
+            """.strip()
+        )
+
     where_sql = ""
     if filters:
         where_sql = "WHERE " + " AND ".join(filters)
 
-    total_sql = text(f"SELECT COUNT(1) AS cnt FROM public.regular_tasks t {where_sql}")
+    total_sql = text(
+        f"""
+        SELECT COUNT(1) AS cnt
+        FROM public.regular_tasks t
+        LEFT JOIN public.roles r
+          ON r.role_id = t.executor_role_id
+        {where_sql}
+        """
+    )
     total = int(conn.execute(total_sql, params).scalar() or 0)
 
     sql = text(
@@ -145,6 +188,8 @@ def list_regular_tasks_tx(
           t.description,
           t.is_active,
           t.executor_role_id,
+          r.name AS executor_role_name,
+          r.code AS executor_role_code,
           t.assignment_scope,
           t.schedule_type,
           t.schedule_params,
@@ -153,6 +198,8 @@ def list_regular_tasks_tx(
           t.created_by_user_id,
           t.updated_at
         FROM public.regular_tasks t
+        LEFT JOIN public.roles r
+          ON r.role_id = t.executor_role_id
         {where_sql}
         ORDER BY t.updated_at DESC, t.regular_task_id DESC
         LIMIT :limit OFFSET :offset
@@ -178,6 +225,8 @@ def get_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any
           t.description,
           t.is_active,
           t.executor_role_id,
+          r.name AS executor_role_name,
+          r.code AS executor_role_code,
           t.assignment_scope,
           t.schedule_type,
           t.schedule_params,
@@ -186,6 +235,8 @@ def get_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any
           t.created_by_user_id,
           t.updated_at
         FROM public.regular_tasks t
+        LEFT JOIN public.roles r
+          ON r.role_id = t.executor_role_id
         WHERE t.regular_task_id = :rid
         """
     )

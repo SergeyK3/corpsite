@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetchJson } from "../../../lib/api";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, { type TemplateFormValues } from "../../regular-tasks/_components/TemplateForm";
@@ -15,6 +16,8 @@ type RegularTaskItem = {
   schedule_type?: string | null;
   schedule_params?: Record<string, unknown> | null;
   executor_role_id?: number | null;
+  executor_role_name?: string | null;
+  executor_role_code?: string | null;
   assignment_scope?: string | null;
   create_offset_days?: number | null;
   due_offset_days?: number | null;
@@ -56,6 +59,8 @@ type RunItem = {
   finished_at?: string | null;
   period_id?: number | null;
   executor_role_id?: number | null;
+  executor_role_name?: string | null;
+  executor_role_code?: string | null;
   is_due: boolean;
   created_tasks: number;
   error?: string | null;
@@ -177,6 +182,8 @@ function matchesSearch(item: RegularTaskItem, q: string): boolean {
       item.description ?? "",
       item.schedule_type ?? "",
       item.assignment_scope ?? "",
+      item.executor_role_name ?? "",
+      item.executor_role_code ?? "",
       item.executor_role_id != null ? String(item.executor_role_id) : "",
     ].join(" "),
   );
@@ -184,16 +191,26 @@ function matchesSearch(item: RegularTaskItem, q: string): boolean {
   return haystack.includes(query);
 }
 
-function metricCard(label: string, value: React.ReactNode) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-zinc-100">{value}</div>
-    </div>
-  );
+function roleLabel(value: {
+  executor_role_id?: number | null;
+  executor_role_name?: string | null;
+  executor_role_code?: string | null;
+}): string {
+  const name = String(value.executor_role_name ?? "").trim();
+  if (name) return name;
+
+  const code = String(value.executor_role_code ?? "").trim();
+  if (code) return code;
+
+  if (value.executor_role_id != null) return `#${value.executor_role_id}`;
+  return "—";
 }
 
 export default function RegularTasksAdminClient() {
+  const sp = useSearchParams();
+  const orgUnitId = sp.get("org_unit_id") ?? "";
+  const prevOrgUnitRef = React.useRef<string>(orgUnitId);
+
   const [activeTab, setActiveTab] = React.useState<MainTab>("templates");
 
   const [templates, setTemplates] = React.useState<RegularTaskItem[]>([]);
@@ -204,7 +221,7 @@ export default function RegularTasksAdminClient() {
   const [selectedTemplate, setSelectedTemplate] = React.useState<RegularTaskItem | null>(null);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [drawerMode, setDrawerMode] = React.useState<DrawerMode>("view");
+  const [drawerMode, setDrawerMode] = React.useState<DrawerMode>("create");
   const [drawerLoading, setDrawerLoading] = React.useState(false);
   const [drawerError, setDrawerError] = React.useState<string | null>(null);
   const [drawerSaving, setDrawerSaving] = React.useState(false);
@@ -233,11 +250,6 @@ export default function RegularTasksAdminClient() {
     return found?.id;
   }, [orgGroup]);
 
-  const selectedOrgGroupLabel = React.useMemo(() => {
-    const found = ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup);
-    return found?.label ?? "Все группы";
-  }, [orgGroup]);
-
   const loadTemplates = React.useCallback(async () => {
     setTemplatesLoading(true);
     setTemplatesError(null);
@@ -249,6 +261,7 @@ export default function RegularTasksAdminClient() {
           limit: 200,
           offset: 0,
           org_group_id: selectedOrgGroupId ?? undefined,
+          org_unit_id: orgUnitId || undefined,
         },
       });
 
@@ -273,7 +286,7 @@ export default function RegularTasksAdminClient() {
     } finally {
       setTemplatesLoading(false);
     }
-  }, [selectedOrgGroupId, selectedTemplateId, drawerOpen, drawerMode]);
+  }, [selectedOrgGroupId, orgUnitId, selectedTemplateId, drawerOpen, drawerMode]);
 
   const loadTemplateCard = React.useCallback(async (regularTaskId: number) => {
     setDrawerLoading(true);
@@ -298,6 +311,7 @@ export default function RegularTasksAdminClient() {
       const data = await apiFetchJson<RegularTaskRun[]>("/regular-task-runs", {
         query: {
           org_group_id: selectedOrgGroupId ?? undefined,
+          org_unit_id: orgUnitId || undefined,
         },
       });
       const rows = Array.isArray(data) ? data : [];
@@ -318,7 +332,7 @@ export default function RegularTasksAdminClient() {
     } finally {
       setRunsLoading(false);
     }
-  }, [selectedOrgGroupId, selectedRunId]);
+  }, [selectedOrgGroupId, orgUnitId, selectedRunId]);
 
   const loadRunItems = React.useCallback(
     async (runId: number) => {
@@ -329,6 +343,7 @@ export default function RegularTasksAdminClient() {
         const data = await apiFetchJson<RunItem[]>(`/regular-task-runs/${runId}/items`, {
           query: {
             org_group_id: selectedOrgGroupId ?? undefined,
+            org_unit_id: orgUnitId || undefined,
           },
         });
         setRunItems(Array.isArray(data) ? data : []);
@@ -339,12 +354,28 @@ export default function RegularTasksAdminClient() {
         setRunItemsLoading(false);
       }
     },
-    [selectedOrgGroupId],
+    [selectedOrgGroupId, orgUnitId],
   );
 
   React.useEffect(() => {
     void Promise.all([loadTemplates(), loadRuns()]);
   }, [loadTemplates, loadRuns]);
+
+  React.useEffect(() => {
+    if (prevOrgUnitRef.current !== orgUnitId) {
+      prevOrgUnitRef.current = orgUnitId;
+
+      setSelectedTemplateId(null);
+      setSelectedTemplate(null);
+      setDrawerOpen(false);
+      setDrawerMode("view");
+      setDrawerError(null);
+
+      setSelectedRunId(null);
+      setRunItems([]);
+      setRunItemsError(null);
+    }
+  }, [orgUnitId]);
 
   React.useEffect(() => {
     if (selectedRunId == null) {
@@ -361,8 +392,6 @@ export default function RegularTasksAdminClient() {
       return matchesSearch(item, query);
     });
   }, [templates, query, activeFilter]);
-
-  const templatesActiveCount = React.useMemo(() => templates.filter((x) => x.is_active).length, [templates]);
 
   const selectedTemplateFromList = React.useMemo(() => {
     if (selectedTemplateId == null) return null;
@@ -599,161 +628,75 @@ export default function RegularTasksAdminClient() {
           : "Карточка шаблона";
 
   return (
-    <div className="flex flex-col gap-5 text-zinc-100">
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 shadow-sm">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
-          <div className="space-y-4">
+    <div className="flex flex-col gap-3 text-zinc-100">
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 shadow-sm">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-100">Регулярные задачи</h1>
-              <p className="mt-2 text-base text-zinc-400">
-                Управление шаблонами, историей запусков и ручным запуском генератора.
-              </p>
+              <h1 className="text-3xl font-semibold tracking-tight text-zinc-100">Шаблоны регулярных задач</h1>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              {metricCard("Шаблонов", templates.length)}
-              {metricCard("Активных", templatesActiveCount)}
-              {metricCard("Запусков", runs.length)}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab("templates")}
+                className={[
+                  "rounded-xl border px-4 py-2 text-sm font-medium transition",
+                  activeTab === "templates"
+                    ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                    : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
+                ].join(" ")}
+              >
+                Шаблоны
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("runs")}
+                className={[
+                  "rounded-xl border px-4 py-2 text-sm font-medium transition",
+                  activeTab === "runs"
+                    ? "border-zinc-700 bg-zinc-950 text-zinc-100"
+                    : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
+                ].join(" ")}
+              >
+                Запуски
+              </button>
+
+              <select
+                className="min-w-[240px] rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-500"
+                value={orgGroup}
+                onChange={(e) => setOrgGroup(e.target.value as OrgGroupFilter)}
+              >
+                {ORG_GROUP_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={handleRefreshAll}
+                className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2 text-sm font-medium text-zinc-100 transition hover:bg-zinc-900"
+              >
+                Обновить
+              </button>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <div className="mb-4">
-              <h2 className="text-base font-semibold text-zinc-100">Ручной запуск</h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                Пробный или боевой запуск генератора регулярных задач.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-zinc-300">run_at_local_iso</label>
+          {activeTab === "templates" ? (
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-1 flex-col gap-2 md:flex-row">
                 <input
-                  className="h-11 rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 text-sm text-zinc-100 outline-none transition focus:border-zinc-500"
-                  placeholder="2026-03-08T10:00:00"
-                  value={runAtLocalIso}
-                  onChange={(e) => setRunAtLocalIso(e.target.value)}
-                />
-              </div>
-
-              <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200">
-                <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
-                dry_run
-              </label>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleRunSubmit}
-                  disabled={runSubmitting}
-                  className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2.5 text-sm font-medium text-zinc-100 transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {runSubmitting ? "Запуск..." : dryRun ? "Пробный запуск" : "Боевой запуск"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRefreshAll}
-                  className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2.5 text-sm font-medium text-zinc-100 transition hover:bg-zinc-900"
-                >
-                  Обновить
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {(runSubmitError || lastRunResult) && (
-          <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4 text-sm">
-            {runSubmitError ? (
-              <div className="text-red-300">{runSubmitError}</div>
-            ) : lastRunResult ? (
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div>
-                  <span className="font-medium text-zinc-300">run_id:</span> {lastRunResult.run_id}
-                </div>
-                <div>
-                  <span className="font-medium text-zinc-300">templates_due:</span>{" "}
-                  {lastRunResult.stats?.templates_due ?? 0}
-                </div>
-                <div>
-                  <span className="font-medium text-zinc-300">created:</span> {lastRunResult.stats?.created ?? 0}
-                </div>
-                <div>
-                  <span className="font-medium text-zinc-300">errors:</span> {lastRunResult.stats?.errors ?? 0}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 shadow-sm">
-        <div className="mb-5 flex flex-col gap-3 border-b border-zinc-800 pb-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab("templates")}
-              className={[
-                "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
-                activeTab === "templates"
-                  ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                  : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
-              ].join(" ")}
-            >
-              Шаблоны · {filteredTemplates.length}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("runs")}
-              className={[
-                "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
-                activeTab === "runs"
-                  ? "border-zinc-700 bg-zinc-950 text-zinc-100"
-                  : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200",
-              ].join(" ")}
-            >
-              Запуски · {runs.length}
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="text-sm text-zinc-400">Группа отделений</div>
-            <select
-              className="min-w-[280px] rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-zinc-500"
-              value={orgGroup}
-              onChange={(e) => setOrgGroup(e.target.value as OrgGroupFilter)}
-            >
-              {ORG_GROUP_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {activeTab === "templates" ? (
-          <section className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold text-zinc-100">Шаблоны регулярных задач</h2>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Всего: {templates.length} · Активных: {templatesActiveCount} · Группа: {selectedOrgGroupLabel}
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2 md:flex-row">
-                <input
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-zinc-500 md:w-[320px]"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-500 md:w-[360px]"
                   placeholder="Поиск по названию, расписанию, роли..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
 
                 <select
-                  className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-zinc-500"
+                  className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-500"
                   value={activeFilter}
                   onChange={(e) => setActiveFilter(e.target.value as "all" | "active" | "inactive")}
                 >
@@ -761,152 +704,196 @@ export default function RegularTasksAdminClient() {
                   <option value="active">Только активные</option>
                   <option value="inactive">Только неактивные</option>
                 </select>
-
-                <button
-                  type="button"
-                  onClick={openCreateTemplate}
-                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500"
-                >
-                  Создать
-                </button>
               </div>
+
+              <button
+                type="button"
+                onClick={openCreateTemplate}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+              >
+                Создать
+              </button>
             </div>
+          ) : (
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-1 flex-col gap-2 md:flex-row">
+                <input
+                  className="h-10 rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 text-sm text-zinc-100 outline-none transition focus:border-zinc-500 md:w-[260px]"
+                  placeholder="2026-03-08T10:00:00"
+                  value={runAtLocalIso}
+                  onChange={(e) => setRunAtLocalIso(e.target.value)}
+                />
 
-            {templatesLoading ? (
-              <div className="rounded-xl border border-dashed border-zinc-700 p-6 text-sm text-zinc-500">
-                Загрузка шаблонов...
+                <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-200">
+                  <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+                  dry_run
+                </label>
               </div>
-            ) : templatesError ? (
-              <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-300">
-                {templatesError}
-              </div>
-            ) : (
-              <div className="overflow-auto rounded-2xl border border-zinc-800">
-                <table className="min-w-full table-fixed text-sm">
-                  <thead className="sticky top-0 bg-zinc-900 text-left">
-                    <tr>
-                      <th className="w-[72px] px-4 py-3 font-medium text-zinc-300">ID</th>
-                      <th className="px-4 py-3 font-medium text-zinc-300">Отчёт</th>
-                      <th className="w-[160px] px-4 py-3 font-medium text-zinc-300">Расписание</th>
-                      <th className="w-[130px] px-4 py-3 font-medium text-zinc-300">Роль</th>
-                      <th className="w-[120px] px-4 py-3 font-medium text-zinc-300">Статус</th>
-                      <th className="w-[220px] px-4 py-3 font-medium text-zinc-300">Действия</th>
-                    </tr>
-                  </thead>
 
-                  <tbody>
-                    {filteredTemplates.map((item) => {
-                      const selected = selectedTemplateId === item.regular_task_id && drawerOpen;
-                      return (
-                        <tr
-                          key={item.regular_task_id}
-                          className={[
-                            "cursor-pointer border-t border-zinc-800 align-top transition",
-                            selected ? "bg-zinc-800/60" : "hover:bg-zinc-900/50",
-                          ].join(" ")}
-                          onClick={() => openViewTemplate(item)}
-                        >
-                          <td className="px-4 py-3 text-zinc-200">{item.regular_task_id}</td>
-                          <td className="px-4 py-3 text-zinc-100">
-                            <div className="font-medium">{item.title}</div>
-                            {item.description ? (
-                              <div className="mt-1 line-clamp-2 text-xs text-zinc-400">{item.description}</div>
-                            ) : null}
-                          </td>
-                          <td className="px-4 py-3 text-zinc-300">{scheduleLabel(item)}</td>
-                          <td className="px-4 py-3 text-zinc-300">{item.executor_role_id ?? "—"}</td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={[
-                                "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
-                                item.is_active
-                                  ? "bg-emerald-950/60 text-emerald-300"
-                                  : "bg-zinc-800 text-zinc-300",
-                              ].join(" ")}
+              <button
+                type="button"
+                onClick={handleRunSubmit}
+                disabled={runSubmitting}
+                className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-4 py-2 text-sm font-medium text-zinc-100 transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {runSubmitting ? "Запуск..." : dryRun ? "Пробный запуск" : "Боевой запуск"}
+              </button>
+            </div>
+          )}
+
+          {(runSubmitError || lastRunResult) && (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm">
+              {runSubmitError ? (
+                <div className="text-red-300">{runSubmitError}</div>
+              ) : lastRunResult ? (
+                <div className="flex flex-wrap gap-x-5 gap-y-1 text-zinc-300">
+                  <div>
+                    <span className="font-medium text-zinc-200">run_id:</span> {lastRunResult.run_id}
+                  </div>
+                  <div>
+                    <span className="font-medium text-zinc-200">templates_due:</span>{" "}
+                    {lastRunResult.stats?.templates_due ?? 0}
+                  </div>
+                  <div>
+                    <span className="font-medium text-zinc-200">created:</span> {lastRunResult.stats?.created ?? 0}
+                  </div>
+                  <div>
+                    <span className="font-medium text-zinc-200">errors:</span> {lastRunResult.stats?.errors ?? 0}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {activeTab === "templates" ? (
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 shadow-sm">
+          {templatesLoading ? (
+            <div className="p-5 text-sm text-zinc-500">Загрузка шаблонов...</div>
+          ) : templatesError ? (
+            <div className="m-3 rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-300">
+              {templatesError}
+            </div>
+          ) : (
+            <div className="overflow-auto rounded-2xl">
+              <table className="min-w-full table-fixed text-sm">
+                <thead className="sticky top-0 bg-zinc-900 text-left">
+                  <tr>
+                    <th className="w-[72px] px-3 py-2 font-medium text-zinc-300">ID</th>
+                    <th className="px-3 py-2 font-medium text-zinc-300">Отчёт</th>
+                    <th className="w-[150px] px-3 py-2 font-medium text-zinc-300">Расписание</th>
+                    <th className="w-[220px] px-3 py-2 font-medium text-zinc-300">Исполнитель</th>
+                    <th className="w-[110px] px-3 py-2 font-medium text-zinc-300">Статус</th>
+                    <th className="w-[190px] px-3 py-2 font-medium text-zinc-300">Действия</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredTemplates.map((item) => {
+                    const selected = selectedTemplateId === item.regular_task_id && drawerOpen;
+                    return (
+                      <tr
+                        key={item.regular_task_id}
+                        className={[
+                          "cursor-pointer border-t border-zinc-800 align-top transition",
+                          selected ? "bg-zinc-800/60" : "hover:bg-zinc-900/50",
+                        ].join(" ")}
+                        onClick={() => openViewTemplate(item)}
+                      >
+                        <td className="px-3 py-2 text-zinc-200">{item.regular_task_id}</td>
+                        <td className="px-3 py-2 text-zinc-100">
+                          <div className="font-medium">{item.title}</div>
+                          {item.description ? (
+                            <div className="mt-1 line-clamp-2 text-xs text-zinc-400">{item.description}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-300">{scheduleLabel(item)}</td>
+                        <td className="px-3 py-2 text-zinc-300">{roleLabel(item)}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={[
+                              "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
+                              item.is_active
+                                ? "bg-emerald-950/60 text-emerald-300"
+                                : "bg-zinc-800 text-zinc-300",
+                            ].join(" ")}
+                          >
+                            {item.is_active ? "Активен" : "Неактивен"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openViewTemplate(item);
+                              }}
+                              className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-xs text-zinc-100 transition hover:bg-zinc-900/60"
                             >
-                              {item.is_active ? "Активен" : "Неактивен"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openViewTemplate(item);
-                                }}
-                                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-900/60"
-                              >
-                                Открыть
-                              </button>
+                              Открыть
+                            </button>
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditTemplate(item);
-                                }}
-                                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-900/60"
-                              >
-                                Изменить
-                              </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditTemplate(item);
+                              }}
+                              className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-xs text-zinc-100 transition hover:bg-zinc-900/60"
+                            >
+                              Изменить
+                            </button>
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void deleteTemplate(item);
-                                }}
-                                className="rounded-md border border-red-800 bg-transparent px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-950/30"
-                              >
-                                Удалить
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {filteredTemplates.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
-                          Нет данных.
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteTemplate(item);
+                              }}
+                              className="rounded-md border border-red-800 bg-transparent px-2.5 py-1 text-xs text-red-300 transition hover:bg-red-950/30"
+                            >
+                              Удалить
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        ) : (
-          <section className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold text-zinc-100">История запусков</h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                Последние записи по генератору регулярных задач · Группа: {selectedOrgGroupLabel}
-              </p>
-            </div>
+                    );
+                  })}
 
+                  {filteredTemplates.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                        Нет данных.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : (
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 shadow-sm">
             {runsLoading ? (
-              <div className="rounded-xl border border-dashed border-zinc-700 p-6 text-sm text-zinc-500">
-                Загрузка истории запусков...
-              </div>
+              <div className="p-5 text-sm text-zinc-500">Загрузка истории запусков...</div>
             ) : runsError ? (
-              <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-300">
+              <div className="m-3 rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-300">
                 {runsError}
               </div>
             ) : (
-              <div className="overflow-auto rounded-2xl border border-zinc-800">
+              <div className="overflow-auto rounded-2xl">
                 <table className="min-w-full table-fixed text-sm">
                   <thead className="bg-zinc-900 text-left">
                     <tr>
-                      <th className="w-[90px] px-4 py-3 font-medium text-zinc-300">Запуск</th>
-                      <th className="w-[210px] px-4 py-3 font-medium text-zinc-300">Старт</th>
-                      <th className="w-[120px] px-4 py-3 font-medium text-zinc-300">Статус</th>
-                      <th className="w-[110px] px-4 py-3 font-medium text-zinc-300">Создано</th>
-                      <th className="w-[110px] px-4 py-3 font-medium text-zinc-300">Дедупл.</th>
-                      <th className="w-[100px] px-4 py-3 font-medium text-zinc-300">Ошибки</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Запуск</th>
+                      <th className="w-[210px] px-3 py-2 font-medium text-zinc-300">Старт</th>
+                      <th className="w-[110px] px-3 py-2 font-medium text-zinc-300">Статус</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Создано</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Дедупл.</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Ошибки</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -921,12 +908,12 @@ export default function RegularTasksAdminClient() {
                           ].join(" ")}
                           onClick={() => setSelectedRunId(run.run_id)}
                         >
-                          <td className="px-4 py-3 font-medium text-zinc-100">{run.run_id}</td>
-                          <td className="px-4 py-3 text-zinc-300">{fmtDateTime(run.started_at)}</td>
-                          <td className={`px-4 py-3 ${statTone(run.status)}`}>{run.status}</td>
-                          <td className="px-4 py-3 text-zinc-300">{run.stats?.created ?? 0}</td>
-                          <td className="px-4 py-3 text-zinc-300">{run.stats?.deduped ?? 0}</td>
-                          <td className="px-4 py-3 text-zinc-300">{run.stats?.errors ?? 0}</td>
+                          <td className="px-3 py-2 font-medium text-zinc-100">{run.run_id}</td>
+                          <td className="px-3 py-2 text-zinc-300">{fmtDateTime(run.started_at)}</td>
+                          <td className={`px-3 py-2 ${statTone(run.status)}`}>{run.status}</td>
+                          <td className="px-3 py-2 text-zinc-300">{run.stats?.created ?? 0}</td>
+                          <td className="px-3 py-2 text-zinc-300">{run.stats?.deduped ?? 0}</td>
+                          <td className="px-3 py-2 text-zinc-300">{run.stats?.errors ?? 0}</td>
                         </tr>
                       );
                     })}
@@ -942,85 +929,85 @@ export default function RegularTasksAdminClient() {
                 </table>
               </div>
             )}
-
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5">
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold text-zinc-100">Детализация запуска</h3>
-                <p className="mt-1 text-sm text-zinc-400">
-                  {selectedRunId != null ? `run_id = ${selectedRunId}` : "Запуск не выбран"}
-                </p>
-              </div>
-
-              {selectedRunId == null ? (
-                <div className="rounded-xl border border-dashed border-zinc-700 p-6 text-sm text-zinc-500">
-                  Выбери запуск в таблице выше.
-                </div>
-              ) : runItemsLoading ? (
-                <div className="rounded-xl border border-dashed border-zinc-700 p-6 text-sm text-zinc-500">
-                  Загрузка деталей...
-                </div>
-              ) : runItemsError ? (
-                <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-300">
-                  {runItemsError}
-                </div>
-              ) : (
-                <div className="overflow-auto rounded-2xl border border-zinc-800">
-                  <table className="min-w-full table-fixed text-sm">
-                    <thead className="bg-zinc-900 text-left">
-                      <tr>
-                        <th className="w-[110px] px-4 py-3 font-medium text-zinc-300">Шаблон</th>
-                        <th className="w-[100px] px-4 py-3 font-medium text-zinc-300">Период</th>
-                        <th className="w-[140px] px-4 py-3 font-medium text-zinc-300">Исполнитель</th>
-                        <th className="w-[110px] px-4 py-3 font-medium text-zinc-300">Актуален</th>
-                        <th className="w-[100px] px-4 py-3 font-medium text-zinc-300">Создано</th>
-                        <th className="w-[110px] px-4 py-3 font-medium text-zinc-300">Статус</th>
-                        <th className="px-4 py-3 font-medium text-zinc-300">Ошибка</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {runItems.map((item) => (
-                        <tr key={item.item_id} className="border-t border-zinc-800 align-top hover:bg-zinc-900/50">
-                          <td className="px-4 py-3 text-zinc-200">{item.regular_task_id}</td>
-                          <td className="px-4 py-3 text-zinc-300">{item.period_id ?? "—"}</td>
-                          <td className="px-4 py-3 text-zinc-300">{item.executor_role_id ?? "—"}</td>
-                          <td className="px-4 py-3 text-zinc-300">{yesNo(item.is_due)}</td>
-                          <td className="px-4 py-3 text-zinc-300">{item.created_tasks}</td>
-                          <td className={`px-4 py-3 ${statTone(item.status)}`}>{item.status}</td>
-                          <td className="px-4 py-3 text-xs text-red-300">{item.error ?? "—"}</td>
-                        </tr>
-                      ))}
-
-                      {runItems.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
-                            Нет элементов запуска.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </section>
-        )}
-      </section>
+
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 shadow-sm">
+            <div className="mb-3">
+              <h3 className="text-base font-semibold text-zinc-100">Детализация запуска</h3>
+              <p className="mt-0.5 text-sm text-zinc-400">
+                {selectedRunId != null ? `run_id = ${selectedRunId}` : "Запуск не выбран"}
+              </p>
+            </div>
+
+            {selectedRunId == null ? (
+              <div className="rounded-xl border border-dashed border-zinc-700 p-5 text-sm text-zinc-500">
+                Выбери запуск в таблице слева.
+              </div>
+            ) : runItemsLoading ? (
+              <div className="rounded-xl border border-dashed border-zinc-700 p-5 text-sm text-zinc-500">
+                Загрузка деталей...
+              </div>
+            ) : runItemsError ? (
+              <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-300">
+                {runItemsError}
+              </div>
+            ) : (
+              <div className="overflow-auto rounded-2xl border border-zinc-800">
+                <table className="min-w-full table-fixed text-sm">
+                  <thead className="bg-zinc-900 text-left">
+                    <tr>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Шаблон</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Период</th>
+                      <th className="w-[170px] px-3 py-2 font-medium text-zinc-300">Исполнитель</th>
+                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-300">Due</th>
+                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-300">Создано</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-300">Статус</th>
+                      <th className="px-3 py-2 font-medium text-zinc-300">Ошибка</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runItems.map((item) => (
+                      <tr key={item.item_id} className="border-t border-zinc-800 align-top hover:bg-zinc-900/50">
+                        <td className="px-3 py-2 text-zinc-200">{item.regular_task_id}</td>
+                        <td className="px-3 py-2 text-zinc-300">{item.period_id ?? "—"}</td>
+                        <td className="px-3 py-2 text-zinc-300">{roleLabel(item)}</td>
+                        <td className="px-3 py-2 text-zinc-300">{yesNo(item.is_due)}</td>
+                        <td className="px-3 py-2 text-zinc-300">{item.created_tasks}</td>
+                        <td className={`px-3 py-2 ${statTone(item.status)}`}>{item.status}</td>
+                        <td className="px-3 py-2 text-xs text-red-300">{item.error ?? "—"}</td>
+                      </tr>
+                    ))}
+
+                    {runItems.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
+                          Нет элементов запуска.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       <TemplateDrawer
         open={drawerOpen}
         title={drawerTitle}
-        subtitle={drawerMode === "create" ? "Шаблоны регулярных задач" : "Регулярные задачи"}
+        subtitle="Шаблоны регулярных задач"
         onClose={closeDrawer}
       >
         {drawerMode === "view" ? (
           <div className="flex h-full flex-col bg-[#050816] text-zinc-100">
-            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex-1 overflow-y-auto px-5 py-4">
               {drawerLoading && !currentTemplate ? (
                 <div className="text-sm text-zinc-400">Загрузка...</div>
               ) : !currentTemplate ? (
                 <div className="text-sm text-zinc-500">Шаблон не выбран.</div>
               ) : (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   {!!drawerError && (
                     <div className="rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                       {drawerError}
@@ -1028,60 +1015,62 @@ export default function RegularTasksAdminClient() {
                   )}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">ID</div>
                       <div className="mt-1 text-sm text-zinc-100">{currentTemplate.regular_task_id}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
-                      <div className="text-xs text-zinc-500">Активен</div>
-                      <div className="mt-1 text-sm text-zinc-100">{currentTemplate.is_active ? "Да" : "Нет"}</div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
+                      <div className="text-xs text-zinc-500">Статус</div>
+                      <div className="mt-1 text-sm text-zinc-100">
+                        {currentTemplate.is_active ? "Активен" : "Неактивен"}
+                      </div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">Тип расписания</div>
                       <div className="mt-1 text-sm text-zinc-100">{currentTemplate.schedule_type ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
-                      <div className="text-xs text-zinc-500">ID роли исполнителя</div>
-                      <div className="mt-1 text-sm text-zinc-100">{currentTemplate.executor_role_id ?? "—"}</div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
+                      <div className="text-xs text-zinc-500">Исполнитель</div>
+                      <div className="mt-1 text-sm text-zinc-100">{roleLabel(currentTemplate)}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">Создать за N дней</div>
                       <div className="mt-1 text-sm text-zinc-100">{currentTemplate.create_offset_days ?? 0}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">Срок +N дней</div>
                       <div className="mt-1 text-sm text-zinc-100">{currentTemplate.due_offset_days ?? 0}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">Область назначения</div>
                       <div className="mt-1 text-sm text-zinc-100">{currentTemplate.assignment_scope ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">Создал пользователь</div>
                       <div className="mt-1 text-sm text-zinc-100">{currentTemplate.created_by_user_id ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                       <div className="text-xs text-zinc-500">Обновлено</div>
                       <div className="mt-1 text-sm text-zinc-100">{fmtDateTime(currentTemplate.updated_at)}</div>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                     <div className="text-xs text-zinc-500">Описание</div>
                     <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-100">
                       {currentTemplate.description ?? "—"}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-3">
                     <div className="text-xs text-zinc-500">schedule_params</div>
                     <pre className="mt-2 overflow-auto text-sm text-zinc-200">
                       {JSON.stringify(currentTemplate.schedule_params ?? {}, null, 2)}
@@ -1092,12 +1081,12 @@ export default function RegularTasksAdminClient() {
             </div>
 
             {currentTemplate ? (
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-800 px-6 py-4">
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-800 px-5 py-3">
                 <button
                   type="button"
                   onClick={() => setDrawerMode("edit")}
                   disabled={drawerSaving || drawerLoading}
-                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-1.5 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
                 >
                   Изменить
                 </button>
@@ -1106,7 +1095,7 @@ export default function RegularTasksAdminClient() {
                   type="button"
                   onClick={() => void toggleTemplateActive(true)}
                   disabled={drawerSaving || drawerLoading || currentTemplate.is_active === true}
-                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-1.5 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
                 >
                   Активировать
                 </button>
@@ -1115,7 +1104,7 @@ export default function RegularTasksAdminClient() {
                   type="button"
                   onClick={() => void toggleTemplateActive(false)}
                   disabled={drawerSaving || drawerLoading || currentTemplate.is_active === false}
-                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-1.5 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
                 >
                   Деактивировать
                 </button>
@@ -1124,7 +1113,7 @@ export default function RegularTasksAdminClient() {
                   type="button"
                   onClick={() => void deleteTemplate(currentTemplate)}
                   disabled={drawerSaving || drawerLoading}
-                  className="rounded-lg border border-red-900/60 bg-red-950/20 px-4 py-2 text-sm text-red-200 transition hover:bg-red-950/40 disabled:opacity-60"
+                  className="rounded-lg border border-red-900/60 bg-red-950/20 px-4 py-1.5 text-sm text-red-200 transition hover:bg-red-950/40 disabled:opacity-60"
                 >
                   Удалить
                 </button>

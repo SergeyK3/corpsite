@@ -7,32 +7,32 @@ export const AUTH_SESSION_LOGIN_KEY = "login";
 // Оставляем как справочник-подсказку логинов для UI (например, /login).
 // НЕ используется для авторизации и НЕ должен управлять доступом.
 export const LOGIN_TO_USER_ID: Record<string, number> = {
-  "director@corp.local": 263,
-  "dep_med@corp.local": 264,
-  "dep_outpatient_audit@corp.local": 265,
-  "dep_admin@corp.local": 266,
-  "dep_strategy@corp.local": 267,
-
-  "stat_head@corp.local": 0,
-  "stat_head_deputy@corp.local": 0,
-  "stat_erob_input@corp.local": 270,
-  "stat_erob_output@corp.local": 0,
-  "stat_erob_analytics@corp.local": 0,
-
-  "qm_head@corp.local": 0,
-  "qm_hosp@corp.local": 0,
-  "qm_amb@corp.local": 262,
-
-  "qm_complaint_reg@corp.local": 0,
-  "qm_complaint_pat@corp.local": 0,
-
-  "hr_head@corp.local": 0,
-  "acc_head@corp.local": 279,
-
-  "econ_head@corp.local": 0,
-  "econ_1@corp.local": 281,
-  "econ_2@corp.local": 282,
-  "econ_3@corp.local": 283,
+  "acc_head@corp.local": 9,
+  "admin": 25,
+  "admin_legacy_1@corp.local": 1,
+  "admission_head_7": 7,
+  "dep_admin@corp.local": 10,
+  "dep_med@corp.local": 11,
+  "dep_outpatient_audit@corp.local": 12,
+  "dep_strategy@corp.local": 13,
+  "director@corp.local": 14,
+  "director_test": 26,
+  "econ_1@corp.local": 15,
+  "econ_2@corp.local": 16,
+  "econ_3@corp.local": 17,
+  "econ_head@corp.local": 18,
+  "hr_head@corp.local": 8,
+  "proc_head@corp.local": 24,
+  "qm_amb@corp.local": 5,
+  "qm_complaint_pat@corp.local": 3,
+  "qm_complaint_reg@corp.local": 2,
+  "qm_head@corp.local": 6,
+  "qm_hosp@corp.local": 4,
+  "stat_erob_analytics@corp.local": 19,
+  "stat_erob_input@corp.local": 20,
+  "stat_erob_output@corp.local": 21,
+  "stat_head@corp.local": 22,
+  "stat_head_deputy@corp.local": 23,
 };
 
 function normalizeLogin(v: string): string {

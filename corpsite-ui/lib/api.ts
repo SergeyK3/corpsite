@@ -1,10 +1,11 @@
-// FILE: corpsite-ui/lib/api.ts
 import type {
   APIError,
   TaskAction,
   TaskActionPayload,
   TaskDetails,
   TaskListItem,
+  TaskScope,
+  TasksListResponse,
   RegularTask,
   RegularTaskStatus,
   RegularTasksListResponse,
@@ -228,16 +229,18 @@ export async function apiAuthMe(): Promise<any> {
  * ============================================================ */
 
 export async function apiGetTasks(params: {
+  scope?: TaskScope;
   limit?: number;
   offset?: number;
   executor_role_id?: number;
   org_unit_id?: number;
-}): Promise<TaskListItem[]> {
+}): Promise<TasksListResponse> {
   const limit = params.limit ?? 50;
   const offset = params.offset ?? 0;
 
   const body = await apiFetchJson<any>("/tasks", {
     query: {
+      scope: params.scope ?? "mine",
       limit,
       offset,
       executor_role_id: params.executor_role_id ?? undefined,
@@ -245,7 +248,15 @@ export async function apiGetTasks(params: {
     },
   });
 
-  return normalizeList<TaskListItem>(body);
+  const items = normalizeList<TaskListItem>(body);
+
+  return {
+    scope: body?.scope === "team" ? "team" : "mine",
+    total: typeof body?.total === "number" ? body.total : items.length,
+    limit: typeof body?.limit === "number" ? body.limit : limit,
+    offset: typeof body?.offset === "number" ? body.offset : offset,
+    items,
+  };
 }
 
 export async function apiGetTask(params: {

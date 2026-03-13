@@ -1,3 +1,4 @@
+// FILE: corpsite-ui/app/tasks/_components/CreateManualTaskModal.tsx
 "use client";
 
 import * as React from "react";
@@ -194,6 +195,7 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
         requires_approval: requiresApproval,
         approver_user_id: requiresApproval ? currentUserId : null,
         due_date: trimmedDueDate,
+        due_at: `${trimmedDueDate}T00:00:00`,
         source_kind: "manual",
         source_note: trimmedSourceNote || null,
       };

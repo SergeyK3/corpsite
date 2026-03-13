@@ -54,6 +54,8 @@ def list_regular_tasks(
     q: Optional[str] = None,
     schedule_type: Optional[str] = None,
     executor_role_id: Optional[int] = None,
+    org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -67,6 +69,8 @@ def list_regular_tasks(
             q=q,
             schedule_type=schedule_type,
             executor_role_id=executor_role_id,
+            org_group_id=org_group_id,
+            org_unit_id=org_unit_id,
             limit=limit,
             offset=offset,
         )
