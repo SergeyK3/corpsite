@@ -24,6 +24,7 @@ LEFT JOIN public.org_units ou
 BASE_SELECT_SQL = f"""
 SELECT
     u.user_id,
+    u.unit_id AS org_unit_id,
     u.full_name,
     u.login,
     u.phone,
@@ -43,9 +44,11 @@ def _normalize_text(value: Any) -> Optional[str]:
 
 
 def _map_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    org_unit_id_raw = row.get("org_unit_id")
     return {
         "id": int(row["user_id"]),
         "user_id": int(row["user_id"]),
+        "org_unit_id": int(org_unit_id_raw) if org_unit_id_raw is not None else None,
         "full_name": _normalize_text(row.get("full_name")),
         "login": _normalize_text(row.get("login")),
         "phone": _normalize_text(row.get("phone")),
@@ -73,10 +76,27 @@ def _fetch_one(user_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def _fetch_org_unit_name(org_unit_id: int) -> Optional[str]:
+    q = text(
+        """
+        SELECT COALESCE(NULLIF(TRIM(name_ru), ''), NULLIF(TRIM(name), '')) AS unit_name
+        FROM public.org_units
+        WHERE unit_id = :org_unit_id
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(q, {"org_unit_id": int(org_unit_id)}).mappings().first()
+    if not row:
+        return None
+    return _normalize_text(row.get("unit_name"))
+
+
 @router.get("/working-contacts")
 def list_working_contacts(
     q: Optional[str] = Query(default=None),
     active_only: bool = Query(default=True),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=500, ge=1, le=2000),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -93,6 +113,10 @@ def list_working_contacts(
     where_parts = [
         "(:active_only = false OR COALESCE(u.is_active, false) = true)",
     ]
+
+    if org_unit_id is not None:
+        params["org_unit_id"] = int(org_unit_id)
+        where_parts.append("u.unit_id = :org_unit_id")
 
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
@@ -137,7 +161,14 @@ def list_working_contacts(
         rows = conn.execute(q_list, params).mappings().all()
 
     items = [_map_row(dict(r)) for r in rows]
-    return {"items": items, "total": total}
+    filter_org_unit_name = _fetch_org_unit_name(int(org_unit_id)) if org_unit_id is not None else None
+
+    return {
+        "items": items,
+        "total": total,
+        "filter_org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+        "filter_org_unit_name": filter_org_unit_name,
+    }
 
 
 @router.get("/working-contacts/{user_id}")

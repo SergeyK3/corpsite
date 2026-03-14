@@ -1,4 +1,3 @@
-// FILE: corpsite-ui/app/directory/working-contacts/_components/WorkingContactsTable.tsx
 "use client";
 
 type WorkingContactItem = {
@@ -16,11 +15,11 @@ type WorkingContactItem = {
 };
 
 type WorkingContactsTableProps = {
-  items: WorkingContactItem[];
-  total: number;
-  limit: number;
-  offset: number;
-  loading: boolean;
+  items?: WorkingContactItem[] | null;
+  total?: number;
+  limit?: number;
+  offset?: number;
+  loading?: boolean;
   onOpen: (item: WorkingContactItem) => void;
   onChangePage: (nextOffset: number) => void;
 };
@@ -56,8 +55,17 @@ export default function WorkingContactsTable({
   onOpen,
   onChangePage,
 }: WorkingContactsTableProps) {
-  const page = Math.floor(offset / limit) + 1;
-  const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
+  const safeItems = Array.isArray(items) ? items : [];
+  const safeTotal =
+    typeof total === "number" && Number.isFinite(total) && total >= 0 ? total : safeItems.length;
+  const safeLimit =
+    typeof limit === "number" && Number.isFinite(limit) && limit > 0 ? limit : 100;
+  const safeOffset =
+    typeof offset === "number" && Number.isFinite(offset) && offset >= 0 ? offset : 0;
+  const safeLoading = Boolean(loading);
+
+  const page = Math.floor(safeOffset / safeLimit) + 1;
+  const pages = Math.max(1, Math.ceil(Math.max(safeTotal, 1) / safeLimit));
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800">
@@ -96,22 +104,20 @@ export default function WorkingContactsTable({
           </thead>
 
           <tbody>
-            {items.length === 0 ? (
+            {safeItems.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-3 py-3 text-[13px] text-zinc-500">
-                  {loading ? "Загрузка..." : "Записи не найдены."}
+                  {safeLoading ? "Загрузка..." : "Записи не найдены."}
                 </td>
               </tr>
             ) : (
-              items.map((item) => (
+              safeItems.map((item) => (
                 <tr
                   key={itemIdOf(item)}
                   className="cursor-pointer border-t border-zinc-800 align-middle transition hover:bg-white/[0.02]"
                   onClick={() => onOpen(item)}
                 >
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">
-                    {itemIdOf(item)}
-                  </td>
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">{itemIdOf(item)}</td>
 
                   <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">
                     {textOrDash(item.full_name)}
@@ -171,15 +177,15 @@ export default function WorkingContactsTable({
       <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-2 text-sm">
         <div className="text-zinc-400">
           Страница {page} из {pages}
-          {loading ? " (обновление...)" : ""}
+          {safeLoading ? " (обновление...)" : ""}
         </div>
 
         <div className="flex gap-2">
           <button
             type="button"
             className="rounded border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-50"
-            disabled={offset <= 0 || loading}
-            onClick={() => onChangePage(Math.max(0, offset - limit))}
+            disabled={safeOffset <= 0 || safeLoading}
+            onClick={() => onChangePage(Math.max(0, safeOffset - safeLimit))}
           >
             Назад
           </button>
@@ -187,8 +193,8 @@ export default function WorkingContactsTable({
           <button
             type="button"
             className="rounded border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-50"
-            disabled={offset + limit >= total || loading}
-            onClick={() => onChangePage(offset + limit)}
+            disabled={safeOffset + safeLimit >= safeTotal || safeLoading}
+            onClick={() => onChangePage(safeOffset + safeLimit)}
           >
             Вперёд
           </button>
