@@ -50,6 +50,22 @@ def _as_dict_or_none(v: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _ensure_owner_unit_exists(conn: Connection, owner_unit_id: int) -> None:
+    found = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM public.org_units
+            WHERE unit_id = :unit_id
+            """
+        ),
+        {"unit_id": int(owner_unit_id)},
+    ).scalar()
+
+    if not found:
+        raise ValueError(f"owner_unit_id={owner_unit_id} not found in org_units")
+
+
 def _row_to_out(r: Any) -> Dict[str, Any]:
     return {
         "regular_task_id": int(r["regular_task_id"]),
@@ -65,6 +81,8 @@ def _row_to_out(r: Any) -> Dict[str, Any]:
         "schedule_params": r.get("schedule_params") or {},
         "create_offset_days": int(r.get("create_offset_days") or 0),
         "due_offset_days": int(r.get("due_offset_days") or 0),
+        "owner_unit_id": _as_int_or_none(r.get("owner_unit_id")),
+        "owner_unit_name": r.get("owner_unit_name"),
         "created_by_user_id": _as_int_or_none(r.get("created_by_user_id")),
         "updated_at": r.get("updated_at").isoformat() if r.get("updated_at") else None,
     }
@@ -105,7 +123,9 @@ def list_regular_tasks_tx(
             "OR COALESCE(t.description, '') ILIKE :q "
             "OR COALESCE(t.code, '') ILIKE :q "
             "OR COALESCE(r.name, '') ILIKE :q "
-            "OR COALESCE(r.code, '') ILIKE :q"
+            "OR COALESCE(r.code, '') ILIKE :q "
+            "OR COALESCE(ou.name, '') ILIKE :q "
+            "OR CAST(COALESCE(t.owner_unit_id, 0) AS TEXT) ILIKE :q"
             ")"
         )
 
@@ -117,32 +137,21 @@ def list_regular_tasks_tx(
         params["executor_role_id"] = int(executor_role_id)
         filters.append("t.executor_role_id = :executor_role_id")
 
+    # Фильтр по группе должен работать по owner_unit_id
     if org_group_id is not None:
         params["org_group_id"] = int(org_group_id)
-        filters.append(
-            """
-            EXISTS (
-                SELECT 1
-                FROM public.users ux
-                JOIN public.org_units oux
-                  ON oux.unit_id = ux.unit_id
-                WHERE ux.role_id = t.executor_role_id
-                  AND COALESCE(ux.is_active, TRUE) = TRUE
-                  AND COALESCE(oux.is_active, TRUE) = TRUE
-                  AND oux.group_id = :org_group_id
-            )
-            """.strip()
-        )
+        filters.append("COALESCE(ou.group_id, 0) = :org_group_id")
 
+    # Фильтр по выбранному узлу дерева должен работать по owner_unit_id
     if org_unit_id is not None:
         params["org_unit_id"] = int(org_unit_id)
         filters.append(
             """
-            EXISTS (
+            t.owner_unit_id IN (
                 WITH RECURSIVE subtree AS (
-                    SELECT ou.unit_id
-                    FROM public.org_units ou
-                    WHERE ou.unit_id = :org_unit_id
+                    SELECT ou0.unit_id
+                    FROM public.org_units ou0
+                    WHERE ou0.unit_id = :org_unit_id
 
                     UNION ALL
 
@@ -152,14 +161,7 @@ def list_regular_tasks_tx(
                       ON s.unit_id = child.parent_unit_id
                     WHERE COALESCE(child.is_active, TRUE) = TRUE
                 )
-                SELECT 1
-                FROM public.users ux
-                JOIN public.org_units oux
-                  ON oux.unit_id = ux.unit_id
-                WHERE ux.role_id = t.executor_role_id
-                  AND COALESCE(ux.is_active, TRUE) = TRUE
-                  AND COALESCE(oux.is_active, TRUE) = TRUE
-                  AND ux.unit_id IN (SELECT unit_id FROM subtree)
+                SELECT unit_id FROM subtree
             )
             """.strip()
         )
@@ -174,6 +176,8 @@ def list_regular_tasks_tx(
         FROM public.regular_tasks t
         LEFT JOIN public.roles r
           ON r.role_id = t.executor_role_id
+        LEFT JOIN public.org_units ou
+          ON ou.unit_id = t.owner_unit_id
         {where_sql}
         """
     )
@@ -195,11 +199,15 @@ def list_regular_tasks_tx(
           t.schedule_params,
           t.create_offset_days,
           t.due_offset_days,
+          t.owner_unit_id,
+          ou.name AS owner_unit_name,
           t.created_by_user_id,
           t.updated_at
         FROM public.regular_tasks t
         LEFT JOIN public.roles r
           ON r.role_id = t.executor_role_id
+        LEFT JOIN public.org_units ou
+          ON ou.unit_id = t.owner_unit_id
         {where_sql}
         ORDER BY t.updated_at DESC, t.regular_task_id DESC
         LIMIT :limit OFFSET :offset
@@ -232,11 +240,15 @@ def get_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any
           t.schedule_params,
           t.create_offset_days,
           t.due_offset_days,
+          t.owner_unit_id,
+          ou.name AS owner_unit_name,
           t.created_by_user_id,
           t.updated_at
         FROM public.regular_tasks t
         LEFT JOIN public.roles r
           ON r.role_id = t.executor_role_id
+        LEFT JOIN public.org_units ou
+          ON ou.unit_id = t.owner_unit_id
         WHERE t.regular_task_id = :rid
         """
     )
@@ -264,6 +276,11 @@ def create_regular_task_tx(
         is_active = True
 
     executor_role_id = _as_int_or_none(payload.get("executor_role_id"))
+    owner_unit_id = _as_int_or_none(payload.get("owner_unit_id"))
+    if owner_unit_id is None or owner_unit_id <= 0:
+        raise ValueError("owner_unit_id is required and must be a positive integer")
+    _ensure_owner_unit_exists(conn, owner_unit_id)
+
     schedule_type = _as_str_or_none(payload.get("schedule_type"))
     schedule_params = _as_dict_or_none(payload.get("schedule_params")) or {}
 
@@ -283,6 +300,7 @@ def create_regular_task_tx(
           description,
           is_active,
           executor_role_id,
+          owner_unit_id,
           schedule_type,
           schedule_params,
           create_offset_days,
@@ -295,6 +313,7 @@ def create_regular_task_tx(
           :description,
           :is_active,
           :executor_role_id,
+          :owner_unit_id,
           :schedule_type,
           CAST(:schedule_params AS jsonb),
           :create_offset_days,
@@ -313,6 +332,7 @@ def create_regular_task_tx(
             "description": description,
             "is_active": bool(is_active),
             "executor_role_id": executor_role_id,
+            "owner_unit_id": owner_unit_id,
             "schedule_type": schedule_type,
             "schedule_params": json.dumps(schedule_params, ensure_ascii=False),
             "create_offset_days": int(create_offset_days),
@@ -360,6 +380,14 @@ def patch_regular_task_tx(
     if "executor_role_id" in payload:
         sets.append("executor_role_id = :executor_role_id")
         params["executor_role_id"] = _as_int_or_none(payload.get("executor_role_id"))
+
+    if "owner_unit_id" in payload:
+        owner_unit_id = _as_int_or_none(payload.get("owner_unit_id"))
+        if owner_unit_id is None or owner_unit_id <= 0:
+            raise ValueError("owner_unit_id must be a positive integer")
+        _ensure_owner_unit_exists(conn, owner_unit_id)
+        sets.append("owner_unit_id = :owner_unit_id")
+        params["owner_unit_id"] = owner_unit_id
 
     if "schedule_type" in payload:
         sets.append("schedule_type = :schedule_type")

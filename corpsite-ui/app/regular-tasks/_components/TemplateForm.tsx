@@ -7,10 +7,17 @@ export type TemplateFormValues = {
   title: string;
   description: string;
   executor_role_id: string;
+  owner_unit_id: string;
   schedule_type: string;
   schedule_params: string;
   create_offset_days: string;
   due_offset_days: string;
+};
+
+export type TemplateFormOwnerUnitOption = {
+  unit_id: number;
+  name: string;
+  code?: string | null;
 };
 
 type TemplateFormProps = {
@@ -21,6 +28,8 @@ type TemplateFormProps = {
   validate?: (values: TemplateFormValues) => string | null;
   onSubmit: (values: TemplateFormValues) => Promise<void> | void;
   onCancel: () => void;
+  ownerUnitOptions?: TemplateFormOwnerUnitOption[];
+  ownerUnitLoading?: boolean;
 };
 
 export default function TemplateForm({
@@ -31,6 +40,8 @@ export default function TemplateForm({
   validate,
   onSubmit,
   onCancel,
+  ownerUnitOptions = [],
+  ownerUnitLoading = false,
 }: TemplateFormProps) {
   const [values, setValues] = React.useState<TemplateFormValues>(initialValues);
 
@@ -41,6 +52,7 @@ export default function TemplateForm({
     initialValues.title,
     initialValues.description,
     initialValues.executor_role_id,
+    initialValues.owner_unit_id,
     initialValues.schedule_type,
     initialValues.schedule_params,
     initialValues.create_offset_days,
@@ -51,12 +63,15 @@ export default function TemplateForm({
     return validate ? validate(values) : null;
   }, [validate, values]);
 
+  const hasOwnerUnitOptions = ownerUnitOptions.length > 0;
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     await onSubmit({
       title: values.title.trim(),
       description: values.description,
       executor_role_id: values.executor_role_id,
+      owner_unit_id: values.owner_unit_id,
       schedule_type: values.schedule_type,
       schedule_params: values.schedule_params,
       create_offset_days: values.create_offset_days,
@@ -216,6 +231,61 @@ export default function TemplateForm({
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
+                <div className="mb-4">
+                  <h3 className="text-base font-semibold text-zinc-100">Подразделение-владелец</h3>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Для ЦАХ выбирай значение <span className="text-zinc-200">ЦАХ (#54)</span>.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {hasOwnerUnitOptions ? (
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="template-owner-unit-select" className="text-sm font-medium text-zinc-200">
+                        Подразделение <span className="text-red-400">*</span>
+                      </label>
+                      <select
+                        id="template-owner-unit-select"
+                        value={values.owner_unit_id}
+                        onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
+                        disabled={ownerUnitLoading}
+                        className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-600 disabled:opacity-60"
+                      >
+                        <option value="">Выберите подразделение</option>
+                        {ownerUnitOptions.map((opt) => (
+                          <option key={opt.unit_id} value={String(opt.unit_id)}>
+                            {opt.name} (#{opt.unit_id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="template-owner-unit" className="text-sm font-medium text-zinc-200">
+                      owner_unit_id <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      id="template-owner-unit"
+                      value={values.owner_unit_id}
+                      onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
+                      placeholder="Например: 54"
+                      inputMode="numeric"
+                      className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                    />
+                  </div>
+
+                  <div className="text-xs text-zinc-500">
+                    {ownerUnitLoading
+                      ? "Загрузка списка подразделений..."
+                      : hasOwnerUnitOptions
+                        ? "Можно выбрать из списка или ввести ID вручную."
+                        : "Список подразделений недоступен, используй ручной ввод ID."}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
                 <h3 className="text-base font-semibold text-zinc-100">Подсказка</h3>
                 <div className="mt-3 space-y-2 text-sm text-zinc-400">
                   <p>
@@ -225,8 +295,10 @@ export default function TemplateForm({
                     Для ежемесячных — <span className="text-zinc-200">monthly</span>.
                   </p>
                   <p>
-                    JSON должен быть именно объектом, а не массивом.
+                    Для ежегодных — <span className="text-zinc-200">yearly</span>.
                   </p>
+                  <p>JSON должен быть именно объектом, а не массивом.</p>
+                  <p>owner_unit_id лучше не оставлять пустым, чтобы не создавать новые дефекты.</p>
                 </div>
               </div>
             </div>
