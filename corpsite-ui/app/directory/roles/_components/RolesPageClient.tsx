@@ -91,11 +91,6 @@ function parsePositiveInt(value: string | null): number | null {
   return Math.trunc(n);
 }
 
-function formatDescription(value: string | null | undefined): string {
-  const text = String(value ?? "").trim();
-  return text || "—";
-}
-
 function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number | null {
   return (
     parsePositiveInt(sp.get("org_unit_id")) ??
@@ -410,9 +405,6 @@ export default function RolesPageClient() {
                         Название
                       </th>
                       <th className="px-4 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
-                        Описание
-                      </th>
-                      <th className="px-4 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Активна
                       </th>
                       <th className="px-4 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
@@ -424,20 +416,22 @@ export default function RolesPageClient() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-2 text-sm text-zinc-400">
+                        <td colSpan={5} className="px-4 py-2 text-sm text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-2 text-sm text-zinc-500">
+                        <td colSpan={5} className="px-4 py-2 text-sm text-zinc-500">
                           Записи не найдены.
                         </td>
                       </tr>
                     ) : (
                       items.map((role) => (
                         <tr key={roleIdOf(role)} className="border-t border-zinc-800 align-top">
-                          <td className="px-4 py-1 text-[13px] leading-4 text-zinc-100">{roleIdOf(role)}</td>
+                          <td className="px-4 py-1 text-[13px] leading-4 text-zinc-100">
+                            {roleIdOf(role)}
+                          </td>
 
                           <td className="px-4 py-1 text-[13px] leading-4 text-zinc-100">
                             <div className="whitespace-nowrap">{roleCodeOf(role)}</div>
@@ -445,10 +439,6 @@ export default function RolesPageClient() {
 
                           <td className="px-4 py-1 text-[13px] leading-4 text-zinc-100">
                             {roleNameOf(role)}
-                          </td>
-
-                          <td className="max-w-[460px] px-4 py-1 text-[13px] leading-4 text-zinc-400">
-                            {formatDescription(role.description)}
                           </td>
 
                           <td className="px-4 py-1 text-[13px] leading-4 text-zinc-100">

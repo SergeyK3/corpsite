@@ -43,7 +43,7 @@ export default function RoleForm({
     const payload: RoleFormValues = {
       role_code: values.role_code.trim(),
       role_name: values.role_name.trim(),
-      description: values.description.trim(),
+      description: "",
       is_active: !!values.is_active,
     };
 
@@ -115,24 +115,6 @@ export default function RoleForm({
               className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
               style={{ colorScheme: "dark" }}
               required
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label htmlFor="description" className="text-sm font-medium text-zinc-200">
-              Описание
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              value={values.description}
-              onChange={(e) => setField("description", e.target.value)}
-              placeholder="Краткое описание роли"
-              rows={6}
-              spellCheck={false}
-              disabled={saving}
-              className="min-h-[140px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ colorScheme: "dark" }}
             />
           </div>
 
