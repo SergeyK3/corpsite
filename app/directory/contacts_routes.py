@@ -1,7 +1,7 @@
 # FILE: app/directory/contacts_routes.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -79,9 +79,95 @@ def _fetch_contact(conn, contact_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def _list_relations(schema: str = "public") -> List[str]:
+    q = text(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = :schema
+          AND table_type IN ('BASE TABLE', 'VIEW')
+        ORDER BY table_name
+        """
+    )
+    with engine.begin() as conn:
+        rows = conn.execute(q, {"schema": schema}).fetchall()
+    return [str(r[0]) for r in rows]
+
+
+def _relation_exists(rel: str) -> bool:
+    return rel in set(_list_relations("public"))
+
+
+def _get_org_unit_caption(org_unit_id: int) -> str:
+    q = text(
+        """
+        SELECT COALESCE(NULLIF(TRIM(name), ''), CONCAT('unit #', CAST(unit_id AS TEXT))) AS unit_name
+        FROM public.org_units
+        WHERE unit_id = :org_unit_id
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(q, {"org_unit_id": int(org_unit_id)}).mappings().first()
+
+    if not row:
+        return f"unit #{int(org_unit_id)}"
+
+    return str(row.get("unit_name") or f"unit #{int(org_unit_id)}").strip()
+
+
+def _build_eligible_contacts_cte_sql() -> str:
+    parts: List[str] = []
+
+    if _relation_exists("contacts_working"):
+        parts.append(
+            """
+            SELECT DISTINCT
+                cw.contact_id AS contact_id,
+                cw.person_id AS person_id
+            FROM public.contacts_working cw
+            WHERE COALESCE(NULLIF(TRIM(cw.dept_code), ''), '∅') IN (
+                SELECT sc.code
+                FROM subtree_codes sc
+            )
+            """.strip()
+        )
+
+    if _relation_exists("key_contacts"):
+        parts.append(
+            """
+            SELECT DISTINCT
+                NULL::integer AS contact_id,
+                kc.person_id AS person_id
+            FROM public.key_contacts kc
+            WHERE COALESCE(NULLIF(TRIM(kc.unit_code), ''), '∅') IN (
+                SELECT sc.code
+                FROM subtree_codes sc
+            )
+            """.strip()
+        )
+
+    if _relation_exists("v_key_contacts_auto"):
+        parts.append(
+            """
+            SELECT DISTINCT
+                NULL::integer AS contact_id,
+                ka.person_id AS person_id
+            FROM public.v_key_contacts_auto ka
+            WHERE COALESCE(NULLIF(TRIM(ka.unit_code), ''), '∅') IN (
+                SELECT sc.code
+                FROM subtree_codes sc
+            )
+            """.strip()
+        )
+
+    return "\nUNION\n".join(parts)
+
+
 @router.get("/contacts")
 def list_contacts(
     q: Optional[str] = Query(default=None),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -91,6 +177,8 @@ def list_contacts(
 
     params: Dict[str, Any] = {"limit": int(limit), "offset": int(offset)}
     where_parts = ["COALESCE(c.is_deleted, false) = false"]
+    with_prefix = ""
+    filter_org_unit_name: Optional[str] = None
 
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
@@ -107,10 +195,55 @@ def list_contacts(
             """
         )
 
+    if org_unit_id is not None:
+        params["org_unit_id"] = int(org_unit_id)
+        filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
+
+        eligible_contacts_sql = _build_eligible_contacts_cte_sql()
+
+        if eligible_contacts_sql:
+            with_prefix = f"""
+            WITH RECURSIVE subtree AS (
+                SELECT ou.unit_id, ou.code
+                FROM public.org_units ou
+                WHERE ou.unit_id = :org_unit_id
+
+                UNION ALL
+
+                SELECT child.unit_id, child.code
+                FROM public.org_units child
+                JOIN subtree s ON s.unit_id = child.parent_unit_id
+            ),
+            subtree_codes AS (
+                SELECT DISTINCT TRIM(code) AS code
+                FROM subtree
+                WHERE COALESCE(TRIM(code), '') <> ''
+            ),
+            eligible_contacts AS (
+                {eligible_contacts_sql}
+            )
+            """
+
+            where_parts.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM eligible_contacts ec
+                    WHERE
+                        (ec.contact_id IS NOT NULL AND ec.contact_id = c.contact_id)
+                        OR
+                        (ec.person_id IS NOT NULL AND c.person_id IS NOT NULL AND ec.person_id = c.person_id)
+                )
+                """
+            )
+        else:
+            where_parts.append("FALSE")
+
     where_sql = " AND ".join(where_parts)
 
     q_total = text(
         f"""
+        {with_prefix}
         SELECT COUNT(*) AS cnt
         FROM public.contacts c
         WHERE {where_sql}
@@ -119,6 +252,7 @@ def list_contacts(
 
     q_list = text(
         f"""
+        {with_prefix}
         {CONTACT_SELECT_SQL}
         WHERE {where_sql}
         ORDER BY LOWER(COALESCE(CAST(c.full_name AS TEXT), '')) ASC, c.contact_id ASC
@@ -131,7 +265,12 @@ def list_contacts(
         rows = conn.execute(q_list, params).mappings().all()
 
     items = [_map_contact(dict(r)) for r in rows]
-    return {"items": items, "total": total}
+    return {
+        "items": items,
+        "total": total,
+        "filter_org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+        "filter_org_unit_name": filter_org_unit_name,
+    }
 
 
 @router.get("/contacts/{contact_id}")

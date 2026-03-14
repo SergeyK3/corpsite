@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
 
 type ContactItem = {
@@ -21,6 +22,8 @@ type ContactsResponse =
       items?: ContactItem[];
       data?: ContactItem[];
       total?: number;
+      filter_org_unit_id?: number | null;
+      filter_org_unit_name?: string | null;
     };
 
 type ContactFormValues = {
@@ -62,6 +65,26 @@ function parseOptionalPositiveInt(value: string): number | null {
   const n = Number(s);
   if (!Number.isSafeInteger(n) || n <= 0) return null;
   return n;
+}
+
+function parsePositiveInt(value: string | null): number | null {
+  const s = String(value ?? "").trim();
+  if (!s) return null;
+  if (!/^\d+$/.test(s)) return null;
+  const n = Number(s);
+  if (!Number.isSafeInteger(n) || n <= 0) return null;
+  return n;
+}
+
+function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number | null {
+  return (
+    parsePositiveInt(sp.get("org_unit_id")) ??
+    parsePositiveInt(sp.get("unit_id")) ??
+    parsePositiveInt(sp.get("orgUnitId")) ??
+    parsePositiveInt(sp.get("selected_org_unit_id")) ??
+    parsePositiveInt(sp.get("ou")) ??
+    parsePositiveInt(sp.get("unit"))
+  );
 }
 
 function formatTelegramUsername(value?: string | null): string {
@@ -313,8 +336,19 @@ function ContactDrawer({
 }
 
 export default function ContactsPage() {
+  const sp = useSearchParams();
+
+  const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
+  const orgUnitNameFromUrl = React.useMemo(() => {
+    const v = String(sp.get("org_unit_name") ?? "").trim();
+    return v || null;
+  }, [sp]);
+
   const [items, setItems] = React.useState<ContactItem[]>([]);
   const [total, setTotal] = React.useState(0);
+  const [filterOrgUnitId, setFilterOrgUnitId] = React.useState<number | null>(null);
+  const [filterOrgUnitName, setFilterOrgUnitName] = React.useState<string | null>(null);
+
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
 
@@ -333,6 +367,10 @@ export default function ContactsPage() {
   const page = Math.floor(offset / PAGE_SIZE) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / PAGE_SIZE));
 
+  React.useEffect(() => {
+    setOffset(0);
+  }, [orgUnitId]);
+
   const loadItems = React.useCallback(async () => {
     setLoading(true);
     setPageError(null);
@@ -341,6 +379,7 @@ export default function ContactsPage() {
       const data = await apiFetchJson<ContactsResponse>(API_BASE, {
         query: {
           q: appliedSearch || undefined,
+          org_unit_id: orgUnitId ?? undefined,
           limit: PAGE_SIZE,
           offset,
         },
@@ -349,14 +388,30 @@ export default function ContactsPage() {
       const normalized = normalizeItems(data);
       setItems(normalized);
       setTotal(extractTotal(data, normalized));
+
+      if (!Array.isArray(data)) {
+        setFilterOrgUnitId(
+          data.filter_org_unit_id != null ? Number(data.filter_org_unit_id) : null,
+        );
+        setFilterOrgUnitName(
+          data.filter_org_unit_name != null
+            ? String(data.filter_org_unit_name).trim() || null
+            : null,
+        );
+      } else {
+        setFilterOrgUnitId(null);
+        setFilterOrgUnitName(null);
+      }
     } catch (error) {
       setPageError(extractErrorMessage(error));
       setItems([]);
       setTotal(0);
+      setFilterOrgUnitId(null);
+      setFilterOrgUnitName(null);
     } finally {
       setLoading(false);
     }
-  }, [appliedSearch, offset, refreshNonce]);
+  }, [appliedSearch, orgUnitId, offset, refreshNonce]);
 
   React.useEffect(() => {
     void loadItems();
@@ -429,7 +484,9 @@ export default function ContactsPage() {
   }
 
   async function handleDelete(item: ContactItem) {
-    const ok = window.confirm(`Удалить контакт «${String(item.full_name ?? "").trim() || item.contact_id}»?`);
+    const ok = window.confirm(
+      `Удалить контакт «${String(item.full_name ?? "").trim() || item.contact_id}»?`,
+    );
     if (!ok) return;
 
     setPageError(null);
@@ -459,28 +516,39 @@ export default function ContactsPage() {
     setOffset(0);
   }
 
+  const filterCaption =
+    filterOrgUnitName ||
+    orgUnitNameFromUrl ||
+    (filterOrgUnitId != null
+      ? `unit #${filterOrgUnitId}`
+      : orgUnitId != null
+        ? `unit #${orgUnitId}`
+        : null);
+
   return (
     <div className="bg-[#04070f] text-zinc-100">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
         <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-[#050816]">
           <div className="border-b border-zinc-800 px-4 py-3">
-            <h1 className="text-xl font-semibold text-zinc-100">Контакты</h1>
+            <h1 className="text-xl font-semibold leading-none text-zinc-100">
+              Контакты{filterCaption ? ` (${filterCaption})` : ""}
+            </h1>
           </div>
 
-          <div className="border-b border-zinc-800 px-4 py-3">
+          <div className="border-b border-zinc-800 px-4 py-2">
             <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                   placeholder="Поиск по ID, person_id, ФИО, телефону, Telegram"
-                  className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                  className="h-8.5 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
                 />
               </div>
 
               <button
                 type="submit"
-                className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60"
+                className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Найти
               </button>
@@ -488,7 +556,7 @@ export default function ContactsPage() {
               <button
                 type="button"
                 onClick={handleResetSearch}
-                className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60"
+                className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Сбросить
               </button>
@@ -501,7 +569,7 @@ export default function ContactsPage() {
                   setOffset(0);
                   setRefreshNonce((v) => v + 1);
                 }}
-                className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60"
+                className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
               </button>
@@ -509,21 +577,21 @@ export default function ContactsPage() {
               <button
                 type="button"
                 onClick={openCreate}
-                className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white transition hover:bg-blue-500"
+                className="h-8.5 rounded-lg bg-blue-600 px-3.5 py-1 text-sm font-medium text-white transition hover:bg-blue-500"
               >
                 Создать
               </button>
             </form>
           </div>
 
-          <div className="px-4 py-3">
+          <div className="px-4 py-2">
             {!!pageError && (
-              <div className="mb-3 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+              <div className="mb-2 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-2 text-sm text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-2 flex items-center justify-between gap-2 text-xs text-zinc-400">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-400">
               <div>
                 Всего: {total} · Показано: {items.length}
               </div>
@@ -538,25 +606,25 @@ export default function ContactsPage() {
                 <table className="min-w-full border-collapse">
                   <thead>
                     <tr className="bg-white/[0.03] text-left">
-                      <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         ID
                       </th>
-                      <th className="min-w-[280px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="min-w-[280px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         ФИО
                       </th>
-                      <th className="min-w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="min-w-[120px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         person_id
                       </th>
-                      <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Телефон
                       </th>
-                      <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Telegram
                       </th>
-                      <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Telegram ID
                       </th>
-                      <th className="w-[190px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -565,43 +633,43 @@ export default function ContactsPage() {
                   <tbody>
                     {items.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-3 py-3 text-[13px] text-zinc-500">
+                        <td colSpan={7} className="px-3 py-2 text-[13px] text-zinc-500">
                           {loading ? "Загрузка..." : "Записи не найдены."}
                         </td>
                       </tr>
                     ) : (
                       items.map((item) => (
                         <tr key={item.contact_id} className="border-t border-zinc-800 align-middle">
-                          <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-100">
                             {item.contact_id}
                           </td>
 
-                          <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-100">
                             {String(item.full_name ?? "").trim() || "—"}
                           </td>
 
-                          <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-300">
                             {item.person_id != null ? item.person_id : "—"}
                           </td>
 
-                          <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-300">
                             {String(item.phone ?? "").trim() || "—"}
                           </td>
 
-                          <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-300">
                             {formatTelegramUsername(item.telegram_username)}
                           </td>
 
-                          <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-300">
                             {item.telegram_numeric_id != null ? item.telegram_numeric_id : "—"}
                           </td>
 
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-1.5">
+                          <td className="px-3 py-1">
+                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => openEdit(item)}
-                                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
+                                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2 py-0.5 text-[10px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
                               >
                                 Изменить
                               </button>
@@ -609,7 +677,7 @@ export default function ContactsPage() {
                               <button
                                 type="button"
                                 onClick={() => void handleDelete(item)}
-                                className="rounded-md border border-red-800 bg-transparent px-2.5 py-1 text-[12px] leading-4 text-red-300 transition hover:bg-red-950/30"
+                                className="rounded-md border border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-300 transition hover:bg-red-950/30"
                               >
                                 Удалить
                               </button>

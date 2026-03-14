@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
 
 type ApiOrgUnitNode = {
@@ -220,6 +220,7 @@ async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTr
 
 export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
 
   const devUserId = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
@@ -277,13 +278,16 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
 
   function replaceUrl(next: Partial<Record<string, string | null>>) {
     const p = new URLSearchParams(sp.toString());
+
     Object.entries(next).forEach(([k, v]) => {
       const s = (v ?? "").toString().trim();
       if (!s) p.delete(k);
       else p.set(k, s);
     });
 
-    router.replace(`${basePath}?${p.toString()}`);
+    const targetPath = (pathname || "").trim() || (basePath || "").trim() || "/directory/roles";
+    const qs = p.toString();
+    router.replace(qs ? `${targetPath}?${qs}` : targetPath);
     router.refresh();
   }
 
@@ -323,7 +327,7 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
       <div key={n.key}>
         <div
           className={[
-            "flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm",
+            "flex items-center gap-2 rounded-lg border px-2 py-1 text-sm",
             "border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900/60",
             isSelected ? "border-zinc-600 bg-zinc-900/60" : "",
           ].join(" ")}
@@ -354,7 +358,11 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
                 if (hasChildren) toggle(n.key);
                 return;
               }
-              replaceUrl({ org_unit_id: String(n.unit_id) });
+
+              replaceUrl({
+                org_unit_id: String(n.unit_id),
+                org_unit_name: n.name,
+              });
             }}
             title={n.name}
           >

@@ -128,6 +128,51 @@ def _roles_meta() -> Dict[str, Optional[str]]:
     }
 
 
+def _org_units_meta() -> Dict[str, Optional[str]]:
+    cols = _get_columns("org_units", "public")
+    if not cols:
+        return {
+            "rel": "org_units",
+            "id_col": "unit_id",
+            "name_col": None,
+        }
+
+    id_col = _pick_first(cols, ["unit_id", "id"])
+    name_col = _pick_first(cols, ["title", "name", "unit_name", "org_unit_name", "label"])
+
+    return {
+        "rel": "org_units",
+        "id_col": id_col or "unit_id",
+        "name_col": name_col,
+    }
+
+
+def _get_org_unit_caption(org_unit_id: int) -> str:
+    meta = _org_units_meta()
+
+    if not meta["name_col"]:
+        return f"unit #{int(org_unit_id)}"
+
+    q = text(
+        f"""
+        SELECT
+            {meta['name_col']} AS unit_name
+        FROM public.{meta['rel']}
+        WHERE {meta['id_col']} = :org_unit_id
+        LIMIT 1
+        """
+    )
+
+    with engine.begin() as conn:
+        row = conn.execute(q, {"org_unit_id": int(org_unit_id)}).mappings().first()
+
+    if not row:
+        return f"unit #{int(org_unit_id)}"
+
+    value = str(row.get("unit_name") or "").strip()
+    return value or f"unit #{int(org_unit_id)}"
+
+
 def _normalize_active(v: Any) -> bool:
     if isinstance(v, bool):
         return v
@@ -187,6 +232,8 @@ def list_roles(
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     with_prefix = ""
 
+    filter_org_unit_name: Optional[str] = None
+
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
         filters.append(
@@ -209,6 +256,8 @@ def list_roles(
 
     if org_unit_id is not None:
         params["org_unit_id"] = int(org_unit_id)
+        filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
+
         with_prefix = """
         WITH RECURSIVE subtree AS (
             SELECT ou.unit_id
@@ -222,6 +271,7 @@ def list_roles(
             JOIN subtree s ON s.unit_id = child.parent_unit_id
         )
         """
+
         filters.append(
             """
             EXISTS (
@@ -229,6 +279,7 @@ def list_roles(
                 FROM public.users u
                 WHERE u.role_id = t.role_id
                   AND u.unit_id IN (SELECT unit_id FROM subtree)
+                  AND COALESCE(u.is_active, TRUE) = TRUE
             )
             """.strip()
         )
@@ -262,7 +313,12 @@ def list_roles(
         rows = conn.execute(q_list, params).mappings().all()
 
     items = [_normalize_role_row(dict(r)) for r in rows]
-    return {"items": items, "total": total}
+    return {
+        "items": items,
+        "total": total,
+        "filter_org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+        "filter_org_unit_name": filter_org_unit_name,
+    }
 
 
 @router.post("/roles")

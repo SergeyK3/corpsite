@@ -52,18 +52,19 @@ export default function RoleForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col bg-[#050816] text-zinc-100">
-      <div className="flex items-start justify-between border-b border-zinc-800 px-6 py-6">
+      <div className="flex items-start justify-between border-b border-zinc-800 px-6 py-5">
         <div>
           <h2 className="text-2xl font-semibold leading-tight text-zinc-100">
-            {mode === "create" ? "Создание записи" : "Редактирование записи"}
+            {mode === "create" ? "Создать роль" : "Редактировать роль"}
           </h2>
-          <p className="mt-1 text-sm text-zinc-400">Роли</p>
+          <p className="mt-1 text-sm text-zinc-400">Справочник ролей</p>
         </div>
 
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
+          disabled={saving}
+          className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Закрыть
         </button>
@@ -87,10 +88,11 @@ export default function RoleForm({
               type="text"
               value={values.role_code}
               onChange={(e) => setField("role_code", e.target.value)}
-              placeholder="Например: TEST_ROLE"
+              placeholder="Например: QUALITY_EXPERT"
               autoComplete="off"
               spellCheck={false}
-              className="h-12 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+              disabled={saving}
+              className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
               style={{ colorScheme: "dark" }}
               required
             />
@@ -106,10 +108,11 @@ export default function RoleForm({
               type="text"
               value={values.role_name}
               onChange={(e) => setField("role_name", e.target.value)}
-              placeholder="Например: Тестовая роль"
+              placeholder="Например: Эксперт по качеству"
               autoComplete="off"
               spellCheck={false}
-              className="h-12 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+              disabled={saving}
+              className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
               style={{ colorScheme: "dark" }}
               required
             />
@@ -127,7 +130,8 @@ export default function RoleForm({
               placeholder="Краткое описание роли"
               rows={6}
               spellCheck={false}
-              className="min-h-[140px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+              disabled={saving}
+              className="min-h-[140px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
               style={{ colorScheme: "dark" }}
             />
           </div>
@@ -137,7 +141,8 @@ export default function RoleForm({
               type="checkbox"
               checked={values.is_active}
               onChange={(e) => setField("is_active", e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-700 bg-zinc-900"
+              disabled={saving}
+              className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 disabled:cursor-not-allowed"
             />
             Активна
           </label>
@@ -148,10 +153,10 @@ export default function RoleForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
           disabled={saving}
+          className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Закрыть
+          Отмена
         </button>
 
         <button

@@ -1,3 +1,4 @@
+// FILE: corpsite-ui/app/directory/roles/_components/RoleDrawer.tsx
 "use client";
 
 import * as React from "react";
@@ -41,8 +42,10 @@ export default function RoleDrawer({
   onSubmit,
 }: RoleDrawerProps) {
   React.useEffect(() => {
+    if (!open) return;
+
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && open) onClose();
+      if (e.key === "Escape") onClose();
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -55,7 +58,7 @@ export default function RoleDrawer({
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative ml-auto h-full w-full max-w-[720px] border-l border-white/10 bg-[#050816] shadow-2xl">
+      <div className="relative ml-auto h-full w-full max-w-[760px] border-l border-white/10 bg-[#050816] shadow-2xl">
         <RoleForm
           mode={mode}
           initialValues={getInitialValues(role)}

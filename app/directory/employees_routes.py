@@ -74,57 +74,6 @@ def list_departments(
         raise as_http500(e)
 
 
-@router.get("/roles")
-def list_roles(
-    status: str = Query(default="active", pattern="^(active|inactive|all)$"),
-    limit: int = Query(default=500, ge=1, le=2000),
-    offset: int = Query(default=0, ge=0),
-    user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
-    try:
-        _ = int(user["user_id"])
-        _ = (status or "").strip().lower()
-
-        sql = text(
-            """
-            SELECT role_id, code, name
-            FROM public.roles
-            ORDER BY role_id
-            LIMIT :limit OFFSET :offset
-            """
-        )
-
-        sql_total = text(
-            """
-            SELECT COUNT(*) AS cnt
-            FROM public.roles
-            """
-        )
-
-        with engine.begin() as c:
-            rows = c.execute(sql, {"limit": int(limit), "offset": int(offset)}).mappings().all()
-            total = int(c.execute(sql_total).scalar_one())
-
-        return {
-            "items": [
-                {
-                    "role_id": int(r["role_id"]),
-                    "code": str(r["code"]) if r.get("code") is not None else None,
-                    "name": str(r["name"]) if r.get("name") is not None else "",
-                    "name_ru": None,
-                    "is_active": True,
-                }
-                for r in rows
-            ],
-            "total": total,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise as_http500(e)
-
-
 @router.get("/department-groups")
 def list_department_groups(
     status: str = Query(default="active", pattern="^(active|inactive|all)$"),

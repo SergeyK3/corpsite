@@ -2,6 +2,8 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
+
 import { apiFetchJson } from "../../../../lib/api";
 import PositionDrawer from "./PositionDrawer";
 import type { PositionFormValues } from "./PositionForm";
@@ -22,9 +24,12 @@ type PositionsResponse =
       items?: PositionItem[];
       data?: PositionItem[];
       total?: number;
+      filter_org_unit_id?: number | null;
+      filter_org_unit_name?: string | null;
     };
 
 const API_BASE = "/directory/positions";
+const PAGE_SIZE = 50;
 
 const CATEGORY_OPTIONS: Array<{ value: PositionCategory; label: string }> = [
   { value: "all", label: "Все" },
@@ -39,40 +44,8 @@ function positionIdOf(item: PositionItem): number {
   return Number(item.position_id ?? item.id ?? 0);
 }
 
-function normalizeItems(payload: PositionsResponse): PositionItem[] {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.items)) return payload.items;
-  if (Array.isArray(payload.data)) return payload.data;
-  return [];
-}
-
-function extractTotal(payload: PositionsResponse, items: PositionItem[]): number {
-  if (!Array.isArray(payload) && typeof payload.total === "number") return payload.total;
-  return items.length;
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return "Не удалось выполнить операцию.";
-}
-
-function normalizeText(value: string): string {
-  return String(value || "").toLowerCase().replace(/ё/g, "е").trim();
-}
-
-function matchesSearch(name: string, query: string): boolean {
-  const q = normalizeText(query);
-  if (!q) return true;
-
-  const hay = normalizeText(name);
-  if (hay.includes(q)) return true;
-
-  const tokens = q.split(/\s+/).filter(Boolean);
-  return tokens.every((t) => hay.includes(t));
-}
-
 function normalizeCategoryValue(item: PositionItem): string {
-  return normalizeText(String(item.category ?? ""));
+  return String(item.category ?? "").trim().toLowerCase();
 }
 
 function getCategoryLabel(item: PositionItem): string {
@@ -84,13 +57,87 @@ function getCategoryLabel(item: PositionItem): string {
   return found?.label ?? "—";
 }
 
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "Не удалось выполнить операцию.";
+}
+
+function parsePositiveInt(value: string | null): number | null {
+  const n = Number(String(value ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
+
+function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number | null {
+  return (
+    parsePositiveInt(sp.get("org_unit_id")) ??
+    parsePositiveInt(sp.get("unit_id")) ??
+    parsePositiveInt(sp.get("orgUnitId")) ??
+    parsePositiveInt(sp.get("selected_org_unit_id")) ??
+    parsePositiveInt(sp.get("ou")) ??
+    parsePositiveInt(sp.get("unit"))
+  );
+}
+
+function normalizeItems(payload: PositionsResponse): {
+  items: PositionItem[];
+  total: number;
+  filterOrgUnitId: number | null;
+  filterOrgUnitName: string | null;
+} {
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      total: payload.length,
+      filterOrgUnitId: null,
+      filterOrgUnitName: null,
+    };
+  }
+
+  const items = Array.isArray(payload.items)
+    ? payload.items
+    : Array.isArray(payload.data)
+      ? payload.data
+      : [];
+
+  const total = Number(payload.total ?? items.length ?? 0);
+  const rawFilterOrgUnitId = payload.filter_org_unit_id;
+  const filterOrgUnitId = rawFilterOrgUnitId == null ? null : Number(rawFilterOrgUnitId);
+  const rawFilterOrgUnitName = payload.filter_org_unit_name;
+  const filterOrgUnitName =
+    rawFilterOrgUnitName == null ? null : String(rawFilterOrgUnitName).trim();
+
+  return {
+    items,
+    total: Number.isFinite(total) ? total : items.length,
+    filterOrgUnitId: Number.isFinite(filterOrgUnitId ?? NaN) ? filterOrgUnitId : null,
+    filterOrgUnitName: filterOrgUnitName || null,
+  };
+}
+
 export default function PositionsPageClient() {
+  const sp = useSearchParams();
+
+  const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
+  const orgUnitNameFromUrl = React.useMemo(() => {
+    const v = String(sp.get("org_unit_name") ?? "").trim();
+    return v || null;
+  }, [sp]);
+
   const [items, setItems] = React.useState<PositionItem[]>([]);
   const [total, setTotal] = React.useState(0);
+  const [filterOrgUnitId, setFilterOrgUnitId] = React.useState<number | null>(null);
+  const [filterOrgUnitName, setFilterOrgUnitName] = React.useState<string | null>(null);
+
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+
+  const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
+
   const [category, setCategory] = React.useState<PositionCategory>("all");
+  const [page, setPage] = React.useState(0);
+
   const [pageError, setPageError] = React.useState<string | null>(null);
   const [drawerError, setDrawerError] = React.useState<string | null>(null);
 
@@ -98,35 +145,56 @@ export default function PositionsPageClient() {
   const [drawerMode, setDrawerMode] = React.useState<"create" | "edit">("create");
   const [selectedItem, setSelectedItem] = React.useState<PositionItem | null>(null);
 
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = searchInput.trim();
+      setPage(0);
+      setSearch(next);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
   const loadItems = React.useCallback(async () => {
     setLoading(true);
     setPageError(null);
 
     try {
-      const data = await apiFetchJson<PositionsResponse>(API_BASE);
-      const normalized = normalizeItems(data);
-      setItems(normalized);
-      setTotal(extractTotal(data, normalized));
+      const payload = await apiFetchJson<PositionsResponse>(API_BASE, {
+        query: {
+          q: search || undefined,
+          category: category === "all" ? undefined : category,
+          org_unit_id: orgUnitId ?? undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        },
+      });
+
+      const normalized = normalizeItems(payload);
+      setItems(normalized.items);
+      setTotal(normalized.total);
+      setFilterOrgUnitId(normalized.filterOrgUnitId);
+      setFilterOrgUnitName(normalized.filterOrgUnitName);
     } catch (error) {
       setPageError(extractErrorMessage(error));
       setItems([]);
       setTotal(0);
+      setFilterOrgUnitId(null);
+      setFilterOrgUnitName(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search, category, orgUnitId, page]);
 
   React.useEffect(() => {
     void loadItems();
   }, [loadItems]);
 
-  const filteredItems = React.useMemo(() => {
-    return items.filter((item) => {
-      const bySearch = matchesSearch(item.name, search);
-      const byCategory = category === "all" ? true : normalizeCategoryValue(item) === category;
-      return bySearch && byCategory;
-    });
-  }, [items, search, category]);
+  React.useEffect(() => {
+    if (page > 0 && total > 0 && page * PAGE_SIZE >= total) {
+      setPage(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1));
+    }
+  }, [page, total]);
 
   function openCreate() {
     setDrawerError(null);
@@ -164,17 +232,26 @@ export default function PositionsPageClient() {
           method: "POST",
           body: payload,
         });
+
+        setDrawerOpen(false);
+        setSelectedItem(null);
+
+        if (page !== 0) {
+          setPage(0);
+        } else {
+          await loadItems();
+        }
       } else {
         const positionId = positionIdOf(selectedItem as PositionItem);
         await apiFetchJson(`${API_BASE}/${positionId}`, {
           method: "PUT",
           body: payload,
         });
-      }
 
-      setDrawerOpen(false);
-      setSelectedItem(null);
-      await loadItems();
+        setDrawerOpen(false);
+        setSelectedItem(null);
+        await loadItems();
+      }
     } catch (error) {
       setDrawerError(extractErrorMessage(error));
     } finally {
@@ -197,29 +274,48 @@ export default function PositionsPageClient() {
     }
   }
 
+  const pageFrom = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const pageTo = Math.min(total, page * PAGE_SIZE + items.length);
+  const hasPrev = page > 0;
+  const hasNext = (page + 1) * PAGE_SIZE < total;
+
+  const filterCaption =
+    filterOrgUnitName ||
+    orgUnitNameFromUrl ||
+    (filterOrgUnitId != null
+      ? `unit #${filterOrgUnitId}`
+      : orgUnitId != null
+        ? `unit #${orgUnitId}`
+        : null);
+
   return (
     <div className="bg-[#04070f] text-zinc-100">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
         <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-[#050816]">
           <div className="border-b border-zinc-800 px-4 py-3">
-            <h1 className="text-xl font-semibold text-zinc-100">Должности</h1>
+            <h1 className="text-xl font-semibold leading-none text-zinc-100">
+              Должности{filterCaption ? ` (${filterCaption})` : ""}
+            </h1>
           </div>
 
-          <div className="border-b border-zinc-800 px-4 py-2.5">
+          <div className="border-b border-zinc-800 px-4 py-2">
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Поиск по названию должности"
-                  className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                  className="h-8.5 w-full rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
                 />
               </div>
 
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as PositionCategory)}
-                className="h-9 min-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-100 outline-none transition focus:border-zinc-600"
+                onChange={(e) => {
+                  setCategory(e.target.value as PositionCategory);
+                  setPage(0);
+                }}
+                className="h-8.5 min-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-100 outline-none transition focus:border-zinc-600"
               >
                 {CATEGORY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-zinc-950 text-zinc-100">
@@ -231,7 +327,7 @@ export default function PositionsPageClient() {
               <button
                 type="button"
                 onClick={() => void loadItems()}
-                className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60"
+                className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
               </button>
@@ -239,22 +335,49 @@ export default function PositionsPageClient() {
               <button
                 type="button"
                 onClick={openCreate}
-                className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white transition hover:bg-blue-500"
+                className="h-8.5 rounded-lg bg-blue-600 px-3.5 py-1 text-sm font-medium text-white transition hover:bg-blue-500"
               >
                 Создать
               </button>
             </div>
           </div>
 
-          <div className="px-4 py-3">
+          <div className="px-4 py-2">
             {!!pageError && (
-              <div className="mb-3 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+              <div className="mb-2 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-2 text-sm text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-2 text-xs text-zinc-400">
-              Всего: {total} · Показано: {filteredItems.length}
+            <div className="mb-1.5 flex flex-col gap-1 text-[11px] text-zinc-400 md:flex-row md:items-center md:justify-between">
+              <div>
+                Всего: {total}
+                {total > 0 ? <span className="ml-2">· показано: {pageFrom}–{pageTo}</span> : null}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+                  disabled={!hasPrev || loading}
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-2 py-0.5 text-[10px] text-zinc-200 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Назад
+                </button>
+
+                <div className="min-w-[52px] text-center text-[10px] text-zinc-400">
+                  Стр. {page + 1}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => prev + 1)}
+                  disabled={!hasNext || loading}
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-2 py-0.5 text-[10px] text-zinc-200 transition hover:bg-zinc-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Вперёд
+                </button>
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-xl border border-zinc-800">
@@ -262,16 +385,16 @@ export default function PositionsPageClient() {
                 <table className="min-w-full border-collapse">
                   <thead>
                     <tr className="bg-white/[0.03] text-left">
-                      <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         ID
                       </th>
-                      <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Название
                       </th>
-                      <th className="w-[190px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Категория
                       </th>
-                      <th className="w-[170px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      <th className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -280,34 +403,34 @@ export default function PositionsPageClient() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2.5 text-[13px] text-zinc-400">
+                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
-                    ) : filteredItems.length === 0 ? (
+                    ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2.5 text-[13px] text-zinc-500">
+                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-500">
                           Записи не найдены.
                         </td>
                       </tr>
                     ) : (
-                      filteredItems.map((item) => (
+                      items.map((item) => (
                         <tr key={positionIdOf(item)} className="border-t border-zinc-800 align-middle">
-                          <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-100">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-100">
                             {positionIdOf(item)}
                           </td>
-                          <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-100">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-100">
                             {item.name}
                           </td>
-                          <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-400">
                             {getCategoryLabel(item)}
                           </td>
-                          <td className="px-3 py-1.5">
-                            <div className="flex items-center gap-1.5">
+                          <td className="px-3 py-1">
+                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => openEdit(item)}
-                                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
+                                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2 py-0.5 text-[10px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
                               >
                                 Изменить
                               </button>
@@ -315,7 +438,7 @@ export default function PositionsPageClient() {
                               <button
                                 type="button"
                                 onClick={() => void handleDelete(item)}
-                                className="rounded-md border border-red-800 bg-transparent px-2.5 py-1 text-[12px] leading-4 text-red-300 transition hover:bg-red-950/30"
+                                className="rounded-md border border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-300 transition hover:bg-red-950/30"
                               >
                                 Удалить
                               </button>
