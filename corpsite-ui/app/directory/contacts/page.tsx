@@ -533,12 +533,6 @@ export default function ContactsPage() {
     setAppliedSearch(searchDraft.trim());
   }
 
-  function handleResetSearch() {
-    setSearchDraft("");
-    setAppliedSearch("");
-    setOffset(0);
-  }
-
   function handleRefresh() {
     setSearchDraft("");
     setAppliedSearch("");
@@ -593,14 +587,6 @@ export default function ContactsPage() {
                 className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Найти
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetSearch}
-                className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
-              >
-                Сбросить
               </button>
 
               <button

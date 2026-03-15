@@ -1,7 +1,8 @@
+// FILE: corpsite-ui/app/directory/working-contacts/_components/WorkingContactsPageClient.tsx
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
 import WorkingContactsTable from "./WorkingContactsTable";
 
@@ -32,6 +33,15 @@ type WorkingContactsResponse =
 
 const API_BASE = "/directory/working-contacts";
 const PAGE_SIZE = 100;
+const ORG_FILTER_PARAM_KEYS = [
+  "org_unit_id",
+  "unit_id",
+  "orgUnitId",
+  "selected_org_unit_id",
+  "ou",
+  "unit",
+  "org_unit_name",
+] as const;
 
 function normalizeItems(payload: WorkingContactsResponse): WorkingContactItem[] {
   if (Array.isArray(payload)) return payload;
@@ -74,6 +84,20 @@ function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number |
     parsePositiveInt(sp.get("ou")) ??
     parsePositiveInt(sp.get("unit"))
   );
+}
+
+function buildUrlWithoutOrgFilter(
+  pathname: string,
+  sp: ReturnType<typeof useSearchParams>,
+): string {
+  const params = new URLSearchParams(sp.toString());
+
+  for (const key of ORG_FILTER_PARAM_KEYS) {
+    params.delete(key);
+  }
+
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 type WorkingContactDrawerProps = {
@@ -184,6 +208,8 @@ function WorkingContactDrawer({ open, item, onClose }: WorkingContactDrawerProps
 }
 
 export default function WorkingContactsPageClient() {
+  const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
 
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
@@ -266,11 +292,23 @@ export default function WorkingContactsPageClient() {
     setAppliedSearch(searchDraft.trim());
   }
 
-  function handleResetSearch() {
+  function handleRefresh() {
     setSearchDraft("");
     setAppliedSearch("");
-    setActiveOnly(true);
     setOffset(0);
+    setPageError(null);
+    setFilterOrgUnitId(null);
+    setFilterOrgUnitName(null);
+
+    const nextUrl = buildUrlWithoutOrgFilter(pathname, sp);
+    const currentUrl = sp.toString() ? `${pathname}?${sp.toString()}` : pathname;
+
+    if (nextUrl !== currentUrl) {
+      router.replace(nextUrl);
+      return;
+    }
+
+    setRefreshNonce((v) => v + 1);
   }
 
   function handleOpen(item: WorkingContactItem) {
@@ -338,18 +376,7 @@ export default function WorkingContactsPageClient() {
 
               <button
                 type="button"
-                onClick={handleResetSearch}
-                className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
-              >
-                Сбросить
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setOffset(0);
-                  setRefreshNonce((v) => v + 1);
-                }}
+                onClick={handleRefresh}
                 className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
