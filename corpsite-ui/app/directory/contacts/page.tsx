@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
 
 type ContactItem = {
@@ -36,6 +36,15 @@ type ContactFormValues = {
 
 const API_BASE = "/directory/contacts";
 const PAGE_SIZE = 100;
+const ORG_FILTER_PARAM_KEYS = [
+  "org_unit_id",
+  "unit_id",
+  "orgUnitId",
+  "selected_org_unit_id",
+  "ou",
+  "unit",
+  "org_unit_name",
+] as const;
 
 function normalizeItems(payload: ContactsResponse): ContactItem[] {
   if (Array.isArray(payload)) return payload;
@@ -108,6 +117,18 @@ function toFormValues(item?: ContactItem | null): ContactFormValues {
     telegram_username: String(item?.telegram_username ?? "").trim(),
     telegram_numeric_id: item?.telegram_numeric_id != null ? String(item.telegram_numeric_id) : "",
   };
+}
+
+function buildUrlWithoutOrgFilter(
+  pathname: string,
+  sp: ReturnType<typeof useSearchParams>,
+): string {
+  const params = new URLSearchParams(sp.toString());
+  for (const key of ORG_FILTER_PARAM_KEYS) {
+    params.delete(key);
+  }
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 function ContactDrawer({
@@ -336,6 +357,8 @@ function ContactDrawer({
 }
 
 export default function ContactsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
 
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
@@ -516,6 +539,25 @@ export default function ContactsPage() {
     setOffset(0);
   }
 
+  function handleRefresh() {
+    setSearchDraft("");
+    setAppliedSearch("");
+    setOffset(0);
+    setPageError(null);
+    setFilterOrgUnitId(null);
+    setFilterOrgUnitName(null);
+
+    const nextUrl = buildUrlWithoutOrgFilter(pathname, sp);
+    const currentUrl = sp.toString() ? `${pathname}?${sp.toString()}` : pathname;
+
+    if (nextUrl !== currentUrl) {
+      router.replace(nextUrl);
+      return;
+    }
+
+    setRefreshNonce((v) => v + 1);
+  }
+
   const filterCaption =
     filterOrgUnitName ||
     orgUnitNameFromUrl ||
@@ -563,12 +605,7 @@ export default function ContactsPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setSearchDraft("");
-                  setAppliedSearch("");
-                  setOffset(0);
-                  setRefreshNonce((v) => v + 1);
-                }}
+                onClick={handleRefresh}
                 className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
