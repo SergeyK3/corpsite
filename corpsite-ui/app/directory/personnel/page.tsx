@@ -24,6 +24,7 @@ export default function PersonnelPage() {
       initialPositions={initialPositions}
       initialEmployees={initialEmployees}
       initialError={null}
+      refreshResetsOrgUnitFilter
     />
   );
 }

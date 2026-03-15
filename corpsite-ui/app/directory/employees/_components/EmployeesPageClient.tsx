@@ -14,7 +14,13 @@ import {
   mapApiErrorToMessage,
   terminateEmployee,
 } from "../_lib/api.client";
-import type { EmployeeDTO, Position, Department, EmployeesResponse, EmployeeDetails } from "../_lib/types";
+import type {
+  EmployeeDTO,
+  Position,
+  Department,
+  EmployeesResponse,
+  EmployeeDetails,
+} from "../_lib/types";
 import type { EmployeesFilters } from "../_lib/query";
 
 type Dept = Department;
@@ -27,7 +33,18 @@ type Props = {
   initialPositions: Pos[];
   initialEmployees: EmployeesResponse;
   initialError?: string | null;
+  refreshResetsOrgUnitFilter?: boolean;
 };
+
+const ORG_FILTER_PARAM_KEYS = [
+  "org_unit_id",
+  "unit_id",
+  "orgUnitId",
+  "selected_org_unit_id",
+  "ou",
+  "unit",
+  "org_unit_name",
+] as const;
 
 function normalizeItems<T>(v: any): T[] {
   if (Array.isArray(v)) return v as T[];
@@ -49,6 +66,21 @@ function getEmployeeName(it: any): string {
   return String(it?.fio ?? it?.full_name ?? it?.fullName ?? it?.name ?? "—");
 }
 
+function buildUrlWithoutOrgFilter(basePath: string, sp: ReturnType<typeof useSearchParams>): string {
+  const nextParams = new URLSearchParams(sp.toString());
+
+  for (const key of ORG_FILTER_PARAM_KEYS) {
+    nextParams.delete(key);
+  }
+
+  nextParams.set("offset", "0");
+  if (!nextParams.get("limit")) nextParams.set("limit", "50");
+  if (!nextParams.get("status")) nextParams.set("status", "all");
+
+  const query = nextParams.toString();
+  return query ? `${basePath}?${query}` : basePath;
+}
+
 export default function EmployeesPageClient(props: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,7 +91,8 @@ export default function EmployeesPageClient(props: Props) {
     return "/directory/employees";
   }, [pathname]);
 
-  const pageTitle = props.pageTitle ?? (routeBase === "/directory/personnel" ? "Персонал" : "Сотрудники");
+  const pageTitle =
+    props.pageTitle ?? (routeBase === "/directory/personnel" ? "Персонал" : "Сотрудники");
 
   const departmentId = sp.get("department_id") ?? "";
   const positionId = sp.get("position_id") ?? "";
@@ -87,7 +120,9 @@ export default function EmployeesPageClient(props: Props) {
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [search, setSearch] = React.useState(qText);
-  const [error, setError] = React.useState<string | null>(props.initialError ? String(props.initialError) : null);
+  const [error, setError] = React.useState<string | null>(
+    props.initialError ? String(props.initialError) : null
+  );
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
@@ -117,6 +152,22 @@ export default function EmployeesPageClient(props: Props) {
     if (!nextParams.get("limit")) nextParams.set("limit", "50");
     if (!nextParams.get("status")) nextParams.set("status", "all");
     router.replace(`${routeBase}?${nextParams.toString()}`);
+  }
+
+  function handleRefresh() {
+    setError(null);
+
+    if (props.refreshResetsOrgUnitFilter) {
+      const currentUrl = sp.toString() ? `${routeBase}?${sp.toString()}` : routeBase;
+      const nextUrl = buildUrlWithoutOrgFilter(routeBase, sp);
+
+      if (nextUrl !== currentUrl) {
+        router.replace(nextUrl);
+        return;
+      }
+    }
+
+    void loadItems();
   }
 
   React.useEffect(() => {
@@ -281,14 +332,20 @@ export default function EmployeesPageClient(props: Props) {
                 onChange={(e) => updateUrl({ status: e.target.value }, { resetOffset: true })}
                 className="h-9 min-w-[160px] rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-100 outline-none transition focus:border-zinc-600"
               >
-                <option value="all" className="bg-zinc-950 text-zinc-100">Все</option>
-                <option value="active" className="bg-zinc-950 text-zinc-100">Работает</option>
-                <option value="inactive" className="bg-zinc-950 text-zinc-100">Не работает</option>
+                <option value="all" className="bg-zinc-950 text-zinc-100">
+                  Все
+                </option>
+                <option value="active" className="bg-zinc-950 text-zinc-100">
+                  Работает
+                </option>
+                <option value="inactive" className="bg-zinc-950 text-zinc-100">
+                  Не работает
+                </option>
               </select>
 
               <button
                 type="button"
-                onClick={() => void loadItems()}
+                onClick={handleRefresh}
                 className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[13px] text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
