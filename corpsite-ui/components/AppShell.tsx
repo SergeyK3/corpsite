@@ -19,21 +19,61 @@ type MeInfo = {
   login?: string;
 };
 
-type NavItem = { href: string; title: string };
-
-type DictionaryNavItem = {
+type NavItem = {
   href: string;
   title: string;
+  matchPrefixes?: string[];
 };
 
-const DICTIONARY_ITEMS: DictionaryNavItem[] = [
-  { href: "/directory/roles", title: "Роли" },
-  { href: "/directory/positions", title: "Должности" },
-  { href: "/directory/contacts", title: "Контакты" },
-  { href: "/directory/personnel", title: "Персонал" },
-  { href: "/directory/working-contacts", title: "Рабочие контакты" },
-  { href: "/directory/department-groups", title: "Группы отделений" },
-  { href: "/directory/org-unit-types", title: "Отделения" },
+const PRIMARY_ADMIN_NAV: NavItem[] = [
+  {
+    href: "/admin/regular-tasks",
+    title: "Шаблоны регулярных задач",
+    matchPrefixes: ["/admin/regular-tasks", "/regular-tasks"],
+  },
+  {
+    href: "/tasks",
+    title: "Задачи",
+    matchPrefixes: ["/tasks"],
+  },
+  {
+    href: "/directory/roles",
+    title: "Роли",
+    matchPrefixes: ["/directory/roles"],
+  },
+  {
+    href: "/directory/contacts",
+    title: "Контакты",
+    matchPrefixes: ["/directory/contacts"],
+  },
+  {
+    href: "/directory/personnel",
+    title: "Персонал",
+    matchPrefixes: ["/directory/personnel", "/directory/employees"],
+  },
+];
+
+const SECONDARY_DIRECTORY_NAV: NavItem[] = [
+  {
+    href: "/directory/positions",
+    title: "Должности",
+    matchPrefixes: ["/directory/positions"],
+  },
+  {
+    href: "/directory/working-contacts",
+    title: "Рабочие контакты",
+    matchPrefixes: ["/directory/working-contacts"],
+  },
+  {
+    href: "/directory/department-groups",
+    title: "Группы отделений",
+    matchPrefixes: ["/directory/department-groups"],
+  },
+  {
+    href: "/directory/org-unit-types",
+    title: "Отделения",
+    matchPrefixes: ["/directory/org-unit-types"],
+  },
 ];
 
 function normalizeMsg(msg: string): string {
@@ -45,44 +85,23 @@ function isUnauthorized(e: any): boolean {
   return Number(e?.status ?? 0) === 401;
 }
 
-function isPathActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function sectionTitle(pathname: string): string {
-  if (pathname.startsWith("/admin/regular-tasks")) return "Шаблоны регулярных задач";
-  if (pathname.startsWith("/tasks")) return "Задачи";
-  if (pathname.startsWith("/regular-tasks")) return "Шаблоны регулярных задач";
-  if (pathname.startsWith("/directory/org")) return "Отделения";
-  if (pathname.startsWith("/directory/employees")) return "Сотрудники";
-  if (
-    pathname.startsWith("/directory/dictionaries") ||
-    pathname.startsWith("/directory/roles") ||
-    pathname.startsWith("/directory/positions") ||
-    pathname.startsWith("/directory/contacts") ||
-    pathname.startsWith("/directory/personnel") ||
-    pathname.startsWith("/directory/working-contacts") ||
-    pathname.startsWith("/directory/department-groups") ||
-    pathname.startsWith("/directory/org-unit-types")
-  ) {
-    return "Справочники";
-  }
-  if (pathname.startsWith("/directory")) return "Справочники";
-  return "";
+function isNavItemActive(pathname: string, item: NavItem): boolean {
+  const prefixes = item.matchPrefixes?.length ? item.matchPrefixes : [item.href];
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] }) {
   return (
     <nav className="space-y-1">
       {items.map((it) => {
-        const active = pathname === it.href || (it.href !== "/tasks" && pathname.startsWith(it.href));
+        const active = isNavItemActive(pathname, it);
 
         return (
           <Link
             key={it.href}
             href={it.href}
             className={[
-              "block rounded-lg border px-2.5 py-1 text-sm transition",
+              "block rounded-lg border px-2.5 py-1 text-sm leading-tight transition",
               active
                 ? "border-zinc-600 bg-zinc-900 text-zinc-100"
                 : "border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:bg-zinc-900/60",
@@ -96,17 +115,8 @@ function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] })
   );
 }
 
-function DictionariesSidebarGroup({ pathname }: { pathname: string }) {
-  const sectionActive =
-    pathname.startsWith("/directory/dictionaries") ||
-    pathname.startsWith("/directory/roles") ||
-    pathname.startsWith("/directory/positions") ||
-    pathname.startsWith("/directory/contacts") ||
-    pathname.startsWith("/directory/personnel") ||
-    pathname.startsWith("/directory/working-contacts") ||
-    pathname.startsWith("/directory/department-groups") ||
-    pathname.startsWith("/directory/org-unit-types");
-
+function RareSidebarGroup({ pathname }: { pathname: string }) {
+  const sectionActive = SECONDARY_DIRECTORY_NAV.some((item) => isNavItemActive(pathname, item));
   const [open, setOpen] = useState<boolean>(sectionActive);
 
   useEffect(() => {
@@ -119,13 +129,15 @@ function DictionariesSidebarGroup({ pathname }: { pathname: string }) {
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={[
-          "flex w-full items-center justify-between rounded-lg border px-2.5 py-1 text-left text-sm transition",
+          "flex w-full items-center justify-between rounded-lg border px-2.5 py-1 text-left text-sm leading-tight transition",
           sectionActive
             ? "border-zinc-600 bg-zinc-900 text-zinc-100"
             : "border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:bg-zinc-900/60",
         ].join(" ")}
+        aria-expanded={open}
+        aria-label="Показать дополнительные справочники"
       >
-        <span>Справочники</span>
+        <span className="text-base font-semibold leading-none">…</span>
         <span className={["text-xs text-zinc-500 transition-transform", open ? "rotate-180" : ""].join(" ")}>
           ▾
         </span>
@@ -133,21 +145,21 @@ function DictionariesSidebarGroup({ pathname }: { pathname: string }) {
 
       {open ? (
         <div className="ml-2 space-y-0.5 border-l border-zinc-800 pl-2">
-          {DICTIONARY_ITEMS.map((item) => {
-            const active = isPathActive(pathname, item.href);
+          {SECONDARY_DIRECTORY_NAV.map((item) => {
+            const active = isNavItemActive(pathname, item);
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={[
-                  "flex items-center justify-between rounded-lg px-2.5 py-1 text-sm transition",
+                  "block rounded-lg px-2.5 py-1 text-sm leading-tight transition",
                   active
                     ? "bg-zinc-800 text-zinc-100"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
                 ].join(" ")}
               >
-                <span>{item.title}</span>
+                {item.title}
               </Link>
             );
           })}
@@ -220,8 +232,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return t || "Сотрудник";
   }, [me]);
 
-  const whoLine = "";
-
   const roleId = Number(me?.role_id ?? 0);
   const isAdmin = roleId === 2;
 
@@ -237,15 +247,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (!forbiddenNonAdminRoute) return;
     router.replace("/tasks");
   }, [isLogin, loading, forbiddenNonAdminRoute, router]);
-
-  const navTop = useMemo<NavItem[]>(() => {
-    if (!isAdmin) return [];
-
-    return [
-      { href: "/admin/regular-tasks", title: "Шаблоны регулярных задач" },
-      { href: "/tasks", title: "Задачи" },
-    ];
-  }, [isAdmin]);
 
   const showOrgUnitsPanel = useMemo(() => {
     if (!isAdmin) return false;
@@ -277,24 +278,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return pathname;
   }, [pathname]);
 
-  const secTitle = useMemo(() => {
-    if (forbiddenNonAdminRoute) return "Задачи";
-    if (!isAdmin) return "Задачи";
-    return sectionTitle(pathname);
-  }, [forbiddenNonAdminRoute, isAdmin, pathname]);
-
   const showRightSidebar = !isAdmin && pathname.startsWith("/tasks");
 
   if (isLogin) return <>{children}</>;
 
   return (
     <div className="min-h-[calc(100vh-52px)] bg-zinc-950 text-zinc-100">
-      <div className="w-full px-3 py-3 xl:px-4 xl:py-4">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <div className="w-full px-3 py-2 xl:px-4 xl:py-3">
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-2xl font-semibold">{roleTitle}</div>
-            {whoLine ? <div className="mt-1 text-sm text-zinc-400">{whoLine}</div> : null}
-            {secTitle ? <div className="mt-1 text-sm text-zinc-300">{secTitle}</div> : null}
           </div>
 
           <button
@@ -306,16 +299,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-400">Загрузка…</div>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-400">
+            Загрузка…
+          </div>
         ) : err ? (
-          <div className="rounded-2xl border border-red-900/60 bg-red-950/40 p-3 text-sm text-red-200">{err}</div>
+          <div className="rounded-2xl border border-red-900/60 bg-red-950/40 p-3 text-sm text-red-200">
+            {err}
+          </div>
         ) : isAdmin ? (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[165px_minmax(0,1fr)]">
-            <aside className="space-y-3">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-1.5">
-                <div className="space-y-1.5">
-                  <SidebarNav pathname={pathname} items={navTop} />
-                  <DictionariesSidebarGroup pathname={pathname} />
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <aside className="space-y-2.5">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-1">
+                <div className="space-y-1">
+                  <SidebarNav pathname={pathname} items={PRIMARY_ADMIN_NAV} />
+                  <RareSidebarGroup pathname={pathname} />
                 </div>
               </div>
 
