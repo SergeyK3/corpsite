@@ -27,6 +27,7 @@ Thumbs.db
 # -----------------------
 .env
 .env.*
+!.env.example
 
 
 # -----------------------
@@ -52,12 +53,14 @@ docs/
 docs/*
 !docs/adr/
 !docs/adr/**
+!docs/PILOT_*.md
 
 
 # -----------------------
 # Manual PowerShell scripts (local smoke tests)
 # -----------------------
 scripts/*.ps1
+!scripts/smoke_check.ps1
 
 
 # -----------------------
