@@ -6,7 +6,7 @@ from datetime import date
 from typing import Dict, Any, List
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
@@ -30,6 +30,8 @@ from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
 from app.directory import router as directory_router
 from app.auth import router as auth_router  # /auth/login, /auth/me
+from app.auth import get_current_user
+from app.security.directory_scope import is_privileged
 
 # regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
@@ -118,7 +120,12 @@ class PeriodOut(BaseModel):
 
 
 class GenerateTasksRequest(BaseModel):
-    initiator_user_id: int
+    initiator_user_id: int | None = None
+
+
+def _require_privileged_user(user: Dict[str, Any]) -> None:
+    if not is_privileged(user):
+        raise HTTPException(status_code=403, detail="Access denied")
 
 
 # -----------------------
@@ -135,7 +142,12 @@ def health():
 # (1) Periods: create/list (MONTH only for MVP)
 # -----------------------
 @app.post("/periods", response_model=PeriodOut)
-def create_period(payload: PeriodCreate):
+def create_period(
+    payload: PeriodCreate,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _require_privileged_user(user)
+
     if payload.date_start > payload.date_end:
         raise HTTPException(status_code=400, detail="date_start must be <= date_end")
 
@@ -172,7 +184,9 @@ def create_period(payload: PeriodCreate):
 
 
 @app.get("/periods", response_model=List[PeriodOut])
-def list_periods():
+def list_periods(user: Dict[str, Any] = Depends(get_current_user)):
+    _require_privileged_user(user)
+
     with engine.connect() as conn:
         rows = conn.execute(
             text(
@@ -202,7 +216,14 @@ def list_periods():
 # (2) Generate monthly tasks for a period
 # -----------------------
 @app.post("/periods/{period_id}/generate-tasks")
-def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, Any]:
+def generate_tasks(
+    period_id: int,
+    payload: GenerateTasksRequest | None = None,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    _require_privileged_user(user)
+    initiator_user_id = int(user["user_id"])
+
     with engine.begin() as conn:
         existing_before = conn.execute(
             text("SELECT COUNT(1) FROM tasks WHERE period_id = :pid"),
@@ -211,7 +232,7 @@ def generate_tasks(period_id: int, payload: GenerateTasksRequest) -> Dict[str, A
 
         row = conn.execute(
             text("SELECT generate_monthly_tasks(:pid, :initiator)"),
-            {"pid": int(period_id), "initiator": payload.initiator_user_id},
+            {"pid": int(period_id), "initiator": initiator_user_id},
         ).fetchone()
 
         created_count = int(row[0]) if row and row[0] is not None else 0

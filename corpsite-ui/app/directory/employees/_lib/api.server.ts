@@ -12,6 +12,8 @@ function apiBase(): string {
 }
 
 function devUserId(): string {
+  const appEnv = (process.env.APP_ENV || process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
+  if (appEnv === "prod" || appEnv === "production") return "";
   return process.env.DEV_X_USER_ID || process.env.NEXT_PUBLIC_DEV_X_USER_ID || "";
 }
 

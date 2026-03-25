@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const STORAGE_KEY = "user_id";
+const APP_ENV = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
+const DEV_LOGIN_ENABLED =
+  APP_ENV !== "prod" && APP_ENV !== "production";
 
 function toUserId(v: string, fallback = 1) {
   const n = Number(String(v ?? "").trim());
@@ -82,6 +85,19 @@ export default function DevLoginPage() {
       }
     }, 80);
   };
+
+  if (!DEV_LOGIN_ENABLED) {
+    return (
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 16px" }}>
+        <h1 style={{ fontSize: 30, fontWeight: 700, marginBottom: 10 }}>
+          Dev Login отключен
+        </h1>
+        <div style={{ color: "#555" }}>
+          Эта страница доступна только в локальной среде разработки.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 16px" }}>

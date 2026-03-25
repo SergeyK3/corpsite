@@ -28,6 +28,10 @@ function getApiBase(): string {
 }
 
 function getDevUserId(): string | undefined {
+  const appEnv = _trim(process.env.NEXT_PUBLIC_APP_ENV) ?? _trim(process.env.APP_ENV) ?? "dev";
+  if (appEnv.toLowerCase() === "prod" || appEnv.toLowerCase() === "production") {
+    return undefined;
+  }
   // ВАЖНО: только прямой доступ, иначе Next.js не инлайнит в client bundle
   return _trim(process.env.NEXT_PUBLIC_DEV_X_USER_ID);
 }

@@ -13,6 +13,13 @@ from app.services.directory_import_xlsx import import_employees_xlsx_bytes
 router = APIRouter()
 
 
+def _raise_import_error(kind: str) -> None:
+    raise HTTPException(
+        status_code=500,
+        detail=f"{kind} import failed. Check server logs for details.",
+    )
+
+
 @router.post("/import/employees_csv")
 async def import_employees_csv(
     request: Request,
@@ -27,8 +34,8 @@ async def import_employees_csv(
         return import_employees_csv_bytes(raw=raw)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"import error: {type(e).__name__}: {str(e)}")
+    except Exception:
+        _raise_import_error("CSV")
 
 
 @router.post("/import/employees_xlsx")
@@ -45,5 +52,5 @@ async def import_employees_xlsx(
         return import_employees_xlsx_bytes(raw=raw)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"import xlsx error: {type(e).__name__}: {str(e)}")
+    except Exception:
+        _raise_import_error("XLSX")

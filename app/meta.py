@@ -1,23 +1,31 @@
 # app/meta.py
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 from sqlalchemy import text
 
 from app.db.engine import engine
 from app.errors import raise_error, ErrorCode
+from app.security.directory_scope import require_uid
 
 router = APIRouter(prefix="/meta", tags=["meta"])
 
 
-def _require_user_id(x_user_id: int | None) -> int:
-    """
-    Meta endpoints требуют авторизации через X-User-Id.
-    Для UI-контракта используем 403, а не 400.
-    """
-    if x_user_id is None or int(x_user_id) <= 0:
+def _require_request_user_id(
+    *,
+    authorization: str | None,
+    x_user_id: int | None,
+    x_internal_api_token: str | None,
+) -> int:
+    try:
+        return require_uid(
+            authorization=authorization,
+            x_user_id=str(int(x_user_id)) if x_user_id is not None else None,
+            x_internal_api_token=x_internal_api_token,
+        )
+    except HTTPException:
+        # Для UI сохраняем стабильный контракт 403/not-bound.
         raise_error(ErrorCode.META_FORBIDDEN_NOT_BOUND)
-    return int(x_user_id)
 
 
 def _is_user_bound(user_id: int) -> bool:
@@ -41,9 +49,15 @@ def _is_user_bound(user_id: int) -> bool:
 
 @router.get("/task-statuses")
 def get_task_statuses(
+    authorization: str | None = Header(default=None, alias="Authorization"),
     x_user_id: int | None = Header(default=None, alias="X-User-Id"),
+    x_internal_api_token: str | None = Header(default=None, alias="X-Internal-Api-Token"),
 ):
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_request_user_id(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
     # Запрещаем доступ к meta тем, кто не прошёл привязку
     if not _is_user_bound(user_id):

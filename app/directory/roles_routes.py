@@ -385,8 +385,8 @@ def create_role(
                 {"role_id": role_id},
             ).mappings().first()
 
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail=f"create role failed: {str(e.orig)}")
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Role already exists or conflicts with existing data.")
 
     return _normalize_role_row(dict(row))
 
@@ -469,8 +469,8 @@ def update_role(
                 {"role_id": int(role_id)},
             ).mappings().first()
 
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail=f"update role failed: {str(e.orig)}")
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Role update conflicts with existing data.")
 
     return _normalize_role_row(dict(row))
 
@@ -509,7 +509,7 @@ def delete_role(
 
             conn.execute(q_delete, {"role_id": int(role_id)})
 
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail=f"delete role failed: {str(e.orig)}")
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Role cannot be deleted because related records still exist.")
 
     return {"ok": True, "role_id": int(role_id)}

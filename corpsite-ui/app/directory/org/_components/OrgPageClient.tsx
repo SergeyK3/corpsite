@@ -51,6 +51,8 @@ type OrgTreeResponse = {
 };
 
 function getDevUserId(): string | null {
+  const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
+  if (appEnv === "prod" || appEnv === "production") return null;
   const v = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
   return v ? v : null;
 }

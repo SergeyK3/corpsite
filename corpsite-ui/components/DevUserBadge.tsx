@@ -4,10 +4,16 @@
 import { useEffect, useState } from "react";
 import { getDevUserId } from "../lib/dev_user";
 
+const APP_ENV = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
+const DEV_LOGIN_ENABLED =
+  APP_ENV !== "prod" && APP_ENV !== "production";
+
 export default function DevUserBadge() {
   const [uid, setUid] = useState<number>(0);
 
   useEffect(() => {
+    if (!DEV_LOGIN_ENABLED) return;
+
     const read = () => setUid(getDevUserId(1));
     read();
 
@@ -19,6 +25,10 @@ export default function DevUserBadge() {
       window.removeEventListener("storage", read);
     };
   }, []);
+
+  if (!DEV_LOGIN_ENABLED) {
+    return null;
+  }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

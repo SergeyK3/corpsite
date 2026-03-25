@@ -265,8 +265,8 @@ def create_position(
                 q_insert,
                 {"name": name, "category": category},
             ).mappings().first()
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail=f"create position failed: {str(e.orig)}")
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Position already exists or conflicts with existing data.")
 
     return {
         "position_id": int(row["position_id"]),
@@ -333,8 +333,8 @@ def update_position(
                 q_update,
                 {"position_id": position_id, "name": name, "category": category},
             ).mappings().first()
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail=f"update position failed: {str(e.orig)}")
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Position update conflicts with existing data.")
 
     return {
         "position_id": int(row["position_id"]),
@@ -389,7 +389,7 @@ def delete_position(
                 )
 
             conn.execute(q_delete, {"position_id": position_id})
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail=f"delete position failed: {str(e.orig)}")
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Position cannot be deleted because related records still exist.")
 
     return {"ok": True, "position_id": position_id}

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.security.directory_scope import require_uid
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -18,19 +19,17 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # Utils
 # ---------------------------
 
-def _require_user_id(x_user_id: Optional[str]) -> int:
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing X-User-Id header.")
-    s = str(x_user_id).strip()
-    if not s:
-        raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
-    try:
-        uid = int(s)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
-    if uid <= 0:
-        raise HTTPException(status_code=400, detail="Invalid X-User-Id header.")
-    return uid
+def _require_request_user_id(
+    *,
+    authorization: Optional[str],
+    x_user_id: Optional[str],
+    x_internal_api_token: Optional[str],
+) -> int:
+    return require_uid(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
 
 def _as_dict_payload(v: Any) -> Dict[str, Any]:
@@ -85,7 +84,9 @@ def _norm_channel(v: Any) -> str:
 @router.get("/me/events")
 def list_my_task_events(
     *,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    x_internal_api_token: Optional[str] = Header(default=None, alias="X-Internal-Api-Token"),
     since_audit_id: int = Query(
         default=0,
         ge=0,
@@ -93,7 +94,11 @@ def list_my_task_events(
     ),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> Dict[str, Any]:
-    uid = _require_user_id(x_user_id)
+    uid = _require_request_user_id(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
     q = text(
         """
@@ -147,7 +152,9 @@ def list_my_task_events(
 @router.get("/analytics/task-events/summary")
 def analytics_task_events_summary(
     *,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    x_internal_api_token: Optional[str] = Header(default=None, alias="X-Internal-Api-Token"),
     from_ts: Optional[datetime] = Query(default=None, description="Начало окна (inclusive), task_events.created_at >= from_ts"),
     to_ts: Optional[datetime] = Query(default=None, description="Конец окна (exclusive), task_events.created_at < to_ts"),
     event_type: Optional[str] = Query(default=None, description="Фильтр по task_events.event_type"),
@@ -163,7 +170,11 @@ def analytics_task_events_summary(
         description="Если true — учитываем только события, у которых есть baseline deliveries (system).",
     ),
 ) -> Dict[str, Any]:
-    _ = _require_user_id(x_user_id)
+    _ = _require_request_user_id(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
     ch_raw = (channel or "").strip()
     ch = ch_raw.lower() if ch_raw else None
@@ -375,13 +386,19 @@ def analytics_task_events_summary(
 @router.get("/internal/task-event-deliveries/pending")
 def list_pending_deliveries(
     *,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    x_internal_api_token: Optional[str] = Header(default=None, alias="X-Internal-Api-Token"),
     channel: str = Query(default="telegram", description="Канал очереди (например telegram)."),
     cursor_from: int = Query(default=0, ge=0, description="audit_id часть курсора (legacy name)."),
     cursor_user_id: int = Query(default=0, ge=0, description="user_id часть курсора (используется вместе с cursor_from)."),
     limit: int = Query(default=200, ge=1, le=1000),
 ) -> Dict[str, Any]:
-    _ = _require_user_id(x_user_id)
+    _ = _require_request_user_id(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
     ch = _norm_channel(channel)
     if not ch:
@@ -469,7 +486,9 @@ def list_pending_deliveries(
 def ack_delivery(
     payload: Dict[str, Any],
     *,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    x_internal_api_token: Optional[str] = Header(default=None, alias="X-Internal-Api-Token"),
 ) -> Dict[str, Any]:
     """
     ACK ВОРКЕРА (результат отправки), а не ACK пользователя.
@@ -480,7 +499,11 @@ def ack_delivery(
       - PENDING через этот endpoint не выставляем
       - если итоговый статус = SENT, то error_code/error_text должны быть NULL
     """
-    _ = _require_user_id(x_user_id)
+    _ = _require_request_user_id(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
     audit_id = _safe_int(payload.get("audit_id"))
     user_id = _safe_int(payload.get("user_id"))

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.engine import engine
 from app.errors import raise_error, ErrorCode
+from app.security.directory_scope import require_uid
 
 router = APIRouter(tags=["tg-bind"])
 
@@ -91,11 +92,20 @@ def _require_bot_token(x_bot_token: str | None) -> None:
         raise_error(ErrorCode.TGBIND_FORBIDDEN_CONSUME)
 
 
-def _require_user_id(x_user_id: int | None) -> int:
-    # forbidden (403) by error contract
-    if x_user_id is None or x_user_id <= 0:
+def _require_request_user_id(
+    *,
+    authorization: str | None,
+    x_user_id: int | None,
+    x_internal_api_token: str | None,
+) -> int:
+    try:
+        return require_uid(
+            authorization=authorization,
+            x_user_id=str(int(x_user_id)) if x_user_id is not None else None,
+            x_internal_api_token=x_internal_api_token,
+        )
+    except HTTPException:
         raise_error(ErrorCode.TGBIND_FORBIDDEN_NOT_AUTH)
-    return int(x_user_id)
 
 
 def _has_active_code_for_user(user_id: int) -> bool:
@@ -244,14 +254,23 @@ class SelfBindOut(BaseModel):
 
 # ---- endpoints ----
 @router.post("/me/tg-bind-code", response_model=TgBindCodeOut)
-def create_bind_code(x_user_id: int | None = Header(default=None, alias="X-User-Id")) -> TgBindCodeOut:
+def create_bind_code(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_user_id: int | None = Header(default=None, alias="X-User-Id"),
+    x_internal_api_token: str | None = Header(default=None, alias="X-Internal-Api-Token"),
+) -> TgBindCodeOut:
     """
     MVP without LK:
-    issues a one-time code for current user identified via X-User-Id.
+    issues a one-time code for current user identified by JWT
+    or by X-User-Id only in development / compatibility mode.
     """
     _gc_expired_codes()
 
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_request_user_id(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_internal_api_token=x_internal_api_token,
+    )
 
     # if active code exists — 409 (contract)
     if _has_active_code_for_user(user_id):

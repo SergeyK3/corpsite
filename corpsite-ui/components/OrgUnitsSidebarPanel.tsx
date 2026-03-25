@@ -223,7 +223,11 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  const devUserId = (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
+  const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
+  const devUserId =
+    appEnv === "prod" || appEnv === "production"
+      ? ""
+      : (process.env.NEXT_PUBLIC_DEV_X_USER_ID || "").trim();
   const extraHeaders = React.useMemo(() => {
     const h: Record<string, string> = { Accept: "application/json" };
     if (devUserId) h["X-User-Id"] = devUserId;

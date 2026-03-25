@@ -54,7 +54,23 @@ def _env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
 
 
+def _is_prod_env() -> bool:
+    return _env("APP_ENV", "dev").lower() in {"prod", "production"}
+
+
 AUTH_JWT_SECRET = _env("AUTH_JWT_SECRET", "dev-secret-change-me")
+
+
+def _validate_auth_config() -> None:
+    if _is_prod_env() and (
+        not AUTH_JWT_SECRET or AUTH_JWT_SECRET == "dev-secret-change-me"
+    ):
+        raise RuntimeError(
+            "AUTH_JWT_SECRET must be set to a non-default value when APP_ENV=prod"
+        )
+
+
+_validate_auth_config()
 
 # Backward-compat:
 # - Old config: AUTH_JWT_EXPIRES_MIN (minutes)

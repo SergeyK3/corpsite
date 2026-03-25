@@ -24,6 +24,32 @@ except Exception:  # pragma: no cover
 SYSTEM_ADMIN_ROLE_ID = 2
 
 
+def _app_env() -> str:
+    return (os.getenv("APP_ENV") or "dev").strip().lower()
+
+
+def _internal_api_token() -> str:
+    return (os.getenv("INTERNAL_API_TOKEN") or "").strip()
+
+
+def legacy_x_user_id_enabled() -> bool:
+    raw = (os.getenv("ENABLE_LEGACY_X_USER_ID") or "").strip().lower()
+    if raw:
+        return raw in {"1", "true", "yes", "on"}
+    return _app_env() not in {"prod", "production"}
+
+
+def internal_api_token_enabled() -> bool:
+    return bool(_internal_api_token())
+
+
+def has_valid_internal_api_token(x_internal_api_token: Optional[str]) -> bool:
+    token = _internal_api_token()
+    if not token:
+        return False
+    return (x_internal_api_token or "").strip() == token
+
+
 def rbac_mode() -> str:
     # off | dept | groups
     v = (os.getenv("DIRECTORY_RBAC_MODE") or "dept").strip().lower()
@@ -146,6 +172,7 @@ def require_uid(
     *,
     authorization: Optional[str],
     x_user_id: Optional[str] = None,
+    x_internal_api_token: Optional[str] = None,
 ) -> int:
     """
     JWT-first (взрослый режим). X-User-Id — только fallback на период миграции.
@@ -153,6 +180,12 @@ def require_uid(
     uid = user_id_from_authorization(authorization)
     if uid is not None:
         return uid
+    if x_internal_api_token is not None and not has_valid_internal_api_token(x_internal_api_token):
+        raise HTTPException(status_code=403, detail="Invalid internal API token")
+    if has_valid_internal_api_token(x_internal_api_token):
+        return require_user_id(x_user_id)
+    if not legacy_x_user_id_enabled():
+        raise HTTPException(status_code=401, detail="Missing Authorization: Bearer token")
     # fallback legacy
     return require_user_id(x_user_id)
 

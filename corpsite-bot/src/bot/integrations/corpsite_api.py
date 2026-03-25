@@ -28,7 +28,7 @@ class CorpsiteAPI:
     """
     Minimal async API client for Corpsite backend.
 
-    - Auth/ACL requests use header: X-User-Id
+    - Auth/ACL requests use JWT or X-User-Id + internal API token
     - Bootstrap flows (self-bind / consume bind-code) use custom headers.
     """
 
@@ -48,6 +48,7 @@ class CorpsiteAPI:
 
         # Token for bind-consume (bot -> backend). Required for POST /tg/bind/consume only.
         self._bot_bind_token = (os.getenv("BOT_BIND_TOKEN") or "").strip()
+        self._internal_api_token = (os.getenv("INTERNAL_API_TOKEN") or "").strip()
 
         # Enable detailed HTTP logs only when needed.
         self._trace = _truthy_env("CORPSITE_HTTP_TRACE")
@@ -87,6 +88,8 @@ class CorpsiteAPI:
         json_body: Optional[Dict[str, Any]] = None,
     ) -> APIResponse:
         headers = {"X-User-Id": str(int(user_id))}
+        if self._internal_api_token:
+            headers["X-Internal-Api-Token"] = self._internal_api_token
         t0 = time.perf_counter()
 
         if self._trace:
@@ -230,14 +233,14 @@ class CorpsiteAPI:
         """
         POST /tg/bind/consume
         Headers:
-          X-Bot-Token: <BOT_BIND_TOKEN from bot .env>
+          X-Bot-Bind-Token: <BOT_BIND_TOKEN from bot .env>
         JSON:
           { "code": "...", "tg_user_id": 123 }
         """
         if not self._bot_bind_token:
             return APIResponse(status_code=0, json=None, text="BOT_BIND_TOKEN is not set in bot environment")
 
-        headers: Dict[str, str] = {"X-Bot-Token": self._bot_bind_token}
+        headers: Dict[str, str] = {"X-Bot-Bind-Token": self._bot_bind_token}
         body = {"code": str(code or "").strip(), "tg_user_id": int(telegram_user_id)}
         return await self._request_headers("POST", "/tg/bind/consume", headers=headers, json_body=body)
 
