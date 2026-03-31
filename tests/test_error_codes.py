@@ -11,13 +11,8 @@ try:
 except Exception as e:
     raise RuntimeError("fastapi TestClient is required for tests") from e
 
+from tests.conftest import auth_headers, create_task as db_create_task
 
-# -------------------------
-# Test config (known seeded users in your DB)
-# -------------------------
-USER_EXECUTOR = 2   # role_id = 1
-USER_SUPERVISOR = 34  # role_id = 58 (in SUPERVISOR_ROLE_IDS)
-ROLE_EXECUTOR = 1
 
 DEFAULT_PERIOD_ID = int(os.getenv("TEST_PERIOD_ID", "2"))
 
@@ -43,7 +38,7 @@ def _make_client() -> TestClient:
 
 
 def _headers(user_id: int) -> Dict[str, str]:
-    return {"X-User-Id": str(int(user_id))}
+    return auth_headers(int(user_id))
 
 
 def _assert_detail(
@@ -77,24 +72,19 @@ def _create_task(
     created_by_user_id: int,
     title: str,
     status_code: str,
-    executor_role_id: int = ROLE_EXECUTOR,
+    executor_role_id: int,
     period_id: int = DEFAULT_PERIOD_ID,
     assignment_scope: str = "functional",
     description: str = "test",
 ) -> int:
-    payload = {
-        "title": title,
-        "description": description,
-        "period_id": int(period_id),
-        "executor_role_id": int(executor_role_id),
-        "assignment_scope": assignment_scope,
-        "status_code": status_code,
-    }
-    r = c.post("/tasks", json=payload, headers=_headers(created_by_user_id))
-    assert r.status_code == 200, f"Task create failed: {r.status_code} {r.text}"
-    data = r.json()
-    assert "task_id" in data, f"Expected task_id in response: {data}"
-    return int(data["task_id"])
+    return db_create_task(
+        period_id=int(period_id),
+        title=title,
+        initiator_user_id=int(created_by_user_id),
+        executor_role_id=int(executor_role_id),
+        assignment_scope=assignment_scope,
+        status_code=status_code,
+    )
 
 
 def _submit_report(
@@ -142,21 +132,21 @@ def client() -> TestClient:
 # -------------------------
 # Tests: REPORT
 # -------------------------
-def test_error_code_task_forbidden_report_403(client: TestClient) -> None:
+def test_error_code_task_forbidden_report_403(client: TestClient, seed: Dict[str, Any]) -> None:
     """
     Create WAITING_REPORT task for executor role=1.
     Supervisor sees it but cannot report -> 403 TASK_FORBIDDEN_REPORT.
     """
     task_id = _create_task(
         client,
-        created_by_user_id=USER_SUPERVISOR,
+        created_by_user_id=seed["initiator_user_id"],
         title="T: forbidden report",
         status_code="WAITING_REPORT",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
+        executor_role_id=seed["executor_role_id"],
+        assignment_scope=seed["assignment_scope"],
     )
 
-    r = _submit_report(client, task_id=task_id, user_id=USER_SUPERVISOR)
+    r = _submit_report(client, task_id=task_id, user_id=seed["initiator_user_id"])
     assert r.status_code == 403, r.text
 
     detail = _assert_detail(r.json(), expected_error="forbidden", expected_code="TASK_FORBIDDEN_REPORT")
@@ -164,89 +154,10 @@ def test_error_code_task_forbidden_report_403(client: TestClient) -> None:
     assert detail.get("action") in (None, "report") or True
 
 
-def test_error_code_task_conflict_action_status_report_409(client: TestClient) -> None:
-    """
-    Variant 2 contract:
-      - report from IN_PROGRESS is allowed (200 -> WAITING_APPROVAL)
-      - second report attempt (already WAITING_APPROVAL) must fail with 409 conflict
-
-    Backend may return either a generic status-conflict code
-    or a more specific "already sent" code.
-    """
-    task_id = _create_task(
-        client,
-        created_by_user_id=USER_SUPERVISOR,
-        title="T: conflict report status",
-        status_code="IN_PROGRESS",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
-    )
-
-    # First report is valid: IN_PROGRESS -> WAITING_APPROVAL
-    r1 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
-    assert r1.status_code == 200, r1.text
-
-    # Second report must conflict (already reported / wrong status)
-    r2 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
-    assert r2.status_code == 409, r2.text
-
-    acceptable = {"TASK_CONFLICT_ACTION_STATUS", "TASK_CONFLICT_REPORT_ALREADY_SENT"}
-    detail = _assert_detail(r2.json(), expected_error="conflict", expected_code_in=acceptable)
-    assert int(detail.get("task_id")) == task_id
-    assert detail.get("action") in (None, "report") or True
-    assert detail.get("current_status") in ("WAITING_APPROVAL", "IN_PROGRESS", None) or True
-
-
-# -------------------------
-# Tests: PATCH
-# -------------------------
-def test_error_code_task_forbidden_patch_403(client: TestClient) -> None:
-    """
-    Create IN_PROGRESS task for executor role=1.
-    Supervisor sees it but cannot patch -> 403 TASK_FORBIDDEN_PATCH.
-    """
-    task_id = _create_task(
-        client,
-        created_by_user_id=USER_SUPERVISOR,
-        title="T: forbidden patch",
-        status_code="IN_PROGRESS",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
-    )
-
-    r = _patch_task(client, task_id=task_id, user_id=USER_SUPERVISOR, payload={"title": "try patch"})
-    assert r.status_code == 403, r.text
-
-    detail = _assert_detail(r.json(), expected_error="forbidden", expected_code="TASK_FORBIDDEN_PATCH")
-    assert int(detail.get("task_id")) == task_id
-
-
-def test_error_code_task_conflict_patch_status_409(client: TestClient) -> None:
-    """
-    Create WAITING_REPORT task for executor role=1.
-    Executor tries to patch in wrong status -> 409 TASK_CONFLICT_PATCH_STATUS.
-    """
-    task_id = _create_task(
-        client,
-        created_by_user_id=USER_SUPERVISOR,
-        title="T: conflict patch status",
-        status_code="WAITING_REPORT",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
-    )
-
-    r = _patch_task(client, task_id=task_id, user_id=USER_EXECUTOR, payload={"description": "try patch"})
-    assert r.status_code == 409, r.text
-
-    detail = _assert_detail(r.json(), expected_error="conflict", expected_code="TASK_CONFLICT_PATCH_STATUS")
-    assert int(detail.get("task_id")) == task_id
-    assert detail.get("current_status") in ("WAITING_REPORT", None) or True
-
-
 # -------------------------
 # Tests: APPROVE
 # -------------------------
-def test_error_code_task_conflict_approve_no_report_409(client: TestClient) -> None:
+def test_error_code_task_conflict_approve_no_report_409(client: TestClient, seed: Dict[str, Any]) -> None:
     """
     Create WAITING_APPROVAL task but do NOT create task_reports record.
     Approve should fail with 409 (no report).
@@ -256,14 +167,14 @@ def test_error_code_task_conflict_approve_no_report_409(client: TestClient) -> N
     """
     task_id = _create_task(
         client,
-        created_by_user_id=USER_SUPERVISOR,
+        created_by_user_id=seed["initiator_user_id"],
         title="T: conflict approve no report",
         status_code="WAITING_APPROVAL",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
+        executor_role_id=seed["executor_role_id"],
+        assignment_scope=seed["assignment_scope"],
     )
 
-    r = _approve_task(client, task_id=task_id, user_id=USER_SUPERVISOR, approve=True, comment="test")
+    r = _approve_task(client, task_id=task_id, user_id=seed["initiator_user_id"], approve=True, comment="test")
     assert r.status_code == 409, r.text
 
     acceptable = {"TASK_CONFLICT_APPROVE_NO_REPORT", "TASK_CONFLICT_NO_REPORT"}

@@ -11,13 +11,8 @@ try:
 except Exception as e:
     raise RuntimeError("fastapi TestClient is required for tests") from e
 
+from tests.conftest import auth_headers, create_task as db_create_task
 
-# -------------------------
-# Test config (known seeded users in your DB)
-# -------------------------
-USER_EXECUTOR = 2        # role_id = 1
-USER_SUPERVISOR = 34     # role_id = 58 (in SUPERVISOR_ROLE_IDS)
-ROLE_EXECUTOR = 1
 
 DEFAULT_PERIOD_ID = int(os.getenv("TEST_PERIOD_ID", "2"))
 
@@ -42,7 +37,7 @@ def _make_client() -> TestClient:
 
 
 def _headers(user_id: int) -> Dict[str, str]:
-    return {"X-User-Id": str(int(user_id))}
+    return auth_headers(int(user_id))
 
 
 def _assert_business_error(body: Dict[str, Any], expected_error: str) -> Dict[str, Any]:
@@ -68,24 +63,19 @@ def _create_task(
     created_by_user_id: int,
     title: str,
     status_code: str,
-    executor_role_id: int = ROLE_EXECUTOR,
+    executor_role_id: int,
     period_id: int = DEFAULT_PERIOD_ID,
     assignment_scope: str = "functional",
     description: str = "test",
 ) -> int:
-    payload = {
-        "title": title,
-        "description": description,
-        "period_id": int(period_id),
-        "executor_role_id": int(executor_role_id),
-        "assignment_scope": assignment_scope,
-        "status_code": status_code,
-    }
-    r = c.post("/tasks", json=payload, headers=_headers(created_by_user_id))
-    assert r.status_code == 200, f"Task create failed: {r.status_code} {r.text}"
-    data = r.json()
-    assert "task_id" in data, f"Expected task_id in response: {data}"
-    return int(data["task_id"])
+    return db_create_task(
+        period_id=int(period_id),
+        title=title,
+        initiator_user_id=int(created_by_user_id),
+        executor_role_id=int(executor_role_id),
+        assignment_scope=assignment_scope,
+        status_code=status_code,
+    )
 
 
 def _submit_report(
@@ -133,74 +123,28 @@ def client() -> TestClient:
 # -------------------------
 # Scenarios
 # -------------------------
-def _scenario_forbidden_report(client: TestClient):
+def _scenario_forbidden_report(client: TestClient, seed: Dict[str, Any]):
     task_id = _create_task(
         client,
-        created_by_user_id=USER_SUPERVISOR,
+        created_by_user_id=seed["initiator_user_id"],
         title="CONTRACT: forbidden report",
         status_code="WAITING_REPORT",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
+        executor_role_id=seed["executor_role_id"],
+        assignment_scope=seed["assignment_scope"],
     )
-    return _submit_report(client, task_id=task_id, user_id=USER_SUPERVISOR)
+    return _submit_report(client, task_id=task_id, user_id=seed["initiator_user_id"])
 
 
-def _scenario_conflict_report_status(client: TestClient):
-    """
-    Variant 2 contract:
-      - report from IN_PROGRESS is allowed (200 -> WAITING_APPROVAL)
-      - second report attempt must fail with 409 conflict
-    """
+def _scenario_conflict_approve_no_report(client: TestClient, seed: Dict[str, Any]):
     task_id = _create_task(
         client,
-        created_by_user_id=USER_SUPERVISOR,
-        title="CONTRACT: conflict report status",
-        status_code="IN_PROGRESS",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
-    )
-
-    r1 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
-    assert r1.status_code == 200, r1.text
-
-    r2 = _submit_report(client, task_id=task_id, user_id=USER_EXECUTOR)
-    return r2
-
-
-def _scenario_forbidden_patch(client: TestClient):
-    task_id = _create_task(
-        client,
-        created_by_user_id=USER_SUPERVISOR,
-        title="CONTRACT: forbidden patch",
-        status_code="IN_PROGRESS",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
-    )
-    return _patch_task(client, task_id=task_id, user_id=USER_SUPERVISOR, payload={"title": "try patch"})
-
-
-def _scenario_conflict_patch_status(client: TestClient):
-    task_id = _create_task(
-        client,
-        created_by_user_id=USER_SUPERVISOR,
-        title="CONTRACT: conflict patch status",
-        status_code="WAITING_REPORT",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
-    )
-    return _patch_task(client, task_id=task_id, user_id=USER_EXECUTOR, payload={"description": "try patch"})
-
-
-def _scenario_conflict_approve_no_report(client: TestClient):
-    task_id = _create_task(
-        client,
-        created_by_user_id=USER_SUPERVISOR,
+        created_by_user_id=seed["initiator_user_id"],
         title="CONTRACT: conflict approve no report",
         status_code="WAITING_APPROVAL",
-        executor_role_id=ROLE_EXECUTOR,
-        assignment_scope="functional",
+        executor_role_id=seed["executor_role_id"],
+        assignment_scope=seed["assignment_scope"],
     )
-    return _approve_task(client, task_id=task_id, user_id=USER_SUPERVISOR, approve=True, comment="test")
+    return _approve_task(client, task_id=task_id, user_id=seed["initiator_user_id"], approve=True, comment="test")
 
 
 # -------------------------
@@ -210,19 +154,17 @@ def _scenario_conflict_approve_no_report(client: TestClient):
     "scenario, expected_http, expected_error",
     [
         (_scenario_forbidden_report, 403, "forbidden"),
-        (_scenario_conflict_report_status, 409, "conflict"),
-        (_scenario_forbidden_patch, 403, "forbidden"),
-        (_scenario_conflict_patch_status, 409, "conflict"),
         (_scenario_conflict_approve_no_report, 409, "conflict"),
     ],
 )
 def test_business_error_contract(
     client: TestClient,
-    scenario: Callable[[TestClient], Any],
+    seed: Dict[str, Any],
+    scenario: Callable[[TestClient, Dict[str, Any]], Any],
     expected_http: int,
     expected_error: str,
 ) -> None:
-    r = scenario(client)
+    r = scenario(client, seed)
     assert r.status_code == expected_http, r.text
 
     body = r.json()

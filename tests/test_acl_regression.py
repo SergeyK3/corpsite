@@ -8,6 +8,7 @@ from app.db.engine import engine
 # Импортируем внутренние хелперы из conftest.
 # Да, они с подчёркиванием — это осознанно: тест должен быть устойчивым к схеме БД.
 from tests.conftest import (  # noqa: F401
+    auth_headers,
     create_task,
     _create_role,
     _create_user,
@@ -65,7 +66,7 @@ def test_executor_from_other_unit_cannot_see_task(client, seed):
             _set_user_unit(conn, other_user_id, other_unit_id)
 
         # Проверка: чужой unit -> 404
-        r = client.get(f"/tasks/{task_id}", headers={"X-User-Id": str(other_user_id)})
+        r = client.get(f"/tasks/{task_id}", headers=auth_headers(other_user_id))
         assert r.status_code == 404, r.text
 
     finally:

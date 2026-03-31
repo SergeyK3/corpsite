@@ -1,7 +1,7 @@
 # tests/test_tasks_actions_endpoint.py
 from __future__ import annotations
 
-from tests.conftest import create_task, cleanup_task, upsert_report
+from tests.conftest import auth_headers, create_task, cleanup_task, upsert_report
 
 
 def test_actions_report_moves_to_waiting_approval(client, seed):
@@ -17,9 +17,9 @@ def test_actions_report_moves_to_waiting_approval(client, seed):
     try:
         payload = {"report_link": "https://example.com/r", "current_comment": "ok"}
         r = client.post(
-            f"/tasks/{task_id}/actions/report",
+            f"/tasks/{task_id}/report",
             json=payload,
-            headers={"X-User-Id": str(seed["executor_user_id"])},
+            headers=auth_headers(seed["executor_user_id"]),
         )
         assert r.status_code == 200, r.text
         data = r.json()
@@ -48,9 +48,9 @@ def test_actions_reject_moves_back_to_waiting_report(client, seed):
         )
 
         r = client.post(
-            f"/tasks/{task_id}/actions/reject",
+            f"/tasks/{task_id}/reject",
             json={"current_comment": "need fix"},
-            headers={"X-User-Id": str(seed["initiator_user_id"])},
+            headers=auth_headers(seed["initiator_user_id"]),
         )
         assert r.status_code == 200, r.text
         data = r.json()

@@ -1,7 +1,7 @@
 # tests/test_tasks_allowed_actions.py
 from __future__ import annotations
 
-from tests.conftest import create_task, cleanup_task, upsert_report
+from tests.conftest import auth_headers, create_task, cleanup_task, upsert_report
 
 
 def test_executor_sees_report_action_on_waiting_report(client, seed):
@@ -15,7 +15,7 @@ def test_executor_sees_report_action_on_waiting_report(client, seed):
     )
 
     try:
-        r = client.get(f"/tasks/{task_id}", headers={"X-User-Id": str(seed["executor_user_id"])})
+        r = client.get(f"/tasks/{task_id}", headers=auth_headers(seed["executor_user_id"]))
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["status_code"] == "WAITING_REPORT"
@@ -42,7 +42,7 @@ def test_initiator_sees_approve_and_reject_on_waiting_approval(client, seed):
             current_comment="test",
         )
 
-        r = client.get(f"/tasks/{task_id}", headers={"X-User-Id": str(seed["initiator_user_id"])})
+        r = client.get(f"/tasks/{task_id}", headers=auth_headers(seed["initiator_user_id"]))
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["status_code"] == "WAITING_APPROVAL"

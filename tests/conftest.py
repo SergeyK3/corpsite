@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
+from app.auth import create_access_token
 from app.db.engine import engine
 from app.main import app
 
@@ -98,6 +99,9 @@ def insert_returning_id(
     if not filtered:
         raise RuntimeError(f"No compatible columns to insert into {schema}.{table}. Have cols={sorted(cols)}")
 
+    if id_col in cols:
+        _sync_pk_sequence(conn, table=table, id_col=id_col, schema=schema)
+
     col_list = ", ".join(filtered.keys())
     bind_list = ", ".join(f":{k}" for k in filtered.keys())
 
@@ -108,6 +112,29 @@ def insert_returning_id(
     """
     row = fetch_one(conn, sql, **filtered)
     return int(row[id_col])
+
+
+def _sync_pk_sequence(conn, *, table: str, id_col: str, schema: str = "public") -> None:
+    row = conn.execute(
+        text("SELECT pg_get_serial_sequence(:table_ref, :id_col) AS seq"),
+        {"table_ref": f"{schema}.{table}", "id_col": id_col},
+    ).mappings().first()
+    seq_name = row.get("seq") if row else None
+    if not seq_name:
+        return
+
+    conn.execute(
+        text(
+            f"""
+            SELECT setval(
+                CAST(:seq_name AS regclass),
+                COALESCE((SELECT MAX({id_col}) FROM {schema}.{table}), 0) + 1,
+                false
+            )
+            """
+        ),
+        {"seq_name": seq_name},
+    )
 
 
 # =============================
@@ -390,6 +417,10 @@ def create_unit(conn, name: str) -> Optional[int]:
         raise RuntimeError(f"Cannot detect unit id column in public.{ut}. cols={sorted(cols)}")
 
     values: Dict[str, Any] = {"name": name, "created_at": now}
+    if "code" in cols:
+        values["code"] = name
+    if "group_id" in cols:
+        values["group_id"] = 1
     return insert_returning_id(conn, table=ut, id_col=id_col, values=values)
 
 
@@ -503,11 +534,17 @@ def create_task(
             "title": title,
             "description": None,
             "initiator_user_id": initiator_user_id,
+            "created_by_user_id": initiator_user_id,
+            "approver_user_id": initiator_user_id,
             "executor_role_id": executor_role_id,
             "unit_id": unit_val,
             "org_unit_id": unit_val,
             "assignment_scope": scope_val,
             "status_id": status_id,
+            "task_kind": "adhoc",
+            "requires_report": True,
+            "requires_approval": True,
+            "source_kind": "manual",
             "created_at": now,
             "updated_at": now,
         }
@@ -592,6 +629,11 @@ def upsert_report(*, task_id: int, submitted_by: int, report_link: str, current_
         )
 
 
+def auth_headers(user_id: int) -> Dict[str, str]:
+    token = create_access_token(int(user_id))
+    return {"Authorization": f"Bearer {token}"}
+
+
 # =============================
 # Backward-compatible names expected by older tests
 # =============================
@@ -604,6 +646,7 @@ _table_exists = table_exists
 _get_columns = get_columns
 _safe_delete = safe_delete
 _safe_delete_many = safe_delete_many
+_auth_headers = auth_headers
 
 
 # =============================
