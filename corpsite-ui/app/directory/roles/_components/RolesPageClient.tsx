@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiFetchJson } from "../../../../lib/api";
 import RoleDrawer from "./RoleDrawer";
@@ -17,6 +17,8 @@ type RoleItem = {
   name?: string | null;
   description?: string | null;
   is_active?: boolean | null;
+  org_unit_id?: number | null;
+  org_unit_name?: string | null;
 };
 
 type RolesResponse =
@@ -28,6 +30,13 @@ type RolesResponse =
       filter_org_unit_id?: number | null;
       filter_org_unit_name?: string | null;
     };
+
+type LoadRolesOptions = {
+  search?: string;
+  onlyActive?: boolean;
+  orgUnitId?: number | null;
+  page?: number;
+};
 
 const API_BASE = "/directory/roles";
 const PAGE_SIZE = 50;
@@ -103,6 +112,7 @@ function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number |
 }
 
 export default function RolesPageClient() {
+  const router = useRouter();
   const sp = useSearchParams();
 
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
@@ -148,48 +158,60 @@ export default function RolesPageClient() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const loadRoles = React.useCallback(async () => {
-    setLoading(true);
-    setPageError(null);
+  const loadRoles = React.useCallback(
+    async (options?: LoadRolesOptions) => {
+      setLoading(true);
+      setPageError(null);
 
-    try {
-      const params = new URLSearchParams();
+      try {
+        const effectiveSearch = options?.search ?? search;
+        const effectiveOnlyActive = options?.onlyActive ?? onlyActive;
+        const effectiveOrgUnitId =
+          options && Object.prototype.hasOwnProperty.call(options, "orgUnitId")
+            ? options.orgUnitId ?? null
+            : orgUnitId;
+        const effectivePage =
+          typeof options?.page === "number" && Number.isFinite(options.page) ? options.page : page;
 
-      if (search) params.set("q", search);
-      if (onlyActive) params.set("is_active", "true");
-      if (orgUnitId != null) params.set("org_unit_id", String(orgUnitId));
+        const params = new URLSearchParams();
 
-      params.set("limit", String(PAGE_SIZE));
-      params.set("offset", String(page * PAGE_SIZE));
+        if (effectiveSearch) params.set("q", effectiveSearch);
+        if (effectiveOnlyActive) params.set("is_active", "true");
+        if (effectiveOrgUnitId != null) params.set("org_unit_id", String(effectiveOrgUnitId));
 
-      const url = `${API_BASE}?${params.toString()}`;
-      const payload = await apiFetchJson<RolesResponse>(url);
-      const normalized = normalizeRoles(payload);
+        params.set("limit", String(PAGE_SIZE));
+        params.set("offset", String(effectivePage * PAGE_SIZE));
 
-      setItems(normalized.items);
-      setTotal(normalized.total);
-      setFilterOrgUnitId(normalized.filterOrgUnitId);
-      setFilterOrgUnitName(normalized.filterOrgUnitName);
+        const url = `${API_BASE}?${params.toString()}`;
+        const payload = await apiFetchJson<RolesResponse>(url);
+        const normalized = normalizeRoles(payload);
 
-      const selectedId = selectedRoleIdRef.current;
-      if (selectedId != null) {
-        const stillVisible = normalized.items.some((role) => roleIdOf(role) === selectedId);
-        if (!stillVisible) {
-          setDrawerOpen(false);
-          setSelectedRole(null);
-          setDrawerError(null);
+        setItems(normalized.items);
+        setTotal(normalized.total);
+        setFilterOrgUnitId(normalized.filterOrgUnitId);
+        setFilterOrgUnitName(normalized.filterOrgUnitName);
+
+        const selectedId = selectedRoleIdRef.current;
+        if (selectedId != null) {
+          const stillVisible = normalized.items.some((role) => roleIdOf(role) === selectedId);
+          if (!stillVisible) {
+            setDrawerOpen(false);
+            setSelectedRole(null);
+            setDrawerError(null);
+          }
         }
+      } catch (error) {
+        setPageError(extractErrorMessage(error));
+        setItems([]);
+        setTotal(0);
+        setFilterOrgUnitId(null);
+        setFilterOrgUnitName(null);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      setPageError(extractErrorMessage(error));
-      setItems([]);
-      setTotal(0);
-      setFilterOrgUnitId(null);
-      setFilterOrgUnitName(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, onlyActive, orgUnitId, page]);
+    },
+    [search, onlyActive, orgUnitId, page],
+  );
 
   React.useEffect(() => {
     void loadRoles();
@@ -200,6 +222,25 @@ export default function RolesPageClient() {
       setPage(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1));
     }
   }, [page, total]);
+
+  const handleRefresh = React.useCallback(() => {
+    setPageError(null);
+    setDrawerError(null);
+    setDrawerOpen(false);
+    setSelectedRole(null);
+    setSearchInput("");
+    setSearch("");
+    setOnlyActive(false);
+    setPage(0);
+
+    router.replace("/directory/roles");
+    void loadRoles({
+      search: "",
+      onlyActive: false,
+      orgUnitId: null,
+      page: 0,
+    });
+  }, [router, loadRoles]);
 
   function openCreate() {
     setDrawerError(null);
@@ -336,7 +377,7 @@ export default function RolesPageClient() {
 
               <button
                 type="button"
-                onClick={() => void loadRoles()}
+                onClick={handleRefresh}
                 className="h-8.5 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить

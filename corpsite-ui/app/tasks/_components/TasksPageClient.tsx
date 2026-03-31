@@ -50,6 +50,13 @@ type ManualRolesResponse = {
   items?: ManualTaskRoleOption[];
 };
 
+type LoadItemsOptions = {
+  offset?: number;
+  statusTab?: StatusTab;
+  taskScope?: TaskScope;
+  orgUnitId?: string;
+};
+
 function normalizeMsg(msg: string): string {
   const s = String(msg || "").trim();
   return s || "Ошибка запроса";
@@ -488,7 +495,7 @@ export default function TasksPageClient() {
     });
   }, [items, search, taskKind, taskScope]);
 
-  function resetDrawerState() {
+  const resetDrawerState = React.useCallback(() => {
     detailsRequestRef.current += 1;
     setDrawerOpen(false);
     setDrawerMode("view");
@@ -501,7 +508,7 @@ export default function TasksPageClient() {
     setCopyHint("");
     setReason("");
     setReportLink("");
-  }
+  }, []);
 
   const redirectToLogin = React.useCallback(() => {
     logout();
@@ -511,7 +518,7 @@ export default function TasksPageClient() {
   const closeDrawer = React.useCallback(() => {
     if (saving) return;
     resetDrawerState();
-  }, [saving]);
+  }, [saving, resetDrawerState]);
 
   const loadCurrentPeriod = React.useCallback(async (): Promise<number> => {
     try {
@@ -566,20 +573,23 @@ export default function TasksPageClient() {
   );
 
   const loadItems = React.useCallback(
-    async (nextOffset?: number) => {
+    async (options?: LoadItemsOptions) => {
       setListLoading(true);
       setPageError(null);
 
       try {
-        const qOffset = typeof nextOffset === "number" ? nextOffset : offset;
+        const qOffset = typeof options?.offset === "number" ? options.offset : offset;
+        const qStatusTab = options?.statusTab ?? tab;
+        const qTaskScope = options?.taskScope ?? taskScope;
+        const qOrgUnitId = typeof options?.orgUnitId === "string" ? options.orgUnitId : orgUnitId;
 
         const body = await apiFetchJson<any>("/tasks", {
           query: {
-            scope: taskScope,
+            scope: qTaskScope,
             limit: LIST_LIMIT,
             offset: qOffset,
-            status_filter: tab,
-            org_unit_id: orgUnitId || undefined,
+            status_filter: qStatusTab,
+            org_unit_id: qOrgUnitId || undefined,
           } as any,
         });
 
@@ -601,7 +611,7 @@ export default function TasksPageClient() {
         setItems([]);
         setTotal(0);
 
-        if (st === 403 && taskScope === "team") {
+        if (st === 403 && (options?.taskScope ?? taskScope) === "team") {
           setPageError("Доступ к вкладке «Все задачи» запрещён.");
         } else {
           setPageError(st ? `(${st}) ${msg}` : msg);
@@ -610,7 +620,7 @@ export default function TasksPageClient() {
         setListLoading(false);
       }
     },
-    [offset, tab, taskScope, selectedId, drawerMode, redirectToLogin, orgUnitId],
+    [offset, tab, taskScope, selectedId, drawerMode, redirectToLogin, orgUnitId, resetDrawerState],
   );
 
   const loadTaskDetails = React.useCallback(
@@ -646,6 +656,26 @@ export default function TasksPageClient() {
     },
     [redirectToLogin],
   );
+
+  const handleRefresh = React.useCallback(() => {
+    const defaultScope: TaskScope = canSeeTeamTasks ? "team" : "mine";
+
+    resetDrawerState();
+    setPageError(null);
+    setOffset(0);
+    setTab("active");
+    setTaskScope(defaultScope);
+    setSearch("");
+    setTaskKind("all");
+
+    router.replace("/tasks");
+    void loadItems({
+      offset: 0,
+      statusTab: "active",
+      taskScope: defaultScope,
+      orgUnitId: "",
+    });
+  }, [canSeeTeamTasks, resetDrawerState, router, loadItems]);
 
   React.useEffect(() => {
     void (async () => {
@@ -1052,7 +1082,7 @@ export default function TasksPageClient() {
 
               <button
                 type="button"
-                onClick={() => void loadItems()}
+                onClick={handleRefresh}
                 className="h-10 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
               >
                 Обновить
@@ -1257,7 +1287,7 @@ export default function TasksPageClient() {
               onCreated={() => {
                 resetDrawerState();
                 setOffset(0);
-                void loadItems(0);
+                void loadItems({ offset: 0 });
               }}
             />
           </div>

@@ -105,6 +105,19 @@ def _normalize_status_filter(v: Optional[str]) -> Optional[str]:
     raise HTTPException(status_code=422, detail="status_filter must be one of: active, done, rejected")
 
 
+def _task_effective_org_unit_sql(task_alias: str = "t", regular_task_alias: str = "rt") -> str:
+    return f"""
+        COALESCE(
+            NULLIF(to_jsonb({task_alias})->>'owner_unit_id','')::int,
+            NULLIF(to_jsonb({task_alias})->>'org_unit_id','')::int,
+            NULLIF(to_jsonb({task_alias})->>'unit_id','')::int,
+            NULLIF(to_jsonb({regular_task_alias})->>'owner_unit_id','')::int,
+            NULLIF(to_jsonb({regular_task_alias})->>'org_unit_id','')::int,
+            NULLIF(to_jsonb({regular_task_alias})->>'unit_id','')::int
+        )
+    """.strip()
+
+
 def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
     row = (
         conn.execute(
@@ -225,12 +238,14 @@ def list_tasks(
         legacy_approver_visibility = """
             EXISTS (
                 SELECT 1
-                FROM public.regular_tasks rt
-                WHERE rt.regular_task_id = t.regular_task_id
-                  AND COALESCE(rt.target_role_id, 0) = :role_id
+                FROM public.regular_tasks rt2
+                WHERE rt2.regular_task_id = t.regular_task_id
+                  AND COALESCE(rt2.target_role_id, 0) = :role_id
             )
             AND COALESCE(ts.code,'') = 'WAITING_APPROVAL'
         """.strip()
+
+        effective_org_unit_sql = _task_effective_org_unit_sql("t", "rt")
 
         where: List[str] = []
 
@@ -273,7 +288,7 @@ def list_tasks(
 
         if org_unit_id is not None:
             where.append(
-                """
+                f"""
                 EXISTS (
                     WITH RECURSIVE subtree AS (
                         SELECT ou.unit_id
@@ -288,10 +303,7 @@ def list_tasks(
                         WHERE COALESCE(child.is_active, TRUE) = TRUE
                     )
                     SELECT 1
-                    FROM public.users ux
-                    WHERE ux.role_id = t.executor_role_id
-                      AND COALESCE(ux.is_active, TRUE) = TRUE
-                      AND ux.unit_id IN (SELECT unit_id FROM subtree)
+                    WHERE {effective_org_unit_sql} IN (SELECT unit_id FROM subtree)
                 )
                 """.strip()
             )
@@ -349,6 +361,7 @@ def list_tasks(
             FROM public.tasks t
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
             LEFT JOIN public.roles er ON er.role_id = t.executor_role_id
+            LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
             WHERE {where_sql}
         """
 
@@ -378,6 +391,8 @@ def list_tasks(
                 t.due_date,
                 ts.code AS status_code,
                 ts.name_ru AS status_name_ru,
+                {effective_org_unit_sql} AS org_unit_id,
+                ou.name AS org_unit_name,
 
                 tr.report_link AS report_link,
                 tr.submitted_at AS report_submitted_at,
@@ -391,6 +406,8 @@ def list_tasks(
             FROM public.tasks t
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
             LEFT JOIN public.roles er ON er.role_id = t.executor_role_id
+            LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
+            LEFT JOIN public.org_units ou ON ou.unit_id = {effective_org_unit_sql}
             LEFT JOIN LATERAL (
                 SELECT
                     ue.user_id AS executor_user_id,
