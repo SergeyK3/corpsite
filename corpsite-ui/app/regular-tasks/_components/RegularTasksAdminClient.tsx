@@ -126,11 +126,11 @@ function yesNo(value: boolean): string {
 
 function statTone(status: string): string {
   const s = String(status || "").toLowerCase();
-  if (s === "ok") return "text-emerald-800";
-  if (s === "partial") return "text-amber-900";
-  if (s === "error") return "text-red-700";
-  if (s === "skip") return "text-zinc-700";
-  return "text-zinc-800";
+  if (s === "ok") return "text-emerald-800 dark:text-emerald-200";
+  if (s === "partial") return "text-amber-900 dark:text-amber-200";
+  if (s === "error") return "text-red-700 dark:text-red-300";
+  if (s === "skip") return "text-zinc-700 dark:text-zinc-300";
+  return "text-zinc-800 dark:text-zinc-200";
 }
 
 function scheduleLabel(item: RegularTaskItem): string {
@@ -787,12 +787,12 @@ export default function RegularTasksAdminClient() {
           : "Карточка шаблона";
 
   return (
-    <div className="notranslate flex flex-col gap-3 text-zinc-900" lang="ru" translate="no">
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-100 p-3 shadow-sm">
+    <div className="notranslate flex flex-col gap-3 text-zinc-900 dark:text-zinc-50" lang="ru" translate="no">
+      <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 shadow-sm">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">Шаблоны регулярных задач</h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Шаблоны регулярных задач</h1>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -802,8 +802,8 @@ export default function RegularTasksAdminClient() {
                 className={[
                   "rounded-xl border px-4 py-2 text-sm font-medium transition",
                   activeTab === "templates"
-                    ? "border-zinc-300 bg-white text-zinc-900"
-                    : "border-zinc-200 bg-zinc-100/30 text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-800",
+                    ? "border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                    : "border-zinc-200 dark:border-zinc-800 bg-zinc-100/30 dark:bg-zinc-900/30 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700/50 dark:hover:bg-zinc-800/50 hover:text-zinc-800 dark:hover:text-zinc-200",
                 ].join(" ")}
               >
                 Шаблоны
@@ -815,20 +815,20 @@ export default function RegularTasksAdminClient() {
                 className={[
                   "rounded-xl border px-4 py-2 text-sm font-medium transition",
                   activeTab === "runs"
-                    ? "border-zinc-300 bg-white text-zinc-900"
-                    : "border-zinc-200 bg-zinc-100/30 text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-800",
+                    ? "border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                    : "border-zinc-200 dark:border-zinc-800 bg-zinc-100/30 dark:bg-zinc-900/30 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700/50 dark:hover:bg-zinc-800/50 hover:text-zinc-800 dark:hover:text-zinc-200",
                 ].join(" ")}
               >
                 Запуски
               </button>
 
               <select
-                className="min-w-[240px] rounded-xl border border-zinc-300 bg-white/60 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                className="min-w-[240px] rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500"
                 value={orgGroup}
                 onChange={(e) => setOrgGroup(e.target.value as OrgGroupFilter)}
               >
                 {ORG_GROUP_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-white text-zinc-900">
+                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                     {opt.label}
                   </option>
                 ))}
@@ -837,7 +837,7 @@ export default function RegularTasksAdminClient() {
               <button
                 type="button"
                 onClick={handleRefreshAll}
-                className="rounded-xl border border-zinc-300 bg-white/60 px-4 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200"
+                className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Обновить
               </button>
@@ -849,14 +849,14 @@ export default function RegularTasksAdminClient() {
               <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap">
                   <input
-                    className="w-full rounded-xl border border-zinc-300 bg-white/60 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 md:w-[420px]"
+                    className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500 md:w-[420px]"
                     placeholder="Поиск по названию, расписанию, ролям, владельцу..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
 
                   <select
-                    className="rounded-xl border border-zinc-300 bg-white/60 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500"
                     value={scheduleFilter}
                     onChange={(e) => setScheduleFilter(e.target.value)}
                   >
@@ -869,7 +869,7 @@ export default function RegularTasksAdminClient() {
                   </select>
 
                   <select
-                    className="rounded-xl border border-zinc-300 bg-white/60 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500"
                     value={activeFilter}
                     onChange={(e) => setActiveFilter(e.target.value as "all" | "active" | "inactive")}
                   >
@@ -879,7 +879,7 @@ export default function RegularTasksAdminClient() {
                   </select>
 
                   <select
-                    className="rounded-xl border border-zinc-300 bg-white/60 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500"
                     value={ownerFilter}
                     onChange={(e) => setOwnerFilter(e.target.value as OwnerFilter)}
                   >
@@ -898,17 +898,17 @@ export default function RegularTasksAdminClient() {
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-2 text-xs text-zinc-600">
-                <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1">
+              <div className="flex flex-wrap gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                <span className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1">
                   Всего: {templatesTotal}
                 </span>
-                <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1">
+                <span className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1">
                   Показано: {filteredTemplates.length}
                 </span>
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-900">
+                <span className="rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1 text-amber-900 dark:text-amber-200">
                   Дефектных owner_unit_id: {defectTemplatesTotal}
                 </span>
-                <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1">
+                <span className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1">
                   В текущем фильтре: {defectTemplatesVisible}
                 </span>
               </div>
@@ -917,13 +917,13 @@ export default function RegularTasksAdminClient() {
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-1 flex-col gap-2 md:flex-row">
                 <input
-                  className="h-10 rounded-xl border border-zinc-300 bg-white/60 px-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 md:w-[260px]"
+                  className="h-10 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500 md:w-[260px]"
                   placeholder="2026-03-08T10:00:00"
                   value={runAtLocalIso}
                   onChange={(e) => setRunAtLocalIso(e.target.value)}
                 />
 
-                <label className="flex items-center gap-2 rounded-xl border border-zinc-300 bg-white/60 px-3 py-2 text-sm text-zinc-800">
+                <label className="flex items-center gap-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200">
                   <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
                   dry_run
                 </label>
@@ -933,7 +933,7 @@ export default function RegularTasksAdminClient() {
                 type="button"
                 onClick={handleRunSubmit}
                 disabled={runSubmitting}
-                className="rounded-xl border border-zinc-300 bg-white/60 px-4 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {runSubmitting ? "Запуск..." : dryRun ? "Пробный запуск" : "Боевой запуск"}
               </button>
@@ -941,23 +941,23 @@ export default function RegularTasksAdminClient() {
           )}
 
           {(runSubmitError || lastRunResult) && (
-            <div className="rounded-2xl border border-zinc-200 bg-white/50 px-4 py-3 text-sm">
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-3 text-sm">
               {runSubmitError ? (
-                <div className="text-red-700">{runSubmitError}</div>
+                <div className="text-red-700 dark:text-red-300">{runSubmitError}</div>
               ) : lastRunResult ? (
-                <div className="flex flex-wrap gap-x-5 gap-y-1 text-zinc-700">
+                <div className="flex flex-wrap gap-x-5 gap-y-1 text-zinc-700 dark:text-zinc-300">
                   <div>
-                    <span className="font-medium text-zinc-800">run_id:</span> {lastRunResult.run_id}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">run_id:</span> {lastRunResult.run_id}
                   </div>
                   <div>
-                    <span className="font-medium text-zinc-800">templates_due:</span>{" "}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">templates_due:</span>{" "}
                     {lastRunResult.stats?.templates_due ?? 0}
                   </div>
                   <div>
-                    <span className="font-medium text-zinc-800">created:</span> {lastRunResult.stats?.created ?? 0}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">created:</span> {lastRunResult.stats?.created ?? 0}
                   </div>
                   <div>
-                    <span className="font-medium text-zinc-800">errors:</span> {lastRunResult.stats?.errors ?? 0}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">errors:</span> {lastRunResult.stats?.errors ?? 0}
                   </div>
                 </div>
               ) : null}
@@ -967,24 +967,24 @@ export default function RegularTasksAdminClient() {
       </section>
 
       {activeTab === "templates" ? (
-        <section className="rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm">
+        <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 shadow-sm">
           {templatesLoading ? (
-            <div className="p-5 text-sm text-zinc-600">Загрузка шаблонов...</div>
+            <div className="p-5 text-sm text-zinc-600 dark:text-zinc-400">Загрузка шаблонов...</div>
           ) : templatesError ? (
-            <div className="m-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="m-3 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 p-4 text-sm text-red-700 dark:text-red-300">
               {templatesError}
             </div>
           ) : (
             <div className="overflow-auto rounded-2xl">
               <table className="min-w-full table-fixed text-sm" lang="ru" translate="no">
-                <thead className="sticky top-0 bg-zinc-100 text-left">
+                <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-900 text-left">
                   <tr>
-                    <th className="w-[52px] px-3 py-2 font-medium text-zinc-700">Ид</th>
-                    <th className="px-3 py-2 font-medium text-zinc-700">Шаблон</th>
-                    <th className="w-[150px] px-3 py-2 font-medium text-zinc-700">Периодичность</th>
-                    <th className="w-[190px] px-3 py-2 font-medium text-zinc-700">Исполнитель</th>
-                    <th className="w-[210px] px-3 py-2 font-medium text-zinc-700">Подразделение</th>
-                    <th className="w-[170px] px-3 py-2 font-medium text-zinc-700">Действия</th>
+                    <th className="w-[52px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Ид</th>
+                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Шаблон</th>
+                    <th className="w-[150px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Периодичность</th>
+                    <th className="w-[190px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Исполнитель</th>
+                    <th className="w-[210px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Подразделение</th>
+                    <th className="w-[170px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Действия</th>
                   </tr>
                 </thead>
 
@@ -997,33 +997,33 @@ export default function RegularTasksAdminClient() {
                       <tr
                         key={item.regular_task_id}
                         className={[
-                          "cursor-pointer border-t border-zinc-200 align-top transition",
+                          "cursor-pointer border-t border-zinc-200 dark:border-zinc-800 align-top transition",
                           selected
-                            ? "bg-zinc-200/60"
+                            ? "bg-zinc-200/60 dark:bg-zinc-800/60"
                             : ownerDefect
-                              ? "bg-amber-50 hover:bg-amber-50"
-                              : "hover:bg-zinc-200/50",
+                              ? "bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-50 dark:bg-amber-950/30"
+                              : "hover:bg-zinc-200 dark:hover:bg-zinc-700/50 dark:hover:bg-zinc-800/50",
                         ].join(" ")}
                         onClick={() => openViewTemplate(item)}
                       >
-                        <td className="px-3 py-2 text-zinc-800">{item.regular_task_id}</td>
+                        <td className="px-3 py-2 text-zinc-800 dark:text-zinc-200">{item.regular_task_id}</td>
 
-                        <td className="px-3 py-2 text-zinc-900">
+                        <td className="px-3 py-2 text-zinc-900 dark:text-zinc-50">
                           <div className="font-medium">{item.title}</div>
                         </td>
 
-                        <td className="px-3 py-2 text-zinc-700">{scheduleLabel(item)}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{scheduleLabel(item)}</td>
 
-                        <td className="px-3 py-2 text-zinc-700">{roleLabel(item)}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{roleLabel(item)}</td>
 
                         <td className="px-3 py-2">
                           <div className="flex flex-col gap-1">
-                            <div className="text-zinc-900">{item.owner_unit_name?.trim() || "—"}</div>
-                            <div className="text-xs text-zinc-600">
+                            <div className="text-zinc-900 dark:text-zinc-50">{item.owner_unit_name?.trim() || "—"}</div>
+                            <div className="text-xs text-zinc-600 dark:text-zinc-400">
                               owner_unit_id: {item.owner_unit_id ?? "—"}
                             </div>
                             {ownerDefect ? (
-                              <span className="inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                              <span className="inline-flex w-fit rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:text-amber-200">
                                 Дефект
                               </span>
                             ) : null}
@@ -1038,7 +1038,7 @@ export default function RegularTasksAdminClient() {
                                 e.stopPropagation();
                                 openViewTemplate(item);
                               }}
-                              className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-xs text-zinc-900 transition hover:bg-zinc-200"
+                              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                             >
                               Открыть
                             </button>
@@ -1049,7 +1049,7 @@ export default function RegularTasksAdminClient() {
                                 e.stopPropagation();
                                 openEditTemplate(item);
                               }}
-                              className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-xs text-zinc-900 transition hover:bg-zinc-200"
+                              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                             >
                               Изменить
                             </button>
@@ -1060,7 +1060,7 @@ export default function RegularTasksAdminClient() {
                                 e.stopPropagation();
                                 void deleteTemplate(item);
                               }}
-                              className="rounded-md border border-red-300 bg-transparent px-2.5 py-1 text-xs text-red-700 transition hover:bg-red-50"
+                              className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2.5 py-1 text-xs text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
                             >
                               Удалить
                             </button>
@@ -1072,7 +1072,7 @@ export default function RegularTasksAdminClient() {
 
                   {filteredTemplates.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-zinc-600">
+                      <td colSpan={6} className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400">
                         Нет данных.
                       </td>
                     </tr>
@@ -1084,24 +1084,24 @@ export default function RegularTasksAdminClient() {
         </section>
       ) : (
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
-          <section className="rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm">
+          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 shadow-sm">
             {runsLoading ? (
-              <div className="p-5 text-sm text-zinc-600">Загрузка истории запусков...</div>
+              <div className="p-5 text-sm text-zinc-600 dark:text-zinc-400">Загрузка истории запусков...</div>
             ) : runsError ? (
-              <div className="m-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <div className="m-3 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 p-4 text-sm text-red-700 dark:text-red-300">
                 {runsError}
               </div>
             ) : (
               <div className="overflow-auto rounded-2xl">
                 <table className="min-w-full table-fixed text-sm">
-                  <thead className="bg-zinc-100 text-left">
+                  <thead className="bg-zinc-100 dark:bg-zinc-900 text-left">
                     <tr>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Запуск</th>
-                      <th className="w-[210px] px-3 py-2 font-medium text-zinc-700">Старт</th>
-                      <th className="w-[110px] px-3 py-2 font-medium text-zinc-700">Статус</th>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Создано</th>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Дедупл.</th>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Ошибки</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Запуск</th>
+                      <th className="w-[210px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Старт</th>
+                      <th className="w-[110px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Статус</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Создано</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Дедупл.</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Ошибки</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1111,24 +1111,24 @@ export default function RegularTasksAdminClient() {
                         <tr
                           key={run.run_id}
                           className={[
-                            "cursor-pointer border-t border-zinc-200",
-                            selected ? "bg-zinc-200/80" : "hover:bg-zinc-200/50",
+                            "cursor-pointer border-t border-zinc-200 dark:border-zinc-800",
+                            selected ? "bg-zinc-200/80 dark:bg-zinc-800/80" : "hover:bg-zinc-200 dark:hover:bg-zinc-700/50 dark:hover:bg-zinc-800/50",
                           ].join(" ")}
                           onClick={() => setSelectedRunId(run.run_id)}
                         >
-                          <td className="px-3 py-2 font-medium text-zinc-900">{run.run_id}</td>
-                          <td className="px-3 py-2 text-zinc-700">{fmtDateTime(run.started_at)}</td>
+                          <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">{run.run_id}</td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{fmtDateTime(run.started_at)}</td>
                           <td className={`px-3 py-2 ${statTone(run.status)}`}>{run.status}</td>
-                          <td className="px-3 py-2 text-zinc-700">{run.stats?.created ?? 0}</td>
-                          <td className="px-3 py-2 text-zinc-700">{run.stats?.deduped ?? 0}</td>
-                          <td className="px-3 py-2 text-zinc-700">{run.stats?.errors ?? 0}</td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{run.stats?.created ?? 0}</td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{run.stats?.deduped ?? 0}</td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{run.stats?.errors ?? 0}</td>
                         </tr>
                       );
                     })}
 
                     {runs.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-zinc-600">
+                        <td colSpan={6} className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400">
                           Нет запусков.
                         </td>
                       </tr>
@@ -1139,56 +1139,56 @@ export default function RegularTasksAdminClient() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-zinc-200 bg-zinc-100 p-3 shadow-sm">
+          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 shadow-sm">
             <div className="mb-3">
-              <h3 className="text-base font-semibold text-zinc-900">Детализация запуска</h3>
-              <p className="mt-0.5 text-sm text-zinc-600">
+              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Детализация запуска</h3>
+              <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
                 {selectedRunId != null ? `run_id = ${selectedRunId}` : "Запуск не выбран"}
               </p>
             </div>
 
             {selectedRunId == null ? (
-              <div className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-600">
+              <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-5 text-sm text-zinc-600 dark:text-zinc-400">
                 Выбери запуск в таблице слева.
               </div>
             ) : runItemsLoading ? (
-              <div className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-600">
+              <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-5 text-sm text-zinc-600 dark:text-zinc-400">
                 Загрузка деталей...
               </div>
             ) : runItemsError ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 p-4 text-sm text-red-700 dark:text-red-300">
                 {runItemsError}
               </div>
             ) : (
-              <div className="overflow-auto rounded-2xl border border-zinc-200">
+              <div className="overflow-auto rounded-2xl border border-zinc-200 dark:border-zinc-800">
                 <table className="min-w-full table-fixed text-sm">
-                  <thead className="bg-zinc-100 text-left">
+                  <thead className="bg-zinc-100 dark:bg-zinc-900 text-left">
                     <tr>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Шаблон</th>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Период</th>
-                      <th className="w-[170px] px-3 py-2 font-medium text-zinc-700">Исполнитель</th>
-                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-700">Due</th>
-                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-700">Создано</th>
-                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700">Статус</th>
-                      <th className="px-3 py-2 font-medium text-zinc-700">Ошибка</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Шаблон</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Период</th>
+                      <th className="w-[170px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Исполнитель</th>
+                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Due</th>
+                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Создано</th>
+                      <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Статус</th>
+                      <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Ошибка</th>
                     </tr>
                   </thead>
                   <tbody>
                     {runItems.map((item) => (
-                      <tr key={item.item_id} className="border-t border-zinc-200 align-top hover:bg-zinc-200/50">
-                        <td className="px-3 py-2 text-zinc-800">{item.regular_task_id}</td>
-                        <td className="px-3 py-2 text-zinc-700">{item.period_id ?? "—"}</td>
-                        <td className="px-3 py-2 text-zinc-700">{roleLabel(item)}</td>
-                        <td className="px-3 py-2 text-zinc-700">{yesNo(item.is_due)}</td>
-                        <td className="px-3 py-2 text-zinc-700">{item.created_tasks}</td>
+                      <tr key={item.item_id} className="border-t border-zinc-200 dark:border-zinc-800 align-top hover:bg-zinc-200 dark:hover:bg-zinc-700/50 dark:hover:bg-zinc-800/50">
+                        <td className="px-3 py-2 text-zinc-800 dark:text-zinc-200">{item.regular_task_id}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{item.period_id ?? "—"}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{roleLabel(item)}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{yesNo(item.is_due)}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{item.created_tasks}</td>
                         <td className={`px-3 py-2 ${statTone(item.status)}`}>{item.status}</td>
-                        <td className="px-3 py-2 text-xs text-red-700">{item.error ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-red-700 dark:text-red-300">{item.error ?? "—"}</td>
                       </tr>
                     ))}
 
                     {runItems.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-zinc-600">
+                        <td colSpan={7} className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400">
                           Нет элементов запуска.
                         </td>
                       </tr>
@@ -1208,107 +1208,107 @@ export default function RegularTasksAdminClient() {
         onClose={closeDrawer}
       >
         {drawerMode === "view" ? (
-          <div className="flex h-full flex-col bg-white text-zinc-900">
+          <div className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {drawerLoading && !currentTemplate ? (
-                <div className="text-sm text-zinc-600">Загрузка...</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка...</div>
               ) : !currentTemplate ? (
-                <div className="text-sm text-zinc-600">Шаблон не выбран.</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">Шаблон не выбран.</div>
               ) : (
                 <div className="space-y-4">
                   {!!drawerError && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                       {drawerError}
                     </div>
                   )}
 
                   {currentTemplateHasOwnerDefect ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
                       Диагностика: у шаблона не заполнен owner_unit_id.
                     </div>
                   ) : null}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Ид</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.regular_task_id}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Ид</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.regular_task_id}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Статус</div>
-                      <div className="mt-1 text-sm text-zinc-900">
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
                         {currentTemplate.is_active ? "Активен" : "Неактивен"}
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Тип расписания</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.schedule_type ?? "—"}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Тип расписания</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.schedule_type ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Исполнитель</div>
-                      <div className="mt-1 text-sm text-zinc-900">{roleLabel(currentTemplate)}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Исполнитель</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{roleLabel(currentTemplate)}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">owner_unit_id</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.owner_unit_id ?? "—"}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">owner_unit_id</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.owner_unit_id ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Подразделение</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.owner_unit_name ?? "—"}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Подразделение</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.owner_unit_name ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Диагностика owner_unit_id</div>
-                      <div className="mt-1 text-sm text-zinc-900">
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Диагностика owner_unit_id</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
                         {currentTemplateHasOwnerDefect ? "Дефект" : "Корректно"}
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Создать за N дней</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.create_offset_days ?? 0}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Создать за N дней</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.create_offset_days ?? 0}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Срок +N дней</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.due_offset_days ?? 0}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Срок +N дней</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.due_offset_days ?? 0}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Область назначения</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.assignment_scope ?? "—"}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Область назначения</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.assignment_scope ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Создал пользователь</div>
-                      <div className="mt-1 text-sm text-zinc-900">{currentTemplate.created_by_user_id ?? "—"}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Создал пользователь</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.created_by_user_id ?? "—"}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-xs text-zinc-600">Обновлено</div>
-                      <div className="mt-1 text-sm text-zinc-900">{fmtDateTime(currentTemplate.updated_at)}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Обновлено</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.updated_at)}</div>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-xs text-zinc-600">Описание</div>
-                    <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900">
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400">Описание</div>
+                    <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900 dark:text-zinc-50">
                       {currentTemplate.description ?? "—"}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-xs text-zinc-600">owner_unit</div>
-                    <div className="mt-2 text-sm text-zinc-900">{ownerUnitLabel(currentTemplate)}</div>
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400">owner_unit</div>
+                    <div className="mt-2 text-sm text-zinc-900 dark:text-zinc-50">{ownerUnitLabel(currentTemplate)}</div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-xs text-zinc-600">schedule_params</div>
-                    <pre className="mt-2 overflow-auto text-sm text-zinc-800">
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400">schedule_params</div>
+                    <pre className="mt-2 overflow-auto text-sm text-zinc-800 dark:text-zinc-200">
                       {JSON.stringify(currentTemplate.schedule_params ?? {}, null, 2)}
                     </pre>
                   </div>
@@ -1317,12 +1317,12 @@ export default function RegularTasksAdminClient() {
             </div>
 
             {currentTemplate ? (
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 px-5 py-3">
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800 px-5 py-3">
                 <button
                   type="button"
                   onClick={() => setDrawerMode("edit")}
                   disabled={drawerSaving || drawerLoading}
-                  className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-1.5 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 >
                   Изменить
                 </button>
@@ -1331,7 +1331,7 @@ export default function RegularTasksAdminClient() {
                   type="button"
                   onClick={() => void toggleTemplateActive(true)}
                   disabled={drawerSaving || drawerLoading || currentTemplate.is_active === true}
-                  className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-1.5 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 >
                   Активировать
                 </button>
@@ -1340,7 +1340,7 @@ export default function RegularTasksAdminClient() {
                   type="button"
                   onClick={() => void toggleTemplateActive(false)}
                   disabled={drawerSaving || drawerLoading || currentTemplate.is_active === false}
-                  className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-1.5 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 >
                   Деактивировать
                 </button>
@@ -1349,7 +1349,7 @@ export default function RegularTasksAdminClient() {
                   type="button"
                   onClick={() => void deleteTemplate(currentTemplate)}
                   disabled={drawerSaving || drawerLoading}
-                  className="rounded-lg border border-red-200 bg-red-50 px-4 py-1.5 text-sm text-red-800 transition hover:bg-red-50 disabled:opacity-60"
+                  className="rounded-lg border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-1.5 text-sm text-red-800 dark:text-red-200 transition hover:bg-red-50 dark:bg-red-950/35 disabled:opacity-60"
                 >
                   Удалить
                 </button>

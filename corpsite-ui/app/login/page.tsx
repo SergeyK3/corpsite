@@ -108,7 +108,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[calc(100vh-0px)] flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-zinc-950 p-6 shadow-sm">
         <div className="mb-6">
           <h1 className="text-xl font-semibold">Вход</h1>
           <p className="mt-1 text-sm text-muted-foreground">Введите свой логин и пароль.</p>
@@ -164,7 +164,7 @@ export default function LoginPage() {
           </div>
 
           {error ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-3 py-2 text-sm text-red-700 dark:text-red-300">
               {error}
             </div>
           ) : null}

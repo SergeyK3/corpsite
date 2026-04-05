@@ -60,28 +60,28 @@ export default function TaskEditForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white text-zinc-900">
+    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
           {!!error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
               {error}
             </div>
           )}
 
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-            <h3 className="mb-3 text-base font-semibold text-zinc-900">Данные задачи</h3>
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+            <h3 className="mb-3 text-base font-semibold text-zinc-900 dark:text-zinc-50">Данные задачи</h3>
 
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
-                <label htmlFor="task-edit-title" className="text-sm font-medium text-zinc-800">
+                <label htmlFor="task-edit-title" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                   Название <span className="text-red-400">*</span>
                 </label>
                 <input
                   id="task-edit-title"
                   value={values.title}
                   onChange={(e) => setValues((prev) => ({ ...prev, title: e.target.value }))}
-                  className="h-10 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-10 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   placeholder="Название задачи"
                 />
               </div>
@@ -89,7 +89,7 @@ export default function TaskEditForm({
               {isSystemAdmin ? (
                 <>
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="task-edit-description" className="text-sm font-medium text-zinc-800">
+                    <label htmlFor="task-edit-description" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                       Описание
                     </label>
                     <textarea
@@ -97,13 +97,13 @@ export default function TaskEditForm({
                       value={values.description}
                       onChange={(e) => setValues((prev) => ({ ...prev, description: e.target.value }))}
                       rows={5}
-                      className="min-h-[120px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                      className="min-h-[120px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                       placeholder="Описание"
                     />
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="task-edit-source-note" className="text-sm font-medium text-zinc-800">
+                    <label htmlFor="task-edit-source-note" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                       Примечание / источник
                     </label>
                     <textarea
@@ -111,7 +111,7 @@ export default function TaskEditForm({
                       value={values.source_note}
                       onChange={(e) => setValues((prev) => ({ ...prev, source_note: e.target.value }))}
                       rows={3}
-                      className="min-h-[80px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                      className="min-h-[80px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                       placeholder="Внутреннее примечание"
                     />
                   </div>
@@ -119,7 +119,7 @@ export default function TaskEditForm({
               ) : null}
 
               <div className="flex flex-col gap-2">
-                <label htmlFor="task-edit-due" className="text-sm font-medium text-zinc-800">
+                <label htmlFor="task-edit-due" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                   Срок (дата)
                 </label>
                 <input
@@ -127,18 +127,18 @@ export default function TaskEditForm({
                   type="date"
                   value={values.due_date}
                   onChange={(e) => setValues((prev) => ({ ...prev, due_date: e.target.value }))}
-                  className="h-10 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400"
+                  className="h-10 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
                 />
               </div>
             </div>
           </div>
 
           {reportSection ? (
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-              <h3 className="mb-3 text-base font-semibold text-zinc-900">Отчёт</h3>
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+              <h3 className="mb-3 text-base font-semibold text-zinc-900 dark:text-zinc-50">Отчёт</h3>
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="task-edit-report-link" className="text-sm font-medium text-zinc-800">
+                  <label htmlFor="task-edit-report-link" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     Ссылка или путь на отчёт
                   </label>
                   <input
@@ -147,11 +147,11 @@ export default function TaskEditForm({
                     onChange={(e) => reportSection.onLinkChange(e.target.value)}
                     disabled={reportSection.disabled}
                     placeholder="https://... или \\server\share\... или d:\..."
-                    className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
+                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
                   />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="task-edit-report-comment" className="text-sm font-medium text-zinc-800">
+                  <label htmlFor="task-edit-report-comment" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     Комментарий к отчёту (при необходимости)
                   </label>
                   <textarea
@@ -161,7 +161,7 @@ export default function TaskEditForm({
                     disabled={reportSection.disabled}
                     rows={3}
                     placeholder="Комментарий"
-                    className="min-h-[80px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
+                    className="min-h-[80px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
                   />
                 </div>
                 <button
@@ -178,12 +178,12 @@ export default function TaskEditForm({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-6 py-4">
+      <div className="flex items-center justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
         <button
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+          className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
         >
           Закрыть
         </button>

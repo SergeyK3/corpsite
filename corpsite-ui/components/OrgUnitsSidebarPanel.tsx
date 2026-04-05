@@ -332,8 +332,8 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
         <div
           className={[
             "flex items-center gap-2 rounded-lg border px-2 py-1 text-sm",
-            "border-zinc-200 bg-zinc-100 hover:bg-zinc-200",
-            isSelected ? "border-zinc-400 bg-zinc-200" : "",
+            "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+            isSelected ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800" : "",
           ].join(" ")}
           style={{ paddingLeft: 8 + depth * 10 }}
         >
@@ -341,7 +341,7 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
             <button
               type="button"
               onClick={() => toggle(n.key)}
-              className="h-5 w-5 rounded-md border border-zinc-200 bg-zinc-100 text-[11px] text-zinc-800 hover:bg-zinc-200"
+              className="h-5 w-5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-[11px] text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
               aria-label={isOpen ? "Свернуть" : "Развернуть"}
               title={isOpen ? "Свернуть" : "Развернуть"}
             >
@@ -355,7 +355,7 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
             type="button"
             className={[
               "min-w-0 flex-1 truncate text-left",
-              selectable ? "text-zinc-900" : "text-zinc-700",
+              selectable ? "text-zinc-900 dark:text-zinc-50" : "text-zinc-700 dark:text-zinc-300",
             ].join(" ")}
             onClick={() => {
               if (!selectable) {
@@ -382,26 +382,26 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-2.5">
-      <div className="mb-2 text-sm font-semibold text-zinc-900">Отделения</div>
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-2.5">
+      <div className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">Отделения</div>
 
       <div>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Поиск по отделениям"
-          className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none"
+          className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none"
         />
       </div>
 
       <div className="mt-3 max-h-[calc(100vh-260px)] space-y-1 overflow-auto pr-1">
-        {loading ? <div className="text-sm text-zinc-600">Загрузка…</div> : null}
+        {loading ? <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
         {err ? <div className="text-sm text-red-400">Ошибка: {err}</div> : null}
 
         {!loading && !err ? filtered.map((n) => renderNode(n, 0)) : null}
 
         {!loading && !err && filtered.length === 0 ? (
-          <div className="text-sm text-zinc-600">Ничего не найдено.</div>
+          <div className="text-sm text-zinc-600 dark:text-zinc-400">Ничего не найдено.</div>
         ) : null}
       </div>
     </div>

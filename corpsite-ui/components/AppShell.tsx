@@ -103,8 +103,8 @@ function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] })
             className={[
               "block rounded-lg border px-2.5 py-1 text-sm leading-tight transition",
               active
-                ? "border-zinc-400 bg-zinc-200 text-zinc-900"
-                : "border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200",
+                ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700",
             ].join(" ")}
           >
             {it.title}
@@ -131,20 +131,20 @@ function RareSidebarGroup({ pathname }: { pathname: string }) {
         className={[
           "flex w-full items-center justify-between rounded-lg border px-2.5 py-1 text-left text-sm leading-tight transition",
           sectionActive
-            ? "border-zinc-400 bg-zinc-200 text-zinc-900"
-            : "border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200",
+            ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+            : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700",
         ].join(" ")}
         aria-expanded={open}
         aria-label="Показать дополнительные справочники"
       >
         <span className="text-base font-semibold leading-none">…</span>
-        <span className={["text-xs text-zinc-600 transition-transform", open ? "rotate-180" : ""].join(" ")}>
+        <span className={["text-xs text-zinc-600 dark:text-zinc-400 transition-transform", open ? "rotate-180" : ""].join(" ")}>
           ▾
         </span>
       </button>
 
       {open ? (
-        <div className="ml-2 space-y-0.5 border-l border-zinc-200 pl-2">
+        <div className="ml-2 space-y-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-2">
           {SECONDARY_DIRECTORY_NAV.map((item) => {
             const active = isNavItemActive(pathname, item);
 
@@ -155,8 +155,8 @@ function RareSidebarGroup({ pathname }: { pathname: string }) {
                 className={[
                   "block rounded-lg px-2.5 py-1 text-sm leading-tight transition",
                   active
-                    ? "bg-zinc-200 text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900",
+                    ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-900",
                 ].join(" ")}
               >
                 {item.title}
@@ -271,7 +271,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isLogin) return <>{children}</>;
 
   return (
-    <div className="min-h-[calc(100vh-52px)] bg-white text-zinc-900">
+    <div className="min-h-[calc(100vh-52px)] bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="w-full px-3 py-2 xl:px-4 xl:py-3">
         <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -280,24 +280,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <button
             onClick={onLogoutClick}
-            className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-800 hover:bg-zinc-200"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
           >
             Выйти
           </button>
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-3 text-sm text-zinc-600">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
             Загрузка…
           </div>
         ) : err ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="rounded-2xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 p-3 text-sm text-red-800 dark:text-red-200">
             {err}
           </div>
         ) : isAdmin ? (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
             <aside className="space-y-2.5">
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-1">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 <div className="space-y-1">
                   <SidebarNav pathname={pathname} items={PRIMARY_ADMIN_NAV} />
                   <RareSidebarGroup pathname={pathname} />
@@ -313,7 +313,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="grid grid-cols-1 gap-4">
             <section className="min-w-0">
               {forbiddenNonAdminRoute ? (
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4 text-sm text-zinc-600">
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 text-sm text-zinc-600 dark:text-zinc-400">
                   Переход к задачам…
                 </div>
               ) : (

@@ -463,22 +463,22 @@ export default function DictionaryPageClient({ config }: Props) {
   }, [parentOptions, editingItem, config]);
 
   return (
-    <div className="relative rounded-2xl border border-zinc-200 bg-zinc-100 text-zinc-900">
+    <div className="relative rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50">
       <div className="space-y-6 p-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{config.title}</h1>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-100 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 flex-col gap-3 md:flex-row">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={config.searchPlaceholder}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm outline-none placeholder:text-zinc-600 focus:border-zinc-500 md:max-w-xl"
+              className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-4 py-2.5 text-sm outline-none placeholder:text-zinc-600 focus:border-zinc-500 md:max-w-xl"
             />
 
-            <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-700">
+            <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-4 py-2.5 text-sm text-zinc-700 dark:text-zinc-300">
               <input
                 type="checkbox"
                 checked={showActiveOnly}
@@ -497,7 +497,7 @@ export default function DictionaryPageClient({ config }: Props) {
                 setShowActiveOnly(false);
                 void loadItems();
               }}
-              className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-200"
+              className="rounded-xl border border-zinc-300 dark:border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
             >
               Обновить
             </button>
@@ -513,26 +513,26 @@ export default function DictionaryPageClient({ config }: Props) {
         </div>
 
         {error ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <div className="rounded-2xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
             {error}
           </div>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse">
               <thead className="bg-zinc-100/80">
-                <tr className="border-b border-zinc-200">
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
                   {config.columns.map((column) => (
                     <th
                       key={column.key}
-                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600"
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400"
                       style={column.width ? { width: column.width } : undefined}
                     >
                       {column.title}
                     </th>
                   ))}
-                  <th className="w-[180px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                  <th className="w-[180px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
                     Действия
                   </th>
                 </tr>
@@ -541,13 +541,13 @@ export default function DictionaryPageClient({ config }: Props) {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={config.columns.length + 1} className="px-4 py-10 text-center text-sm text-zinc-600">
+                    <td colSpan={config.columns.length + 1} className="px-4 py-10 text-center text-sm text-zinc-600 dark:text-zinc-400">
                       Загрузка...
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={config.columns.length + 1} className="px-4 py-10 text-center text-sm text-zinc-600">
+                    <td colSpan={config.columns.length + 1} className="px-4 py-10 text-center text-sm text-zinc-600 dark:text-zinc-400">
                       Нет данных
                     </td>
                   </tr>
@@ -556,12 +556,12 @@ export default function DictionaryPageClient({ config }: Props) {
                     const rowKey = getRowKey(row, config, index);
 
                     return (
-                      <tr key={rowKey} className="border-b border-zinc-200/80 last:border-b-0">
+                      <tr key={rowKey} className="border-b border-zinc-200 dark:border-zinc-800/80 last:border-b-0">
                         {config.columns.map((column) => {
                           const value = formatCellValue(row, column);
 
                           return (
-                            <td key={`${rowKey}-${column.key}`} className="px-4 py-3 text-sm text-zinc-800">
+                            <td key={`${rowKey}-${column.key}`} className="px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200">
                               {value}
                             </td>
                           );
@@ -572,7 +572,7 @@ export default function DictionaryPageClient({ config }: Props) {
                             <button
                               type="button"
                               onClick={() => openEdit(row)}
-                              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-800 transition hover:bg-zinc-200"
+                              className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                             >
                               Изменить
                             </button>
@@ -580,7 +580,7 @@ export default function DictionaryPageClient({ config }: Props) {
                             <button
                               type="button"
                               onClick={() => void onDelete(row)}
-                              className="rounded-lg border border-red-900/70 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
+                              className="rounded-lg border border-red-900/70 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
                             >
                               Удалить
                             </button>
@@ -598,22 +598,22 @@ export default function DictionaryPageClient({ config }: Props) {
 
       {drawerOpen ? (
         <>
-          <div className="fixed inset-0 z-40 bg-zinc-600/35" onClick={closeDrawer} />
-          <div className="fixed right-0 top-0 z-50 h-full w-full max-w-xl border-l border-zinc-200 bg-white shadow-2xl">
+          <div className="fixed inset-0 z-40 bg-zinc-600/35 dark:bg-black/50" onClick={closeDrawer} />
+          <div className="fixed right-0 top-0 z-50 h-full w-full max-w-xl border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
             <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-zinc-900">
+                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
                     {editingItem ? "Редактирование записи" : "Создание записи"}
                   </h2>
-                  <p className="mt-1 text-sm text-zinc-600">{config.title}</p>
+                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{config.title}</p>
                 </div>
 
                 <button
                   type="button"
                   onClick={closeDrawer}
                   disabled={saving}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Закрыть
                 </button>
@@ -624,7 +624,7 @@ export default function DictionaryPageClient({ config }: Props) {
                   {visibleFormFields.map((field) => {
                     if (field.type === "checkbox") {
                       return (
-                        <label key={field.key} className="flex items-center gap-3 text-sm text-zinc-800">
+                        <label key={field.key} className="flex items-center gap-3 text-sm text-zinc-800 dark:text-zinc-200">
                           <input
                             type="checkbox"
                             checked={Boolean(form[field.key])}
@@ -639,7 +639,7 @@ export default function DictionaryPageClient({ config }: Props) {
                     if (field.type === "textarea") {
                       return (
                         <div key={field.key} className="space-y-2">
-                          <label className="block text-sm font-medium text-zinc-700">
+                          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                             {field.label}
                             {field.required ? <span className="ml-1 text-red-400">*</span> : null}
                           </label>
@@ -648,7 +648,7 @@ export default function DictionaryPageClient({ config }: Props) {
                             onChange={(e) => onChangeField(field.key, e.target.value)}
                             placeholder={field.placeholder}
                             rows={4}
-                            className="w-full rounded-xl border border-zinc-300 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-600 focus:border-zinc-500"
+                            className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none placeholder:text-zinc-600 focus:border-zinc-500"
                           />
                         </div>
                       );
@@ -657,11 +657,11 @@ export default function DictionaryPageClient({ config }: Props) {
                     if (isOrgUnitsConfig(config) && field.key === "parent_unit_id") {
                       return (
                         <div key={field.key} className="space-y-2">
-                          <label className="block text-sm font-medium text-zinc-700">{field.label}</label>
+                          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{field.label}</label>
                           <select
                             value={String(form[field.key] ?? "")}
                             onChange={(e) => onChangeField(field.key, e.target.value)}
-                            className="w-full rounded-xl border border-zinc-300 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-500"
+                            className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none focus:border-zinc-500"
                           >
                             <option value="">Не выбрано</option>
                             {availableParentOptions.map((option) => (
@@ -677,11 +677,11 @@ export default function DictionaryPageClient({ config }: Props) {
                     if (isOrgUnitsConfig(config) && field.key === "group_id") {
                       return (
                         <div key={field.key} className="space-y-2">
-                          <label className="block text-sm font-medium text-zinc-700">{field.label}</label>
+                          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{field.label}</label>
                           <select
                             value={String(form[field.key] ?? "")}
                             onChange={(e) => onChangeField(field.key, e.target.value)}
-                            className="w-full rounded-xl border border-zinc-300 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-500"
+                            className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none focus:border-zinc-500"
                           >
                             <option value="">Не выбрано</option>
                             {groupOptions.map((option) => (
@@ -696,7 +696,7 @@ export default function DictionaryPageClient({ config }: Props) {
 
                     return (
                       <div key={field.key} className="space-y-2">
-                        <label className="block text-sm font-medium text-zinc-700">
+                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                           {field.label}
                           {field.required ? <span className="ml-1 text-red-400">*</span> : null}
                         </label>
@@ -704,19 +704,19 @@ export default function DictionaryPageClient({ config }: Props) {
                           value={form[field.key] ?? ""}
                           onChange={(e) => onChangeField(field.key, e.target.value)}
                           placeholder={field.placeholder}
-                          className="w-full rounded-xl border border-zinc-300 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-600 focus:border-zinc-500"
+                          className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none placeholder:text-zinc-600 focus:border-zinc-500"
                         />
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-zinc-200 bg-white px-6 py-4">
+                <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-6 py-4">
                   <button
                     type="button"
                     onClick={closeDrawer}
                     disabled={saving}
-                    className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-xl border border-zinc-300 dark:border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Отмена
                   </button>

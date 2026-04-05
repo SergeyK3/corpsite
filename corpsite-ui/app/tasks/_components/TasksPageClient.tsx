@@ -275,11 +275,11 @@ function reportStatusBadgeText(st: ReportUiState): string {
 }
 
 function reportStatusBadgeClass(st: ReportUiState): string {
-  if (st === "approved") return "border-zinc-300 bg-zinc-100 text-zinc-800";
-  if (st === "sent_waiting") return "border-zinc-300 bg-zinc-100 text-zinc-800";
-  if (st === "draft") return "border-zinc-200 bg-zinc-50 text-zinc-700";
-  if (st === "rejected_or_archived") return "border-zinc-200 bg-zinc-50 text-zinc-600";
-  return "border-zinc-200 bg-zinc-50 text-zinc-600";
+  if (st === "approved") return "border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200";
+  if (st === "sent_waiting") return "border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200";
+  if (st === "draft") return "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300";
+  if (st === "rejected_or_archived") return "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400";
+  return "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400";
 }
 
 function currentPeriodIdOf(body: any): number {
@@ -1001,16 +1001,16 @@ export default function TasksPageClient() {
   const selectedExecutorPerson = React.useMemo(() => executorPersonLabelOf(selectedItem), [selectedItem]);
 
   return (
-    <div className="bg-zinc-50 text-zinc-900">
+    <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="w-full px-0 py-0">
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h1 className="text-2xl font-semibold text-zinc-900">Задачи</h1>
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Задачи</h1>
           </div>
 
-          <div className="border-b border-zinc-200 px-4 py-3">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 {canSeeTeamTasks ? (
                   <button
                     type="button"
@@ -1021,7 +1021,7 @@ export default function TasksPageClient() {
                     }}
                     className={[
                       "rounded-md px-3 py-2 text-sm transition",
-                      taskScope === "team" ? "bg-zinc-200 text-zinc-900" : "text-zinc-700 hover:bg-zinc-200",
+                      taskScope === "team" ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                     ].join(" ")}
                   >
                     Все задачи
@@ -1037,7 +1037,7 @@ export default function TasksPageClient() {
                   }}
                   className={[
                     "rounded-md px-3 py-2 text-sm transition",
-                    taskScope === "mine" ? "bg-zinc-200 text-zinc-900" : "text-zinc-700 hover:bg-zinc-200",
+                    taskScope === "mine" ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                   ].join(" ")}
                 >
                   Мои задачи
@@ -1055,23 +1055,23 @@ export default function TasksPageClient() {
                       ? "Поиск по задаче, роли или исполнителю"
                       : "Поиск по названию задачи"
                   }
-                  className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-10 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
               </div>
 
               <select
                 value={taskKind}
                 onChange={(e) => setTaskKind(e.target.value as TaskKindFilter)}
-                className="h-10 min-w-[180px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-400"
+                className="h-10 min-w-[180px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 {TASK_KIND_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-white text-zinc-900">
+                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                     {opt.label}
                   </option>
                 ))}
               </select>
 
-              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 {(["active", "done", "rejected"] as StatusTab[]).map((v) => (
                   <button
                     key={v}
@@ -1082,7 +1082,7 @@ export default function TasksPageClient() {
                     }}
                     className={[
                       "rounded-md px-3 py-2 text-sm transition",
-                      tab === v ? "bg-zinc-200 text-zinc-900" : "text-zinc-700 hover:bg-zinc-200",
+                      tab === v ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                     ].join(" ")}
                   >
                     {tabRu(v)}
@@ -1093,7 +1093,7 @@ export default function TasksPageClient() {
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="h-10 rounded-lg border border-zinc-200 bg-zinc-100 px-4 text-sm text-zinc-800 transition hover:bg-zinc-200"
+                className="h-10 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Обновить
               </button>
@@ -1113,24 +1113,24 @@ export default function TasksPageClient() {
 
           <div className="px-4 py-4">
             {!!pageError && (
-              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <div className="mb-4 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600 dark:text-zinc-400">
               <div>
                 {scopeRu(taskScope)} · Всего: {total} · Показано: {filteredItems.length}
                 {listLoading ? <span className="ml-2">· загрузка…</span> : null}
                 {manualRolesLoading ? <span className="ml-2">· роли…</span> : null}
               </div>
 
-              <div className="text-zinc-600">
+              <div className="text-zinc-600 dark:text-zinc-400">
                 Период: {currentPeriodName ? `${currentPeriodName} (#${currentPeriodId})` : `#${currentPeriodId}`}
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-zinc-200">
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
               <div className="overflow-x-auto">
                 <table className="w-full table-fixed border-collapse">
                   <colgroup>
@@ -1143,27 +1143,27 @@ export default function TasksPageClient() {
                   </colgroup>
 
                   <thead>
-                    <tr className="bg-zinc-100 text-left">
-                      <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600">
+                    <tr className="bg-zinc-100 dark:bg-zinc-900 text-left">
+                      <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         ID
                       </th>
-                      <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Название
                       </th>
 
                       {showExecutorColumn ? (
-                        <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600">
+                        <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                           Роль
                         </th>
                       ) : null}
 
-                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Статус
                       </th>
-                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Дедлайн
                       </th>
-                      <th className="px-2 py-3 text-center text-xs font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="px-2 py-3 text-center text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -1172,13 +1172,13 @@ export default function TasksPageClient() {
                   <tbody>
                     {listLoading ? (
                       <tr>
-                        <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-600">
+                        <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-600 dark:text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : filteredItems.length === 0 ? (
                       <tr>
-                        <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-600">
+                        <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-600 dark:text-zinc-400">
                           Записи не найдены.
                         </td>
                       </tr>
@@ -1190,28 +1190,28 @@ export default function TasksPageClient() {
                         return (
                           <tr
                             key={id}
-                            className="cursor-pointer border-t border-zinc-200 align-middle transition hover:bg-zinc-100"
+                            className="cursor-pointer border-t border-zinc-200 dark:border-zinc-800 align-middle transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
                             onClick={() => openView(item)}
                           >
-                            <td className="px-1.5 py-2 text-sm leading-5 text-zinc-900">{id}</td>
+                            <td className="px-1.5 py-2 text-sm leading-5 text-zinc-900 dark:text-zinc-50">{id}</td>
 
-                            <td className="px-2 py-2 text-sm leading-5 text-zinc-900">
+                            <td className="px-2 py-2 text-sm leading-5 text-zinc-900 dark:text-zinc-50">
                               <div className="max-w-full whitespace-normal break-words">{taskTitleOf(item)}</div>
                             </td>
 
                             {showExecutorColumn ? (
-                              <td className="px-1.5 py-2 text-sm leading-5 text-zinc-700">
+                              <td className="px-1.5 py-2 text-sm leading-5 text-zinc-700 dark:text-zinc-300">
                                 <div className="whitespace-normal break-words">
                                   {executorRoleLabelOf(item)}
                                 </div>
                               </td>
                             ) : null}
 
-                            <td className="px-2 py-2 text-sm leading-5 text-zinc-600">
+                            <td className="px-2 py-2 text-sm leading-5 text-zinc-600 dark:text-zinc-400">
                               {statusTextOf(item)}
                             </td>
 
-                            <td className="px-2 py-2 text-sm leading-5 text-zinc-600">
+                            <td className="px-2 py-2 text-sm leading-5 text-zinc-600 dark:text-zinc-400">
                               {formatDeadline(item)}
                             </td>
 
@@ -1223,7 +1223,7 @@ export default function TasksPageClient() {
                                     e.stopPropagation();
                                     openView(item);
                                   }}
-                                  className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1.5 text-[13px] leading-4 text-zinc-900 transition hover:bg-zinc-200"
+                                  className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                                 >
                                   Открыть
                                 </button>
@@ -1236,7 +1236,7 @@ export default function TasksPageClient() {
                                       openEdit(item);
                                     }}
                                     title={editButtonTitle(item)}
-                                    className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1.5 text-sm leading-5 text-zinc-900 transition hover:bg-zinc-200"
+                                    className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1.5 text-sm leading-5 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                                   >
                                     Изменить
                                   </button>
@@ -1249,7 +1249,7 @@ export default function TasksPageClient() {
                                       e.stopPropagation();
                                       void handleDelete(item, false);
                                     }}
-                                    className="rounded-md border border-red-300 bg-transparent px-2 py-1.5 text-[13px] leading-4 text-red-700 transition hover:bg-red-50"
+                                    className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-1.5 text-[13px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
                                   >
                                     Удалить
                                   </button>
@@ -1269,7 +1269,7 @@ export default function TasksPageClient() {
               <button
                 type="button"
                 onClick={() => setOffset((v) => Math.max(0, v - LIST_LIMIT))}
-                className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 disabled={listLoading || offset <= 0}
               >
                 Назад
@@ -1278,7 +1278,7 @@ export default function TasksPageClient() {
               <button
                 type="button"
                 onClick={() => setOffset((v) => v + LIST_LIMIT)}
-                className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 disabled={listLoading || items.length < LIST_LIMIT}
               >
                 Далее
@@ -1303,7 +1303,7 @@ export default function TasksPageClient() {
           </div>
         ) : drawerMode === "edit" ? (
           drawerLoading && !selectedItem ? (
-            <div className="px-6 py-5 text-sm text-zinc-600">Загрузка...</div>
+            <div className="px-6 py-5 text-sm text-zinc-600 dark:text-zinc-400">Загрузка...</div>
           ) : (
             <TaskEditForm
               initialValues={currentEditValues}
@@ -1327,28 +1327,28 @@ export default function TasksPageClient() {
             />
           )
         ) : (
-          <div className="flex h-full flex-col bg-white text-zinc-900">
+          <div className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
             <div className="flex-1 overflow-y-auto px-6 py-5">
               {drawerLoading && !selectedItem ? (
-                <div className="text-sm text-zinc-600">Загрузка...</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка...</div>
               ) : !selectedItem ? (
-                <div className="text-sm text-zinc-600">Задача не выбрана.</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">Задача не выбрана.</div>
               ) : (
                 <div className="space-y-5">
                   {!!drawerError && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                       {drawerError}
                     </div>
                   )}
 
                   {!!uiNotice && (
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-800">
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200">
                       {uiNotice}
                     </div>
                   )}
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1 text-xs text-zinc-800">
+                    <div className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200">
                       {selectedStatus}
                     </div>
 
@@ -1363,78 +1363,78 @@ export default function TasksPageClient() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="text-xs text-zinc-600">ID</div>
-                      <div className="mt-1 text-sm text-zinc-900">{taskIdOf(selectedItem)}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">ID</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{taskIdOf(selectedItem)}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="text-xs text-zinc-600">Дедлайн</div>
-                      <div className="mt-1 text-sm text-zinc-900">{formatDeadline(selectedItem)}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Дедлайн</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{formatDeadline(selectedItem)}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="text-xs text-zinc-600">Тип задачи</div>
-                      <div className="mt-1 text-sm text-zinc-900">{taskKindLabelOf(selectedItem)}</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Тип задачи</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{taskKindLabelOf(selectedItem)}</div>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="text-xs text-zinc-600">Источник</div>
-                      <div className="mt-1 text-sm text-zinc-900">
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Источник</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
                         {String(selectedItem?.source_kind ?? "—")}
                       </div>
                     </div>
 
                     {showExecutorColumn ? (
-                      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 sm:col-span-2">
-                        <div className="text-xs text-zinc-600">Роль</div>
-                        <div className="mt-1 text-sm text-zinc-900">{selectedExecutorRole}</div>
+                      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 sm:col-span-2">
+                        <div className="text-xs text-zinc-600 dark:text-zinc-400">Роль</div>
+                        <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{selectedExecutorRole}</div>
                         {selectedExecutorPerson && selectedExecutorPerson !== selectedExecutorRole ? (
-                          <div className="mt-1 text-xs text-zinc-600">{selectedExecutorPerson}</div>
+                          <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{selectedExecutorPerson}</div>
                         ) : null}
                       </div>
                     ) : null}
                   </div>
 
                   {String(selectedItem?.description ?? "").trim() ? (
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="text-xs text-zinc-600">Описание</div>
-                      <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900">
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Описание</div>
+                      <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900 dark:text-zinc-50">
                         {String(selectedItem?.description ?? "").trim()}
                       </div>
                     </div>
                   ) : null}
 
                   {String(selectedItem?.source_note ?? "").trim() ? (
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="text-xs text-zinc-600">Примечание</div>
-                      <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900">
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Примечание</div>
+                      <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900 dark:text-zinc-50">
                         {String(selectedItem?.source_note ?? "").trim()}
                       </div>
                     </div>
                   ) : null}
 
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                    <div className="mb-1 text-xs text-zinc-600">Доступные действия</div>
-                    <div className="text-sm text-zinc-900">{actionsRu(selectedAllowed)}</div>
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                    <div className="mb-1 text-xs text-zinc-600 dark:text-zinc-400">Доступные действия</div>
+                    <div className="text-sm text-zinc-900 dark:text-zinc-50">{actionsRu(selectedAllowed)}</div>
                   </div>
 
                   {String(selectedItem?.report_link ?? "").trim() ? (
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="mb-2 text-xs text-zinc-600">Отчёт</div>
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                      <div className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">Отчёт</div>
 
                       {isHttpUrl(String(selectedItem?.report_link ?? "").trim()) ? (
                         <a
                           href={String(selectedItem?.report_link ?? "").trim()}
                           target="_blank"
                           rel="noreferrer"
-                          className="break-all text-sm text-blue-600 underline"
+                          className="break-all text-sm text-blue-600 dark:text-blue-400 underline"
                         >
                           Открыть отчёт
                         </a>
                       ) : (
                         <div className="space-y-2">
-                          <div className="break-all text-sm text-zinc-800">
+                          <div className="break-all text-sm text-zinc-800 dark:text-zinc-200">
                             {String(selectedItem?.report_link ?? "").trim()}
                           </div>
 
@@ -1447,61 +1447,61 @@ export default function TasksPageClient() {
                                 setCopyHint(ok ? "Путь скопирован" : "Не удалось скопировать");
                                 window.setTimeout(() => setCopyHint(""), 1500);
                               }}
-                              className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-200"
+                              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                             >
                               Скопировать путь
                             </button>
 
                             {isUncPath(String(selectedItem?.report_link ?? "").trim()) ||
                             isWindowsDrivePath(String(selectedItem?.report_link ?? "").trim()) ? (
-                              <div className="text-xs text-zinc-600">
+                              <div className="text-xs text-zinc-600 dark:text-zinc-400">
                                 UNC/локальный путь не открывается браузером напрямую.
                               </div>
                             ) : (
-                              <div className="text-xs text-zinc-600">Ссылка не является http(s).</div>
+                              <div className="text-xs text-zinc-600 dark:text-zinc-400">Ссылка не является http(s).</div>
                             )}
 
-                            {copyHint ? <div className="text-xs text-zinc-600">• {copyHint}</div> : null}
+                            {copyHint ? <div className="text-xs text-zinc-600 dark:text-zinc-400">• {copyHint}</div> : null}
                           </div>
                         </div>
                       )}
 
                       {selectedItem?.report_submitted_at ? (
-                        <div className="mt-3 text-xs text-zinc-600">
+                        <div className="mt-3 text-xs text-zinc-600 dark:text-zinc-400">
                           Отчёт отправлен:{" "}
-                          <span className="text-zinc-800">{fmtDtRu(selectedItem?.report_submitted_at)}</span>
+                          <span className="text-zinc-800 dark:text-zinc-200">{fmtDtRu(selectedItem?.report_submitted_at)}</span>
                         </div>
                       ) : null}
 
                       {selectedItem?.report_submitted_by ? (
-                        <div className="text-xs text-zinc-600">
+                        <div className="text-xs text-zinc-600 dark:text-zinc-400">
                           Отправил:{" "}
-                          <span className="text-zinc-800">
+                          <span className="text-zinc-800 dark:text-zinc-200">
                             {roleLabelOfReport(selectedItem, "submitted")}
                           </span>
                         </div>
                       ) : null}
 
                       {selectedItem?.report_approved_at ? (
-                        <div className="mt-2 text-xs text-zinc-600">
+                        <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                           Решение принято:{" "}
-                          <span className="text-zinc-800">{fmtDtRu(selectedItem?.report_approved_at)}</span>
+                          <span className="text-zinc-800 dark:text-zinc-200">{fmtDtRu(selectedItem?.report_approved_at)}</span>
                         </div>
                       ) : null}
 
                       {selectedItem?.report_approved_by ? (
-                        <div className="text-xs text-zinc-600">
+                        <div className="text-xs text-zinc-600 dark:text-zinc-400">
                           Принял решение:{" "}
-                          <span className="text-zinc-800">
+                          <span className="text-zinc-800 dark:text-zinc-200">
                             {roleLabelOfReport(selectedItem, "approved")}
                           </span>
                         </div>
                       ) : null}
 
                       {String(selectedItem?.report_current_comment ?? "").trim() ? (
-                        <div className="mt-2 text-xs text-zinc-600">
+                        <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                           Комментарий:{" "}
-                          <span className="text-zinc-800">
+                          <span className="text-zinc-800 dark:text-zinc-200">
                             {String(selectedItem?.report_current_comment ?? "").trim()}
                           </span>
                         </div>
@@ -1511,25 +1511,25 @@ export default function TasksPageClient() {
 
                   {selectedAllowed.includes("report") ? (
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm font-medium text-zinc-800">Ссылка или путь на отчёт</label>
+                      <label className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Ссылка или путь на отчёт</label>
                       <input
                         value={reportLink}
                         onChange={(e) => setReportLink(e.target.value)}
                         placeholder="https://... или \\server\share\... или d:\..."
-                        className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                        className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                       />
                     </div>
                   ) : null}
 
                   {selectedAllowed.length > 0 ? (
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm font-medium text-zinc-800">Причина / комментарий</label>
+                      <label className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Причина / комментарий</label>
                       <textarea
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                         rows={4}
                         placeholder="Комментарий для действия"
-                        className="min-h-[96px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                        className="min-h-[96px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                       />
                     </div>
                   ) : null}
@@ -1538,8 +1538,8 @@ export default function TasksPageClient() {
             </div>
 
             {selectedItem ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 px-6 py-4">
-                <div className="text-sm text-zinc-600">{actionsRu(selectedAllowed)}</div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">{actionsRu(selectedAllowed)}</div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   {selectedEditable ? (
@@ -1547,7 +1547,7 @@ export default function TasksPageClient() {
                       type="button"
                       onClick={() => setDrawerMode("edit")}
                       disabled={saving || drawerLoading}
-                      className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
                       Изменить
                     </button>
@@ -1558,7 +1558,7 @@ export default function TasksPageClient() {
                       type="button"
                       onClick={() => void handleDelete(selectedItem, false)}
                       disabled={saving || drawerLoading}
-                      className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
                       Удалить
                     </button>
@@ -1569,7 +1569,7 @@ export default function TasksPageClient() {
                       type="button"
                       onClick={() => void handleDelete(selectedItem, true)}
                       disabled={saving || drawerLoading}
-                      className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 transition hover:bg-red-50 disabled:opacity-60"
+                      className="rounded-lg border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-2 text-sm text-red-800 dark:text-red-200 transition hover:bg-red-50 dark:bg-red-950/35 disabled:opacity-60"
                     >
                       Удалить навсегда
                     </button>
@@ -1591,7 +1591,7 @@ export default function TasksPageClient() {
                       type="button"
                       onClick={() => void runAction("approve")}
                       disabled={saving || drawerLoading}
-                      className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
                       {ACTION_RU.approve}
                     </button>
@@ -1602,7 +1602,7 @@ export default function TasksPageClient() {
                       type="button"
                       onClick={() => void runAction("reject")}
                       disabled={saving || drawerLoading}
-                      className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
                       {ACTION_RU.reject}
                     </button>
@@ -1616,7 +1616,7 @@ export default function TasksPageClient() {
                         if (ok) void runAction("archive");
                       }}
                       disabled={saving || drawerLoading}
-                      className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
                       {ACTION_RU.archive}
                     </button>

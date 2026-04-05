@@ -371,13 +371,13 @@ export default function OrgUnitsPage() {
           </div>
 
           {errorText ? (
-            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-3 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 p-3 text-sm text-red-700 dark:text-red-300">
               <div className="font-medium">Ошибка</div>
               <div className="mt-1 whitespace-pre-wrap">{errorText}</div>
             </div>
           ) : null}
 
-          {isLoading ? <div className="mb-3 rounded-xl border bg-white p-3 text-sm text-gray-600">Загрузка…</div> : null}
+          {isLoading ? <div className="mb-3 rounded-xl border bg-white dark:bg-zinc-950 p-3 text-sm text-gray-600">Загрузка…</div> : null}
 
           <div className="min-h-0 flex-1 overflow-auto">
             <OrgUnitsTree
@@ -400,7 +400,7 @@ export default function OrgUnitsPage() {
         </div>
 
         {/* RIGHT */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-white p-6 text-gray-900">
+        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-white dark:bg-zinc-950 p-6 text-gray-900">
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-sm text-gray-800">Карточка подразделения</div>
@@ -557,12 +557,12 @@ export default function OrgUnitsPage() {
       {/* Rename modal */}
       {renameOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/55 p-4"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeRename();
           }}
         >
-          <div className="w-full max-w-[520px] rounded-2xl border bg-white p-4 shadow-lg">
+          <div className="w-full max-w-[520px] rounded-2xl border bg-white dark:bg-zinc-950 p-4 shadow-lg">
             <div className="text-sm font-medium text-gray-900">Переименовать подразделение</div>
 
             <input
@@ -598,12 +598,12 @@ export default function OrgUnitsPage() {
       {/* Move modal */}
       {moveOpen && selectedNode ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/55 p-4"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeMove();
           }}
         >
-          <div className="w-full max-w-[720px] rounded-2xl border bg-white p-4 shadow-lg">
+          <div className="w-full max-w-[720px] rounded-2xl border bg-white dark:bg-zinc-950 p-4 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-gray-900">Переместить подразделение</div>

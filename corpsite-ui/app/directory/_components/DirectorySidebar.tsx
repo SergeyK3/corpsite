@@ -18,7 +18,7 @@ export default function DirectorySidebar() {
 
   return (
     <aside className="w-[360px] shrink-0 px-4 py-8">
-      <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4">
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4">
         <div className="space-y-3">
           {NAV.map((item) => {
             const active =
@@ -30,7 +30,7 @@ export default function DirectorySidebar() {
                 href={item.href}
                 className={[
                   "block rounded-lg border px-4 py-3 text-left text-sm",
-                  "border-zinc-200 bg-zinc-100 text-zinc-900 hover:bg-zinc-200",
+                  "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                   active ? "outline outline-1 outline-zinc-600" : "",
                 ].join(" ")}
               >

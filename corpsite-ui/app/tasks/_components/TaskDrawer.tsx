@@ -42,7 +42,7 @@ export default function TemplateDrawer({
       <button
         type="button"
         aria-label="Закрыть"
-        className="fixed inset-0 bg-zinc-600/35 backdrop-blur-sm"
+        className="fixed inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
 
@@ -50,20 +50,20 @@ export default function TemplateDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-drawer-title"
-        className="relative z-10 flex w-full max-w-[840px] flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl max-h-[min(920px,calc(100vh-2rem))] min-h-0"
+        className="relative z-10 flex w-full max-w-[840px] flex-col rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl max-h-[min(920px,calc(100vh-2rem))] min-h-0"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 px-5 py-4">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="task-drawer-title" className="truncate text-2xl font-semibold leading-tight text-zinc-900">
+            <h2 id="task-drawer-title" className="truncate text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
               {title}
             </h2>
-            {subtitle ? <p className="mt-0.5 text-sm text-zinc-600">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">{subtitle}</p> : null}
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-sm text-zinc-800 transition hover:bg-zinc-200"
+            className="shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
           >
             Закрыть
           </button>

@@ -4,6 +4,9 @@ import "./globals.css";
 
 import TenantTitle from "../components/TenantTitle";
 import AppShell from "../components/AppShell";
+import ThemeControl from "../components/ThemeControl";
+
+const themeBootScript = `(function(){try{var k="corpsite_ui_theme";var m=localStorage.getItem(k);if(m==="document"){document.documentElement.classList.remove("dark");}else{document.documentElement.classList.add("dark");}}catch(e){document.documentElement.classList.add("dark");}})();`;
 
 export const metadata: Metadata = {
   title: "Система личных кабинетов",
@@ -12,43 +15,23 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body>
-        <header
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-            borderBottom: "1px solid rgb(228 228 231)",
-            background: "rgb(255 255 255)",
-            color: "rgb(24 24 27)",
-          }}
-        >
-          <div
-            style={{
-              maxWidth: 1200,
-              margin: "0 auto",
-              padding: "10px 16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
+        <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+          <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-2.5">
             <a
               href="/"
-              style={{
-                fontWeight: 700,
-                textDecoration: "none",
-                color: "inherit",
-                letterSpacing: 0.2,
-              }}
+              className="font-bold tracking-wide text-inherit no-underline"
             >
               <TenantTitle />
             </a>
 
-            {/* Reserved: right side (DEV badge / user menu) */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }} />
+            <div className="flex items-center gap-2">
+              <ThemeControl />
+            </div>
           </div>
         </header>
 

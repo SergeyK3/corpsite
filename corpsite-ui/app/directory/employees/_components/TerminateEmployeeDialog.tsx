@@ -59,9 +59,9 @@ export default function TerminateEmployeeDialog({ employee, open, onClose, onSub
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/30" onClick={submitting ? undefined : onClose} />
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/55" onClick={submitting ? undefined : onClose} />
 
-      <div className="absolute left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 bg-white border rounded shadow-xl">
+      <div className="absolute left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-zinc-950 border rounded shadow-xl">
         <div className="p-4 border-b">
           <div className="font-semibold">Завершить работу сотрудника</div>
           <div className="text-sm text-gray-600 mt-1">
@@ -70,7 +70,7 @@ export default function TerminateEmployeeDialog({ employee, open, onClose, onSub
         </div>
 
         <div className="p-4 space-y-3">
-          {error ? <div className="border rounded p-3 bg-white text-sm text-red-700">{error}</div> : null}
+          {error ? <div className="border rounded p-3 bg-white dark:bg-zinc-950 text-sm text-red-700 dark:text-red-300">{error}</div> : null}
 
           <div>
             <label className="block text-xs text-gray-600 mb-1">Дата по</label>

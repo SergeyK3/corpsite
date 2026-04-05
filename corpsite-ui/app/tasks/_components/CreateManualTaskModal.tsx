@@ -225,38 +225,38 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex min-h-full flex-col bg-white text-zinc-900">
+    <form onSubmit={handleSubmit} className="flex min-h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
             <div>
-              Текущий период: <span className="text-zinc-900">#{periodId}</span>
+              Текущий период: <span className="text-zinc-900 dark:text-zinc-50">#{periodId}</span>
             </div>
-            <div className="mt-1 text-xs text-zinc-600">
+            <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
               По умолчанию дедлайн ставится на 2 дня вперёд.
             </div>
           </div>
 
           {!!error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
               {error}
             </div>
           )}
 
           {!!success && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
               {success}
             </div>
           )}
 
           {!hasRoles && (
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
               Для вашей роли сейчас нет доступных исполнителей, которым можно поставить разовую задачу.
             </div>
           )}
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="manual-task-title" className="text-sm font-medium text-zinc-800">
+            <label htmlFor="manual-task-title" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Название задачи <span className="text-red-400">*</span>
             </label>
             <input
@@ -267,12 +267,12 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               autoComplete="off"
               spellCheck={false}
               disabled={loading || bootstrapLoading}
-              className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
+              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="manual-task-description" className="text-sm font-medium text-zinc-800">
+            <label htmlFor="manual-task-description" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Описание
             </label>
             <textarea
@@ -282,12 +282,12 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               placeholder="Описание задачи"
               rows={5}
               disabled={loading || bootstrapLoading}
-              className="min-h-[120px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
+              className="min-h-[120px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="manual-task-due-date" className="text-sm font-medium text-zinc-800">
+            <label htmlFor="manual-task-due-date" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Дедлайн <span className="text-red-400">*</span>
             </label>
             <input
@@ -297,12 +297,12 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               onChange={(e) => setDueDate(e.target.value)}
               disabled={loading || bootstrapLoading}
               style={{ colorScheme: "dark" }}
-              className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 disabled:opacity-60"
+              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:opacity-60"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="manual-task-role" className="text-sm font-medium text-zinc-800">
+            <label htmlFor="manual-task-role" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Исполнитель <span className="text-red-400">*</span>
             </label>
             <select
@@ -310,11 +310,11 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               value={executorRoleId}
               onChange={(e) => setExecutorRoleId(e.target.value ? Number(e.target.value) : "")}
               disabled={loading || bootstrapLoading || !hasRoles}
-              className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 disabled:opacity-60"
+              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:opacity-60"
             >
               <option value="">Выберите роль исполнителя</option>
               {roleOptions.map((role) => (
-                <option key={role.role_id} value={role.role_id} className="bg-white text-zinc-900">
+                <option key={role.role_id} value={role.role_id} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                   {roleLabelOf(role)}
                 </option>
               ))}
@@ -322,7 +322,7 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
           </div>
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="manual-task-scope" className="text-sm font-medium text-zinc-800">
+            <label htmlFor="manual-task-scope" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Тип назначения
             </label>
             <select
@@ -330,10 +330,10 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               value={assignmentScope}
               onChange={(e) => setAssignmentScope(e.target.value as AssignmentScope)}
               disabled={loading || bootstrapLoading}
-              className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 disabled:opacity-60"
+              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:opacity-60"
             >
               {ASSIGNMENT_SCOPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-white text-zinc-900">
+                <option key={opt.value} value={opt.value} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                   {opt.label}
                 </option>
               ))}
@@ -341,7 +341,7 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-800">
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200">
               <input
                 type="checkbox"
                 checked={requiresReport}
@@ -352,7 +352,7 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               <span>Требуется отчёт</span>
             </label>
 
-            <label className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-800">
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200">
               <input
                 type="checkbox"
                 checked={requiresApproval}
@@ -365,7 +365,7 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
           </div>
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="manual-task-note" className="text-sm font-medium text-zinc-800">
+            <label htmlFor="manual-task-note" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Комментарий
             </label>
             <textarea
@@ -375,13 +375,13 @@ export default function CreateManualTaskModal({ periodId, roleOptions, onCreated
               placeholder="Служебная пометка или основание постановки задачи"
               rows={4}
               disabled={loading || bootstrapLoading}
-              className="min-h-[96px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
+              className="min-h-[96px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400 disabled:opacity-60"
             />
           </div>
         </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-end gap-3 border-t border-zinc-200 pt-4">
+      <div className="mt-6 flex items-center justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800 pt-4">
         <button
           type="submit"
           disabled={loading || bootstrapLoading || !hasRoles}

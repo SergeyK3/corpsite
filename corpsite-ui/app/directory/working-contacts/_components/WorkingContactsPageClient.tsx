@@ -137,68 +137,68 @@ function WorkingContactDrawer({ open, item, onClose }: WorkingContactDrawerProps
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-zinc-600/35 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative ml-auto flex h-full w-full max-w-[720px] flex-col border-l border-zinc-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
+      <div className="absolute inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative ml-auto flex h-full w-full max-w-[720px] flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
+        <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
           <div>
-            <h2 className="text-2xl font-semibold leading-tight text-zinc-900">Рабочий контакт</h2>
-            <p className="mt-1 text-sm text-zinc-600">Карточка сотрудника</p>
+            <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">Рабочий контакт</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Карточка сотрудника</p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200"
+            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
           >
             Закрыть
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="grid grid-cols-1 gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 text-sm text-zinc-700 dark:text-zinc-300 md:grid-cols-2">
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">ID</div>
-              <div className="mt-1 text-zinc-900">{item.id ?? item.user_id ?? "—"}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">ID</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{item.id ?? item.user_id ?? "—"}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">org_unit_id</div>
-              <div className="mt-1 text-zinc-900">{item.org_unit_id ?? "—"}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">org_unit_id</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{item.org_unit_id ?? "—"}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">ФИО</div>
-              <div className="mt-1 text-zinc-900">{textOrDash(item.full_name)}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">ФИО</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{textOrDash(item.full_name)}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Логин</div>
-              <div className="mt-1 text-zinc-900">{textOrDash(item.login)}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Логин</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{textOrDash(item.login)}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Телефон</div>
-              <div className="mt-1 text-zinc-900">{textOrDash(item.phone)}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Телефон</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{textOrDash(item.phone)}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Telegram</div>
-              <div className="mt-1 text-zinc-900">{telegramOrDash(item.telegram_username)}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Telegram</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{telegramOrDash(item.telegram_username)}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Роль</div>
-              <div className="mt-1 text-zinc-900">{roleOrDash(item)}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Роль</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{roleOrDash(item)}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Отделение</div>
-              <div className="mt-1 text-zinc-900">{unitOrDash(item)}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Отделение</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{unitOrDash(item)}</div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Активен</div>
-              <div className="mt-1 text-zinc-900">{item.is_active ? "Да" : "Нет"}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Активен</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{item.is_active ? "Да" : "Нет"}</div>
             </div>
           </div>
         </div>
@@ -334,27 +334,27 @@ export default function WorkingContactsPageClient() {
         : null);
 
   return (
-    <div className="bg-zinc-50 text-zinc-900">
+    <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h1 className="text-xl font-semibold leading-none text-zinc-900">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <h1 className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
               Рабочие контакты{filterCaption ? ` (${filterCaption})` : ""}
             </h1>
           </div>
 
-          <div className="border-b border-zinc-200 px-4 py-2">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
             <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                   placeholder="Поиск по ID, ФИО, логину, телефону, Telegram, роли"
-                  className="h-8.5 w-full rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-8.5 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
               </div>
 
-              <label className="inline-flex h-8.5 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-sm text-zinc-800">
+              <label className="inline-flex h-8.5 items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-800 dark:text-zinc-200">
                 <input
                   type="checkbox"
                   checked={activeOnly}
@@ -369,7 +369,7 @@ export default function WorkingContactsPageClient() {
 
               <button
                 type="submit"
-                className="h-8.5 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-800 transition hover:bg-zinc-200"
+                className="h-8.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Найти
               </button>
@@ -377,7 +377,7 @@ export default function WorkingContactsPageClient() {
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="h-8.5 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-800 transition hover:bg-zinc-200"
+                className="h-8.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Обновить
               </button>
@@ -386,12 +386,12 @@ export default function WorkingContactsPageClient() {
 
           <div className="px-4 py-2">
             {!!pageError && (
-              <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+              <div className="mb-2 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-2 text-sm text-red-800 dark:text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-600">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
               <div>
                 Всего: {total} · Показано: {items.length}
               </div>

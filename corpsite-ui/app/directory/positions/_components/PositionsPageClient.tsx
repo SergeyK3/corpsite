@@ -289,23 +289,23 @@ export default function PositionsPageClient() {
         : null);
 
   return (
-    <div className="bg-zinc-50 text-zinc-900">
+    <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h1 className="text-xl font-semibold leading-none text-zinc-900">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <h1 className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
               Должности{filterCaption ? ` (${filterCaption})` : ""}
             </h1>
           </div>
 
-          <div className="border-b border-zinc-200 px-4 py-2">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Поиск по названию должности"
-                  className="h-8.5 w-full rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-8.5 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
               </div>
 
@@ -315,10 +315,10 @@ export default function PositionsPageClient() {
                   setCategory(e.target.value as PositionCategory);
                   setPage(0);
                 }}
-                className="h-8.5 min-w-[220px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-900 outline-none transition focus:border-zinc-400"
+                className="h-8.5 min-w-[220px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 {CATEGORY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-white text-zinc-900">
+                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                     {opt.label}
                   </option>
                 ))}
@@ -327,7 +327,7 @@ export default function PositionsPageClient() {
               <button
                 type="button"
                 onClick={() => void loadItems()}
-                className="h-8.5 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-800 transition hover:bg-zinc-200"
+                className="h-8.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Обновить
               </button>
@@ -344,12 +344,12 @@ export default function PositionsPageClient() {
 
           <div className="px-4 py-2">
             {!!pageError && (
-              <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+              <div className="mb-2 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-2 text-sm text-red-800 dark:text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-1.5 flex flex-col gap-1 text-[11px] text-zinc-600 md:flex-row md:items-center md:justify-between">
+            <div className="mb-1.5 flex flex-col gap-1 text-[11px] text-zinc-600 dark:text-zinc-400 md:flex-row md:items-center md:justify-between">
               <div>
                 Всего: {total}
                 {total > 0 ? <span className="ml-2">· показано: {pageFrom}–{pageTo}</span> : null}
@@ -360,12 +360,12 @@ export default function PositionsPageClient() {
                   type="button"
                   onClick={() => setPage((prev) => Math.max(0, prev - 1))}
                   disabled={!hasPrev || loading}
-                  className="rounded-lg border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-800 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Назад
                 </button>
 
-                <div className="min-w-[52px] text-center text-[10px] text-zinc-600">
+                <div className="min-w-[52px] text-center text-[10px] text-zinc-600 dark:text-zinc-400">
                   Стр. {page + 1}
                 </div>
 
@@ -373,28 +373,28 @@ export default function PositionsPageClient() {
                   type="button"
                   onClick={() => setPage((prev) => prev + 1)}
                   disabled={!hasNext || loading}
-                  className="rounded-lg border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-800 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Вперёд
                 </button>
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-zinc-200">
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse">
                   <thead>
-                    <tr className="bg-zinc-100 text-left">
-                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                    <tr className="bg-zinc-100 dark:bg-zinc-900 text-left">
+                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         ID
                       </th>
-                      <th className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Название
                       </th>
-                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Категория
                       </th>
-                      <th className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -403,26 +403,26 @@ export default function PositionsPageClient() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-600">
+                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-600">
+                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Записи не найдены.
                         </td>
                       </tr>
                     ) : (
                       items.map((item) => (
-                        <tr key={positionIdOf(item)} className="border-t border-zinc-200 align-middle">
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900">
+                        <tr key={positionIdOf(item)} className="border-t border-zinc-200 dark:border-zinc-800 align-middle">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
                             {positionIdOf(item)}
                           </td>
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
                             {item.name}
                           </td>
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                             {getCategoryLabel(item)}
                           </td>
                           <td className="px-3 py-1">
@@ -430,7 +430,7 @@ export default function PositionsPageClient() {
                               <button
                                 type="button"
                                 onClick={() => openEdit(item)}
-                                className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] leading-4 text-zinc-900 transition hover:bg-zinc-200"
+                                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[10px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                               >
                                 Изменить
                               </button>
@@ -438,7 +438,7 @@ export default function PositionsPageClient() {
                               <button
                                 type="button"
                                 onClick={() => void handleDelete(item)}
-                                className="rounded-md border border-red-300 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 transition hover:bg-red-50"
+                                className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
                               >
                                 Удалить
                               </button>

@@ -110,18 +110,18 @@ export default function EmployeeDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-zinc-600/35 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative ml-auto flex h-full w-full max-w-[860px] flex-col border-l border-zinc-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
+      <div className="absolute inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative ml-auto flex h-full w-full max-w-[860px] flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
           <div className="min-w-0">
-            <h2 className="truncate text-2xl font-semibold leading-tight text-zinc-900">{fio}</h2>
-            <p className="mt-1 text-sm text-zinc-600">{details ? `Таб. № ${tabNo}` : ""}</p>
+            <h2 className="truncate text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">{fio}</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{details ? `Таб. № ${tabNo}` : ""}</p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200"
+            className="shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
           >
             Закрыть
           </button>
@@ -129,7 +129,7 @@ export default function EmployeeDrawer({
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {error ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
               {error}
             </div>
           ) : null}
@@ -137,54 +137,54 @@ export default function EmployeeDrawer({
           {details ? (
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs text-zinc-600">Статус</div>
-                  <div className="mt-1 text-sm text-zinc-900">{statusLabel(details)}</div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
+                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{statusLabel(details)}</div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs text-zinc-600">Отдел</div>
-                  <div className="mt-1 text-sm text-zinc-900">{departmentName}</div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Отдел</div>
+                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{departmentName}</div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs text-zinc-600">Должность</div>
-                  <div className="mt-1 text-sm text-zinc-900">{positionName}</div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Должность</div>
+                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{positionName}</div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs text-zinc-600">Ставка</div>
-                  <div className="mt-1 text-sm text-zinc-900">{String(rate)}</div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Ставка</div>
+                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{String(rate)}</div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs text-zinc-600">Дата с</div>
-                  <div className="mt-1 text-sm text-zinc-900">{dateFrom}</div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата с</div>
+                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateFrom}</div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs text-zinc-600">Дата по</div>
-                  <div className="mt-1 text-sm text-zinc-900">{dateTo}</div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата по</div>
+                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateTo}</div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <div className="text-xs text-zinc-600">Период работы</div>
-                <div className="mt-2 text-sm text-zinc-900">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Период работы</div>
+                <div className="mt-2 text-sm text-zinc-900 dark:text-zinc-50">
                   {dateFrom} — {dateTo}
                 </div>
               </div>
             </div>
           ) : loading ? (
-            <div className="text-sm text-zinc-600">Загрузка данных...</div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка данных...</div>
           ) : null}
         </div>
 
         {details && isActive(details) ? (
-          <div className="border-t border-zinc-200 px-6 py-4">
+          <div className="border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
             <button
               type="button"
-              className="rounded-lg border border-zinc-300 bg-white/50 px-4 py-2 text-sm text-zinc-900 transition hover:bg-zinc-200"
+              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-900/50 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               onClick={() => onTerminate(details)}
             >
               Завершить работу

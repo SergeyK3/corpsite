@@ -180,24 +180,24 @@ function ContactDrawer({
   return (
     <div className="fixed inset-0 z-50 flex">
       <div
-        className="absolute inset-0 bg-zinc-600/35 backdrop-blur-sm"
+        className="absolute inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm"
         onClick={saving ? undefined : onClose}
       />
-      <div className="relative ml-auto flex h-full w-full max-w-[760px] flex-col border-l border-zinc-200 bg-white shadow-2xl">
-        <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white text-zinc-900">
-          <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
+      <div className="relative ml-auto flex h-full w-full max-w-[760px] flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
+        <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+          <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
             <div>
-              <h2 className="text-2xl font-semibold leading-tight text-zinc-900">
+              <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
                 {mode === "create" ? "Создание контакта" : "Редактирование контакта"}
               </h2>
-              <p className="mt-1 text-sm text-zinc-600">Справочник контактов</p>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Справочник контактов</p>
             </div>
 
             <button
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
             >
               Закрыть
             </button>
@@ -206,36 +206,36 @@ function ContactDrawer({
           <div className="flex-1 overflow-y-auto px-6 py-5">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {!!error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                   {error}
                 </div>
               )}
 
               {mode === "edit" && currentItem ? (
-                <div className="grid grid-cols-1 gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 text-sm text-zinc-700 dark:text-zinc-300 md:grid-cols-2">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">ID</div>
-                    <div className="mt-1 text-zinc-900">{currentItem.contact_id}</div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">ID</div>
+                    <div className="mt-1 text-zinc-900 dark:text-zinc-50">{currentItem.contact_id}</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">person_id</div>
-                    <div className="mt-1 text-zinc-900">
+                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">person_id</div>
+                    <div className="mt-1 text-zinc-900 dark:text-zinc-50">
                       {currentItem.person_id != null ? currentItem.person_id : "—"}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Создан</div>
-                    <div className="mt-1 text-zinc-900">{formatDateTime(currentItem.created_at)}</div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Создан</div>
+                    <div className="mt-1 text-zinc-900 dark:text-zinc-50">{formatDateTime(currentItem.created_at)}</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600">Обновлён</div>
-                    <div className="mt-1 text-zinc-900">{formatDateTime(currentItem.updated_at)}</div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Обновлён</div>
+                    <div className="mt-1 text-zinc-900 dark:text-zinc-50">{formatDateTime(currentItem.updated_at)}</div>
                   </div>
                 </div>
               ) : null}
 
               <div className="flex flex-col gap-2">
-                <label htmlFor="full_name" className="text-sm font-medium text-zinc-800">
+                <label htmlFor="full_name" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                   ФИО / название контакта <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -247,14 +247,14 @@ function ContactDrawer({
                   placeholder="Например: Иванов Иван Иванович"
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="person_id" className="text-sm font-medium text-zinc-800">
+                  <label htmlFor="person_id" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     person_id
                   </label>
                   <input
@@ -267,12 +267,12 @@ function ContactDrawer({
                     placeholder="Например: 25"
                     autoComplete="off"
                     spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="phone" className="text-sm font-medium text-zinc-800">
+                  <label htmlFor="phone" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     Телефон
                   </label>
                   <input
@@ -284,14 +284,14 @@ function ContactDrawer({
                     placeholder="+7 777 000 00 00"
                     autoComplete="off"
                     spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="telegram_username" className="text-sm font-medium text-zinc-800">
+                  <label htmlFor="telegram_username" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     Telegram username
                   </label>
                   <input
@@ -305,12 +305,12 @@ function ContactDrawer({
                     placeholder="@username"
                     autoComplete="off"
                     spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="telegram_numeric_id" className="text-sm font-medium text-zinc-800">
+                  <label htmlFor="telegram_numeric_id" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     Telegram numeric id
                   </label>
                   <input
@@ -325,19 +325,19 @@ function ContactDrawer({
                     placeholder="Например: 885342581"
                     autoComplete="off"
                     spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4">
+          <div className="flex items-center justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
             <button
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
+              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
             >
               Закрыть
             </button>
@@ -562,29 +562,29 @@ export default function ContactsPage() {
         : null);
 
   return (
-    <div className="bg-zinc-50 text-zinc-900">
+    <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h1 className="text-xl font-semibold leading-none text-zinc-900">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <h1 className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
               Контакты{filterCaption ? ` (${filterCaption})` : ""}
             </h1>
           </div>
 
-          <div className="border-b border-zinc-200 px-4 py-2">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
             <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                   placeholder="Поиск по ID, person_id, ФИО, телефону, Telegram"
-                  className="h-8.5 w-full rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-8.5 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
               </div>
 
               <button
                 type="submit"
-                className="h-8.5 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-800 transition hover:bg-zinc-200"
+                className="h-8.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Найти
               </button>
@@ -592,7 +592,7 @@ export default function ContactsPage() {
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="h-8.5 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm text-zinc-800 transition hover:bg-zinc-200"
+                className="h-8.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Обновить
               </button>
@@ -609,12 +609,12 @@ export default function ContactsPage() {
 
           <div className="px-4 py-2">
             {!!pageError && (
-              <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+              <div className="mb-2 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-2 text-sm text-red-800 dark:text-red-200">
                 {pageError}
               </div>
             )}
 
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-600">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
               <div>
                 Всего: {total} · Показано: {items.length}
               </div>
@@ -624,30 +624,30 @@ export default function ContactsPage() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-zinc-200">
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse">
                   <thead>
-                    <tr className="bg-zinc-100 text-left">
-                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                    <tr className="bg-zinc-100 dark:bg-zinc-900 text-left">
+                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         ID
                       </th>
-                      <th className="min-w-[280px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="min-w-[280px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         ФИО
                       </th>
-                      <th className="min-w-[120px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="min-w-[120px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         person_id
                       </th>
-                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Телефон
                       </th>
-                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Telegram
                       </th>
-                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Telegram ID
                       </th>
-                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -656,34 +656,34 @@ export default function ContactsPage() {
                   <tbody>
                     {items.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-3 py-2 text-[13px] text-zinc-600">
+                        <td colSpan={7} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           {loading ? "Загрузка..." : "Записи не найдены."}
                         </td>
                       </tr>
                     ) : (
                       items.map((item) => (
-                        <tr key={item.contact_id} className="border-t border-zinc-200 align-middle">
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900">
+                        <tr key={item.contact_id} className="border-t border-zinc-200 dark:border-zinc-800 align-middle">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
                             {item.contact_id}
                           </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
                             {String(item.full_name ?? "").trim() || "—"}
                           </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
                             {item.person_id != null ? item.person_id : "—"}
                           </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
                             {String(item.phone ?? "").trim() || "—"}
                           </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
                             {formatTelegramUsername(item.telegram_username)}
                           </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700">
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
                             {item.telegram_numeric_id != null ? item.telegram_numeric_id : "—"}
                           </td>
 
@@ -692,7 +692,7 @@ export default function ContactsPage() {
                               <button
                                 type="button"
                                 onClick={() => openEdit(item)}
-                                className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] leading-4 text-zinc-900 transition hover:bg-zinc-200"
+                                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[10px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                               >
                                 Изменить
                               </button>
@@ -700,7 +700,7 @@ export default function ContactsPage() {
                               <button
                                 type="button"
                                 onClick={() => void handleDelete(item)}
-                                className="rounded-md border border-red-300 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 transition hover:bg-red-50"
+                                className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
                               >
                                 Удалить
                               </button>
@@ -713,15 +713,15 @@ export default function ContactsPage() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between border-t border-zinc-200 px-3 py-2 text-sm">
-                <div className="text-zinc-600">
+              <div className="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm">
+                <div className="text-zinc-600 dark:text-zinc-400">
                   Страница {page} из {pages}
                 </div>
 
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="rounded border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-50"
+                    className="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50"
                     disabled={offset <= 0 || loading}
                     onClick={() => setOffset((prev) => Math.max(0, prev - PAGE_SIZE))}
                   >
@@ -730,7 +730,7 @@ export default function ContactsPage() {
 
                   <button
                     type="button"
-                    className="rounded border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-50"
+                    className="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50"
                     disabled={offset + PAGE_SIZE >= total || loading}
                     onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
                   >

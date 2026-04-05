@@ -280,14 +280,14 @@ export default function EmployeesPageClient(props: Props) {
   const posList = Array.isArray(positions) ? positions : [];
 
   return (
-    <div className="bg-zinc-50 text-zinc-900">
+    <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h1 className="text-xl font-semibold text-zinc-900">{pageTitle}</h1>
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{pageTitle}</h1>
           </div>
 
-          <div className="border-b border-zinc-200 px-4 py-2.5">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2.5">
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
               <div className="flex-1">
                 <input
@@ -297,18 +297,18 @@ export default function EmployeesPageClient(props: Props) {
                     if (e.key === "Enter") applySearch();
                   }}
                   placeholder="Поиск по ФИО или табельному номеру"
-                  className="h-9 w-full rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-[13px] text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-9 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
               </div>
 
               <select
                 value={departmentId}
                 onChange={(e) => updateUrl({ department_id: e.target.value }, { resetOffset: true })}
-                className="h-9 min-w-[220px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-[13px] text-zinc-900 outline-none transition focus:border-zinc-400"
+                className="h-9 min-w-[220px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 <option value="">Все отделы</option>
                 {depList.map((d) => (
-                  <option key={d.id} value={String(d.id)} className="bg-white text-zinc-900">
+                  <option key={d.id} value={String(d.id)} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                     {d.name ?? `#${d.id}`}
                   </option>
                 ))}
@@ -317,11 +317,11 @@ export default function EmployeesPageClient(props: Props) {
               <select
                 value={positionId}
                 onChange={(e) => updateUrl({ position_id: e.target.value }, { resetOffset: true })}
-                className="h-9 min-w-[220px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-[13px] text-zinc-900 outline-none transition focus:border-zinc-400"
+                className="h-9 min-w-[220px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 <option value="">Все должности</option>
                 {posList.map((p) => (
-                  <option key={p.id} value={String(p.id)} className="bg-white text-zinc-900">
+                  <option key={p.id} value={String(p.id)} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                     {p.name ?? `#${p.id}`}
                   </option>
                 ))}
@@ -330,15 +330,15 @@ export default function EmployeesPageClient(props: Props) {
               <select
                 value={status}
                 onChange={(e) => updateUrl({ status: e.target.value }, { resetOffset: true })}
-                className="h-9 min-w-[160px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-[13px] text-zinc-900 outline-none transition focus:border-zinc-400"
+                className="h-9 min-w-[160px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
-                <option value="all" className="bg-white text-zinc-900">
+                <option value="all" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                   Все
                 </option>
-                <option value="active" className="bg-white text-zinc-900">
+                <option value="active" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                   Работает
                 </option>
-                <option value="inactive" className="bg-white text-zinc-900">
+                <option value="inactive" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
                   Не работает
                 </option>
               </select>
@@ -346,7 +346,7 @@ export default function EmployeesPageClient(props: Props) {
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="h-9 rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-[13px] text-zinc-800 transition hover:bg-zinc-200"
+                className="h-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
               >
                 Обновить
               </button>
@@ -364,12 +364,12 @@ export default function EmployeesPageClient(props: Props) {
 
           <div className="px-4 py-3">
             {!!error && (
-              <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <div className="mb-3 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                 {error}
               </div>
             )}
 
-            <div className="mb-2 text-xs text-zinc-600">
+            <div className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
               Всего: {data.total} · Показано: {data.items.length}
             </div>
 

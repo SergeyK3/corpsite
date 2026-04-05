@@ -340,18 +340,18 @@ export default function RegularTaskRunsPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       {/* TITLE */}
       <div className="mb-6">
-        <div className="text-2xl font-semibold text-zinc-900">{roleTitle}</div>
-        <div className="mt-1 text-sm text-zinc-600">Запуски регулярных задач</div>
+        <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{roleTitle}</div>
+        <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Запуски регулярных задач</div>
       </div>
 
       {/* TOP BAR */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm text-zinc-600">{meLoading ? "Загрузка профиля…" : meError ? "Ошибка профиля" : null}</div>
+        <div className="text-sm text-zinc-600 dark:text-zinc-400">{meLoading ? "Загрузка профиля…" : meError ? "Ошибка профиля" : null}</div>
 
         <div className="flex items-center gap-2">
           <Link
             href="/"
-            className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-200"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
             title="Перейти в кабинет"
           >
             Кабинет
@@ -359,7 +359,7 @@ export default function RegularTaskRunsPage() {
 
           <Link
             href="/regular-tasks"
-            className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-200"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
             title="Перейти к шаблонам"
           >
             Шаблоны
@@ -367,7 +367,7 @@ export default function RegularTaskRunsPage() {
 
           <button
             onClick={handleLogout}
-            className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-200"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
             title="Сбросить токен и перейти на страницу входа"
           >
             Выйти
@@ -376,11 +376,11 @@ export default function RegularTaskRunsPage() {
       </div>
 
       {meError ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{meError}</div>
+        <div className="mb-4 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-3 py-2 text-sm text-red-700 dark:text-red-300">{meError}</div>
       ) : null}
 
       {!meLoading && me && !canSeeRuns ? (
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4 text-sm text-zinc-800">
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 text-sm text-zinc-800 dark:text-zinc-200">
           Доступ к разделу запусков ограничен. Этот раздел предназначен для службы поддержки/администраторов.
         </div>
       ) : null}
@@ -388,23 +388,23 @@ export default function RegularTaskRunsPage() {
       {!meLoading && me && canSeeRuns ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* RUNS LIST */}
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-zinc-900">Запуски</div>
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Запуски</div>
               <button
                 onClick={() => void loadRuns()}
-                className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-200 disabled:opacity-60"
+                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 disabled={runsLoading}
               >
                 {runsLoading ? "Обновление…" : "Обновить"}
               </button>
             </div>
 
-            {runsError ? <div className="mb-3 text-sm text-red-700">Ошибка: {runsError}</div> : null}
-            {runsLoading ? <div className="text-sm text-zinc-600">Загрузка…</div> : null}
+            {runsError ? <div className="mb-3 text-sm text-red-700 dark:text-red-300">Ошибка: {runsError}</div> : null}
+            {runsLoading ? <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
 
             {!runsLoading && !runsError && runs.length === 0 ? (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-100 p-3 text-sm text-zinc-600">Запусков нет.</div>
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">Запусков нет.</div>
             ) : null}
 
             <div className="space-y-2">
@@ -417,15 +417,15 @@ export default function RegularTaskRunsPage() {
                     onClick={() => void openRun(r.run_id)}
                     className={[
                       "w-full rounded-lg border px-3 py-2 text-left",
-                      active ? "border-zinc-400 bg-zinc-100" : "border-zinc-200 bg-zinc-100 hover:bg-zinc-200",
+                      active ? "border-zinc-400 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-900" : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                     ].join(" ")}
                     title="Открыть items"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="font-medium text-zinc-900">Run #{r.run_id}</div>
-                      <div className="text-xs text-zinc-600">{r.status}</div>
+                      <div className="font-medium text-zinc-900 dark:text-zinc-50">Run #{r.run_id}</div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{r.status}</div>
                     </div>
-                    <div className="mt-1 text-xs text-zinc-600">
+                    <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
                       {r.started_at}
                       {hasErrors ? " • есть ошибки" : ""}
                     </div>
@@ -436,15 +436,15 @@ export default function RegularTaskRunsPage() {
           </div>
 
           {/* RUN ITEMS */}
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-zinc-900">
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 Items {selectedRun ? `• run #${selectedRun.run_id}` : ""}
               </div>
 
               <button
                 onClick={() => (selectedRunId ? void openRun(selectedRunId) : null)}
-                className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-200 disabled:opacity-60"
+                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 disabled={!selectedRunId || itemsLoading}
                 title={!selectedRunId ? "Сначала выберите запуск" : "Перезагрузить items"}
               >
@@ -453,13 +453,13 @@ export default function RegularTaskRunsPage() {
             </div>
 
             {!selectedRunId ? (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-100 p-3 text-sm text-zinc-600">
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
                 Выберите запуск слева.
               </div>
             ) : (
               <>
                 <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <label className="flex items-center gap-2 text-sm text-zinc-800">
+                  <label className="flex items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
                     <input
                       type="checkbox"
                       checked={onlyIssues}
@@ -473,20 +473,20 @@ export default function RegularTaskRunsPage() {
                     <input
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none"
+                      className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none"
                       placeholder="Фильтр по id/статусу/ошибке…"
                     />
-                    <div className="mt-1 text-[11px] text-zinc-600">
+                    <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
                       Показано: {filteredItems.length} из {items.length}
                     </div>
                   </div>
                 </div>
 
-                {itemsError ? <div className="mb-3 text-sm text-red-700">Ошибка: {itemsError}</div> : null}
-                {itemsLoading ? <div className="mb-3 text-sm text-zinc-600">Загрузка…</div> : null}
+                {itemsError ? <div className="mb-3 text-sm text-red-700 dark:text-red-300">Ошибка: {itemsError}</div> : null}
+                {itemsLoading ? <div className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
 
                 {!itemsLoading && !itemsError && items.length === 0 ? (
-                  <div className="rounded-lg border border-zinc-200 bg-zinc-100 p-3 text-sm text-zinc-600">
+                  <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
                     Items отсутствуют.
                   </div>
                 ) : null}
@@ -501,32 +501,32 @@ export default function RegularTaskRunsPage() {
                         className={[
                           "rounded-lg border px-3 py-2",
                           err
-                            ? "border-red-200 bg-red-50"
+                            ? "border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35"
                             : ok
-                              ? "border-emerald-200 bg-emerald-50"
-                              : "border-zinc-200 bg-zinc-50",
+                              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30"
+                              : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950",
                         ].join(" ")}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-sm font-medium text-zinc-900">
+                          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
                             template #{it.regular_task_id}{" "}
-                            <span className="text-xs text-zinc-600">• item #{it.item_id}</span>
+                            <span className="text-xs text-zinc-600 dark:text-zinc-400">• item #{it.item_id}</span>
                           </div>
-                          <div className="text-xs text-zinc-700">{it.status}</div>
+                          <div className="text-xs text-zinc-700 dark:text-zinc-300">{it.status}</div>
                         </div>
 
-                        <div className="mt-1 text-xs text-zinc-600">
-                          is_due: <span className="text-zinc-800">{String(it.is_due)}</span>
+                        <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                          is_due: <span className="text-zinc-800 dark:text-zinc-200">{String(it.is_due)}</span>
                           {" • "}
-                          created: <span className="text-zinc-800">{it.created_tasks}</span>
+                          created: <span className="text-zinc-800 dark:text-zinc-200">{it.created_tasks}</span>
                           {" • "}
-                          role: <span className="text-zinc-800">{it.executor_role_id ?? "—"}</span>
+                          role: <span className="text-zinc-800 dark:text-zinc-200">{it.executor_role_id ?? "—"}</span>
                           {" • "}
-                          period: <span className="text-zinc-800">{it.period_id ?? "—"}</span>
+                          period: <span className="text-zinc-800 dark:text-zinc-200">{it.period_id ?? "—"}</span>
                         </div>
 
                         {err ? (
-                          <div className="mt-2 text-xs text-red-800">
+                          <div className="mt-2 text-xs text-red-800 dark:text-red-200">
                             {issueLabel(err)}
                           </div>
                         ) : null}
@@ -536,9 +536,9 @@ export default function RegularTaskRunsPage() {
                 </div>
 
                 {/* raw json */}
-                <details className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                  <summary className="cursor-pointer text-sm text-zinc-700">Детали (JSON)</summary>
-                  <pre className="mt-2 overflow-auto text-xs text-zinc-800">
+                <details className="mt-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                  <summary className="cursor-pointer text-sm text-zinc-700 dark:text-zinc-300">Детали (JSON)</summary>
+                  <pre className="mt-2 overflow-auto text-xs text-zinc-800 dark:text-zinc-200">
                     {JSON.stringify({ run: selectedRun, items }, null, 2)}
                   </pre>
                 </details>

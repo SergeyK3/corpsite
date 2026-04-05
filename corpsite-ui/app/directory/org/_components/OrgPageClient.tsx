@@ -427,10 +427,10 @@ export default function OrgPageClient() {
   }
 
   return (
-    <div className="w-full rounded-2xl border border-zinc-200 bg-zinc-100">
-      <div className="border-b border-zinc-200 p-4">
-        <div className="text-sm font-semibold text-zinc-900">{selectedUnit ? selectedUnit.name : "Сотрудники"}</div>
-        <div className="mt-1 text-xs text-zinc-600">
+    <div className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900">
+      <div className="border-b border-zinc-200 dark:border-zinc-800 p-4">
+        <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{selectedUnit ? selectedUnit.name : "Сотрудники"}</div>
+        <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
           {!selectedUnit
             ? "Выберите подразделение слева."
             : selectedUnit.unit_id == null
@@ -441,22 +441,22 @@ export default function OrgPageClient() {
 
       <div className="p-4">
         {empError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{empError}</div>
+          <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-3 py-2 text-sm text-red-700 dark:text-red-300">{empError}</div>
         ) : null}
 
-        {empLoading ? <div className="text-sm text-zinc-600">Загрузка…</div> : null}
+        {empLoading ? <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
 
         {!empLoading && !empError ? (
-          <div className="overflow-auto rounded-xl border border-zinc-200">
-            <table className="min-w-full text-sm text-zinc-900">
-              <thead className="bg-zinc-100 text-xs text-zinc-600">
+          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <table className="min-w-full text-sm text-zinc-900 dark:text-zinc-50">
+              <thead className="bg-zinc-100 dark:bg-zinc-900 text-xs text-zinc-600 dark:text-zinc-400">
                 <tr>
-                  <th className="border-b border-zinc-200 p-2 text-left font-semibold">Таб. №</th>
-                  <th className="border-b border-zinc-200 p-2 text-left font-semibold">ФИО</th>
-                  <th className="border-b border-zinc-200 p-2 text-left font-semibold">Подразделение</th>
-                  <th className="border-b border-zinc-200 p-2 text-left font-semibold">Должность</th>
-                  <th className="border-b border-zinc-200 p-2 text-left font-semibold">Ставка</th>
-                  <th className="border-b border-zinc-200 p-2 text-left font-semibold">Статус</th>
+                  <th className="border-b border-zinc-200 dark:border-zinc-800 p-2 text-left font-semibold">Таб. №</th>
+                  <th className="border-b border-zinc-200 dark:border-zinc-800 p-2 text-left font-semibold">ФИО</th>
+                  <th className="border-b border-zinc-200 dark:border-zinc-800 p-2 text-left font-semibold">Подразделение</th>
+                  <th className="border-b border-zinc-200 dark:border-zinc-800 p-2 text-left font-semibold">Должность</th>
+                  <th className="border-b border-zinc-200 dark:border-zinc-800 p-2 text-left font-semibold">Ставка</th>
+                  <th className="border-b border-zinc-200 dark:border-zinc-800 p-2 text-left font-semibold">Статус</th>
                 </tr>
               </thead>
               <tbody>
@@ -467,7 +467,7 @@ export default function OrgPageClient() {
                   return (
                     <tr
                       key={id || `${safeFio(e)}-${safePos(e)}-${safeDept(e)}`}
-                      className={["cursor-pointer hover:bg-zinc-200", isSelected ? "bg-zinc-200" : ""].join(" ")}
+                      className={["cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700", isSelected ? "bg-zinc-200 dark:bg-zinc-800" : ""].join(" ")}
                       role="button"
                       tabIndex={0}
                       onClick={() => openEmployeeDrawer(id)}
@@ -479,19 +479,19 @@ export default function OrgPageClient() {
                       }}
                       title="Открыть карточку сотрудника"
                     >
-                      <td className="border-b border-zinc-200 p-2 whitespace-nowrap">{id}</td>
-                      <td className="border-b border-zinc-200 p-2">{safeFio(e)}</td>
-                      <td className="border-b border-zinc-200 p-2">{safeDept(e)}</td>
-                      <td className="border-b border-zinc-200 p-2">{safePos(e)}</td>
-                      <td className="border-b border-zinc-200 p-2 whitespace-nowrap">{safeRate(e)}</td>
-                      <td className="border-b border-zinc-200 p-2 whitespace-nowrap">{safeActive(e)}</td>
+                      <td className="border-b border-zinc-200 dark:border-zinc-800 p-2 whitespace-nowrap">{id}</td>
+                      <td className="border-b border-zinc-200 dark:border-zinc-800 p-2">{safeFio(e)}</td>
+                      <td className="border-b border-zinc-200 dark:border-zinc-800 p-2">{safeDept(e)}</td>
+                      <td className="border-b border-zinc-200 dark:border-zinc-800 p-2">{safePos(e)}</td>
+                      <td className="border-b border-zinc-200 dark:border-zinc-800 p-2 whitespace-nowrap">{safeRate(e)}</td>
+                      <td className="border-b border-zinc-200 dark:border-zinc-800 p-2 whitespace-nowrap">{safeActive(e)}</td>
                     </tr>
                   );
                 })}
 
                 {sortedEmployees.length === 0 ? (
                   <tr>
-                    <td className="p-3 text-zinc-600" colSpan={6}>
+                    <td className="p-3 text-zinc-600 dark:text-zinc-400" colSpan={6}>
                       Нет сотрудников в выбранном подразделении.
                     </td>
                   </tr>

@@ -19,7 +19,7 @@ export default function EmployeesToolbar({
   onReset,
 }: Props) {
   return (
-    <div className="border rounded p-3 bg-white">
+    <div className="border rounded p-3 bg-white dark:bg-zinc-950">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
         <div className="md:col-span-4">
           <label className="block text-xs text-gray-600 mb-1">Поиск</label>

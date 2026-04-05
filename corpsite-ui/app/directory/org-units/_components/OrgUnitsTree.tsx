@@ -212,7 +212,7 @@ function ContextMenu({
   };
 
   return (
-    <div ref={ref} style={style} className="rounded-xl border bg-white text-gray-900 shadow-lg">
+    <div ref={ref} style={style} className="rounded-xl border bg-white dark:bg-zinc-950 text-gray-900 shadow-lg">
       <div className="py-1">
         {items.slice(0, 3).map((it) => (
           <button
@@ -355,8 +355,8 @@ function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
-      <div ref={ref} className="w-full max-w-lg rounded-2xl border bg-white shadow-xl">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 dark:bg-black/55 p-4">
+      <div ref={ref} className="w-full max-w-lg rounded-2xl border bg-white dark:bg-zinc-950 shadow-xl">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="text-sm font-medium">{title}</div>
           <button type="button" onClick={onClose} className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50">
@@ -697,7 +697,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
   };
 
   return (
-    <div className={["w-full rounded-2xl border bg-white", className ?? ""].join(" ")}>
+    <div className={["w-full rounded-2xl border bg-white dark:bg-zinc-950", className ?? ""].join(" ")}>
       <div className="flex items-center gap-2 border-b px-3 py-3">
         <div className="text-sm font-medium">{headerTitle}</div>
 
@@ -714,7 +714,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Поиск по структуре"
-            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-offset-2"
+            className="w-full rounded-xl border bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-offset-2"
           />
 
           {searchQuery ? (
@@ -796,14 +796,14 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
             <input
               value={createName}
               onChange={(e) => setCreateName(e.target.value)}
-              className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-offset-2"
+              className="w-full rounded-xl border bg-white dark:bg-zinc-950 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-offset-2"
               placeholder="Например: Секция внутреннего обучения"
               disabled={createBusy}
             />
           </div>
 
           {createErr ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{createErr}</div>
+            <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-3 py-2 text-sm text-red-800 dark:text-red-200">{createErr}</div>
           ) : null}
 
           <div className="flex items-center justify-end gap-2 pt-2">

@@ -448,13 +448,13 @@ export default function OrgUnitsTree() {
           <div key={`group-${depth}-${r}`} className="mb-3">
             <button
               type="button"
-              className="mb-2 flex w-full items-center justify-between rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-left text-xs font-semibold text-zinc-800 hover:bg-zinc-200"
+              className="mb-2 flex w-full items-center justify-between rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-left text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
               onClick={() => toggleGroup(gk)}
               aria-expanded={open}
               title={open ? "Свернуть группу" : "Развернуть группу"}
             >
               <span>{label}</span>
-              <span className="text-xs text-zinc-700">{open ? "▾" : "▸"}</span>
+              <span className="text-xs text-zinc-700 dark:text-zinc-300">{open ? "▾" : "▸"}</span>
             </button>
 
             {open ? <div className="space-y-1">{chunk.map((n) => renderTree([n], depth + 1))}</div> : null}
@@ -477,7 +477,7 @@ export default function OrgUnitsTree() {
               {hasChildren ? (
                 <button
                   type="button"
-                  className="mr-2 h-6 w-6 rounded border border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200"
+                  className="mr-2 h-6 w-6 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                   onClick={(ev) => {
                     ev.stopPropagation();
                     toggleExpanded(n.key);
@@ -496,7 +496,7 @@ export default function OrgUnitsTree() {
               type="button"
               className={[
                 "flex-1 rounded-lg border px-3 py-2 text-left text-sm",
-                "border-zinc-200 bg-zinc-100 text-zinc-900 hover:bg-zinc-200",
+                "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                 active ? "outline outline-1 outline-zinc-600" : "",
               ].join(" ")}
               onClick={() => onSelectUnit(n)}
@@ -513,12 +513,12 @@ export default function OrgUnitsTree() {
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-zinc-100">
-      <div className="border-b border-zinc-200 p-4">
-        <div className="text-sm font-semibold text-zinc-900">Отделения</div>
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900">
+      <div className="border-b border-zinc-200 dark:border-zinc-800 p-4">
+        <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Отделения</div>
         <div className="mt-2">
           <input
-            className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-600 outline-none"
+            className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-600 outline-none"
             placeholder="Поиск по подразделениям"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
@@ -528,17 +528,17 @@ export default function OrgUnitsTree() {
 
       <div className="p-4">
         {orgError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{orgError}</div>
+          <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-3 py-2 text-sm text-red-700 dark:text-red-300">{orgError}</div>
         ) : null}
 
-        {orgLoading ? <div className="text-sm text-zinc-600">Загрузка…</div> : null}
+        {orgLoading ? <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
 
         {!orgLoading && !orgError ? (
           <div className="max-h-[70vh] space-y-1 overflow-auto">
             {treeForRender.length > 0 ? (
               renderTree(treeForRender, 0)
             ) : (
-              <div className="text-sm text-zinc-600">Ничего не найдено.</div>
+              <div className="text-sm text-zinc-600 dark:text-zinc-400">Ничего не найдено.</div>
             )}
           </div>
         ) : null}
