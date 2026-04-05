@@ -667,8 +667,21 @@ def create_task(
     description = _as_str_or_none(payload.get("description"))
     due_date = _as_str_or_none(payload.get("due_date"))
 
-    created_by_user_id = _as_int_or_none(payload.get("created_by_user_id")) or int(current_user_id)
-    initiator_user_id = _as_int_or_none(payload.get("initiator_user_id")) or int(current_user_id)
+    payload_created_by = _as_int_or_none(payload.get("created_by_user_id"))
+    payload_initiator = _as_int_or_none(payload.get("initiator_user_id"))
+    uid = int(current_user_id)
+    is_admin = _is_system_admin_role_id(user.get("role_id"))
+
+    if is_admin:
+        created_by_user_id = int(payload_created_by) if payload_created_by is not None else uid
+        initiator_user_id = int(payload_initiator) if payload_initiator is not None else uid
+    else:
+        if payload_created_by is not None and int(payload_created_by) != uid:
+            raise HTTPException(status_code=403, detail="Only system admins may set created_by_user_id")
+        if payload_initiator is not None and int(payload_initiator) != uid:
+            raise HTTPException(status_code=403, detail="Only system admins may set initiator_user_id")
+        created_by_user_id = uid
+        initiator_user_id = uid
     approver_user_id = _as_int_or_none(payload.get("approver_user_id"))
     task_kind = (_as_str_or_none(payload.get("task_kind")) or ("regular" if regular_task_id is not None else "adhoc")).lower()
     requires_report = _as_bool(payload.get("requires_report"), True)

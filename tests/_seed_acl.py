@@ -12,7 +12,10 @@ from app.db.engine import engine
 
 
 def _headers(user_id: int) -> Dict[str, str]:
-    return {"X-User-Id": str(int(user_id))}
+    # POST /tasks and most task routes require JWT; keep helper name for call sites.
+    from tests.conftest import auth_headers
+
+    return auth_headers(int(user_id))
 
 
 def _table_exists(conn, table: str, schema: str = "public") -> bool:
@@ -268,10 +271,11 @@ def seed_task_with_event(
         "description": "seed",
         "period_id": int(period_id),
         "executor_role_id": int(executor_role_id),
-        "assignment_scope": "functional",
+        "assignment_scope": "unit",
         "status_code": "IN_PROGRESS",
+        "approver_user_id": int(initiator_user_id),
     }
-    r = client.post("/tasks", json=payload, headers=_headers(initiator_user_id))
+    r = client.post("/tasks/", json=payload, headers=_headers(initiator_user_id))
     assert r.status_code == 200, r.text
     task_id = int(r.json()["task_id"])
 
@@ -288,7 +292,11 @@ def seed_task_with_event(
 def fetch_event_task_ids(client: TestClient, user_id: int) -> List[int]:
     r = client.get("/tasks/me/events?limit=200", headers=_headers(user_id))
     assert r.status_code == 200, r.text
-    events = r.json()
+    data = r.json()
+    if isinstance(data, dict) and "items" in data:
+        events = data["items"]
+    else:
+        events = data
     return [int(e["task_id"]) for e in events]
 
 def pick_two_non_priv_role_ids() -> tuple[int, int]:

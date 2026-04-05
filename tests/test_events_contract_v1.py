@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import os
-import re
-from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List
 
 import pytest
@@ -13,22 +11,18 @@ try:
 except Exception as e:
     raise RuntimeError("fastapi TestClient is required for tests") from e
 
+from tests.conftest import auth_headers
+
 
 # -------------------------
 # Test config
 # -------------------------
-USER_ID = 1  # любой пользователь, у которого есть события
-TIME_SKEW = timedelta(seconds=2)
+USER_ID = 1  # пользователь с возможными событиями в ленте (JWT sub)
 
 
 # -------------------------
 # Helpers
 # -------------------------
-RFC3339_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+\-]\d{2}:\d{2}|Z)$"
-)
-
-
 def _ensure_env() -> None:
     os.environ.setdefault("SUPERVISOR_ROLE_IDS", "58,59")
     os.environ.setdefault("DEPUTY_ROLE_IDS", "60")
@@ -41,56 +35,32 @@ def _make_client() -> TestClient:
     return TestClient(app)
 
 
-def _headers(user_id: int) -> Dict[str, str]:
-    return {"X-User-Id": str(int(user_id))}
-
-
-def _parse_rfc3339(value: str) -> datetime:
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    dt = datetime.fromisoformat(value)
-    assert dt.tzinfo is not None
-    return dt
-
-
-def _get_events(resp) -> List[Dict[str, Any]]:
+def _get_feed_page(resp) -> tuple[List[Dict[str, Any]], int]:
     assert resp.headers.get("content-type", "").startswith("application/json")
     data = resp.json()
-    assert isinstance(data, list), f"Expected JSON array, got: {type(data)}"
-    return data
+    assert isinstance(data, dict), f"Expected JSON object, got: {type(data)}"
+    assert "items" in data and "next_cursor" in data
+    items = data["items"]
+    assert isinstance(items, list)
+    return items, int(data["next_cursor"])
 
 
-def _assert_event_shape(ev: Dict[str, Any]) -> None:
-    required = {
-        "event_id",
-        "task_id",
-        "event_type",
-        "actor_user_id",
-        "actor_role_id",
-        "created_at",
-        "payload",
-    }
+def _assert_feed_item_shape(ev: Dict[str, Any]) -> None:
+    required = {"audit_id", "task_id", "event_type", "actor_user_id", "actor_role_id", "payload"}
     assert required.issubset(ev.keys()), f"Missing keys: {required - set(ev.keys())}"
 
-    assert isinstance(ev["event_id"], int) and ev["event_id"] > 0
+    assert isinstance(ev["audit_id"], int) and ev["audit_id"] > 0
     assert isinstance(ev["task_id"], int) and ev["task_id"] > 0
-    assert isinstance(ev["actor_user_id"], int)
-    assert isinstance(ev["actor_role_id"], int)
+    assert isinstance(ev["event_type"], str) and ev["event_type"]
+    assert ev["actor_user_id"] is None or isinstance(ev["actor_user_id"], int)
+    assert ev["actor_role_id"] is None or isinstance(ev["actor_role_id"], int)
     assert isinstance(ev["payload"], dict)
 
-    assert isinstance(ev["event_type"], str) and ev["event_type"]
-    assert isinstance(ev["created_at"], str)
-    assert RFC3339_RE.match(ev["created_at"]), f"Invalid RFC3339: {ev['created_at']}"
 
-    dt = _parse_rfc3339(ev["created_at"])
-    now = datetime.now(timezone.utc)
-    assert dt <= now + TIME_SKEW, f"created_at too far in future: {dt}"
-
-
-def _assert_sorted_desc(events: List[Dict[str, Any]]) -> None:
-    ids = [e["event_id"] for e in events]
-    assert ids == sorted(ids, reverse=True), f"Expected DESC event_id, got {ids}"
-    assert len(ids) == len(set(ids)), "event_id must be unique within page"
+def _assert_sorted_asc_audit(events: List[Dict[str, Any]]) -> None:
+    ids = [e["audit_id"] for e in events]
+    assert ids == sorted(ids), f"Expected ASC audit_id, got {ids}"
+    assert len(ids) == len(set(ids)), "audit_id must be unique within page"
 
 
 # -------------------------
@@ -102,70 +72,75 @@ def client() -> TestClient:
 
 
 # -------------------------
-# Tests: basic contract
+# Tests: basic contract (GET /tasks/me/events v2)
 # -------------------------
 @pytest.mark.parametrize("limit", [1, 5, 50])
 def test_events_basic_shape_and_sorting(client: TestClient, limit: int) -> None:
     r = client.get(
         f"/tasks/me/events?limit={limit}",
-        headers=_headers(USER_ID),
+        headers=auth_headers(USER_ID),
     )
     assert r.status_code == 200, r.text
 
-    events = _get_events(r)
+    events, _next = _get_feed_page(r)
     assert len(events) <= limit
 
     for ev in events:
-        _assert_event_shape(ev)
+        _assert_feed_item_shape(ev)
 
-    _assert_sorted_desc(events)
+    _assert_sorted_asc_audit(events)
 
 
 # -------------------------
-# Tests: after_id
+# Tests: since_audit_id cursor
 # -------------------------
-def test_events_after_id_filters_strictly(client: TestClient) -> None:
+def test_events_since_audit_id_filters_strictly(client: TestClient) -> None:
     r1 = client.get(
         "/tasks/me/events?limit=10",
-        headers=_headers(USER_ID),
+        headers=auth_headers(USER_ID),
     )
     assert r1.status_code == 200, r1.text
-    page1 = _get_events(r1)
+    page1, _c1 = _get_feed_page(r1)
 
     if not page1:
-        pytest.skip("No events to test after_id filtering")
+        pytest.skip("No events to test since_audit_id filtering")
 
-    _assert_sorted_desc(page1)
-    after_id = page1[-1]["event_id"]
+    _assert_sorted_asc_audit(page1)
+    cursor = page1[-1]["audit_id"]
 
     r2 = client.get(
-        f"/tasks/me/events?limit=50&after_id={after_id}",
-        headers=_headers(USER_ID),
+        f"/tasks/me/events?limit=50&since_audit_id={cursor}",
+        headers=auth_headers(USER_ID),
     )
     assert r2.status_code == 200, r2.text
-    page2 = _get_events(r2)
+    page2, _c2 = _get_feed_page(r2)
 
     for ev in page2:
-        assert ev["event_id"] > after_id
+        assert ev["audit_id"] > cursor
 
-    _assert_sorted_desc(page2)
+    _assert_sorted_asc_audit(page2)
 
 
-def test_events_after_id_zero_is_invalid(client: TestClient) -> None:
+def test_events_since_audit_id_zero_returns_first_page(client: TestClient) -> None:
     r = client.get(
-        "/tasks/me/events?after_id=0",
-        headers=_headers(USER_ID),
-    )
-    assert r.status_code == 422, r.text
-
-
-def test_events_after_id_large_returns_empty(client: TestClient) -> None:
-    r = client.get(
-        "/tasks/me/events?after_id=999999999",
-        headers=_headers(USER_ID),
+        "/tasks/me/events?since_audit_id=0&limit=5",
+        headers=auth_headers(USER_ID),
     )
     assert r.status_code == 200, r.text
-    events = _get_events(r)
+    events, next_cursor = _get_feed_page(r)
+    assert isinstance(events, list)
+    assert next_cursor >= 0
+    for ev in events:
+        _assert_feed_item_shape(ev)
+
+
+def test_events_since_audit_id_large_returns_empty(client: TestClient) -> None:
+    r = client.get(
+        "/tasks/me/events?since_audit_id=999999999&limit=50",
+        headers=auth_headers(USER_ID),
+    )
+    assert r.status_code == 200, r.text
+    events, _nc = _get_feed_page(r)
     assert events == []
 
 
@@ -176,7 +151,7 @@ def test_events_after_id_large_returns_empty(client: TestClient) -> None:
 def test_events_invalid_limit(client: TestClient, limit: int) -> None:
     r = client.get(
         f"/tasks/me/events?limit={limit}",
-        headers=_headers(USER_ID),
+        headers=auth_headers(USER_ID),
     )
     assert r.status_code in (400, 422), r.text
 
