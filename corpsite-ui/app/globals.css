@@ -6,6 +6,10 @@
   color-scheme: light;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 html,
 body {
   height: 100%;
@@ -13,4 +17,6 @@ body {
 
 body {
   margin: 0;
+  background: #fafafa;
+  color: #18181b;
 }

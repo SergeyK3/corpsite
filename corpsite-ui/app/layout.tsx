@@ -19,9 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             position: "sticky",
             top: 0,
             zIndex: 10,
-            borderBottom: "1px solid rgba(255,255,255,0.10)",
-            background: "rgb(9 9 11)",
-            color: "rgb(244 244 245)",
+            borderBottom: "1px solid rgb(228 228 231)",
+            background: "rgb(255 255 255)",
+            color: "rgb(24 24 27)",
           }}
         >
           <div

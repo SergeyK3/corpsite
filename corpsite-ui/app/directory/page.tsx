@@ -87,27 +87,27 @@ function DirectoryHomeInner() {
       <div className="max-w-6xl">
         {/* TITLE */}
         <div className="mb-6">
-          <div className="text-2xl font-semibold text-zinc-100">Отделения</div>
-          <div className="mt-1 text-sm text-zinc-400">
+          <div className="text-2xl font-semibold text-zinc-900">Отделения</div>
+          <div className="mt-1 text-sm text-zinc-600">
             Просмотр подразделений и сотрудников (только для чтения)
           </div>
         </div>
 
         {/* LINKS */}
         <div className="mb-6 flex flex-wrap gap-4 text-sm">
-          <a href="/directory/org" className="text-blue-400 hover:underline">
+          <a href="/directory/org" className="text-blue-600 hover:underline">
             Открыть дерево подразделений
           </a>
-          <a href="/directory/employees" className="text-blue-400 hover:underline">
+          <a href="/directory/employees" className="text-blue-600 hover:underline">
             Полный справочник сотрудников
           </a>
         </div>
 
         {/* SEARCH BLOCK */}
-        <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-100 p-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
-              <div className="mb-1 text-xs text-zinc-400">Поиск</div>
+              <div className="mb-1 text-xs text-zinc-600">Поиск</div>
               <input
                 value={q}
                 onChange={(e) => {
@@ -115,19 +115,19 @@ function DirectoryHomeInner() {
                   setQ(e.target.value);
                 }}
                 placeholder="ФИО или табельный номер"
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none"
               />
             </div>
 
             <div>
-              <div className="mb-1 text-xs text-zinc-400">Статус</div>
+              <div className="mb-1 text-xs text-zinc-600">Статус</div>
               <select
                 value={status}
                 onChange={(e) => {
                   setOffset(0);
                   setStatus(e.target.value as Status);
                 }}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none"
               >
                 <option value="active">Активные</option>
                 <option value="inactive">Неактивные</option>
@@ -144,7 +144,7 @@ function DirectoryHomeInner() {
                   setIncludeChildren(false);
                   setOffset(0);
                 }}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900/60"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 hover:bg-zinc-200"
               >
                 Сбросить фильтры
               </button>
@@ -153,13 +153,13 @@ function DirectoryHomeInner() {
         </div>
 
         {/* TABLE */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-          {loading && <div className="text-sm text-zinc-400">Загрузка…</div>}
+        <div className="rounded-xl border border-zinc-200 bg-zinc-100 p-4">
+          {loading && <div className="text-sm text-zinc-600">Загрузка…</div>}
           {err && <div className="text-sm text-red-400">Ошибка: {err}</div>}
 
           {!loading && !err && (
             <>
-              <div className="mb-4 flex justify-between text-xs text-zinc-400">
+              <div className="mb-4 flex justify-between text-xs text-zinc-600">
                 <div>
                   Показано {pageInfo.from}–{pageInfo.to} из {total}
                 </div>
@@ -168,14 +168,14 @@ function DirectoryHomeInner() {
                   <button
                     onClick={() => setOffset((v) => Math.max(0, v - limit))}
                     disabled={offset === 0}
-                    className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 disabled:opacity-50"
+                    className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 disabled:opacity-50"
                   >
                     Назад
                   </button>
                   <button
                     onClick={() => setOffset((v) => (v + limit < total ? v + limit : v))}
                     disabled={offset + limit >= total}
-                    className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 disabled:opacity-50"
+                    className="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 disabled:opacity-50"
                   >
                     Вперёд
                   </button>
@@ -185,12 +185,12 @@ function DirectoryHomeInner() {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="text-left text-xs text-zinc-400">
-                      <th className="border-b border-zinc-800 px-2 py-2">Таб№</th>
-                      <th className="border-b border-zinc-800 px-2 py-2">ФИО</th>
-                      <th className="border-b border-zinc-800 px-2 py-2">Подразделение</th>
-                      <th className="border-b border-zinc-800 px-2 py-2">Должность</th>
-                      <th className="border-b border-zinc-800 px-2 py-2">Активен</th>
+                    <tr className="text-left text-xs text-zinc-600">
+                      <th className="border-b border-zinc-200 px-2 py-2">Таб№</th>
+                      <th className="border-b border-zinc-200 px-2 py-2">ФИО</th>
+                      <th className="border-b border-zinc-200 px-2 py-2">Подразделение</th>
+                      <th className="border-b border-zinc-200 px-2 py-2">Должность</th>
+                      <th className="border-b border-zinc-200 px-2 py-2">Активен</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -202,13 +202,13 @@ function DirectoryHomeInner() {
 
                       return (
                         <tr key={e.id}>
-                          <td className="border-b border-zinc-800 px-2 py-2 font-medium text-zinc-200">
+                          <td className="border-b border-zinc-200 px-2 py-2 font-medium text-zinc-800">
                             {e.id}
                           </td>
-                          <td className="border-b border-zinc-800 px-2 py-2 text-zinc-100">{fio}</td>
-                          <td className="border-b border-zinc-800 px-2 py-2 text-zinc-300">{unitName}</td>
-                          <td className="border-b border-zinc-800 px-2 py-2 text-zinc-300">{posName}</td>
-                          <td className="border-b border-zinc-800 px-2 py-2 text-zinc-300">
+                          <td className="border-b border-zinc-200 px-2 py-2 text-zinc-900">{fio}</td>
+                          <td className="border-b border-zinc-200 px-2 py-2 text-zinc-700">{unitName}</td>
+                          <td className="border-b border-zinc-200 px-2 py-2 text-zinc-700">{posName}</td>
+                          <td className="border-b border-zinc-200 px-2 py-2 text-zinc-700">
                             {active === true ? "да" : active === false ? "нет" : "—"}
                           </td>
                         </tr>
@@ -217,7 +217,7 @@ function DirectoryHomeInner() {
 
                     {items.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-4 text-center text-zinc-500">
+                        <td colSpan={5} className="px-3 py-4 text-center text-zinc-600">
                           Нет данных.
                         </td>
                       </tr>

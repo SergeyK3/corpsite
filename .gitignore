@@ -76,6 +76,12 @@ scripts/*.ps1
 
 
 # -----------------------
+# Local deploy / audit artifacts (not source)
+# -----------------------
+.deploy_audit/
+_deploy_stage/
+
+# -----------------------
 # Local test artifacts
 # -----------------------
 /tmp_*.xlsx

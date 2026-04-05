@@ -135,22 +135,37 @@ function normalizeTreeResponse(body: any): TreeNode[] {
  * Фолбэк:
  *   GET /directory/org/tree
  */
+export type OrgUnitsTreePayload = {
+  items: TreeNode[];
+  inactive_ids: string[];
+  root_id: number | string | null;
+};
+
 export async function getOrgUnitsTree(args?: {
   include_inactive?: boolean;
-}): Promise<TreeNode[]> {
+}): Promise<OrgUnitsTreePayload> {
   const query = buildQuery({
     include_inactive: args?.include_inactive ?? undefined,
   });
 
+  function pack(body: any): OrgUnitsTreePayload {
+    const items = normalizeTreeResponse(body);
+    const inactive_ids = Array.isArray(body?.inactive_ids)
+      ? (body.inactive_ids as unknown[]).map((x) => String(x))
+      : [];
+    const root_id = body?.root_id ?? null;
+    return { items, inactive_ids, root_id };
+  }
+
   try {
     const body = await apiFetchJson<any>("/directory/org-units/tree", { query });
-    return normalizeTreeResponse(body);
+    return pack(body);
   } catch (e: any) {
     const status = extractStatus(e);
     if (status && status !== 404) throw e;
 
     const body = await apiFetchJson<any>("/directory/org/tree", { query });
-    return normalizeTreeResponse(body);
+    return pack(body);
   }
 }
 
@@ -170,6 +185,7 @@ export async function createOrgUnit(payload: {
   org_level?: number | null;
   sort_order1?: number | null;
   sort_order2?: number | null;
+  is_active?: boolean;
 }): Promise<any> {
   return await apiFetchJson<any>("/directory/org-units", {
     method: "POST",

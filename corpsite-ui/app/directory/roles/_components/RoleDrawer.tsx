@@ -5,8 +5,8 @@ import * as React from "react";
 import RoleForm, { type RoleFormValues } from "./RoleForm";
 
 type RoleRecord = {
-  role_id?: number;
-  id?: number;
+  role_id?: number | null;
+  id?: number | null;
   role_code: string;
   role_name: string;
   description?: string | null;
@@ -56,9 +56,9 @@ export default function RoleDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-zinc-600/35 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative ml-auto h-full w-full max-w-[760px] border-l border-white/10 bg-[#050816] shadow-2xl">
+      <div className="relative ml-auto h-full w-full max-w-[760px] border-l border-white/10 bg-white shadow-2xl">
         <RoleForm
           mode={mode}
           initialValues={getInitialValues(role)}

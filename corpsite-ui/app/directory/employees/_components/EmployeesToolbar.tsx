@@ -42,7 +42,7 @@ export default function EmployeesToolbar({
           >
             <option value="">Все</option>
             {departments.map((d) => (
-              <option key={d.id} value={d.id}>
+              <option key={d.id ?? `d-${d.name}`} value={d.id != null ? String(d.id) : ""}>
                 {d.name}
               </option>
             ))}
@@ -60,7 +60,7 @@ export default function EmployeesToolbar({
           >
             <option value="">Все</option>
             {positions.map((p) => (
-              <option key={p.id} value={p.id}>
+              <option key={p.id ?? `p-${p.name}`} value={p.id != null ? String(p.id) : ""}>
                 {p.name}
               </option>
             ))}

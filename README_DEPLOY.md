@@ -1,67 +1,67 @@
-# Corpsite Deployment Notes
+# Заметки По Развёртыванию Corpsite
 
-This project is developed locally and deployed into a closed corporate environment.
-Use one repeatable deployment flow for every update.
+Проект разрабатывается локально и разворачивается в закрытой корпоративной среде.
+Для каждого обновления используй один и тот же, повторяемый сценарий развёртывания.
 
-## Environment policy
+## Политика окружений
 
-- Local development:
+- Локальная разработка:
   - `APP_ENV=dev`
   - `NEXT_PUBLIC_APP_ENV=dev`
   - `ENABLE_DIRECTORY_DEBUG=1`
   - `ENABLE_LEGACY_X_USER_ID=1`
-- Server / production:
+- Сервер / production:
   - `APP_ENV=prod`
   - `NEXT_PUBLIC_APP_ENV=prod`
   - `ENABLE_DIRECTORY_DEBUG=0`
   - `ENABLE_LEGACY_X_USER_ID=0`
-  - `AUTH_JWT_SECRET` must be set to a non-default value
-  - `INTERNAL_API_TOKEN` must be set if the bot still calls per-user internal endpoints
+  - `AUTH_JWT_SECRET` должен быть задан и не должен быть значением по умолчанию
+  - `INTERNAL_API_TOKEN` должен быть задан, если бот всё ещё обращается к внутренним per-user endpoint'ам
 
-`ENABLE_LEGACY_X_USER_ID=1` can be used temporarily during migration if an internal helper still sends `X-User-Id` without a service token.
-Treat it as a compatibility flag, not as the target production setup.
+`ENABLE_LEGACY_X_USER_ID=1` можно временно использовать на этапе миграции, если какой-то внутренний helper всё ещё отправляет `X-User-Id` без сервисного токена.
+Считай это временным флагом совместимости, а не целевой production-настройкой.
 
-Recommended production setup for the Telegram bot:
+Рекомендуемая production-схема для Telegram-бота:
 
-- bot sends `X-User-Id`
-- bot also sends `X-Internal-Api-Token`
-- backend validates the internal token before trusting the user id
-- use `corpsite-bot/.env.example` as the starting point for bot configuration
+- бот отправляет `X-User-Id`
+- бот также отправляет `X-Internal-Api-Token`
+- backend проверяет internal token перед тем, как доверять user id
+- за основу конфигурации бота бери `corpsite-bot/.env.example`
 
-## Before every deployment
+## Перед каждым развёртыванием
 
-1. Back up the database.
-2. Save the current server `.env`.
-3. Review what changed:
-   - backend code
-   - frontend code
-   - database migrations
-4. Confirm production env values:
+1. Сделай резервную копию базы данных.
+2. Сохрани текущий серверный `.env`.
+3. Проверь, что изменилось:
+   - backend-код
+   - frontend-код
+   - миграции базы данных
+4. Подтверди production-значения переменных:
    - `APP_ENV=prod`
    - `NEXT_PUBLIC_APP_ENV=prod`
-   - `AUTH_JWT_SECRET` is not default
-   - `INTERNAL_API_TOKEN` matches between backend and bot
-   - debug/dev flags are disabled unless explicitly needed
+   - `AUTH_JWT_SECRET` не равен значению по умолчанию
+   - `INTERNAL_API_TOKEN` совпадает между backend и ботом
+   - debug/dev-флаги выключены, если они не нужны специально
 
-## Deployment order
+## Порядок развёртывания
 
-1. Stop application services if needed.
-2. Copy updated project files to the server.
-3. Apply DB migrations before starting the new backend version.
-4. Update backend dependencies if they changed.
-5. Build/update the frontend.
-6. Start backend and frontend services.
-7. Run the smoke check below.
+1. При необходимости останови сервисы приложения.
+2. Скопируй обновлённые файлы проекта на сервер.
+3. Примени миграции БД до запуска новой версии backend.
+4. Обнови backend-зависимости, если они изменились.
+5. Собери или обнови frontend.
+6. Запусти backend и frontend.
+7. Выполни smoke-check ниже.
 
-## Smoke check after deployment
+## Smoke-check после развёртывания
 
-1. `GET /health` returns `{"status":"ok"}`.
-2. Login works for a real test user.
-3. The tasks page opens successfully.
-4. A pilot user can see their tasks.
-5. A privileged user can open the periods screen.
-6. A test task can move through the expected status flow.
-7. No debug UI is visible in production.
+1. `GET /health` возвращает `{"status":"ok"}`.
+2. Вход работает для реального тестового пользователя.
+3. Страница задач открывается без ошибок.
+4. Пилотный пользователь видит свои задачи.
+5. Привилегированный пользователь может открыть экран периодов.
+6. Тестовая задача проходит ожидаемый жизненный цикл по статусам.
+7. В production не отображается debug-интерфейс.
 
 PowerShell helper:
 
@@ -72,29 +72,29 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke_check.ps1 `
   -Password "test_user_password"
 ```
 
-If login/password are omitted, the script checks only `/health`.
+Если `Login` и `Password` не переданы, скрипт проверяет только `/health`.
 
-## Pilot update checklist
+## Чеклист обновлений для пилота
 
-For the first pilot in one department:
+Для первого пилота в одном подразделении:
 
-1. Update only what is needed for the pilot workflow.
-2. Avoid schema changes unless necessary.
-3. Keep one test user per role.
-4. Record each release in a short log:
-   - date
-   - what changed
-   - what to verify
-   - rollback note
+1. Обновляй только то, что действительно нужно для пилотного сценария.
+2. Избегай изменений схемы БД, если без них можно обойтись.
+3. Держи хотя бы одного тестового пользователя на каждую роль.
+4. Фиксируй каждый релиз в коротком журнале:
+   - дата
+   - что изменилось
+   - что нужно проверить
+   - примечание по откату
 
-Operational checklist for the first live week:
+Операционный чеклист на первую рабочую неделю:
 
-- see `docs/PILOT_WEEK1_CHECKLIST.md`
+- см. `docs/PILOT_WEEK1_CHECKLIST.md`
 
-## Rollback minimum
+## Минимальный откат
 
-If an update fails:
+Если обновление прошло неудачно:
 
-1. Restore the previous backend/frontend build.
-2. Restore the previous `.env` if it was changed.
-3. Restore the database from backup if the issue is caused by a migration or bad data update.
+1. Верни предыдущую сборку backend/frontend.
+2. Верни предыдущий `.env`, если он менялся.
+3. Восстанови базу данных из резервной копии, если проблема вызвана миграцией или неудачным обновлением данных.

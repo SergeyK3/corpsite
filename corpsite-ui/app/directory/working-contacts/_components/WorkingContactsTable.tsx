@@ -68,36 +68,36 @@ export default function WorkingContactsTable({
   const pages = Math.max(1, Math.ceil(Math.max(safeTotal, 1) / safeLimit));
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800">
+    <div className="overflow-hidden rounded-xl border border-zinc-200">
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
           <thead>
-            <tr className="bg-white/[0.03] text-left">
-              <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+            <tr className="bg-zinc-100 text-left">
+              <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 ID
               </th>
-              <th className="min-w-[250px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[250px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 ФИО
               </th>
-              <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Логин
               </th>
-              <th className="min-w-[170px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[170px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Телефон
               </th>
-              <th className="min-w-[170px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[170px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Telegram
               </th>
-              <th className="min-w-[240px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[240px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Роль
               </th>
-              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Отделение
               </th>
-              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Статус
               </th>
-              <th className="w-[130px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[130px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Действие
               </th>
             </tr>
@@ -106,7 +106,7 @@ export default function WorkingContactsTable({
           <tbody>
             {safeItems.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-3 text-[13px] text-zinc-500">
+                <td colSpan={9} className="px-3 py-3 text-[13px] text-zinc-600">
                   {safeLoading ? "Загрузка..." : "Записи не найдены."}
                 </td>
               </tr>
@@ -114,42 +114,42 @@ export default function WorkingContactsTable({
               safeItems.map((item) => (
                 <tr
                   key={itemIdOf(item)}
-                  className="cursor-pointer border-t border-zinc-800 align-middle transition hover:bg-white/[0.02]"
+                  className="cursor-pointer border-t border-zinc-200 align-middle transition hover:bg-zinc-100"
                   onClick={() => onOpen(item)}
                 >
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">{itemIdOf(item)}</td>
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-900">{itemIdOf(item)}</td>
 
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-100">
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-900">
                     {textOrDash(item.full_name)}
                   </td>
 
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-700">
                     {textOrDash(item.login)}
                   </td>
 
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-700">
                     {textOrDash(item.phone)}
                   </td>
 
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-700">
                     {displayTelegram(item)}
                   </td>
 
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-700">
                     {displayRole(item)}
                   </td>
 
-                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-300">
+                  <td className="px-3 py-2 text-[13px] leading-5 text-zinc-700">
                     {displayUnit(item)}
                   </td>
 
                   <td className="px-3 py-2">
                     {item.is_active ? (
-                      <span className="inline-flex rounded-md border border-emerald-800 bg-emerald-950/30 px-2 py-0.5 text-[12px] text-emerald-300">
+                      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[12px] text-emerald-800">
                         Да
                       </span>
                     ) : (
-                      <span className="inline-flex rounded-md border border-zinc-700 bg-zinc-900/40 px-2 py-0.5 text-[12px] text-zinc-400">
+                      <span className="inline-flex rounded-md border border-zinc-300 bg-zinc-100 px-2 py-0.5 text-[12px] text-zinc-600">
                         Нет
                       </span>
                     )}
@@ -162,7 +162,7 @@ export default function WorkingContactsTable({
                         e.stopPropagation();
                         onOpen(item);
                       }}
-                      className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
+                      className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 transition hover:bg-zinc-200"
                     >
                       Открыть
                     </button>
@@ -174,8 +174,8 @@ export default function WorkingContactsTable({
         </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-2 text-sm">
-        <div className="text-zinc-400">
+      <div className="flex items-center justify-between border-t border-zinc-200 px-3 py-2 text-sm">
+        <div className="text-zinc-600">
           Страница {page} из {pages}
           {safeLoading ? " (обновление...)" : ""}
         </div>
@@ -183,7 +183,7 @@ export default function WorkingContactsTable({
         <div className="flex gap-2">
           <button
             type="button"
-            className="rounded border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-50"
+            className="rounded border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-50"
             disabled={safeOffset <= 0 || safeLoading}
             onClick={() => onChangePage(Math.max(0, safeOffset - safeLimit))}
           >
@@ -192,7 +192,7 @@ export default function WorkingContactsTable({
 
           <button
             type="button"
-            className="rounded border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-50"
+            className="rounded border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-50"
             disabled={safeOffset + safeLimit >= safeTotal || safeLoading}
             onClick={() => onChangePage(safeOffset + safeLimit)}
           >

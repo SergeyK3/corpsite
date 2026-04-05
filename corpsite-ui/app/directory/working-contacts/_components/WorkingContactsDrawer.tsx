@@ -49,9 +49,9 @@ function InfoBlock({
   value: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-4">
-      <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
-      <div className="mt-2 text-sm text-zinc-100">{value}</div>
+    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+      <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-600">{label}</div>
+      <div className="mt-2 text-sm text-zinc-900">{value}</div>
     </div>
   );
 }
@@ -74,21 +74,21 @@ export default function WorkingContactsDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-zinc-600/35 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative ml-auto flex h-full w-full max-w-[760px] flex-col border-l border-zinc-800 bg-[#050816] shadow-2xl">
-        <div className="flex items-start justify-between border-b border-zinc-800 px-6 py-5">
+      <div className="relative ml-auto flex h-full w-full max-w-[760px] flex-col border-l border-zinc-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
           <div>
-            <h2 className="text-2xl font-semibold leading-tight text-zinc-100">
+            <h2 className="text-2xl font-semibold leading-tight text-zinc-900">
               {textOrDash(item?.full_name)}
             </h2>
-            <p className="mt-1 text-sm text-zinc-400">Рабочий контакт</p>
+            <p className="mt-1 text-sm text-zinc-600">Рабочий контакт</p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
+            className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200"
           >
             Закрыть
           </button>
@@ -101,8 +101,8 @@ export default function WorkingContactsDrawer({
                 className={[
                   "inline-flex rounded-full border px-2.5 py-1 text-xs font-medium",
                   item?.is_active
-                    ? "border-emerald-800 bg-emerald-950/30 text-emerald-300"
-                    : "border-zinc-700 bg-zinc-900/40 text-zinc-400",
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-zinc-300 bg-zinc-100 text-zinc-600",
                 ].join(" ")}
               >
                 {item?.is_active ? "Активный" : "Неактивный"}
@@ -120,11 +120,11 @@ export default function WorkingContactsDrawer({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60"
+            className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200"
           >
             Закрыть
           </button>

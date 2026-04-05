@@ -78,10 +78,10 @@ export default function OrgUnitsPage() {
     setErrorText("");
 
     try {
-      const data = await getOrgUnitsTree({ status: "all" });
+      const data = await getOrgUnitsTree({ include_inactive: true });
 
-      setNodes(Array.isArray(data.items) ? (data.items as unknown as TreeNode[]) : []);
-      setInactiveIds(Array.isArray(data.inactive_ids) ? (data.inactive_ids as unknown as string[]) : []);
+      setNodes(data.items as unknown as TreeNode[]);
+      setInactiveIds(data.inactive_ids);
 
       if (data.root_id != null) {
         setExpandedIds((prev) => (prev.length ? prev : [String(data.root_id)]));
@@ -162,7 +162,7 @@ export default function OrgUnitsPage() {
     setErrorText("");
 
     try {
-      await renameOrgUnit({ unit_id: String(selectedNode.id), name: nextName });
+      await renameOrgUnit(selectedNode.id, { name: nextName });
       closeRename();
       await loadTree();
     } catch (e) {
@@ -243,8 +243,7 @@ export default function OrgUnitsPage() {
     setErrorText("");
 
     try {
-      await moveOrgUnit({
-        unit_id: String(selectedNode.id),
+      await moveOrgUnit(selectedNode.id, {
         parent_unit_id: nextParentId ? Number(nextParentId) : null,
       });
       closeMove();
@@ -299,10 +298,10 @@ export default function OrgUnitsPage() {
       try {
         if (makeActive) {
           if (!inactiveSet.has(sid)) return;
-          await activateOrgUnit({ unit_id: sid });
+          await activateOrgUnit(sid);
         } else {
           if (inactiveSet.has(sid)) return;
-          await deactivateOrgUnit({ unit_id: sid });
+          await deactivateOrgUnit(sid);
         }
         await loadTree();
       } catch (e) {

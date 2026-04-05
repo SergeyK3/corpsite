@@ -80,28 +80,28 @@ export default function TemplateForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-[#050816] text-zinc-100">
+    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white text-zinc-900">
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
           {!!error && (
-            <div className="rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-5">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
                 <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-100">Основные данные</h3>
-                  <p className="mt-1 text-sm text-zinc-400">
+                  <h3 className="text-base font-semibold text-zinc-900">Основные данные</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
                     Название и описание шаблона регулярной задачи.
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="template-title" className="text-sm font-medium text-zinc-200">
+                    <label htmlFor="template-title" className="text-sm font-medium text-zinc-800">
                       Отчёт <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -109,12 +109,12 @@ export default function TemplateForm({
                       value={values.title}
                       onChange={(e) => setValues((prev) => ({ ...prev, title: e.target.value }))}
                       placeholder="Например: Отчёт по приёмному отделению — месячный"
-                      className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                      className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="template-description" className="text-sm font-medium text-zinc-200">
+                    <label htmlFor="template-description" className="text-sm font-medium text-zinc-800">
                       Описание
                     </label>
                     <textarea
@@ -123,23 +123,23 @@ export default function TemplateForm({
                       onChange={(e) => setValues((prev) => ({ ...prev, description: e.target.value }))}
                       placeholder="Краткое описание назначения шаблона"
                       rows={6}
-                      className="min-h-[144px] resize-y rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                      className="min-h-[144px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
                 <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-100">Расписание</h3>
-                  <p className="mt-1 text-sm text-zinc-400">
+                  <h3 className="text-base font-semibold text-zinc-900">Расписание</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
                     Тип расписания и JSON-параметры генерации.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="template-schedule-type" className="text-sm font-medium text-zinc-200">
+                    <label htmlFor="template-schedule-type" className="text-sm font-medium text-zinc-800">
                       Тип расписания
                     </label>
                     <input
@@ -148,7 +148,7 @@ export default function TemplateForm({
                       value={values.schedule_type}
                       onChange={(e) => setValues((prev) => ({ ...prev, schedule_type: e.target.value }))}
                       placeholder="weekly / monthly / yearly"
-                      className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                      className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                     <datalist id="schedule-type-options">
                       <option value="daily" />
@@ -159,7 +159,7 @@ export default function TemplateForm({
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="template-create-offset" className="text-sm font-medium text-zinc-200">
+                    <label htmlFor="template-create-offset" className="text-sm font-medium text-zinc-800">
                       Создать за N дней
                     </label>
                     <input
@@ -168,12 +168,12 @@ export default function TemplateForm({
                       onChange={(e) => setValues((prev) => ({ ...prev, create_offset_days: e.target.value }))}
                       placeholder="0"
                       inputMode="numeric"
-                      className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                      className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="template-due-offset" className="text-sm font-medium text-zinc-200">
+                    <label htmlFor="template-due-offset" className="text-sm font-medium text-zinc-800">
                       Срок +N дней
                     </label>
                     <input
@@ -182,13 +182,13 @@ export default function TemplateForm({
                       onChange={(e) => setValues((prev) => ({ ...prev, due_offset_days: e.target.value }))}
                       placeholder="0"
                       inputMode="numeric"
-                      className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                      className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                   </div>
                 </div>
 
                 <div className="mt-4 flex flex-col gap-2">
-                  <label htmlFor="template-schedule-params" className="text-sm font-medium text-zinc-200">
+                  <label htmlFor="template-schedule-params" className="text-sm font-medium text-zinc-800">
                     schedule_params (JSON)
                   </label>
                   <textarea
@@ -197,9 +197,9 @@ export default function TemplateForm({
                     onChange={(e) => setValues((prev) => ({ ...prev, schedule_params: e.target.value }))}
                     placeholder='Например: {"byweekday":["TH"],"time":"10:00"}'
                     rows={12}
-                    className="min-h-[240px] resize-y rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 font-mono text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                    className="min-h-[240px] resize-y rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-3 font-mono text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   />
-                  <div className={`text-sm ${formError ? "text-red-300" : "text-zinc-500"}`}>
+                  <div className={`text-sm ${formError ? "text-red-700" : "text-zinc-600"}`}>
                     {formError ?? "JSON корректен. Форму можно сохранять."}
                   </div>
                 </div>
@@ -207,16 +207,16 @@ export default function TemplateForm({
             </div>
 
             <div className="flex flex-col gap-5">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
                 <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-100">Исполнитель</h3>
-                  <p className="mt-1 text-sm text-zinc-400">
+                  <h3 className="text-base font-semibold text-zinc-900">Исполнитель</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
                     Укажи ID роли, для которой создаётся задача.
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="template-executor-role" className="text-sm font-medium text-zinc-200">
+                  <label htmlFor="template-executor-role" className="text-sm font-medium text-zinc-800">
                     ID роли исполнителя
                   </label>
                   <input
@@ -225,23 +225,23 @@ export default function TemplateForm({
                     onChange={(e) => setValues((prev) => ({ ...prev, executor_role_id: e.target.value }))}
                     placeholder="Например: 60"
                     inputMode="numeric"
-                    className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                    className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                   />
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
                 <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-100">Подразделение-владелец</h3>
-                  <p className="mt-1 text-sm text-zinc-400">
-                    Для ЦАХ выбирай значение <span className="text-zinc-200">ЦАХ (#54)</span>.
+                  <h3 className="text-base font-semibold text-zinc-900">Подразделение-владелец</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    Для ЦАХ выбирай значение <span className="text-zinc-800">ЦАХ (#54)</span>.
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-3">
                   {hasOwnerUnitOptions ? (
                     <div className="flex flex-col gap-2">
-                      <label htmlFor="template-owner-unit-select" className="text-sm font-medium text-zinc-200">
+                      <label htmlFor="template-owner-unit-select" className="text-sm font-medium text-zinc-800">
                         Подразделение <span className="text-red-400">*</span>
                       </label>
                       <select
@@ -249,7 +249,7 @@ export default function TemplateForm({
                         value={values.owner_unit_id}
                         onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
                         disabled={ownerUnitLoading}
-                        className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-zinc-600 disabled:opacity-60"
+                        className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 disabled:opacity-60"
                       >
                         <option value="">Выберите подразделение</option>
                         {ownerUnitOptions.map((opt) => (
@@ -262,7 +262,7 @@ export default function TemplateForm({
                   ) : null}
 
                   <div className="flex flex-col gap-2">
-                    <label htmlFor="template-owner-unit" className="text-sm font-medium text-zinc-200">
+                    <label htmlFor="template-owner-unit" className="text-sm font-medium text-zinc-800">
                       owner_unit_id <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -271,11 +271,11 @@ export default function TemplateForm({
                       onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
                       placeholder="Например: 54"
                       inputMode="numeric"
-                      className="h-11 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-600"
+                      className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                   </div>
 
-                  <div className="text-xs text-zinc-500">
+                  <div className="text-xs text-zinc-600">
                     {ownerUnitLoading
                       ? "Загрузка списка подразделений..."
                       : hasOwnerUnitOptions
@@ -285,17 +285,17 @@ export default function TemplateForm({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-5">
-                <h3 className="text-base font-semibold text-zinc-100">Подсказка</h3>
-                <div className="mt-3 space-y-2 text-sm text-zinc-400">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
+                <h3 className="text-base font-semibold text-zinc-900">Подсказка</h3>
+                <div className="mt-3 space-y-2 text-sm text-zinc-600">
                   <p>
-                    Для еженедельных шаблонов обычно используют <span className="text-zinc-200">weekly</span>.
+                    Для еженедельных шаблонов обычно используют <span className="text-zinc-800">weekly</span>.
                   </p>
                   <p>
-                    Для ежемесячных — <span className="text-zinc-200">monthly</span>.
+                    Для ежемесячных — <span className="text-zinc-800">monthly</span>.
                   </p>
                   <p>
-                    Для ежегодных — <span className="text-zinc-200">yearly</span>.
+                    Для ежегодных — <span className="text-zinc-800">yearly</span>.
                   </p>
                   <p>JSON должен быть именно объектом, а не массивом.</p>
                   <p>owner_unit_id лучше не оставлять пустым, чтобы не создавать новые дефекты.</p>
@@ -306,12 +306,12 @@ export default function TemplateForm({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-6 py-4">
+      <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4">
         <button
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-60"
+          className="rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-60"
         >
           Закрыть
         </button>

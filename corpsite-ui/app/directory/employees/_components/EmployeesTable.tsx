@@ -43,8 +43,8 @@ function statusMeta(it: any): { active: boolean; label: string } {
 function StatusBadge({ it }: { it: any }) {
   const meta = statusMeta(it);
   const cls = meta.active
-    ? "bg-emerald-950/60 text-emerald-300"
-    : "bg-zinc-800 text-zinc-300";
+    ? "bg-emerald-100 text-emerald-800"
+    : "bg-zinc-200 text-zinc-700";
 
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>{meta.label}</span>;
 }
@@ -80,36 +80,36 @@ export default function EmployeesTable({
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800">
+    <div className="overflow-hidden rounded-xl border border-zinc-200">
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
           <thead>
-            <tr className="bg-white/[0.03] text-left">
-              <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+            <tr className="bg-zinc-100 text-left">
+              <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Таб. №
               </th>
-              <th className="min-w-[300px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[300px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 ФИО
               </th>
-              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Отдел
               </th>
-              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Должность
               </th>
-              <th className="w-[100px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[100px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Ставка
               </th>
-              <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Дата с
               </th>
-              <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Дата по
               </th>
-              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Статус
               </th>
-              <th className="w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <th className="w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600">
                 Действия
               </th>
             </tr>
@@ -118,7 +118,7 @@ export default function EmployeesTable({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-2.5 text-[13px] text-zinc-500">
+                <td colSpan={9} className="px-3 py-2.5 text-[13px] text-zinc-600">
                   {loading ? "Загрузка..." : "Записи не найдены."}
                 </td>
               </tr>
@@ -129,32 +129,32 @@ export default function EmployeesTable({
                 const active = computeIsActive(it);
 
                 return (
-                  <tr key={employeeId || fio} className="border-t border-zinc-800 align-middle">
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-100">
+                  <tr key={employeeId || fio} className="border-t border-zinc-200 align-middle">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900">
                       {employeeId || "—"}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-100">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900">
                       {fio}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600">
                       {getDepartmentName(it)}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600">
                       {getPositionName(it)}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600">
                       {it.employment_rate ?? it.rate ?? "—"}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600">
                       {formatDate(it.date_from ?? it.dateFrom ?? null)}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-400">
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600">
                       {formatDate(it.date_to ?? it.dateTo ?? null)}
                     </td>
 
@@ -168,7 +168,7 @@ export default function EmployeesTable({
                           <button
                             type="button"
                             onClick={() => onOpenEmployee(employeeId)}
-                            className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
+                            className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 transition hover:bg-zinc-200"
                           >
                             Открыть
                           </button>
@@ -178,7 +178,7 @@ export default function EmployeesTable({
                           <button
                             type="button"
                             onClick={() => onTerminateEmployee(employeeId, fio)}
-                            className="rounded-md border border-zinc-800 bg-zinc-950/40 px-2.5 py-1 text-[12px] leading-4 text-zinc-100 transition hover:bg-zinc-900/60"
+                            className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 transition hover:bg-zinc-200"
                           >
                             Завершить
                           </button>
@@ -193,8 +193,8 @@ export default function EmployeesTable({
         </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-2 text-sm">
-        <div className="text-zinc-400">
+      <div className="flex items-center justify-between border-t border-zinc-200 px-3 py-2 text-sm">
+        <div className="text-zinc-600">
           Страница {page} из {pages}
           {loading ? " (обновление...)" : ""}
         </div>
@@ -202,7 +202,7 @@ export default function EmployeesTable({
         <div className="flex gap-2">
           <button
             type="button"
-            className="rounded border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-50"
+            className="rounded border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-50"
             disabled={offset <= 0 || loading}
             onClick={() => onChangePage(Math.max(0, offset - limit))}
           >
@@ -211,7 +211,7 @@ export default function EmployeesTable({
 
           <button
             type="button"
-            className="rounded border border-zinc-800 bg-zinc-950/40 px-3 py-1 text-zinc-200 transition hover:bg-zinc-900/60 disabled:opacity-50"
+            className="rounded border border-zinc-200 bg-zinc-100 px-3 py-1 text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-50"
             disabled={offset + limit >= total || loading}
             onClick={() => onChangePage(offset + limit)}
           >

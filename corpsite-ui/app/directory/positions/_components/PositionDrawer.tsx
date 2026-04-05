@@ -56,8 +56,8 @@ export default function PositionDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative ml-auto h-full w-full max-w-[720px] border-l border-zinc-800 bg-[#050816] shadow-2xl">
+      <div className="absolute inset-0 bg-zinc-600/35 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative ml-auto h-full w-full max-w-[720px] border-l border-zinc-200 bg-white shadow-2xl">
         <PositionForm
           mode={mode}
           initialValues={{
