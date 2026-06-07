@@ -6,17 +6,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
+import {
+  taskActionLabel,
+  taskActionsLabel,
+  taskSourceLabel,
+  taskStatusLabel,
+} from "@/lib/i18n";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
 import TaskDrawer from "./TaskDrawer";
 import TaskEditForm, { type TaskEditValues } from "./TaskEditForm";
-
-const ACTION_RU: Record<string, string> = {
-  report: "Отправить отчёт",
-  approve: "Согласовать",
-  reject: "Отклонить",
-  archive: "В архив",
-};
 
 const LIST_LIMIT = 50;
 
@@ -89,13 +88,17 @@ function taskTitleOf(t: any): string {
 
 function statusTextOf(t: any): string {
   const sRu = String(t?.status_name_ru ?? "").trim();
-  const sCode = String(t?.status_code ?? "").trim();
-  const sLegacy = String(t?.status ?? "").trim();
   if (sRu) return sRu;
-  if (sCode) return sCode;
-  if (sLegacy) return sLegacy;
+
+  const sCode = String(t?.status_code ?? "").trim();
+  if (sCode) return taskStatusLabel(sCode);
+
+  const sLegacy = String(t?.status ?? "").trim();
+  if (sLegacy) return taskStatusLabel(sLegacy);
+
   const sid = t?.status_id;
-  if (sid != null) return `status_id=${sid}`;
+  if (sid != null) return `Статус №${sid}`;
+
   return "—";
 }
 
@@ -117,8 +120,7 @@ function allowedActionsOf(t: any): AllowedAction[] {
 }
 
 function actionsRu(actions: AllowedAction[] | undefined | null): string {
-  if (!actions || actions.length === 0) return "—";
-  return actions.map((a) => ACTION_RU[String(a)] ?? String(a)).join(" / ");
+  return taskActionsLabel(actions);
 }
 
 function formatDeadline(t: any): string {
@@ -1381,7 +1383,7 @@ export default function TasksPageClient() {
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
                       <div className="text-xs text-zinc-600 dark:text-zinc-400">Источник</div>
                       <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
-                        {String(selectedItem?.source_kind ?? "—")}
+                        {taskSourceLabel(selectedItem?.source_kind)}
                       </div>
                     </div>
 
@@ -1582,7 +1584,7 @@ export default function TasksPageClient() {
                       disabled={saving || drawerLoading}
                       className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-60"
                     >
-                      {ACTION_RU.report}
+                      {taskActionLabel("report")}
                     </button>
                   ) : null}
 
@@ -1593,7 +1595,7 @@ export default function TasksPageClient() {
                       disabled={saving || drawerLoading}
                       className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
-                      {ACTION_RU.approve}
+                      {taskActionLabel("approve")}
                     </button>
                   ) : null}
 
@@ -1604,7 +1606,7 @@ export default function TasksPageClient() {
                       disabled={saving || drawerLoading}
                       className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
-                      {ACTION_RU.reject}
+                      {taskActionLabel("reject")}
                     </button>
                   ) : null}
 
@@ -1618,7 +1620,7 @@ export default function TasksPageClient() {
                       disabled={saving || drawerLoading}
                       className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                     >
-                      {ACTION_RU.archive}
+                      {taskActionLabel("archive")}
                     </button>
                   ) : null}
                 </div>

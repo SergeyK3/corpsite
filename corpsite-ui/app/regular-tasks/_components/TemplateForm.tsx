@@ -3,6 +3,8 @@
 
 import * as React from "react";
 
+import { scheduleTypeLabel } from "@/lib/i18n";
+
 export type TemplateFormValues = {
   title: string;
   description: string;
@@ -147,7 +149,7 @@ export default function TemplateForm({
                       list="schedule-type-options"
                       value={values.schedule_type}
                       onChange={(e) => setValues((prev) => ({ ...prev, schedule_type: e.target.value }))}
-                      placeholder="weekly / monthly / yearly"
+                      placeholder="еженедельно / ежемесячно / ежегодно"
                       className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                     />
                     <datalist id="schedule-type-options">
@@ -289,13 +291,19 @@ export default function TemplateForm({
                 <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Подсказка</h3>
                 <div className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
                   <p>
-                    Для еженедельных шаблонов обычно используют <span className="text-zinc-800 dark:text-zinc-200">weekly</span>.
+                    Для еженедельных шаблонов обычно используют{" "}
+                    <span className="text-zinc-800 dark:text-zinc-200">{scheduleTypeLabel("weekly")}</span> (
+                    <span className="font-mono text-zinc-600 dark:text-zinc-400">weekly</span>).
                   </p>
                   <p>
-                    Для ежемесячных — <span className="text-zinc-800 dark:text-zinc-200">monthly</span>.
+                    Для ежемесячных —{" "}
+                    <span className="text-zinc-800 dark:text-zinc-200">{scheduleTypeLabel("monthly")}</span> (
+                    <span className="font-mono text-zinc-600 dark:text-zinc-400">monthly</span>).
                   </p>
                   <p>
-                    Для ежегодных — <span className="text-zinc-800 dark:text-zinc-200">yearly</span>.
+                    Для ежегодных —{" "}
+                    <span className="text-zinc-800 dark:text-zinc-200">{scheduleTypeLabel("yearly")}</span> (
+                    <span className="font-mono text-zinc-600 dark:text-zinc-400">yearly</span>).
                   </p>
                   <p>JSON должен быть именно объектом, а не массивом.</p>
                   <p>owner_unit_id лучше не оставлять пустым, чтобы не создавать новые дефекты.</p>

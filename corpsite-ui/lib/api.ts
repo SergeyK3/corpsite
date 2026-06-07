@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 import { getSessionAccessToken, logout, setSessionAccessToken } from "./auth";
+import { formatApiError } from "./i18n";
 
 function env(name: string, fallback = ""): string {
   const v = process.env[name];
@@ -76,7 +77,7 @@ export function toApiError(status: number, body: any, meta?: Record<string, any>
   const err: APIError = {
     status,
     code: body?.code,
-    message: body?.message ?? body?.detail ?? body?.error ?? "Request failed",
+    message: formatApiError(status, body),
     details: body,
   };
 

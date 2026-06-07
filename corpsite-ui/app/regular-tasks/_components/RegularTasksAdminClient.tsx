@@ -4,6 +4,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "../../../lib/api";
+import { runStatusLabel, scheduleTypeLabel } from "@/lib/i18n";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
   type TemplateFormOwnerUnitOption,
@@ -133,8 +134,13 @@ function statTone(status: string): string {
   return "text-zinc-800 dark:text-zinc-200";
 }
 
+function scheduleTypeCodeOf(item: RegularTaskItem): string {
+  return String(item.schedule_type ?? item.periodicity ?? "").trim();
+}
+
 function scheduleLabel(item: RegularTaskItem): string {
-  return item.schedule_type ?? item.periodicity ?? "—";
+  const code = scheduleTypeCodeOf(item);
+  return code ? scheduleTypeLabel(code) : "—";
 }
 
 function errorText(err: unknown, fallback: string): string {
@@ -490,7 +496,7 @@ export default function RegularTasksAdminClient() {
     return templates.filter((item) => {
       if (activeFilter === "active" && !item.is_active) return false;
       if (activeFilter === "inactive" && item.is_active) return false;
-      if (scheduleFilter !== "all" && scheduleLabel(item) !== scheduleFilter) return false;
+      if (scheduleFilter !== "all" && scheduleTypeCodeOf(item) !== scheduleFilter) return false;
       return matchesSearch(item, query);
     });
   }, [templates, query, activeFilter, scheduleFilter]);
@@ -863,7 +869,7 @@ export default function RegularTasksAdminClient() {
                     <option value="all">Периодичность: все</option>
                     {scheduleTypeOptions.map((value) => (
                       <option key={value} value={value}>
-                        {value}
+                        {scheduleTypeLabel(value)}
                       </option>
                     ))}
                   </select>
@@ -1118,7 +1124,7 @@ export default function RegularTasksAdminClient() {
                         >
                           <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">{run.run_id}</td>
                           <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{fmtDateTime(run.started_at)}</td>
-                          <td className={`px-3 py-2 ${statTone(run.status)}`}>{run.status}</td>
+                          <td className={`px-3 py-2 ${statTone(run.status)}`}>{runStatusLabel(run.status)}</td>
                           <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{run.stats?.created ?? 0}</td>
                           <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{run.stats?.deduped ?? 0}</td>
                           <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{run.stats?.errors ?? 0}</td>
@@ -1181,7 +1187,7 @@ export default function RegularTasksAdminClient() {
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{roleLabel(item)}</td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{yesNo(item.is_due)}</td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{item.created_tasks}</td>
-                        <td className={`px-3 py-2 ${statTone(item.status)}`}>{item.status}</td>
+                        <td className={`px-3 py-2 ${statTone(item.status)}`}>{runStatusLabel(item.status)}</td>
                         <td className="px-3 py-2 text-xs text-red-700 dark:text-red-300">{item.error ?? "—"}</td>
                       </tr>
                     ))}
@@ -1243,7 +1249,9 @@ export default function RegularTasksAdminClient() {
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
                       <div className="text-xs text-zinc-600 dark:text-zinc-400">Тип расписания</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.schedule_type ?? "—"}</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
+                        {scheduleTypeLabel(currentTemplate.schedule_type) ?? "—"}
+                      </div>
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
