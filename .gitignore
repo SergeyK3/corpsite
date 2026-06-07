@@ -101,3 +101,4 @@ sql/fix_titles.sql
 *.csv
 __tmp__*
 tmp/
+.venv/
