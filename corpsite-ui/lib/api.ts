@@ -18,7 +18,7 @@ function env(name: string, fallback = ""): string {
   return (v ?? fallback).toString().trim();
 }
 
-const API_BASE_URL = env("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000");
+const API_BASE_URL = env("NEXT_PUBLIC_API_BASE_URL", "http://46.247.42.47:8000");
 
 function truthyEnv(name: string): boolean {
   const v = env(name, "").toLowerCase();
