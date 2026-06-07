@@ -1,11 +1,15 @@
 # FILE: app/main.py
 from __future__ import annotations
 
-from pathlib import Path
 from datetime import date
 from typing import Dict, Any, List
 
-from dotenv import load_dotenv
+import app.config  # noqa: F401 — load .env before other app imports
+
+from app.config import cors_allowed_origins, is_prod_env, validate_production_secrets
+
+validate_production_secrets()
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,13 +19,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.errors import raise_error, ErrorCode
-
-# -----------------------
-# Env (single source of truth)
-# IMPORTANT: load .env BEFORE importing app.* modules that may read os.getenv at import time
-# -----------------------
-ROOT_ENV = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(dotenv_path=ROOT_ENV)
 
 from app.db.engine import engine
 from app.meta import router as meta_router
@@ -43,7 +40,17 @@ class UTF8JSONResponse(JSONResponse):
     media_type = "application/json; charset=utf-8"
 
 
-app = FastAPI(title="Corpsite MVP", default_response_class=UTF8JSONResponse)
+_docs_url = None if is_prod_env() else "/docs"
+_redoc_url = None if is_prod_env() else "/redoc"
+_openapi_url = None if is_prod_env() else "/openapi.json"
+
+app = FastAPI(
+    title="Corpsite MVP",
+    default_response_class=UTF8JSONResponse,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
+)
 
 
 # -----------------------
@@ -70,13 +77,16 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+_origins = cors_allowed_origins()
+if not _origins and not is_prod_env():
+    _origins = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://46.247.42.47:3000",
-    ],
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
