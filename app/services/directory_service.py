@@ -475,7 +475,7 @@ def list_employees(
     if q:
         qq = q.strip().lower()
         params["q"] = f"%{qq}%"
-        parts: List[str] = []
+        parts: List[str] = [f"LOWER(CAST(e.{emp_id_col} AS TEXT)) LIKE :q"]
         if fio_col:
             parts.append(f"LOWER(CAST(e.{fio_col} AS TEXT)) LIKE :q")
         if last_col:

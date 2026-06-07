@@ -289,17 +289,26 @@ export default function EmployeesPageClient(props: Props) {
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2.5">
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-              <div className="flex-1">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  applySearch();
+                }}
+                className="flex flex-1 gap-2"
+              >
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") applySearch();
-                  }}
                   placeholder="Поиск по ФИО или табельному номеру"
-                  className="h-9 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
-              </div>
+                <button
+                  type="submit"
+                  className="h-9 shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  Найти
+                </button>
+              </form>
 
               <select
                 value={departmentId}
