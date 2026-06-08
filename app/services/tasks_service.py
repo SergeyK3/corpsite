@@ -313,11 +313,38 @@ def get_team_scope_context(
     user_ctx = load_user_context(conn, user_id=int(current_user_id))
     current_unit_id = int(user_ctx["unit_id"]) if user_ctx.get("unit_id") is not None else None
 
+    role_meta = load_role_meta(conn, role_id=int(current_role_id))
+    role_code = str(role_meta.get("code") or "").strip().upper()
+
+    if role_code == "QM_HEAD":
+        qm_rows = conn.execute(
+            text(
+                """
+                SELECT DISTINCT r.role_id
+                FROM public.roles r
+                WHERE r.code ~ '^QM_'
+                  AND r.code <> 'QM_HEAD'
+                ORDER BY r.role_id
+                """
+            )
+        ).mappings().all()
+        team_executor_role_ids = [
+            int(r["role_id"]) for r in qm_rows if r.get("role_id") is not None
+        ]
+        return {
+            "current_unit_id": current_unit_id,
+            "team_user_ids": [],
+            "team_executor_role_ids": team_executor_role_ids,
+            "scope_mode": "qm_head",
+        }
+
     if current_unit_id is None:
         if is_system_admin_role_id(current_role_id):
             return {
                 "current_unit_id": None,
                 "team_user_ids": [],
+                "team_executor_role_ids": [],
+                "scope_mode": "admin",
             }
         raise HTTPException(status_code=403, detail="Team task scope is not available without unit_id")
 
@@ -346,6 +373,8 @@ def get_team_scope_context(
     return {
         "current_unit_id": int(current_unit_id),
         "team_user_ids": team_user_ids,
+        "team_executor_role_ids": [],
+        "scope_mode": "unit",
     }
 
 
@@ -427,11 +456,16 @@ def get_manual_task_role_options_for_user(
     if not visible_role_ids:
         visible_role_ids = [int(current_role_id)]
 
+    role_meta = load_role_meta(conn, role_id=int(current_role_id))
     is_manager = (
         is_privileged
         or (int(current_role_id) in DIRECTOR_ROLE_IDS)
         or (int(current_role_id) in DEPUTY_ROLE_IDS)
         or (int(current_role_id) in SUPERVISOR_ROLE_IDS)
+        or _looks_like_manager_role(
+            role_code=role_meta.get("code"),
+            role_name=role_meta.get("name"),
+        )
         or (len(visible_role_ids) > 1)
     )
 
@@ -756,6 +790,22 @@ def _task_matches_team_scope(
 
     if is_system_admin_role_id(current_role_id):
         return executor_role_id != int(current_role_id)
+
+    role_meta = load_role_meta(conn, role_id=int(current_role_id))
+    role_code = str(role_meta.get("code") or "").strip().upper()
+
+    if role_code == "QM_HEAD":
+        team_ctx = get_team_scope_context(
+            conn,
+            current_user_id=int(current_user_id),
+            current_role_id=int(current_role_id),
+        )
+        if team_ctx.get("scope_mode") != "qm_head":
+            return False
+        team_role_ids = team_ctx.get("team_executor_role_ids") or []
+        return int(executor_role_id) in {
+            int(x) for x in team_role_ids if x is not None
+        }
 
     user_ctx = load_user_context(conn, user_id=int(current_user_id))
     current_unit_id = int(user_ctx["unit_id"]) if user_ctx.get("unit_id") is not None else None
