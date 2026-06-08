@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import React from "react";
 
-import { apiCatchUpRegularTasks, apiFetchJson } from "@/lib/api";
-
-type CatchUpPreset = "past_week" | "past_month" | "manual";
+import {
+  apiCatchUpRegularTasks,
+  apiFetchJson,
+  type CatchUpPreset,
+  type CatchUpRegularTasksParams,
+} from "@/lib/api";
 
 type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 
@@ -136,8 +139,8 @@ export default function CatchUpRunClient() {
   }, []);
 
   const buildPayload = React.useCallback(
-    (dryRun: boolean) => {
-      const payload: Record<string, unknown> = {
+    (dryRun: boolean): CatchUpRegularTasksParams => {
+      const payload: CatchUpRegularTasksParams = {
         dry_run: dryRun,
         preset,
       };
