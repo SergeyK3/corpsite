@@ -43,6 +43,31 @@ SUPERVISOR_ROLE_IDS = _parse_int_set("SUPERVISOR_ROLE_IDS")
 DEPUTY_ROLE_IDS = _parse_int_set("DEPUTY_ROLE_IDS")
 DIRECTOR_ROLE_IDS = _parse_int_set("DIRECTOR_ROLE_IDS")
 
+
+def _lookup_role_ids_by_codes_tx(conn, codes: Iterable[str]) -> List[int]:
+    code_list = [str(c).strip().upper() for c in codes if str(c).strip()]
+    if not code_list:
+        return []
+    rows = conn.execute(
+        text(
+            """
+            SELECT role_id
+            FROM public.roles
+            WHERE upper(code) = ANY(:codes)
+            """
+        ),
+        {"codes": code_list},
+    ).scalars().all()
+    out: List[int] = []
+    for r in rows:
+        try:
+            iv = int(r)
+            if iv > 0:
+                out.append(iv)
+        except Exception:
+            continue
+    return out
+
 # allow-list Telegram (если пусто — ограничения нет)
 TELEGRAM_DELIVERY_ALLOW_USER_IDS: Set[int] = _parse_int_set("TELEGRAM_DELIVERY_ALLOW_USER_IDS")
 
@@ -244,7 +269,12 @@ def resolve_recipients_for_task_event_tx(
             {"rid": int(task.executor_role_id)},
         ).scalars().all()
 
-        mgmt_role_ids = sorted(set(SUPERVISOR_ROLE_IDS) | set(DEPUTY_ROLE_IDS) | set(DIRECTOR_ROLE_IDS))
+        mgmt_role_ids = sorted(
+            set(SUPERVISOR_ROLE_IDS)
+            | set(DEPUTY_ROLE_IDS)
+            | set(DIRECTOR_ROLE_IDS)
+            | set(_lookup_role_ids_by_codes_tx(conn, ["QM_HEAD"]))
+        )
         mgmt_users: List[int] = []
         if mgmt_role_ids:
             mgmt_users = conn.execute(
@@ -415,9 +445,12 @@ def create_task_event_tx(
             tg_rows = conn.execute(
                 text(
                     """
-                    SELECT b.user_id
-                    FROM public.tg_bindings b
-                    WHERE b.user_id = ANY(:uids)
+                    SELECT u.user_id
+                    FROM public.users u
+                    WHERE u.user_id = ANY(:uids)
+                      AND u.telegram_id IS NOT NULL
+                      AND trim(u.telegram_id::text) <> ''
+                      AND COALESCE(u.is_active, TRUE) = TRUE
                     """
                 ),
                 {"uids": filtered_uids},
