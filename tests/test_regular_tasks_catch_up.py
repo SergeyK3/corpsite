@@ -158,6 +158,30 @@ def test_catch_up_dry_run_scoped_by_org_unit():
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_catch_up_dry_run_stores_empty_errors_array():
+    with engine.begin() as conn:
+        run_id, stats, _resolved = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="manual",
+            dry_run=True,
+            run_for_date_manual=date(2026, 3, 5),
+            schedule_type="weekly",
+            org_unit_id=999999,
+        )
+
+        assert stats["errors"] == 0
+
+        errors_json = conn.execute(
+            text("SELECT errors FROM public.regular_task_runs WHERE run_id = :rid"),
+            {"rid": int(run_id)},
+        ).scalar_one()
+
+        conn.execute(text("DELETE FROM public.regular_task_runs WHERE run_id = :rid"), {"rid": int(run_id)})
+
+    assert errors_json == []
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_catch_up_endpoint_requires_admin():
     client = TestClient(app)
     r = client.post(

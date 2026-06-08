@@ -951,8 +951,8 @@ def run_regular_tasks_generation_tx(
     run_id = conn.execute(
         text(
             """
-            INSERT INTO public.regular_task_runs (started_at, status, stats)
-            VALUES (now(), 'ok', '{}'::jsonb)
+            INSERT INTO public.regular_task_runs (started_at, status, stats, errors)
+            VALUES (now(), 'ok', '{}'::jsonb, '[]'::jsonb)
             RETURNING run_id
             """
         )
@@ -1324,7 +1324,7 @@ def run_regular_tasks_generation_tx(
             SET finished_at = now(),
                 status = CASE WHEN :errors_cnt > 0 THEN 'partial' ELSE 'ok' END,
                 stats = CAST(:stats AS jsonb),
-                errors = CASE WHEN :errors_cnt > 0 THEN CAST(:errors AS jsonb) ELSE NULL END
+                errors = CAST(:errors AS jsonb)
             WHERE run_id = :run_id
             """
         ),
