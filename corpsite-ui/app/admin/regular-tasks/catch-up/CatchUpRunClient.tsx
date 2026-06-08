@@ -10,6 +10,11 @@ import {
   type CatchUpPreset,
   type CatchUpRegularTasksParams,
 } from "@/lib/api";
+import {
+  buildOrgUnitSelectGroups,
+  loadOrgUnitSelectOptions,
+  type OrgUnitSelectOption,
+} from "@/lib/orgUnitsSelect";
 
 type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 
@@ -61,29 +66,6 @@ function resolveOrgGroupId(filter: OrgGroupFilter, deptGroups: DeptGroupRow[]): 
   return envId;
 }
 
-type OrgUnitRow = {
-  id?: number | string;
-  unit_id?: number;
-  unitId?: number;
-  parent_id?: number | string | null;
-  parent_unit_id?: number | null;
-  name?: string | null;
-  title?: string | null;
-  code?: string | null;
-  group_id?: number | null;
-  groupId?: number | null;
-};
-
-type OrgUnitOption = {
-  unit_id: number;
-  name: string;
-  group_id?: number | null;
-};
-
-type OrgUnitsListResponse = {
-  items?: OrgUnitRow[];
-};
-
 type CatchUpResult = {
   run_id: number;
   dry_run: boolean;
@@ -103,111 +85,6 @@ type CatchUpResult = {
     errors?: number;
   };
 };
-
-function unitIdOf(row: OrgUnitRow): number | null {
-  const direct = row.unit_id ?? row.unitId;
-  if (typeof direct === "number" && Number.isFinite(direct) && direct > 0) return direct;
-  const parsed = Number(row.id);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function unitNameOf(row: OrgUnitRow): string {
-  const name = String(row.title ?? row.name ?? row.code ?? "").trim();
-  const id = unitIdOf(row);
-  return name || (id != null ? `#${id}` : "—");
-}
-
-function ownGroupId(row: OrgUnitRow): number | null {
-  const g = row.group_id ?? row.groupId;
-  if (typeof g === "number" && Number.isFinite(g) && g > 0) return g;
-  return null;
-}
-
-function dedupeOrgUnitOptions(items: OrgUnitOption[]): OrgUnitOption[] {
-  const seen = new Set<number>();
-  return items
-    .filter((x) => {
-      if (seen.has(x.unit_id)) return false;
-      seen.add(x.unit_id);
-      return true;
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
-}
-
-function flattenOrgUnitTree(nodes: unknown[], inheritedGroupId: number | null = null): OrgUnitOption[] {
-  const out: OrgUnitOption[] = [];
-
-  const walk = (list: unknown[], parentGroupId: number | null) => {
-    for (const raw of list) {
-      const node = raw as OrgUnitRow & { children?: unknown[] };
-      const unitId = unitIdOf(node);
-      const effectiveGroup = ownGroupId(node) ?? parentGroupId;
-      if (unitId != null) {
-        out.push({
-          unit_id: unitId,
-          name: unitNameOf(node),
-          group_id: effectiveGroup,
-        });
-      }
-      if (Array.isArray(node.children) && node.children.length > 0) {
-        walk(node.children, effectiveGroup);
-      }
-    }
-  };
-
-  walk(nodes, inheritedGroupId);
-  return dedupeOrgUnitOptions(out);
-}
-
-function enrichFlatOrgUnitsWithInheritedGroup(rows: OrgUnitRow[]): OrgUnitOption[] {
-  const byId = new Map<number, OrgUnitRow>();
-  for (const row of rows) {
-    const id = unitIdOf(row);
-    if (id != null) byId.set(id, row);
-  }
-
-  const resolveGroup = (id: number, seen = new Set<number>()): number | null => {
-    if (seen.has(id)) return null;
-    seen.add(id);
-    const row = byId.get(id);
-    if (!row) return null;
-    const own = ownGroupId(row);
-    if (own != null) return own;
-    const parentRaw = row.parent_unit_id ?? row.parent_id;
-    const parentId = Number(parentRaw);
-    if (Number.isFinite(parentId) && parentId > 0) return resolveGroup(parentId, seen);
-    return null;
-  };
-
-  return dedupeOrgUnitOptions(
-    rows.flatMap((row): OrgUnitOption[] => {
-      const unitId = unitIdOf(row);
-      if (unitId == null) return [];
-      return [
-        {
-          unit_id: unitId,
-          name: unitNameOf(row),
-          group_id: resolveGroup(unitId),
-        },
-      ];
-    }),
-  );
-}
-
-async function loadOrgUnitOptions(): Promise<OrgUnitOption[]> {
-  const tree = await apiFetchJson<{ items?: unknown[] }>("/directory/org-units/tree", {
-    query: { status: "active" },
-  });
-  const nodes = Array.isArray(tree?.items) ? tree.items : [];
-  let options = flattenOrgUnitTree(nodes);
-  if (options.length > 0) return options;
-
-  const flat = await apiFetchJson<OrgUnitsListResponse>("/directory/org-units", {
-    query: { status: "active" },
-  });
-  const rows = Array.isArray(flat?.items) ? flat.items : [];
-  return enrichFlatOrgUnitsWithInheritedGroup(rows);
-}
 
 function errorText(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -233,7 +110,7 @@ export default function CatchUpRunClient() {
   const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
   const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
-  const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitOption[]>([]);
+  const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitSelectOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
   const [ownerUnitLoadError, setOwnerUnitLoadError] = React.useState<string | null>(null);
 
@@ -262,10 +139,28 @@ export default function CatchUpRunClient() {
     setOrgUnitId(orgUnitFromUrl);
   }, [orgUnitFromUrl]);
 
+  const groupLabelById = React.useMemo(() => {
+    const map = new Map<number, string>();
+    for (const opt of ORG_GROUP_OPTIONS) {
+      if (opt.value === "all") continue;
+      const gid = resolveOrgGroupId(opt.value, deptGroups);
+      if (gid != null) map.set(gid, opt.label);
+    }
+    for (const g of deptGroups) {
+      if (!map.has(g.group_id)) map.set(g.group_id, g.group_name);
+    }
+    return map;
+  }, [deptGroups]);
+
   const filteredOwnerUnitOptions = React.useMemo(() => {
     if (selectedOrgGroupId == null) return ownerUnitOptions;
     return ownerUnitOptions.filter((u) => Number(u.group_id) === Number(selectedOrgGroupId));
   }, [ownerUnitOptions, selectedOrgGroupId]);
+
+  const unitSelectGroups = React.useMemo(
+    () => buildOrgUnitSelectGroups(filteredOwnerUnitOptions, groupLabelById),
+    [filteredOwnerUnitOptions, groupLabelById],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -300,7 +195,7 @@ export default function CatchUpRunClient() {
       setOwnerUnitLoading(true);
       setOwnerUnitLoadError(null);
       try {
-        const options = await loadOrgUnitOptions();
+        const options = await loadOrgUnitSelectOptions();
         if (!cancelled) setOwnerUnitOptions(options);
       } catch (err) {
         if (!cancelled) {
@@ -530,22 +425,34 @@ export default function CatchUpRunClient() {
               disabled={ownerUnitLoading}
             >
               <option value="">Все отделения в группе</option>
-              {filteredOwnerUnitOptions.map((u) => (
-                <option key={u.unit_id} value={String(u.unit_id)}>
-                  {`${u.name} (#${u.unit_id})`}
-                </option>
+              {unitSelectGroups.map((group) => (
+                <optgroup key={group.key} label={group.label}>
+                  {group.items.map((u) => (
+                    <option key={u.unit_id} value={String(u.unit_id)}>
+                      {`${u.name} (#${u.unit_id})`}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            {ownerUnitLoading ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">Загрузка отделений...</span>
+            ) : null}
             {ownerUnitLoadError ? (
               <span className="text-xs text-red-600 dark:text-red-400">{ownerUnitLoadError}</span>
             ) : null}
             {!ownerUnitLoading && !ownerUnitLoadError && filteredOwnerUnitOptions.length === 0 ? (
               <span className="text-xs text-amber-700 dark:text-amber-300">
                 {ownerUnitOptions.length === 0
-                  ? "Список отделений пуст. Проверьте справочник «Отделения» и права admin."
+                  ? "Список отделений пуст. Откройте /directory/org-units под admin и проверьте, что API возвращает items."
                   : selectedOrgGroupId != null
-                    ? `В группе «${selectedOrgGroupLabel}» нет отделений (загружено всего: ${ownerUnitOptions.length}). Проверьте group_id у отделений в справочнике.`
+                    ? `В группе «${selectedOrgGroupLabel}» нет отделений (загружено всего: ${ownerUnitOptions.length}).`
                     : "Нет отделений для выбора."}
+              </span>
+            ) : null}
+            {!ownerUnitLoading && !ownerUnitLoadError && filteredOwnerUnitOptions.length > 0 ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Доступно отделений: {filteredOwnerUnitOptions.length}
               </span>
             ) : null}
           </label>
