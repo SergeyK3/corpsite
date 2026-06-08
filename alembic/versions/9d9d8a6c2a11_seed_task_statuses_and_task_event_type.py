@@ -17,7 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 1) Enum type for audit/events (write_task_audit casts to ::task_event_type)
+    # Enum type for audit/events (write_task_audit casts to ::task_event_type)
     op.execute(
         r"""
         DO $$
@@ -34,8 +34,7 @@ def upgrade() -> None:
         """
     )
 
-    # 2) Task statuses dictionary (FSM uses these codes)
-    # Use WHERE NOT EXISTS to avoid relying on UNIQUE constraints.
+    # Task statuses dictionary (FSM uses these codes)
     op.execute(
         r"""
         INSERT INTO public.task_statuses (code, name_ru)

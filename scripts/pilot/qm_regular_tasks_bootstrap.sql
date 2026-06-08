@@ -9,6 +9,10 @@
 -- After apply: catch-up Preview with org_unit_id=44, preset=past_week
 -- (do NOT run live catch-up until templates are verified).
 --
+-- Note: regular_tasks.assignment_scope is stored as 'unit' here, but catch-up
+-- normalizes it to 'structural' on tasks (see regular_tasks_service._normalize_assignment_scope).
+-- This is expected; not a RBAC bug.
+--
 -- Example (review before apply on VPS):
 --   docker exec -i corpsite-pg psql -U postgres -d corpsite < scripts/pilot/qm_regular_tasks_bootstrap.sql
 
