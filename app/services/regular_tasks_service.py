@@ -758,32 +758,106 @@ def _acquire_task_slot_lock(
     return lock_key
 
 
-def run_regular_tasks_generation_tx(
+@dataclass(frozen=True)
+class CatchUpTemplateFilters:
+    schedule_type: Optional[str] = None
+    org_group_id: Optional[int] = None
+    org_unit_id: Optional[int] = None
+    executor_role_id: Optional[int] = None
+
+
+def resolve_catch_up_run_for_date(
+    preset: str,
+    today: date,
+    *,
+    manual_date: Optional[date] = None,
+) -> date:
+    p = (preset or "").strip().lower()
+    if p == "manual":
+        if manual_date is None:
+            raise ValueError("run_for_date is required when preset=manual")
+        return manual_date
+    if p == "past_month":
+        first_cur = _first_day_of_month(today)
+        last_prev = first_cur - timedelta(days=1)
+        return _first_day_of_month(last_prev)
+    if p == "past_week":
+        start = today - timedelta(days=7)
+        end = today - timedelta(days=1)
+        last_wed: Optional[date] = None
+        d = start
+        while d <= end:
+            if d.isoweekday() == 3:
+                last_wed = d
+            d += timedelta(days=1)
+        if last_wed is not None:
+            return last_wed
+        d = today - timedelta(days=1)
+        while d.isoweekday() != 3:
+            d -= timedelta(days=1)
+        return d
+    raise ValueError(f"unsupported catch-up preset: {preset}")
+
+
+def resolve_catch_up_schedule_type(preset: str, schedule_type: Optional[str]) -> Optional[str]:
+    explicit = (schedule_type or "").strip().lower()
+    if explicit:
+        return explicit
+    p = (preset or "").strip().lower()
+    if p == "past_week":
+        return "weekly"
+    if p == "past_month":
+        return "monthly"
+    return None
+
+
+def _load_regular_task_templates(
     conn: Connection,
     *,
-    run_at_local: Optional[datetime] = None,
-    dry_run: bool = False,
-) -> Tuple[int, Dict[str, Any]]:
-    now_local = run_at_local or _now_local()
+    template_filters: Optional[CatchUpTemplateFilters] = None,
+) -> List[Any]:
+    filters: List[str] = ["COALESCE(rt.is_active, true) = true"]
+    params: Dict[str, Any] = {}
 
-    today_effective: date = FORCE_RUN_FOR_DATE or now_local.date()
-    ignore_time_gate: bool = IGNORE_TIME_GATE_ENV or (FORCE_RUN_FOR_DATE is not None)
+    if template_filters is not None:
+        if template_filters.schedule_type:
+            params["schedule_type"] = str(template_filters.schedule_type).strip().lower()
+            filters.append("LOWER(TRIM(COALESCE(rt.schedule_type, ''))) = :schedule_type")
 
-    run_id = conn.execute(
+        if template_filters.executor_role_id is not None:
+            params["executor_role_id"] = int(template_filters.executor_role_id)
+            filters.append("rt.executor_role_id = :executor_role_id")
+
+        if template_filters.org_group_id is not None:
+            params["org_group_id"] = int(template_filters.org_group_id)
+            filters.append("COALESCE(ou.group_id, 0) = :org_group_id")
+
+        if template_filters.org_unit_id is not None:
+            params["org_unit_id"] = int(template_filters.org_unit_id)
+            filters.append(
+                """
+                rt.owner_unit_id IN (
+                    WITH RECURSIVE subtree AS (
+                        SELECT ou0.unit_id
+                        FROM public.org_units ou0
+                        WHERE ou0.unit_id = :org_unit_id
+
+                        UNION ALL
+
+                        SELECT child.unit_id
+                        FROM public.org_units child
+                        JOIN subtree s ON s.unit_id = child.parent_unit_id
+                        WHERE COALESCE(child.is_active, TRUE) = TRUE
+                    )
+                    SELECT unit_id FROM subtree
+                )
+                """.strip()
+            )
+
+    where_sql = " AND ".join(filters)
+    return conn.execute(
         text(
-            """
-            INSERT INTO public.regular_task_runs (started_at, status, stats)
-            VALUES (now(), 'ok', '{}'::jsonb)
-            RETURNING run_id
-            """
-        )
-    ).scalar_one()
-
-    errors: List[Dict[str, Any]] = []
-
-    templates = conn.execute(
-        text(
-            """
+            f"""
             SELECT
                 rt.regular_task_id,
                 rt.is_active,
@@ -800,11 +874,93 @@ def run_regular_tasks_generation_tx(
                 r.code AS executor_role_code
             FROM public.regular_tasks rt
             LEFT JOIN public.roles r ON r.role_id = rt.executor_role_id
-            WHERE COALESCE(rt.is_active, true) = true
+            LEFT JOIN public.org_units ou ON ou.unit_id = rt.owner_unit_id
+            WHERE {where_sql}
             ORDER BY rt.regular_task_id
             """
-        )
+        ),
+        params,
     ).mappings().all()
+
+
+def run_regular_tasks_catch_up_tx(
+    conn: Connection,
+    *,
+    preset: str,
+    dry_run: bool = False,
+    run_for_date_manual: Optional[date] = None,
+    schedule_type: Optional[str] = None,
+    org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
+    executor_role_id: Optional[int] = None,
+) -> Tuple[int, Dict[str, Any], Dict[str, Any]]:
+    today = _now_local().date()
+    resolved_date = resolve_catch_up_run_for_date(
+        preset,
+        today,
+        manual_date=run_for_date_manual,
+    )
+    resolved_schedule = resolve_catch_up_schedule_type(preset, schedule_type)
+    filters = CatchUpTemplateFilters(
+        schedule_type=resolved_schedule,
+        org_group_id=org_group_id,
+        org_unit_id=org_unit_id,
+        executor_role_id=executor_role_id,
+    )
+    resolved: Dict[str, Any] = {
+        "preset": (preset or "").strip().lower(),
+        "run_for_date": resolved_date.isoformat(),
+        "schedule_type": resolved_schedule,
+        "org_group_id": int(org_group_id) if org_group_id is not None else None,
+        "org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+        "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
+    }
+    run_at_local = datetime.combine(resolved_date, time(12, 0), tzinfo=_LOCAL_TZ)
+    run_id, stats = run_regular_tasks_generation_tx(
+        conn,
+        run_at_local=run_at_local,
+        dry_run=dry_run,
+        run_for_date=resolved_date,
+        force_due=True,
+        template_filters=filters,
+        catch_up_meta=resolved,
+    )
+    resolved["templates_in_scope"] = int(stats.get("templates_total") or 0)
+    return int(run_id), stats, resolved
+
+
+def run_regular_tasks_generation_tx(
+    conn: Connection,
+    *,
+    run_at_local: Optional[datetime] = None,
+    dry_run: bool = False,
+    run_for_date: Optional[date] = None,
+    force_due: bool = False,
+    template_filters: Optional[CatchUpTemplateFilters] = None,
+    catch_up_meta: Optional[Dict[str, Any]] = None,
+) -> Tuple[int, Dict[str, Any]]:
+    if run_for_date is not None:
+        now_local = run_at_local or datetime.combine(run_for_date, time(12, 0), tzinfo=_LOCAL_TZ)
+        today_effective = run_for_date
+        ignore_time_gate = True
+    else:
+        now_local = run_at_local or _now_local()
+        today_effective = FORCE_RUN_FOR_DATE or now_local.date()
+        ignore_time_gate = IGNORE_TIME_GATE_ENV or (FORCE_RUN_FOR_DATE is not None)
+
+    run_id = conn.execute(
+        text(
+            """
+            INSERT INTO public.regular_task_runs (started_at, status, stats)
+            VALUES (now(), 'ok', '{}'::jsonb)
+            RETURNING run_id
+            """
+        )
+    ).scalar_one()
+
+    errors: List[Dict[str, Any]] = []
+
+    templates = _load_regular_task_templates(conn, template_filters=template_filters)
 
     total = len(templates)
     due = 0
@@ -821,9 +977,10 @@ def run_regular_tasks_generation_tx(
             "dry_run": bool(dry_run),
             "now_local": now_local.isoformat(),
             "today_effective": today_effective.isoformat(),
-            "force_due_all": bool(FORCE_DUE_ALL),
+            "force_due_all": bool(FORCE_DUE_ALL or force_due),
             "force_run_for_date": FORCE_RUN_FOR_DATE.isoformat() if FORCE_RUN_FOR_DATE else None,
             "ignore_time_gate": bool(ignore_time_gate),
+            "catch_up": catch_up_meta,
         }
 
         try:
@@ -861,7 +1018,7 @@ def run_regular_tasks_generation_tx(
                 )
                 continue
 
-            if FORCE_DUE_ALL:
+            if FORCE_DUE_ALL or force_due:
                 is_due = True
             else:
                 is_due = _is_due_today_or_with_offset(
@@ -1150,13 +1307,15 @@ def run_regular_tasks_generation_tx(
             )
             continue
 
-    stats = RunStats(
-        templates_total=int(total),
-        templates_due=int(due),
-        created=int(created),
-        deduped=int(deduped),
-        errors=int(len(errors)),
-    )
+    stats_dict: Dict[str, Any] = {
+        "templates_total": int(total),
+        "templates_due": int(due),
+        "created": int(created),
+        "deduped": int(deduped),
+        "errors": int(len(errors)),
+    }
+    if catch_up_meta is not None:
+        stats_dict["catch_up"] = catch_up_meta
 
     conn.execute(
         text(
@@ -1172,9 +1331,9 @@ def run_regular_tasks_generation_tx(
         {
             "run_id": int(run_id),
             "errors_cnt": int(len(errors)),
-            "stats": json.dumps(stats.__dict__, ensure_ascii=False),
+            "stats": json.dumps(stats_dict, ensure_ascii=False),
             "errors": json.dumps(errors, ensure_ascii=False),
         },
     )
 
-    return int(run_id), stats.__dict__
+    return int(run_id), stats_dict
