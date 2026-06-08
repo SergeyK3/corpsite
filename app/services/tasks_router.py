@@ -267,19 +267,27 @@ def list_tasks(
                     current_user_id=int(current_user_id),
                     current_role_id=int(role_id),
                 )
-                params["current_unit_id"] = team_ctx.get("current_unit_id")
-                where.append(
-                    """
-                    EXISTS (
-                        SELECT 1
-                        FROM public.users ux
-                        WHERE ux.role_id = t.executor_role_id
-                          AND ux.unit_id = :current_unit_id
-                          AND ux.user_id <> :current_user_id
-                          AND COALESCE(ux.is_active, TRUE) = TRUE
+                if team_ctx.get("scope_mode") == "qm_head":
+                    team_role_ids = team_ctx.get("team_executor_role_ids") or []
+                    if not team_role_ids:
+                        where.append("1=0")
+                    else:
+                        where.append("t.executor_role_id = ANY(:team_executor_role_ids)")
+                        params["team_executor_role_ids"] = [int(x) for x in team_role_ids]
+                else:
+                    params["current_unit_id"] = team_ctx.get("current_unit_id")
+                    where.append(
+                        """
+                        EXISTS (
+                            SELECT 1
+                            FROM public.users ux
+                            WHERE ux.role_id = t.executor_role_id
+                              AND ux.unit_id = :current_unit_id
+                              AND ux.user_id <> :current_user_id
+                              AND COALESCE(ux.is_active, TRUE) = TRUE
+                        )
+                        """.strip()
                     )
-                    """.strip()
-                )
 
         if executor_role_id is not None:
             erid = int(executor_role_id)
