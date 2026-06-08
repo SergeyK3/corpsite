@@ -184,3 +184,37 @@ Requires fresh `WAITING_REPORT` tasks (re-run catch-up for a new period if tasks
 1. Notifications and delivery (API → bot / Telegram).
 2. Bindings and bot cursor storage.
 3. UX copy after logic is stable.
+
+## VPS checkpoint — Notifications & Delivery (2026-06-08)
+
+Stage closed on VPS: notifications and Telegram delivery verified end-to-end.
+
+### Verified
+
+- Backend **task events** are created on FSM transitions (`REPORT_SUBMITTED`, `APPROVED`, `REJECTED`).
+- **Telegram delivery** confirmed in DB:
+  - `audit_id=5`, `task_id=2`, `event_type=REPORT_SUBMITTED`
+  - recipient `qm_head@corp.local`, `channel=telegram`, `status=SENT`
+- Fix `4a10146` — telegram queue uses `users.telegram_id` (not legacy `tg_bindings`).
+- **systemd:** `/etc/systemd/system/corpsite-bot.service`
+  - `ExecStart=/opt/projects/corpsite/app/.venv/bin/python -m bot.bot`
+- All services **active:** `corpsite-backend`, `corpsite-frontend`, `corpsite-bot`
+
+### Runtime layout
+
+- `DATA_DIR=/var/lib/corpsite` (moved from default `.data` under app root)
+- Cursor files:
+  - `/var/lib/corpsite/bot_events_cursor.json`
+  - `/var/lib/corpsite/bot_deliveries_cursor_telegram.json`
+- `bot_deliveries_cursor_telegram.json`: `cursor_audit_id=5`, `cursor_user_id=2`
+
+### Regression script
+
+```bash
+set -a && source /opt/projects/corpsite/app/.env && set +a
+./venv/bin/python scripts/pilot/qm_notifications_check.py
+```
+
+### Next stage
+
+End-to-end **report → approve → reject** with delivery verification per step (bindings + cursor advance after each event).
