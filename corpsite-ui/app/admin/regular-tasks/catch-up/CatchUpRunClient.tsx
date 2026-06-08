@@ -11,14 +11,26 @@ import {
   type CatchUpRegularTasksParams,
 } from "@/lib/api";
 
-type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
+type DeptGroupRow = {
+  group_id: number;
+  group_name: string;
+};
+
+type DeptGroupsResponse = {
+  items?: DeptGroupRow[];
+};
 
 type OrgUnitRow = {
-  id?: number;
+  id?: number | string;
   unit_id?: number;
+  unitId?: number;
+  parent_id?: number | string | null;
+  parent_unit_id?: number | null;
   name?: string | null;
+  title?: string | null;
   code?: string | null;
   group_id?: number | null;
+  groupId?: number | null;
 };
 
 type OrgUnitOption = {
@@ -51,74 +63,109 @@ type CatchUpResult = {
   };
 };
 
-function readEnvGroupId(name: string, fallback: number): number {
-  const raw = String(process.env[name] ?? "").trim();
-  if (!raw) return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return n;
+function unitIdOf(row: OrgUnitRow): number | null {
+  const direct = row.unit_id ?? row.unitId;
+  if (typeof direct === "number" && Number.isFinite(direct) && direct > 0) return direct;
+  const parsed = Number(row.id);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-const ORG_GROUP_ID_CLINICAL = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_CLINICAL", 1);
-const ORG_GROUP_ID_PARACLINICAL = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_PARACLINICAL", 2);
-const ORG_GROUP_ID_ADMIN = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3);
-
-const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string; id?: number }> = [
-  { value: "all", label: "Все группы отделений" },
-  { value: "clinical", label: "Клинические", id: ORG_GROUP_ID_CLINICAL },
-  { value: "paraclinical", label: "Параклинические", id: ORG_GROUP_ID_PARACLINICAL },
-  { value: "admin", label: "Административно-хозяйственные", id: ORG_GROUP_ID_ADMIN },
-];
-
-function normalizeOrgUnits(data: OrgUnitsListResponse | OrgUnitRow[]): OrgUnitOption[] {
-  const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-
-  return rows
-    .flatMap((x): OrgUnitOption[] => {
-      const unitId = Number(x.unit_id ?? x.id);
-      const name = String(x.name ?? x.code ?? "").trim();
-      if (!Number.isFinite(unitId) || unitId <= 0) return [];
-      return [
-        {
-          unit_id: unitId,
-          name: name || `#${unitId}`,
-          group_id: x.group_id ?? null,
-        },
-      ];
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+function unitNameOf(row: OrgUnitRow): string {
+  const name = String(row.title ?? row.name ?? row.code ?? "").trim();
+  const id = unitIdOf(row);
+  return name || (id != null ? `#${id}` : "—");
 }
 
-function flattenOrgUnitTree(nodes: unknown[]): OrgUnitOption[] {
-  const out: OrgUnitOption[] = [];
+function ownGroupId(row: OrgUnitRow): number | null {
+  const g = row.group_id ?? row.groupId;
+  if (typeof g === "number" && Number.isFinite(g) && g > 0) return g;
+  return null;
+}
 
-  const walk = (list: unknown[]) => {
-    for (const raw of list) {
-      const node = raw as OrgUnitRow & { children?: unknown[] };
-      const unitId = Number(node.unit_id ?? node.id);
-      const name = String(node.name ?? node.code ?? "").trim();
-      if (Number.isFinite(unitId) && unitId > 0) {
-        out.push({
-          unit_id: unitId,
-          name: name || `#${unitId}`,
-          group_id: node.group_id ?? null,
-        });
-      }
-      if (Array.isArray(node.children) && node.children.length > 0) {
-        walk(node.children);
-      }
-    }
-  };
-
-  walk(nodes);
+function dedupeOrgUnitOptions(items: OrgUnitOption[]): OrgUnitOption[] {
   const seen = new Set<number>();
-  return out
+  return items
     .filter((x) => {
       if (seen.has(x.unit_id)) return false;
       seen.add(x.unit_id);
       return true;
     })
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+}
+
+function flattenOrgUnitTree(nodes: unknown[], inheritedGroupId: number | null = null): OrgUnitOption[] {
+  const out: OrgUnitOption[] = [];
+
+  const walk = (list: unknown[], parentGroupId: number | null) => {
+    for (const raw of list) {
+      const node = raw as OrgUnitRow & { children?: unknown[] };
+      const unitId = unitIdOf(node);
+      const effectiveGroup = ownGroupId(node) ?? parentGroupId;
+      if (unitId != null) {
+        out.push({
+          unit_id: unitId,
+          name: unitNameOf(node),
+          group_id: effectiveGroup,
+        });
+      }
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        walk(node.children, effectiveGroup);
+      }
+    }
+  };
+
+  walk(nodes, inheritedGroupId);
+  return dedupeOrgUnitOptions(out);
+}
+
+function enrichFlatOrgUnitsWithInheritedGroup(rows: OrgUnitRow[]): OrgUnitOption[] {
+  const byId = new Map<number, OrgUnitRow>();
+  for (const row of rows) {
+    const id = unitIdOf(row);
+    if (id != null) byId.set(id, row);
+  }
+
+  const resolveGroup = (id: number, seen = new Set<number>()): number | null => {
+    if (seen.has(id)) return null;
+    seen.add(id);
+    const row = byId.get(id);
+    if (!row) return null;
+    const own = ownGroupId(row);
+    if (own != null) return own;
+    const parentRaw = row.parent_unit_id ?? row.parent_id;
+    const parentId = Number(parentRaw);
+    if (Number.isFinite(parentId) && parentId > 0) return resolveGroup(parentId, seen);
+    return null;
+  };
+
+  return dedupeOrgUnitOptions(
+    rows.flatMap((row): OrgUnitOption[] => {
+      const unitId = unitIdOf(row);
+      if (unitId == null) return [];
+      return [
+        {
+          unit_id: unitId,
+          name: unitNameOf(row),
+          group_id: resolveGroup(unitId),
+        },
+      ];
+    }),
+  );
+}
+
+async function loadOrgUnitOptions(): Promise<OrgUnitOption[]> {
+  const tree = await apiFetchJson<{ items?: unknown[] }>("/directory/org-units/tree", {
+    query: { status: "active" },
+  });
+  const nodes = Array.isArray(tree?.items) ? tree.items : [];
+  let options = flattenOrgUnitTree(nodes);
+  if (options.length > 0) return options;
+
+  const flat = await apiFetchJson<OrgUnitsListResponse>("/directory/org-units", {
+    query: { status: "active" },
+  });
+  const rows = Array.isArray(flat?.items) ? flat.items : [];
+  return enrichFlatOrgUnitsWithInheritedGroup(rows);
 }
 
 function errorText(err: unknown, fallback: string): string {
@@ -142,7 +189,9 @@ export default function CatchUpRunClient() {
 
   const [preset, setPreset] = React.useState<CatchUpPreset>("past_week");
   const [manualDate, setManualDate] = React.useState("");
-  const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
+  const [orgGroup, setOrgGroup] = React.useState<string>("all");
+  const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
+  const [deptGroupsLoading, setDeptGroupsLoading] = React.useState(false);
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
   const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
@@ -154,9 +203,15 @@ export default function CatchUpRunClient() {
   const [liveResult, setLiveResult] = React.useState<CatchUpResult | null>(null);
 
   const selectedOrgGroupId = React.useMemo(() => {
-    const found = ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup);
-    return found?.id ?? null;
+    if (orgGroup === "all") return null;
+    const n = Number(orgGroup);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
   }, [orgGroup]);
+
+  const selectedOrgGroupLabel = React.useMemo(() => {
+    if (selectedOrgGroupId == null) return null;
+    return deptGroups.find((g) => g.group_id === selectedOrgGroupId)?.group_name ?? `#${selectedOrgGroupId}`;
+  }, [deptGroups, selectedOrgGroupId]);
 
   const parsedOrgUnitId = React.useMemo(() => {
     const s = (orgUnitId || orgUnitFromUrl).trim();
@@ -177,20 +232,41 @@ export default function CatchUpRunClient() {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
+      setDeptGroupsLoading(true);
+      try {
+        const data = await apiFetchJson<DeptGroupsResponse>("/directory/department-groups", {
+          query: { status: "active", limit: 200 },
+        });
+        const rows = Array.isArray(data?.items) ? data.items : [];
+        if (!cancelled) {
+          setDeptGroups(
+            rows
+              .map((g) => ({
+                group_id: Number(g.group_id),
+                group_name: String(g.group_name ?? "").trim() || `#${g.group_id}`,
+              }))
+              .filter((g) => Number.isFinite(g.group_id) && g.group_id > 0)
+              .sort((a, b) => a.group_name.localeCompare(b.group_name, "ru")),
+          );
+        }
+      } catch {
+        if (!cancelled) setDeptGroups([]);
+      } finally {
+        if (!cancelled) setDeptGroupsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
       setOwnerUnitLoading(true);
       setOwnerUnitLoadError(null);
       try {
-        const data = await apiFetchJson<OrgUnitsListResponse>("/directory/org-units", {
-          query: { status: "active" },
-        });
-        let options = normalizeOrgUnits(data);
-        if (options.length === 0) {
-          const tree = await apiFetchJson<{ items?: unknown[] }>("/directory/org-units/tree", {
-            query: { status: "active" },
-          });
-          const nodes = Array.isArray(tree?.items) ? tree.items : [];
-          options = flattenOrgUnitTree(nodes);
-        }
+        const options = await loadOrgUnitOptions();
         if (!cancelled) setOwnerUnitOptions(options);
       } catch (err) {
         if (!cancelled) {
@@ -397,15 +473,17 @@ export default function CatchUpRunClient() {
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={orgGroup}
               onChange={(e) => {
-                setOrgGroup(e.target.value as OrgGroupFilter);
+                setOrgGroup(e.target.value);
                 setOrgUnitId("");
                 setPreviewResult(null);
                 setLiveResult(null);
               }}
+              disabled={deptGroupsLoading}
             >
-              {ORG_GROUP_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+              <option value="all">Все группы отделений</option>
+              {deptGroups.map((g) => (
+                <option key={g.group_id} value={String(g.group_id)}>
+                  {g.group_name}
                 </option>
               ))}
             </select>
@@ -431,7 +509,11 @@ export default function CatchUpRunClient() {
             ) : null}
             {!ownerUnitLoading && !ownerUnitLoadError && filteredOwnerUnitOptions.length === 0 ? (
               <span className="text-xs text-amber-700 dark:text-amber-300">
-                В выбранной группе нет активных отделений (проверьте NEXT_PUBLIC_ORG_GROUP_ID_* в env).
+                {ownerUnitOptions.length === 0
+                  ? "Список отделений пуст. Проверьте справочник «Отделения» и права admin."
+                  : selectedOrgGroupId != null
+                    ? `В группе «${selectedOrgGroupLabel}» нет отделений (загружено всего: ${ownerUnitOptions.length}). Проверьте group_id у отделений в справочнике.`
+                    : "Нет отделений для выбора."}
               </span>
             ) : null}
           </label>
