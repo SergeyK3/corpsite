@@ -13,13 +13,22 @@ import {
 
 type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 
+type OrgUnitRow = {
+  id?: number;
+  unit_id?: number;
+  name?: string | null;
+  code?: string | null;
+  group_id?: number | null;
+};
+
 type OrgUnitOption = {
   unit_id: number;
-  name?: string | null;
+  name: string;
+  group_id?: number | null;
 };
 
 type OrgUnitsListResponse = {
-  items?: OrgUnitOption[];
+  items?: OrgUnitRow[];
 };
 
 type CatchUpResult = {
@@ -61,9 +70,55 @@ const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string; id?: numb
   { value: "admin", label: "Административно-хозяйственные", id: ORG_GROUP_ID_ADMIN },
 ];
 
-function normalizeOrgUnits(data: OrgUnitsListResponse | OrgUnitOption[]): OrgUnitOption[] {
-  if (Array.isArray(data)) return data;
-  return Array.isArray(data?.items) ? data.items : [];
+function normalizeOrgUnits(data: OrgUnitsListResponse | OrgUnitRow[]): OrgUnitOption[] {
+  const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+
+  return rows
+    .flatMap((x): OrgUnitOption[] => {
+      const unitId = Number(x.unit_id ?? x.id);
+      const name = String(x.name ?? x.code ?? "").trim();
+      if (!Number.isFinite(unitId) || unitId <= 0) return [];
+      return [
+        {
+          unit_id: unitId,
+          name: name || `#${unitId}`,
+          group_id: x.group_id ?? null,
+        },
+      ];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+}
+
+function flattenOrgUnitTree(nodes: unknown[]): OrgUnitOption[] {
+  const out: OrgUnitOption[] = [];
+
+  const walk = (list: unknown[]) => {
+    for (const raw of list) {
+      const node = raw as OrgUnitRow & { children?: unknown[] };
+      const unitId = Number(node.unit_id ?? node.id);
+      const name = String(node.name ?? node.code ?? "").trim();
+      if (Number.isFinite(unitId) && unitId > 0) {
+        out.push({
+          unit_id: unitId,
+          name: name || `#${unitId}`,
+          group_id: node.group_id ?? null,
+        });
+      }
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        walk(node.children);
+      }
+    }
+  };
+
+  walk(nodes);
+  const seen = new Set<number>();
+  return out
+    .filter((x) => {
+      if (seen.has(x.unit_id)) return false;
+      seen.add(x.unit_id);
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
 function errorText(err: unknown, fallback: string): string {
@@ -91,6 +146,7 @@ export default function CatchUpRunClient() {
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
   const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
+  const [ownerUnitLoadError, setOwnerUnitLoadError] = React.useState<string | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -113,22 +169,34 @@ export default function CatchUpRunClient() {
     setOrgUnitId(orgUnitFromUrl);
   }, [orgUnitFromUrl]);
 
+  const filteredOwnerUnitOptions = React.useMemo(() => {
+    if (selectedOrgGroupId == null) return ownerUnitOptions;
+    return ownerUnitOptions.filter((u) => Number(u.group_id) === Number(selectedOrgGroupId));
+  }, [ownerUnitOptions, selectedOrgGroupId]);
+
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       setOwnerUnitLoading(true);
+      setOwnerUnitLoadError(null);
       try {
-        let data: OrgUnitsListResponse | OrgUnitOption[];
-        try {
-          data = await apiFetchJson<OrgUnitsListResponse>("/org-units", { query: { status: "active" } });
-        } catch {
-          data = await apiFetchJson<OrgUnitsListResponse>("/directory/org-units", {
+        const data = await apiFetchJson<OrgUnitsListResponse>("/directory/org-units", {
+          query: { status: "active" },
+        });
+        let options = normalizeOrgUnits(data);
+        if (options.length === 0) {
+          const tree = await apiFetchJson<{ items?: unknown[] }>("/directory/org-units/tree", {
             query: { status: "active" },
           });
+          const nodes = Array.isArray(tree?.items) ? tree.items : [];
+          options = flattenOrgUnitTree(nodes);
         }
-        if (!cancelled) setOwnerUnitOptions(normalizeOrgUnits(data));
-      } catch {
-        if (!cancelled) setOwnerUnitOptions([]);
+        if (!cancelled) setOwnerUnitOptions(options);
+      } catch (err) {
+        if (!cancelled) {
+          setOwnerUnitOptions([]);
+          setOwnerUnitLoadError(errorText(err, "Не удалось загрузить список отделений."));
+        }
       } finally {
         if (!cancelled) setOwnerUnitLoading(false);
       }
@@ -137,6 +205,15 @@ export default function CatchUpRunClient() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!orgUnitId.trim()) return;
+    const selectedId = Number(orgUnitId);
+    if (!Number.isFinite(selectedId) || selectedId <= 0) return;
+    if (!filteredOwnerUnitOptions.some((u) => u.unit_id === selectedId)) {
+      setOrgUnitId("");
+    }
+  }, [filteredOwnerUnitOptions, orgUnitId]);
 
   const buildPayload = React.useCallback(
     (dryRun: boolean): CatchUpRegularTasksParams => {
@@ -319,7 +396,12 @@ export default function CatchUpRunClient() {
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={orgGroup}
-              onChange={(e) => setOrgGroup(e.target.value as OrgGroupFilter)}
+              onChange={(e) => {
+                setOrgGroup(e.target.value as OrgGroupFilter);
+                setOrgUnitId("");
+                setPreviewResult(null);
+                setLiveResult(null);
+              }}
             >
               {ORG_GROUP_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -338,12 +420,20 @@ export default function CatchUpRunClient() {
               disabled={ownerUnitLoading}
             >
               <option value="">Все отделения в группе</option>
-              {ownerUnitOptions.map((u) => (
+              {filteredOwnerUnitOptions.map((u) => (
                 <option key={u.unit_id} value={String(u.unit_id)}>
-                  {u.name ? `${u.name} (#${u.unit_id})` : `#${u.unit_id}`}
+                  {`${u.name} (#${u.unit_id})`}
                 </option>
               ))}
             </select>
+            {ownerUnitLoadError ? (
+              <span className="text-xs text-red-600 dark:text-red-400">{ownerUnitLoadError}</span>
+            ) : null}
+            {!ownerUnitLoading && !ownerUnitLoadError && filteredOwnerUnitOptions.length === 0 ? (
+              <span className="text-xs text-amber-700 dark:text-amber-300">
+                В выбранной группе нет активных отделений (проверьте NEXT_PUBLIC_ORG_GROUP_ID_* в env).
+              </span>
+            ) : null}
           </label>
         </div>
 
