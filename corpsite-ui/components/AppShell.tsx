@@ -32,6 +32,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     matchPrefixes: ["/admin/regular-tasks", "/regular-tasks"],
   },
   {
+    href: "/admin/regular-tasks/catch-up",
+    title: "Догоняющий запуск",
+    matchPrefixes: ["/admin/regular-tasks/catch-up"],
+  },
+  {
     href: "/tasks",
     title: "Задачи",
     matchPrefixes: ["/tasks"],
@@ -87,7 +92,14 @@ function isUnauthorized(e: any): boolean {
 
 function isNavItemActive(pathname: string, item: NavItem): boolean {
   const prefixes = item.matchPrefixes?.length ? item.matchPrefixes : [item.href];
-  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return prefixes.some((prefix) => {
+    if (pathname === prefix) return true;
+    if (!pathname.startsWith(`${prefix}/`)) return false;
+    if (prefix === "/admin/regular-tasks" && pathname.startsWith("/admin/regular-tasks/catch-up")) {
+      return false;
+    }
+    return true;
+  });
 }
 
 function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] }) {
@@ -253,6 +265,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const orgTreeBasePath = useMemo(() => {
     if (pathname.startsWith("/tasks")) return "/tasks";
+    if (pathname.startsWith("/admin/regular-tasks/catch-up")) return "/admin/regular-tasks/catch-up";
     if (pathname.startsWith("/admin/regular-tasks")) return "/admin/regular-tasks";
     if (pathname.startsWith("/regular-tasks")) return "/regular-tasks";
 

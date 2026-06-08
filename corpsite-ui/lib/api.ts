@@ -377,6 +377,52 @@ export async function apiGetRegularTasksRaw(params: {
 }
 
 /* ============================================================
+ * REGULAR TASKS CATCH-UP (admin internal)
+ * ============================================================ */
+
+export type CatchUpPreset = "past_week" | "past_month" | "manual";
+
+export type CatchUpRegularTasksParams = {
+  dry_run: boolean;
+  preset: CatchUpPreset;
+  run_for_date?: string;
+  schedule_type?: string;
+  org_group_id?: number;
+  org_unit_id?: number;
+  executor_role_id?: number;
+};
+
+export type CatchUpRegularTasksResult = {
+  run_id: number;
+  dry_run: boolean;
+  resolved?: {
+    preset?: string;
+    run_for_date?: string;
+    schedule_type?: string | null;
+    org_group_id?: number | null;
+    org_unit_id?: number | null;
+    executor_role_id?: number | null;
+    templates_in_scope?: number;
+  };
+  stats?: {
+    templates_total?: number;
+    templates_due?: number;
+    created?: number;
+    deduped?: number;
+    errors?: number;
+  };
+};
+
+export async function apiCatchUpRegularTasks(
+  params: CatchUpRegularTasksParams,
+): Promise<CatchUpRegularTasksResult> {
+  return apiFetchJson<CatchUpRegularTasksResult>("/internal/regular-tasks/catch-up", {
+    method: "POST",
+    body: params,
+  });
+}
+
+/* ============================================================
  * REGULAR TASK RUNS (new public read endpoints)
  * ============================================================ */
 
