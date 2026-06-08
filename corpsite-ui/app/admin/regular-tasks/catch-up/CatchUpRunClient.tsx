@@ -11,6 +11,8 @@ import {
   type CatchUpRegularTasksParams,
 } from "@/lib/api";
 
+type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
+
 type DeptGroupRow = {
   group_id: number;
   group_name: string;
@@ -19,6 +21,45 @@ type DeptGroupRow = {
 type DeptGroupsResponse = {
   items?: DeptGroupRow[];
 };
+
+const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string }> = [
+  { value: "all", label: "Все группы отделений" },
+  { value: "clinical", label: "Клинические" },
+  { value: "paraclinical", label: "Параклинические" },
+  { value: "admin", label: "Административно-хозяйственные" },
+];
+
+function readEnvGroupId(name: string, fallback: number): number {
+  const raw = String(process.env[name] ?? "").trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+const ENV_ORG_GROUP_IDS: Record<Exclude<OrgGroupFilter, "all">, number> = {
+  clinical: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_CLINICAL", 1),
+  paraclinical: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_PARACLINICAL", 2),
+  admin: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3),
+};
+
+const ORG_GROUP_NAME_PATTERNS: Record<Exclude<OrgGroupFilter, "all">, RegExp> = {
+  clinical: /клинич/i,
+  paraclinical: /параклинич/i,
+  admin: /адм|хоз/i,
+};
+
+function resolveOrgGroupId(filter: OrgGroupFilter, deptGroups: DeptGroupRow[]): number | null {
+  if (filter === "all") return null;
+
+  const envId = ENV_ORG_GROUP_IDS[filter];
+  if (deptGroups.some((g) => g.group_id === envId)) return envId;
+
+  const byName = deptGroups.find((g) => ORG_GROUP_NAME_PATTERNS[filter].test(g.group_name));
+  if (byName) return byName.group_id;
+
+  return envId;
+}
 
 type OrgUnitRow = {
   id?: number | string;
@@ -189,9 +230,8 @@ export default function CatchUpRunClient() {
 
   const [preset, setPreset] = React.useState<CatchUpPreset>("past_week");
   const [manualDate, setManualDate] = React.useState("");
-  const [orgGroup, setOrgGroup] = React.useState<string>("all");
+  const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
   const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
-  const [deptGroupsLoading, setDeptGroupsLoading] = React.useState(false);
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
   const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
@@ -202,16 +242,14 @@ export default function CatchUpRunClient() {
   const [previewResult, setPreviewResult] = React.useState<CatchUpResult | null>(null);
   const [liveResult, setLiveResult] = React.useState<CatchUpResult | null>(null);
 
-  const selectedOrgGroupId = React.useMemo(() => {
-    if (orgGroup === "all") return null;
-    const n = Number(orgGroup);
-    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
-  }, [orgGroup]);
+  const selectedOrgGroupId = React.useMemo(
+    () => resolveOrgGroupId(orgGroup, deptGroups),
+    [orgGroup, deptGroups],
+  );
 
   const selectedOrgGroupLabel = React.useMemo(() => {
-    if (selectedOrgGroupId == null) return null;
-    return deptGroups.find((g) => g.group_id === selectedOrgGroupId)?.group_name ?? `#${selectedOrgGroupId}`;
-  }, [deptGroups, selectedOrgGroupId]);
+    return ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup)?.label ?? null;
+  }, [orgGroup]);
 
   const parsedOrgUnitId = React.useMemo(() => {
     const s = (orgUnitId || orgUnitFromUrl).trim();
@@ -232,7 +270,6 @@ export default function CatchUpRunClient() {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      setDeptGroupsLoading(true);
       try {
         const data = await apiFetchJson<DeptGroupsResponse>("/directory/department-groups", {
           query: { status: "active", limit: 200 },
@@ -245,14 +282,11 @@ export default function CatchUpRunClient() {
                 group_id: Number(g.group_id),
                 group_name: String(g.group_name ?? "").trim() || `#${g.group_id}`,
               }))
-              .filter((g) => Number.isFinite(g.group_id) && g.group_id > 0)
-              .sort((a, b) => a.group_name.localeCompare(b.group_name, "ru")),
+              .filter((g) => Number.isFinite(g.group_id) && g.group_id > 0),
           );
         }
       } catch {
         if (!cancelled) setDeptGroups([]);
-      } finally {
-        if (!cancelled) setDeptGroupsLoading(false);
       }
     })();
     return () => {
@@ -473,17 +507,15 @@ export default function CatchUpRunClient() {
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={orgGroup}
               onChange={(e) => {
-                setOrgGroup(e.target.value);
+                setOrgGroup(e.target.value as OrgGroupFilter);
                 setOrgUnitId("");
                 setPreviewResult(null);
                 setLiveResult(null);
               }}
-              disabled={deptGroupsLoading}
             >
-              <option value="all">Все группы отделений</option>
-              {deptGroups.map((g) => (
-                <option key={g.group_id} value={String(g.group_id)}>
-                  {g.group_name}
+              {ORG_GROUP_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
             </select>
