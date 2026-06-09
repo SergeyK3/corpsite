@@ -4,8 +4,10 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
+import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import {
   taskActionLabel,
   taskActionsLabel,
@@ -53,6 +55,7 @@ type LoadItemsOptions = {
   offset?: number;
   statusTab?: StatusTab;
   taskScope?: TaskScope;
+  orgGroupId?: number;
   orgUnitId?: string;
   search?: string;
   taskKind?: TaskKindFilter;
@@ -459,8 +462,11 @@ export default function TasksPageClient() {
   const [canCreateManualTask, setCanCreateManualTask] = React.useState(false);
   const [manualRolesLoading, setManualRolesLoading] = React.useState(false);
 
+  const orgScope = readOrgScopeFromSearchParams(sp);
+  const orgGroupId = orgScope.org_group_id;
   const orgUnitId = sp.get("org_unit_id") ?? "";
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
+  const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
 
   const isSystemAdmin = React.useMemo(() => detectSystemAdmin(me), [me]);
   const canSeeTeamTasks = React.useMemo(() => detectCanSeeTeamTasks(me), [me]);
@@ -564,6 +570,7 @@ export default function TasksPageClient() {
       try {
         const qOffset = typeof options?.offset === "number" ? options.offset : offset;
         const qStatusTab = options?.statusTab ?? tab;
+        const qOrgGroupId = typeof options?.orgGroupId === "number" ? options.orgGroupId : orgGroupId;
         const qOrgUnitId = typeof options?.orgUnitId === "string" ? options.orgUnitId : orgUnitId;
         const qSearch = typeof options?.search === "string" ? options.search : searchQuery;
         const qTaskKind = options?.taskKind ?? taskKind;
@@ -576,6 +583,7 @@ export default function TasksPageClient() {
             limit: LIST_LIMIT,
             offset: qOffset,
             status_filter: qStatusTab,
+            org_group_id: qOrgGroupId ?? undefined,
             org_unit_id: qOrgUnitId || undefined,
             search: qSearch || undefined,
             task_kind: backendTaskKind,
@@ -615,7 +623,7 @@ export default function TasksPageClient() {
         }
       }
     },
-    [offset, tab, taskScope, searchQuery, taskKind, selectedId, drawerMode, redirectToLogin, orgUnitId, resetDrawerState],
+    [offset, tab, taskScope, searchQuery, taskKind, selectedId, drawerMode, redirectToLogin, orgGroupId, orgUnitId, resetDrawerState],
   );
 
   const loadTaskDetails = React.useCallback(
@@ -711,6 +719,13 @@ export default function TasksPageClient() {
       setOffset(0);
     }
   }, [orgUnitId]);
+
+  React.useEffect(() => {
+    if (prevOrgGroupRef.current !== orgGroupId) {
+      prevOrgGroupRef.current = orgGroupId;
+      setOffset(0);
+    }
+  }, [orgGroupId]);
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1007,6 +1022,10 @@ export default function TasksPageClient() {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <OrgScopeFilter basePath="/tasks" className="min-w-[220px]" />
+            </div>
+
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 {canSeeTeamTasks ? (

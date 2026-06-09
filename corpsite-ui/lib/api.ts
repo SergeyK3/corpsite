@@ -234,6 +234,7 @@ export async function apiGetTasks(params: {
   limit?: number;
   offset?: number;
   executor_role_id?: number;
+  org_group_id?: number;
   org_unit_id?: number;
 }): Promise<TasksListResponse> {
   const limit = params.limit ?? 50;
@@ -245,6 +246,7 @@ export async function apiGetTasks(params: {
       limit,
       offset,
       executor_role_id: params.executor_role_id ?? undefined,
+      org_group_id: params.org_group_id ?? undefined,
       org_unit_id: params.org_unit_id ?? undefined,
     },
   });

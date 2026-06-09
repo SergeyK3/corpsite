@@ -10,6 +10,9 @@ from sqlalchemy import text
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.errors import ErrorCode, raise_error
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.resolver import task_effective_owner_unit_sql
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.services.tasks_fsm import transition
 from app.services.tasks_service import (
     SYSTEM_ADMIN_ROLE_ID,
@@ -106,16 +109,10 @@ def _normalize_status_filter(v: Optional[str]) -> Optional[str]:
 
 
 def _task_effective_org_unit_sql(task_alias: str = "t", regular_task_alias: str = "rt") -> str:
-    return f"""
-        COALESCE(
-            NULLIF(to_jsonb({task_alias})->>'owner_unit_id','')::int,
-            NULLIF(to_jsonb({task_alias})->>'org_unit_id','')::int,
-            NULLIF(to_jsonb({task_alias})->>'unit_id','')::int,
-            NULLIF(to_jsonb({regular_task_alias})->>'owner_unit_id','')::int,
-            NULLIF(to_jsonb({regular_task_alias})->>'org_unit_id','')::int,
-            NULLIF(to_jsonb({regular_task_alias})->>'unit_id','')::int
-        )
-    """.strip()
+    return task_effective_owner_unit_sql(
+        task_alias=task_alias,
+        regular_task_alias=regular_task_alias,
+    )
 
 
 def _user_reported_task(conn, task_id: int, user_id: int) -> bool:
@@ -181,6 +178,11 @@ def list_tasks(
         None,
         ge=1,
         description="Filter by selected org unit subtree.",
+    ),
+    org_group_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="Filter by top-level org group of effective owner unit.",
     ),
     assignment_scope: Optional[str] = Query(
         None,
@@ -294,28 +296,20 @@ def list_tasks(
             where.append("t.executor_role_id = :executor_role_id")
             params["executor_role_id"] = erid
 
-        if org_unit_id is not None:
-            where.append(
-                f"""
-                EXISTS (
-                    WITH RECURSIVE subtree AS (
-                        SELECT ou.unit_id
-                        FROM public.org_units ou
-                        WHERE ou.unit_id = :org_unit_id
+        org_scope = apply_org_scope(
+            strategy=OrgScopeStrategy.TASK_OWNER_UNIT,
+            params=OrgScopeParams(
+                org_group_id=int(org_group_id) if org_group_id is not None else None,
+                org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+            ),
+            task_alias="t",
+            regular_task_alias="rt",
+        )
+        params.update(org_scope.params)
+        if org_scope.where_sql != "TRUE":
+            where.append(f"({org_scope.where_sql})")
 
-                        UNION ALL
-
-                        SELECT child.unit_id
-                        FROM public.org_units child
-                        JOIN subtree s ON s.unit_id = child.parent_unit_id
-                        WHERE COALESCE(child.is_active, TRUE) = TRUE
-                    )
-                    SELECT 1
-                    WHERE {effective_org_unit_sql} IN (SELECT unit_id FROM subtree)
-                )
-                """.strip()
-            )
-            params["org_unit_id"] = int(org_unit_id)
+        scope_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
 
         if period_id is not None:
             where.append("t.period_id = :period_id")
@@ -372,6 +366,7 @@ def list_tasks(
         where_sql = " AND ".join(where) if where else "1=1"
 
         count_text = f"""
+            {scope_prefix}
             SELECT COUNT(1)
             FROM public.tasks t
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
@@ -381,6 +376,7 @@ def list_tasks(
         """
 
         select_text = f"""
+            {scope_prefix}
             SELECT
                 t.task_id,
                 t.period_id,
