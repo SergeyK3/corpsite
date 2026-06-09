@@ -32,7 +32,7 @@ SELECT
     r.name AS role_name,
     NULL::text AS role_name_ru,
     ou.name AS unit_name,
-    ou.name_ru AS unit_name_ru,
+    ou.name AS unit_name_ru,
     COALESCE(u.is_active, false) AS is_active
 {BASE_FROM_SQL}
 """
@@ -79,7 +79,7 @@ def _fetch_one(user_id: int) -> Optional[Dict[str, Any]]:
 def _fetch_org_unit_name(org_unit_id: int) -> Optional[str]:
     q = text(
         """
-        SELECT COALESCE(NULLIF(TRIM(name_ru), ''), NULLIF(TRIM(name), '')) AS unit_name
+        SELECT NULLIF(TRIM(name), '') AS unit_name
         FROM public.org_units
         WHERE unit_id = :org_unit_id
         LIMIT 1
@@ -129,7 +129,7 @@ def list_working_contacts(
                 OR LOWER(COALESCE(CAST(u.phone AS TEXT), '')) LIKE :q
                 OR LOWER(COALESCE(CAST(u.telegram_username AS TEXT), '')) LIKE :q
                 OR LOWER(COALESCE(CAST(r.name AS TEXT), '')) LIKE :q
-                OR LOWER(COALESCE(CAST(ou.name_ru AS TEXT), CAST(ou.name AS TEXT), '')) LIKE :q
+                OR LOWER(COALESCE(CAST(ou.name AS TEXT), '')) LIKE :q
             )
             """
         )
