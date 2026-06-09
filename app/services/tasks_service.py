@@ -685,6 +685,60 @@ def _is_report_author(*, current_user_id: int, task_row: Dict[str, Any]) -> bool
         return False
 
 
+def _user_has_any_report_on_task(conn, *, task_id: int, user_id: int) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM public.task_reports r
+            WHERE r.task_id = :task_id
+              AND r.submitted_by = :user_id
+            LIMIT 1
+            """
+        ),
+        {"task_id": int(task_id), "user_id": int(user_id)},
+    ).mappings().first()
+    return bool(row)
+
+
+def _is_legacy_approver_role(
+    conn,
+    *,
+    current_role_id: int,
+    task_row: Dict[str, Any],
+) -> bool:
+    if str(task_row.get("status_code") or "") != "WAITING_APPROVAL":
+        return False
+
+    rid = task_row.get("regular_task_id")
+    try:
+        regular_task_id = int(rid) if rid is not None else 0
+    except Exception:
+        regular_task_id = 0
+
+    if regular_task_id <= 0:
+        return False
+
+    row = conn.execute(
+        text(
+            """
+            SELECT COALESCE(rt.target_role_id, 0) AS target_role_id
+            FROM public.regular_tasks rt
+            WHERE rt.regular_task_id = :regular_task_id
+            """
+        ),
+        {"regular_task_id": int(regular_task_id)},
+    ).mappings().first()
+
+    if not row:
+        return False
+
+    try:
+        return int(row["target_role_id"]) == int(current_role_id)
+    except Exception:
+        return False
+
+
 def _is_explicit_approver_user(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
     try:
         approver_user_id = task_row.get("approver_user_id")
@@ -736,11 +790,11 @@ def _task_kind(task_row: Dict[str, Any]) -> str:
     return raw if raw in {"regular", "adhoc"} else "regular"
 
 
-def _can_view(
+def _is_task_visible_to_user(
+    conn,
     *,
     current_user_id: int,
     current_role_id: int,
-    visible_executor_role_ids: Set[int],
     task_row: Dict[str, Any],
 ) -> bool:
     if is_system_admin_role_id(current_role_id):
@@ -750,6 +804,71 @@ def _can_view(
         return True
 
     if _is_created_by(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
+        return True
+
+    visible_executor_role_ids = compute_visible_executor_role_ids_for_tasks(
+        user_id=int(current_user_id)
+    )
+    try:
+        erid = int(task_row.get("executor_role_id") or 0)
+    except Exception:
+        erid = 0
+    if erid in visible_executor_role_ids:
+        return True
+
+    if _is_report_author(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    try:
+        task_id = int(task_row.get("task_id") or 0)
+    except Exception:
+        task_id = 0
+    if task_id > 0 and _user_has_any_report_on_task(
+        conn,
+        task_id=int(task_id),
+        user_id=int(current_user_id),
+    ):
+        return True
+
+    if _is_explicit_approver_user(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    if _is_legacy_approver_role(
+        conn,
+        current_role_id=int(current_role_id),
+        task_row=task_row,
+    ):
+        return True
+
+    return _task_matches_team_scope(
+        conn,
+        current_user_id=int(current_user_id),
+        current_role_id=int(current_role_id),
+        task_row=task_row,
+    )
+
+
+def _can_view(
+    *,
+    current_user_id: int,
+    current_role_id: int,
+    visible_executor_role_ids: Set[int],
+    task_row: Dict[str, Any],
+) -> bool:
+    """Backward-compatible wrapper; prefer _is_task_visible_to_user when conn is available."""
+    if is_system_admin_role_id(current_role_id):
+        return True
+
+    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    if _is_created_by(current_user_id=current_user_id, task_row=task_row):
+        return True
+
+    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
         return True
 
     if _is_report_author(current_user_id=current_user_id, task_row=task_row):
@@ -845,23 +964,22 @@ def ensure_task_visible_or_404(
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if is_system_admin_role_id(current_role_id):
-        return task_row
-
-    visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
-    if not _can_view(
-        current_user_id=current_user_id,
-        current_role_id=current_role_id,
-        visible_executor_role_ids=visible,
-        task_row=task_row,
-    ):
-        if conn is None or not _task_matches_team_scope(
-            conn,
-            current_user_id=int(current_user_id),
-            current_role_id=int(current_role_id),
+    if conn is None:
+        visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
+        if not _can_view(
+            current_user_id=current_user_id,
+            current_role_id=current_role_id,
+            visible_executor_role_ids=visible,
             task_row=task_row,
         ):
             raise HTTPException(status_code=404, detail="Task not found")
+    elif not _is_task_visible_to_user(
+        conn,
+        current_user_id=int(current_user_id),
+        current_role_id=int(current_role_id),
+        task_row=task_row,
+    ):
+        raise HTTPException(status_code=404, detail="Task not found")
 
     if (not include_archived) and (str(task_row.get("status_code") or "") == "ARCHIVED"):
         raise HTTPException(status_code=404, detail="Task not found")
