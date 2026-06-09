@@ -4,7 +4,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "../../../lib/api";
-import { runStatusLabel, scheduleTypeLabel } from "@/lib/i18n";
+import { runStatusLabel, scheduleTypeLabel, assignmentScopeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
   type TemplateFormOwnerUnitOption,
@@ -144,13 +144,7 @@ function scheduleLabel(item: RegularTaskItem): string {
 }
 
 function errorText(err: unknown, fallback: string): string {
-  if (err instanceof Error && err.message) return err.message;
-  const detail =
-    (err as { details?: { detail?: unknown }; detail?: unknown })?.details?.detail ??
-    (err as { detail?: unknown })?.detail;
-
-  if (typeof detail === "string" && detail.trim()) return detail.trim();
-  return fallback;
+  return formatThrownError(err, { fallback });
 }
 
 function prettyJson(value: unknown): string {
@@ -170,11 +164,11 @@ function parseJsonObject(text: string): { value: Record<string, unknown> | null;
   try {
     const parsed = JSON.parse(s);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { value: null, error: "schedule_params должен быть JSON-объектом." };
+      return { value: null, error: "Параметры расписания должны быть JSON-объектом." };
     }
     return { value: parsed as Record<string, unknown>, error: null };
   } catch {
-    return { value: null, error: "schedule_params содержит некорректный JSON." };
+    return { value: null, error: "Параметры расписания содержат некорректный JSON." };
   }
 }
 
@@ -678,7 +672,7 @@ export default function RegularTasksAdminClient() {
 
     const ownerUnitId = toNullableInt(values.owner_unit_id);
     if (ownerUnitId == null || ownerUnitId <= 0) {
-      return "owner_unit_id обязателен и должен быть положительным числом.";
+      return "Укажите отделение (положительный числовой ID).";
     }
 
     return null;
@@ -699,7 +693,7 @@ export default function RegularTasksAdminClient() {
 
     const ownerUnitId = toNullableInt(values.owner_unit_id);
     if (ownerUnitId == null || ownerUnitId <= 0) {
-      setDrawerError("owner_unit_id обязателен и должен быть положительным числом.");
+      setDrawerError("Укажите отделение (положительный числовой ID).");
       return;
     }
 
@@ -890,7 +884,7 @@ export default function RegularTasksAdminClient() {
                     onChange={(e) => setOwnerFilter(e.target.value as OwnerFilter)}
                   >
                     <option value="all">Все владельцы_единиц</option>
-                    <option value="ok">Только с owner_unit_id</option>
+                    <option value="ok">Только с отделением</option>
                     <option value="defect">Только дефектные</option>
                   </select>
                 </div>
@@ -912,7 +906,7 @@ export default function RegularTasksAdminClient() {
                   Показано: {filteredTemplates.length}
                 </span>
                 <span className="rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1 text-amber-900 dark:text-amber-200">
-                  Дефектных owner_unit_id: {defectTemplatesTotal}
+                  Дефектных отделений: {defectTemplatesTotal}
                 </span>
                 <span className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1">
                   В текущем фильтре: {defectTemplatesVisible}
@@ -931,7 +925,7 @@ export default function RegularTasksAdminClient() {
 
                 <label className="flex items-center gap-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200">
                   <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
-                  dry_run
+                  {uiFieldLabel("dry_run")}
                 </label>
               </div>
 
@@ -953,17 +947,20 @@ export default function RegularTasksAdminClient() {
               ) : lastRunResult ? (
                 <div className="flex flex-wrap gap-x-5 gap-y-1 text-zinc-700 dark:text-zinc-300">
                   <div>
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">run_id:</span> {lastRunResult.run_id}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{uiFieldLabel("run_id")}:</span>{" "}
+                    {lastRunResult.run_id}
                   </div>
                   <div>
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">templates_due:</span>{" "}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{uiFieldLabel("templates_due")}:</span>{" "}
                     {lastRunResult.stats?.templates_due ?? 0}
                   </div>
                   <div>
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">created:</span> {lastRunResult.stats?.created ?? 0}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{uiFieldLabel("created")}:</span>{" "}
+                    {lastRunResult.stats?.created ?? 0}
                   </div>
                   <div>
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">errors:</span> {lastRunResult.stats?.errors ?? 0}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{uiFieldLabel("errors")}:</span>{" "}
+                    {lastRunResult.stats?.errors ?? 0}
                   </div>
                 </div>
               ) : null}
@@ -1026,7 +1023,7 @@ export default function RegularTasksAdminClient() {
                           <div className="flex flex-col gap-1">
                             <div className="text-zinc-900 dark:text-zinc-50">{item.owner_unit_name?.trim() || "—"}</div>
                             <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                              owner_unit_id: {item.owner_unit_id ?? "—"}
+                              {uiFieldLabel("owner_unit_id")}: {item.owner_unit_id ?? "—"}
                             </div>
                             {ownerDefect ? (
                               <span className="inline-flex w-fit rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:text-amber-200">
@@ -1149,7 +1146,7 @@ export default function RegularTasksAdminClient() {
             <div className="mb-3">
               <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Детализация запуска</h3>
               <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
-                {selectedRunId != null ? `run_id = ${selectedRunId}` : "Запуск не выбран"}
+                {selectedRunId != null ? `${uiFieldLabel("run_id")} = ${selectedRunId}` : "Запуск не выбран"}
               </p>
             </div>
 
@@ -1173,7 +1170,7 @@ export default function RegularTasksAdminClient() {
                       <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Шаблон</th>
                       <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Период</th>
                       <th className="w-[170px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Исполнитель</th>
-                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Due</th>
+                      <th className="w-[80px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">{uiFieldLabel("due")}</th>
                       <th className="w-[80px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Создано</th>
                       <th className="w-[90px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Статус</th>
                       <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Ошибка</th>
@@ -1188,7 +1185,7 @@ export default function RegularTasksAdminClient() {
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{yesNo(item.is_due)}</td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{item.created_tasks}</td>
                         <td className={`px-3 py-2 ${statTone(item.status)}`}>{runStatusLabel(item.status)}</td>
-                        <td className="px-3 py-2 text-xs text-red-700 dark:text-red-300">{item.error ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-red-700 dark:text-red-300">{translateRunIssueMessage(item.error)}</td>
                       </tr>
                     ))}
 
@@ -1230,7 +1227,7 @@ export default function RegularTasksAdminClient() {
 
                   {currentTemplateHasOwnerDefect ? (
                     <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
-                      Диагностика: у шаблона не заполнен owner_unit_id.
+                      Диагностика: у шаблона не заполнено отделение.
                     </div>
                   ) : null}
 
@@ -1260,7 +1257,7 @@ export default function RegularTasksAdminClient() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">owner_unit_id</div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("owner_unit_id")}</div>
                       <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.owner_unit_id ?? "—"}</div>
                     </div>
 
@@ -1270,7 +1267,7 @@ export default function RegularTasksAdminClient() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Диагностика owner_unit_id</div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Диагностика отделения</div>
                       <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
                         {currentTemplateHasOwnerDefect ? "Дефект" : "Корректно"}
                       </div>
@@ -1287,8 +1284,10 @@ export default function RegularTasksAdminClient() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Область назначения</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.assignment_scope ?? "—"}</div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("assignment_scope")}</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
+                        {assignmentScopeLabel(currentTemplate.assignment_scope) || "—"}
+                      </div>
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
@@ -1310,12 +1309,12 @@ export default function RegularTasksAdminClient() {
                   </div>
 
                   <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                    <div className="text-xs text-zinc-600 dark:text-zinc-400">owner_unit</div>
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("owner_unit")}</div>
                     <div className="mt-2 text-sm text-zinc-900 dark:text-zinc-50">{ownerUnitLabel(currentTemplate)}</div>
                   </div>
 
                   <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                    <div className="text-xs text-zinc-600 dark:text-zinc-400">schedule_params</div>
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("schedule_params")}</div>
                     <pre className="mt-2 overflow-auto text-sm text-zinc-800 dark:text-zinc-200">
                       {JSON.stringify(currentTemplate.schedule_params ?? {}, null, 2)}
                     </pre>

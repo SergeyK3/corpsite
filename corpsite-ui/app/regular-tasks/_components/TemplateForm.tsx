@@ -3,7 +3,7 @@
 
 import * as React from "react";
 
-import { scheduleTypeLabel } from "@/lib/i18n";
+import { scheduleTypeLabel, uiFieldLabel } from "@/lib/i18n";
 
 export type TemplateFormValues = {
   title: string;
@@ -191,7 +191,7 @@ export default function TemplateForm({
 
                 <div className="mt-4 flex flex-col gap-2">
                   <label htmlFor="template-schedule-params" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    schedule_params (JSON)
+                    {uiFieldLabel("schedule_params")} (JSON)
                   </label>
                   <textarea
                     id="template-schedule-params"
@@ -265,7 +265,7 @@ export default function TemplateForm({
 
                   <div className="flex flex-col gap-2">
                     <label htmlFor="template-owner-unit" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      owner_unit_id <span className="text-red-400">*</span>
+                      {uiFieldLabel("owner_unit_id")} <span className="text-red-400">*</span>
                     </label>
                     <input
                       id="template-owner-unit"
@@ -306,7 +306,7 @@ export default function TemplateForm({
                     <span className="font-mono text-zinc-600 dark:text-zinc-400">yearly</span>).
                   </p>
                   <p>JSON должен быть именно объектом, а не массивом.</p>
-                  <p>owner_unit_id лучше не оставлять пустым, чтобы не создавать новые дефекты.</p>
+                  <p>{uiFieldLabel("owner_unit_id")} лучше не оставлять пустым, чтобы не создавать новые дефекты.</p>
                 </div>
               </div>
             </div>

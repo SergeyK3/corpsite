@@ -15,6 +15,12 @@ import {
   loadOrgUnitSelectOptions,
   type OrgUnitSelectOption,
 } from "@/lib/orgUnitsSelect";
+import {
+  formatThrownError,
+  runTitleLabel,
+  scheduleTypeLabel,
+  uiFieldLabel,
+} from "@/lib/i18n";
 
 type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 
@@ -86,18 +92,9 @@ type CatchUpResult = {
   };
 };
 
-function errorText(err: unknown, fallback: string): string {
-  if (err instanceof Error && err.message) return err.message;
-  const detail =
-    (err as { details?: { detail?: unknown }; detail?: unknown })?.details?.detail ??
-    (err as { detail?: unknown })?.detail;
-  if (typeof detail === "string" && detail.trim()) return detail.trim();
-  return fallback;
-}
-
 function presetLabel(p: CatchUpPreset): string {
-  if (p === "past_week") return "Прошлая неделя (weekly)";
-  if (p === "past_month") return "Прошлый месяц (monthly)";
+  if (p === "past_week") return `Прошлая неделя (${scheduleTypeLabel("weekly")})`;
+  if (p === "past_month") return `Прошлый месяц (${scheduleTypeLabel("monthly")})`;
   return "Ручная дата";
 }
 
@@ -200,7 +197,7 @@ export default function CatchUpRunClient() {
       } catch (err) {
         if (!cancelled) {
           setOwnerUnitOptions([]);
-          setOwnerUnitLoadError(errorText(err, "Не удалось загрузить список отделений."));
+          setOwnerUnitLoadError(formatThrownError(err, { fallback: "Не удалось загрузить список отделений." }));
         }
       } finally {
         if (!cancelled) setOwnerUnitLoading(false);
@@ -265,7 +262,7 @@ export default function CatchUpRunClient() {
       const result = await apiCatchUpRegularTasks(buildPayload(true));
       setPreviewResult(result);
     } catch (err) {
-      setSubmitError(errorText(err, "Не удалось выполнить пробный прогон."));
+      setSubmitError(formatThrownError(err, { fallback: "Не удалось выполнить пробный прогон." }));
     } finally {
       setSubmitting(false);
     }
@@ -294,7 +291,7 @@ export default function CatchUpRunClient() {
       const result = await apiCatchUpRegularTasks(buildPayload(false));
       setLiveResult(result);
     } catch (err) {
-      setSubmitError(errorText(err, "Не удалось выполнить боевой прогон."));
+      setSubmitError(formatThrownError(err, { fallback: "Не удалось выполнить боевой прогон." }));
     } finally {
       setSubmitting(false);
     }
@@ -310,13 +307,14 @@ export default function CatchUpRunClient() {
         <div className="font-medium text-zinc-900 dark:text-zinc-50">{title}</div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-zinc-700 dark:text-zinc-300">
           <div>
-            <span className="text-zinc-500 dark:text-zinc-400">run_id:</span> {result.run_id}
+            <span className="text-zinc-500 dark:text-zinc-400">{uiFieldLabel("run_id")}:</span> {result.run_id}
           </div>
           <div>
             <span className="text-zinc-500 dark:text-zinc-400">дата:</span> {resolved.run_for_date ?? "—"}
           </div>
           <div>
-            <span className="text-zinc-500 dark:text-zinc-400">тип:</span> {resolved.schedule_type ?? "—"}
+            <span className="text-zinc-500 dark:text-zinc-400">тип:</span>{" "}
+            {scheduleTypeLabel(resolved.schedule_type) || "—"}
           </div>
           <div>
             <span className="text-zinc-500 dark:text-zinc-400">шаблонов:</span>{" "}
@@ -338,7 +336,7 @@ export default function CatchUpRunClient() {
               href={`/regular-task-runs?run_id=${result.run_id}`}
               className="text-blue-600 hover:underline dark:text-blue-400"
             >
-              Открыть журнал запуска #{result.run_id}
+              Открыть журнал — {runTitleLabel(result.run_id)}
             </Link>
           </div>
         ) : null}
@@ -417,7 +415,7 @@ export default function CatchUpRunClient() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">Отделение (owner_unit_id)</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{uiFieldLabel("owner_unit_id")}</span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={orgUnitId}

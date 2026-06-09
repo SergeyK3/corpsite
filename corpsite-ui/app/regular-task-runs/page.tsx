@@ -7,6 +7,14 @@ import { useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
+import {
+  formatThrownError,
+  runStatusLabel,
+  runTitleLabel,
+  templateItemTitleLabel,
+  translateRunIssueMessage,
+  uiFieldLabel,
+} from "@/lib/i18n";
 
 type MeInfo = {
   user_id?: number;
@@ -24,41 +32,11 @@ type APIErrorLike = {
   body?: any;
 };
 
-function formatUserError(e: any): string {
-  const status = Number((e as APIErrorLike)?.status ?? 0);
-  const body =
-    (e as APIErrorLike)?.details ??
-    (e as APIErrorLike)?.body ??
-    undefined;
-  const msg = String(
-    (e as APIErrorLike)?.message ??
-      body?.message ??
-      body?.detail ??
-      body?.error ??
-      "",
-  ).trim();
-
-  const base =
-    status === 401
-      ? "Требуется авторизация."
-      : status === 403
-        ? "Недостаточно прав."
-        : status === 404
-          ? "Объект не найден."
-          : status === 409
-            ? "Конфликт данных. Обновите страницу и попробуйте снова."
-            : status === 422
-              ? "Некорректные данные."
-              : status >= 500
-                ? "Ошибка сервера. Попробуйте позже."
-                : "Не удалось выполнить запрос.";
-
-  return status
-    ? `(${status}) ${base}${msg ? ` ${msg}` : ""}`
-    : `${base}${msg ? ` ${msg}` : ""}`;
+function formatUserError(e: unknown): string {
+  return formatThrownError(e);
 }
 
-function isUnauthorized(e: any): boolean {
+function isUnauthorized(e: unknown): boolean {
   return Number((e as APIErrorLike)?.status ?? 0) === 401;
 }
 
@@ -144,7 +122,11 @@ async function apiGetRuns(): Promise<RegularTaskRun[]> {
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
-    const e: any = { status: res.status, message: body?.message ?? body?.detail ?? "Request failed", details: body };
+    const e: APIErrorLike = {
+      status: res.status,
+      message: body?.message ?? body?.detail ?? "Request failed",
+      details: body,
+    };
     throw e;
   }
 
@@ -164,7 +146,11 @@ async function apiGetRunItems(runId: number): Promise<RegularTaskRunItem[]> {
 
   const body = await readJsonSafe(res);
   if (!res.ok) {
-    const e: any = { status: res.status, message: body?.message ?? body?.detail ?? "Request failed", details: body };
+    const e: APIErrorLike = {
+      status: res.status,
+      message: body?.message ?? body?.detail ?? "Request failed",
+      details: body,
+    };
     throw e;
   }
 
@@ -172,11 +158,7 @@ async function apiGetRunItems(runId: number): Promise<RegularTaskRunItem[]> {
 }
 
 function issueLabel(s: string): string {
-  const x = String(s ?? "").trim();
-  if (!x) return "—";
-  if (x.includes("unsupported schedule_type: yearly")) return "yearly не поддержан";
-  if (x.includes("schedule_params.bymonthday must be a non-empty list")) return "monthly без bymonthday";
-  return x;
+  return translateRunIssueMessage(s);
 }
 
 export default function RegularTaskRunsPage() {
@@ -419,11 +401,11 @@ export default function RegularTaskRunsPage() {
                       "w-full rounded-lg border px-3 py-2 text-left",
                       active ? "border-zinc-400 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-900" : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                     ].join(" ")}
-                    title="Открыть items"
+                    title="Открыть элементы"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="font-medium text-zinc-900 dark:text-zinc-50">Run #{r.run_id}</div>
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{r.status}</div>
+                      <div className="font-medium text-zinc-900 dark:text-zinc-50">{runTitleLabel(r.run_id)}</div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{runStatusLabel(r.status)}</div>
                     </div>
                     <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
                       {r.started_at}
@@ -439,14 +421,15 @@ export default function RegularTaskRunsPage() {
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                Items {selectedRun ? `• run #${selectedRun.run_id}` : ""}
+                {uiFieldLabel("items")}
+                {selectedRun ? ` · ${runTitleLabel(selectedRun.run_id)}` : ""}
               </div>
 
               <button
                 onClick={() => (selectedRunId ? void openRun(selectedRunId) : null)}
                 className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 disabled={!selectedRunId || itemsLoading}
-                title={!selectedRunId ? "Сначала выберите запуск" : "Перезагрузить items"}
+                title={!selectedRunId ? "Сначала выберите запуск" : "Перезагрузить элементы"}
               >
                 {itemsLoading ? "Обновление…" : "Обновить"}
               </button>
@@ -487,7 +470,7 @@ export default function RegularTaskRunsPage() {
 
                 {!itemsLoading && !itemsError && items.length === 0 ? (
                   <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
-                    Items отсутствуют.
+                    Элементы отсутствуют.
                   </div>
                 ) : null}
 
@@ -509,20 +492,23 @@ export default function RegularTaskRunsPage() {
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                            template #{it.regular_task_id}{" "}
-                            <span className="text-xs text-zinc-600 dark:text-zinc-400">• item #{it.item_id}</span>
+                            {templateItemTitleLabel(it.regular_task_id, it.item_id)}
                           </div>
-                          <div className="text-xs text-zinc-700 dark:text-zinc-300">{it.status}</div>
+                          <div className="text-xs text-zinc-700 dark:text-zinc-300">{runStatusLabel(it.status)}</div>
                         </div>
 
                         <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                          is_due: <span className="text-zinc-800 dark:text-zinc-200">{String(it.is_due)}</span>
+                          {uiFieldLabel("is_due")}:{" "}
+                          <span className="text-zinc-800 dark:text-zinc-200">{it.is_due ? "Да" : "Нет"}</span>
                           {" • "}
-                          created: <span className="text-zinc-800 dark:text-zinc-200">{it.created_tasks}</span>
+                          {uiFieldLabel("created")}:{" "}
+                          <span className="text-zinc-800 dark:text-zinc-200">{it.created_tasks}</span>
                           {" • "}
-                          role: <span className="text-zinc-800 dark:text-zinc-200">{it.executor_role_id ?? "—"}</span>
+                          {uiFieldLabel("role")}:{" "}
+                          <span className="text-zinc-800 dark:text-zinc-200">{it.executor_role_id ?? "—"}</span>
                           {" • "}
-                          period: <span className="text-zinc-800 dark:text-zinc-200">{it.period_id ?? "—"}</span>
+                          {uiFieldLabel("period")}:{" "}
+                          <span className="text-zinc-800 dark:text-zinc-200">{it.period_id ?? "—"}</span>
                         </div>
 
                         {err ? (
