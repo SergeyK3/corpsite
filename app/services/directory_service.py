@@ -7,6 +7,8 @@ from fastapi import HTTPException
 from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import build_dept_scope_cte
 
 
@@ -429,8 +431,9 @@ def list_employees(
     q: Optional[str],
     department_id: Optional[int],
     position_id: Optional[int],
-    org_unit_id: Optional[int],
-    include_children: bool,
+    org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
+    include_children: bool = False,
     limit: int,
     offset: int,
     sort: Optional[str],
@@ -506,27 +509,34 @@ def list_employees(
         where.append("e.org_unit_id IN :rbac_unit_ids")
         params["rbac_unit_ids"] = ids
 
-    # filter by org_unit_id (+ optionally children)
+    # org_unit_id filtering (3a-2 backward-compatible):
+    # - legacy exact match when only org_unit_id is passed with include_children=false;
+    # - unified subtree via apply_org_scope when include_children=true or org_group_id is set
+    #   (frontend sidebar passes include_children=true).
+    org_scope_unit_id: Optional[int] = None
     if org_unit_id is not None:
-        params["org_unit_id"] = int(org_unit_id)
-        if include_children:
-            # NOTE: this is a recursive CTE fragment (subtree references itself), so it must live under WITH RECURSIVE.
-            cte_parts.append(
-                """
-                subtree AS (
-                    SELECT unit_id
-                    FROM public.org_units
-                    WHERE unit_id = :org_unit_id
-                    UNION ALL
-                    SELECT ou.unit_id
-                    FROM public.org_units ou
-                    JOIN subtree s ON ou.parent_unit_id = s.unit_id
-                )
-                """.strip()
-            )
-            where.append("e.org_unit_id IN (SELECT unit_id FROM subtree)")
+        unit_id_int = int(org_unit_id)
+        if include_children or org_group_id is not None:
+            org_scope_unit_id = unit_id_int
         else:
+            params["org_unit_id"] = unit_id_int
             where.append("e.org_unit_id = :org_unit_id")
+
+    if org_group_id is not None or org_scope_unit_id is not None:
+        org_scope = apply_org_scope(
+            strategy=OrgScopeStrategy.OWNER_UNIT,
+            params=OrgScopeParams(
+                org_group_id=int(org_group_id) if org_group_id is not None else None,
+                org_unit_id=org_scope_unit_id,
+            ),
+            regular_task_alias="e",
+            owner_unit_column="org_unit_id",
+        )
+        params.update(org_scope.params)
+        if org_scope.where_sql != "TRUE":
+            where.append(f"({org_scope.where_sql})")
+        if org_scope.cte_sql:
+            cte_parts.append(org_scope.cte_sql)
 
     # stitch CTEs into a single WITH RECURSIVE ...
     if cte_parts:

@@ -97,7 +97,9 @@ export async function getEmployees(args: {
   status?: string;
   department_id?: number | string | null;
   position_id?: number | string | null;
+  org_group_id?: number | string | null;
   org_unit_id?: number | string | null;
+  include_children?: boolean;
   q?: string | null;
   limit?: number | string;
   offset?: number | string;
@@ -106,7 +108,9 @@ export async function getEmployees(args: {
     status: args.status ?? "all",
     department_id: args.department_id ?? undefined,
     position_id: args.position_id ?? undefined,
+    org_group_id: args.org_group_id ?? undefined,
     org_unit_id: args.org_unit_id ?? undefined,
+    include_children: args.include_children ? "true" : undefined,
     q: args.q ?? undefined,
     limit: args.limit ?? 50,
     offset: args.offset ?? 0,

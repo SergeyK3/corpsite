@@ -4,6 +4,8 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import OrgScopeFilter from "@/components/OrgScopeFilter";
+import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 
@@ -37,6 +39,7 @@ type Props = {
 };
 
 const ORG_FILTER_PARAM_KEYS = [
+  ORG_GROUP_ID_PARAM,
   "org_unit_id",
   "unit_id",
   "orgUnitId",
@@ -94,6 +97,9 @@ export default function EmployeesPageClient(props: Props) {
   const pageTitle =
     props.pageTitle ?? (routeBase === "/directory/personnel" ? "Персонал" : "Сотрудники");
 
+  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+  const orgGroupId = orgScope.org_group_id;
+
   const departmentId = sp.get("department_id") ?? "";
   const positionId = sp.get("position_id") ?? "";
   const status = sp.get("status") ?? "all";
@@ -128,6 +134,7 @@ export default function EmployeesPageClient(props: Props) {
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
 
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
+  const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
 
   function updateUrl(next: Partial<Record<string, string>>, opts?: { resetOffset?: boolean }) {
     const resetOffset = opts?.resetOffset !== false;
@@ -182,6 +189,13 @@ export default function EmployeesPageClient(props: Props) {
   }, [orgUnitId, offsetNum]);
 
   React.useEffect(() => {
+    if (prevOrgGroupRef.current !== orgGroupId) {
+      prevOrgGroupRef.current = orgGroupId;
+      if (offsetNum !== 0) setPageOffset(0);
+    }
+  }, [orgGroupId, offsetNum]);
+
+  React.useEffect(() => {
     let cancelled = false;
 
     async function loadRefs() {
@@ -216,7 +230,9 @@ export default function EmployeesPageClient(props: Props) {
         status,
         department_id: departmentId || null,
         position_id: positionId || null,
+        org_group_id: orgGroupId ?? null,
         org_unit_id: orgUnitId || null,
+        include_children: Boolean(orgUnitId),
         q: qText || null,
         limit: String(limitNum),
         offset: String(offsetNum),
@@ -232,7 +248,7 @@ export default function EmployeesPageClient(props: Props) {
     } finally {
       setLoading(false);
     }
-  }, [status, departmentId, positionId, orgUnitId, qText, limitNum, offsetNum]);
+  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum]);
 
   React.useEffect(() => {
     void loadItems();
@@ -288,7 +304,13 @@ export default function EmployeesPageClient(props: Props) {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2.5">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-end">
+              <OrgScopeFilter
+                basePath={routeBase}
+                className="min-w-[240px]"
+                resetParamsOnChange={["offset"]}
+              />
+
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
