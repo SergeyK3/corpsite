@@ -1,7 +1,7 @@
 """merge alembic heads; ensure task_event_type enum on restored DBs
 
 Revision ID: a7c4e1f903de
-Revises: c3a1f2e8b901, e4b2c1a903de
+Revises: d668fb72f5f7
 Create Date: 2026-06-08
 
 Repairs VPS databases where alembic skipped 9d9d8a6c2a11 (file had no .py suffix).
@@ -14,7 +14,7 @@ from typing import Sequence, Union
 from alembic import op
 
 revision: str = "a7c4e1f903de"
-down_revision: Union[str, Sequence[str], None] = ("c3a1f2e8b901", "e4b2c1a903de")
+down_revision: Union[str, Sequence[str], None] = "d668fb72f5f7"
 branch_labels = None
 depends_on = None
 
