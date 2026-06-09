@@ -8,6 +8,8 @@ from sqlalchemy import text
 
 from app.auth import get_current_user
 from app.db.engine import engine
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
 
 router = APIRouter()
@@ -96,6 +98,11 @@ def _fetch_org_unit_name(org_unit_id: int) -> Optional[str]:
 def list_working_contacts(
     q: Optional[str] = Query(default=None),
     active_only: bool = Query(default=True),
+    org_group_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Filter by top-level org group of user's unit.",
+    ),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=500, ge=1, le=2000),
     offset: int = Query(default=0, ge=0),
@@ -114,9 +121,19 @@ def list_working_contacts(
         "(:active_only = false OR COALESCE(u.is_active, false) = true)",
     ]
 
-    if org_unit_id is not None:
-        params["org_unit_id"] = int(org_unit_id)
-        where_parts.append("u.unit_id = :org_unit_id")
+    org_scope = apply_org_scope(
+        strategy=OrgScopeStrategy.OWNER_UNIT,
+        params=OrgScopeParams(
+            org_group_id=int(org_group_id) if org_group_id is not None else None,
+            org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+        ),
+        regular_task_alias="u",
+        owner_unit_column="unit_id",
+    )
+    params.update(org_scope.params)
+    if org_scope.where_sql != "TRUE":
+        where_parts.append(f"({org_scope.where_sql})")
+    scope_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
 
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
@@ -138,6 +155,7 @@ def list_working_contacts(
 
     q_total = text(
         f"""
+        {scope_prefix}
         SELECT COUNT(*) AS cnt
         {BASE_FROM_SQL}
         WHERE {where_sql}
@@ -146,6 +164,7 @@ def list_working_contacts(
 
     q_list = text(
         f"""
+        {scope_prefix}
         {BASE_SELECT_SQL}
         WHERE {where_sql}
         ORDER BY

@@ -3,8 +3,10 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiFetchJson } from "@/lib/api";
 import { formatThrownError, recordStatusLabel, uiFieldLabel } from "@/lib/i18n";
+import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import WorkingContactsTable from "./WorkingContactsTable";
 
 type WorkingContactItem = {
@@ -35,6 +37,7 @@ type WorkingContactsResponse =
 const API_BASE = "/directory/working-contacts";
 const PAGE_SIZE = 100;
 const ORG_FILTER_PARAM_KEYS = [
+  ORG_GROUP_ID_PARAM,
   "org_unit_id",
   "unit_id",
   "orgUnitId",
@@ -212,6 +215,8 @@ export default function WorkingContactsPageClient() {
   const pathname = usePathname();
   const sp = useSearchParams();
 
+  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+  const orgGroupId = orgScope.org_group_id;
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
   const orgUnitNameFromUrl = React.useMemo(() => {
     const v = String(sp.get("org_unit_name") ?? "").trim();
@@ -237,7 +242,7 @@ export default function WorkingContactsPageClient() {
 
   React.useEffect(() => {
     setOffset(0);
-  }, [orgUnitId]);
+  }, [orgUnitId, orgGroupId]);
 
   const loadItems = React.useCallback(async () => {
     setLoading(true);
@@ -248,6 +253,7 @@ export default function WorkingContactsPageClient() {
         query: {
           q: appliedSearch || undefined,
           active_only: activeOnly,
+          org_group_id: orgGroupId ?? undefined,
           org_unit_id: orgUnitId ?? undefined,
           limit: PAGE_SIZE,
           offset,
@@ -280,7 +286,7 @@ export default function WorkingContactsPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [activeOnly, appliedSearch, offset, orgUnitId, refreshNonce]);
+  }, [activeOnly, appliedSearch, offset, orgGroupId, orgUnitId, refreshNonce]);
 
   React.useEffect(() => {
     void loadItems();
@@ -344,7 +350,13 @@ export default function WorkingContactsPageClient() {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
-            <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-end">
+              <OrgScopeFilter
+                basePath="/directory/working-contacts"
+                className="min-w-[240px]"
+                resetParamsOnChange={["offset"]}
+              />
+
               <div className="flex-1">
                 <input
                   value={searchDraft}
