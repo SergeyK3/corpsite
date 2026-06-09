@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
+
 
 def _as_int_or_none(v: Any) -> Optional[int]:
     try:
@@ -137,34 +140,20 @@ def list_regular_tasks_tx(
         params["executor_role_id"] = int(executor_role_id)
         filters.append("t.executor_role_id = :executor_role_id")
 
-    # Фильтр по группе должен работать по owner_unit_id
-    if org_group_id is not None:
-        params["org_group_id"] = int(org_group_id)
-        filters.append("COALESCE(ou.group_id, 0) = :org_group_id")
+    org_scope = apply_org_scope(
+        strategy=OrgScopeStrategy.OWNER_UNIT,
+        params=OrgScopeParams(
+            org_group_id=int(org_group_id) if org_group_id is not None else None,
+            org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+        ),
+        regular_task_alias="t",
+        owner_unit_column="owner_unit_id",
+    )
+    params.update(org_scope.params)
+    if org_scope.where_sql != "TRUE":
+        filters.append(f"({org_scope.where_sql})")
 
-    # Фильтр по выбранному узлу дерева должен работать по owner_unit_id
-    if org_unit_id is not None:
-        params["org_unit_id"] = int(org_unit_id)
-        filters.append(
-            """
-            t.owner_unit_id IN (
-                WITH RECURSIVE subtree AS (
-                    SELECT ou0.unit_id
-                    FROM public.org_units ou0
-                    WHERE ou0.unit_id = :org_unit_id
-
-                    UNION ALL
-
-                    SELECT child.unit_id
-                    FROM public.org_units child
-                    JOIN subtree s
-                      ON s.unit_id = child.parent_unit_id
-                    WHERE COALESCE(child.is_active, TRUE) = TRUE
-                )
-                SELECT unit_id FROM subtree
-            )
-            """.strip()
-        )
+    scope_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
 
     where_sql = ""
     if filters:
@@ -172,6 +161,7 @@ def list_regular_tasks_tx(
 
     total_sql = text(
         f"""
+        {scope_prefix}
         SELECT COUNT(1) AS cnt
         FROM public.regular_tasks t
         LEFT JOIN public.roles r
@@ -185,6 +175,7 @@ def list_regular_tasks_tx(
 
     sql = text(
         f"""
+        {scope_prefix}
         SELECT
           t.regular_task_id,
           t.code,

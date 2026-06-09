@@ -3,6 +3,8 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import OrgScopeFilter from "@/components/OrgScopeFilter";
+import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { apiFetchJson } from "../../../lib/api";
 import { runStatusLabel, scheduleTypeLabel, assignmentScopeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
@@ -92,27 +94,7 @@ type OrgUnitsListResponse = {
 
 type MainTab = "templates" | "runs";
 type DrawerMode = "create" | "view" | "edit";
-type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 type OwnerFilter = "all" | "ok" | "defect";
-
-function readEnvGroupId(name: string, fallback: number): number {
-  const raw = String(process.env[name] ?? "").trim();
-  if (!raw) return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return n;
-}
-
-const ORG_GROUP_ID_CLINICAL = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_CLINICAL", 1);
-const ORG_GROUP_ID_PARACLINICAL = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_PARACLINICAL", 2);
-const ORG_GROUP_ID_ADMIN = readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3);
-
-const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string; id?: number }> = [
-  { value: "all", label: "Все группы" },
-  { value: "clinical", label: "Клинические", id: ORG_GROUP_ID_CLINICAL },
-  { value: "paraclinical", label: "Параклинические", id: ORG_GROUP_ID_PARACLINICAL },
-  { value: "admin", label: "Административно-хозяйственные", id: ORG_GROUP_ID_ADMIN },
-];
 
 function fmtDateTime(value?: string | null): string {
   if (!value) return "—";
@@ -265,8 +247,11 @@ export default function RegularTasksAdminClient() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const orgScope = readOrgScopeFromSearchParams(sp);
+  const orgGroupId = orgScope.org_group_id;
   const orgUnitId = sp.get("org_unit_id") ?? "";
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
+  const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
 
   const [activeTab, setActiveTab] = React.useState<MainTab>("templates");
 
@@ -300,18 +285,11 @@ export default function RegularTasksAdminClient() {
   const [activeFilter, setActiveFilter] = React.useState<"all" | "active" | "inactive">("all");
   const [ownerFilter, setOwnerFilter] = React.useState<OwnerFilter>("all");
   const [scheduleFilter, setScheduleFilter] = React.useState<string>("all");
-  const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
-
   const [runAtLocalIso, setRunAtLocalIso] = React.useState("");
   const [dryRun, setDryRun] = React.useState(true);
   const [runSubmitting, setRunSubmitting] = React.useState(false);
   const [runSubmitError, setRunSubmitError] = React.useState<string | null>(null);
   const [lastRunResult, setLastRunResult] = React.useState<RunResult | null>(null);
-
-  const selectedOrgGroupId = React.useMemo(() => {
-    const found = ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup);
-    return found?.id;
-  }, [orgGroup]);
 
   const loadTemplates = React.useCallback(async () => {
     setTemplatesLoading(true);
@@ -323,7 +301,7 @@ export default function RegularTasksAdminClient() {
           status: "all",
           limit: 200,
           offset: 0,
-          org_group_id: selectedOrgGroupId ?? undefined,
+          org_group_id: orgGroupId ?? undefined,
           org_unit_id: orgUnitId || undefined,
         },
       });
@@ -353,7 +331,7 @@ export default function RegularTasksAdminClient() {
     } finally {
       setTemplatesLoading(false);
     }
-  }, [selectedOrgGroupId, orgUnitId, selectedTemplateId, drawerOpen, drawerMode]);
+  }, [orgGroupId, orgUnitId, selectedTemplateId, drawerOpen, drawerMode]);
 
   const loadOwnerUnits = React.useCallback(async () => {
     setOwnerUnitLoading(true);
@@ -399,7 +377,7 @@ export default function RegularTasksAdminClient() {
     try {
       const data = await apiFetchJson<RegularTaskRun[]>("/regular-task-runs", {
         query: {
-          org_group_id: selectedOrgGroupId ?? undefined,
+          org_group_id: orgGroupId ?? undefined,
           org_unit_id: orgUnitId || undefined,
         },
       });
@@ -421,7 +399,7 @@ export default function RegularTasksAdminClient() {
     } finally {
       setRunsLoading(false);
     }
-  }, [selectedOrgGroupId, orgUnitId, selectedRunId]);
+  }, [orgGroupId, orgUnitId, selectedRunId]);
 
   const loadRunItems = React.useCallback(
     async (runId: number) => {
@@ -431,7 +409,7 @@ export default function RegularTasksAdminClient() {
       try {
         const data = await apiFetchJson<RunItem[]>(`/regular-task-runs/${runId}/items`, {
           query: {
-            org_group_id: selectedOrgGroupId ?? undefined,
+            org_group_id: orgGroupId ?? undefined,
             org_unit_id: orgUnitId || undefined,
           },
         });
@@ -443,7 +421,7 @@ export default function RegularTasksAdminClient() {
         setRunItemsLoading(false);
       }
     },
-    [selectedOrgGroupId, orgUnitId],
+    [orgGroupId, orgUnitId],
   );
 
   React.useEffect(() => {
@@ -465,6 +443,22 @@ export default function RegularTasksAdminClient() {
       setRunItemsError(null);
     }
   }, [orgUnitId]);
+
+  React.useEffect(() => {
+    if (prevOrgGroupRef.current !== orgGroupId) {
+      prevOrgGroupRef.current = orgGroupId;
+
+      setSelectedTemplateId(null);
+      setSelectedTemplate(null);
+      setDrawerOpen(false);
+      setDrawerMode("view");
+      setDrawerError(null);
+
+      setSelectedRunId(null);
+      setRunItems([]);
+      setRunItemsError(null);
+    }
+  }, [orgGroupId]);
 
   React.useEffect(() => {
     if (selectedRunId == null) {
@@ -582,7 +576,6 @@ export default function RegularTasksAdminClient() {
     setScheduleFilter("all");
     setActiveFilter("all");
     setOwnerFilter("all");
-    setOrgGroup("all");
     setRunSubmitError(null);
     setLastRunResult(null);
 
@@ -594,8 +587,10 @@ export default function RegularTasksAdminClient() {
 
     const params = new URLSearchParams(sp.toString());
     const hadOrgUnitFilter = params.has("org_unit_id");
-    if (hadOrgUnitFilter) {
-      params.delete("org_unit_id");
+    const hadOrgGroupFilter = params.has(ORG_GROUP_ID_PARAM);
+    if (hadOrgUnitFilter || hadOrgGroupFilter) {
+      if (hadOrgUnitFilter) params.delete("org_unit_id");
+      if (hadOrgGroupFilter) params.delete(ORG_GROUP_ID_PARAM);
       const next = params.toString();
       router.replace(next ? `${pathname}?${next}` : pathname);
       return;
@@ -822,17 +817,7 @@ export default function RegularTasksAdminClient() {
                 Запуски
               </button>
 
-              <select
-                className="min-w-[240px] rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500"
-                value={orgGroup}
-                onChange={(e) => setOrgGroup(e.target.value as OrgGroupFilter)}
-              >
-                {ORG_GROUP_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <OrgScopeFilter basePath="/regular-tasks" className="min-w-[240px]" />
 
               <button
                 type="button"

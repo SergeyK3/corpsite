@@ -13,6 +13,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
+
 
 # ---------------------------
 # ENV helpers
@@ -818,6 +821,7 @@ def _load_regular_task_templates(
 ) -> List[Any]:
     filters: List[str] = ["COALESCE(rt.is_active, true) = true"]
     params: Dict[str, Any] = {}
+    scope_prefix = ""
 
     if template_filters is not None:
         if template_filters.schedule_type:
@@ -828,36 +832,25 @@ def _load_regular_task_templates(
             params["executor_role_id"] = int(template_filters.executor_role_id)
             filters.append("rt.executor_role_id = :executor_role_id")
 
-        if template_filters.org_group_id is not None:
-            params["org_group_id"] = int(template_filters.org_group_id)
-            filters.append("COALESCE(ou.group_id, 0) = :org_group_id")
-
-        if template_filters.org_unit_id is not None:
-            params["org_unit_id"] = int(template_filters.org_unit_id)
-            filters.append(
-                """
-                rt.owner_unit_id IN (
-                    WITH RECURSIVE subtree AS (
-                        SELECT ou0.unit_id
-                        FROM public.org_units ou0
-                        WHERE ou0.unit_id = :org_unit_id
-
-                        UNION ALL
-
-                        SELECT child.unit_id
-                        FROM public.org_units child
-                        JOIN subtree s ON s.unit_id = child.parent_unit_id
-                        WHERE COALESCE(child.is_active, TRUE) = TRUE
-                    )
-                    SELECT unit_id FROM subtree
-                )
-                """.strip()
-            )
+        org_scope = apply_org_scope(
+            strategy=OrgScopeStrategy.OWNER_UNIT,
+            params=OrgScopeParams(
+                org_group_id=template_filters.org_group_id,
+                org_unit_id=template_filters.org_unit_id,
+            ),
+            regular_task_alias="rt",
+            owner_unit_column="owner_unit_id",
+        )
+        params.update(org_scope.params)
+        if org_scope.where_sql != "TRUE":
+            filters.append(f"({org_scope.where_sql})")
+        scope_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
 
     where_sql = " AND ".join(filters)
     return conn.execute(
         text(
             f"""
+            {scope_prefix}
             SELECT
                 rt.regular_task_id,
                 rt.is_active,
