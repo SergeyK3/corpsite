@@ -4,8 +4,10 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiFetchJson } from "../../../../lib/api";
 import { formatThrownError } from "@/lib/i18n";
+import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import PositionDrawer from "./PositionDrawer";
 import type { PositionFormValues } from "./PositionForm";
 
@@ -118,6 +120,8 @@ function normalizeItems(payload: PositionsResponse): {
 export default function PositionsPageClient() {
   const sp = useSearchParams();
 
+  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+  const orgGroupId = orgScope.org_group_id;
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
   const orgUnitNameFromUrl = React.useMemo(() => {
     const v = String(sp.get("org_unit_name") ?? "").trim();
@@ -155,6 +159,10 @@ export default function PositionsPageClient() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  React.useEffect(() => {
+    setPage(0);
+  }, [orgGroupId, orgUnitId]);
+
   const loadItems = React.useCallback(async () => {
     setLoading(true);
     setPageError(null);
@@ -164,6 +172,7 @@ export default function PositionsPageClient() {
         query: {
           q: search || undefined,
           category: category === "all" ? undefined : category,
+          org_group_id: orgGroupId ?? undefined,
           org_unit_id: orgUnitId ?? undefined,
           limit: PAGE_SIZE,
           offset: page * PAGE_SIZE,
@@ -184,7 +193,7 @@ export default function PositionsPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [search, category, orgUnitId, page]);
+  }, [search, category, orgGroupId, orgUnitId, page]);
 
   React.useEffect(() => {
     void loadItems();
@@ -299,7 +308,13 @@ export default function PositionsPageClient() {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-end">
+              <OrgScopeFilter
+                basePath="/directory/positions"
+                className="min-w-[240px]"
+                resetParamsOnChange={[]}
+              />
+
               <div className="flex-1">
                 <input
                   value={searchInput}

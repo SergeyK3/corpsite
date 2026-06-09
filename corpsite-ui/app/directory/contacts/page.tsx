@@ -3,8 +3,10 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiFetchJson } from "@/lib/api";
 import { formatThrownError, uiFieldLabel } from "@/lib/i18n";
+import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 
 type ContactItem = {
   contact_id: number;
@@ -38,6 +40,7 @@ type ContactFormValues = {
 const API_BASE = "/directory/contacts";
 const PAGE_SIZE = 100;
 const ORG_FILTER_PARAM_KEYS = [
+  ORG_GROUP_ID_PARAM,
   "org_unit_id",
   "unit_id",
   "orgUnitId",
@@ -359,6 +362,8 @@ export default function ContactsPage() {
   const pathname = usePathname();
   const sp = useSearchParams();
 
+  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+  const orgGroupId = orgScope.org_group_id;
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
   const orgUnitNameFromUrl = React.useMemo(() => {
     const v = String(sp.get("org_unit_name") ?? "").trim();
@@ -390,7 +395,7 @@ export default function ContactsPage() {
 
   React.useEffect(() => {
     setOffset(0);
-  }, [orgUnitId]);
+  }, [orgGroupId, orgUnitId]);
 
   const loadItems = React.useCallback(async () => {
     setLoading(true);
@@ -400,6 +405,7 @@ export default function ContactsPage() {
       const data = await apiFetchJson<ContactsResponse>(API_BASE, {
         query: {
           q: appliedSearch || undefined,
+          org_group_id: orgGroupId ?? undefined,
           org_unit_id: orgUnitId ?? undefined,
           limit: PAGE_SIZE,
           offset,
@@ -432,7 +438,7 @@ export default function ContactsPage() {
     } finally {
       setLoading(false);
     }
-  }, [appliedSearch, orgUnitId, offset, refreshNonce]);
+  }, [appliedSearch, orgGroupId, orgUnitId, offset, refreshNonce]);
 
   React.useEffect(() => {
     void loadItems();
@@ -570,7 +576,13 @@ export default function ContactsPage() {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
-            <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            <form onSubmit={handleApplySearch} className="flex flex-col gap-2 xl:flex-row xl:items-end">
+              <OrgScopeFilter
+                basePath="/directory/contacts"
+                className="min-w-[240px]"
+                resetParamsOnChange={[]}
+              />
+
               <div className="flex-1">
                 <input
                   value={searchDraft}

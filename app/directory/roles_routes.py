@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
 
 router = APIRouter()
@@ -217,6 +219,11 @@ def _build_select_sql(meta: Dict[str, Optional[str]]) -> str:
 def list_roles(
     q: Optional[str] = Query(default=None),
     is_active: Optional[bool] = Query(default=None),
+    org_group_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Filter by top-level org group of user's unit.",
+    ),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -254,32 +261,30 @@ def list_roles(
             filters.append("CAST(is_active AS BOOLEAN) = :is_active")
             params["is_active"] = bool(is_active)
 
-    if org_unit_id is not None:
-        params["org_unit_id"] = int(org_unit_id)
-        filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
+    if org_group_id is not None or org_unit_id is not None:
+        if org_unit_id is not None:
+            filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
 
-        with_prefix = """
-        WITH RECURSIVE subtree AS (
-            SELECT ou.unit_id
-            FROM public.org_units ou
-            WHERE ou.unit_id = :org_unit_id
-
-            UNION ALL
-
-            SELECT child.unit_id
-            FROM public.org_units child
-            JOIN subtree s ON s.unit_id = child.parent_unit_id
+        org_scope = apply_org_scope(
+            strategy=OrgScopeStrategy.OWNER_UNIT,
+            params=OrgScopeParams(
+                org_group_id=int(org_group_id) if org_group_id is not None else None,
+                org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+            ),
+            regular_task_alias="u",
+            owner_unit_column="unit_id",
         )
-        """
+        params.update(org_scope.params)
+        with_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
 
         filters.append(
-            """
+            f"""
             EXISTS (
                 SELECT 1
                 FROM public.users u
                 WHERE u.role_id = t.role_id
-                  AND u.unit_id IN (SELECT unit_id FROM subtree)
                   AND COALESCE(u.is_active, TRUE) = TRUE
+                  AND ({org_scope.where_sql})
             )
             """.strip()
         )

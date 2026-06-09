@@ -4,8 +4,10 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiFetchJson } from "../../../../lib/api";
 import { formatThrownError, recordStatusLabel } from "@/lib/i18n";
+import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import RoleDrawer from "./RoleDrawer";
 import type { RoleFormValues } from "./RoleForm";
 
@@ -115,6 +117,8 @@ export default function RolesPageClient() {
   const router = useRouter();
   const sp = useSearchParams();
 
+  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+  const orgGroupId = orgScope.org_group_id;
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
   const orgUnitNameFromUrl = React.useMemo(() => {
     const v = String(sp.get("org_unit_name") ?? "").trim();
@@ -158,6 +162,10 @@ export default function RolesPageClient() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  React.useEffect(() => {
+    setPage(0);
+  }, [orgGroupId, orgUnitId]);
+
   const loadRoles = React.useCallback(
     async (options?: LoadRolesOptions) => {
       setLoading(true);
@@ -177,6 +185,7 @@ export default function RolesPageClient() {
 
         if (effectiveSearch) params.set("q", effectiveSearch);
         if (effectiveOnlyActive) params.set("is_active", "true");
+        if (orgGroupId != null) params.set("org_group_id", String(orgGroupId));
         if (effectiveOrgUnitId != null) params.set("org_unit_id", String(effectiveOrgUnitId));
 
         params.set("limit", String(PAGE_SIZE));
@@ -210,7 +219,7 @@ export default function RolesPageClient() {
         setLoading(false);
       }
     },
-    [search, onlyActive, orgUnitId, page],
+    [search, onlyActive, orgGroupId, orgUnitId, page],
   );
 
   React.useEffect(() => {
@@ -352,7 +361,13 @@ export default function RolesPageClient() {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-6 py-2">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-end">
+              <OrgScopeFilter
+                basePath="/directory/roles"
+                className="min-w-[240px]"
+                resetParamsOnChange={[]}
+              />
+
               <div className="flex-1">
                 <input
                   value={searchInput}

@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
 
 router = APIRouter()
@@ -127,8 +129,8 @@ def _build_eligible_contacts_cte_sql() -> str:
                 cw.person_id AS person_id
             FROM public.contacts_working cw
             WHERE COALESCE(NULLIF(TRIM(cw.dept_code), ''), '∅') IN (
-                SELECT sc.code
-                FROM subtree_codes sc
+                SELECT euc.code
+                FROM eligible_unit_codes euc
             )
             """.strip()
         )
@@ -141,8 +143,8 @@ def _build_eligible_contacts_cte_sql() -> str:
                 kc.person_id AS person_id
             FROM public.key_contacts kc
             WHERE COALESCE(NULLIF(TRIM(kc.unit_code), ''), '∅') IN (
-                SELECT sc.code
-                FROM subtree_codes sc
+                SELECT euc.code
+                FROM eligible_unit_codes euc
             )
             """.strip()
         )
@@ -155,8 +157,8 @@ def _build_eligible_contacts_cte_sql() -> str:
                 ka.person_id AS person_id
             FROM public.v_key_contacts_auto ka
             WHERE COALESCE(NULLIF(TRIM(ka.unit_code), ''), '∅') IN (
-                SELECT sc.code
-                FROM subtree_codes sc
+                SELECT euc.code
+                FROM eligible_unit_codes euc
             )
             """.strip()
         )
@@ -167,6 +169,11 @@ def _build_eligible_contacts_cte_sql() -> str:
 @router.get("/contacts")
 def list_contacts(
     q: Optional[str] = Query(default=None),
+    org_group_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Filter by top-level org group of linked org unit.",
+    ),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -195,34 +202,54 @@ def list_contacts(
             """
         )
 
-    if org_unit_id is not None:
-        params["org_unit_id"] = int(org_unit_id)
-        filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
+    if org_group_id is not None or org_unit_id is not None:
+        if org_unit_id is not None:
+            filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
+
+        org_scope = apply_org_scope(
+            strategy=OrgScopeStrategy.OWNER_UNIT,
+            params=OrgScopeParams(
+                org_group_id=int(org_group_id) if org_group_id is not None else None,
+                org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+            ),
+            regular_task_alias="ou",
+            owner_unit_column="unit_id",
+        )
+        params.update(org_scope.params)
 
         eligible_contacts_sql = _build_eligible_contacts_cte_sql()
 
         if eligible_contacts_sql:
-            with_prefix = f"""
-            WITH RECURSIVE subtree AS (
-                SELECT ou.unit_id, ou.code
-                FROM public.org_units ou
-                WHERE ou.unit_id = :org_unit_id
+            cte_chunks: List[str] = []
+            if org_scope.cte_sql:
+                body = org_scope.cte_sql.strip()
+                if body.upper().startswith("WITH RECURSIVE"):
+                    body = body[len("WITH RECURSIVE") :].strip()
+                elif body.upper().startswith("WITH"):
+                    body = body[len("WITH") :].strip()
+                if body:
+                    cte_chunks.append(body.rstrip(","))
 
-                UNION ALL
-
-                SELECT child.unit_id, child.code
-                FROM public.org_units child
-                JOIN subtree s ON s.unit_id = child.parent_unit_id
-            ),
-            subtree_codes AS (
-                SELECT DISTINCT TRIM(code) AS code
-                FROM subtree
-                WHERE COALESCE(TRIM(code), '') <> ''
-            ),
-            eligible_contacts AS (
-                {eligible_contacts_sql}
+            cte_chunks.append(
+                """
+                eligible_unit_codes AS (
+                    SELECT DISTINCT TRIM(ou.code) AS code
+                    FROM public.org_units ou
+                    WHERE COALESCE(TRIM(ou.code), '') <> ''
+                      AND ({org_scope_where})
+                )
+                """.format(org_scope_where=org_scope.where_sql).strip()
             )
-            """
+            cte_chunks.append(
+                f"""
+                eligible_contacts AS (
+                    {eligible_contacts_sql}
+                )
+                """.strip()
+            )
+
+            recursive_kw = "RECURSIVE" if org_scope.cte_sql else ""
+            with_prefix = f"WITH {recursive_kw}\n" + ",\n".join(cte_chunks) + "\n"
 
             where_parts.append(
                 """
