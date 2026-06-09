@@ -14,10 +14,26 @@ from app.services.org_units_service import OrgUnit
 router = APIRouter()
 
 
+def _find_tree_node(nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
+    for n in nodes:
+        if str(n.get("id")) == target_id:
+            return n
+        got = _find_tree_node(n.get("children") or [], target_id)
+        if got is not None:
+            return got
+    return None
+
+
 @router.get("/org-units/tree")
 def org_units_tree(
     include_inactive: bool = Query(default=True),
     status: Optional[str] = Query(default=None),
+    org_group_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Filter by org_units.group_id (top-level org classification).",
+    ),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
@@ -35,7 +51,12 @@ def org_units_tree(
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
-        units = org_units.list_org_units(scope_unit_ids=scope_unit_ids, include_inactive=include_inactive)
+        units = org_units.list_org_units(
+            scope_unit_ids=scope_unit_ids,
+            include_inactive=include_inactive,
+            org_group_id=org_group_id,
+            org_unit_id=org_unit_id,
+        )
 
         top_id: Optional[int] = None
         if scope_unit_id is not None:
@@ -51,21 +72,12 @@ def org_units_tree(
 
         items, inactive_ids, total = org_units.build_ui_tree(units)
 
-        def find_node(nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
-            for n in nodes:
-                if str(n.get("id")) == target_id:
-                    return n
-                got = find_node(n.get("children") or [], target_id)
-                if got is not None:
-                    return got
-            return None
-
         if scope_unit_id is not None:
             root_node: Optional[Dict[str, Any]] = None
             if top_id is not None:
-                root_node = find_node(items, str(top_id))
+                root_node = _find_tree_node(items, str(top_id))
             if root_node is None:
-                root_node = find_node(items, str(scope_unit_id))
+                root_node = _find_tree_node(items, str(scope_unit_id))
 
             root_id_out: Optional[int] = None
             if root_node is not None and root_node.get("id") is not None:
@@ -83,6 +95,17 @@ def org_units_tree(
                 "items": [root_node] if root_node is not None else [],
                 "root_id": root_id_out,
             }
+
+        if org_unit_id is not None:
+            filter_root = _find_tree_node(items, str(int(org_unit_id)))
+            if filter_root is not None:
+                return {
+                    "version": 1,
+                    "total": total,
+                    "inactive_ids": inactive_ids,
+                    "items": [filter_root],
+                    "root_id": int(org_unit_id),
+                }
 
         return {
             "version": 1,
@@ -102,6 +125,12 @@ def org_units_tree(
 def list_org_units_flat(
     include_inactive: bool = Query(default=True),
     status: Optional[str] = Query(default=None),
+    org_group_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Filter by org_units.group_id (top-level org classification).",
+    ),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
@@ -116,7 +145,12 @@ def list_org_units_flat(
         user_ctx = user
         scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
 
-        units = org_units.list_org_units(scope_unit_ids=scope["scope_unit_ids"], include_inactive=include_inactive)
+        units = org_units.list_org_units(
+            scope_unit_ids=scope["scope_unit_ids"],
+            include_inactive=include_inactive,
+            org_group_id=org_group_id,
+            org_unit_id=org_unit_id,
+        )
         return {
             "items": [
                 {

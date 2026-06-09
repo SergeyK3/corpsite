@@ -2,6 +2,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+import OrgScopeFilter from "@/components/OrgScopeFilter";
+import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 
 import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
 import {
@@ -51,6 +55,9 @@ function flattenNodes(nodes: TreeNode[]): Array<{ id: string; title: string; typ
 }
 
 export default function OrgUnitsPage() {
+  const sp = useSearchParams();
+  const orgScope = useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [inactiveIds, setInactiveIds] = useState<string[]>([]);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
@@ -78,7 +85,11 @@ export default function OrgUnitsPage() {
     setErrorText("");
 
     try {
-      const data = await getOrgUnitsTree({ include_inactive: true });
+      const data = await getOrgUnitsTree({
+        include_inactive: true,
+        org_group_id: orgScope.org_group_id ?? null,
+        org_unit_id: orgScope.org_unit_id ?? null,
+      });
 
       setNodes(data.items as unknown as TreeNode[]);
       setInactiveIds(data.inactive_ids);
@@ -93,7 +104,7 @@ export default function OrgUnitsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [orgScope.org_group_id, orgScope.org_unit_id]);
 
   useEffect(() => {
     void loadTree();
@@ -357,6 +368,10 @@ export default function OrgUnitsPage() {
       <div className="flex h-full w-full gap-4">
         {/* LEFT */}
         <div className="flex w-[420px] shrink-0 flex-col">
+          <div className="mb-3">
+            <OrgScopeFilter basePath="/directory/org-units" className="w-full" />
+          </div>
+
           <div className="mb-3 flex items-center justify-between">
             <div className="text-sm font-medium">Оргструктура</div>
             <button

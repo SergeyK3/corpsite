@@ -143,9 +143,13 @@ export type OrgUnitsTreePayload = {
 
 export async function getOrgUnitsTree(args?: {
   include_inactive?: boolean;
+  org_group_id?: number | string | null;
+  org_unit_id?: number | string | null;
 }): Promise<OrgUnitsTreePayload> {
   const query = buildQuery({
     include_inactive: args?.include_inactive ?? undefined,
+    org_group_id: args?.org_group_id ?? undefined,
+    org_unit_id: args?.org_unit_id ?? undefined,
   });
 
   function pack(body: any): OrgUnitsTreePayload {

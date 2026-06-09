@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
+from app.org_scope.apply import apply_org_scope
+from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
+
 
 @dataclass(frozen=True)
 class OrgUnit:
@@ -410,33 +413,64 @@ class OrgUnitsService:
         self,
         scope_unit_ids: Optional[List[int]] = None,
         include_inactive: bool = True,
+        org_group_id: Optional[int] = None,
+        org_unit_id: Optional[int] = None,
     ) -> List[OrgUnit]:
-        where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
+        where_active = "" if include_inactive else "AND COALESCE(ou.is_active, true) = true"
 
-        if scope_unit_ids is None:
-            sql = text(
-                f"""
-                SELECT unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
-                FROM {self._schema}.{self._org_units_table}
-                WHERE 1=1
-                  {where_active}
-                ORDER BY unit_id
-                """
-            )
-            params: Dict[str, Any] = {}
-        else:
-            sql = (
-                text(
-                    f"""
-                    SELECT unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
-                    FROM {self._schema}.{self._org_units_table}
-                    WHERE unit_id IN :ids
-                      {where_active}
-                    ORDER BY unit_id
-                    """
-                ).bindparams(bindparam("ids", expanding=True))
-            )
-            params = {"ids": [int(x) for x in scope_unit_ids]}
+        where_parts: List[str] = ["TRUE"]
+        params: Dict[str, Any] = {}
+        cte_parts: List[str] = []
+
+        if scope_unit_ids is not None:
+            ids = [int(x) for x in scope_unit_ids]
+            if not ids:
+                return []
+            where_parts.append("ou.unit_id IN :scope_unit_ids")
+            params["scope_unit_ids"] = ids
+
+        org_scope = apply_org_scope(
+            strategy=OrgScopeStrategy.OWNER_UNIT,
+            params=OrgScopeParams(
+                org_group_id=int(org_group_id) if org_group_id is not None else None,
+                org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+                include_inactive_units=include_inactive,
+            ),
+            regular_task_alias="ou",
+            owner_unit_column="unit_id",
+        )
+        params.update(org_scope.params)
+        if org_scope.where_sql != "TRUE":
+            where_parts.append(f"({org_scope.where_sql})")
+        if org_scope.cte_sql:
+            cte_parts.append(org_scope.cte_sql)
+
+        where_sql = " AND ".join(where_parts)
+
+        cte_prefix = ""
+        if cte_parts:
+            normalized: List[str] = []
+            for p in cte_parts:
+                p2 = p.strip()
+                if p2.lower().startswith("with recursive"):
+                    p2 = p2[len("with recursive") :].strip()
+                normalized.append(p2.strip().lstrip(","))
+            cte_prefix = "WITH RECURSIVE\n" + ",\n".join([x for x in normalized if x])
+
+        sql = text(
+            f"""
+            {cte_prefix}
+            SELECT ou.unit_id, ou.parent_unit_id, ou.name, ou.code, ou.group_id,
+                   COALESCE(ou.is_active, true) AS is_active
+            FROM {self._schema}.{self._org_units_table} ou
+            WHERE {where_sql}
+              {where_active}
+            ORDER BY ou.unit_id
+            """
+        )
+
+        if "scope_unit_ids" in params:
+            sql = sql.bindparams(bindparam("scope_unit_ids", expanding=True))
 
         with self._engine.begin() as c:
             rows = c.execute(sql, params).mappings().all()
