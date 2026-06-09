@@ -47,7 +47,7 @@ export const ASSIGNMENT_SCOPE_LABELS: Readonly<Record<string, string>> = {
   admin: "Административный",
 };
 
-/** Подписи полей admin-экранов regular-tasks / runs. */
+/** Подписи полей admin / directory экранов. */
 export const UI_FIELD_LABELS: Readonly<Record<string, string>> = {
   run_id: "ID запуска",
   dry_run: "Пробный запуск",
@@ -56,6 +56,8 @@ export const UI_FIELD_LABELS: Readonly<Record<string, string>> = {
   errors: "Ошибки",
   owner_unit_id: "Отделение",
   owner_unit: "Отделение",
+  org_unit_id: "Отделение",
+  person_id: "ID персоны",
   assignment_scope: "Тип назначения",
   schedule_params: "Параметры расписания",
   due: "К сроку",
@@ -66,6 +68,11 @@ export const UI_FIELD_LABELS: Readonly<Record<string, string>> = {
   template: "Шаблон",
   role: "Роль",
   period: "Период",
+};
+
+export const RECORD_STATUS_LABELS: Readonly<Record<string, string>> = {
+  active: "Активен",
+  inactive: "Неактивен",
 };
 
 const API_MESSAGE_LABELS: Readonly<Record<string, string>> = {
@@ -191,6 +198,13 @@ export function uiFieldLabel(key: string | null | undefined, fallback?: string):
   if (!raw) return fallback ?? "—";
   const hit = UI_FIELD_LABELS[normalizeLookupKey(raw)] ?? UI_FIELD_LABELS[raw];
   return hit ?? fallback ?? raw;
+}
+
+export function recordStatusLabel(
+  code: string | null | undefined,
+  options?: { fallback?: string },
+): string {
+  return lookupLabel(RECORD_STATUS_LABELS, code, options?.fallback);
 }
 
 export function runTitleLabel(runId: number | string): string {

@@ -41,8 +41,8 @@ export const DICTIONARIES: DictionaryConfig[] = [
       { key: "is_active", title: "Активна", width: "110px", format: "boolean" },
     ],
     formFields: [
-      { key: "code", label: "Код роли", type: "text", required: true, placeholder: "Например: DIRECTOR" },
-      { key: "name", label: "Название", type: "text", required: true, placeholder: "Например: Director" },
+      { key: "code", label: "Код роли", type: "text", required: true, placeholder: "Например: DIRECTOR — код роли латиницей" },
+      { key: "name", label: "Название", type: "text", required: true, placeholder: "Например: Директор" },
       { key: "name_ru", label: "Русское название", type: "text", placeholder: "Например: Директор" },
       { key: "description", label: "Описание", type: "textarea", placeholder: "Краткое описание роли" },
       { key: "is_active", label: "Активна", type: "checkbox" },
@@ -79,7 +79,7 @@ export const DICTIONARIES: DictionaryConfig[] = [
       { key: "is_active", title: "Активно", width: "110px", format: "boolean" },
     ],
     formFields: [
-      { key: "code", label: "Код", type: "text", required: true, placeholder: "Например: SURG_01" },
+      { key: "code", label: "Код", type: "text", required: true, placeholder: "Например: SURG_01 — код отделения" },
       { key: "name", label: "Название", type: "text", required: true, placeholder: "Например: Хирургия 1" },
       { key: "name_ru", label: "Русское название", type: "text", placeholder: "Например: Хирургия 1" },
       { key: "parent_unit_id", label: "Родительское отделение", type: "text", placeholder: "Например: 41" },

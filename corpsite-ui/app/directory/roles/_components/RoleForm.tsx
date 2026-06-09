@@ -88,7 +88,7 @@ export default function RoleForm({
               type="text"
               value={values.role_code}
               onChange={(e) => setField("role_code", e.target.value)}
-              placeholder="Например: QUALITY_EXPERT"
+              placeholder="Например: QUALITY_EXPERT — код роли латиницей"
               autoComplete="off"
               spellCheck={false}
               disabled={saving}

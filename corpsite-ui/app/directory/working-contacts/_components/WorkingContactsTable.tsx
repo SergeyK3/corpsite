@@ -1,5 +1,7 @@
 "use client";
 
+import { recordStatusLabel } from "@/lib/i18n";
+
 type WorkingContactItem = {
   id?: number;
   user_id?: number | null;
@@ -146,11 +148,11 @@ export default function WorkingContactsTable({
                   <td className="px-3 py-2">
                     {item.is_active ? (
                       <span className="inline-flex rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 text-[12px] text-emerald-800 dark:text-emerald-200">
-                        Да
+                        {recordStatusLabel("active")}
                       </span>
                     ) : (
                       <span className="inline-flex rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[12px] text-zinc-600 dark:text-zinc-400">
-                        Нет
+                        {recordStatusLabel("inactive")}
                       </span>
                     )}
                   </td>

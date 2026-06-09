@@ -4,6 +4,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
+import { formatThrownError, uiFieldLabel } from "@/lib/i18n";
 
 type ContactItem = {
   contact_id: number;
@@ -59,12 +60,7 @@ function extractTotal(payload: ContactsResponse, items: ContactItem[]): number {
 }
 
 function extractErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error && "message" in error) {
-    const msg = String((error as { message?: unknown }).message ?? "").trim();
-    if (msg) return msg;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return "Не удалось выполнить операцию.";
+  return formatThrownError(error, { fallback: "Не удалось выполнить операцию." });
 }
 
 function parseOptionalPositiveInt(value: string): number | null {
@@ -218,7 +214,9 @@ function ContactDrawer({
                     <div className="mt-1 text-zinc-900 dark:text-zinc-50">{currentItem.contact_id}</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">person_id</div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                      {uiFieldLabel("person_id")}
+                    </div>
                     <div className="mt-1 text-zinc-900 dark:text-zinc-50">
                       {currentItem.person_id != null ? currentItem.person_id : "—"}
                     </div>
@@ -255,7 +253,7 @@ function ContactDrawer({
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <label htmlFor="person_id" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    person_id
+                    {uiFieldLabel("person_id")}
                   </label>
                   <input
                     id="person_id"
@@ -468,7 +466,7 @@ export default function ContactsPage() {
     try {
       const personId = parseOptionalPositiveInt(values.person_id);
       if (values.person_id.trim() && personId === null) {
-        throw new Error("person_id должен быть положительным целым числом.");
+        throw new Error(`${uiFieldLabel("person_id")} должен быть положительным целым числом.`);
       }
 
       const telegramNumericId = parseOptionalPositiveInt(values.telegram_numeric_id);
@@ -577,7 +575,7 @@ export default function ContactsPage() {
                 <input
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
-                  placeholder="Поиск по ID, person_id, ФИО, телефону, Telegram"
+                  placeholder={`Поиск по ID, ${uiFieldLabel("person_id")}, ФИО, телефону, Telegram`}
                   className="h-8.5 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
               </div>
@@ -636,7 +634,7 @@ export default function ContactsPage() {
                         ФИО
                       </th>
                       <th className="min-w-[120px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                        person_id
+                        {uiFieldLabel("person_id")}
                       </th>
                       <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Телефон

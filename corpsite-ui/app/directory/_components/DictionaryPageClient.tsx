@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import { apiFetchJson } from "@/lib/api";
+import { formatThrownError, recordStatusLabel } from "@/lib/i18n";
 import type { DictionaryConfig, DictionaryField, DictionaryColumn } from "../_lib/dictionaries.config";
 
 type Props = {
@@ -50,54 +51,8 @@ function normalizeMutationItem(payload: DictMutationResponse | null | undefined)
   return null;
 }
 
-function errorToText(err: any): string {
-  if (!err) return "Неизвестная ошибка.";
-
-  if (typeof err === "string") return err;
-
-  if (typeof err?.message === "string" && err.message.trim()) {
-    return err.message.trim();
-  }
-
-  if (typeof err?.detail === "string" && err.detail.trim()) {
-    return err.detail.trim();
-  }
-
-  if (Array.isArray(err?.detail)) {
-    return err.detail
-      .map((x: any) => {
-        if (typeof x === "string") return x;
-        if (typeof x?.msg === "string" && x.msg.trim()) {
-          const loc = Array.isArray(x?.loc) ? x.loc.join(" → ") : "";
-          return loc ? `${loc}: ${x.msg}` : x.msg;
-        }
-        try {
-          return JSON.stringify(x);
-        } catch {
-          return String(x);
-        }
-      })
-      .join("; ");
-  }
-
-  if (Array.isArray(err)) {
-    return err
-      .map((x: any) => {
-        if (typeof x === "string") return x;
-        try {
-          return JSON.stringify(x);
-        } catch {
-          return String(x);
-        }
-      })
-      .join("; ");
-  }
-
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return "Ошибка запроса.";
-  }
+function errorToText(err: unknown): string {
+  return formatThrownError(err, { fallback: "Неизвестная ошибка." });
 }
 
 function buildInitialForm(fields: DictionaryField[], source?: Record<string, any> | null) {
@@ -116,7 +71,9 @@ function formatCellValue(row: Record<string, any>, column: DictionaryColumn): st
   const rawValue = row[column.key];
 
   if (column.format === "boolean") {
-    return rawValue === true ? "Да" : rawValue === false ? "Нет" : "";
+    if (rawValue === true) return recordStatusLabel("active");
+    if (rawValue === false) return recordStatusLabel("inactive");
+    return "";
   }
 
   if (column.key === "name") {

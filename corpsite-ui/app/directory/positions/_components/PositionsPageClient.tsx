@@ -5,6 +5,7 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 
 import { apiFetchJson } from "../../../../lib/api";
+import { formatThrownError } from "@/lib/i18n";
 import PositionDrawer from "./PositionDrawer";
 import type { PositionFormValues } from "./PositionForm";
 
@@ -58,8 +59,7 @@ function getCategoryLabel(item: PositionItem): string {
 }
 
 function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return "Не удалось выполнить операцию.";
+  return formatThrownError(error, { fallback: "Не удалось выполнить операцию." });
 }
 
 function parsePositiveInt(value: string | null): number | null {

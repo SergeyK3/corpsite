@@ -8,11 +8,20 @@ import { useParams } from "next/navigation";
 
 import { getEmployee } from "../_lib/api.client";
 import type { EmployeeDTO } from "../_lib/types";
+import { formatThrownError, recordStatusLabel } from "@/lib/i18n";
 
 type LoadState =
   | { status: "idle" | "loading" }
   | { status: "ok"; item: EmployeeDTO }
   | { status: "error"; message: string };
+
+function fmtStatus(value: unknown): string {
+  if (value == null) return "—";
+  const s = String(value).trim();
+  if (!s) return "—";
+  const labeled = recordStatusLabel(s);
+  return labeled !== s ? labeled : s;
+}
 
 function fmt(v: unknown): string {
   if (v == null) return "—";
@@ -37,13 +46,12 @@ export default function EmployeeDetailsPage() {
         const item = await getEmployee(id);
         if (cancelled) return;
         setState({ status: "ok", item });
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (cancelled) return;
-        const msg =
-          typeof e?.message === "string" && e.message
-            ? e.message
-            : "Не удалось загрузить сотрудника";
-        setState({ status: "error", message: msg });
+        setState({
+          status: "error",
+          message: formatThrownError(e, { fallback: "Не удалось загрузить сотрудника" }),
+        });
       }
     })();
 
@@ -102,7 +110,7 @@ export default function EmployeeDetailsPage() {
         <Row label="Отдел" value={e.department?.name} />
         <Row label="Должность" value={e.position?.name} />
         <Row label="Ставка" value={e.rate} />
-        <Row label="Статус" value={e.status} />
+        <Row label="Статус" value={fmtStatus(e.status)} />
         <Row label="Дата с" value={e.date_from} />
         <Row label="Дата по" value={e.date_to} />
       </div>

@@ -5,6 +5,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiFetchJson } from "../../../../lib/api";
+import { formatThrownError, recordStatusLabel } from "@/lib/i18n";
 import RoleDrawer from "./RoleDrawer";
 import type { RoleFormValues } from "./RoleForm";
 
@@ -90,8 +91,7 @@ function normalizeRoles(payload: RolesResponse): {
 }
 
 function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return "Не удалось выполнить операцию.";
+  return formatThrownError(error, { fallback: "Не удалось выполнить операцию." });
 }
 
 function parsePositiveInt(value: string | null): number | null {
@@ -483,7 +483,7 @@ export default function RolesPageClient() {
                           </td>
 
                           <td className="px-4 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                            {role.is_active ? "Да" : "Нет"}
+                            {role.is_active ? recordStatusLabel("active") : recordStatusLabel("inactive")}
                           </td>
 
                           <td className="px-4 py-1">

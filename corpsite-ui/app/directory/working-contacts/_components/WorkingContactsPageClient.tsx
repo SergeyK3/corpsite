@@ -4,6 +4,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
+import { formatThrownError, recordStatusLabel, uiFieldLabel } from "@/lib/i18n";
 import WorkingContactsTable from "./WorkingContactsTable";
 
 type WorkingContactItem = {
@@ -58,12 +59,7 @@ function extractTotal(payload: WorkingContactsResponse, items: WorkingContactIte
 }
 
 function extractErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error && "message" in error) {
-    const msg = String((error as { message?: unknown }).message ?? "").trim();
-    if (msg) return msg;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return "Не удалось загрузить рабочие контакты.";
+  return formatThrownError(error, { fallback: "Не удалось загрузить рабочие контакты." });
 }
 
 function parsePositiveInt(value: string | null): number | null {
@@ -162,7 +158,9 @@ function WorkingContactDrawer({ open, item, onClose }: WorkingContactDrawerProps
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">org_unit_id</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                {uiFieldLabel("org_unit_id")}
+              </div>
               <div className="mt-1 text-zinc-900 dark:text-zinc-50">{item.org_unit_id ?? "—"}</div>
             </div>
 
@@ -198,7 +196,9 @@ function WorkingContactDrawer({ open, item, onClose }: WorkingContactDrawerProps
 
             <div>
               <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">Активен</div>
-              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{item.is_active ? "Да" : "Нет"}</div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">
+                {item.is_active ? recordStatusLabel("active") : recordStatusLabel("inactive")}
+              </div>
             </div>
           </div>
         </div>

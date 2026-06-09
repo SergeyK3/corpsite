@@ -2,6 +2,7 @@
 
 import type { EmployeesResponse, EmployeeDetails } from "./types";
 import { getSessionAccessToken } from "@/lib/auth";
+import { formatThrownError } from "@/lib/i18n";
 
 function getApiBase(): string {
   const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
@@ -30,17 +31,8 @@ function buildQuery(params: Record<string, string | number | null | undefined>):
  * Единая мапа ошибок fetch/HTTP → человеко-читаемый текст для UI.
  * Важно: экспортируется и используется в компонентах.
  */
-export function mapApiErrorToMessage(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
-
-  const m = msg.match(/\bHTTP\s+(\d{3})\b/i);
-  const status = m ? Number(m[1]) : undefined;
-
-  if (status === 401) return "Нет доступа (401).";
-  if (status === 403) return "Недостаточно прав (403).";
-  if (status === 404) return "Не найдено (404).";
-  if (status && status >= 500) return "Ошибка сервера. Попробуйте позже.";
-  return msg || "Ошибка запроса.";
+export function mapApiErrorToMessage(e: unknown, fallback = "Ошибка запроса."): string {
+  return formatThrownError(e, { fallback });
 }
 
 function maybeAddAuthHeader(headers: Record<string, string>) {

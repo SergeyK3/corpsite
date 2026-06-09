@@ -3,6 +3,8 @@
 
 import * as React from "react";
 
+import { recordStatusLabel } from "@/lib/i18n";
+
 type WorkingContactItem = {
   id?: number;
   user_id?: number | null;
@@ -105,7 +107,7 @@ export default function WorkingContactsDrawer({
                     : "border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400",
                 ].join(" ")}
               >
-                {item?.is_active ? "Активный" : "Неактивный"}
+                {item?.is_active ? recordStatusLabel("active") : recordStatusLabel("inactive")}
               </span>
             </div>
 
