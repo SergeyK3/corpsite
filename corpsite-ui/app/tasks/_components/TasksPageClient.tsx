@@ -54,6 +54,8 @@ type LoadItemsOptions = {
   statusTab?: StatusTab;
   taskScope?: TaskScope;
   orgUnitId?: string;
+  search?: string;
+  taskKind?: TaskKindFilter;
 };
 
 function normalizeMsg(msg: string): string {
@@ -357,21 +359,6 @@ function editButtonTitle(src: any): string {
   return "Этот тип задачи не поддерживает редактирование";
 }
 
-function normalizeText(value: string): string {
-  return String(value || "").toLowerCase().replace(/ё/g, "е").trim();
-}
-
-function matchesSearch(name: string, query: string): boolean {
-  const q = normalizeText(query);
-  if (!q) return true;
-
-  const hay = normalizeText(name);
-  if (hay.includes(q)) return true;
-
-  const tokens = q.split(/\s+/).filter(Boolean);
-  return tokens.every((t) => hay.includes(t));
-}
-
 function normalizeTaskKind(value: any): string {
   const s = String(value ?? "").trim().toLowerCase();
   if (s === "adhoc" || s === "regular") return s;
@@ -444,6 +431,7 @@ export default function TasksPageClient() {
   const [tab, setTab] = React.useState<StatusTab>("active");
   const [taskScope, setTaskScope] = React.useState<TaskScope>("mine");
   const [search, setSearch] = React.useState("");
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [taskKind, setTaskKind] = React.useState<TaskKindFilter>("all");
 
   const [items, setItems] = React.useState<any[]>([]);
@@ -482,21 +470,12 @@ export default function TasksPageClient() {
   const showDeleteButtons = isSystemAdmin;
   const actionsColWidth = showDeleteButtons ? "w-[170px]" : "w-[138px]";
 
-  const filteredItems = React.useMemo(() => {
-    return items.filter((item) => {
-      const q = search.trim();
-      const bySearch = !q
-        ? true
-        : matchesSearch(taskTitleOf(item), q) ||
-          (taskScope === "team" &&
-            (matchesSearch(executorRoleLabelOf(item), q) ||
-              matchesSearch(String(item?.executor_name ?? ""), q)));
+  const displayItems = React.useMemo(() => {
+    if (taskKind !== "other") return items;
+    return items.filter((item) => normalizeTaskKind(item?.task_kind) === "other");
+  }, [items, taskKind]);
 
-      const kindValue = normalizeTaskKind(item?.task_kind);
-      const byTaskKind = taskKind === "all" ? true : kindValue === taskKind;
-      return bySearch && byTaskKind;
-    });
-  }, [items, search, taskKind, taskScope]);
+  const displayTotal = taskKind === "other" ? displayItems.length : total;
 
   const resetDrawerState = React.useCallback(() => {
     detailsRequestRef.current += 1;
@@ -586,6 +565,10 @@ export default function TasksPageClient() {
         const qOffset = typeof options?.offset === "number" ? options.offset : offset;
         const qStatusTab = options?.statusTab ?? tab;
         const qOrgUnitId = typeof options?.orgUnitId === "string" ? options.orgUnitId : orgUnitId;
+        const qSearch = typeof options?.search === "string" ? options.search : searchQuery;
+        const qTaskKind = options?.taskKind ?? taskKind;
+        const backendTaskKind =
+          qTaskKind === "regular" || qTaskKind === "adhoc" ? qTaskKind : undefined;
 
         const body = await apiFetchJson<any>("/tasks", {
           query: {
@@ -594,6 +577,8 @@ export default function TasksPageClient() {
             offset: qOffset,
             status_filter: qStatusTab,
             org_unit_id: qOrgUnitId || undefined,
+            search: qSearch || undefined,
+            task_kind: backendTaskKind,
           } as any,
         });
 
@@ -630,7 +615,7 @@ export default function TasksPageClient() {
         }
       }
     },
-    [offset, tab, taskScope, selectedId, drawerMode, redirectToLogin, orgUnitId, resetDrawerState],
+    [offset, tab, taskScope, searchQuery, taskKind, selectedId, drawerMode, redirectToLogin, orgUnitId, resetDrawerState],
   );
 
   const loadTaskDetails = React.useCallback(
@@ -676,6 +661,7 @@ export default function TasksPageClient() {
     setTab("active");
     setTaskScope(defaultScope);
     setSearch("");
+    setSearchQuery("");
     setTaskKind("all");
 
     router.replace("/tasks");
@@ -684,6 +670,8 @@ export default function TasksPageClient() {
       statusTab: "active",
       taskScope: defaultScope,
       orgUnitId: "",
+      search: "",
+      taskKind: "all",
     });
   }, [canSeeTeamTasks, resetDrawerState, router, loadItems]);
 
@@ -723,6 +711,14 @@ export default function TasksPageClient() {
       setOffset(0);
     }
   }, [orgUnitId]);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(search.trim());
+      setOffset(0);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   React.useEffect(() => {
     if (!ready) return;
@@ -1063,7 +1059,10 @@ export default function TasksPageClient() {
 
               <select
                 value={taskKind}
-                onChange={(e) => setTaskKind(e.target.value as TaskKindFilter)}
+                onChange={(e) => {
+                  setTaskKind(e.target.value as TaskKindFilter);
+                  setOffset(0);
+                }}
                 className="h-10 min-w-[180px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 {TASK_KIND_OPTIONS.map((opt) => (
@@ -1122,7 +1121,7 @@ export default function TasksPageClient() {
 
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600 dark:text-zinc-400">
               <div>
-                {scopeRu(taskScope)} · Всего: {total} · Показано: {filteredItems.length}
+                {scopeRu(taskScope)} · Всего: {displayTotal} · Показано: {displayItems.length}
                 {listLoading ? <span className="ml-2">· загрузка…</span> : null}
                 {manualRolesLoading ? <span className="ml-2">· роли…</span> : null}
               </div>
@@ -1178,14 +1177,14 @@ export default function TasksPageClient() {
                           Загрузка...
                         </td>
                       </tr>
-                    ) : filteredItems.length === 0 ? (
+                    ) : displayItems.length === 0 ? (
                       <tr>
                         <td colSpan={tableColSpan} className="px-2 py-3 text-sm text-zinc-600 dark:text-zinc-400">
                           Записи не найдены.
                         </td>
                       </tr>
                     ) : (
-                      filteredItems.map((item) => {
+                      displayItems.map((item) => {
                         const id = taskIdOf(item);
                         const editable = canEditTask(item) && !readOnlyTeamMode;
 
@@ -1281,7 +1280,7 @@ export default function TasksPageClient() {
                 type="button"
                 onClick={() => setOffset((v) => v + LIST_LIMIT)}
                 className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                disabled={listLoading || items.length < LIST_LIMIT}
+                disabled={listLoading || offset + LIST_LIMIT >= total}
               >
                 Далее
               </button>

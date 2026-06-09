@@ -357,6 +357,13 @@ def list_tasks(
                         t.title ILIKE :q
                         OR COALESCE(t.description,'') ILIKE :q
                         OR COALESCE(er.name,'') ILIKE :q
+                        OR EXISTS (
+                            SELECT 1
+                            FROM public.users ue
+                            WHERE ue.role_id = t.executor_role_id
+                              AND COALESCE(ue.is_active, TRUE) = TRUE
+                              AND COALESCE(ue.full_name, '') ILIKE :q
+                        )
                     )
                     """.strip()
                 )
