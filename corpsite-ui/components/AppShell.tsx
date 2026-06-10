@@ -7,17 +7,9 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
+import type { MeInfo } from "@/lib/types";
 
 import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
-
-type MeInfo = {
-  user_id?: number;
-  role_id?: number;
-  role_name_ru?: string;
-  role_name?: string;
-  full_name?: string;
-  login?: string;
-};
 
 type NavItem = {
   href: string;
@@ -214,8 +206,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const data = (await apiAuthMe()) as any;
-        setMe(data as MeInfo);
+        const data = await apiAuthMe();
+        setMe(data);
       } catch (e: any) {
         if (isUnauthorized(e)) {
           redirectToLogin();
@@ -291,12 +283,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="text-2xl font-semibold">{roleTitle}</div>
           </div>
 
-          <button
-            onClick={onLogoutClick}
-            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-          >
-            Выйти
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/profile"
+              className={[
+                "rounded-md border px-3 py-1 text-sm transition",
+                pathname === "/profile"
+                  ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                  : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+              ].join(" ")}
+            >
+              Профиль
+              {!loading && me && me.telegram_bound !== true ? (
+                <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle" aria-hidden="true" />
+              ) : null}
+            </Link>
+            <button
+              onClick={onLogoutClick}
+              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            >
+              Выйти
+            </button>
+          </div>
         </div>
 
         {loading ? (

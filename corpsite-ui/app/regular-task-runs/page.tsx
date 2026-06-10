@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
+import type { MeInfo } from "@/lib/types";
 import {
   formatThrownError,
   runStatusLabel,
@@ -15,15 +16,6 @@ import {
   translateRunIssueMessage,
   uiFieldLabel,
 } from "@/lib/i18n";
-
-type MeInfo = {
-  user_id?: number;
-  role_id?: number;
-  role_name_ru?: string;
-  role_name?: string;
-  full_name?: string;
-  login?: string;
-};
 
 type APIErrorLike = {
   status?: number;
@@ -265,8 +257,8 @@ export default function RegularTaskRunsPage() {
       }
 
       try {
-        const data = (await apiAuthMe()) as any;
-        setMe(data as MeInfo);
+        const data = await apiAuthMe();
+        setMe(data);
       } catch (e: any) {
         if (isUnauthorized(e)) {
           redirectToLogin();

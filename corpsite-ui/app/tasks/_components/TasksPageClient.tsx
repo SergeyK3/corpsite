@@ -9,6 +9,7 @@ import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/ap
 import { isAuthed, logout } from "@/lib/auth";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
+import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
 import TaskDetailPanel from "./TaskDetailPanel";
@@ -23,16 +24,6 @@ type StatusTab = "active" | "done" | "rejected";
 type DrawerMode = "create" | "view" | "edit";
 type TaskKindFilter = "all" | "adhoc" | "regular" | "other";
 type TaskScope = "mine" | "team";
-
-type MeInfo = {
-  user_id?: number;
-  role_id?: number;
-  role_code?: string;
-  role_name?: string;
-  role_name_ru?: string;
-  full_name?: string;
-  login?: string;
-};
 
 type CurrentPeriodDto = {
   period_id?: number;
@@ -563,8 +554,7 @@ export default function TasksPageClient() {
       }
 
       try {
-        const meBody = await apiAuthMe();
-        const meInfo = meBody as MeInfo;
+        const meInfo = await apiAuthMe();
         setMe(meInfo);
         setTaskScope(detectCanSeeTeamTasks(meInfo) ? "team" : "mine");
       } catch (e: any) {

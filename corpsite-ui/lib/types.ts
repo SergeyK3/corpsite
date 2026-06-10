@@ -1,5 +1,24 @@
 // FILE: corpsite-ui/lib/types.ts
 
+export type MeInfo = {
+  user_id?: number;
+  role_id?: number;
+  role_code?: string;
+  role_name_ru?: string;
+  role_name?: string;
+  full_name?: string;
+  login?: string;
+  is_active?: boolean;
+  unit_id?: number;
+  telegram_bound?: boolean;
+  telegram_username?: string | null;
+};
+
+export type TelegramBindCodeResponse = {
+  code: string;
+  expires_at: string;
+};
+
 export type TaskScope = "mine" | "team";
 
 // UI actions we show as buttons

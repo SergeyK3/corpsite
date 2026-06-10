@@ -1,5 +1,6 @@
 import type {
   APIError,
+  MeInfo,
   TaskAction,
   TaskActionPayload,
   TaskDetails,
@@ -9,6 +10,7 @@ import type {
   RegularTask,
   RegularTaskStatus,
   RegularTasksListResponse,
+  TelegramBindCodeResponse,
 } from "./types";
 
 import { getSessionAccessToken, logout, setSessionAccessToken } from "./auth";
@@ -222,8 +224,16 @@ export async function apiAuthLogin(params: {
   return body;
 }
 
-export async function apiAuthMe(): Promise<any> {
-  return apiFetchJson<any>("/auth/me");
+export type { TelegramBindCodeResponse } from "./types";
+
+export async function apiAuthMe(): Promise<MeInfo> {
+  return apiFetchJson<MeInfo>("/auth/me");
+}
+
+export async function apiCreateTelegramBindCode(): Promise<TelegramBindCodeResponse> {
+  return apiFetchJson<TelegramBindCodeResponse>("/me/tg-bind-code", {
+    method: "POST",
+  });
 }
 
 /* ============================================================
