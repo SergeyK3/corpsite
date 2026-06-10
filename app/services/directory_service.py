@@ -760,3 +760,68 @@ def create_employee(
         raise HTTPException(status_code=500, detail="create employee failed")
 
     return str(row["employee_id"])
+
+
+def terminate_employee(
+    *,
+    employee_id: str,
+    date_to: Optional[date] = None,
+) -> str:
+    """
+    Terminate employee (HR record) and deactivate linked user account if present.
+
+    Idempotency for date_to:
+    - first call: date_to = provided value or today;
+    - repeat without date_to in request: keep existing date_to;
+    - repeat with date_to in request: update date_to to the provided value.
+    """
+    target_id_text = _normalize_employee_id_text(employee_id)
+    if not target_id_text:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    q_fetch = text(
+        """
+        SELECT employee_id, is_active, date_to
+        FROM public.employees
+        WHERE CAST(employee_id AS TEXT) = :id_text
+        LIMIT 1
+        """
+    )
+    q_update_employee = text(
+        """
+        UPDATE public.employees
+        SET is_active = FALSE,
+            date_to = :date_to
+        WHERE employee_id = :employee_id
+        """
+    )
+    q_deactivate_user = text(
+        """
+        UPDATE public.users
+        SET is_active = FALSE
+        WHERE employee_id = :employee_id
+        """
+    )
+
+    with engine.begin() as conn:
+        row = conn.execute(q_fetch, {"id_text": target_id_text}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        emp_id = int(row["employee_id"])
+        already_inactive = row.get("is_active") is False
+
+        if already_inactive and date_to is None and row.get("date_to") is not None:
+            effective_date_to = row["date_to"]
+        elif date_to is not None:
+            effective_date_to = date_to
+        else:
+            effective_date_to = date.today()
+
+        conn.execute(
+            q_update_employee,
+            {"employee_id": emp_id, "date_to": effective_date_to},
+        )
+        conn.execute(q_deactivate_user, {"employee_id": emp_id})
+
+    return target_id_text

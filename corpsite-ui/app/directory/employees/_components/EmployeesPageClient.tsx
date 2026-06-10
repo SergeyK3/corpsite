@@ -421,6 +421,7 @@ export default function EmployeesPageClient(props: Props) {
     try {
       await terminateEmployee(employeeId);
       await loadItems();
+      setEmployeeRefreshToken((t) => t + 1);
     } catch (e) {
       setError(mapApiErrorToMessage(e));
     } finally {
@@ -433,7 +434,6 @@ export default function EmployeesPageClient(props: Props) {
     const employeeName = getEmployeeName(details as any);
     if (!employeeId) return;
     await handleTerminateEmployee(employeeId, employeeName);
-    setDrawerOpen(false);
   }
 
   function handleOpenUserCreateDrawer(details: EmployeeDetails) {

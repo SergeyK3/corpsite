@@ -18,6 +18,7 @@ from app.services.directory_service import (
     list_employees as svc_list_employees,
     get_employee as svc_get_employee,
     create_employee as svc_create_employee,
+    terminate_employee as svc_terminate_employee,
 )
 
 from .common import as_http500, call_service
@@ -47,6 +48,10 @@ class EmployeeCreateIn(BaseModel):
     date_from: Optional[date] = None
     employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
     department_id: Optional[int] = Field(default=None, ge=1)
+
+
+class EmployeeTerminateIn(BaseModel):
+    date_to: Optional[date] = None
 
 
 def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -379,6 +384,37 @@ def create_employee(
         raise
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Unable to create employee.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/terminate")
+def terminate_employee(
+    employee_id: str = Path(..., min_length=1),
+    body: Optional[EmployeeTerminateIn] = None,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        date_to = body.date_to if body is not None else None
+
+        call_service(
+            svc_terminate_employee,
+            employee_id=employee_id,
+            date_to=date_to,
+        )
+
+        return call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise as_http500(e)
 
