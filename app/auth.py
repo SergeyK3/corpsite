@@ -189,6 +189,19 @@ def decode_and_verify_token(token: str) -> Dict[str, Any]:
     return payload
 
 
+def _telegram_bound_from_id(telegram_id: Any) -> bool:
+    if telegram_id is None:
+        return False
+    return bool(str(telegram_id).strip())
+
+
+def _normalize_telegram_username(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
 def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     with engine.connect() as conn:
         row = conn.execute(
@@ -200,7 +213,9 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                     r.name AS role_name_ru,
                     u.unit_id,
                     u.is_active,
-                    u.login
+                    u.login,
+                    u.telegram_id,
+                    u.telegram_username
                 FROM public.users u
                 LEFT JOIN public.roles r 
                     ON r.role_id = u.role_id
@@ -208,18 +223,20 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                 """
             ),
             {"uid": int(user_id)},
-        ).fetchone()
+        ).mappings().first()
 
     if not row:
         return None
 
     return {
-        "user_id": int(row[0]),
-        "role_id": int(row[1]) if row[1] is not None else None,
-        "role_name_ru": str(row[2]) if row[2] is not None else None,
-        "unit_id": int(row[3]) if row[3] is not None else None,
-        "is_active": bool(row[4]),
-        "login": str(row[5]) if row[5] is not None else None,
+        "user_id": int(row["user_id"]),
+        "role_id": int(row["role_id"]) if row["role_id"] is not None else None,
+        "role_name_ru": str(row["role_name_ru"]) if row["role_name_ru"] is not None else None,
+        "unit_id": int(row["unit_id"]) if row["unit_id"] is not None else None,
+        "is_active": bool(row["is_active"]),
+        "login": str(row["login"]) if row["login"] is not None else None,
+        "telegram_bound": _telegram_bound_from_id(row.get("telegram_id")),
+        "telegram_username": _normalize_telegram_username(row.get("telegram_username")),
     }
 
 
