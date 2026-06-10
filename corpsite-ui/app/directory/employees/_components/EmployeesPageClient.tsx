@@ -63,6 +63,19 @@ function normalizeItems<T>(v: any): T[] {
   return [];
 }
 
+// API /directory/positions отдаёт position_id; UI ожидает id (как в PositionsPageClient).
+function positionIdOf(p: { id?: number | null; position_id?: number | null }): number {
+  return Number(p.position_id ?? p.id ?? 0);
+}
+
+function normalizePosition(p: any): Pos {
+  const id = positionIdOf(p);
+  return {
+    id: Number.isFinite(id) && id > 0 ? id : null,
+    name: p?.name ?? null,
+  };
+}
+
 function toInt(v: string | null, def: number): number {
   const n = Number(String(v ?? "").trim());
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : def;
@@ -290,7 +303,7 @@ export default function EmployeesPageClient(props: Props) {
 
         if (cancelled) return;
         setDepartments(normalizeItems<Dept>(dObj));
-        setPositions(normalizeItems<Pos>(pObj));
+        setPositions(normalizeItems<any>(pObj).map(normalizePosition).filter((p) => p.id != null));
       } catch {
         if (cancelled) return;
         setDepartments([]);

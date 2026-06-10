@@ -62,7 +62,14 @@ export async function getDepartments(): Promise<Array<{ id: number; name: string
 
 export async function getPositions(): Promise<Array<{ id: number; name: string }>> {
   const r = await apiGet("/directory/positions", { limit: 1000, offset: 0 });
-  return Array.isArray(r?.items) ? r.items : [];
+  const items = Array.isArray(r?.items) ? r.items : [];
+  // Нормализация position_id → id для совместимости с CRUD-эндпоинтом должностей.
+  return items
+    .map((p: { position_id?: number; id?: number; name?: string }) => {
+      const id = Number(p?.position_id ?? p?.id ?? 0);
+      return { id, name: String(p?.name ?? "") };
+    })
+    .filter((p: { id: number; name: string }) => Number.isFinite(p.id) && p.id > 0);
 }
 
 export type GetEmployeesArgs = {
