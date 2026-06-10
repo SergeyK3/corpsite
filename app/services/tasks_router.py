@@ -517,6 +517,9 @@ def get_task(
                 include_archived=include_archived,
             )
         except HTTPException as e:
+            # Defensive fallbacks: _is_task_visible_to_user already covers any-report
+            # and legacy/explicit approver (WAITING_APPROVAL) parity with list_tasks.
+            # Kept so a future ensure regression still allows GET before mutating endpoints.
             if e.status_code in (403, 404):
                 if _user_reported_task(conn, task_id=int(task_id), user_id=int(current_user_id)):
                     task = task

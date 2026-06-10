@@ -740,6 +740,8 @@ def _is_legacy_approver_role(
 
 
 def _is_explicit_approver_user(*, current_user_id: int, task_row: Dict[str, Any]) -> bool:
+    if str(task_row.get("status_code") or "") != "WAITING_APPROVAL":
+        return False
     try:
         approver_user_id = task_row.get("approver_user_id")
         if approver_user_id is None:
@@ -851,40 +853,6 @@ def _is_task_visible_to_user(
     )
 
 
-def _can_view(
-    *,
-    current_user_id: int,
-    current_role_id: int,
-    visible_executor_role_ids: Set[int],
-    task_row: Dict[str, Any],
-) -> bool:
-    """Backward-compatible wrapper; prefer _is_task_visible_to_user when conn is available."""
-    if is_system_admin_role_id(current_role_id):
-        return True
-
-    if _is_initiator(current_user_id=current_user_id, task_row=task_row):
-        return True
-
-    if _is_created_by(current_user_id=current_user_id, task_row=task_row):
-        return True
-
-    if _is_executor_role(current_role_id=current_role_id, task_row=task_row):
-        return True
-
-    if _is_report_author(current_user_id=current_user_id, task_row=task_row):
-        return True
-
-    if _is_explicit_approver_user(current_user_id=current_user_id, task_row=task_row):
-        return True
-
-    try:
-        erid = int(task_row.get("executor_role_id") or 0)
-    except Exception:
-        erid = 0
-
-    return erid in visible_executor_role_ids
-
-
 def _task_matches_team_scope(
     conn,
     *,
@@ -955,7 +923,7 @@ def _task_matches_team_scope(
 
 def ensure_task_visible_or_404(
     *,
-    conn=None,
+    conn,
     current_user_id: int,
     current_role_id: int,
     task_row: Optional[Dict[str, Any]],
@@ -964,16 +932,7 @@ def ensure_task_visible_or_404(
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if conn is None:
-        visible = compute_visible_executor_role_ids_for_tasks(user_id=int(current_user_id))
-        if not _can_view(
-            current_user_id=current_user_id,
-            current_role_id=current_role_id,
-            visible_executor_role_ids=visible,
-            task_row=task_row,
-        ):
-            raise HTTPException(status_code=404, detail="Task not found")
-    elif not _is_task_visible_to_user(
+    if not _is_task_visible_to_user(
         conn,
         current_user_id=int(current_user_id),
         current_role_id=int(current_role_id),

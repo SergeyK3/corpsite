@@ -5,7 +5,13 @@ import pytest
 from fastapi import HTTPException
 
 from app.db.engine import engine
-from app.services.tasks_service import ensure_task_visible_or_404, get_user_role_id, load_task_full
+from app.services.tasks_service import (
+    _is_explicit_approver_user,
+    _is_task_visible_to_user,
+    ensure_task_visible_or_404,
+    get_user_role_id,
+    load_task_full,
+)
 
 
 @pytest.mark.parametrize(
@@ -56,3 +62,37 @@ def test_fixture_visibility_gaps_do_not_raise_404_on_ensure(user_id: int, task_i
             )
         except HTTPException as exc:
             pytest.fail(f"ensure_task_visible_or_404 raised {exc.status_code}: {exc.detail}")
+
+
+@pytest.mark.parametrize(
+    "user_id, task_id",
+    [
+        (5, 10001),
+        (3, 10002),
+    ],
+)
+def test_fixture_cases_covered_by_ensure_without_get_fallbacks(user_id: int, task_id: int) -> None:
+    """GET /tasks/{id} report/approver fallbacks should not be needed for #118 fixture gaps."""
+    with engine.begin() as conn:
+        role_id = get_user_role_id(conn, int(user_id))
+        task = load_task_full(conn, task_id=int(task_id))
+        if task is None:
+            pytest.skip(f"fixture task_id={task_id} not present; apply rbac_visibility_gaps_fixture.sql")
+
+        assert _is_task_visible_to_user(
+            conn,
+            current_user_id=int(user_id),
+            current_role_id=int(role_id),
+            task_row=task,
+        )
+
+
+def test_explicit_approver_visibility_requires_waiting_approval() -> None:
+    assert not _is_explicit_approver_user(
+        current_user_id=10,
+        task_row={"approver_user_id": 10, "status_code": "DONE"},
+    )
+    assert _is_explicit_approver_user(
+        current_user_id=10,
+        task_row={"approver_user_id": 10, "status_code": "WAITING_APPROVAL"},
+    )
