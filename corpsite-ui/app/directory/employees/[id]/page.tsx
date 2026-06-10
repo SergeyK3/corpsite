@@ -8,19 +8,16 @@ import { useParams } from "next/navigation";
 
 import { getEmployee } from "../_lib/api.client";
 import type { EmployeeDTO } from "../_lib/types";
-import { formatThrownError, recordStatusLabel } from "@/lib/i18n";
+import EmployeeStatusBadge from "../_components/EmployeeStatusBadge";
+import { formatThrownError } from "@/lib/i18n";
 
 type LoadState =
   | { status: "idle" | "loading" }
   | { status: "ok"; item: EmployeeDTO }
   | { status: "error"; message: string };
 
-function fmtStatus(value: unknown): string {
-  if (value == null) return "—";
-  const s = String(value).trim();
-  if (!s) return "—";
-  const labeled = recordStatusLabel(s);
-  return labeled !== s ? labeled : s;
+function fmtStatus(item: EmployeeDTO): React.ReactNode {
+  return <EmployeeStatusBadge item={item} />;
 }
 
 function fmt(v: unknown): string {
@@ -110,7 +107,7 @@ export default function EmployeeDetailsPage() {
         <Row label="Отдел" value={e.department?.name} />
         <Row label="Должность" value={e.position?.name} />
         <Row label="Ставка" value={e.rate} />
-        <Row label="Статус" value={fmtStatus(e.status)} />
+        <Row label="Статус" value={fmtStatus(e)} />
         <Row label="Дата с" value={e.date_from} />
         <Row label="Дата по" value={e.date_to} />
       </div>
@@ -118,11 +115,11 @@ export default function EmployeeDetailsPage() {
   );
 }
 
-function Row(props: { label: string; value: unknown }) {
+function Row(props: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 12 }}>
       <div style={{ color: "#6b7280" }}>{props.label}</div>
-      <div>{fmt(props.value)}</div>
+      <div>{props.value == null ? "—" : props.value}</div>
     </div>
   );
 }

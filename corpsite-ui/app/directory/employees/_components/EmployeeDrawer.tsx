@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import type { EmployeeDetails } from "../_lib/types";
 import { getEmployee, mapApiErrorToMessage } from "../_lib/api.client";
+import { employeeStatusMeta } from "../_lib/employeeStatus";
+import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
   employeeId: string | null;
@@ -21,18 +23,8 @@ function fmtDate(v: string | null | undefined): string {
   return dt.toLocaleDateString("ru-RU");
 }
 
-function statusLabel(details: any): string {
-  const s = (details?.status ?? "").toString().toLowerCase();
-  if (s === "active") return "Работает";
-  if (s === "inactive") return "Не работает";
-  return "—";
-}
-
 function isActive(d: EmployeeDetails): boolean {
-  const s = (d as any)?.status?.toString?.().toLowerCase?.();
-  if (s === "active") return true;
-  if (s === "inactive") return false;
-  return (d as any)?.date_to === null;
+  return employeeStatusMeta(d).active;
 }
 
 export default function EmployeeDrawer({
@@ -151,7 +143,9 @@ export default function EmployeeDrawer({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
                   <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
-                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{statusLabel(details)}</div>
+                  <div className="mt-1">
+                    <EmployeeStatusBadge item={details} />
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">

@@ -2,6 +2,8 @@
 "use client";
 
 import type { EmployeeListItem } from "../_lib/types";
+import { employeeStatusMeta } from "../_lib/employeeStatus";
+import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
   items: EmployeeListItem[];
@@ -22,31 +24,7 @@ function formatDate(d: string | null): string {
 }
 
 function computeIsActive(it: any): boolean {
-  if (typeof it?.status === "string") {
-    const s = String(it.status).toLowerCase();
-    if (s === "active") return true;
-    if (s === "inactive") return false;
-  }
-
-  if (typeof it?.is_active === "boolean") return it.is_active;
-  if (typeof it?.isActive === "boolean") return it.isActive;
-  if ("date_to" in (it ?? {})) return it.date_to == null;
-  if ("dateTo" in (it ?? {})) return it.dateTo == null;
-  return true;
-}
-
-function statusMeta(it: any): { active: boolean; label: string } {
-  const active = computeIsActive(it);
-  return { active, label: active ? "Работает" : "Не работает" };
-}
-
-function StatusBadge({ it }: { it: any }) {
-  const meta = statusMeta(it);
-  const cls = meta.active
-    ? "bg-emerald-100 text-emerald-800 dark:text-emerald-200"
-    : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300";
-
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>{meta.label}</span>;
+  return employeeStatusMeta(it).active;
 }
 
 function getEmployeeId(it: any): string {
@@ -158,8 +136,8 @@ export default function EmployeesTable({
                       {formatDate(it.date_to ?? it.dateTo ?? null)}
                     </td>
 
-                    <td className="px-3 py-1.5">
-                      <StatusBadge it={it} />
+                    <td className="px-3 py-1.5 text-[13px] leading-4">
+                      <EmployeeStatusBadge item={it} />
                     </td>
 
                     <td className="px-3 py-1.5">
