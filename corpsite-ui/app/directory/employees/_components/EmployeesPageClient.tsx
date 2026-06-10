@@ -9,7 +9,9 @@ import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 import EmployeeCreateDrawer from "./EmployeeCreateDrawer";
+import UserCreateDrawer from "./UserCreateDrawer";
 import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
+import type { UserCreateFormValues } from "./UserCreateForm";
 
 import {
   getEmployees,
@@ -18,6 +20,8 @@ import {
   mapApiErrorToMessage,
   terminateEmployee,
   createEmployee,
+  createUser,
+  getRoles,
 } from "../_lib/api.client";
 import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 import type {
@@ -102,6 +106,34 @@ function buildDefaultCreateValues(orgUnitId: string): EmployeeCreateFormValues {
   };
 }
 
+function buildDefaultUserCreateValues(loginSeed = ""): UserCreateFormValues {
+  return {
+    login: loginSeed,
+    password: "",
+    role_id: "",
+    is_active: true,
+  };
+}
+
+function translitLoginSeed(name: string): string {
+  const map: Record<string, string> = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i",
+    й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t",
+    у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "",
+    э: "e", ю: "yu", я: "ya",
+  };
+  const parts = String(name || "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  const last = parts[parts.length - 1] ?? "";
+  const firstInitial = (parts[0] ?? "").slice(0, 1);
+  const raw = `${last}${firstInitial}`.split("").map((ch) => map[ch] ?? ch).join("");
+  return raw.replace(/[^a-z0-9._-]+/g, "").slice(0, 64);
+}
+
 function flattenOrgUnits(nodes: TreeNode[], depth = 0): Array<{ id: number; label: string }> {
   const out: Array<{ id: number; label: string }> = [];
   for (const node of nodes) {
@@ -173,6 +205,16 @@ export default function EmployeesPageClient(props: Props) {
   const [createInitialValues, setCreateInitialValues] = React.useState<EmployeeCreateFormValues>(
     buildDefaultCreateValues(orgUnitId)
   );
+
+  const [userCreateDrawerOpen, setUserCreateDrawerOpen] = React.useState(false);
+  const [userCreateSaving, setUserCreateSaving] = React.useState(false);
+  const [userCreateError, setUserCreateError] = React.useState<string | null>(null);
+  const [userCreateEmployee, setUserCreateEmployee] = React.useState<EmployeeDetails | null>(null);
+  const [userCreateInitialValues, setUserCreateInitialValues] = React.useState<UserCreateFormValues>(
+    buildDefaultUserCreateValues()
+  );
+  const [roleOptions, setRoleOptions] = React.useState<Array<{ id: number; label: string }>>([]);
+  const [employeeRefreshToken, setEmployeeRefreshToken] = React.useState(0);
 
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
@@ -394,6 +436,83 @@ export default function EmployeesPageClient(props: Props) {
     setDrawerOpen(false);
   }
 
+  function handleOpenUserCreateDrawer(details: EmployeeDetails) {
+    const fio = getEmployeeName(details as any);
+    const orgUnitName =
+      (details as any)?.org_unit?.name ??
+      (details as any)?.orgUnit?.name ??
+      (details as any)?.org_unit_name ??
+      "—";
+
+    setUserCreateError(null);
+    setUserCreateEmployee(details);
+    setUserCreateInitialValues(buildDefaultUserCreateValues(translitLoginSeed(fio)));
+    setUserCreateDrawerOpen(true);
+
+    void (async () => {
+      try {
+        const rolesObj = await getRoles({ limit: 200, offset: 0 });
+        const items = normalizeItems<any>(rolesObj);
+        setRoleOptions(
+          items
+            .map((r) => ({
+              id: Number(r.role_id ?? r.id),
+              label: String(r.role_name ?? r.name ?? `#${r.role_id ?? r.id}`),
+            }))
+            .filter((r) => Number.isFinite(r.id) && r.id > 0)
+        );
+      } catch {
+        setRoleOptions([]);
+      }
+    })();
+  }
+
+  function handleCloseUserCreateDrawer() {
+    if (userCreateSaving) return;
+    setUserCreateDrawerOpen(false);
+    setUserCreateError(null);
+    setUserCreateEmployee(null);
+  }
+
+  async function handleCreateUser(values: UserCreateFormValues) {
+    if (!userCreateEmployee) return;
+
+    const employeeId = Number(getEmployeeId(userCreateEmployee as any));
+    if (!Number.isFinite(employeeId) || employeeId < 1) {
+      setUserCreateError("Не удалось определить сотрудника.");
+      return;
+    }
+
+    setUserCreateSaving(true);
+    setUserCreateError(null);
+
+    try {
+      await createUser({
+        employee_id: employeeId,
+        role_id: Number(values.role_id),
+        login: values.login.trim(),
+        password: values.password,
+        unit_id: (userCreateEmployee as any)?.org_unit?.unit_id ?? undefined,
+        is_active: values.is_active,
+      });
+
+      setUserCreateDrawerOpen(false);
+      setUserCreateEmployee(null);
+      setEmployeeRefreshToken((t) => t + 1);
+    } catch (e) {
+      setUserCreateError(mapApiErrorToMessage(e));
+    } finally {
+      setUserCreateSaving(false);
+    }
+  }
+
+  const userCreateFullName = userCreateEmployee ? getEmployeeName(userCreateEmployee as any) : "";
+  const userCreateOrgUnitLabel =
+    (userCreateEmployee as any)?.org_unit?.name ??
+    (userCreateEmployee as any)?.orgUnit?.name ??
+    (userCreateEmployee as any)?.org_unit_name ??
+    "—";
+
   const depList = Array.isArray(departments) ? departments : [];
   const posList = Array.isArray(positions) ? positions : [];
 
@@ -524,6 +643,8 @@ export default function EmployeesPageClient(props: Props) {
         open={drawerOpen}
         onClose={handleCloseDrawer}
         onTerminate={handleTerminateFromDrawer}
+        onCreateUser={handleOpenUserCreateDrawer}
+        refreshToken={employeeRefreshToken}
       />
 
       <EmployeeCreateDrawer
@@ -538,6 +659,18 @@ export default function EmployeesPageClient(props: Props) {
         error={createError}
         onClose={handleCloseCreateDrawer}
         onSubmit={handleCreateEmployee}
+      />
+
+      <UserCreateDrawer
+        open={userCreateDrawerOpen}
+        fullName={userCreateFullName}
+        orgUnitLabel={userCreateOrgUnitLabel}
+        initialValues={userCreateInitialValues}
+        roleOptions={roleOptions}
+        saving={userCreateSaving}
+        error={userCreateError}
+        onClose={handleCloseUserCreateDrawer}
+        onSubmit={handleCreateUser}
       />
     </div>
   );

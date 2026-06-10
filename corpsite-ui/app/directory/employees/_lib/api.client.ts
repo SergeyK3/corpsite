@@ -1,6 +1,12 @@
 // FILE: corpsite-ui/app/directory/employees/_lib/api.client.ts
 
-import type { EmployeesResponse, EmployeeDetails, EmployeeCreatePayload } from "./types";
+import type {
+  EmployeesResponse,
+  EmployeeDetails,
+  EmployeeCreatePayload,
+  UserDTO,
+  UserCreatePayload,
+} from "./types";
 import { getSessionAccessToken } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
 
@@ -173,6 +179,58 @@ export async function createEmployee(body: EmployeeCreatePayload): Promise<Emplo
   }
 
   return apiPostJson<EmployeeDetails>("/directory/employees", payload);
+}
+
+/**
+ * Пользователь по employee_id
+ * Backend: GET /directory/users?employee_id=
+ */
+export async function getUserByEmployeeId(employeeId: number | string): Promise<UserDTO> {
+  const id = Number(employeeId);
+  if (!Number.isFinite(id) || id < 1) throw new Error("employee_id is required");
+  const qs = buildQuery({ employee_id: id });
+  return apiGetJson<UserDTO>("/directory/users", qs);
+}
+
+/**
+ * Создание пользователя для сотрудника
+ * Backend: POST /directory/users
+ */
+export async function createUser(body: UserCreatePayload): Promise<UserDTO> {
+  const employee_id = Number(body.employee_id);
+  const role_id = Number(body.role_id);
+  const login = String(body.login ?? "").trim();
+  const password = String(body.password ?? "");
+
+  if (!Number.isFinite(employee_id) || employee_id < 1) throw new Error("employee_id is required");
+  if (!Number.isFinite(role_id) || role_id < 1) throw new Error("role_id is required");
+  if (!login) throw new Error("login is required");
+  if (password.length < 8) throw new Error("password must be at least 8 characters");
+
+  const payload: Record<string, unknown> = {
+    employee_id,
+    role_id,
+    login,
+    password,
+    is_active: body.is_active !== false,
+  };
+
+  if (body.unit_id != null && Number.isFinite(Number(body.unit_id))) {
+    payload.unit_id = Number(body.unit_id);
+  }
+
+  return apiPostJson<UserDTO>("/directory/users", payload);
+}
+
+/**
+ * Роли (для select при создании пользователя)
+ */
+export async function getRoles(args?: { limit?: number; offset?: number }): Promise<any> {
+  const qs = buildQuery({
+    limit: args?.limit ?? 200,
+    offset: args?.offset ?? 0,
+  });
+  return apiGetJson<any>("/directory/roles", qs);
 }
 
 /**

@@ -420,6 +420,45 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
     }
 
 
+def _fetch_linked_user(employee_id: Any) -> Optional[Dict[str, Any]]:
+    if employee_id is None:
+        return None
+    try:
+        emp_id = int(employee_id)
+    except (TypeError, ValueError):
+        return None
+
+    q = text(
+        """
+        SELECT
+            u.user_id,
+            u.login,
+            u.role_id,
+            r.name AS role_name,
+            u.is_active
+        FROM public.users u
+        LEFT JOIN public.roles r
+          ON r.role_id = u.role_id
+        WHERE u.employee_id = :employee_id
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(q, {"employee_id": emp_id}).mappings().first()
+
+    if not row:
+        return None
+
+    role_id_raw = row.get("role_id")
+    return {
+        "user_id": int(row["user_id"]),
+        "login": str(row["login"]).strip() if row.get("login") is not None else None,
+        "role_id": int(role_id_raw) if role_id_raw is not None else None,
+        "role_name": str(row["role_name"]).strip() if row.get("role_name") is not None else None,
+        "is_active": bool(row.get("is_active")),
+    }
+
+
 # ---------------------------
 # Employees (read)
 # ---------------------------
@@ -659,7 +698,9 @@ def get_employee(
     if not row:
         raise HTTPException(status_code=404, detail="Employee not found.")
 
-    return _normalize_employee_joined(dict(row), emp_rel)
+    result = _normalize_employee_joined(dict(row), emp_rel)
+    result["user"] = _fetch_linked_user(row.get("e_id"))
+    return result
 
 
 def create_employee(

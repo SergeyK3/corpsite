@@ -36,6 +36,8 @@ export type EmployeeDTO = {
   date_from: string | null;
   date_to: string | null;
 
+  user?: LinkedUserDTO | null;
+
   source?: { relation?: string } | null;
 };
 
@@ -50,6 +52,36 @@ export type EmployeeCreatePayload = {
   position_id: number;
   date_from?: string | null;
   employment_rate?: number | null;
+};
+
+export type LinkedUserDTO = {
+  user_id: number;
+  login: string | null;
+  role_id: number | null;
+  role_name: string | null;
+  is_active: boolean;
+};
+
+export type UserDTO = {
+  user_id: number;
+  employee_id: number | null;
+  full_name: string | null;
+  login: string | null;
+  google_login: string | null;
+  role_id: number | null;
+  role_name: string | null;
+  unit_id: number | null;
+  is_active: boolean;
+  created_at?: string | null;
+};
+
+export type UserCreatePayload = {
+  employee_id: number;
+  role_id: number;
+  login: string;
+  password: string;
+  unit_id?: number | null;
+  is_active?: boolean;
 };
 
 /**

@@ -10,6 +10,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onTerminate: (details: EmployeeDetails) => void;
+  onCreateUser?: (details: EmployeeDetails) => void;
+  refreshToken?: number;
 };
 
 function fmtDate(v: string | null | undefined): string {
@@ -38,6 +40,8 @@ export default function EmployeeDrawer({
   open,
   onClose,
   onTerminate,
+  onCreateUser,
+  refreshToken = 0,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<EmployeeDetails | null>(null);
@@ -70,7 +74,7 @@ export default function EmployeeDrawer({
     return () => {
       alive = false;
     };
-  }, [employeeId, open]);
+  }, [employeeId, open, refreshToken]);
 
   if (!open) return null;
 
@@ -107,6 +111,14 @@ export default function EmployeeDrawer({
   const rate = (details as any)?.employment_rate ?? (details as any)?.rate ?? "—";
   const dateFrom = fmtDate((details as any)?.date_from ?? (details as any)?.dateFrom);
   const dateTo = fmtDate((details as any)?.date_to ?? (details as any)?.dateTo);
+
+  const linkedUser = (details as any)?.user ?? null;
+
+  function userStatusLabel(active: boolean | null | undefined): string {
+    if (active === true) return "Активен";
+    if (active === false) return "Неактивен";
+    return "—";
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -173,6 +185,39 @@ export default function EmployeeDrawer({
                 <div className="mt-2 text-sm text-zinc-900 dark:text-zinc-50">
                   {dateFrom} — {dateTo}
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Аккаунт</div>
+                {linkedUser ? (
+                  <div className="mt-2 space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">Логин: </span>
+                      {linkedUser.login ?? "—"}
+                    </div>
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">Роль: </span>
+                      {linkedUser.role_name ?? linkedUser.role_id ?? "—"}
+                    </div>
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">Статус: </span>
+                      {userStatusLabel(linkedUser.is_active)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-zinc-700 dark:text-zinc-300">Аккаунт не создан</div>
+                    {onCreateUser ? (
+                      <button
+                        type="button"
+                        onClick={() => onCreateUser(details)}
+                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+                      >
+                        Создать пользователя
+                      </button>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
           ) : loading ? (
