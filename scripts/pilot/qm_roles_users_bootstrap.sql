@@ -34,7 +34,8 @@ VALUES
     ('QM_HOSP', 'Госпитальный эксперт ОВЭиПД'),
     ('QM_AMB', 'Амбулаторный эксперт ОВЭиПД'),
     ('QM_COMPLAINT_REG', 'Эксперт по регистрации жалоб ОВЭиПД'),
-    ('QM_COMPLAINT_PAT', 'Эксперт по улаживанию жалоб ОВЭиПД')
+    ('QM_COMPLAINT_PAT', 'Эксперт по улаживанию жалоб ОВЭиПД'),
+    ('QM_TRAINING_EXPERT', 'Эксперт по внутреннему обучению и аттестации')
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name;
 
@@ -138,7 +139,8 @@ WHERE code IN (
     'QM_HOSP',
     'QM_AMB',
     'QM_COMPLAINT_REG',
-    'QM_COMPLAINT_PAT'
+    'QM_COMPLAINT_PAT',
+    'QM_TRAINING_EXPERT'
 )
 ORDER BY code;
 

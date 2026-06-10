@@ -14,6 +14,14 @@ from app.services.org_units_service import OrgUnitsService
 
 SYSTEM_ADMIN_ROLE_ID = 2
 
+# Роли QM-пилота, видимые QM_HEAD в team scope (без QM_TRAINING_EXPERT и прочих вне FSM).
+QM_HEAD_TEAM_EXECUTOR_ROLE_CODES: tuple[str, ...] = (
+    "QM_HOSP",
+    "QM_AMB",
+    "QM_COMPLAINT_REG",
+    "QM_COMPLAINT_PAT",
+)
+
 
 def parse_int_set_env(name: str) -> Set[int]:
     raw = (os.getenv(name) or "").strip()
@@ -322,11 +330,11 @@ def get_team_scope_context(
                 """
                 SELECT DISTINCT r.role_id
                 FROM public.roles r
-                WHERE r.code ~ '^QM_'
-                  AND r.code <> 'QM_HEAD'
+                WHERE r.code IN :role_codes
                 ORDER BY r.role_id
                 """
-            )
+            ).bindparams(bindparam("role_codes", expanding=True)),
+            {"role_codes": list(QM_HEAD_TEAM_EXECUTOR_ROLE_CODES)},
         ).mappings().all()
         team_executor_role_ids = [
             int(r["role_id"]) for r in qm_rows if r.get("role_id") is not None
