@@ -3,6 +3,8 @@
 
 import * as React from "react";
 
+import { getEmployees } from "../_lib/api.client";
+
 export type OrgUnitOption = {
   id: number;
   label: string;
@@ -24,12 +26,22 @@ export type EmployeeCreateFormValues = {
 type EmployeeCreateFormProps = {
   initialValues: EmployeeCreateFormValues;
   orgUnitOptions: OrgUnitOption[];
+  /** Полный справочник должностей; фильтрация по отделению — внутри формы. */
   positionOptions: PositionOption[];
   saving?: boolean;
   error?: string | null;
   onSubmit: (values: EmployeeCreateFormValues) => Promise<void> | void;
   onCancel: () => void;
 };
+
+function employeePositionId(item: { position?: { id?: number | null } | null }): number {
+  const id = Number(item?.position?.id ?? 0);
+  return Number.isFinite(id) && id > 0 ? id : 0;
+}
+
+function sortPositionOptions(opts: PositionOption[]): PositionOption[] {
+  return [...opts].sort((a, b) => a.label.localeCompare(b.label, "ru"));
+}
 
 export default function EmployeeCreateForm({
   initialValues,
@@ -41,14 +53,148 @@ export default function EmployeeCreateForm({
   onCancel,
 }: EmployeeCreateFormProps) {
   const [values, setValues] = React.useState<EmployeeCreateFormValues>(initialValues);
+  const [unitPositionIds, setUnitPositionIds] = React.useState<Set<number> | null>(null);
+  const [unitPositionsLoading, setUnitPositionsLoading] = React.useState(false);
+  const [showAllPositions, setShowAllPositions] = React.useState(false);
 
   React.useEffect(() => {
     setValues(initialValues);
   }, [initialValues]);
 
+  React.useEffect(() => {
+    setShowAllPositions(false);
+  }, [values.org_unit_id]);
+
+  // Должности, уже используемые сотрудниками выбранного отделения (org_unit_id).
+  React.useEffect(() => {
+    const unitId = String(values.org_unit_id ?? "").trim();
+    if (!unitId) {
+      setUnitPositionIds(null);
+      setUnitPositionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setUnitPositionsLoading(true);
+
+    void (async () => {
+      try {
+        const res = await getEmployees({
+          status: "all",
+          org_unit_id: unitId,
+          include_children: false,
+          limit: 200,
+          offset: 0,
+        });
+        if (cancelled) return;
+
+        const ids = new Set<number>();
+        for (const item of res.items ?? []) {
+          const pid = employeePositionId(item);
+          if (pid > 0) ids.add(pid);
+        }
+        setUnitPositionIds(ids);
+      } catch {
+        if (!cancelled) setUnitPositionIds(new Set());
+      } finally {
+        if (!cancelled) setUnitPositionsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [values.org_unit_id]);
+
+  const sortedAllPositions = React.useMemo(
+    () => sortPositionOptions(positionOptions),
+    [positionOptions]
+  );
+
+  const unitPositionGroups = React.useMemo(() => {
+    const unitId = String(values.org_unit_id ?? "").trim();
+    if (!unitId || !unitPositionIds || unitPositionIds.size === 0) {
+      return {
+        matched: [] as PositionOption[],
+        rest: sortedAllPositions,
+        hasMatches: false,
+      };
+    }
+
+    const matched = sortedAllPositions.filter((o) => unitPositionIds.has(o.id));
+    const rest = sortedAllPositions.filter((o) => !unitPositionIds.has(o.id));
+    return {
+      matched,
+      rest,
+      hasMatches: matched.length > 0,
+    };
+  }, [sortedAllPositions, values.org_unit_id, unitPositionIds]);
+
+  const showFilteredOnly = unitPositionGroups.hasMatches && !showAllPositions;
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     await onSubmit(values);
+  }
+
+  function handleOrgUnitChange(orgUnitId: string) {
+    setShowAllPositions(false);
+    setValues((prev) => ({ ...prev, org_unit_id: orgUnitId, position_id: "" }));
+  }
+
+  function renderPositionOptions() {
+    if (showFilteredOnly) {
+      return unitPositionGroups.matched.map((opt) => (
+        <option
+          key={opt.id}
+          value={String(opt.id)}
+          className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+        >
+          {opt.label}
+        </option>
+      ));
+    }
+
+    if (unitPositionGroups.hasMatches && showAllPositions) {
+      return (
+        <>
+          <optgroup label="В выбранном отделении">
+            {unitPositionGroups.matched.map((opt) => (
+              <option
+                key={`unit-${opt.id}`}
+                value={String(opt.id)}
+                className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+              >
+                {opt.label}
+              </option>
+            ))}
+          </optgroup>
+          {unitPositionGroups.rest.length > 0 && (
+            <optgroup label="Прочие должности">
+              {unitPositionGroups.rest.map((opt) => (
+                <option
+                  key={`all-${opt.id}`}
+                  value={String(opt.id)}
+                  className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </>
+      );
+    }
+
+    return sortedAllPositions.map((opt) => (
+      <option
+        key={opt.id}
+        value={String(opt.id)}
+        className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+      >
+        {opt.label}
+      </option>
+    ));
   }
 
   return (
@@ -104,7 +250,7 @@ export default function EmployeeCreateForm({
               id="employee-org-unit"
               name="org_unit_id"
               value={values.org_unit_id}
-              onChange={(e) => setValues((prev) => ({ ...prev, org_unit_id: e.target.value }))}
+              onChange={(e) => handleOrgUnitChange(e.target.value)}
               className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               required
             >
@@ -132,22 +278,40 @@ export default function EmployeeCreateForm({
               name="position_id"
               value={values.position_id}
               onChange={(e) => setValues((prev) => ({ ...prev, position_id: e.target.value }))}
-              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
+              disabled={unitPositionsLoading && Boolean(values.org_unit_id)}
+              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:cursor-wait disabled:opacity-70"
               required
             >
               <option value="" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-                Выберите должность
+                {unitPositionsLoading && values.org_unit_id
+                  ? "Загрузка должностей отделения…"
+                  : "Выберите должность"}
               </option>
-              {positionOptions.map((opt) => (
-                <option
-                  key={opt.id}
-                  value={String(opt.id)}
-                  className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
-                >
-                  {opt.label}
-                </option>
-              ))}
+              {renderPositionOptions()}
             </select>
+            {unitPositionGroups.hasMatches && !showAllPositions && (
+              <button
+                type="button"
+                onClick={() => setShowAllPositions(true)}
+                className="self-start text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Показать все должности ({sortedAllPositions.length})
+              </button>
+            )}
+            {unitPositionGroups.hasMatches && showAllPositions && (
+              <button
+                type="button"
+                onClick={() => setShowAllPositions(false)}
+                className="self-start text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Только должности отделения ({unitPositionGroups.matched.length})
+              </button>
+            )}
+            {showFilteredOnly && (
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                Показаны должности, уже используемые в выбранном отделении ({unitPositionGroups.matched.length}).
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
