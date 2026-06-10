@@ -91,3 +91,64 @@ Use one entry for each deployment during the pilot.
 - status: **PASS** — final pilot smoke green for RBAC, Search, Regular Tasks, Working Contacts, Contacts, Positions
 - issues found: none blocking after commits `d8126d0` (working-contacts) and `28dccbd` (contacts/positions schema)
 - follow-up actions: optional UI login smoke with pilot credentials; populate `contacts` seed data if business needs non-empty list
+
+---
+
+## Release Entry
+
+- Date: 2026-06-10
+- Version / label: `pilot-v0.3-week1-prep`
+- Environment: VPS pilot (46.247.42.47)
+- Responsible person: Sergey
+- Git HEAD: `17bcdd9` (код без изменений; ops-only на VPS)
+
+### What changed
+
+- **database backup:** `/tmp/corpsite-backups/pre_week1_day0_20260610_152756.dump` (pg_dump `-Fc`, 80 KB)
+- **RBAC fixture cleanup:** удалены `RBAC_GAP_LEGACY`, `RBAC_GAP_HISTORICAL`, tasks `10001`/`10002`, связанные reports
+- **stale pilot tasks:**
+  - task `2` (P1 AMB): `WAITING_APPROVAL` → **DONE** (approve от qm_head, Day-0 prep)
+  - task `4` (P2 AMB): `WAITING_REPORT` → **ARCHIVED** (admin, Day-0 prep)
+  - tasks `1`, `3` (DONE): **оставлены** как исторический audit trail
+- **catch-up live:** `run_id=27`, `run_for_date=2026-06-17`, `org_unit_id=44` → period **2026-06-10..2026-06-16**
+  - создано **2** задачи: `10009` (QM_HOSP), `10010` (QM_AMB), status `IN_PROGRESS`
+- **env hardening** (`.env`, `corpsite-ui/.env.production`):
+  - `APP_ENV=prod`
+  - `ENABLE_DIRECTORY_DEBUG=0`
+  - `ENABLE_LEGACY_X_USER_ID=0`
+  - `NEXT_PUBLIC_APP_ENV=prod`
+  - prod-secrets rotated (`AUTH_JWT_SECRET`, `INTERNAL_API_TOKEN`, `BOT_BIND_TOKEN`) — значения только в `.env`, не в git
+- **frontend:** `npm run build` после смены `NEXT_PUBLIC_APP_ENV`
+- **services:** restart `corpsite-backend`, `corpsite-frontend`, `corpsite-bot`
+
+### Why this release was made
+
+- Подготовка **QM Pilot Week 1 Day-0**: чистый старт без RBAC-fixture шума, актуальная неделя Jun 10–16, prod-флаги.
+
+### What to verify after deployment
+
+1. `GET /health` → 200
+2. Frontend → 200
+3. `qm_head` / `qm_hosp` / `qm_amb` login (JWT re-login после rotation secrets)
+4. `qm_hosp` видит task `10009`, `qm_amb` — task `10010`
+5. Tasks `1`, `2`, `3` (DONE), `4` (ARCHIVED) — история сохранена
+6. `./venv/bin/python scripts/pilot/qm_notifications_check.py` с `TASK_IDS=10009,10010` — events появятся после первого report
+7. `pytest tests/test_tasks_org_scope.py` — PASS
+
+### Rollback note
+
+- **backup:** `/tmp/corpsite-backups/pre_week1_day0_20260610_152756.dump`
+- restore: `pg_restore -c -d corpsite < backup.dump` (через docker exec)
+- env rollback: вернуть прежние флаги/secrets из backup `.env` (не в git)
+- rollback если: pilot users не логинятся, неверная видимость задач, catch-up создал не те задачи
+
+### Result
+
+- status: **PASS (Day-0 prep)** — backup, cleanup, catch-up, env, services active
+- issues found:
+  - `qm_notifications_check` для tasks `10009/10010` — FAIL ожидаемо (ещё нет events; пройдёт после первого report)
+  - visibility fixture tests — SKIPPED (fixture удалён из prod, корректно)
+- follow-up actions:
+  - UI login smoke для 3 pilot users
+  - Day 1: hosp report (`10009`) → amb report (`10010`) → head approve
+  - заполнить pilot prep table в `docs/PILOT_QM_ROSTER.md`
