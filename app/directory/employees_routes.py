@@ -1,20 +1,23 @@
 # FILE: app/directory/employees_routes.py
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
+from app.security.directory_scope import is_privileged as _is_privileged
 
 from app.services.directory_service import (
     list_departments as svc_list_departments,
     list_employees as svc_list_employees,
     get_employee as svc_get_employee,
+    create_employee as svc_create_employee,
 )
 
 from .common import as_http500, call_service
@@ -35,6 +38,15 @@ class DepartmentGroupPatchIn(BaseModel):
     group_name: str
     description: Optional[str] = None
     is_active: bool = True
+
+
+class EmployeeCreateIn(BaseModel):
+    full_name: str = Field(..., min_length=1, max_length=500)
+    org_unit_id: int = Field(..., ge=1)
+    position_id: int = Field(..., ge=1)
+    date_from: Optional[date] = None
+    employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    department_id: Optional[int] = Field(default=None, ge=1)
 
 
 def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -291,6 +303,82 @@ def list_employees(
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees", status_code=201)
+def create_employee(
+    body: EmployeeCreateIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        q_org_unit = text(
+            """
+            SELECT unit_id
+            FROM public.org_units
+            WHERE unit_id = :org_unit_id
+            LIMIT 1
+            """
+        )
+        q_position = text(
+            """
+            SELECT position_id
+            FROM public.positions
+            WHERE position_id = :position_id
+            LIMIT 1
+            """
+        )
+        q_department = text(
+            """
+            SELECT department_id
+            FROM public.departments
+            WHERE department_id = :department_id
+            LIMIT 1
+            """
+        )
+
+        with engine.begin() as conn:
+            org_row = conn.execute(q_org_unit, {"org_unit_id": int(body.org_unit_id)}).first()
+            if org_row is None:
+                raise HTTPException(status_code=404, detail="Org unit not found.")
+
+            pos_row = conn.execute(q_position, {"position_id": int(body.position_id)}).first()
+            if pos_row is None:
+                raise HTTPException(status_code=404, detail="Position not found.")
+
+            if body.department_id is not None:
+                dept_row = conn.execute(
+                    q_department,
+                    {"department_id": int(body.department_id)},
+                ).first()
+                if dept_row is None:
+                    raise HTTPException(status_code=404, detail="Department not found.")
+
+        new_employee_id = call_service(
+            svc_create_employee,
+            full_name=body.full_name,
+            org_unit_id=body.org_unit_id,
+            position_id=body.position_id,
+            date_from=body.date_from,
+            employment_rate=body.employment_rate,
+            department_id=body.department_id,
+        )
+
+        return call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=new_employee_id,
+        )
+
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to create employee.")
     except Exception as e:
         raise as_http500(e)
 

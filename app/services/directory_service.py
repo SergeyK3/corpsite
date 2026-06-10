@@ -1,6 +1,7 @@
 # FILE: app/services/directory_service.py
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
@@ -659,3 +660,62 @@ def get_employee(
         raise HTTPException(status_code=404, detail="Employee not found.")
 
     return _normalize_employee_joined(dict(row), emp_rel)
+
+
+def create_employee(
+    *,
+    full_name: str,
+    org_unit_id: int,
+    position_id: int,
+    date_from: Optional[date] = None,
+    employment_rate: Optional[float] = None,
+    department_id: Optional[int] = None,
+) -> str:
+    normalized_name = " ".join((full_name or "").split()).strip()
+    if not normalized_name:
+        raise HTTPException(status_code=422, detail="full_name is required.")
+
+    hired_on = date_from if date_from is not None else date.today()
+    rate = 1.0 if employment_rate is None else float(employment_rate)
+
+    q_insert = text(
+        """
+        INSERT INTO public.employees (
+            full_name,
+            org_unit_id,
+            position_id,
+            date_from,
+            employment_rate,
+            is_active,
+            department_id
+        )
+        VALUES (
+            :full_name,
+            :org_unit_id,
+            :position_id,
+            :date_from,
+            :employment_rate,
+            TRUE,
+            :department_id
+        )
+        RETURNING employee_id
+        """
+    )
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            q_insert,
+            {
+                "full_name": normalized_name,
+                "org_unit_id": int(org_unit_id),
+                "position_id": int(position_id),
+                "date_from": hired_on,
+                "employment_rate": rate,
+                "department_id": int(department_id) if department_id is not None else None,
+            },
+        ).mappings().first()
+
+    if not row or row.get("employee_id") is None:
+        raise HTTPException(status_code=500, detail="create employee failed")
+
+    return str(row["employee_id"])

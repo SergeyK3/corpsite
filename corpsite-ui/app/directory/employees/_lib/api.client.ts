@@ -1,6 +1,6 @@
 // FILE: corpsite-ui/app/directory/employees/_lib/api.client.ts
 
-import type { EmployeesResponse, EmployeeDetails } from "./types";
+import type { EmployeesResponse, EmployeeDetails, EmployeeCreatePayload } from "./types";
 import { getSessionAccessToken } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
 
@@ -144,6 +144,35 @@ export async function terminateEmployee(employeeId: string, dateTo?: string): Pr
   const body = dt ? { date_to: dt } : undefined;
 
   return apiPostJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}/terminate`, body);
+}
+
+/**
+ * Создание сотрудника
+ * Backend: POST /directory/employees
+ */
+export async function createEmployee(body: EmployeeCreatePayload): Promise<EmployeeDetails> {
+  const full_name = String(body.full_name ?? "").trim();
+  if (!full_name) throw new Error("full_name is required");
+
+  const org_unit_id = Number(body.org_unit_id);
+  const position_id = Number(body.position_id);
+  if (!Number.isFinite(org_unit_id) || org_unit_id < 1) throw new Error("org_unit_id is required");
+  if (!Number.isFinite(position_id) || position_id < 1) throw new Error("position_id is required");
+
+  const payload: Record<string, unknown> = {
+    full_name,
+    org_unit_id,
+    position_id,
+  };
+
+  const dateFrom = String(body.date_from ?? "").trim();
+  if (dateFrom) payload.date_from = dateFrom;
+
+  if (body.employment_rate != null && Number.isFinite(Number(body.employment_rate))) {
+    payload.employment_rate = Number(body.employment_rate);
+  }
+
+  return apiPostJson<EmployeeDetails>("/directory/employees", payload);
 }
 
 /**

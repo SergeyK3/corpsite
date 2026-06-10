@@ -44,6 +44,14 @@ export type EmployeesResponse = {
   total: number;
 };
 
+export type EmployeeCreatePayload = {
+  full_name: string;
+  org_unit_id: number;
+  position_id: number;
+  date_from?: string | null;
+  employment_rate?: number | null;
+};
+
 /**
  * Алиасы для совместимости с текущими компонентами UI
  */

@@ -8,6 +8,8 @@ import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
+import EmployeeCreateDrawer from "./EmployeeCreateDrawer";
+import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 
 import {
   getEmployees,
@@ -15,7 +17,9 @@ import {
   getDepartments,
   mapApiErrorToMessage,
   terminateEmployee,
+  createEmployee,
 } from "../_lib/api.client";
+import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 import type {
   EmployeeDTO,
   Position,
@@ -84,6 +88,35 @@ function buildUrlWithoutOrgFilter(basePath: string, sp: ReturnType<typeof useSea
   return query ? `${basePath}?${query}` : basePath;
 }
 
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildDefaultCreateValues(orgUnitId: string): EmployeeCreateFormValues {
+  return {
+    full_name: "",
+    org_unit_id: orgUnitId,
+    position_id: "",
+    date_from: todayIsoDate(),
+    employment_rate: "1",
+  };
+}
+
+function flattenOrgUnits(nodes: TreeNode[], depth = 0): Array<{ id: number; label: string }> {
+  const out: Array<{ id: number; label: string }> = [];
+  for (const node of nodes) {
+    const unitId = Number(node.unit_id ?? node.id);
+    if (Number.isFinite(unitId) && unitId > 0) {
+      const name = String(node.name ?? node.name_ru ?? `#${unitId}`).trim();
+      out.push({ id: unitId, label: `${"— ".repeat(depth)}${name}` });
+    }
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      out.push(...flattenOrgUnits(node.children, depth + 1));
+    }
+  }
+  return out;
+}
+
 export default function EmployeesPageClient(props: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -132,6 +165,14 @@ export default function EmployeesPageClient(props: Props) {
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
+
+  const [createDrawerOpen, setCreateDrawerOpen] = React.useState(false);
+  const [createSaving, setCreateSaving] = React.useState(false);
+  const [createError, setCreateError] = React.useState<string | null>(null);
+  const [orgUnitOptions, setOrgUnitOptions] = React.useState<Array<{ id: number; label: string }>>([]);
+  const [createInitialValues, setCreateInitialValues] = React.useState<EmployeeCreateFormValues>(
+    buildDefaultCreateValues(orgUnitId)
+  );
 
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
@@ -221,6 +262,33 @@ export default function EmployeesPageClient(props: Props) {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function loadOrgUnits() {
+      try {
+        const tree = await getOrgUnitsTree({
+          org_group_id: orgGroupId ?? undefined,
+          org_unit_id: orgUnitId || undefined,
+        });
+        if (cancelled) return;
+        setOrgUnitOptions(flattenOrgUnits(tree.items ?? []));
+      } catch {
+        if (cancelled) return;
+        setOrgUnitOptions([]);
+      }
+    }
+
+    void loadOrgUnits();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgGroupId, orgUnitId]);
+
+  React.useEffect(() => {
+    setCreateInitialValues(buildDefaultCreateValues(orgUnitId));
+  }, [orgUnitId]);
+
   const loadItems = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -265,6 +333,40 @@ export default function EmployeesPageClient(props: Props) {
 
   function handleCloseDrawer() {
     setDrawerOpen(false);
+  }
+
+  function handleOpenCreateDrawer() {
+    setCreateError(null);
+    setCreateInitialValues(buildDefaultCreateValues(orgUnitId));
+    setCreateDrawerOpen(true);
+  }
+
+  function handleCloseCreateDrawer() {
+    if (createSaving) return;
+    setCreateDrawerOpen(false);
+    setCreateError(null);
+  }
+
+  async function handleCreateEmployee(values: EmployeeCreateFormValues) {
+    setCreateSaving(true);
+    setCreateError(null);
+
+    try {
+      await createEmployee({
+        full_name: values.full_name.trim(),
+        org_unit_id: Number(values.org_unit_id),
+        position_id: Number(values.position_id),
+        date_from: values.date_from || null,
+        employment_rate: values.employment_rate ? Number(values.employment_rate) : 1,
+      });
+
+      setCreateDrawerOpen(false);
+      await loadItems();
+    } catch (e) {
+      setCreateError(mapApiErrorToMessage(e));
+    } finally {
+      setCreateSaving(false);
+    }
   }
 
   async function handleTerminateEmployee(employeeId: string, employeeName: string) {
@@ -384,9 +486,8 @@ export default function EmployeesPageClient(props: Props) {
 
               <button
                 type="button"
-                disabled
-                title="Backend route для создания сотрудника пока не реализован."
-                className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white opacity-60"
+                onClick={handleOpenCreateDrawer}
+                className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white transition hover:bg-blue-500"
               >
                 Создать
               </button>
@@ -423,6 +524,20 @@ export default function EmployeesPageClient(props: Props) {
         open={drawerOpen}
         onClose={handleCloseDrawer}
         onTerminate={handleTerminateFromDrawer}
+      />
+
+      <EmployeeCreateDrawer
+        open={createDrawerOpen}
+        initialValues={createInitialValues}
+        orgUnitOptions={orgUnitOptions}
+        positionOptions={posList.map((p) => ({
+          id: Number(p.id),
+          label: String(p.name ?? `#${p.id}`),
+        })).filter((p) => Number.isFinite(p.id) && p.id > 0)}
+        saving={createSaving}
+        error={createError}
+        onClose={handleCloseCreateDrawer}
+        onSubmit={handleCreateEmployee}
       />
     </div>
   );
