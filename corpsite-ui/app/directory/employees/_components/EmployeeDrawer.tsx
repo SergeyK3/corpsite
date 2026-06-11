@@ -1,7 +1,7 @@
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeeDrawer.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { EmployeeDetails } from "../_lib/types";
 import { getEmployee, getPositions, mapApiErrorToMessage, updateEmployee } from "../_lib/api.client";
 import { employeeStatusMeta } from "../_lib/employeeStatus";
@@ -78,6 +78,44 @@ function normalizePositionOptions(raw: unknown): PositionOption[] {
     })
     .filter((p: PositionOption) => Number.isFinite(p.id) && p.id > 0)
     .sort((a: PositionOption, b: PositionOption) => a.label.localeCompare(b.label, "ru"));
+}
+
+function userStatusLabel(active: boolean | null | undefined): string {
+  if (active === true) return "Активен";
+  if (active === false) return "Неактивен";
+  return "—";
+}
+
+function resolveTelegramLabel(user: Record<string, unknown> | null | undefined): string {
+  if (!user) return "Telegram не привязан";
+
+  const username = user.telegram_username ?? user.telegramUsername;
+  if (username != null && String(username).trim()) {
+    const s = String(username).trim();
+    return s.startsWith("@") ? s : `@${s}`;
+  }
+
+  const id = user.telegram_id ?? user.telegramId;
+  if (id != null && String(id).trim()) return String(id).trim();
+
+  return "Telegram не привязан";
+}
+
+function SectionBlock({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={className}>
+      <h3 className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-50">{title}</h3>
+      {children}
+    </section>
+  );
 }
 
 export default function EmployeeDrawer({
@@ -193,13 +231,11 @@ export default function EmployeeDrawer({
 
   if (!open) return null;
 
-  const fio =
-    mode === "edit"
-      ? editValues.full_name || (loading ? "Загрузка..." : "Сотрудник")
-      : (details as any)?.fio ??
-        (details as any)?.full_name ??
-        (details as any)?.fullName ??
-        (loading ? "Загрузка..." : "Сотрудник");
+  const displayFio =
+    (details as any)?.fio ??
+    (details as any)?.full_name ??
+    (details as any)?.fullName ??
+    (loading ? "Загрузка..." : "Сотрудник");
 
   const tabNo = details
     ? (details as any)?.id ?? (details as any)?.employee_id ?? employeeId
@@ -232,6 +268,7 @@ export default function EmployeeDrawer({
 
   const linkedUser = (details as any)?.user ?? null;
   const canEdit = Boolean(details && isActive(details));
+  const telegramLabel = resolveTelegramLabel(linkedUser as Record<string, unknown> | null);
 
   const positionSelectOptions = (() => {
     const currentId = Number(editValues.position_id || positionIdOf(details));
@@ -242,73 +279,113 @@ export default function EmployeeDrawer({
     return positionOptions;
   })();
 
-  function userStatusLabel(active: boolean | null | undefined): string {
-    if (active === true) return "Активен";
-    if (active === false) return "Неактивен";
-    return "—";
-  }
+  const editableFieldClass =
+    "mt-1 w-full rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40 disabled:opacity-60";
+  const editableCardClass =
+    "rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20 p-4";
+  const readOnlyCardClass =
+    "rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4";
 
-  function telegramAccessLabel(user: Record<string, unknown> | null | undefined): string | null {
-    if (!user) return null;
-
-    const hasUsername = "telegram_username" in user || "telegramUsername" in user;
-    const hasId = "telegram_id" in user || "telegramId" in user;
-    if (!hasUsername && !hasId) return null;
-
-    const username = user.telegram_username ?? user.telegramUsername;
-    if (username != null && String(username).trim()) {
-      const s = String(username).trim();
-      return s.startsWith("@") ? s : `@${s}`;
+  function handleBackdropClick() {
+    if (mode === "edit") {
+      handleCancelEdit();
+      return;
     }
-
-    const id = user.telegram_id ?? user.telegramId;
-    if (id != null && String(id).trim()) return String(id).trim();
-
-    return "—";
+    onClose();
   }
 
-  const telegramAccess = linkedUser
-    ? telegramAccessLabel(linkedUser as Record<string, unknown>)
-    : null;
+  function renderOrgUnitCorrectionStub() {
+    return (
+      <div className="mt-4 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-3">
+        <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200/90">
+          Используйте это действие только если отделение было указано неверно при импорте или первичном
+          заполнении. Это не кадровый перевод.
+        </p>
+        <button
+          type="button"
+          disabled
+          title="Функция будет доступна в следующем этапе HR"
+          className="mt-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-white/70 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 opacity-70 cursor-not-allowed"
+        >
+          Исправить ошибочное отделение
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm" onClick={handleBackdropClick} />
       <div className="relative ml-auto flex h-full w-full max-w-[860px] flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
+        <div
+          className={[
+            "flex items-start justify-between gap-4 border-b px-6 py-5",
+            mode === "edit"
+              ? "border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20"
+              : "border-zinc-200 dark:border-zinc-800",
+          ].join(" ")}
+        >
           <div className="min-w-0">
             {mode === "edit" ? (
-              <input
-                value={editValues.full_name}
-                onChange={(e) => setEditValues((prev) => ({ ...prev, full_name: e.target.value }))}
-                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
-                placeholder="ФИО"
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <>
+                <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
+                  Редактирование сотрудника
+                </h2>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  {displayFio}
+                  {details ? ` · Таб. № ${tabNo}` : ""}
+                </p>
+              </>
             ) : (
-              <h2 className="truncate text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">{fio}</h2>
+              <>
+                <h2 className="truncate text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
+                  {displayFio}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{details ? `Таб. № ${tabNo}` : ""}</p>
+              </>
             )}
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{details ? `Таб. № ${tabNo}` : ""}</p>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {mode === "view" && canEdit ? (
-              <button
-                type="button"
-                onClick={() => void handleEnterEdit()}
-                className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
-              >
-                Изменить
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            >
-              Закрыть
-            </button>
+            {mode === "edit" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void handleSaveEdit()}
+                  disabled={saving || positionsLoading}
+                >
+                  {saving ? "Сохранение..." : "Сохранить"}
+                </button>
+              </>
+            ) : (
+              <>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleEnterEdit()}
+                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                  >
+                    Изменить
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  Закрыть
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -326,160 +403,196 @@ export default function EmployeeDrawer({
           ) : null}
 
           {details ? (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
-                  <div className="mt-1">
-                    <EmployeeStatusBadge item={details} />
+            <div className="space-y-6">
+              {mode === "edit" ? (
+                <SectionBlock title="Изменяемые данные">
+                  <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className={editableCardClass}>
+                        <label htmlFor="employee-drawer-full-name" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                          ФИО
+                        </label>
+                        <input
+                          id="employee-drawer-full-name"
+                          value={editValues.full_name}
+                          onChange={(e) => setEditValues((prev) => ({ ...prev, full_name: e.target.value }))}
+                          className={editableFieldClass}
+                          placeholder="ФИО сотрудника"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </div>
+
+                      <div className={editableCardClass}>
+                        <label htmlFor="employee-drawer-position" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                          Должность
+                        </label>
+                        <select
+                          id="employee-drawer-position"
+                          value={editValues.position_id}
+                          onChange={(e) => setEditValues((prev) => ({ ...prev, position_id: e.target.value }))}
+                          disabled={positionsLoading}
+                          className={editableFieldClass}
+                        >
+                          <option value="">
+                            {positionsLoading ? "Загрузка должностей…" : "Выберите должность"}
+                          </option>
+                          {positionSelectOptions.map((opt) => (
+                            <option key={opt.id} value={String(opt.id)}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className={editableCardClass}>
+                        <label htmlFor="employee-drawer-rate" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                          Ставка
+                        </label>
+                        <input
+                          id="employee-drawer-rate"
+                          type="number"
+                          min="0.01"
+                          max="2"
+                          step="0.01"
+                          value={editValues.employment_rate}
+                          onChange={(e) => setEditValues((prev) => ({ ...prev, employment_rate: e.target.value }))}
+                          className={editableFieldClass}
+                        />
+                      </div>
+
+                      <div className={editableCardClass}>
+                        <label htmlFor="employee-drawer-date-from" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                          Дата приёма
+                        </label>
+                        <input
+                          id="employee-drawer-date-from"
+                          type="date"
+                          value={editValues.date_from}
+                          onChange={(e) => setEditValues((prev) => ({ ...prev, date_from: e.target.value }))}
+                          className={editableFieldClass}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </SectionBlock>
+              ) : (
+                <SectionBlock title="Основные данные">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
+                      <div className="mt-1">
+                        <EmployeeStatusBadge item={details} />
+                      </div>
+                    </div>
 
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Отделение</div>
-                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{orgUnitDisplay}</div>
-                </div>
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Должность</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{positionName}</div>
+                    </div>
 
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Должность</div>
-                  {mode === "edit" ? (
-                    <select
-                      value={editValues.position_id}
-                      onChange={(e) => setEditValues((prev) => ({ ...prev, position_id: e.target.value }))}
-                      disabled={positionsLoading}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:opacity-60"
-                    >
-                      <option value="">
-                        {positionsLoading ? "Загрузка должностей…" : "Выберите должность"}
-                      </option>
-                      {positionSelectOptions.map((opt) => (
-                        <option key={opt.id} value={String(opt.id)}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{positionName}</div>
-                  )}
-                </div>
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Ставка</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{String(rate)}</div>
+                    </div>
 
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Ставка</div>
-                  {mode === "edit" ? (
-                    <input
-                      type="number"
-                      min="0.01"
-                      max="2"
-                      step="0.01"
-                      value={editValues.employment_rate}
-                      onChange={(e) => setEditValues((prev) => ({ ...prev, employment_rate: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
-                    />
-                  ) : (
-                    <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{String(rate)}</div>
-                  )}
-                </div>
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата приёма</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateFrom}</div>
+                    </div>
 
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата приёма</div>
-                  {mode === "edit" ? (
-                    <input
-                      type="date"
-                      value={editValues.date_from}
-                      onChange={(e) => setEditValues((prev) => ({ ...prev, date_from: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
-                    />
-                  ) : (
-                    <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateFrom}</div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата по</div>
-                  <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateTo}</div>
-                </div>
-              </div>
-
-              {mode === "view" ? (
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Период работы</div>
-                  <div className="mt-2 text-sm text-zinc-900 dark:text-zinc-50">
-                    {dateFrom} — {dateTo}
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата по</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateTo}</div>
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                </SectionBlock>
+              )}
 
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">Учётная запись Corpsite</div>
-                {linkedUser ? (
-                  <div className="mt-2 space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
-                    <div>
-                      <span className="text-zinc-600 dark:text-zinc-400">Логин: </span>
-                      {linkedUser.login ?? "—"}
+              {mode === "edit" ? (
+                <SectionBlock title="Данные только для просмотра">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
+                      <div className="mt-1">
+                        <EmployeeStatusBadge item={details} />
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-zinc-600 dark:text-zinc-400">Роль доступа: </span>
-                      {linkedUser.role_name ?? linkedUser.role_id ?? "—"}
+
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Отделение</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{orgUnitDisplay}</div>
                     </div>
-                    <div>
-                      <span className="text-zinc-600 dark:text-zinc-400">Статус доступа: </span>
-                      {userStatusLabel(linkedUser.is_active)}
+
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата по</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateTo}</div>
                     </div>
-                    {telegramAccess != null ? (
+                  </div>
+                </SectionBlock>
+              ) : (
+                <SectionBlock title="Отделение">
+                  <div className={readOnlyCardClass}>
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400">Текущее отделение</div>
+                    <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{orgUnitDisplay}</div>
+                    {renderOrgUnitCorrectionStub()}
+                  </div>
+                </SectionBlock>
+              )}
+
+              <SectionBlock title="Учётная запись Corpsite">
+                <div className={readOnlyCardClass}>
+                  {linkedUser ? (
+                    <div className="space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
                       <div>
-                        <span className="text-zinc-600 dark:text-zinc-400">Telegram: </span>
-                        {telegramAccess}
+                        <span className="text-zinc-600 dark:text-zinc-400">Логин: </span>
+                        {linkedUser.login ?? "—"}
                       </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                        Доступ к Corpsite не создан
+                      <div>
+                        <span className="text-zinc-600 dark:text-zinc-400">Роль доступа: </span>
+                        {linkedUser.role_name ?? linkedUser.role_id ?? "—"}
                       </div>
-                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
-                        Создайте доступ, если сотрудник должен входить в систему или получать задачи.
+                      <div>
+                        <span className="text-zinc-600 dark:text-zinc-400">Статус доступа: </span>
+                        {userStatusLabel(linkedUser.is_active)}
                       </div>
                     </div>
-                    {onCreateUser && mode === "view" ? (
-                      <button
-                        type="button"
-                        onClick={() => onCreateUser(details)}
-                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
-                      >
-                        Создать доступ к Corpsite
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                          Доступ к Corpsite не создан
+                        </div>
+                        <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                          Создайте доступ, если сотрудник должен входить в систему или получать задачи.
+                        </div>
+                      </div>
+                      {onCreateUser && mode === "view" ? (
+                        <button
+                          type="button"
+                          onClick={() => onCreateUser(details)}
+                          className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+                        >
+                          Создать доступ к Corpsite
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              </SectionBlock>
+
+              <SectionBlock title="Telegram">
+                <div className={readOnlyCardClass}>
+                  <div className="text-sm text-zinc-900 dark:text-zinc-50">{telegramLabel}</div>
+                </div>
+              </SectionBlock>
             </div>
           ) : loading ? (
             <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка данных...</div>
           ) : null}
         </div>
 
-        {mode === "edit" ? (
-          <div className="flex items-center justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
-            <button
-              type="button"
-              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
-              onClick={handleCancelEdit}
-              disabled={saving}
-            >
-              Отмена
-            </button>
-            <button
-              type="button"
-              className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => void handleSaveEdit()}
-              disabled={saving || positionsLoading}
-            >
-              {saving ? "Сохранение..." : "Сохранить"}
-            </button>
-          </div>
-        ) : details && isActive(details) ? (
+        {mode === "view" && details && isActive(details) ? (
           <div className="border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
             <button
               type="button"
