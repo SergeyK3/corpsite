@@ -21,20 +21,28 @@ LEFT JOIN public.roles r
   ON r.role_id = u.role_id
 LEFT JOIN public.org_units ou
   ON ou.unit_id = u.unit_id
+LEFT JOIN public.employees e
+  ON e.employee_id = u.employee_id
+LEFT JOIN public.positions p
+  ON p.position_id = e.position_id
 """
 
 BASE_SELECT_SQL = f"""
 SELECT
     u.user_id,
     u.unit_id AS org_unit_id,
+    u.employee_id,
     u.full_name,
     u.login,
     u.phone,
     u.telegram_username,
+    u.telegram_id,
     r.name AS role_name,
     NULL::text AS role_name_ru,
     ou.name AS unit_name,
     ou.name AS unit_name_ru,
+    p.position_id,
+    p.name AS position_name,
     COALESCE(u.is_active, false) AS is_active
 {BASE_FROM_SQL}
 """
@@ -45,18 +53,32 @@ def _normalize_text(value: Any) -> Optional[str]:
     return s or None
 
 
+def _normalize_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
 def _map_row(row: Dict[str, Any]) -> Dict[str, Any]:
     org_unit_id_raw = row.get("org_unit_id")
     return {
         "id": int(row["user_id"]),
         "user_id": int(row["user_id"]),
+        "employee_id": _normalize_int(row.get("employee_id")),
         "org_unit_id": int(org_unit_id_raw) if org_unit_id_raw is not None else None,
         "full_name": _normalize_text(row.get("full_name")),
         "login": _normalize_text(row.get("login")),
         "phone": _normalize_text(row.get("phone")),
         "telegram_username": _normalize_text(row.get("telegram_username")),
+        "telegram_id": _normalize_int(row.get("telegram_id")),
         "role_name": _normalize_text(row.get("role_name")),
         "role_name_ru": _normalize_text(row.get("role_name_ru")),
+        "position_id": _normalize_int(row.get("position_id")),
+        "position_name": _normalize_text(row.get("position_name")),
         "unit_name": _normalize_text(row.get("unit_name")),
         "unit_name_ru": _normalize_text(row.get("unit_name_ru")),
         "is_active": bool(row.get("is_active")),
@@ -147,6 +169,7 @@ def list_working_contacts(
                 OR LOWER(COALESCE(CAST(u.telegram_username AS TEXT), '')) LIKE :q
                 OR LOWER(COALESCE(CAST(r.name AS TEXT), '')) LIKE :q
                 OR LOWER(COALESCE(CAST(ou.name AS TEXT), '')) LIKE :q
+                OR LOWER(COALESCE(CAST(p.name AS TEXT), '')) LIKE :q
             )
             """
         )
