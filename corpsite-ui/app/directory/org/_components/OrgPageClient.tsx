@@ -4,7 +4,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import type { EmployeeDTO, EmployeeDetails, EmployeesResponse } from "../../employees/_lib/types";
+import type { EmployeeDTO, EmployeesResponse } from "../../employees/_lib/types";
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
 import { apiFetchJson } from "../../../../lib/api";
@@ -422,10 +422,6 @@ export default function OrgPageClient() {
     replaceUrl({ employee_id: null });
   }
 
-  async function onTerminate(_details: EmployeeDetails) {
-    closeEmployeeDrawer();
-  }
-
   return (
     <div className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900">
       <div className="border-b border-zinc-200 dark:border-zinc-800 p-4">
@@ -506,7 +502,6 @@ export default function OrgPageClient() {
         employeeId={drawerEmployeeId}
         open={drawerOpen}
         onClose={closeEmployeeDrawer}
-        onTerminate={onTerminate}
       />
     </div>
   );

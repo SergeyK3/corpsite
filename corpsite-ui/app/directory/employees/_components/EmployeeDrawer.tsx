@@ -23,7 +23,6 @@ type Props = {
   employeeId: string | null;
   open: boolean;
   onClose: () => void;
-  onTerminate: (details: EmployeeDetails) => void;
   onCreateUser?: (details: EmployeeDetails) => void;
   onSaved?: () => void;
   refreshToken?: number;
@@ -52,6 +51,21 @@ function isActive(d: EmployeeDetails): boolean {
 function positionIdOf(details: EmployeeDetails | null): string {
   const id = Number((details as any)?.position?.id ?? 0);
   return Number.isFinite(id) && id > 0 ? String(id) : "";
+}
+
+function employeeOrgUnitId(details: EmployeeDetails | null | undefined): number | null {
+  if (!details) return null;
+
+  const fromOrgUnit = Number((details as any)?.org_unit?.unit_id ?? (details as any)?.orgUnit?.unit_id ?? 0);
+  if (Number.isFinite(fromOrgUnit) && fromOrgUnit > 0) return Math.trunc(fromOrgUnit);
+
+  const fromTopLevel = Number((details as any)?.org_unit_id ?? (details as any)?.unit_id ?? 0);
+  if (Number.isFinite(fromTopLevel) && fromTopLevel > 0) return Math.trunc(fromTopLevel);
+
+  const fromDepartment = Number((details as any)?.department?.id ?? 0);
+  if (Number.isFinite(fromDepartment) && fromDepartment > 0) return Math.trunc(fromDepartment);
+
+  return null;
 }
 
 function buildEditValues(details: EmployeeDetails): EditValues {
@@ -122,7 +136,6 @@ export default function EmployeeDrawer({
   employeeId,
   open,
   onClose,
-  onTerminate,
   onCreateUser,
   onSaved,
   refreshToken = 0,
@@ -139,6 +152,7 @@ export default function EmployeeDrawer({
   });
   const [positionOptions, setPositionOptions] = useState<PositionOption[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
+  const [positionsOrgUnitHint, setPositionsOrgUnitHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -169,6 +183,8 @@ export default function EmployeeDrawer({
       setError(null);
       setMode("view");
       setSaveError(null);
+      setPositionsOrgUnitHint(null);
+      setPositionOptions([]);
       return;
     }
 
@@ -187,10 +203,19 @@ export default function EmployeeDrawer({
     setMode("edit");
     setSaveError(null);
     setEditValues(buildEditValues(details));
+    setPositionsOrgUnitHint(null);
     setPositionsLoading(true);
 
+    const orgUnitId = employeeOrgUnitId(details);
+    if (orgUnitId == null) {
+      setPositionOptions([]);
+      setPositionsOrgUnitHint("Не удалось определить отделение сотрудника");
+      setPositionsLoading(false);
+      return;
+    }
+
     try {
-      const raw = await getPositions({ limit: 500, offset: 0 });
+      const raw = await getPositions({ org_unit_id: orgUnitId, limit: 500, offset: 0 });
       setPositionOptions(normalizePositionOptions(raw));
     } catch {
       setPositionOptions([]);
@@ -202,6 +227,7 @@ export default function EmployeeDrawer({
   function handleCancelEdit() {
     setMode("view");
     setSaveError(null);
+    setPositionsOrgUnitHint(null);
     if (details) setEditValues(buildEditValues(details));
   }
 
@@ -443,6 +469,9 @@ export default function EmployeeDrawer({
                             </option>
                           ))}
                         </select>
+                        {positionsOrgUnitHint ? (
+                          <p className="mt-2 text-xs text-amber-800 dark:text-amber-200/90">{positionsOrgUnitHint}</p>
+                        ) : null}
                       </div>
 
                       <div className={editableCardClass}>
@@ -591,18 +620,6 @@ export default function EmployeeDrawer({
             <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка данных...</div>
           ) : null}
         </div>
-
-        {mode === "view" && details && isActive(details) ? (
-          <div className="border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
-            <button
-              type="button"
-              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-900/50 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
-              onClick={() => onTerminate(details)}
-            >
-              Завершить работу
-            </button>
-          </div>
-        ) : null}
       </div>
     </div>
   );

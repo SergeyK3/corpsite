@@ -18,7 +18,6 @@ import {
   getPositions,
   getDepartments,
   mapApiErrorToMessage,
-  terminateEmployee,
   createEmployee,
   createUser,
   getRoles,
@@ -202,7 +201,6 @@ export default function EmployeesPageClient(props: Props) {
       : { items: [], total: 0 }
   );
   const [loading, setLoading] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
   const [search, setSearch] = React.useState(qText);
   const [error, setError] = React.useState<string | null>(
     props.initialError ? String(props.initialError) : null
@@ -424,31 +422,6 @@ export default function EmployeesPageClient(props: Props) {
     }
   }
 
-  async function handleTerminateEmployee(employeeId: string, employeeName: string) {
-    const ok = window.confirm(`Завершить работу сотрудника «${employeeName}»?`);
-    if (!ok) return;
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      await terminateEmployee(employeeId);
-      await loadItems();
-      setEmployeeRefreshToken((t) => t + 1);
-    } catch (e) {
-      setError(mapApiErrorToMessage(e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleTerminateFromDrawer(details: EmployeeDetails) {
-    const employeeId = getEmployeeId(details as any);
-    const employeeName = getEmployeeName(details as any);
-    if (!employeeId) return;
-    await handleTerminateEmployee(employeeId, employeeName);
-  }
-
   function handleOpenUserCreateDrawer(details: EmployeeDetails) {
     const fio = getEmployeeName(details as any);
     const orgUnitName =
@@ -642,9 +615,8 @@ export default function EmployeesPageClient(props: Props) {
               total={data.total}
               limit={limitNum}
               offset={offsetNum}
-              loading={loading || saving}
+              loading={loading}
               onOpenEmployee={handleOpenEmployee}
-              onTerminateEmployee={handleTerminateEmployee}
               onChangePage={setPageOffset}
             />
           </div>
@@ -655,7 +627,6 @@ export default function EmployeesPageClient(props: Props) {
         employeeId={drawerEmployeeId}
         open={drawerOpen}
         onClose={handleCloseDrawer}
-        onTerminate={handleTerminateFromDrawer}
         onCreateUser={handleOpenUserCreateDrawer}
         onSaved={async () => {
           await loadItems();

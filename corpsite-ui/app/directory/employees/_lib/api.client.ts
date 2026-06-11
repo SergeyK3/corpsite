@@ -304,10 +304,15 @@ export async function getRoles(args?: { limit?: number; offset?: number }): Prom
 /**
  * Должности
  */
-export async function getPositions(args?: { limit?: number; offset?: number }): Promise<any> {
+export async function getPositions(args?: {
+  limit?: number;
+  offset?: number;
+  org_unit_id?: number;
+}): Promise<any> {
   const qs = buildQuery({
     limit: args?.limit ?? 200,
     offset: args?.offset ?? 0,
+    org_unit_id: args?.org_unit_id,
   });
   return apiGetJson<any>("/directory/positions", qs);
 }

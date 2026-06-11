@@ -2,7 +2,6 @@
 "use client";
 
 import type { EmployeeListItem } from "../_lib/types";
-import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
@@ -12,7 +11,6 @@ type Props = {
   offset: number;
   loading: boolean;
   onOpenEmployee: (employee_id: string) => void;
-  onTerminateEmployee: (employee_id: string, employee_name: string) => Promise<void> | void;
   onChangePage: (nextOffset: number) => void;
 };
 
@@ -21,10 +19,6 @@ function formatDate(d: string | null): string {
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return d;
   return dt.toLocaleDateString("ru-RU");
-}
-
-function computeIsActive(it: any): boolean {
-  return employeeStatusMeta(it).active;
 }
 
 function getEmployeeId(it: any): string {
@@ -51,7 +45,6 @@ export default function EmployeesTable({
   offset,
   loading,
   onOpenEmployee,
-  onTerminateEmployee,
   onChangePage,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
@@ -104,7 +97,6 @@ export default function EmployeesTable({
               (items as any[]).map((it) => {
                 const employeeId = getEmployeeId(it);
                 const fio = getEmployeeFio(it);
-                const active = computeIsActive(it);
 
                 return (
                   <tr key={employeeId || fio} className="border-t border-zinc-200 dark:border-zinc-800 align-middle">
@@ -149,16 +141,6 @@ export default function EmployeesTable({
                             className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                           >
                             Открыть
-                          </button>
-                        )}
-
-                        {!!employeeId && active && (
-                          <button
-                            type="button"
-                            onClick={() => onTerminateEmployee(employeeId, fio)}
-                            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                          >
-                            Завершить
                           </button>
                         )}
                       </div>
