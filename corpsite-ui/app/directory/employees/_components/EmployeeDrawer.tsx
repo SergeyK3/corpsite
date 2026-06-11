@@ -1,7 +1,7 @@
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeeDrawer.tsx
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { EmployeeDetails } from "../_lib/types";
 import { getEmployee, getPositions, mapApiErrorToMessage, updateEmployee } from "../_lib/api.client";
 import { employeeStatusMeta } from "../_lib/employeeStatus";
@@ -233,20 +233,43 @@ export default function EmployeeDrawer({
   const linkedUser = (details as any)?.user ?? null;
   const canEdit = Boolean(details && isActive(details));
 
-  const positionSelectOptions = useMemo(() => {
+  const positionSelectOptions = (() => {
     const currentId = Number(editValues.position_id || positionIdOf(details));
     const hasCurrent = positionOptions.some((p) => p.id === currentId);
     if (Number.isFinite(currentId) && currentId > 0 && !hasCurrent && positionName !== "—") {
       return [{ id: currentId, label: positionName }, ...positionOptions];
     }
     return positionOptions;
-  }, [details, editValues.position_id, positionName, positionOptions]);
+  })();
 
   function userStatusLabel(active: boolean | null | undefined): string {
     if (active === true) return "Активен";
     if (active === false) return "Неактивен";
     return "—";
   }
+
+  function telegramAccessLabel(user: Record<string, unknown> | null | undefined): string | null {
+    if (!user) return null;
+
+    const hasUsername = "telegram_username" in user || "telegramUsername" in user;
+    const hasId = "telegram_id" in user || "telegramId" in user;
+    if (!hasUsername && !hasId) return null;
+
+    const username = user.telegram_username ?? user.telegramUsername;
+    if (username != null && String(username).trim()) {
+      const s = String(username).trim();
+      return s.startsWith("@") ? s : `@${s}`;
+    }
+
+    const id = user.telegram_id ?? user.telegramId;
+    if (id != null && String(id).trim()) return String(id).trim();
+
+    return "—";
+  }
+
+  const telegramAccess = linkedUser
+    ? telegramAccessLabel(linkedUser as Record<string, unknown>)
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -387,7 +410,7 @@ export default function EmployeeDrawer({
               ) : null}
 
               <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">Аккаунт</div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Учётная запись Corpsite</div>
                 {linkedUser ? (
                   <div className="mt-2 space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
                     <div>
@@ -395,24 +418,37 @@ export default function EmployeeDrawer({
                       {linkedUser.login ?? "—"}
                     </div>
                     <div>
-                      <span className="text-zinc-600 dark:text-zinc-400">Роль: </span>
+                      <span className="text-zinc-600 dark:text-zinc-400">Роль доступа: </span>
                       {linkedUser.role_name ?? linkedUser.role_id ?? "—"}
                     </div>
                     <div>
-                      <span className="text-zinc-600 dark:text-zinc-400">Статус: </span>
+                      <span className="text-zinc-600 dark:text-zinc-400">Статус доступа: </span>
                       {userStatusLabel(linkedUser.is_active)}
                     </div>
+                    {telegramAccess != null ? (
+                      <div>
+                        <span className="text-zinc-600 dark:text-zinc-400">Telegram: </span>
+                        {telegramAccess}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
-                  <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm text-zinc-700 dark:text-zinc-300">Аккаунт не создан</div>
+                  <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                        Доступ к Corpsite не создан
+                      </div>
+                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                        Создайте доступ, если сотрудник должен входить в систему или получать задачи.
+                      </div>
+                    </div>
                     {onCreateUser && mode === "view" ? (
                       <button
                         type="button"
                         onClick={() => onCreateUser(details)}
                         className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
                       >
-                        Создать пользователя
+                        Создать доступ к Corpsite
                       </button>
                     ) : null}
                   </div>
