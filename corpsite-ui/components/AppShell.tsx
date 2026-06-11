@@ -241,6 +241,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (!isAdmin) return false;
 
     if (pathname.startsWith("/directory/department-groups")) return false;
+    if (pathname.startsWith("/directory/org-units")) return false;
 
     return (
       pathname.startsWith("/tasks") ||
