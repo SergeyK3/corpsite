@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
+import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibraries";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
 import type { MeInfo } from "@/lib/types";
@@ -864,6 +865,18 @@ export default function TasksPageClient() {
 
   const tableColSpan = showExecutorColumn ? 6 : 5;
 
+  const departmentDiLibraryUrl = React.useMemo(
+    () => getDepartmentDiLibraryUrl(me?.unit_id),
+    [me?.unit_id],
+  );
+  const sectionDiLibraryUrl = React.useMemo(
+    () => getSectionDiLibraryUrl(me?.login),
+    [me?.login],
+  );
+
+  const diLibraryButtonClassName =
+    "inline-flex h-10 items-center rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700";
+
   return (
     <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="w-full px-0 py-0">
@@ -875,6 +888,28 @@ export default function TasksPageClient() {
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
             <div className="mb-3 flex flex-wrap items-end gap-3">
               <OrgScopeFilter basePath="/tasks" className="min-w-[220px]" />
+
+              {departmentDiLibraryUrl ? (
+                <a
+                  href={departmentDiLibraryUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={diLibraryButtonClassName}
+                >
+                  Библиотека отдела
+                </a>
+              ) : null}
+
+              {sectionDiLibraryUrl ? (
+                <a
+                  href={sectionDiLibraryUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={diLibraryButtonClassName}
+                >
+                  Библиотека секции
+                </a>
+              ) : null}
             </div>
 
             <div className="mb-3 flex flex-wrap items-center gap-2">
