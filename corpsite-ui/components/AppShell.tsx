@@ -35,7 +35,7 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   },
   {
     href: "/directory/roles",
-    title: "Роли",
+    title: "Роли доступа",
     matchPrefixes: ["/directory/roles"],
   },
   {
@@ -57,19 +57,14 @@ const SECONDARY_DIRECTORY_NAV: NavItem[] = [
     matchPrefixes: ["/directory/positions"],
   },
   {
-    href: "/directory/working-contacts",
-    title: "Рабочие контакты",
-    matchPrefixes: ["/directory/working-contacts"],
-  },
-  {
     href: "/directory/department-groups",
-    title: "Группы отделений",
+    title: "Типы деятельности",
     matchPrefixes: ["/directory/department-groups"],
   },
   {
-    href: "/directory/org-unit-types",
-    title: "Типы отделений",
-    matchPrefixes: ["/directory/org-unit-types"],
+    href: "/directory/org-units",
+    title: "Отделения",
+    matchPrefixes: ["/directory/org-units"],
   },
 ];
 
@@ -266,7 +261,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
     if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
     if (pathname.startsWith("/directory/working-contacts")) return "/directory/working-contacts";
-    if (pathname.startsWith("/directory/org-unit-types")) return "/directory/org-unit-types";
+    if (pathname.startsWith("/directory/org-units")) return "/directory/org-units";
+    if (pathname.startsWith("/directory/org-unit-types")) return "/directory/org-units";
     if (pathname.startsWith("/directory/org")) return "/directory/org";
     if (pathname.startsWith("/directory/employees")) return "/directory/employees";
 
