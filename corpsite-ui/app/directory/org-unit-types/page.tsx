@@ -5,7 +5,7 @@ import DictionaryPageClient from "../_components/DictionaryPageClient";
 import { getDictionaryConfig } from "../_lib/dictionaries.config";
 
 export default function OrgUnitsPage() {
-  const config = getDictionaryConfig("org-units");
+  const config = getDictionaryConfig("org-unit-types");
 
   if (!config) {
     notFound();

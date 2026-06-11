@@ -68,7 +68,7 @@ const SECONDARY_DIRECTORY_NAV: NavItem[] = [
   },
   {
     href: "/directory/org-unit-types",
-    title: "Отделения",
+    title: "Типы отделений",
     matchPrefixes: ["/directory/org-unit-types"],
   },
 ];

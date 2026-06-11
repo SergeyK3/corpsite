@@ -373,7 +373,7 @@ export default function OrgUnitsPage() {
           </div>
 
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-sm font-medium">Оргструктура</div>
+            <div className="text-sm font-medium">Отделения</div>
             <button
               type="button"
               className="rounded-lg border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"

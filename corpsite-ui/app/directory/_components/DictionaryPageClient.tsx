@@ -158,7 +158,7 @@ function toNullableNumber(value: any): number | null {
 }
 
 function isOrgUnitsConfig(config: DictionaryConfig): boolean {
-  return config.code === "org-units";
+  return config.code === "org-units" || config.code === "org-unit-types";
 }
 
 function shouldHideField(config: DictionaryConfig, field: DictionaryField): boolean {
