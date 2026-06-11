@@ -54,6 +54,13 @@ export type EmployeeCreatePayload = {
   employment_rate?: number | null;
 };
 
+export type EmployeeUpdatePayload = {
+  full_name?: string;
+  employment_rate?: number | null;
+  date_from?: string | null;
+  position_id?: number;
+};
+
 export type LinkedUserDTO = {
   user_id: number;
   login: string | null;

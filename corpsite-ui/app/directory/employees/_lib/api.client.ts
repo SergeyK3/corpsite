@@ -4,6 +4,7 @@ import type {
   EmployeesResponse,
   EmployeeDetails,
   EmployeeCreatePayload,
+  EmployeeUpdatePayload,
   UserDTO,
   UserCreatePayload,
 } from "./types";
@@ -83,6 +84,32 @@ async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
 
   const res = await fetch(`${apiBase}${path}`, {
     method: "POST",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+async function apiPatchJson<T>(path: string, body?: unknown): Promise<T> {
+  const apiBase = getApiBase();
+  const devUserId = getDevUserId();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (devUserId) headers["X-User-Id"] = devUserId;
+  maybeAddAuthHeader(headers);
+
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "PATCH",
     headers,
     body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
@@ -179,6 +206,47 @@ export async function createEmployee(body: EmployeeCreatePayload): Promise<Emplo
   }
 
   return apiPostJson<EmployeeDetails>("/directory/employees", payload);
+}
+
+/**
+ * Редактирование сотрудника
+ * Backend: PATCH /directory/employees/{id}
+ */
+export async function updateEmployee(
+  employeeId: string,
+  body: EmployeeUpdatePayload
+): Promise<EmployeeDetails> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+
+  const payload: Record<string, unknown> = {};
+
+  if (body.full_name != null) {
+    const full_name = String(body.full_name).trim();
+    if (!full_name) throw new Error("full_name is required");
+    payload.full_name = full_name;
+  }
+
+  if (body.date_from != null) {
+    const dateFrom = String(body.date_from).trim();
+    if (dateFrom) payload.date_from = dateFrom;
+  }
+
+  if (body.employment_rate != null && Number.isFinite(Number(body.employment_rate))) {
+    payload.employment_rate = Number(body.employment_rate);
+  }
+
+  if (body.position_id != null) {
+    const position_id = Number(body.position_id);
+    if (!Number.isFinite(position_id) || position_id < 1) throw new Error("position_id is required");
+    payload.position_id = position_id;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    throw new Error("At least one field is required");
+  }
+
+  return apiPatchJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}`, payload);
 }
 
 /**

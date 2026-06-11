@@ -825,3 +825,87 @@ def terminate_employee(
         conn.execute(q_deactivate_user, {"employee_id": emp_id})
 
     return target_id_text
+
+
+def update_employee(
+    *,
+    employee_id: str,
+    full_name: Optional[str] = None,
+    employment_rate: Optional[float] = None,
+    date_from: Optional[date] = None,
+    position_id: Optional[int] = None,
+) -> str:
+    target_id_text = _normalize_employee_id_text(employee_id)
+    if not target_id_text:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    if all(v is None for v in (full_name, employment_rate, date_from, position_id)):
+        raise HTTPException(status_code=422, detail="At least one field is required.")
+
+    q_fetch = text(
+        """
+        SELECT employee_id, date_to
+        FROM public.employees
+        WHERE CAST(employee_id AS TEXT) = :id_text
+        LIMIT 1
+        """
+    )
+
+    with engine.begin() as conn:
+        row = conn.execute(q_fetch, {"id_text": target_id_text}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        emp_id = int(row["employee_id"])
+        existing_date_to = row.get("date_to")
+
+        updates: List[str] = []
+        params: Dict[str, Any] = {"employee_id": emp_id}
+
+        if full_name is not None:
+            normalized_name = " ".join((full_name or "").split()).strip()
+            if not normalized_name:
+                raise HTTPException(status_code=422, detail="full_name is required.")
+            updates.append("full_name = :full_name")
+            params["full_name"] = normalized_name
+
+        if employment_rate is not None:
+            rate = float(employment_rate)
+            if rate <= 0 or rate > 2:
+                raise HTTPException(status_code=422, detail="employment_rate must be > 0 and <= 2.")
+            updates.append("employment_rate = :employment_rate")
+            params["employment_rate"] = rate
+
+        if date_from is not None:
+            if existing_date_to is not None and date_from > existing_date_to:
+                raise HTTPException(status_code=422, detail="date_from must be on or before date_to.")
+            updates.append("date_from = :date_from")
+            params["date_from"] = date_from
+
+        if position_id is not None:
+            pos_row = conn.execute(
+                text(
+                    """
+                    SELECT position_id
+                    FROM public.positions
+                    WHERE position_id = :position_id
+                    LIMIT 1
+                    """
+                ),
+                {"position_id": int(position_id)},
+            ).first()
+            if pos_row is None:
+                raise HTTPException(status_code=404, detail="Position not found.")
+            updates.append("position_id = :position_id")
+            params["position_id"] = int(position_id)
+
+        q_update = text(
+            f"""
+            UPDATE public.employees
+            SET {", ".join(updates)}
+            WHERE employee_id = :employee_id
+            """
+        )
+        conn.execute(q_update, params)
+
+    return target_id_text

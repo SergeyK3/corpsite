@@ -5,7 +5,7 @@ from datetime import date
 from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -19,6 +19,7 @@ from app.services.directory_service import (
     get_employee as svc_get_employee,
     create_employee as svc_create_employee,
     terminate_employee as svc_terminate_employee,
+    update_employee as svc_update_employee,
 )
 
 from .common import as_http500, call_service
@@ -52,6 +53,15 @@ class EmployeeCreateIn(BaseModel):
 
 class EmployeeTerminateIn(BaseModel):
     date_to: Optional[date] = None
+
+
+class EmployeeUpdateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    date_from: Optional[date] = None
+    position_id: Optional[int] = Field(default=None, ge=1)
 
 
 def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -384,6 +394,45 @@ def create_employee(
         raise
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Unable to create employee.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.patch("/employees/{employee_id}")
+def update_employee(
+    employee_id: str = Path(..., min_length=1),
+    body: EmployeeUpdateIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        if body.model_dump(exclude_unset=True) == {}:
+            raise HTTPException(status_code=422, detail="At least one field is required.")
+
+        updates = body.model_dump(exclude_unset=True)
+
+        call_service(
+            svc_update_employee,
+            employee_id=employee_id,
+            full_name=updates.get("full_name"),
+            employment_rate=updates.get("employment_rate"),
+            date_from=updates.get("date_from"),
+            position_id=updates.get("position_id"),
+        )
+
+        return call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to update employee.")
     except Exception as e:
         raise as_http500(e)
 

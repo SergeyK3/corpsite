@@ -657,6 +657,10 @@ export default function EmployeesPageClient(props: Props) {
         onClose={handleCloseDrawer}
         onTerminate={handleTerminateFromDrawer}
         onCreateUser={handleOpenUserCreateDrawer}
+        onSaved={async () => {
+          await loadItems();
+          setEmployeeRefreshToken((t) => t + 1);
+        }}
         refreshToken={employeeRefreshToken}
       />
 
