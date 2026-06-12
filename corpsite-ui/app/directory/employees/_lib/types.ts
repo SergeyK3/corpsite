@@ -67,6 +67,8 @@ export type LinkedUserDTO = {
   role_id: number | null;
   role_name: string | null;
   is_active: boolean;
+  telegram_id?: number | null;
+  telegram_username?: string | null;
 };
 
 export type UserDTO = {

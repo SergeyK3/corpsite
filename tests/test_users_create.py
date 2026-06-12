@@ -55,6 +55,30 @@ def _create_employee(conn, *, full_name: str, org_unit_id: int, position_id: int
     )
 
 
+def _set_user_telegram(
+    user_id: int,
+    *,
+    telegram_id: Any = None,
+    telegram_username: Any = None,
+) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.users
+                SET telegram_id = :telegram_id,
+                    telegram_username = :telegram_username
+                WHERE user_id = :user_id
+                """
+            ),
+            {
+                "user_id": int(user_id),
+                "telegram_id": telegram_id,
+                "telegram_username": telegram_username,
+            },
+        )
+
+
 def _cleanup_users_by_logins(logins: List[str]) -> None:
     if not logins:
         return
@@ -342,6 +366,48 @@ def test_get_employee_shows_linked_user(client, seed, privileged_headers):
         assert body["user"]["login"] == login
         assert body["user"]["role_id"] == int(seed["executor_role_id"])
         assert body["user"]["is_active"] is True
+    finally:
+        _cleanup_users_by_logins([login])
+        _cleanup_employees(created_employee_ids)
+        _cleanup_positions(created_position_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_get_employee_shows_linked_user_telegram(client, seed, privileged_headers):
+    employee_id, _position_id, created_employee_ids, created_position_ids = _make_employee(seed)
+    login = f"pytest_user_{uuid4().hex[:10]}"
+    password = "SecretPass1"
+    telegram_id = 1234567890123
+    telegram_username = "pytest_tg_user"
+
+    try:
+        create_resp = client.post(
+            "/directory/users",
+            json={
+                "employee_id": employee_id,
+                "role_id": int(seed["executor_role_id"]),
+                "login": login,
+                "password": password,
+            },
+            headers=privileged_headers,
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        created_user = create_resp.json()
+        _set_user_telegram(
+            int(created_user["user_id"]),
+            telegram_id=telegram_id,
+            telegram_username=telegram_username,
+        )
+
+        get_resp = client.get(
+            f"/directory/employees/{employee_id}",
+            headers=privileged_headers,
+        )
+        assert get_resp.status_code == 200, get_resp.text
+        body = get_resp.json()
+        assert body.get("user") is not None
+        assert body["user"]["telegram_id"] == telegram_id
+        assert body["user"]["telegram_username"] == telegram_username
     finally:
         _cleanup_users_by_logins([login])
         _cleanup_employees(created_employee_ids)

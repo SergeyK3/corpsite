@@ -435,7 +435,9 @@ def _fetch_linked_user(employee_id: Any) -> Optional[Dict[str, Any]]:
             u.login,
             u.role_id,
             r.name AS role_name,
-            u.is_active
+            u.is_active,
+            u.telegram_id,
+            u.telegram_username
         FROM public.users u
         LEFT JOIN public.roles r
           ON r.role_id = u.role_id
@@ -450,12 +452,31 @@ def _fetch_linked_user(employee_id: Any) -> Optional[Dict[str, Any]]:
         return None
 
     role_id_raw = row.get("role_id")
+    tg_id_raw = row.get("telegram_id")
+    telegram_id: Optional[int] = None
+    if tg_id_raw is not None:
+        try:
+            tg_id = int(tg_id_raw)
+            if tg_id > 0:
+                telegram_id = tg_id
+        except (TypeError, ValueError):
+            pass
+
+    tg_username_raw = row.get("telegram_username")
+    telegram_username = (
+        str(tg_username_raw).strip() if tg_username_raw is not None else None
+    )
+    if telegram_username == "":
+        telegram_username = None
+
     return {
         "user_id": int(row["user_id"]),
         "login": str(row["login"]).strip() if row.get("login") is not None else None,
         "role_id": int(role_id_raw) if role_id_raw is not None else None,
         "role_name": str(row["role_name"]).strip() if row.get("role_name") is not None else None,
         "is_active": bool(row.get("is_active")),
+        "telegram_id": telegram_id,
+        "telegram_username": telegram_username,
     }
 
 
