@@ -103,3 +103,6 @@ sql/fix_titles.sql
 __tmp__*
 tmp/
 .venv/
+
+ Local sync exports
+data/sync/
