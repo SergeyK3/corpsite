@@ -1,7 +1,8 @@
 # FILE: app/services/directory_service.py
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
@@ -930,3 +931,366 @@ def update_employee(
         conn.execute(q_update, params)
 
     return target_id_text
+
+
+# ---------------------------
+# Employee events (Phase 3b)
+# ---------------------------
+def _normalize_employee_event(row: Dict[str, Any]) -> Dict[str, Any]:
+    def _rate(v: Any) -> Optional[float]:
+        if v is None:
+            return None
+        if isinstance(v, Decimal):
+            return float(v)
+        return float(v)
+
+    effective = row.get("effective_date")
+    created_at = row.get("created_at")
+
+    return {
+        "event_id": int(row["event_id"]),
+        "event_type": str(row["event_type"]),
+        "effective_date": effective.isoformat() if hasattr(effective, "isoformat") else effective,
+        "from_org_unit_id": int(row["from_org_unit_id"]) if row.get("from_org_unit_id") is not None else None,
+        "to_org_unit_id": int(row["to_org_unit_id"]) if row.get("to_org_unit_id") is not None else None,
+        "from_position_id": int(row["from_position_id"]) if row.get("from_position_id") is not None else None,
+        "to_position_id": int(row["to_position_id"]) if row.get("to_position_id") is not None else None,
+        "from_rate": _rate(row.get("from_rate")),
+        "to_rate": _rate(row.get("to_rate")),
+        "order_ref": row.get("order_ref"),
+        "comment": row.get("comment"),
+        "created_by": int(row["created_by"]),
+        "created_at": (
+            created_at.isoformat()
+            if isinstance(created_at, datetime)
+            else created_at
+        ),
+    }
+
+
+def _apply_employee_org_change(
+    *,
+    employee_id: str,
+    event_type: str,
+    to_org_unit_id: int,
+    to_position_id: Optional[int],
+    to_employment_rate: Optional[float],
+    effective_date: date,
+    order_ref: Optional[str],
+    comment: Optional[str],
+    created_by: int,
+    require_active: bool,
+    require_different_org_unit: bool,
+) -> Dict[str, Any]:
+    target_id_text = _normalize_employee_id_text(employee_id)
+    if not target_id_text:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    q_fetch = text(
+        """
+        SELECT
+            employee_id,
+            org_unit_id,
+            position_id,
+            employment_rate,
+            is_active
+        FROM public.employees
+        WHERE CAST(employee_id AS TEXT) = :id_text
+        FOR UPDATE
+        """
+    )
+    q_org_unit = text(
+        """
+        SELECT unit_id
+        FROM public.org_units
+        WHERE unit_id = :unit_id
+        LIMIT 1
+        """
+    )
+    q_position = text(
+        """
+        SELECT position_id
+        FROM public.positions
+        WHERE position_id = :position_id
+        LIMIT 1
+        """
+    )
+    q_update_employee = text(
+        """
+        UPDATE public.employees
+        SET org_unit_id = :org_unit_id,
+            position_id = :position_id,
+            employment_rate = :employment_rate
+        WHERE employee_id = :employee_id
+        """
+    )
+    q_update_user_unit = text(
+        """
+        UPDATE public.users
+        SET unit_id = :unit_id
+        WHERE employee_id = :employee_id
+        """
+    )
+    q_insert_event = text(
+        """
+        INSERT INTO public.employee_events (
+            employee_id,
+            event_type,
+            effective_date,
+            from_org_unit_id,
+            from_position_id,
+            from_rate,
+            to_org_unit_id,
+            to_position_id,
+            to_rate,
+            order_ref,
+            comment,
+            created_by
+        )
+        VALUES (
+            :employee_id,
+            :event_type,
+            :effective_date,
+            :from_org_unit_id,
+            :from_position_id,
+            :from_rate,
+            :to_org_unit_id,
+            :to_position_id,
+            :to_rate,
+            :order_ref,
+            :comment,
+            :created_by
+        )
+        RETURNING
+            event_id,
+            event_type,
+            effective_date,
+            from_org_unit_id,
+            from_position_id,
+            from_rate,
+            to_org_unit_id,
+            to_position_id,
+            to_rate,
+            order_ref,
+            comment,
+            created_by,
+            created_at
+        """
+    )
+
+    with engine.begin() as conn:
+        row = conn.execute(q_fetch, {"id_text": target_id_text}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        emp_id = int(row["employee_id"])
+        is_active = row.get("is_active")
+        if require_active and is_active is False:
+            raise HTTPException(status_code=409, detail="Employee is inactive.")
+
+        from_org_unit_id = int(row["org_unit_id"])
+        from_position_id = int(row["position_id"])
+        from_rate_raw = row.get("employment_rate")
+        from_rate = float(from_rate_raw) if from_rate_raw is not None else None
+
+        org_row = conn.execute(q_org_unit, {"unit_id": int(to_org_unit_id)}).first()
+        if org_row is None:
+            raise HTTPException(status_code=404, detail="Org unit not found.")
+
+        effective_to_position_id = int(to_position_id) if to_position_id is not None else from_position_id
+        pos_row = conn.execute(q_position, {"position_id": effective_to_position_id}).first()
+        if pos_row is None:
+            raise HTTPException(status_code=404, detail="Position not found.")
+
+        if to_employment_rate is not None:
+            effective_to_rate = float(to_employment_rate)
+            if effective_to_rate <= 0 or effective_to_rate > 2:
+                raise HTTPException(status_code=422, detail="employment_rate must be > 0 and <= 2.")
+        else:
+            effective_to_rate = from_rate if from_rate is not None else 1.0
+
+        if require_different_org_unit and from_org_unit_id == int(to_org_unit_id):
+            raise HTTPException(
+                status_code=422,
+                detail="to_org_unit_id must differ from current org unit for transfer.",
+            )
+
+        if not require_different_org_unit:
+            position_changed = to_position_id is not None and int(to_position_id) != from_position_id
+            org_changed = from_org_unit_id != int(to_org_unit_id)
+            if not org_changed and not position_changed:
+                raise HTTPException(status_code=422, detail="At least one of org unit or position must change.")
+
+        conn.execute(
+            q_update_employee,
+            {
+                "employee_id": emp_id,
+                "org_unit_id": int(to_org_unit_id),
+                "position_id": effective_to_position_id,
+                "employment_rate": effective_to_rate,
+            },
+        )
+        conn.execute(
+            q_update_user_unit,
+            {"employee_id": emp_id, "unit_id": int(to_org_unit_id)},
+        )
+
+        event_row = conn.execute(
+            q_insert_event,
+            {
+                "employee_id": emp_id,
+                "event_type": event_type,
+                "effective_date": effective_date,
+                "from_org_unit_id": from_org_unit_id,
+                "from_position_id": from_position_id,
+                "from_rate": from_rate,
+                "to_org_unit_id": int(to_org_unit_id),
+                "to_position_id": effective_to_position_id,
+                "to_rate": effective_to_rate,
+                "order_ref": order_ref,
+                "comment": comment,
+                "created_by": int(created_by),
+            },
+        ).mappings().first()
+
+    if not event_row:
+        raise HTTPException(status_code=500, detail="Failed to record employee event.")
+
+    return _normalize_employee_event(dict(event_row))
+
+
+def transfer_employee(
+    *,
+    employee_id: str,
+    to_org_unit_id: int,
+    to_position_id: Optional[int] = None,
+    to_employment_rate: Optional[float] = None,
+    effective_date: date,
+    order_ref: Optional[str] = None,
+    comment: Optional[str] = None,
+    created_by: int,
+) -> Dict[str, Any]:
+    return _apply_employee_org_change(
+        employee_id=employee_id,
+        event_type="TRANSFER",
+        to_org_unit_id=to_org_unit_id,
+        to_position_id=to_position_id,
+        to_employment_rate=to_employment_rate,
+        effective_date=effective_date,
+        order_ref=order_ref,
+        comment=comment,
+        created_by=created_by,
+        require_active=True,
+        require_different_org_unit=True,
+    )
+
+
+def correct_employee_org_unit(
+    *,
+    employee_id: str,
+    to_org_unit_id: int,
+    to_position_id: Optional[int] = None,
+    effective_date: date,
+    comment: str,
+    created_by: int,
+) -> Dict[str, Any]:
+    normalized_comment = (comment or "").strip()
+    if not normalized_comment:
+        raise HTTPException(status_code=422, detail="comment is required.")
+
+    return _apply_employee_org_change(
+        employee_id=employee_id,
+        event_type="CORRECTION",
+        to_org_unit_id=to_org_unit_id,
+        to_position_id=to_position_id,
+        to_employment_rate=None,
+        effective_date=effective_date,
+        order_ref=None,
+        comment=normalized_comment,
+        created_by=created_by,
+        require_active=False,
+        require_different_org_unit=False,
+    )
+
+
+def list_employee_events(
+    *,
+    employee_id: str,
+    event_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    target_id_text = _normalize_employee_id_text(employee_id)
+    if not target_id_text:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    allowed_types = {"TRANSFER", "CORRECTION", "HIRE", "TERMINATION"}
+    if event_type is not None:
+        normalized_type = event_type.strip().upper()
+        if normalized_type not in allowed_types:
+            raise HTTPException(status_code=422, detail="Invalid event_type filter.")
+        event_type = normalized_type
+
+    q_exists = text(
+        """
+        SELECT employee_id
+        FROM public.employees
+        WHERE CAST(employee_id AS TEXT) = :id_text
+        LIMIT 1
+        """
+    )
+
+    where_parts = ["employee_id = :employee_id"]
+    params: Dict[str, Any] = {
+        "employee_id": None,
+        "limit": int(limit),
+        "offset": int(offset),
+    }
+
+    if event_type is not None:
+        where_parts.append("event_type = :event_type")
+        params["event_type"] = event_type
+
+    where_sql = " AND ".join(where_parts)
+
+    q_total = text(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM public.employee_events
+        WHERE {where_sql}
+        """
+    )
+    q_list = text(
+        f"""
+        SELECT
+            event_id,
+            event_type,
+            effective_date,
+            from_org_unit_id,
+            from_position_id,
+            from_rate,
+            to_org_unit_id,
+            to_position_id,
+            to_rate,
+            order_ref,
+            comment,
+            created_by,
+            created_at
+        FROM public.employee_events
+        WHERE {where_sql}
+        ORDER BY effective_date DESC, event_id DESC
+        LIMIT :limit OFFSET :offset
+        """
+    )
+
+    with engine.begin() as conn:
+        emp_row = conn.execute(q_exists, {"id_text": target_id_text}).mappings().first()
+        if not emp_row:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        params["employee_id"] = int(emp_row["employee_id"])
+        total = int(conn.execute(q_total, params).mappings().first()["cnt"])
+        rows = conn.execute(q_list, params).mappings().all()
+
+    items = [_normalize_employee_event(dict(r)) for r in rows]
+    return {"items": items, "total": total}

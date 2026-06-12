@@ -20,6 +20,9 @@ from app.services.directory_service import (
     create_employee as svc_create_employee,
     terminate_employee as svc_terminate_employee,
     update_employee as svc_update_employee,
+    transfer_employee as svc_transfer_employee,
+    correct_employee_org_unit as svc_correct_employee_org_unit,
+    list_employee_events as svc_list_employee_events,
 )
 
 from .common import as_http500, call_service
@@ -62,6 +65,22 @@ class EmployeeUpdateIn(BaseModel):
     employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
     date_from: Optional[date] = None
     position_id: Optional[int] = Field(default=None, ge=1)
+
+
+class EmployeeTransferIn(BaseModel):
+    to_org_unit_id: int = Field(..., ge=1)
+    to_position_id: Optional[int] = Field(default=None, ge=1)
+    to_employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    effective_date: date
+    order_ref: Optional[str] = Field(default=None, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class EmployeeCorrectOrgUnitIn(BaseModel):
+    to_org_unit_id: int = Field(..., ge=1)
+    to_position_id: Optional[int] = Field(default=None, ge=1)
+    effective_date: date
+    comment: str = Field(..., min_length=1, max_length=2000)
 
 
 def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -460,6 +479,108 @@ def terminate_employee(
             scope_unit_id=None,
             scope_unit_ids=None,
             employee_id=employee_id,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/transfer")
+def transfer_employee(
+    employee_id: str = Path(..., min_length=1),
+    body: EmployeeTransferIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        event = call_service(
+            svc_transfer_employee,
+            employee_id=employee_id,
+            to_org_unit_id=body.to_org_unit_id,
+            to_position_id=body.to_position_id,
+            to_employment_rate=body.to_employment_rate,
+            effective_date=body.effective_date,
+            order_ref=body.order_ref,
+            comment=body.comment,
+            created_by=int(user["user_id"]),
+        )
+
+        item = call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+
+        return {"item": item, "event": event}
+
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to transfer employee.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/correct-org-unit")
+def correct_employee_org_unit(
+    employee_id: str = Path(..., min_length=1),
+    body: EmployeeCorrectOrgUnitIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        event = call_service(
+            svc_correct_employee_org_unit,
+            employee_id=employee_id,
+            to_org_unit_id=body.to_org_unit_id,
+            to_position_id=body.to_position_id,
+            effective_date=body.effective_date,
+            comment=body.comment,
+            created_by=int(user["user_id"]),
+        )
+
+        item = call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+
+        return {"item": item, "event": event}
+
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to correct employee org unit.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/employees/{employee_id}/events")
+def list_employee_events(
+    employee_id: str = Path(..., min_length=1),
+    event_type: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        return call_service(
+            svc_list_employee_events,
+            employee_id=employee_id,
+            event_type=event_type,
+            limit=limit,
+            offset=offset,
         )
 
     except HTTPException:
