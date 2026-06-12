@@ -61,6 +61,36 @@ export type EmployeeUpdatePayload = {
   position_id?: number;
 };
 
+export type EmployeeEventDTO = {
+  event_id: number;
+  event_type: string;
+  effective_date: string;
+  from_org_unit_id: number | null;
+  to_org_unit_id: number | null;
+  from_position_id: number | null;
+  to_position_id: number | null;
+  from_rate: number | null;
+  to_rate: number | null;
+  order_ref: string | null;
+  comment: string | null;
+  created_by: number;
+  created_at: string;
+};
+
+export type EmployeeTransferPayload = {
+  to_org_unit_id: number;
+  to_position_id?: number;
+  to_employment_rate?: number;
+  effective_date: string;
+  order_ref?: string;
+  comment?: string;
+};
+
+export type EmployeeTransferResponse = {
+  item: EmployeeDetails;
+  event: EmployeeEventDTO;
+};
+
 export type LinkedUserDTO = {
   user_id: number;
   login: string | null;

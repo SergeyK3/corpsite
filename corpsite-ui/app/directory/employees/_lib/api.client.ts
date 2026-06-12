@@ -5,6 +5,8 @@ import type {
   EmployeeDetails,
   EmployeeCreatePayload,
   EmployeeUpdatePayload,
+  EmployeeTransferPayload,
+  EmployeeTransferResponse,
   UserDTO,
   UserCreatePayload,
 } from "./types";
@@ -247,6 +249,50 @@ export async function updateEmployee(
   }
 
   return apiPatchJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}`, payload);
+}
+
+/**
+ * Кадровый перевод сотрудника
+ * Backend: POST /directory/employees/{id}/transfer
+ */
+export async function transferEmployee(
+  employeeId: string,
+  body: EmployeeTransferPayload
+): Promise<EmployeeTransferResponse> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+
+  const to_org_unit_id = Number(body.to_org_unit_id);
+  if (!Number.isFinite(to_org_unit_id) || to_org_unit_id < 1) {
+    throw new Error("to_org_unit_id is required");
+  }
+
+  const effective_date = String(body.effective_date ?? "").trim();
+  if (!effective_date) throw new Error("effective_date is required");
+
+  const payload: Record<string, unknown> = {
+    to_org_unit_id,
+    effective_date,
+  };
+
+  if (body.to_position_id != null && Number.isFinite(Number(body.to_position_id))) {
+    payload.to_position_id = Number(body.to_position_id);
+  }
+
+  if (body.to_employment_rate != null && Number.isFinite(Number(body.to_employment_rate))) {
+    payload.to_employment_rate = Number(body.to_employment_rate);
+  }
+
+  const orderRef = String(body.order_ref ?? "").trim();
+  if (orderRef) payload.order_ref = orderRef;
+
+  const comment = String(body.comment ?? "").trim();
+  if (comment) payload.comment = comment;
+
+  return apiPostJson<EmployeeTransferResponse>(
+    `/directory/employees/${encodeURIComponent(id)}/transfer`,
+    payload
+  );
 }
 
 /**

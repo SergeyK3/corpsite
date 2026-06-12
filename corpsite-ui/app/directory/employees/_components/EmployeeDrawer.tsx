@@ -8,10 +8,13 @@ import {
   getEmployees,
   getPositions,
   mapApiErrorToMessage,
+  transferEmployee,
   updateEmployee,
 } from "../_lib/api.client";
 import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
+import EmployeeTransferDrawer from "./EmployeeTransferDrawer";
+import type { EmployeeTransferFormValues } from "./EmployeeTransferForm";
 
 type PositionOption = {
   id: number;
@@ -211,6 +214,9 @@ export default function EmployeeDrawer({
   const [positionsOrgUnitHint, setPositionsOrgUnitHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferSaving, setTransferSaving] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
 
   const loadDetails = useCallback(async () => {
     if (!employeeId) {
@@ -239,6 +245,8 @@ export default function EmployeeDrawer({
       setError(null);
       setMode("view");
       setSaveError(null);
+      setTransferOpen(false);
+      setTransferError(null);
       setPositionsOrgUnitHint(null);
       setAllPositionOptions([]);
       setUnitPositionIds(null);
@@ -363,6 +371,60 @@ export default function EmployeeDrawer({
     }
   }
 
+  function handleOpenTransfer() {
+    if (!details || !isActive(details)) return;
+    setTransferError(null);
+    setTransferOpen(true);
+  }
+
+  function handleCloseTransfer() {
+    if (transferSaving) return;
+    setTransferOpen(false);
+    setTransferError(null);
+  }
+
+  async function handleTransferSubmit(values: EmployeeTransferFormValues) {
+    if (!employeeId || !details) return;
+
+    setTransferSaving(true);
+    setTransferError(null);
+
+    try {
+      const toOrgUnitId = Number(values.to_org_unit_id);
+      if (!Number.isFinite(toOrgUnitId) || toOrgUnitId < 1) {
+        setTransferError("Выберите целевое отделение.");
+        setTransferSaving(false);
+        return;
+      }
+
+      const payload: Parameters<typeof transferEmployee>[1] = {
+        to_org_unit_id: toOrgUnitId,
+        effective_date: values.effective_date,
+      };
+
+      const toPositionId = Number(values.to_position_id);
+      if (Number.isFinite(toPositionId) && toPositionId > 0) {
+        payload.to_position_id = toPositionId;
+      }
+
+      const orderRef = values.order_ref.trim();
+      if (orderRef) payload.order_ref = orderRef;
+
+      const comment = values.comment.trim();
+      if (comment) payload.comment = comment;
+
+      const result = await transferEmployee(employeeId, payload);
+
+      setDetails(result.item);
+      setTransferOpen(false);
+      onSaved?.();
+    } catch (e) {
+      setTransferError(mapApiErrorToMessage(e));
+    } finally {
+      setTransferSaving(false);
+    }
+  }
+
   if (!open) return null;
 
   const displayFio =
@@ -444,6 +506,10 @@ export default function EmployeeDrawer({
     "rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4";
 
   function handleBackdropClick() {
+    if (transferOpen) {
+      handleCloseTransfer();
+      return;
+    }
     if (mode === "edit") {
       handleCancelEdit();
       return;
@@ -507,13 +573,22 @@ export default function EmployeeDrawer({
             ) : (
               <>
                 {canEdit ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleEnterEdit()}
-                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                  >
-                    Изменить
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleEnterEdit()}
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    >
+                      Изменить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenTransfer}
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    >
+                      Перевести
+                    </button>
+                  </>
                 ) : null}
                 <button
                   type="button"
@@ -756,6 +831,15 @@ export default function EmployeeDrawer({
           ) : null}
         </div>
       </div>
+
+      <EmployeeTransferDrawer
+        open={transferOpen}
+        details={details}
+        saving={transferSaving}
+        error={transferError}
+        onClose={handleCloseTransfer}
+        onSubmit={handleTransferSubmit}
+      />
     </div>
   );
 }
