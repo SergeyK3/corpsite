@@ -199,6 +199,97 @@ def _make_transfer_fixture(seed) -> tuple[int, int, int, List[int], List[int], L
     )
 
 
+def _position_name(position_id: int) -> str:
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT name FROM public.positions WHERE position_id = :position_id"),
+            {"position_id": int(position_id)},
+        ).mappings().first()
+    assert row is not None
+    return str(row["name"])
+
+
+def _create_linked_user(
+    client,
+    *,
+    employee_id: int,
+    role_id: int,
+    headers: Dict[str, str],
+) -> tuple[int, str]:
+    login = f"pytest_xfer_{uuid4().hex[:10]}"
+    create_user = client.post(
+        "/directory/users",
+        json={
+            "employee_id": employee_id,
+            "role_id": int(role_id),
+            "login": login,
+            "password": "SecretPass1",
+        },
+        headers=headers,
+    )
+    assert create_user.status_code == 201, create_user.text
+    return int(create_user.json()["user_id"]), login
+
+
+def _working_contact_user_ids(client, headers: Dict[str, str], **params) -> set[int]:
+    resp = client.get("/directory/working-contacts", params=params, headers=headers)
+    assert resp.status_code == 200, resp.text
+    return {
+        int(x.get("user_id") or x.get("id") or 0)
+        for x in (resp.json().get("items") or [])
+    }
+
+
+def _make_three_unit_fixture(seed) -> tuple[int, int, int, int, List[int], List[int], List[int]]:
+    """Employee in from_unit; to_unit and third_unit available for chained transfers."""
+    created_unit_ids: List[int] = []
+    created_position_ids: List[int] = []
+    created_employee_ids: List[int] = []
+
+    with engine.begin() as conn:
+        if not table_exists(conn, "employees"):
+            pytest.skip("employees table not available")
+        if not table_exists(conn, "employee_events"):
+            pytest.skip("employee_events table not available")
+
+        group_id = _find_group_id(conn)
+        from_unit_id = int(seed["unit_id"])
+        to_unit_id = _create_unit_with_group(
+            conn,
+            name=f"pytest_xfer_to_{uuid4().hex[:8]}",
+            group_id=group_id,
+        )
+        third_unit_id = _create_unit_with_group(
+            conn,
+            name=f"pytest_xfer_third_{uuid4().hex[:8]}",
+            group_id=group_id,
+        )
+        created_unit_ids.extend([to_unit_id, third_unit_id])
+
+        position_id = _create_position(conn, name=f"pytest_xfer_pos_{uuid4().hex[:8]}")
+        created_position_ids.append(position_id)
+        new_position_id = _create_position(conn, name=f"pytest_xfer_pos2_{uuid4().hex[:8]}")
+        created_position_ids.append(new_position_id)
+
+        employee_id = _create_employee(
+            conn,
+            full_name=f"PytestTransfer {uuid4().hex[:8]}",
+            org_unit_id=from_unit_id,
+            position_id=position_id,
+        )
+        created_employee_ids.append(employee_id)
+
+    return (
+        int(employee_id),
+        int(from_unit_id),
+        int(to_unit_id),
+        int(third_unit_id),
+        created_employee_ids,
+        created_position_ids,
+        created_unit_ids,
+    )
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_transfer_employee_returns_item_and_event(client, seed, privileged_headers):
     employee_id, from_unit_id, to_unit_id, emp_ids, pos_ids, unit_ids = _make_transfer_fixture(seed)
@@ -412,6 +503,290 @@ def test_list_employee_events_unprivileged_returns_403(client, seed):
             headers=auth_headers(seed["executor_user_id"]),
         )
         assert resp.status_code == 403, resp.text
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_working_contacts_reflects_transfer_unit_and_position(client, seed, privileged_headers):
+    employee_id, from_unit_id, to_unit_id, emp_ids, pos_ids, unit_ids = _make_transfer_fixture(seed)
+    new_position_name = _position_name(pos_ids[1])
+    login: str | None = None
+
+    try:
+        created_user_id, login = _create_linked_user(
+            client,
+            employee_id=employee_id,
+            role_id=int(seed["executor_role_id"]),
+            headers=privileged_headers,
+        )
+
+        before_old = _working_contact_user_ids(
+            client,
+            privileged_headers,
+            org_unit_id=from_unit_id,
+        )
+        before_new = _working_contact_user_ids(
+            client,
+            privileged_headers,
+            org_unit_id=to_unit_id,
+        )
+        assert created_user_id in before_old
+        assert created_user_id not in before_new
+
+        transfer = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "to_position_id": pos_ids[1],
+                "effective_date": "2026-06-15",
+            },
+            headers=privileged_headers,
+        )
+        assert transfer.status_code == 200, transfer.text
+
+        after_old = _working_contact_user_ids(
+            client,
+            privileged_headers,
+            org_unit_id=from_unit_id,
+        )
+        after_new = _working_contact_user_ids(
+            client,
+            privileged_headers,
+            org_unit_id=to_unit_id,
+        )
+        assert created_user_id not in after_old
+        assert created_user_id in after_new
+
+        detail = client.get(
+            f"/directory/working-contacts/{created_user_id}",
+            headers=privileged_headers,
+        )
+        assert detail.status_code == 200, detail.text
+        contact = detail.json()
+        assert contact["org_unit_id"] == to_unit_id
+        assert contact["position_id"] == pos_ids[1]
+        assert contact["position_name"] == new_position_name
+    finally:
+        if login:
+            _cleanup_users_by_logins([login])
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_transfer_inactive_employee_returns_409(client, seed, privileged_headers):
+    employee_id, from_unit_id, to_unit_id, emp_ids, pos_ids, unit_ids = _make_transfer_fixture(seed)
+
+    try:
+        terminate = client.post(
+            f"/directory/employees/{employee_id}/terminate",
+            headers=privileged_headers,
+        )
+        assert terminate.status_code == 200, terminate.text
+
+        resp = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "effective_date": "2026-06-15",
+            },
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 409, resp.text
+        assert resp.json()["detail"] == "Employee is inactive."
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_correct_org_unit_on_inactive_employee_returns_200(client, seed, privileged_headers):
+    employee_id, from_unit_id, to_unit_id, emp_ids, pos_ids, unit_ids = _make_transfer_fixture(seed)
+
+    try:
+        terminate = client.post(
+            f"/directory/employees/{employee_id}/terminate",
+            headers=privileged_headers,
+        )
+        assert terminate.status_code == 200, terminate.text
+
+        resp = client.post(
+            f"/directory/employees/{employee_id}/correct-org-unit",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "effective_date": "2026-06-01",
+                "comment": "Fix org unit after import on terminated record",
+            },
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["item"]["org_unit"]["unit_id"] == to_unit_id
+        assert body["item"]["status"] == "inactive"
+        assert body["event"]["event_type"] == "CORRECTION"
+        assert body["event"]["from_org_unit_id"] == from_unit_id
+        assert body["event"]["to_org_unit_id"] == to_unit_id
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_list_employee_events_same_effective_date_orders_by_event_id_desc(client, seed, privileged_headers):
+    employee_id, from_unit_id, to_unit_id, third_unit_id, emp_ids, pos_ids, unit_ids = _make_three_unit_fixture(
+        seed
+    )
+
+    try:
+        first = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "effective_date": "2026-06-15",
+                "comment": "First transfer",
+            },
+            headers=privileged_headers,
+        )
+        assert first.status_code == 200, first.text
+        first_event_id = int(first.json()["event"]["event_id"])
+
+        second = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": third_unit_id,
+                "effective_date": "2026-06-15",
+                "comment": "Second transfer same date",
+            },
+            headers=privileged_headers,
+        )
+        assert second.status_code == 200, second.text
+        second_event_id = int(second.json()["event"]["event_id"])
+
+        assert second_event_id > first_event_id
+
+        resp = client.get(
+            f"/directory/employees/{employee_id}/events",
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["total"] == 2
+        assert [e["event_id"] for e in body["items"]] == [second_event_id, first_event_id]
+        assert all(e["effective_date"] == "2026-06-15" for e in body["items"])
+        assert body["items"][0]["to_org_unit_id"] == third_unit_id
+        assert body["items"][1]["to_org_unit_id"] == to_unit_id
+        assert body["items"][1]["from_org_unit_id"] == from_unit_id
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_list_employee_events_pagination_and_type_filters(client, seed, privileged_headers):
+    employee_id, from_unit_id, to_unit_id, third_unit_id, emp_ids, pos_ids, unit_ids = _make_three_unit_fixture(
+        seed
+    )
+
+    try:
+        transfer = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "effective_date": "2026-06-20",
+            },
+            headers=privileged_headers,
+        )
+        assert transfer.status_code == 200, transfer.text
+
+        second_transfer = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": third_unit_id,
+                "effective_date": "2026-06-25",
+            },
+            headers=privileged_headers,
+        )
+        assert second_transfer.status_code == 200, second_transfer.text
+
+        correction = client.post(
+            f"/directory/employees/{employee_id}/correct-org-unit",
+            json={
+                "to_org_unit_id": third_unit_id,
+                "to_position_id": pos_ids[1],
+                "effective_date": "2026-06-10",
+                "comment": "Corrected position after data review",
+            },
+            headers=privileged_headers,
+        )
+        assert correction.status_code == 200, correction.text
+
+        all_events = client.get(
+            f"/directory/employees/{employee_id}/events",
+            headers=privileged_headers,
+        )
+        assert all_events.status_code == 200, all_events.text
+        assert all_events.json()["total"] == 3
+
+        page_one = client.get(
+            f"/directory/employees/{employee_id}/events",
+            params={"limit": 1, "offset": 0},
+            headers=privileged_headers,
+        )
+        assert page_one.status_code == 200, page_one.text
+        page_one_body = page_one.json()
+        assert page_one_body["total"] == 3
+        assert len(page_one_body["items"]) == 1
+
+        page_two = client.get(
+            f"/directory/employees/{employee_id}/events",
+            params={"limit": 1, "offset": 1},
+            headers=privileged_headers,
+        )
+        assert page_two.status_code == 200, page_two.text
+        page_two_body = page_two.json()
+        assert page_two_body["total"] == 3
+        assert len(page_two_body["items"]) == 1
+        assert page_two_body["items"][0]["event_id"] != page_one_body["items"][0]["event_id"]
+
+        page_three = client.get(
+            f"/directory/employees/{employee_id}/events",
+            params={"limit": 2, "offset": 1},
+            headers=privileged_headers,
+        )
+        assert page_three.status_code == 200, page_three.text
+        page_three_body = page_three.json()
+        assert page_three_body["total"] == 3
+        assert len(page_three_body["items"]) == 2
+
+        transfers_only = client.get(
+            f"/directory/employees/{employee_id}/events",
+            params={"event_type": "TRANSFER"},
+            headers=privileged_headers,
+        )
+        assert transfers_only.status_code == 200, transfers_only.text
+        transfers_body = transfers_only.json()
+        assert transfers_body["total"] == 2
+        assert all(e["event_type"] == "TRANSFER" for e in transfers_body["items"])
+
+        corrections_only = client.get(
+            f"/directory/employees/{employee_id}/events",
+            params={"event_type": "CORRECTION"},
+            headers=privileged_headers,
+        )
+        assert corrections_only.status_code == 200, corrections_only.text
+        corrections_body = corrections_only.json()
+        assert corrections_body["total"] == 1
+        assert corrections_body["items"][0]["event_type"] == "CORRECTION"
+        assert corrections_body["items"][0]["from_org_unit_id"] == third_unit_id
+        assert corrections_body["items"][0]["to_org_unit_id"] == third_unit_id
+        assert corrections_body["items"][0]["to_position_id"] == pos_ids[1]
     finally:
         _cleanup_employees(emp_ids)
         _cleanup_positions(pos_ids)
