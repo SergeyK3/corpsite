@@ -1,0 +1,72 @@
+{
+  "artifact": "org_unit_aliases",
+  "version": "v1",
+  "repo_head_baseline": "fe0db5c",
+  "policy": "ADR-014 Phase 3",
+  "direction": "local_to_vps",
+  "table": "org_units",
+  "match_key": "code",
+  "notes": [
+    "Match by code, never by unit_id.",
+    "Resolve aliases before INSERT or UPDATE.",
+    "Parent remap uses canonical code (after alias resolution).",
+    "Preserve VPS unit_id=1 (mmc_root) and unit_id=44 (qm_ovipd).",
+    "Local GYNE (unit_id=44) must never take VPS id 44.",
+    "No DELETE."
+  ],
+  "aliases": [
+    {
+      "local_code": "ORG_MAIN",
+      "vps_code": "mmc_root",
+      "vps_unit_id": 1,
+      "action": "UPDATE",
+      "preserve_vps_unit_id": true,
+      "preserve_vps_code": true,
+      "skip_insert_local_source": true
+    },
+    {
+      "local_code": "QM",
+      "vps_code": "qm_ovipd",
+      "vps_unit_id": 44,
+      "action": "UPDATE",
+      "preserve_vps_unit_id": true,
+      "preserve_vps_code": true,
+      "skip_insert_local_source": true
+    },
+    {
+      "local_code": "Pharmacy",
+      "vps_code": "PHARM",
+      "vps_unit_id": null,
+      "action": "SKIP_ALIAS",
+      "preserve_vps_unit_id": false,
+      "preserve_vps_code": false,
+      "skip_insert_local_source": true,
+      "canonical_local_code": "PHARM",
+      "notes": "Local PHARM row is the INSERT source; Pharmacy employees remap to PHARM in Phase 4."
+    }
+  ],
+  "skip_alias_sources": ["ORG_MAIN", "QM", "Pharmacy"],
+  "update_targets": [
+    {
+      "vps_code": "mmc_root",
+      "vps_unit_id": 1,
+      "local_source_code": "ORG_MAIN"
+    },
+    {
+      "vps_code": "qm_ovipd",
+      "vps_unit_id": 44,
+      "local_source_code": "QM"
+    }
+  ],
+  "reserved_vps_unit_ids": {
+    "1": "mmc_root",
+    "44": "qm_ovipd"
+  },
+  "expected_dry_run": {
+    "SKIP_ALIAS": 3,
+    "UPDATE": 2,
+    "INSERT": 36,
+    "KEEP": 0,
+    "post_apply_org_units": 38
+  }
+}
