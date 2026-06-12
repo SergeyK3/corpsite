@@ -3,7 +3,13 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { EmployeeDetails } from "../_lib/types";
-import { getEmployee, getPositions, mapApiErrorToMessage, updateEmployee } from "../_lib/api.client";
+import {
+  getEmployee,
+  getEmployees,
+  getPositions,
+  mapApiErrorToMessage,
+  updateEmployee,
+} from "../_lib/api.client";
 import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
@@ -26,6 +32,8 @@ type Props = {
   onCreateUser?: (details: EmployeeDetails) => void;
   onSaved?: () => void;
   refreshToken?: number;
+  /** Полный справочник из parent (как в Create); drawer догружает при необходимости. */
+  positionCatalogOptions?: PositionOption[];
 };
 
 function fmtDate(v: string | null | undefined): string {
@@ -75,6 +83,51 @@ function buildEditValues(details: EmployeeDetails): EditValues {
     date_from: toIsoDate((details as any)?.date_from ?? (details as any)?.dateFrom),
     position_id: positionIdOf(details),
   };
+}
+
+function employeePositionId(item: {
+  position?: { id?: number | null } | null;
+  position_id?: number | null;
+}): number {
+  const fromNested = Number(item?.position?.id ?? 0);
+  if (Number.isFinite(fromNested) && fromNested > 0) return fromNested;
+
+  const fromFlat = Number(item?.position_id ?? 0);
+  return Number.isFinite(fromFlat) && fromFlat > 0 ? fromFlat : 0;
+}
+
+function positionOptionsFromEmployees(items: unknown[]): PositionOption[] {
+  const byId = new Map<number, string>();
+
+  for (const item of items) {
+    const row = item as {
+      position?: { id?: number | null; name?: string | null } | null;
+      position_id?: number | null;
+    };
+    const id = employeePositionId(row);
+    if (id <= 0) continue;
+
+    const label = String(row?.position?.name ?? `#${id}`).trim() || `#${id}`;
+    byId.set(id, label);
+  }
+
+  return [...byId.entries()]
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+}
+
+function mergePositionOptions(...groups: PositionOption[][]): PositionOption[] {
+  const byId = new Map<number, string>();
+  for (const group of groups) {
+    for (const opt of group) {
+      if (Number.isFinite(opt.id) && opt.id > 0) {
+        byId.set(opt.id, opt.label);
+      }
+    }
+  }
+  return [...byId.entries()]
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
 }
 
 function normalizePositionOptions(raw: unknown): PositionOption[] {
@@ -139,6 +192,7 @@ export default function EmployeeDrawer({
   onCreateUser,
   onSaved,
   refreshToken = 0,
+  positionCatalogOptions = [],
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<EmployeeDetails | null>(null);
@@ -150,7 +204,9 @@ export default function EmployeeDrawer({
     date_from: "",
     position_id: "",
   });
-  const [positionOptions, setPositionOptions] = useState<PositionOption[]>([]);
+  const [allPositionOptions, setAllPositionOptions] = useState<PositionOption[]>([]);
+  const [unitPositionIds, setUnitPositionIds] = useState<Set<number> | null>(null);
+  const [showAllPositions, setShowAllPositions] = useState(false);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [positionsOrgUnitHint, setPositionsOrgUnitHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -184,7 +240,9 @@ export default function EmployeeDrawer({
       setMode("view");
       setSaveError(null);
       setPositionsOrgUnitHint(null);
-      setPositionOptions([]);
+      setAllPositionOptions([]);
+      setUnitPositionIds(null);
+      setShowAllPositions(false);
       return;
     }
 
@@ -204,21 +262,70 @@ export default function EmployeeDrawer({
     setSaveError(null);
     setEditValues(buildEditValues(details));
     setPositionsOrgUnitHint(null);
+    setShowAllPositions(false);
+    setAllPositionOptions([]);
+    setUnitPositionIds(null);
     setPositionsLoading(true);
 
     const orgUnitId = employeeOrgUnitId(details);
-    if (orgUnitId == null) {
-      setPositionOptions([]);
-      setPositionsOrgUnitHint("Не удалось определить отделение сотрудника");
-      setPositionsLoading(false);
-      return;
-    }
 
     try {
-      const raw = await getPositions({ org_unit_id: orgUnitId, limit: 500, offset: 0 });
-      setPositionOptions(normalizePositionOptions(raw));
+      let unitIds = new Set<number>();
+      let unitOptionsFromEmployees: PositionOption[] = [];
+
+      if (orgUnitId != null) {
+        try {
+          const employeesRes = await getEmployees({
+            status: "all",
+            org_unit_id: orgUnitId,
+            include_children: false,
+            limit: 200,
+            offset: 0,
+          });
+          unitOptionsFromEmployees = positionOptionsFromEmployees(employeesRes?.items ?? []);
+          unitIds = new Set(unitOptionsFromEmployees.map((p) => p.id));
+          setUnitPositionIds(unitIds);
+          setPositionsOrgUnitHint(null);
+        } catch {
+          setUnitPositionIds(new Set());
+          setShowAllPositions(true);
+          setPositionsOrgUnitHint(
+            "Не удалось загрузить должности отделения — показан полный справочник"
+          );
+        }
+      } else {
+        setUnitPositionIds(null);
+        setPositionsOrgUnitHint("Отделение не определено — показан полный справочник должностей");
+      }
+
+      let catalogOptions: PositionOption[] = [...positionCatalogOptions];
+
+      if (catalogOptions.length === 0) {
+        try {
+          const rawPositions = await getPositions({ limit: 1000, offset: 0 });
+          catalogOptions = normalizePositionOptions(rawPositions);
+        } catch {
+          catalogOptions = [];
+        }
+      }
+
+      const mergedCatalog = mergePositionOptions(catalogOptions, unitOptionsFromEmployees);
+      setAllPositionOptions(mergedCatalog);
+
+      if (
+        orgUnitId != null &&
+        unitIds.size > 0 &&
+        mergedCatalog.length > 0 &&
+        mergedCatalog.length <= unitIds.size
+      ) {
+        setShowAllPositions(true);
+        setPositionsOrgUnitHint(
+          "Полный справочник недоступен — показаны должности, найденные в отделении"
+        );
+      }
     } catch {
-      setPositionOptions([]);
+      setAllPositionOptions([]);
+      setUnitPositionIds(null);
     } finally {
       setPositionsLoading(false);
     }
@@ -228,6 +335,7 @@ export default function EmployeeDrawer({
     setMode("view");
     setSaveError(null);
     setPositionsOrgUnitHint(null);
+    setShowAllPositions(false);
     if (details) setEditValues(buildEditValues(details));
   }
 
@@ -296,13 +404,36 @@ export default function EmployeeDrawer({
   const canEdit = Boolean(details && isActive(details));
   const telegramLabel = resolveTelegramLabel(linkedUser as Record<string, unknown> | null);
 
+  const editOrgUnitId = employeeOrgUnitId(details);
+  const unitPositionCount = unitPositionIds?.size ?? 0;
+  const hasUnitPositionMatches = unitPositionIds !== null && unitPositionCount > 0;
+  const canExpandPositionCatalog =
+    editOrgUnitId != null &&
+    hasUnitPositionMatches &&
+    !showAllPositions &&
+    allPositionOptions.length > unitPositionCount;
+  const canCollapsePositionCatalog =
+    editOrgUnitId != null && hasUnitPositionMatches && showAllPositions && allPositionOptions.length > unitPositionCount;
+
   const positionSelectOptions = (() => {
     const currentId = Number(editValues.position_id || positionIdOf(details));
-    const hasCurrent = positionOptions.some((p) => p.id === currentId);
-    if (Number.isFinite(currentId) && currentId > 0 && !hasCurrent && positionName !== "—") {
-      return [{ id: currentId, label: positionName }, ...positionOptions];
+
+    let baseOptions: PositionOption[];
+    if (showAllPositions || editOrgUnitId == null) {
+      baseOptions = allPositionOptions;
+    } else if (unitPositionIds === null) {
+      baseOptions = allPositionOptions;
+    } else if (unitPositionIds.size === 0) {
+      baseOptions = [];
+    } else {
+      baseOptions = allPositionOptions.filter((p) => unitPositionIds.has(p.id));
     }
-    return positionOptions;
+
+    const hasCurrent = baseOptions.some((p) => p.id === currentId);
+    if (Number.isFinite(currentId) && currentId > 0 && !hasCurrent && positionName !== "—") {
+      return [{ id: currentId, label: positionName }, ...baseOptions];
+    }
+    return baseOptions;
   })();
 
   const editableFieldClass =
@@ -430,7 +561,7 @@ export default function EmployeeDrawer({
                         />
                       </div>
 
-                      <div className={editableCardClass}>
+                      <div className={`${editableCardClass} flex flex-col gap-2`}>
                         <label htmlFor="employee-drawer-position" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                           Должность
                         </label>
@@ -451,7 +582,31 @@ export default function EmployeeDrawer({
                           ))}
                         </select>
                         {positionsOrgUnitHint ? (
-                          <p className="mt-2 text-xs text-amber-800 dark:text-amber-200/90">{positionsOrgUnitHint}</p>
+                          <p className="text-xs text-amber-800 dark:text-amber-200/90">{positionsOrgUnitHint}</p>
+                        ) : !positionsLoading ? (
+                          <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                            {showAllPositions
+                              ? "Показаны все должности справочника"
+                              : "Показаны должности текущего отделения"}
+                          </p>
+                        ) : null}
+                        {canExpandPositionCatalog ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllPositions(true)}
+                            className="block text-left text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Показать все должности ({allPositionOptions.length})
+                          </button>
+                        ) : null}
+                        {canCollapsePositionCatalog ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllPositions(false)}
+                            className="block text-left text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Только должности отделения ({unitPositionCount})
+                          </button>
                         ) : null}
                       </div>
 
