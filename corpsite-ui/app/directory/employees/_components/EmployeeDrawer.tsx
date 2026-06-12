@@ -320,25 +320,6 @@ export default function EmployeeDrawer({
     onClose();
   }
 
-  function renderOrgUnitCorrectionStub() {
-    return (
-      <div className="mt-4 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-3">
-        <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200/90">
-          Используйте это действие только если отделение было указано неверно при импорте или первичном
-          заполнении. Это не кадровый перевод.
-        </p>
-        <button
-          type="button"
-          disabled
-          title="Функция будет доступна в следующем этапе HR"
-          className="mt-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-white/70 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 opacity-70 cursor-not-allowed"
-        >
-          Исправить ошибочное отделение
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-zinc-600/35 dark:bg-black/50 backdrop-blur-sm" onClick={handleBackdropClick} />
@@ -564,7 +545,6 @@ export default function EmployeeDrawer({
                   <div className={readOnlyCardClass}>
                     <div className="text-xs text-zinc-600 dark:text-zinc-400">Текущее отделение</div>
                     <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{orgUnitDisplay}</div>
-                    {renderOrgUnitCorrectionStub()}
                   </div>
                 </SectionBlock>
               )}
