@@ -93,7 +93,23 @@ export type ProfessionalDocumentRow = {
 export type ProfessionalDocumentsResponse = {
   items: ProfessionalDocumentRow[];
   total: number;
+  available?: boolean;
 };
+
+export type ProfessionalDocumentsAvailabilityResponse = {
+  available: boolean;
+};
+
+export async function fetchProfessionalDocumentsAvailability(): Promise<boolean> {
+  try {
+    const body = await apiGetJson<ProfessionalDocumentsAvailabilityResponse>(
+      "/directory/professional-documents/availability"
+    );
+    return body.available === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function listProfessionalDocuments(): Promise<ProfessionalDocumentsResponse> {
   return apiGetJson<ProfessionalDocumentsResponse>("/directory/professional-documents");

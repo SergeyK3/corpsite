@@ -1,5 +1,5 @@
 # FILE: app/services/professional_documents_service.py
-"""ADR-034 demonstration read-model (not production)."""
+"""ADR-034 local demonstration read-model (not production)."""
 from __future__ import annotations
 
 from datetime import date
@@ -8,6 +8,33 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 
 from app.db.engine import engine
+
+
+def _table_exists(conn, table: str, schema: str = "public") -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = :schema AND table_name = :table
+            LIMIT 1
+            """
+        ),
+        {"schema": schema, "table": table},
+    ).first()
+    return row is not None
+
+
+def professional_documents_available() -> bool:
+    """True when local ADR-034 demo tables are present."""
+    with engine.begin() as conn:
+        return _table_exists(conn, "certificate_types") and _table_exists(
+            conn, "employee_certificates"
+        )
+
+
+def _empty_response() -> Dict[str, Any]:
+    return {"items": [], "total": 0, "available": False}
 
 
 def _compute_status(expires_at: Optional[date], *, today: date) -> str:
@@ -24,7 +51,10 @@ def _compute_status(expires_at: Optional[date], *, today: date) -> str:
 
 
 def list_professional_documents_demo() -> Dict[str, Any]:
-    """Return certificate rows plus synthetic MISSING rows for demo."""
+    """Return certificate rows plus synthetic MISSING rows for local demo."""
+    if not professional_documents_available():
+        return _empty_response()
+
     today = date.today()
 
     q_certs = text(
@@ -110,4 +140,4 @@ def list_professional_documents_demo() -> Dict[str, Any]:
     }
     items.sort(key=lambda x: (status_order.get(x["status"], 9), x.get("employee_name") or ""))
 
-    return {"items": items, "total": len(items)}
+    return {"items": items, "total": len(items), "available": True}

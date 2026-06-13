@@ -1,8 +1,11 @@
 // FILE: corpsite-ui/app/directory/personnel/_components/PersonnelSubNav.tsx
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+import { fetchProfessionalDocumentsAvailability } from "../_lib/demoApi.client";
 
 const ITEMS = [
   { href: "/directory/personnel", title: "Сотрудники", prefixes: ["/directory/personnel"] },
@@ -15,6 +18,7 @@ const ITEMS = [
     href: "/directory/personnel/documents",
     title: "Профессиональные документы",
     prefixes: ["/directory/personnel/documents"],
+    demoOnly: true,
   },
 ] as const;
 
@@ -27,10 +31,26 @@ function isActive(pathname: string, prefixes: readonly string[], href: string): 
 
 export default function PersonnelSubNav() {
   const pathname = usePathname() || "";
+  const [showProfessionalDocuments, setShowProfessionalDocuments] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const available = await fetchProfessionalDocumentsAvailability();
+      if (!cancelled) setShowProfessionalDocuments(available);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const visibleItems = ITEMS.filter(
+    (item) => !("demoOnly" in item && item.demoOnly) || showProfessionalDocuments
+  );
 
   return (
     <nav className="mb-4 flex flex-wrap gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
-      {ITEMS.map((item) => {
+      {visibleItems.map((item) => {
         const active = isActive(pathname, item.prefixes, item.href);
         return (
           <Link

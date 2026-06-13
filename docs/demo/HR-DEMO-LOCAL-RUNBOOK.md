@@ -4,14 +4,55 @@
 
 Demonstration-grade MVP (not production):
 
-- **Track B:** `Кадровый журнал` — org-wide `employee_events` register
-- **ADR-034 demo:** `Профессиональные документы` — `certificate_types` + `employee_certificates`
+- **Track B:** `Кадровый журнал` — org-wide `employee_events` register (**production-safe** with migration `b5e2a81d4c03`)
+- **ADR-034 demo:** `Профессиональные документы` — **local-demo-only** (`certificate_types` + `employee_certificates`)
 
-## Migration summary
+## Migration strategy
 
-**Revision:** `e4a1c92b7d10` (`add_professional_documents_demo`)
+| Layer | VPS / production | Local demo |
+|-------|------------------|------------|
+| Track B (`employee_events`) | Alembic `b5e2a81d4c03` | Same |
+| ADR-034 tables + seed | **Not in Alembic chain** | SQL scripts under `scripts/local_demo/` |
 
-**Creates:**
+**Production Alembic head:** `b5e2a81d4c03` (`add_employee_events`)
+
+ADR-034 was removed from Alembic (`e4a1c92b7d10` deleted) so `alembic upgrade head` on VPS will never apply demo seed.
+
+### Local ADR-034 setup (schema + seed)
+
+```bash
+cd /opt/projects/corpsite/app
+# Use the same DATABASE_URL as the app (.env)
+psql "$DATABASE_URL" -f scripts/local_demo/adr034_professional_documents_schema.sql
+psql "$DATABASE_URL" -f scripts/local_demo/adr034_professional_documents_seed.sql
+```
+
+### Local ADR-034 rollback
+
+```bash
+psql "$DATABASE_URL" -f scripts/local_demo/adr034_professional_documents_rollback.sql
+```
+
+### If local DB still shows `e4a1c92b7d10` in `alembic_version`
+
+The old demo migration is gone from the repo. Reconcile with:
+
+```bash
+psql "$DATABASE_URL" -f scripts/local_demo/adr034_professional_documents_rollback.sql  # optional cleanup
+.venv/bin/python -c "
+from alembic.config import Config
+from alembic import command
+from app.db.engine import engine
+cfg = Config('alembic.ini')
+cfg.set_main_option('sqlalchemy.url', str(engine.url.render_as_string(hide_password=False)))
+command.stamp(cfg, 'b5e2a81d4c03')
+"
+# Re-apply local demo if needed:
+psql "$DATABASE_URL" -f scripts/local_demo/adr034_professional_documents_schema.sql
+psql "$DATABASE_URL" -f scripts/local_demo/adr034_professional_documents_seed.sql
+```
+
+**Creates (local only):**
 
 | Object | Purpose |
 |--------|---------|
@@ -26,60 +67,27 @@ Demonstration-grade MVP (not production):
 
 **Track B:** no new tables — reads existing `employee_events`.
 
-### Apply (local)
-
-```bash
-cd /opt/projects/corpsite/app
-# If alembic.ini DATABASE_URL differs from app .env:
-.venv/bin/python -c "
-from alembic.config import Config
-from alembic import command
-from app.db.engine import engine
-cfg = Config('alembic.ini')
-cfg.set_main_option('sqlalchemy.url', str(engine.url.render_as_string(hide_password=False)))
-command.upgrade(cfg, 'head')
-"
-```
-
-### Rollback
-
-```bash
-.venv/bin/alembic downgrade b5e2a81d4c03
-```
-
-Or manual:
-
-```sql
-DELETE FROM employee_certificates WHERE certificate_number LIKE 'DEMO-%';
-DROP TABLE IF EXISTS employee_certificates;
-DELETE FROM certificate_types WHERE code IN ('MED_SPEC', 'ACCRED');
-DROP TABLE IF EXISTS certificate_types;
-```
-
-**Note:** Track B API/routes are code-only; rollback migration does not remove them.
-
-## API (privileged demo)
+## API
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /directory/personnel-events` | Org-wide journal; filters: `event_type`, `date_from`, `date_to` |
-| `GET /directory/professional-documents` | Demo documents register with computed statuses |
+| `GET /directory/personnel-events` | Track B — org-wide journal (privileged) |
+| `GET /directory/professional-documents/availability` | Whether local ADR-034 tables exist |
+| `GET /directory/professional-documents` | Demo register; returns empty + `available: false` when tables absent |
 
 ## UI routes
 
-| Path | Screen |
-|------|--------|
-| `/directory/personnel` | Track A — employees + sub-nav |
-| `/directory/personnel/journal` | Track B — Кадровый журнал |
-| `/directory/personnel/documents` | ADR-034 — Профессиональные документы |
-
-Row click → `EmployeeDrawer` (Track A continuity).
+| Path | Screen | Visibility |
+|------|--------|------------|
+| `/directory/personnel` | Track A — employees + sub-nav | Always |
+| `/directory/personnel/journal` | Track B — Кадровый журнал | Always |
+| `/directory/personnel/documents` | ADR-034 — Профессиональные документы | Nav hidden unless demo tables exist |
 
 ## Local demo flow
 
 1. **Track A:** Персонал → open employee → «Кадровая история»
 2. **Track B:** Персонал → Кадровый журнал → filter / click row
-3. **ADR-034:** Персонал → Профессиональные документы → status colors
+3. **ADR-034:** apply local SQL scripts → Персонал → Профессиональные документы → status colors
 
 ## Screenshots
 
@@ -101,3 +109,4 @@ Stored in `docs/demo/screenshots/`:
 - Telegram, tasks, notifications
 - `certificate_requirements` table
 - Production CRUD for documents
+- ADR-034 in production Alembic chain

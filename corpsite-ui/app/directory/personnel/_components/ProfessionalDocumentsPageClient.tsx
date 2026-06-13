@@ -48,6 +48,7 @@ export default function ProfessionalDocumentsPageClient() {
   const [items, setItems] = React.useState<ProfessionalDocumentRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [unavailable, setUnavailable] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
 
@@ -59,6 +60,12 @@ export default function ProfessionalDocumentsPageClient() {
       try {
         const body = await listProfessionalDocuments();
         if (cancelled) return;
+        if (body.available === false) {
+          setUnavailable(true);
+          setItems([]);
+          return;
+        }
+        setUnavailable(false);
         setItems(Array.isArray(body.items) ? body.items : []);
       } catch (e) {
         if (cancelled) return;
@@ -95,6 +102,13 @@ export default function ProfessionalDocumentsPageClient() {
         </p>
       </div>
 
+      {unavailable ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/55 dark:bg-amber-950/35 dark:text-amber-200">
+          Локальная демонстрация ADR-034 недоступна: таблицы не установлены. См.{" "}
+          <code className="text-xs">docs/demo/HR-DEMO-LOCAL-RUNBOOK.md</code>.
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-200">
           {error}
@@ -128,10 +142,10 @@ export default function ProfessionalDocumentsPageClient() {
                   </td>
                 </tr>
               ) : null}
-              {!loading && items.length === 0 ? (
+              {!loading && !unavailable && items.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-zinc-500">
-                    Нет данных для демонстрации. Выполните миграцию demo seed.
+                    Нет данных для демонстрации. Выполните локальный demo seed.
                   </td>
                 </tr>
               ) : null}
