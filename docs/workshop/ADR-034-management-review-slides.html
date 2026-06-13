@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Corpsite — Профессиональные документы | Управленческий обзор</title>
+  <style>
+    @page { size: landscape; margin: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #1a1a1a;
+      background: #e8e8e8;
+    }
+    .slide {
+      width: 297mm;
+      height: 210mm;
+      margin: 0 auto 12px;
+      padding: 14mm 18mm 12mm;
+      background: #fff;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    .slide:last-child { page-break-after: auto; }
+    .header {
+      background: #1e3a5f;
+      color: #fff;
+      margin: -14mm -18mm 10mm;
+      padding: 10mm 18mm 8mm;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28pt;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .subtitle {
+      margin: 0 0 8mm;
+      font-size: 14pt;
+      color: #555;
+      font-weight: 500;
+    }
+    ul {
+      margin: 0;
+      padding: 0 0 0 6mm;
+      flex: 1;
+    }
+    li {
+      font-size: 15pt;
+      line-height: 1.45;
+      margin-bottom: 5mm;
+    }
+    .note {
+      margin-top: auto;
+      padding-top: 6mm;
+      border-top: 1px solid #ddd;
+      font-size: 10pt;
+      color: #777;
+      font-style: italic;
+    }
+    .footer {
+      position: absolute;
+      bottom: 8mm;
+      right: 18mm;
+      font-size: 9pt;
+      color: #999;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6mm;
+      margin-top: 4mm;
+      flex: 1;
+    }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 5mm;
+      font-size: 11pt;
+      line-height: 1.4;
+    }
+    .card strong { display: block; font-size: 12pt; margin-bottom: 2mm; color: #1e3a5f; }
+    .phase-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12pt;
+      margin-top: 4mm;
+    }
+    .phase-table th, .phase-table td {
+      border: 1px solid #ccc;
+      padding: 3mm 4mm;
+      text-align: left;
+      vertical-align: top;
+    }
+    .phase-table th { background: #f0f4f8; color: #1e3a5f; }
+    .decision-box {
+      background: #f7fafc;
+      border-left: 4px solid #1e3a5f;
+      padding: 5mm 6mm;
+      margin-bottom: 4mm;
+      font-size: 14pt;
+      line-height: 1.4;
+    }
+    .wireframe-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4mm;
+      margin-top: 3mm;
+      flex: 1;
+    }
+    .wireframe {
+      border: 1px dashed #999;
+      border-radius: 3px;
+      background: #fafafa;
+      padding: 3mm;
+      font-size: 7.5pt;
+      color: #444;
+      display: flex;
+      flex-direction: column;
+      min-height: 72mm;
+    }
+    .wireframe-title {
+      font-size: 8.5pt;
+      font-weight: 700;
+      color: #1e3a5f;
+      margin-bottom: 2mm;
+      text-align: center;
+    }
+    .wireframe-tag {
+      font-size: 6.5pt;
+      color: #888;
+      text-align: center;
+      margin-bottom: 2mm;
+      font-style: italic;
+    }
+    .wf-box {
+      border: 1px solid #bbb;
+      background: #fff;
+      border-radius: 2px;
+      padding: 1.5mm;
+      margin-bottom: 1.5mm;
+    }
+    .wf-bar {
+      height: 3mm;
+      background: #ddd;
+      border-radius: 1px;
+      margin-bottom: 1mm;
+    }
+    .wf-bar.short { width: 55%; }
+    .wf-bar.mid { width: 75%; }
+    .wf-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 1mm;
+      margin-bottom: 1mm;
+    }
+    .wf-cell {
+      height: 3mm;
+      background: #e8e8e8;
+      border-radius: 1px;
+    }
+    .wf-cell.status-ok { background: #c8e6c9; }
+    .wf-cell.status-warn { background: #ffe0b2; }
+    .wf-cell.status-bad { background: #ffcdd2; }
+    .wf-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5mm;
+      margin: 2mm 0;
+    }
+    .wf-metric {
+      border: 1px solid #bbb;
+      padding: 2mm 1mm;
+      text-align: center;
+      background: #fff;
+    }
+    .wf-metric strong {
+      display: block;
+      font-size: 11pt;
+      color: #333;
+    }
+    .wf-metric.red strong { color: #c62828; }
+    .wf-metric.orange strong { color: #e65100; }
+    .wf-metric.yellow strong { color: #f9a825; }
+    .wf-metric.gray strong { color: #616161; }
+    @media print {
+      body { background: #fff; }
+      .slide { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Слайд 1 -->
+<section class="slide">
+  <div class="header"><h1>Профессиональные документы</h1></div>
+  <p class="subtitle">Управленческий обзор · Corpsite · Июнь 2026</p>
+  <ul>
+    <li>Модуль контроля сроков профессиональных документов медицинского персонала</li>
+    <li>Цель встречи: согласовать концепцию и <strong>Этап A</strong> до начала разработки</li>
+    <li>Статус: архитектурный аудит завершён · реализация не начата</li>
+    <li>Логичное продолжение кадрового контура Corpsite (после демо HR Track A)</li>
+  </ul>
+  <p class="note">Докладчик (~1 мин): контекст, цель обзора, что будет решено сегодня.</p>
+  <span class="footer">Слайд 1 / 6</span>
+</section>
+
+<!-- Слайд 2 -->
+<section class="slide">
+  <div class="header"><h1>Проблема и решение</h1></div>
+  <p class="subtitle">Почему нужен модуль</p>
+  <ul>
+    <li><strong>Сегодня:</strong> сроки сертификатов и аккредитаций ведутся вручную — Excel, папки, переписка</li>
+    <li><strong>HR пропускает:</strong> документы, истекающие через 30–60 дней; уже просроченные; отсутствующие записи</li>
+    <li><strong>Риск:</strong> лицензионные и внутренние проверки, репутация, операционные сбои</li>
+    <li><strong>Решение:</strong> единый реестр «Профессиональные документы» в Corpsite — кто, что, до какой даты</li>
+    <li>Модуль <strong>не заменяет</strong> кадровое делопроизводство; дополняет готовый кадровый контур</li>
+  </ul>
+  <p class="note">Докладчик (~2 мин): бизнес-боль без технических деталей.</p>
+  <span class="footer">Слайд 2 / 6</span>
+</section>
+
+<!-- Слайд 3 -->
+<section class="slide">
+  <div class="header"><h1>Ценность для ролей</h1></div>
+  <p class="subtitle">Кто что получает</p>
+  <div class="grid-3">
+    <div class="card">
+      <strong>HR / кадровая служба</strong>
+      Единый реестр · импорт из Excel · отчёты по срокам · владение данными · меньше ручного контроля
+    </div>
+    <div class="card">
+      <strong>Руководитель отделения</strong>
+      Видимость рисков в своём подразделении · раннее предупреждение · только просмотр (без редактирования)
+    </div>
+    <div class="card">
+      <strong>Директор / топ-менеджмент</strong>
+      Агрегированная картина compliance-рисков · меньше зависимости от «памяти HR» · управляемый риск
+    </div>
+  </div>
+  <ul style="margin-top:6mm;">
+    <li><strong>Сотрудник:</strong> просмотр своих документов и сроков в карточке</li>
+    <li>Владение данными по ADR-033: HR — владелец; руководитель — наблюдатель; системный администратор — техника</li>
+  </ul>
+  <p class="note">Докладчик (~2 мин): акцент на управляемости риска для каждой роли.</p>
+  <span class="footer">Слайд 3 / 6</span>
+</section>
+
+<!-- Слайд 4 -->
+<section class="slide">
+  <div class="header"><h1>Как это выглядит</h1></div>
+  <p class="subtitle">Три ключевых экрана — wireframe placeholders для согласования</p>
+  <div class="wireframe-grid">
+    <div class="wireframe">
+      <div class="wireframe-title">1. Карточка сотрудника</div>
+      <div class="wireframe-tag">Wireframe placeholder</div>
+      <div class="wf-box">
+        <div class="wf-bar mid"></div>
+        <div class="wf-bar short"></div>
+      </div>
+      <div class="wf-box">
+        <strong>Профессиональные документы</strong>
+        <div class="wf-row" style="margin-top:1.5mm;">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell status-ok"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell status-warn"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell status-bad"></div>
+        </div>
+      </div>
+      <div class="wf-bar short" style="margin-top:auto;"></div>
+    </div>
+    <div class="wireframe">
+      <div class="wireframe-title">2. Реестр</div>
+      <div class="wireframe-tag">Wireframe placeholder</div>
+      <div class="wf-box">
+        <div style="display:flex;gap:1mm;margin-bottom:1.5mm;">
+          <div class="wf-bar mid" style="flex:1;margin:0;"></div>
+          <div class="wf-bar short" style="width:18%;margin:0;"></div>
+        </div>
+        <div style="display:flex;gap:1mm;">
+          <div class="wf-cell" style="flex:1;height:3mm;"></div>
+          <div class="wf-cell" style="flex:1;height:3mm;"></div>
+          <div class="wf-cell" style="flex:1;height:3mm;"></div>
+        </div>
+      </div>
+      <div class="wf-box" style="flex:1;">
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell status-ok"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell status-warn"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell status-bad"></div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+      </div>
+    </div>
+    <div class="wireframe">
+      <div class="wireframe-title">3. Виджет контроля</div>
+      <div class="wireframe-tag">Wireframe placeholder</div>
+      <div class="wf-box">
+        <strong>Профессиональные документы</strong>
+        <div class="wf-metrics">
+          <div class="wf-metric red"><strong>12</strong>Истекли</div>
+          <div class="wf-metric orange"><strong>8</strong>≤ 30 дней</div>
+          <div class="wf-metric yellow"><strong>23</strong>≤ 60 дней</div>
+          <div class="wf-metric gray"><strong>5</strong>Нет данных</div>
+        </div>
+        <div class="wf-bar mid" style="margin:0 auto;"></div>
+      </div>
+      <div class="wf-box" style="margin-top:auto;">
+        <div class="wf-bar short"></div>
+        <div class="wf-bar" style="width:90%;"></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Докладчик (~2 мин): обсудить три экрана; собрать правки до разработки. Placeholders встроены в HTML — PDF самодостаточен.</p>
+  <span class="footer">Слайд 4 / 6</span>
+</section>
+
+<!-- Слайд 5 -->
+<section class="slide">
+  <div class="header"><h1>Этапы внедрения</h1></div>
+  <p class="subtitle">MVP по фазам — рекомендация: утвердить Этап A</p>
+  <table class="phase-table">
+    <thead>
+      <tr>
+        <th>Этап</th>
+        <th>Срок</th>
+        <th>Что входит</th>
+        <th>Ценность / риск</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>A — Реестр и импорт</strong></td>
+        <td>2–3 нед.</td>
+        <td>Справочник видов · реестр · импорт Excel · отчёты «истекает / истёк»</td>
+        <td>Ценность: высокая · Риск: низкий–средний</td>
+      </tr>
+      <tr>
+        <td><strong>B — Полнота и видимость</strong></td>
+        <td>1–2 нед.</td>
+        <td>«Нет данных» · виджет · просмотр для руководителя и сотрудника</td>
+        <td>Ценность: высокая · Риск: средний (сверка требований с HR)</td>
+      </tr>
+      <tr>
+        <td><strong>C — Напоминания</strong></td>
+        <td>3–4 нед.</td>
+        <td>Telegram · задачи на продление · дайджесты HR</td>
+        <td>Ценность: средне-высокая · Риск: средний (настройка частоты)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="note">Докладчик (~2 мин): поэтапность снижает риск; быстрый результат уже на Этапе A.</p>
+  <span class="footer">Слайд 5 / 6</span>
+</section>
+
+<!-- Слайд 6 -->
+<section class="slide">
+  <div class="header"><h1>Решения на обзоре</h1></div>
+  <p class="subtitle">Повестка согласования</p>
+  <div class="decision-box">1. Утвердить название модуля: <strong>«Профессиональные документы»</strong></div>
+  <div class="decision-box">2. Утвердить <strong>Этап A</strong> как стартовый MVP: реестр + импорт + контроль сроков (без уведомлений)</div>
+  <div class="decision-box">3. Назначить <strong>HR-владельца</strong> справочника видов документов и матрицы обязательности по должностям</div>
+  <div class="decision-box">4. Подготовить <strong>Excel-выгрузку</strong> текущих реестров для пилотного импорта</div>
+  <div class="decision-box">5. Следующий шаг: фиксация ADR-034 и старт разработки Этапа A</div>
+  <p class="note">Докладчик (~2 мин): зафиксировать решения, ответственных и сроки подготовки данных.</p>
+  <span class="footer">Слайд 6 / 6</span>
+</section>
+
+</body>
+</html>
