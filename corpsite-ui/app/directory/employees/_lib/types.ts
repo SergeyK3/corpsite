@@ -77,6 +77,11 @@ export type EmployeeEventDTO = {
   created_at: string;
 };
 
+export type EmployeeEventsResponse = {
+  items: EmployeeEventDTO[];
+  total: number;
+};
+
 export type EmployeeTransferPayload = {
   to_org_unit_id: number;
   to_position_id?: number;

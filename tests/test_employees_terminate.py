@@ -71,6 +71,11 @@ def _cleanup_employees(employee_ids: List[int]) -> None:
     if not employee_ids:
         return
     with engine.begin() as conn:
+        if table_exists(conn, "employee_events"):
+            conn.execute(
+                text("DELETE FROM public.employee_events WHERE employee_id = ANY(:ids)"),
+                {"ids": [int(x) for x in employee_ids]},
+            )
         if table_exists(conn, "users"):
             conn.execute(
                 text("DELETE FROM public.users WHERE employee_id = ANY(:ids)"),
@@ -247,6 +252,52 @@ def test_terminate_employee_repeated_is_idempotent(client, seed, privileged_head
         )
         assert repeat_with_date.status_code == 200, repeat_with_date.text
         assert repeat_with_date.json()["date_to"] == second_date
+    finally:
+        _cleanup_employees(created_employee_ids)
+        _cleanup_positions(created_position_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_terminate_employee_emits_termination_event_once(client, seed, privileged_headers):
+    employee_id, created_employee_ids, created_position_ids = _make_employee(seed)
+    termination_date = "2026-05-30"
+
+    try:
+        with engine.begin() as conn:
+            if not table_exists(conn, "employee_events"):
+                pytest.skip("employee_events table not available")
+
+        first = client.post(
+            f"/directory/employees/{employee_id}/terminate",
+            json={"date_to": termination_date},
+            headers=privileged_headers,
+        )
+        assert first.status_code == 200, first.text
+
+        events_resp = client.get(
+            f"/directory/employees/{employee_id}/events",
+            headers=privileged_headers,
+        )
+        assert events_resp.status_code == 200, events_resp.text
+        body = events_resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["event_type"] == "TERMINATION"
+        assert body["items"][0]["effective_date"] == termination_date
+        assert body["items"][0]["from_org_unit_id"] == int(seed["unit_id"])
+        assert body["items"][0]["to_org_unit_id"] is None
+
+        repeat = client.post(
+            f"/directory/employees/{employee_id}/terminate",
+            headers=privileged_headers,
+        )
+        assert repeat.status_code == 200, repeat.text
+
+        events_repeat = client.get(
+            f"/directory/employees/{employee_id}/events",
+            headers=privileged_headers,
+        )
+        assert events_repeat.status_code == 200, events_repeat.text
+        assert events_repeat.json()["total"] == 1
     finally:
         _cleanup_employees(created_employee_ids)
         _cleanup_positions(created_position_ids)

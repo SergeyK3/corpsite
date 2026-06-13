@@ -733,6 +733,7 @@ def create_employee(
     date_from: Optional[date] = None,
     employment_rate: Optional[float] = None,
     department_id: Optional[int] = None,
+    created_by: int,
 ) -> str:
     normalized_name = " ".join((full_name or "").split()).strip()
     if not normalized_name:
@@ -778,16 +779,34 @@ def create_employee(
             },
         ).mappings().first()
 
-    if not row or row.get("employee_id") is None:
-        raise HTTPException(status_code=500, detail="create employee failed")
+        if not row or row.get("employee_id") is None:
+            raise HTTPException(status_code=500, detail="create employee failed")
 
-    return str(row["employee_id"])
+        emp_id = int(row["employee_id"])
+        _insert_employee_event(
+            conn,
+            employee_id=emp_id,
+            event_type="HIRE",
+            effective_date=hired_on,
+            from_org_unit_id=None,
+            from_position_id=None,
+            from_rate=None,
+            to_org_unit_id=int(org_unit_id),
+            to_position_id=int(position_id),
+            to_rate=rate,
+            order_ref=None,
+            comment=None,
+            created_by=int(created_by),
+        )
+
+    return str(emp_id)
 
 
 def terminate_employee(
     *,
     employee_id: str,
     date_to: Optional[date] = None,
+    created_by: int,
 ) -> str:
     """
     Terminate employee (HR record) and deactivate linked user account if present.
@@ -803,10 +822,16 @@ def terminate_employee(
 
     q_fetch = text(
         """
-        SELECT employee_id, is_active, date_to
+        SELECT
+            employee_id,
+            org_unit_id,
+            position_id,
+            employment_rate,
+            is_active,
+            date_to
         FROM public.employees
         WHERE CAST(employee_id AS TEXT) = :id_text
-        LIMIT 1
+        FOR UPDATE
         """
     )
     q_update_employee = text(
@@ -845,6 +870,25 @@ def terminate_employee(
             {"employee_id": emp_id, "date_to": effective_date_to},
         )
         conn.execute(q_deactivate_user, {"employee_id": emp_id})
+
+        if not already_inactive:
+            from_rate_raw = row.get("employment_rate")
+            from_rate = float(from_rate_raw) if from_rate_raw is not None else None
+            _insert_employee_event(
+                conn,
+                employee_id=emp_id,
+                event_type="TERMINATION",
+                effective_date=effective_date_to,
+                from_org_unit_id=int(row["org_unit_id"]),
+                from_position_id=int(row["position_id"]),
+                from_rate=from_rate,
+                to_org_unit_id=None,
+                to_position_id=None,
+                to_rate=None,
+                order_ref=None,
+                comment=None,
+                created_by=int(created_by),
+            )
 
     return target_id_text
 
@@ -936,6 +980,90 @@ def update_employee(
 # ---------------------------
 # Employee events (Phase 3b)
 # ---------------------------
+def _insert_employee_event(
+    conn,
+    *,
+    employee_id: int,
+    event_type: str,
+    effective_date: date,
+    from_org_unit_id: Optional[int],
+    from_position_id: Optional[int],
+    from_rate: Optional[float],
+    to_org_unit_id: Optional[int],
+    to_position_id: Optional[int],
+    to_rate: Optional[float],
+    order_ref: Optional[str],
+    comment: Optional[str],
+    created_by: int,
+) -> Dict[str, Any]:
+    q_insert_event = text(
+        """
+        INSERT INTO public.employee_events (
+            employee_id,
+            event_type,
+            effective_date,
+            from_org_unit_id,
+            from_position_id,
+            from_rate,
+            to_org_unit_id,
+            to_position_id,
+            to_rate,
+            order_ref,
+            comment,
+            created_by
+        )
+        VALUES (
+            :employee_id,
+            :event_type,
+            :effective_date,
+            :from_org_unit_id,
+            :from_position_id,
+            :from_rate,
+            :to_org_unit_id,
+            :to_position_id,
+            :to_rate,
+            :order_ref,
+            :comment,
+            :created_by
+        )
+        RETURNING
+            event_id,
+            event_type,
+            effective_date,
+            from_org_unit_id,
+            from_position_id,
+            from_rate,
+            to_org_unit_id,
+            to_position_id,
+            to_rate,
+            order_ref,
+            comment,
+            created_by,
+            created_at
+        """
+    )
+    event_row = conn.execute(
+        q_insert_event,
+        {
+            "employee_id": int(employee_id),
+            "event_type": event_type,
+            "effective_date": effective_date,
+            "from_org_unit_id": from_org_unit_id,
+            "from_position_id": from_position_id,
+            "from_rate": from_rate,
+            "to_org_unit_id": to_org_unit_id,
+            "to_position_id": to_position_id,
+            "to_rate": to_rate,
+            "order_ref": order_ref,
+            "comment": comment,
+            "created_by": int(created_by),
+        },
+    ).mappings().first()
+    if not event_row:
+        raise HTTPException(status_code=500, detail="Failed to record employee event.")
+    return _normalize_employee_event(dict(event_row))
+
+
 def _normalize_employee_event(row: Dict[str, Any]) -> Dict[str, Any]:
     def _rate(v: Any) -> Optional[float]:
         if v is None:
@@ -1031,52 +1159,6 @@ def _apply_employee_org_change(
         WHERE employee_id = :employee_id
         """
     )
-    q_insert_event = text(
-        """
-        INSERT INTO public.employee_events (
-            employee_id,
-            event_type,
-            effective_date,
-            from_org_unit_id,
-            from_position_id,
-            from_rate,
-            to_org_unit_id,
-            to_position_id,
-            to_rate,
-            order_ref,
-            comment,
-            created_by
-        )
-        VALUES (
-            :employee_id,
-            :event_type,
-            :effective_date,
-            :from_org_unit_id,
-            :from_position_id,
-            :from_rate,
-            :to_org_unit_id,
-            :to_position_id,
-            :to_rate,
-            :order_ref,
-            :comment,
-            :created_by
-        )
-        RETURNING
-            event_id,
-            event_type,
-            effective_date,
-            from_org_unit_id,
-            from_position_id,
-            from_rate,
-            to_org_unit_id,
-            to_position_id,
-            to_rate,
-            order_ref,
-            comment,
-            created_by,
-            created_at
-        """
-    )
 
     with engine.begin() as conn:
         row = conn.execute(q_fetch, {"id_text": target_id_text}).mappings().first()
@@ -1135,28 +1217,23 @@ def _apply_employee_org_change(
             {"employee_id": emp_id, "unit_id": int(to_org_unit_id)},
         )
 
-        event_row = conn.execute(
-            q_insert_event,
-            {
-                "employee_id": emp_id,
-                "event_type": event_type,
-                "effective_date": effective_date,
-                "from_org_unit_id": from_org_unit_id,
-                "from_position_id": from_position_id,
-                "from_rate": from_rate,
-                "to_org_unit_id": int(to_org_unit_id),
-                "to_position_id": effective_to_position_id,
-                "to_rate": effective_to_rate,
-                "order_ref": order_ref,
-                "comment": comment,
-                "created_by": int(created_by),
-            },
-        ).mappings().first()
+        event_row = _insert_employee_event(
+            conn,
+            employee_id=emp_id,
+            event_type=event_type,
+            effective_date=effective_date,
+            from_org_unit_id=from_org_unit_id,
+            from_position_id=from_position_id,
+            from_rate=from_rate,
+            to_org_unit_id=int(to_org_unit_id),
+            to_position_id=effective_to_position_id,
+            to_rate=effective_to_rate,
+            order_ref=order_ref,
+            comment=comment,
+            created_by=int(created_by),
+        )
 
-    if not event_row:
-        raise HTTPException(status_code=500, detail="Failed to record employee event.")
-
-    return _normalize_employee_event(dict(event_row))
+    return event_row
 
 
 def transfer_employee(

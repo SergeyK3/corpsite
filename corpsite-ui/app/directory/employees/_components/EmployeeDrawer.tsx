@@ -14,6 +14,7 @@ import {
 import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 import EmployeeTransferDrawer from "./EmployeeTransferDrawer";
+import EmployeeEventsTimeline from "./EmployeeEventsTimeline";
 import type { EmployeeTransferFormValues } from "./EmployeeTransferForm";
 
 type PositionOption = {
@@ -217,6 +218,7 @@ export default function EmployeeDrawer({
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferSaving, setTransferSaving] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
+  const [eventsRefreshToken, setEventsRefreshToken] = useState(0);
 
   const loadDetails = useCallback(async () => {
     if (!employeeId) {
@@ -417,6 +419,7 @@ export default function EmployeeDrawer({
 
       setDetails(result.item);
       setTransferOpen(false);
+      setEventsRefreshToken((t) => t + 1);
       onSaved?.();
     } catch (e) {
       setTransferError(mapApiErrorToMessage(e));
@@ -825,6 +828,10 @@ export default function EmployeeDrawer({
                   <div className="text-sm text-zinc-900 dark:text-zinc-50">{telegramLabel}</div>
                 </div>
               </SectionBlock>
+
+              {mode === "view" && employeeId ? (
+                <EmployeeEventsTimeline employeeId={employeeId} refreshToken={eventsRefreshToken} />
+              ) : null}
             </div>
           ) : loading ? (
             <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка данных...</div>

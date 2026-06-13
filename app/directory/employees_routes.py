@@ -400,6 +400,7 @@ def create_employee(
             date_from=body.date_from,
             employment_rate=body.employment_rate,
             department_id=body.department_id,
+            created_by=int(user["user_id"]),
         )
 
         return call_service(
@@ -472,6 +473,7 @@ def terminate_employee(
             svc_terminate_employee,
             employee_id=employee_id,
             date_to=date_to,
+            created_by=int(user["user_id"]),
         )
 
         return call_service(

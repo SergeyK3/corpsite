@@ -38,6 +38,18 @@ def _cleanup_employees(full_names: List[str]) -> None:
     if not full_names:
         return
     with engine.begin() as conn:
+        if table_exists(conn, "employee_events"):
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM public.employee_events
+                    WHERE employee_id IN (
+                        SELECT employee_id FROM public.employees WHERE full_name = ANY(:names)
+                    )
+                    """
+                ),
+                {"names": full_names},
+            )
         conn.execute(
             text("DELETE FROM public.employees WHERE full_name = ANY(:names)"),
             {"names": full_names},
@@ -207,6 +219,50 @@ def test_create_employee_visible_via_list_and_get(client, seed, privileged_heade
         get_body = get_resp.json()
         assert get_body["fio"] == unique_name
         assert get_body["id"] == employee_id
+    finally:
+        _cleanup_employees(created_names)
+        _cleanup_positions(created_position_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_create_employee_emits_hire_event(client, seed, privileged_headers):
+    unique_name = f"PytestEmpCreate HireEvent {uuid4().hex[:8]}"
+    created_names: List[str] = [unique_name]
+    created_position_ids: List[int] = []
+    employee_id: Optional[str] = None
+
+    try:
+        with engine.begin() as conn:
+            if not table_exists(conn, "employees") or not table_exists(conn, "employee_events"):
+                pytest.skip("employees / employee_events tables not available")
+            position_id = _create_position(conn, name=f"pytest_pos_{uuid4().hex[:8]}")
+            created_position_ids.append(position_id)
+
+        create_resp = client.post(
+            "/directory/employees",
+            json={
+                "full_name": unique_name,
+                "org_unit_id": int(seed["unit_id"]),
+                "position_id": int(position_id),
+                "date_from": "2024-03-01",
+            },
+            headers=privileged_headers,
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        employee_id = str(create_resp.json()["id"])
+
+        events_resp = client.get(
+            f"/directory/employees/{employee_id}/events",
+            headers=privileged_headers,
+        )
+        assert events_resp.status_code == 200, events_resp.text
+        body = events_resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["event_type"] == "HIRE"
+        assert body["items"][0]["effective_date"] == "2024-03-01"
+        assert body["items"][0]["to_org_unit_id"] == int(seed["unit_id"])
+        assert body["items"][0]["to_position_id"] == int(position_id)
+        assert body["items"][0]["from_org_unit_id"] is None
     finally:
         _cleanup_employees(created_names)
         _cleanup_positions(created_position_ids)

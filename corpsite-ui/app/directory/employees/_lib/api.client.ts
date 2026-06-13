@@ -7,6 +7,7 @@ import type {
   EmployeeUpdatePayload,
   EmployeeTransferPayload,
   EmployeeTransferResponse,
+  EmployeeEventsResponse,
   UserDTO,
   UserCreatePayload,
 } from "./types";
@@ -292,6 +293,33 @@ export async function transferEmployee(
   return apiPostJson<EmployeeTransferResponse>(
     `/directory/employees/${encodeURIComponent(id)}/transfer`,
     payload
+  );
+}
+
+/**
+ * Кадровая история сотрудника
+ * Backend: GET /directory/employees/{id}/events
+ */
+export async function listEmployeeEvents(
+  employeeId: string,
+  args?: {
+    event_type?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<EmployeeEventsResponse> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+
+  const qs = buildQuery({
+    event_type: args?.event_type,
+    limit: args?.limit ?? 50,
+    offset: args?.offset ?? 0,
+  });
+
+  return apiGetJson<EmployeeEventsResponse>(
+    `/directory/employees/${encodeURIComponent(id)}/events`,
+    qs
   );
 }
 
