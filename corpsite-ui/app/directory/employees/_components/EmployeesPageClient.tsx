@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
+import PersonnelSubNav from "../../personnel/_components/PersonnelSubNav";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 import EmployeeCreateDrawer from "./EmployeeCreateDrawer";
@@ -508,6 +509,11 @@ export default function EmployeesPageClient(props: Props) {
         <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
             <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{pageTitle}</h1>
+            {routeBase === "/directory/personnel" ? (
+              <div className="mt-3">
+                <PersonnelSubNav />
+              </div>
+            ) : null}
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2.5">

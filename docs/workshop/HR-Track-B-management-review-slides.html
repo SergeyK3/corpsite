@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Corpsite — Кадровый журнал организации | HR Demo Track B</title>
+  <style>
+    @page { size: landscape; margin: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #1a1a1a;
+      background: #e8e8e8;
+    }
+    .slide {
+      width: 297mm;
+      height: 210mm;
+      margin: 0 auto 12px;
+      padding: 14mm 18mm 12mm;
+      background: #fff;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    .slide:last-child { page-break-after: auto; }
+    .header {
+      background: #1e3a5f;
+      color: #fff;
+      margin: -14mm -18mm 10mm;
+      padding: 10mm 18mm 8mm;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28pt;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .subtitle {
+      margin: 0 0 8mm;
+      font-size: 14pt;
+      color: #555;
+      font-weight: 500;
+    }
+    ul {
+      margin: 0;
+      padding: 0 0 0 6mm;
+      flex: 1;
+    }
+    li {
+      font-size: 15pt;
+      line-height: 1.45;
+      margin-bottom: 5mm;
+    }
+    .note {
+      margin-top: auto;
+      padding-top: 6mm;
+      border-top: 1px solid #ddd;
+      font-size: 10pt;
+      color: #777;
+      font-style: italic;
+    }
+    .footer {
+      position: absolute;
+      bottom: 8mm;
+      right: 18mm;
+      font-size: 9pt;
+      color: #999;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6mm;
+      margin-top: 4mm;
+      flex: 1;
+    }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 5mm;
+      font-size: 11pt;
+      line-height: 1.4;
+    }
+    .card strong { display: block; font-size: 12pt; margin-bottom: 2mm; color: #1e3a5f; }
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11pt;
+      margin-top: 4mm;
+    }
+    .compare-table th, .compare-table td {
+      border: 1px solid #ccc;
+      padding: 3mm 4mm;
+      text-align: left;
+      vertical-align: top;
+    }
+    .compare-table th { background: #f0f4f8; color: #1e3a5f; }
+    .phase-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12pt;
+      margin-top: 4mm;
+    }
+    .phase-table th, .phase-table td {
+      border: 1px solid #ccc;
+      padding: 3mm 4mm;
+      text-align: left;
+      vertical-align: top;
+    }
+    .phase-table th { background: #f0f4f8; color: #1e3a5f; }
+    .decision-box {
+      background: #f7fafc;
+      border-left: 4px solid #1e3a5f;
+      padding: 5mm 6mm;
+      margin-bottom: 4mm;
+      font-size: 14pt;
+      line-height: 1.4;
+    }
+    .track-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6mm;
+      margin-top: 4mm;
+    }
+    .track-box {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 5mm;
+      background: #fafafa;
+    }
+    .track-box h3 {
+      margin: 0 0 3mm;
+      font-size: 13pt;
+      color: #1e3a5f;
+    }
+    .track-box p {
+      margin: 0;
+      font-size: 11pt;
+      line-height: 1.4;
+      color: #444;
+    }
+    .wireframe-2col {
+      display: grid;
+      grid-template-columns: 2.2fr 1fr;
+      gap: 5mm;
+      margin-top: 3mm;
+      flex: 1;
+    }
+    .wireframe {
+      border: 1px dashed #999;
+      border-radius: 3px;
+      background: #fafafa;
+      padding: 3mm;
+      font-size: 7pt;
+      color: #444;
+      display: flex;
+      flex-direction: column;
+      min-height: 95mm;
+    }
+    .wireframe-title {
+      font-size: 9pt;
+      font-weight: 700;
+      color: #1e3a5f;
+      margin-bottom: 1.5mm;
+      text-align: center;
+    }
+    .wireframe-tag {
+      font-size: 6.5pt;
+      color: #888;
+      text-align: center;
+      margin-bottom: 2mm;
+      font-style: italic;
+    }
+    .wf-box {
+      border: 1px solid #bbb;
+      background: #fff;
+      border-radius: 2px;
+      padding: 1.5mm;
+      margin-bottom: 1.5mm;
+    }
+    .wf-bar {
+      height: 3mm;
+      background: #ddd;
+      border-radius: 1px;
+      margin-bottom: 1mm;
+    }
+    .wf-bar.short { width: 45%; }
+    .wf-bar.mid { width: 65%; }
+    .wf-chips {
+      display: flex;
+      gap: 1mm;
+      flex-wrap: wrap;
+      margin-bottom: 1.5mm;
+    }
+    .wf-chip {
+      height: 3.5mm;
+      min-width: 12mm;
+      background: #e8e8e8;
+      border-radius: 2px;
+      border: 1px solid #ccc;
+    }
+    .wf-chip.active { background: #1e3a5f; opacity: 0.25; }
+    .wf-reg-header {
+      display: grid;
+      grid-template-columns: 1.2fr 1.8fr 1fr 1.2fr 1.2fr 0.8fr 0.8fr;
+      gap: 0.8mm;
+      margin-bottom: 1mm;
+    }
+    .wf-reg-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1.8fr 1fr 1.2fr 1.2fr 0.8fr 0.8fr;
+      gap: 0.8mm;
+      margin-bottom: 0.8mm;
+    }
+    .wf-hcell {
+      height: 3mm;
+      background: #d0d8e4;
+      border-radius: 1px;
+    }
+    .wf-cell {
+      height: 3mm;
+      background: #e8e8e8;
+      border-radius: 1px;
+    }
+    .wf-badge-hire { background: #c8e6c9; }
+    .wf-badge-transfer { background: #bbdefb; }
+    .wf-badge-correct { background: #ffe0b2; }
+    .wf-badge-term { background: #e0e0e0; }
+    .wf-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2mm;
+      margin: 2mm 0;
+      flex: 1;
+    }
+    .wf-metric {
+      border: 1px solid #bbb;
+      padding: 3mm 2mm;
+      text-align: center;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .wf-metric strong {
+      display: block;
+      font-size: 16pt;
+      color: #1e3a5f;
+      line-height: 1.1;
+    }
+    .wf-metric span {
+      font-size: 7pt;
+      color: #555;
+      margin-top: 1mm;
+    }
+    .wf-metric.green strong { color: #2e7d32; }
+    .wf-metric.blue strong { color: #1565c0; }
+    .wf-metric.gray strong { color: #616161; }
+    .wf-metric.amber strong { color: #e65100; }
+    @media print {
+      body { background: #fff; }
+      .slide { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Слайд 1 -->
+<section class="slide">
+  <div class="header"><h1>Кадровый журнал организации</h1></div>
+  <p class="subtitle">HR Demo Track B · Управленческий обзор · Corpsite · Июнь 2026</p>
+  <ul>
+    <li><strong>Track A (готово):</strong> «Что произошло с этим сотрудником?» — кадровая история в карточке</li>
+    <li><strong>Track B (предлагается):</strong> «Что произошло в организации?» — единый журнал всех кадровых событий</li>
+    <li>Не отдельный модуль — продолжение кадрового контура на тех же данных</li>
+    <li>Цель встречи: согласовать концепцию и <strong>Этап A</strong> до начала разработки</li>
+  </ul>
+  <p class="note">Докладчик (~1 мин): связь Track A → Track B; один источник данных — два уровня обзора.</p>
+  <span class="footer">Слайд 1 / 6</span>
+</section>
+
+<!-- Слайд 2 -->
+<section class="slide">
+  <div class="header"><h1>Зачем нужен журнал</h1></div>
+  <p class="subtitle">От карточки сотрудника к обзору организации</p>
+  <div class="track-pair">
+    <div class="track-box">
+      <h3>Track A — уже есть</h3>
+      <p>Открываем сотрудника → видим его личную кадровую историю: приём, переводы, исправления, увольнение.</p>
+    </div>
+    <div class="track-box">
+      <h3>Track B — предлагается</h3>
+      <p>Открываем журнал организации → видим все кадровые события за период: кто принят, переведён, уволен, где были исправления.</p>
+    </div>
+  </div>
+  <ul style="margin-top:6mm;">
+    <li><strong>Сегодня:</strong> чтобы понять движение кадров, нужно обходить карточки сотрудников или внешние таблицы</li>
+    <li><strong>Решение:</strong> единый «Кадровый журнал» в Corpsite — хронология событий всей организации</li>
+    <li>Данные уже записываются при приёме, переводе и увольнении — журнал это <strong>новый уровень просмотра</strong>, не новый учёт</li>
+  </ul>
+  <p class="note">Докладчик (~2 мин): бизнес-логика без технических деталей.</p>
+  <span class="footer">Слайд 2 / 6</span>
+</section>
+
+<!-- Слайд 3 -->
+<section class="slide">
+  <div class="header"><h1>Ценность для ролей</h1></div>
+  <p class="subtitle">Кто что получает</p>
+  <div class="grid-3">
+    <div class="card">
+      <strong>HR / кадровая служба</strong>
+      Единый реестр всех кадровых событий · фильтры по периоду, типу, отделению · поиск сотрудника · переход в карточку · контроль полноты данных
+    </div>
+    <div class="card">
+      <strong>Руководитель отделения</strong>
+      Видит движение кадров в своём подразделении: приёмы, переводы, увольнения · раннее понимание изменений · только просмотр
+    </div>
+    <div class="card">
+      <strong>Заместитель директора</strong>
+      Обзор организации целиком · счётчики за год (приёмы / переводы / увольнения) · аудит с датами и приказами · меньше зависимости от ручных сводок HR
+    </div>
+  </div>
+  <table class="compare-table" style="margin-top:6mm;">
+    <thead>
+      <tr><th>Track A</th><th>Track B</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>История одного человека</td>
+        <td>История всей организации</td>
+      </tr>
+      <tr>
+        <td>Нужно знать, кого открыть</td>
+        <td>Сразу видно поток событий</td>
+      </tr>
+      <tr>
+        <td>Для HR и карточки сотрудника</td>
+        <td>Для руководства и операционного контроля</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="note">Докладчик (~2 мин): акцент на ценности для зама — макро-обзор vs микро-история.</p>
+  <span class="footer">Слайд 3 / 6</span>
+</section>
+
+<!-- Слайд 4 -->
+<section class="slide">
+  <div class="header"><h1>Как это выглядит</h1></div>
+  <p class="subtitle">Кадровый журнал и счётчики — wireframe placeholders</p>
+  <div class="wireframe-2col">
+    <div class="wireframe">
+      <div class="wireframe-title">Кадровый журнал организации</div>
+      <div class="wireframe-tag">Wireframe placeholder</div>
+      <div class="wf-box">
+        <div style="display:flex;gap:1.5mm;margin-bottom:1.5mm;">
+          <div class="wf-bar mid" style="flex:1;margin:0;"></div>
+          <div class="wf-bar short" style="width:22%;margin:0;"></div>
+        </div>
+        <div class="wf-chips">
+          <div class="wf-chip active"></div>
+          <div class="wf-chip"></div>
+          <div class="wf-chip"></div>
+          <div class="wf-chip"></div>
+          <div class="wf-chip"></div>
+        </div>
+        <div style="font-size:6pt;color:#888;margin-bottom:1mm;">Все · Приём · Перевод · Исправление · Увольнение</div>
+      </div>
+      <div class="wf-box" style="flex:1;">
+        <div class="wf-reg-header">
+          <div class="wf-hcell"></div><div class="wf-hcell"></div><div class="wf-hcell"></div>
+          <div class="wf-hcell"></div><div class="wf-hcell"></div><div class="wf-hcell"></div><div class="wf-hcell"></div>
+        </div>
+        <div style="font-size:6pt;color:#666;margin-bottom:1.5mm;">
+          Дата · Сотрудник · Тип · Из отделения · В отделение · Приказ · Автор
+        </div>
+        <div class="wf-reg-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div>
+          <div class="wf-cell wf-badge-hire"></div>
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+        <div class="wf-reg-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div>
+          <div class="wf-cell wf-badge-transfer"></div>
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+        <div class="wf-reg-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div>
+          <div class="wf-cell wf-badge-correct"></div>
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+        <div class="wf-reg-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div>
+          <div class="wf-cell wf-badge-term"></div>
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+        <div class="wf-reg-row">
+          <div class="wf-cell"></div><div class="wf-cell"></div>
+          <div class="wf-cell wf-badge-transfer"></div>
+          <div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div><div class="wf-cell"></div>
+        </div>
+      </div>
+      <div style="font-size:6.5pt;color:#888;text-align:center;">Строка → открыть карточку сотрудника (Track A)</div>
+    </div>
+    <div class="wireframe">
+      <div class="wireframe-title">Счётчики за год</div>
+      <div class="wireframe-tag">Wireframe placeholder</div>
+      <div class="wf-box">
+        <strong style="font-size:8pt;color:#1e3a5f;">Кадровое движение · 2026</strong>
+        <div class="wf-metrics">
+          <div class="wf-metric green">
+            <strong>24</strong>
+            <span>Приёмы</span>
+          </div>
+          <div class="wf-metric blue">
+            <strong>18</strong>
+            <span>Переводы</span>
+          </div>
+          <div class="wf-metric gray">
+            <strong>7</strong>
+            <span>Увольнения</span>
+          </div>
+          <div class="wf-metric amber">
+            <strong>3</strong>
+            <span>Исправления</span>
+          </div>
+        </div>
+        <div class="wf-bar mid" style="margin:2mm auto 0;"></div>
+        <div style="font-size:6.5pt;color:#888;text-align:center;margin-top:1.5mm;">Открыть журнал с фильтром →</div>
+      </div>
+      <div class="wf-box" style="margin-top:auto;">
+        <div style="font-size:7pt;color:#555;line-height:1.4;">
+          Размещение: экран «Персонал» (HR, зам) или страница отделения (руководитель — scoped)
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Докладчик (~2 мин): журнал + счётчики; клик по метрике открывает журнал с фильтром.</p>
+  <span class="footer">Слайд 4 / 6</span>
+</section>
+
+<!-- Слайд 5 -->
+<section class="slide">
+  <div class="header"><h1>Этапы внедрения</h1></div>
+  <p class="subtitle">MVP по фазам — рекомендация: утвердить Этап A для demo зама</p>
+  <table class="phase-table">
+    <thead>
+      <tr>
+        <th>Этап</th>
+        <th>Срок</th>
+        <th>Что входит</th>
+        <th>Ценность / риск</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>A — Журнал для HR</strong></td>
+        <td>1.5–2 нед.</td>
+        <td>Кадровый журнал · фильтры: период, тип, отделение, поиск · переход в карточку</td>
+        <td>Ценность: высокая · Риск: низкий–средний</td>
+      </tr>
+      <tr>
+        <td><strong>B — Видимость и метрики</strong></td>
+        <td>~1 нед.</td>
+        <td>Счётчики за год · scope для руководителей · просмотр своих событий сотрудником · экспорт</td>
+        <td>Ценность: высокая · Риск: средний (scope переводов)</td>
+      </tr>
+      <tr>
+        <td><strong>C — Управленческий polish</strong></td>
+        <td>~1 нед.</td>
+        <td>Фильтр «автор» · виджет для зама · backfill старых приёмов/увольнений</td>
+        <td>Ценность: средняя · Риск: низкий</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="note">Докладчик (~2 мин): Track B не дублирует Track A — это read-only витрина тех же событий.</p>
+  <span class="footer">Слайд 5 / 6</span>
+</section>
+
+<!-- Слайд 6 -->
+<section class="slide">
+  <div class="header"><h1>Решения на обзоре</h1></div>
+  <p class="subtitle">Повестка согласования</p>
+  <div class="decision-box">1. Утвердить <strong>Track B</strong> как продолжение Track A: «Кадровый журнал организации»</div>
+  <div class="decision-box">2. Утвердить <strong>Этап A</strong>: журнал + фильтры для HR (без счётчиков и scope руководителей)</div>
+  <div class="decision-box">3. Согласовать wireframes: реестр событий и блок счётчиков (слайд 4)</div>
+  <div class="decision-box">4. Подтвердить demo-сценарий: Track A (карточка [DEMO]) → Track B (тот же сотрудник в журнале организации)</div>
+  <div class="decision-box">5. Следующий шаг: фиксация ADR и старт разработки Этапа A</div>
+  <p class="note">Докладчик (~2 мин): зафиксировать решения; Track B — не отдельный проект, а второй экран кадрового контура.</p>
+  <span class="footer">Слайд 6 / 6</span>
+</section>
+
+</body>
+</html>

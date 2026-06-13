@@ -59,6 +59,8 @@ docs/*
 !docs/ops/**
 !docs/workshop/
 !docs/workshop/**
+!docs/demo/
+!docs/demo/**
 
 
 # -----------------------

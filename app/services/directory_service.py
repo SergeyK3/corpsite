@@ -1371,3 +1371,96 @@ def list_employee_events(
 
     items = [_normalize_employee_event(dict(r)) for r in rows]
     return {"items": items, "total": total}
+
+
+def list_personnel_events(
+    *,
+    event_type: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Org-wide personnel event register (Track B demo)."""
+    allowed_types = {"TRANSFER", "CORRECTION", "HIRE", "TERMINATION"}
+    if event_type is not None:
+        normalized_type = event_type.strip().upper()
+        if normalized_type not in allowed_types:
+            raise HTTPException(status_code=422, detail="Invalid event_type filter.")
+        event_type = normalized_type
+
+    where_parts: List[str] = ["TRUE"]
+    params: Dict[str, Any] = {
+        "limit": int(limit),
+        "offset": int(offset),
+    }
+
+    if event_type is not None:
+        where_parts.append("ev.event_type = :event_type")
+        params["event_type"] = event_type
+    if date_from is not None:
+        where_parts.append("ev.effective_date >= :date_from")
+        params["date_from"] = date_from
+    if date_to is not None:
+        where_parts.append("ev.effective_date <= :date_to")
+        params["date_to"] = date_to
+
+    where_sql = " AND ".join(where_parts)
+
+    q_total = text(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM public.employee_events ev
+        WHERE {where_sql}
+        """
+    )
+    q_list = text(
+        f"""
+        SELECT
+            ev.event_id,
+            ev.employee_id,
+            e.full_name AS employee_name,
+            ev.event_type,
+            ev.effective_date,
+            ev.from_org_unit_id,
+            fou.name AS from_org_unit_name,
+            ev.to_org_unit_id,
+            tou.name AS to_org_unit_name,
+            ev.order_ref
+        FROM public.employee_events ev
+        JOIN public.employees e ON e.employee_id = ev.employee_id
+        LEFT JOIN public.org_units fou ON fou.unit_id = ev.from_org_unit_id
+        LEFT JOIN public.org_units tou ON tou.unit_id = ev.to_org_unit_id
+        WHERE {where_sql}
+        ORDER BY ev.effective_date DESC, ev.event_id DESC
+        LIMIT :limit OFFSET :offset
+        """
+    )
+
+    with engine.begin() as conn:
+        total = int(conn.execute(q_total, params).mappings().first()["cnt"])
+        rows = conn.execute(q_list, params).mappings().all()
+
+    items: List[Dict[str, Any]] = []
+    for r in rows:
+        eff = r.get("effective_date")
+        items.append(
+            {
+                "event_id": int(r["event_id"]),
+                "employee_id": int(r["employee_id"]),
+                "employee_name": str(r.get("employee_name") or ""),
+                "event_type": str(r["event_type"]),
+                "effective_date": eff.isoformat() if hasattr(eff, "isoformat") else eff,
+                "from_org_unit_id": (
+                    int(r["from_org_unit_id"]) if r.get("from_org_unit_id") is not None else None
+                ),
+                "from_org_unit_name": r.get("from_org_unit_name"),
+                "to_org_unit_id": (
+                    int(r["to_org_unit_id"]) if r.get("to_org_unit_id") is not None else None
+                ),
+                "to_org_unit_name": r.get("to_org_unit_name"),
+                "order_ref": r.get("order_ref"),
+            }
+        )
+
+    return {"items": items, "total": total}
