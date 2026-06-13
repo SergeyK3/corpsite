@@ -41,6 +41,78 @@ function fmtDate(v: string | null | undefined): string {
   return dt.toLocaleDateString("ru-RU");
 }
 
+function fmtOrderRef(v: string | null | undefined): React.ReactNode {
+  const value = String(v ?? "").trim();
+  if (!value) return "—";
+  return (
+    <span className="inline-flex max-w-[12rem] truncate rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-xs font-semibold tracking-tight text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+      {value}
+    </span>
+  );
+}
+
+function orgUnitsUnchanged(row: PersonnelEventRow): boolean {
+  if (row.from_org_unit_id != null && row.to_org_unit_id != null) {
+    return row.from_org_unit_id === row.to_org_unit_id;
+  }
+  const from = String(row.from_org_unit_name ?? "").trim();
+  const to = String(row.to_org_unit_name ?? "").trim();
+  return Boolean(from && to && from === to);
+}
+
+function renderOrgUnitCells(row: PersonnelEventRow): React.ReactNode {
+  const typeKey = String(row.event_type || "").toUpperCase();
+
+  if (typeKey === "HIRE") {
+    return (
+      <>
+        <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">—</td>
+        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+          {row.to_org_unit_name || "—"}
+        </td>
+      </>
+    );
+  }
+
+  if (typeKey === "TERMINATION") {
+    return (
+      <>
+        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+          {row.from_org_unit_name || "—"}
+        </td>
+        <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">—</td>
+      </>
+    );
+  }
+
+  if (typeKey === "CORRECTION" && orgUnitsUnchanged(row)) {
+    const unit = row.to_org_unit_name || row.from_org_unit_name;
+    return (
+      <td colSpan={2} className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+        {unit ? (
+          <>
+            <span>{unit}</span>
+            <span className="text-zinc-500 dark:text-zinc-400"> · Корректировка данных</span>
+          </>
+        ) : (
+          <span className="text-zinc-500 dark:text-zinc-400">Корректировка данных</span>
+        )}
+      </td>
+    );
+  }
+
+  return (
+    <>
+      <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+        {row.from_org_unit_name || "—"}
+      </td>
+      <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+        {row.to_org_unit_name || "—"}
+      </td>
+    </>
+  );
+}
+
 export default function PersonnelJournalPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -113,7 +185,7 @@ export default function PersonnelJournalPageClient() {
       <div>
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Кадровый журнал</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          История кадровых событий организации (Track B demo)
+          История кадровых событий организации
         </p>
       </div>
 
@@ -222,15 +294,8 @@ export default function PersonnelJournalPageClient() {
                         {EVENT_LABEL[typeKey] || typeKey}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
-                      {row.from_org_unit_name || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
-                      {row.to_org_unit_name || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400">
-                      {row.order_ref || "—"}
-                    </td>
+                    {renderOrgUnitCells(row)}
+                    <td className="px-3 py-2">{fmtOrderRef(row.order_ref)}</td>
                   </tr>
                 );
               })}
