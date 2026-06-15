@@ -4,13 +4,12 @@
  * Dev (split ports): NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
  * Prod (nginx /api):  NEXT_PUBLIC_API_BASE_URL=/api
  * SSR on VPS:         BACKEND_URL=http://127.0.0.1:8000 (direct to FastAPI, no /api)
+ *
+ * Client bundle MUST use static process.env.NEXT_PUBLIC_API_BASE_URL so Next.js
+ * can inline the value at build time (dynamic process.env[name] is not inlined).
  */
 
 const DEFAULT_DEV_BACKEND = "http://127.0.0.1:8000";
-
-function trimEnv(name: string): string {
-  return (process.env[name] ?? "").toString().trim();
-}
 
 export function normalizeApiBase(base: string): string {
   return base.trim().replace(/\/+$/, "");
@@ -20,18 +19,31 @@ function isAbsoluteHttpUrl(base: string): boolean {
   return /^https?:\/\//i.test(base);
 }
 
+/** Server-only: direct FastAPI URL for SSR fetches. */
+function readBackendUrl(): string {
+  return normalizeApiBase(String(process.env.BACKEND_URL ?? "").trim());
+}
+
+/**
+ * Public API base from build-time env. Static property access is required for
+ * client bundles; do not replace with process.env[name].
+ */
+function readPublicApiBaseUrl(): string {
+  return normalizeApiBase(String(process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim());
+}
+
 function serverSideBackendBase(): string {
-  const backend = normalizeApiBase(trimEnv("BACKEND_URL"));
+  const backend = readBackendUrl();
   if (backend) return backend;
 
-  const publicBase = normalizeApiBase(trimEnv("NEXT_PUBLIC_API_BASE_URL"));
+  const publicBase = readPublicApiBaseUrl();
   if (publicBase && isAbsoluteHttpUrl(publicBase)) return publicBase;
 
   return DEFAULT_DEV_BACKEND;
 }
 
 function clientPublicBase(): string {
-  return normalizeApiBase(trimEnv("NEXT_PUBLIC_API_BASE_URL")) || DEFAULT_DEV_BACKEND;
+  return readPublicApiBaseUrl() || DEFAULT_DEV_BACKEND;
 }
 
 /**
