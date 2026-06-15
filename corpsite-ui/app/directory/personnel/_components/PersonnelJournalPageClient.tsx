@@ -128,6 +128,7 @@ export default function PersonnelJournalPageClient() {
   const eventType = searchParams.get("event_type") || "";
   const dateFrom = searchParams.get("date_from") || "";
   const dateTo = searchParams.get("date_to") || "";
+  const employeeSearch = searchParams.get("q") || "";
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -155,7 +156,21 @@ export default function PersonnelJournalPageClient() {
     void load();
   }, [load]);
 
-  function updateFilters(next: { event_type?: string; date_from?: string; date_to?: string }) {
+  const filteredItems = React.useMemo(() => {
+    const q = employeeSearch.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((row) => {
+      const name = String(row.employee_name || "").toLowerCase();
+      return name.includes(q) || String(row.employee_id).includes(q);
+    });
+  }, [employeeSearch, items]);
+
+  function updateFilters(next: {
+    event_type?: string;
+    date_from?: string;
+    date_to?: string;
+    q?: string;
+  }) {
     const params = new URLSearchParams(searchParams.toString());
     if (next.event_type !== undefined) {
       if (next.event_type) params.set("event_type", next.event_type);
@@ -168,6 +183,10 @@ export default function PersonnelJournalPageClient() {
     if (next.date_to !== undefined) {
       if (next.date_to) params.set("date_to", next.date_to);
       else params.delete("date_to");
+    }
+    if (next.q !== undefined) {
+      if (next.q.trim()) params.set("q", next.q.trim());
+      else params.delete("q");
     }
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "/directory/personnel/journal");
@@ -228,8 +247,24 @@ export default function PersonnelJournalPageClient() {
             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
         </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Поиск сотрудника
+          </label>
+          <input
+            type="search"
+            value={employeeSearch}
+            onChange={(e) => updateFilters({ q: e.target.value })}
+            placeholder="ФИО или таб. №"
+            className="min-w-[12rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+        </div>
         <div className="text-sm text-zinc-500 dark:text-zinc-400">
-          {loading ? "Загрузка…" : `${total} событий`}
+          {loading
+            ? "Загрузка…"
+            : employeeSearch.trim()
+              ? `${filteredItems.length} из ${total} событий`
+              : `${total} событий`}
         </div>
       </div>
 
@@ -265,14 +300,16 @@ export default function PersonnelJournalPageClient() {
               </tr>
             </thead>
             <tbody>
-              {!loading && items.length === 0 ? (
+              {!loading && filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
-                    Кадровые события не найдены
+                    {items.length === 0
+                      ? "Кадровые события не найдены"
+                      : "События не найдены по выбранным фильтрам"}
                   </td>
                 </tr>
               ) : null}
-              {items.map((row) => {
+              {filteredItems.map((row) => {
                 const typeKey = String(row.event_type || "").toUpperCase();
                 return (
                   <tr

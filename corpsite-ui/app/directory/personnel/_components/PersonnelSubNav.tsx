@@ -16,7 +16,7 @@ const ITEMS = [
   },
   {
     href: "/directory/personnel/documents",
-    title: "Профессиональные документы",
+    title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
     demoOnly: true,
   },

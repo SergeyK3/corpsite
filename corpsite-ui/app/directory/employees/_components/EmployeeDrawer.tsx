@@ -15,6 +15,7 @@ import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 import EmployeeTransferDrawer from "./EmployeeTransferDrawer";
 import EmployeeEventsTimeline from "./EmployeeEventsTimeline";
+import EmployeeProfessionalProfile from "./EmployeeProfessionalProfile";
 import type { EmployeeTransferFormValues } from "./EmployeeTransferForm";
 
 type PositionOption = {
@@ -781,6 +782,10 @@ export default function EmployeeDrawer({
                   </div>
                 </SectionBlock>
               )}
+
+              {mode === "view" && employeeId ? (
+                <EmployeeProfessionalProfile employeeId={employeeId} />
+              ) : null}
 
               <SectionBlock title="Учётная запись Corpsite">
                 <div className={readOnlyCardClass}>
