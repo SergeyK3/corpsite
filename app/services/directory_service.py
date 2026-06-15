@@ -874,13 +874,15 @@ def terminate_employee(
         if not already_inactive:
             from_rate_raw = row.get("employment_rate")
             from_rate = float(from_rate_raw) if from_rate_raw is not None else None
+            from_position_raw = row.get("position_id")
+            from_position_id = int(from_position_raw) if from_position_raw is not None else None
             _insert_employee_event(
                 conn,
                 employee_id=emp_id,
                 event_type="TERMINATION",
                 effective_date=effective_date_to,
                 from_org_unit_id=int(row["org_unit_id"]),
-                from_position_id=int(row["position_id"]),
+                from_position_id=from_position_id,
                 from_rate=from_rate,
                 to_org_unit_id=None,
                 to_position_id=None,
@@ -1171,7 +1173,8 @@ def _apply_employee_org_change(
             raise HTTPException(status_code=409, detail="Employee is inactive.")
 
         from_org_unit_id = int(row["org_unit_id"])
-        from_position_id = int(row["position_id"])
+        from_position_raw = row.get("position_id")
+        from_position_id = int(from_position_raw) if from_position_raw is not None else None
         from_rate_raw = row.get("employment_rate")
         from_rate = float(from_rate_raw) if from_rate_raw is not None else None
 
@@ -1179,7 +1182,15 @@ def _apply_employee_org_change(
         if org_row is None:
             raise HTTPException(status_code=404, detail="Org unit not found.")
 
-        effective_to_position_id = int(to_position_id) if to_position_id is not None else from_position_id
+        if to_position_id is not None:
+            effective_to_position_id = int(to_position_id)
+        elif from_position_id is not None:
+            effective_to_position_id = from_position_id
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail="Current position is missing; choose target position",
+            )
         pos_row = conn.execute(q_position, {"position_id": effective_to_position_id}).first()
         if pos_row is None:
             raise HTTPException(status_code=404, detail="Position not found.")
@@ -1198,7 +1209,9 @@ def _apply_employee_org_change(
             )
 
         if not require_different_org_unit:
-            position_changed = to_position_id is not None and int(to_position_id) != from_position_id
+            position_changed = to_position_id is not None and (
+                from_position_id is None or int(to_position_id) != from_position_id
+            )
             org_changed = from_org_unit_id != int(to_org_unit_id)
             if not org_changed and not position_changed:
                 raise HTTPException(status_code=422, detail="At least one of org unit or position must change.")

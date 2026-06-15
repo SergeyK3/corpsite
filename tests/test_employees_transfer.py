@@ -96,6 +96,27 @@ def _create_employee(
     )
 
 
+def _create_employee_without_position(
+    conn,
+    *,
+    full_name: str,
+    org_unit_id: int,
+    is_active: bool = True,
+) -> int:
+    return insert_returning_id(
+        conn,
+        table="employees",
+        id_col="employee_id",
+        values={
+            "full_name": full_name,
+            "org_unit_id": int(org_unit_id),
+            "position_id": None,
+            "employment_rate": 1.0,
+            "is_active": is_active,
+        },
+    )
+
+
 def _cleanup_employee_events(employee_ids: List[int]) -> None:
     if not employee_ids:
         return
@@ -787,6 +808,107 @@ def test_list_employee_events_pagination_and_type_filters(client, seed, privileg
         assert corrections_body["items"][0]["from_org_unit_id"] == third_unit_id
         assert corrections_body["items"][0]["to_org_unit_id"] == third_unit_id
         assert corrections_body["items"][0]["to_position_id"] == pos_ids[1]
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+def _make_null_position_transfer_fixture(seed) -> tuple[int, int, int, List[int], List[int], List[int]]:
+    created_unit_ids: List[int] = []
+    created_position_ids: List[int] = []
+    created_employee_ids: List[int] = []
+
+    with engine.begin() as conn:
+        if not table_exists(conn, "employees"):
+            pytest.skip("employees table not available")
+        if not table_exists(conn, "employee_events"):
+            pytest.skip("employee_events table not available")
+
+        group_id = _find_group_id(conn)
+        from_unit_id = int(seed["unit_id"])
+        to_unit_id = _create_unit_with_group(
+            conn,
+            name=f"pytest_xfer_null_from_{uuid4().hex[:8]}",
+            group_id=group_id,
+        )
+        created_unit_ids.append(to_unit_id)
+
+        target_position_id = _create_position(conn, name=f"pytest_xfer_null_pos_{uuid4().hex[:8]}")
+        created_position_ids.append(target_position_id)
+
+        employee_id = _create_employee_without_position(
+            conn,
+            full_name=f"PytestTransferNullPos {uuid4().hex[:8]}",
+            org_unit_id=from_unit_id,
+        )
+        created_employee_ids.append(employee_id)
+
+    return (
+        int(employee_id),
+        int(from_unit_id),
+        int(to_unit_id),
+        created_employee_ids,
+        created_position_ids,
+        created_unit_ids,
+    )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_transfer_employee_null_current_position_with_explicit_target_returns_200(
+    client, seed, privileged_headers
+):
+    employee_id, from_unit_id, to_unit_id, emp_ids, pos_ids, unit_ids = _make_null_position_transfer_fixture(
+        seed
+    )
+
+    try:
+        resp = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "to_position_id": pos_ids[0],
+                "effective_date": "2026-06-15",
+            },
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert "TypeError" not in resp.text
+
+        body = resp.json()
+        assert body["item"]["org_unit"]["unit_id"] == to_unit_id
+        assert body["item"]["position"]["id"] == pos_ids[0]
+        assert body["event"]["event_type"] == "TRANSFER"
+        assert body["event"]["from_org_unit_id"] == from_unit_id
+        assert body["event"]["from_position_id"] is None
+        assert body["event"]["to_org_unit_id"] == to_unit_id
+        assert body["event"]["to_position_id"] == pos_ids[0]
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_transfer_employee_null_current_position_without_target_returns_422(
+    client, seed, privileged_headers
+):
+    employee_id, _from_unit_id, to_unit_id, emp_ids, pos_ids, unit_ids = _make_null_position_transfer_fixture(
+        seed
+    )
+
+    try:
+        resp = client.post(
+            f"/directory/employees/{employee_id}/transfer",
+            json={
+                "to_org_unit_id": to_unit_id,
+                "effective_date": "2026-06-15",
+            },
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 422, resp.text
+        assert "TypeError" not in resp.text
+        assert resp.json()["detail"] == "Current position is missing; choose target position"
     finally:
         _cleanup_employees(emp_ids)
         _cleanup_positions(pos_ids)
