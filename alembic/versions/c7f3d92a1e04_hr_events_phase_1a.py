@@ -1,7 +1,7 @@
 """hr events phase 1a schema
 
 Revision ID: c7f3d92a1e04
-Revises: b5e2a81d4c03
+Revises: e4a1c92b7d10
 Create Date: 2026-06-15 12:00:00.000000
 
 ADR-036 Phase 1A Step 1: employee_events event_class, lifecycle_status, metadata;
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c7f3d92a1e04"
-down_revision: Union[str, Sequence[str], None] = "b5e2a81d4c03"
+down_revision: Union[str, Sequence[str], None] = "e4a1c92b7d10"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
