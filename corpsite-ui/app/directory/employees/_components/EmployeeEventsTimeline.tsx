@@ -30,6 +30,15 @@ const EVENT_TYPE_META: Record<
     label: "Перевод",
     badgeClass: "bg-blue-100 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200",
   },
+  POSITION_CHANGE: {
+    label: "Смена должности",
+    badgeClass:
+      "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
+  },
+  RATE_CHANGE: {
+    label: "Изменение ставки",
+    badgeClass: "bg-cyan-100 text-cyan-900 dark:bg-cyan-950/50 dark:text-cyan-200",
+  },
   CORRECTION: {
     label: "Исправление",
     badgeClass: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
@@ -111,14 +120,18 @@ function describeEvent(event: EmployeeEventDTO, maps: LabelMaps): string {
   return parts.join(" · ");
 }
 
-function eventTypeMeta(eventType: string) {
-  const key = String(eventType || "").toUpperCase();
-  return (
+function eventTypeMeta(event: EmployeeEventDTO) {
+  const fromApi = String(event.event_label ?? "").trim();
+  const key = String(event.event_type || "").toUpperCase();
+  const fallback =
     EVENT_TYPE_META[key] ?? {
       label: key || "Событие",
       badgeClass: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
-    }
-  );
+    };
+  return {
+    label: fromApi || fallback.label,
+    badgeClass: fallback.badgeClass,
+  };
 }
 
 export default function EmployeeEventsTimeline({ employeeId, refreshToken = 0 }: Props) {
@@ -233,7 +246,7 @@ export default function EmployeeEventsTimeline({ employeeId, refreshToken = 0 }:
       ) : (
         <ol className="relative space-y-0 border-l border-zinc-200 dark:border-zinc-800 ml-2">
           {items.map((event) => {
-            const meta = eventTypeMeta(event.event_type);
+            const meta = eventTypeMeta(event);
             const summary = describeEvent(event, labelMaps);
 
             return (

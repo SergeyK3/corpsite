@@ -116,21 +116,60 @@ def test_update_employee_happy_path(client, seed, privileged_headers):
     try:
         resp = client.patch(
             f"/directory/employees/{employee_id}",
-            json={
-                "full_name": new_name,
-                "employment_rate": 0.75,
-                "date_from": "2024-02-01",
-                "position_id": alt_position_id,
-            },
+            json={"full_name": new_name},
             headers=privileged_headers,
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["fio"] == new_name
-        assert float(body["rate"]) == 0.75
-        assert body["date_from"] == "2024-02-01"
-        assert int(body["position"]["id"]) == alt_position_id
+        assert float(body["rate"]) == 1.0
+        assert body["date_from"] == "2024-01-10"
+        assert int(body["position"]["id"]) == position_id
         assert int(body["org_unit"]["unit_id"]) == int(seed["unit_id"])
+    finally:
+        _cleanup_employees(created_employee_ids)
+        _cleanup_positions(created_position_ids)
+
+
+@pytest.mark.parametrize("field,payload", [
+    ("position_id", {"position_id": 1}),
+    ("employment_rate", {"employment_rate": 0.75}),
+    ("date_from", {"date_from": "2024-02-01"}),
+])
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_update_employee_personnel_fields_rejected_by_schema(
+    client, seed, privileged_headers, field, payload
+):
+    employee_id, _, alt_position_id, created_employee_ids, created_position_ids = _make_employee(seed)
+    if field == "position_id":
+        payload = {"position_id": alt_position_id}
+
+    try:
+        resp = client.patch(
+            f"/directory/employees/{employee_id}",
+            json=payload,
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 422, resp.text
+    finally:
+        _cleanup_employees(created_employee_ids)
+        _cleanup_positions(created_position_ids)
+
+
+@pytest.mark.parametrize("employment_rate", [0, -0.5, 2.5, 3])
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_update_employee_bad_employment_rate_returns_422(
+    client, seed, privileged_headers, employment_rate
+):
+    employee_id, _, _, created_employee_ids, created_position_ids = _make_employee(seed)
+
+    try:
+        resp = client.patch(
+            f"/directory/employees/{employee_id}",
+            json={"employment_rate": employment_rate},
+            headers=privileged_headers,
+        )
+        assert resp.status_code == 422, resp.text
     finally:
         _cleanup_employees(created_employee_ids)
         _cleanup_positions(created_position_ids)
@@ -163,7 +202,7 @@ def test_update_employee_not_found_returns_404(client, privileged_headers):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_update_employee_bad_position_returns_404(client, seed, privileged_headers):
+def test_update_employee_bad_position_returns_422(client, seed, privileged_headers):
     employee_id, _, _, created_employee_ids, created_position_ids = _make_employee(seed)
 
     try:
@@ -172,15 +211,14 @@ def test_update_employee_bad_position_returns_404(client, seed, privileged_heade
             json={"position_id": 999999999},
             headers=privileged_headers,
         )
-        assert resp.status_code == 404, resp.text
-        assert "Position" in resp.text
+        assert resp.status_code == 422, resp.text
     finally:
         _cleanup_employees(created_employee_ids)
         _cleanup_positions(created_position_ids)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_update_employee_date_from_after_date_to_returns_422(client, seed, privileged_headers):
+def test_update_employee_date_from_returns_422(client, seed, privileged_headers):
     created_position_ids: List[int] = []
     created_employee_ids: List[int] = []
 
@@ -205,7 +243,6 @@ def test_update_employee_date_from_after_date_to_returns_422(client, seed, privi
             headers=privileged_headers,
         )
         assert resp.status_code == 422, resp.text
-        assert "date_from" in resp.text
     finally:
         _cleanup_employees(created_employee_ids)
         _cleanup_positions(created_position_ids)
@@ -241,25 +278,6 @@ def test_update_employee_empty_body_returns_422(client, seed, privileged_headers
         resp = client.patch(
             f"/directory/employees/{employee_id}",
             json={},
-            headers=privileged_headers,
-        )
-        assert resp.status_code == 422, resp.text
-    finally:
-        _cleanup_employees(created_employee_ids)
-        _cleanup_positions(created_position_ids)
-
-
-@pytest.mark.parametrize("employment_rate", [0, -0.5, 2.5, 3])
-@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_update_employee_bad_employment_rate_returns_422(
-    client, seed, privileged_headers, employment_rate
-):
-    employee_id, _, _, created_employee_ids, created_position_ids = _make_employee(seed)
-
-    try:
-        resp = client.patch(
-            f"/directory/employees/{employee_id}",
-            json={"employment_rate": employment_rate},
             headers=privileged_headers,
         )
         assert resp.status_code == 422, resp.text

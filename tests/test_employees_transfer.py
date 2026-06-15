@@ -332,6 +332,8 @@ def test_transfer_employee_returns_item_and_event(client, seed, privileged_heade
         assert body["item"]["org_unit"]["unit_id"] == to_unit_id
         assert body["item"]["position"]["id"] == pos_ids[1]
         assert body["event"]["event_type"] == "TRANSFER"
+        assert body["event"]["event_class"] == "EMPLOYMENT"
+        assert body["event"]["lifecycle_status"] == "APPROVED"
         assert body["event"]["from_org_unit_id"] == from_unit_id
         assert body["event"]["to_org_unit_id"] == to_unit_id
         assert body["event"]["order_ref"] == "123-к"

@@ -1,6 +1,7 @@
 # FILE: app/services/directory_service.py
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,6 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
+from app.services.hr_event_registry import get_event_class, get_event_label
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import build_dept_scope_cte
@@ -787,6 +789,9 @@ def create_employee(
             conn,
             employee_id=emp_id,
             event_type="HIRE",
+            event_class=get_event_class("HIRE"),
+            lifecycle_status="APPROVED",
+            metadata=None,
             effective_date=hired_on,
             from_org_unit_id=None,
             from_position_id=None,
@@ -880,6 +885,9 @@ def terminate_employee(
                 conn,
                 employee_id=emp_id,
                 event_type="TERMINATION",
+                event_class=get_event_class("TERMINATION"),
+                lifecycle_status="APPROVED",
+                metadata=None,
                 effective_date=effective_date_to,
                 from_org_unit_id=int(row["org_unit_id"]),
                 from_position_id=from_position_id,
@@ -893,6 +901,9 @@ def terminate_employee(
             )
 
     return target_id_text
+
+
+_PERSONNEL_PATCH_FORBIDDEN_MSG = "Use personnel event instead of direct employee patch"
 
 
 def update_employee(
@@ -910,9 +921,12 @@ def update_employee(
     if all(v is None for v in (full_name, employment_rate, date_from, position_id)):
         raise HTTPException(status_code=422, detail="At least one field is required.")
 
+    if employment_rate is not None or date_from is not None or position_id is not None:
+        raise HTTPException(status_code=422, detail=_PERSONNEL_PATCH_FORBIDDEN_MSG)
+
     q_fetch = text(
         """
-        SELECT employee_id, date_to
+        SELECT employee_id
         FROM public.employees
         WHERE CAST(employee_id AS TEXT) = :id_text
         LIMIT 1
@@ -925,56 +939,24 @@ def update_employee(
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         emp_id = int(row["employee_id"])
-        existing_date_to = row.get("date_to")
 
-        updates: List[str] = []
-        params: Dict[str, Any] = {"employee_id": emp_id}
+        if full_name is None:
+            raise HTTPException(status_code=422, detail="At least one field is required.")
 
-        if full_name is not None:
-            normalized_name = " ".join((full_name or "").split()).strip()
-            if not normalized_name:
-                raise HTTPException(status_code=422, detail="full_name is required.")
-            updates.append("full_name = :full_name")
-            params["full_name"] = normalized_name
+        normalized_name = " ".join((full_name or "").split()).strip()
+        if not normalized_name:
+            raise HTTPException(status_code=422, detail="full_name is required.")
 
-        if employment_rate is not None:
-            rate = float(employment_rate)
-            if rate <= 0 or rate > 2:
-                raise HTTPException(status_code=422, detail="employment_rate must be > 0 and <= 2.")
-            updates.append("employment_rate = :employment_rate")
-            params["employment_rate"] = rate
-
-        if date_from is not None:
-            if existing_date_to is not None and date_from > existing_date_to:
-                raise HTTPException(status_code=422, detail="date_from must be on or before date_to.")
-            updates.append("date_from = :date_from")
-            params["date_from"] = date_from
-
-        if position_id is not None:
-            pos_row = conn.execute(
-                text(
-                    """
-                    SELECT position_id
-                    FROM public.positions
-                    WHERE position_id = :position_id
-                    LIMIT 1
-                    """
-                ),
-                {"position_id": int(position_id)},
-            ).first()
-            if pos_row is None:
-                raise HTTPException(status_code=404, detail="Position not found.")
-            updates.append("position_id = :position_id")
-            params["position_id"] = int(position_id)
-
-        q_update = text(
-            f"""
-            UPDATE public.employees
-            SET {", ".join(updates)}
-            WHERE employee_id = :employee_id
-            """
+        conn.execute(
+            text(
+                """
+                UPDATE public.employees
+                SET full_name = :full_name
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {"employee_id": emp_id, "full_name": normalized_name},
         )
-        conn.execute(q_update, params)
 
     return target_id_text
 
@@ -987,6 +969,9 @@ def _insert_employee_event(
     *,
     employee_id: int,
     event_type: str,
+    event_class: str,
+    lifecycle_status: str,
+    metadata: Optional[Dict[str, Any]],
     effective_date: date,
     from_org_unit_id: Optional[int],
     from_position_id: Optional[int],
@@ -998,11 +983,15 @@ def _insert_employee_event(
     comment: Optional[str],
     created_by: int,
 ) -> Dict[str, Any]:
+    metadata_json = json.dumps(metadata) if metadata is not None else None
     q_insert_event = text(
         """
         INSERT INTO public.employee_events (
             employee_id,
             event_type,
+            event_class,
+            lifecycle_status,
+            metadata,
             effective_date,
             from_org_unit_id,
             from_position_id,
@@ -1017,6 +1006,9 @@ def _insert_employee_event(
         VALUES (
             :employee_id,
             :event_type,
+            :event_class,
+            :lifecycle_status,
+            CAST(:metadata AS jsonb),
             :effective_date,
             :from_org_unit_id,
             :from_position_id,
@@ -1031,6 +1023,9 @@ def _insert_employee_event(
         RETURNING
             event_id,
             event_type,
+            event_class,
+            lifecycle_status,
+            metadata,
             effective_date,
             from_org_unit_id,
             from_position_id,
@@ -1049,6 +1044,9 @@ def _insert_employee_event(
         {
             "employee_id": int(employee_id),
             "event_type": event_type,
+            "event_class": event_class,
+            "lifecycle_status": lifecycle_status,
+            "metadata": metadata_json,
             "effective_date": effective_date,
             "from_org_unit_id": from_org_unit_id,
             "from_position_id": from_position_id,
@@ -1076,10 +1074,37 @@ def _normalize_employee_event(row: Dict[str, Any]) -> Dict[str, Any]:
 
     effective = row.get("effective_date")
     created_at = row.get("created_at")
+    event_type = str(row["event_type"])
+    metadata_raw = row.get("metadata")
+    metadata: Optional[Dict[str, Any]] = None
+    if metadata_raw is not None:
+        if isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+        elif isinstance(metadata_raw, str):
+            try:
+                metadata = json.loads(metadata_raw)
+            except json.JSONDecodeError:
+                metadata = None
+
+    event_class = row.get("event_class")
+    if event_class is not None:
+        event_class = str(event_class)
+    else:
+        event_class = get_event_class(event_type)
+
+    lifecycle_status = row.get("lifecycle_status")
+    if lifecycle_status is not None:
+        lifecycle_status = str(lifecycle_status)
+    else:
+        lifecycle_status = "APPROVED"
 
     return {
         "event_id": int(row["event_id"]),
-        "event_type": str(row["event_type"]),
+        "event_type": event_type,
+        "event_class": event_class,
+        "event_label": get_event_label(event_type),
+        "lifecycle_status": lifecycle_status,
+        "metadata": metadata,
         "effective_date": effective.isoformat() if hasattr(effective, "isoformat") else effective,
         "from_org_unit_id": int(row["from_org_unit_id"]) if row.get("from_org_unit_id") is not None else None,
         "to_org_unit_id": int(row["to_org_unit_id"]) if row.get("to_org_unit_id") is not None else None,
@@ -1234,6 +1259,9 @@ def _apply_employee_org_change(
             conn,
             employee_id=emp_id,
             event_type=event_type,
+            event_class=get_event_class(event_type),
+            lifecycle_status="APPROVED",
+            metadata=None,
             effective_date=effective_date,
             from_org_unit_id=from_org_unit_id,
             from_position_id=from_position_id,
@@ -1260,18 +1288,20 @@ def transfer_employee(
     comment: Optional[str] = None,
     created_by: int,
 ) -> Dict[str, Any]:
-    return _apply_employee_org_change(
+    from app.services.personnel_events_service import create_personnel_event
+
+    return create_personnel_event(
         employee_id=employee_id,
         event_type="TRANSFER",
-        to_org_unit_id=to_org_unit_id,
-        to_position_id=to_position_id,
-        to_employment_rate=to_employment_rate,
-        effective_date=effective_date,
-        order_ref=order_ref,
-        comment=comment,
+        payload={
+            "to_org_unit_id": to_org_unit_id,
+            "to_position_id": to_position_id,
+            "to_employment_rate": to_employment_rate,
+            "effective_date": effective_date,
+            "order_ref": order_ref,
+            "comment": comment,
+        },
         created_by=created_by,
-        require_active=True,
-        require_different_org_unit=True,
     )
 
 
@@ -1314,7 +1344,14 @@ def list_employee_events(
     if not target_id_text:
         raise HTTPException(status_code=404, detail="Employee not found.")
 
-    allowed_types = {"TRANSFER", "CORRECTION", "HIRE", "TERMINATION"}
+    allowed_types = {
+        "TRANSFER",
+        "CORRECTION",
+        "HIRE",
+        "TERMINATION",
+        "POSITION_CHANGE",
+        "RATE_CHANGE",
+    }
     if event_type is not None:
         normalized_type = event_type.strip().upper()
         if normalized_type not in allowed_types:
@@ -1355,6 +1392,9 @@ def list_employee_events(
         SELECT
             event_id,
             event_type,
+            event_class,
+            lifecycle_status,
+            metadata,
             effective_date,
             from_org_unit_id,
             from_position_id,
@@ -1395,7 +1435,14 @@ def list_personnel_events(
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Org-wide personnel event register (Track B demo)."""
-    allowed_types = {"TRANSFER", "CORRECTION", "HIRE", "TERMINATION"}
+    allowed_types = {
+        "TRANSFER",
+        "CORRECTION",
+        "HIRE",
+        "TERMINATION",
+        "POSITION_CHANGE",
+        "RATE_CHANGE",
+    }
     if event_type is not None:
         normalized_type = event_type.strip().upper()
         if normalized_type not in allowed_types:
@@ -1434,6 +1481,9 @@ def list_personnel_events(
             ev.employee_id,
             e.full_name AS employee_name,
             ev.event_type,
+            ev.event_class,
+            ev.lifecycle_status,
+            ev.metadata,
             ev.effective_date,
             ev.from_org_unit_id,
             fou.name AS from_org_unit_name,
@@ -1473,12 +1523,40 @@ def list_personnel_events(
     items: List[Dict[str, Any]] = []
     for r in rows:
         eff = r.get("effective_date")
+        event_type = str(r["event_type"])
+        metadata_raw = r.get("metadata")
+        metadata: Optional[Dict[str, Any]] = None
+        if metadata_raw is not None:
+            if isinstance(metadata_raw, dict):
+                metadata = metadata_raw
+            elif isinstance(metadata_raw, str):
+                try:
+                    metadata = json.loads(metadata_raw)
+                except json.JSONDecodeError:
+                    metadata = None
+
+        event_class = r.get("event_class")
+        if event_class is not None:
+            event_class = str(event_class)
+        else:
+            event_class = get_event_class(event_type)
+
+        lifecycle_status = r.get("lifecycle_status")
+        if lifecycle_status is not None:
+            lifecycle_status = str(lifecycle_status)
+        else:
+            lifecycle_status = "APPROVED"
+
         items.append(
             {
                 "event_id": int(r["event_id"]),
                 "employee_id": int(r["employee_id"]),
                 "employee_name": str(r.get("employee_name") or ""),
-                "event_type": str(r["event_type"]),
+                "event_type": event_type,
+                "event_class": event_class,
+                "event_label": get_event_label(event_type),
+                "lifecycle_status": lifecycle_status,
+                "metadata": metadata,
                 "effective_date": eff.isoformat() if hasattr(eff, "isoformat") else eff,
                 "from_org_unit_id": (
                     int(r["from_org_unit_id"]) if r.get("from_org_unit_id") is not None else None

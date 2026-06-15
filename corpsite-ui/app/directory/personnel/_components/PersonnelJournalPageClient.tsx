@@ -16,6 +16,8 @@ const EVENT_TYPES = [
   { value: "", label: "Все" },
   { value: "HIRE", label: "Приём" },
   { value: "TRANSFER", label: "Перевод" },
+  { value: "POSITION_CHANGE", label: "Смена должности" },
+  { value: "RATE_CHANGE", label: "Изменение ставки" },
   { value: "CORRECTION", label: "Исправление" },
   { value: "TERMINATION", label: "Увольнение" },
 ] as const;
@@ -23,6 +25,8 @@ const EVENT_TYPES = [
 const EVENT_BADGE: Record<string, string> = {
   HIRE: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
   TRANSFER: "bg-blue-100 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200",
+  POSITION_CHANGE: "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
+  RATE_CHANGE: "bg-cyan-100 text-cyan-900 dark:bg-cyan-950/50 dark:text-cyan-200",
   CORRECTION: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
   TERMINATION: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200",
 };
@@ -30,9 +34,18 @@ const EVENT_BADGE: Record<string, string> = {
 const EVENT_LABEL: Record<string, string> = {
   HIRE: "Приём",
   TRANSFER: "Перевод",
+  POSITION_CHANGE: "Смена должности",
+  RATE_CHANGE: "Изменение ставки",
   CORRECTION: "Исправление",
   TERMINATION: "Увольнение",
 };
+
+function eventRowLabel(row: PersonnelEventRow): string {
+  const fromApi = String(row.event_label ?? "").trim();
+  if (fromApi) return fromApi;
+  const typeKey = String(row.event_type || "").toUpperCase();
+  return EVENT_LABEL[typeKey] || typeKey || "—";
+}
 
 function fmtDate(v: string | null | undefined): string {
   if (!v) return "—";
@@ -77,6 +90,33 @@ function formatEventDetails(row: PersonnelEventRow): string[] {
       `Отделение: ${nameOrDash(row.from_org_unit_name)}`,
       `Должность: ${nameOrDash(row.from_position_name)}`,
       `Ставка: ${fmtRate(row.from_rate)}`,
+    ];
+  }
+
+  if (typeKey === "POSITION_CHANGE") {
+    const lines: string[] = [
+      `Отделение: ${nameOrDash(row.to_org_unit_name || row.from_org_unit_name)}`,
+    ];
+    const fromPos = nameOrDash(row.from_position_name);
+    const toPos = nameOrDash(row.to_position_name);
+    if (fromPos !== toPos) {
+      lines.push(`Должность: ${fromPos} → ${toPos}`);
+    } else if (toPos !== "—") {
+      lines.push(`Должность: ${toPos}`);
+    }
+    const fromRate = fmtRate(row.from_rate);
+    const toRate = fmtRate(row.to_rate);
+    if (fromRate !== toRate && toRate !== "—") {
+      lines.push(`Ставка: ${fromRate} → ${toRate}`);
+    }
+    return lines;
+  }
+
+  if (typeKey === "RATE_CHANGE") {
+    return [
+      `Отделение: ${nameOrDash(row.to_org_unit_name || row.from_org_unit_name)}`,
+      `Должность: ${nameOrDash(row.to_position_name || row.from_position_name)}`,
+      `Ставка: ${fmtRate(row.from_rate)} → ${fmtRate(row.to_rate)}`,
     ];
   }
 
@@ -171,6 +211,18 @@ function renderOrgUnitCells(row: PersonnelEventRow): React.ReactNode {
         ) : (
           <span className="text-zinc-500 dark:text-zinc-400">Корректировка данных</span>
         )}
+      </td>
+    );
+  }
+
+  if (
+    (typeKey === "POSITION_CHANGE" || typeKey === "RATE_CHANGE") &&
+    orgUnitsUnchanged(row)
+  ) {
+    const unit = row.to_org_unit_name || row.from_org_unit_name;
+    return (
+      <td colSpan={2} className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+        {unit || "—"}
       </td>
     );
   }
@@ -360,7 +412,7 @@ export default function PersonnelJournalPageClient() {
                   Сотрудник
                 </th>
                 <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-                  Тип
+                  Событие
                 </th>
                 <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
                   Из отделения
@@ -405,7 +457,7 @@ export default function PersonnelJournalPageClient() {
                           "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
                         }`}
                       >
-                        {EVENT_LABEL[typeKey] || typeKey}
+                        {eventRowLabel(row)}
                       </span>
                     </td>
                     {renderOrgUnitCells(row)}

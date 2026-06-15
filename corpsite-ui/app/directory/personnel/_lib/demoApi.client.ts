@@ -46,6 +46,10 @@ export type PersonnelEventRow = {
   employee_id: number;
   employee_name: string;
   event_type: string;
+  event_label?: string | null;
+  event_class?: string | null;
+  lifecycle_status?: string | null;
+  metadata?: Record<string, unknown> | null;
   effective_date: string;
   from_org_unit_id: number | null;
   from_org_unit_name: string | null;

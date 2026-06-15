@@ -24,6 +24,8 @@ from app.services.directory_service import (
     correct_employee_org_unit as svc_correct_employee_org_unit,
     list_employee_events as svc_list_employee_events,
 )
+from app.services.hr_event_registry import list_registry_for_ui
+from app.services.personnel_events_service import create_personnel_event
 
 from .common import as_http500, call_service
 from .rbac import compute_scope, require_privileged_or_403
@@ -62,9 +64,6 @@ class EmployeeUpdateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     full_name: Optional[str] = Field(default=None, min_length=1, max_length=500)
-    employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
-    date_from: Optional[date] = None
-    position_id: Optional[int] = Field(default=None, ge=1)
 
 
 class EmployeeTransferIn(BaseModel):
@@ -81,6 +80,18 @@ class EmployeeCorrectOrgUnitIn(BaseModel):
     to_position_id: Optional[int] = Field(default=None, ge=1)
     effective_date: date
     comment: str = Field(..., min_length=1, max_length=2000)
+
+
+class PersonnelEventCreateIn(BaseModel):
+    event_type: str = Field(..., min_length=1, max_length=50)
+    to_org_unit_id: Optional[int] = Field(default=None, ge=1)
+    to_position_id: Optional[int] = Field(default=None, ge=1)
+    to_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    to_employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    effective_date: date
+    order_ref: Optional[str] = Field(default=None, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+    metadata: Optional[Dict[str, Any]] = None
 
 
 def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -437,9 +448,9 @@ def update_employee(
             svc_update_employee,
             employee_id=employee_id,
             full_name=updates.get("full_name"),
-            employment_rate=updates.get("employment_rate"),
-            date_from=updates.get("date_from"),
-            position_id=updates.get("position_id"),
+            employment_rate=None,
+            date_from=None,
+            position_id=None,
         )
 
         return call_service(
@@ -485,6 +496,56 @@ def terminate_employee(
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/hr-event-registry")
+def get_hr_event_registry(
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+        return {"items": list_registry_for_ui()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/personnel-events")
+def create_personnel_event_route(
+    employee_id: str = Path(..., min_length=1),
+    body: PersonnelEventCreateIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        payload = body.model_dump(exclude={"event_type"}, exclude_none=False)
+        event = call_service(
+            create_personnel_event,
+            employee_id=employee_id,
+            event_type=body.event_type,
+            payload=payload,
+            created_by=int(user["user_id"]),
+        )
+
+        item = call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+
+        return {"item": item, "event": event}
+
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to create personnel event.")
     except Exception as e:
         raise as_http500(e)
 

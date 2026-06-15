@@ -359,9 +359,6 @@ export default function EmployeeDrawer({
     try {
       const updated = await updateEmployee(employeeId, {
         full_name: editValues.full_name.trim(),
-        employment_rate: Number(editValues.employment_rate),
-        date_from: editValues.date_from || null,
-        position_id: Number(editValues.position_id),
       });
 
       setDetails(updated);
@@ -569,7 +566,7 @@ export default function EmployeeDrawer({
                   type="button"
                   className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => void handleSaveEdit()}
-                  disabled={saving || positionsLoading}
+                  disabled={saving}
                 >
                   {saving ? "Сохранение..." : "Сохранить"}
                 </button>
@@ -639,85 +636,10 @@ export default function EmployeeDrawer({
                           spellCheck={false}
                         />
                       </div>
-
-                      <div className={`${editableCardClass} flex flex-col gap-2`}>
-                        <label htmlFor="employee-drawer-position" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                          Должность
-                        </label>
-                        <select
-                          id="employee-drawer-position"
-                          value={editValues.position_id}
-                          onChange={(e) => setEditValues((prev) => ({ ...prev, position_id: e.target.value }))}
-                          disabled={positionsLoading}
-                          className={editableFieldClass}
-                        >
-                          <option value="">
-                            {positionsLoading ? "Загрузка должностей…" : "Выберите должность"}
-                          </option>
-                          {positionSelectOptions.map((opt) => (
-                            <option key={opt.id} value={String(opt.id)}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                        {positionsOrgUnitHint ? (
-                          <p className="text-xs text-amber-800 dark:text-amber-200/90">{positionsOrgUnitHint}</p>
-                        ) : !positionsLoading ? (
-                          <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                            {showAllPositions
-                              ? "Показаны все должности справочника"
-                              : "Показаны должности текущего отделения"}
-                          </p>
-                        ) : null}
-                        {canExpandPositionCatalog ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowAllPositions(true)}
-                            className="block text-left text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-                          >
-                            Показать все должности ({allPositionOptions.length})
-                          </button>
-                        ) : null}
-                        {canCollapsePositionCatalog ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowAllPositions(false)}
-                            className="block text-left text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-                          >
-                            Только должности отделения ({unitPositionCount})
-                          </button>
-                        ) : null}
-                      </div>
-
-                      <div className={editableCardClass}>
-                        <label htmlFor="employee-drawer-rate" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                          Ставка
-                        </label>
-                        <input
-                          id="employee-drawer-rate"
-                          type="number"
-                          min="0.01"
-                          max="2"
-                          step="0.01"
-                          value={editValues.employment_rate}
-                          onChange={(e) => setEditValues((prev) => ({ ...prev, employment_rate: e.target.value }))}
-                          className={editableFieldClass}
-                        />
-                      </div>
-
-                      <div className={editableCardClass}>
-                        <label htmlFor="employee-drawer-date-from" className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                          Дата приёма
-                        </label>
-                        <input
-                          id="employee-drawer-date-from"
-                          type="date"
-                          value={editValues.date_from}
-                          onChange={(e) => setEditValues((prev) => ({ ...prev, date_from: e.target.value }))}
-                          className={editableFieldClass}
-                        />
-                      </div>
                     </div>
+                    <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400">
+                      Должность, ставку и дату приёма можно изменить только через кадровое событие.
+                    </p>
                   </div>
                 </SectionBlock>
               ) : (
@@ -766,6 +688,21 @@ export default function EmployeeDrawer({
                     <div className={readOnlyCardClass}>
                       <div className="text-xs text-zinc-600 dark:text-zinc-400">Отделение</div>
                       <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{orgUnitDisplay}</div>
+                    </div>
+
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Должность</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{positionName}</div>
+                    </div>
+
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Ставка</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{String(rate)}</div>
+                    </div>
+
+                    <div className={readOnlyCardClass}>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Дата приёма</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{dateFrom}</div>
                     </div>
 
                     <div className={readOnlyCardClass}>

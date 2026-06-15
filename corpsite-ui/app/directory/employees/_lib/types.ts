@@ -56,14 +56,15 @@ export type EmployeeCreatePayload = {
 
 export type EmployeeUpdatePayload = {
   full_name?: string;
-  employment_rate?: number | null;
-  date_from?: string | null;
-  position_id?: number;
 };
 
 export type EmployeeEventDTO = {
   event_id: number;
   event_type: string;
+  event_label?: string | null;
+  event_class?: string | null;
+  lifecycle_status?: string | null;
+  metadata?: Record<string, unknown> | null;
   effective_date: string;
   from_org_unit_id: number | null;
   to_org_unit_id: number | null;

@@ -223,21 +223,6 @@ export async function updateEmployee(
     payload.full_name = full_name;
   }
 
-  if (body.date_from != null) {
-    const dateFrom = String(body.date_from).trim();
-    if (dateFrom) payload.date_from = dateFrom;
-  }
-
-  if (body.employment_rate != null && Number.isFinite(Number(body.employment_rate))) {
-    payload.employment_rate = Number(body.employment_rate);
-  }
-
-  if (body.position_id != null) {
-    const position_id = Number(body.position_id);
-    if (!Number.isFinite(position_id) || position_id < 1) throw new Error("position_id is required");
-    payload.position_id = position_id;
-  }
-
   if (Object.keys(payload).length === 0) {
     throw new Error("At least one field is required");
   }
