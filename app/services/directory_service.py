@@ -1439,16 +1439,32 @@ def list_personnel_events(
             fou.name AS from_org_unit_name,
             ev.to_org_unit_id,
             tou.name AS to_org_unit_name,
-            ev.order_ref
+            ev.from_position_id,
+            fp.name AS from_position_name,
+            ev.to_position_id,
+            tp.name AS to_position_name,
+            ev.from_rate,
+            ev.to_rate,
+            ev.order_ref,
+            ev.comment
         FROM public.employee_events ev
         JOIN public.employees e ON e.employee_id = ev.employee_id
         LEFT JOIN public.org_units fou ON fou.unit_id = ev.from_org_unit_id
         LEFT JOIN public.org_units tou ON tou.unit_id = ev.to_org_unit_id
+        LEFT JOIN public.positions fp ON fp.position_id = ev.from_position_id
+        LEFT JOIN public.positions tp ON tp.position_id = ev.to_position_id
         WHERE {where_sql}
         ORDER BY ev.effective_date DESC, ev.event_id DESC
         LIMIT :limit OFFSET :offset
         """
     )
+
+    def _event_rate(v: Any) -> Optional[float]:
+        if v is None:
+            return None
+        if isinstance(v, Decimal):
+            return float(v)
+        return float(v)
 
     with engine.begin() as conn:
         total = int(conn.execute(q_total, params).mappings().first()["cnt"])
@@ -1472,7 +1488,18 @@ def list_personnel_events(
                     int(r["to_org_unit_id"]) if r.get("to_org_unit_id") is not None else None
                 ),
                 "to_org_unit_name": r.get("to_org_unit_name"),
+                "from_position_id": (
+                    int(r["from_position_id"]) if r.get("from_position_id") is not None else None
+                ),
+                "from_position_name": r.get("from_position_name"),
+                "to_position_id": (
+                    int(r["to_position_id"]) if r.get("to_position_id") is not None else None
+                ),
+                "to_position_name": r.get("to_position_name"),
+                "from_rate": _event_rate(r.get("from_rate")),
+                "to_rate": _event_rate(r.get("to_rate")),
                 "order_ref": r.get("order_ref"),
+                "comment": r.get("comment"),
             }
         )
 

@@ -51,7 +51,14 @@ export type PersonnelEventRow = {
   from_org_unit_name: string | null;
   to_org_unit_id: number | null;
   to_org_unit_name: string | null;
+  from_position_id: number | null;
+  from_position_name: string | null;
+  to_position_id: number | null;
+  to_position_name: string | null;
+  from_rate: number | null;
+  to_rate: number | null;
   order_ref: string | null;
+  comment: string | null;
 };
 
 export type PersonnelEventsResponse = {

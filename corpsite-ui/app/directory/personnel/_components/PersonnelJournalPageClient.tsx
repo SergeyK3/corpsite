@@ -51,6 +51,80 @@ function fmtOrderRef(v: string | null | undefined): React.ReactNode {
   );
 }
 
+function fmtRate(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(Number(v))) return "—";
+  return String(parseFloat(Number(v).toFixed(2)));
+}
+
+function nameOrDash(v: string | null | undefined): string {
+  const s = String(v ?? "").trim();
+  return s || "—";
+}
+
+function formatEventDetails(row: PersonnelEventRow): string[] {
+  const typeKey = String(row.event_type || "").toUpperCase();
+
+  if (typeKey === "HIRE") {
+    return [
+      `Отделение: ${nameOrDash(row.to_org_unit_name)}`,
+      `Должность: ${nameOrDash(row.to_position_name)}`,
+      `Ставка: ${fmtRate(row.to_rate)}`,
+    ];
+  }
+
+  if (typeKey === "TERMINATION") {
+    return [
+      `Отделение: ${nameOrDash(row.from_org_unit_name)}`,
+      `Должность: ${nameOrDash(row.from_position_name)}`,
+      `Ставка: ${fmtRate(row.from_rate)}`,
+    ];
+  }
+
+  if (typeKey === "CORRECTION" && orgUnitsUnchanged(row)) {
+    const lines: string[] = [];
+    const unit = nameOrDash(row.to_org_unit_name || row.from_org_unit_name);
+    lines.push(`Отделение: ${unit}`);
+
+    const fromPos = nameOrDash(row.from_position_name);
+    const toPos = nameOrDash(row.to_position_name);
+    if (fromPos !== toPos) {
+      lines.push(`Должность: ${fromPos} → ${toPos}`);
+    } else if (toPos !== "—") {
+      lines.push(`Должность: ${toPos}`);
+    }
+
+    const fromRate = fmtRate(row.from_rate);
+    const toRate = fmtRate(row.to_rate);
+    if (fromRate !== toRate) {
+      lines.push(`Ставка: ${fromRate} → ${toRate}`);
+    } else if (toRate !== "—") {
+      lines.push(`Ставка: ${toRate}`);
+    }
+
+    if (lines.length === 1) {
+      lines.push("Корректировка данных");
+    }
+    return lines;
+  }
+
+  return [
+    `Отделение: ${nameOrDash(row.from_org_unit_name)} → ${nameOrDash(row.to_org_unit_name)}`,
+    `Должность: ${nameOrDash(row.from_position_name)} → ${nameOrDash(row.to_position_name)}`,
+    `Ставка: ${fmtRate(row.from_rate)} → ${fmtRate(row.to_rate)}`,
+  ];
+}
+
+function renderEventDetails(row: PersonnelEventRow): React.ReactNode {
+  const lines = formatEventDetails(row);
+  return (
+    <div className="min-w-[14rem] max-w-[22rem] space-y-0.5 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
+      {lines.map((line) => (
+        <div key={line}>{line}</div>
+      ))}
+    </div>
+  );
+}
+
 function orgUnitsUnchanged(row: PersonnelEventRow): boolean {
   if (row.from_org_unit_id != null && row.to_org_unit_id != null) {
     return row.from_org_unit_id === row.to_org_unit_id;
@@ -295,6 +369,9 @@ export default function PersonnelJournalPageClient() {
                   В отделение
                 </th>
                 <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+                  Детали
+                </th>
+                <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
                   Приказ
                 </th>
               </tr>
@@ -302,7 +379,7 @@ export default function PersonnelJournalPageClient() {
             <tbody>
               {!loading && filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={7} className="px-3 py-8 text-center text-zinc-500">
                     {items.length === 0
                       ? "Кадровые события не найдены"
                       : "События не найдены по выбранным фильтрам"}
@@ -332,6 +409,7 @@ export default function PersonnelJournalPageClient() {
                       </span>
                     </td>
                     {renderOrgUnitCells(row)}
+                    <td className="px-3 py-2 align-top">{renderEventDetails(row)}</td>
                     <td className="px-3 py-2">{fmtOrderRef(row.order_ref)}</td>
                   </tr>
                 );
