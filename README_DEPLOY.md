@@ -28,6 +28,13 @@
 - backend проверяет internal token перед тем, как доверять user id
 - за основу конфигурации бота бери `corpsite-bot/.env.example`
 
+## Database configuration
+
+- Приложение (FastAPI), pytest и scripts подключаются к БД через `DATABASE_URL` из `.env`.
+- Alembic использует **тот же** `DATABASE_URL` (загружается в `alembic/env.py` из корневого `.env`).
+- Файл `alembic.ini` **не редактируется вручную** для смены БД и не должен содержать credentials.
+- Перед `alembic upgrade head` достаточно проверить, что в `.env` задан корректный `DATABASE_URL` для целевой среды.
+
 ## Перед каждым развёртыванием
 
 1. Сделай резервную копию базы данных.
