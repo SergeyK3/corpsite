@@ -1,5 +1,7 @@
 // corpsite-ui/app/directory/employees/_lib/directory.ts
 
+import { resolveApiUrl } from "@/lib/apiBase";
+
 export type OrgTreeNode = {
   unit_id: number;
   name: string;
@@ -18,27 +20,16 @@ function _trim(v?: string): string | undefined {
   return s ? s : undefined;
 }
 
-function getApiBase(): string {
-  const base =
-    _trim(process.env.NEXT_PUBLIC_API_BASE_URL) ??
-    _trim(process.env.BACKEND_URL) ??
-    "http://127.0.0.1:8000";
-
-  return base.replace(/\/+$/, "");
-}
-
 function getDevUserId(): string | undefined {
   const appEnv = _trim(process.env.NEXT_PUBLIC_APP_ENV) ?? _trim(process.env.APP_ENV) ?? "dev";
   if (appEnv.toLowerCase() === "prod" || appEnv.toLowerCase() === "production") {
     return undefined;
   }
-  // ВАЖНО: только прямой доступ, иначе Next.js не инлайнит в client bundle
   return _trim(process.env.NEXT_PUBLIC_DEV_X_USER_ID);
 }
 
 export async function getOrgTree(): Promise<OrgTreeResponse> {
-  const base = getApiBase();
-  const url = `${base}/directory/org-units/tree`;
+  const url = resolveApiUrl("/directory/org-units/tree");
 
   const headers: Record<string, string> = { Accept: "application/json" };
 

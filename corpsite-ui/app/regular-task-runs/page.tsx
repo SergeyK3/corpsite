@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
+import { resolveApiUrl } from "@/lib/apiBase";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
 import {
@@ -87,11 +88,6 @@ function normalizeList<T>(body: any): T[] {
   return [];
 }
 
-function getApiBase(): string {
-  const base = env("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000").replace(/\/+$/, "");
-  return base || "http://127.0.0.1:8000";
-}
-
 function getBearer(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -102,11 +98,10 @@ function getBearer(): string {
 }
 
 async function apiGetRuns(): Promise<RegularTaskRun[]> {
-  const base = getApiBase();
-  const url = new URL("/regular-task-runs", base);
+  const url = resolveApiUrl("/regular-task-runs");
 
   const tok = getBearer();
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     method: "GET",
     headers: tok ? { Authorization: `Bearer ${tok}`, Accept: "application/json" } : { Accept: "application/json" },
     cache: "no-store",
@@ -126,11 +121,10 @@ async function apiGetRuns(): Promise<RegularTaskRun[]> {
 }
 
 async function apiGetRunItems(runId: number): Promise<RegularTaskRunItem[]> {
-  const base = getApiBase();
-  const url = new URL(`/regular-task-runs/${runId}/items`, base);
+  const url = resolveApiUrl(`/regular-task-runs/${runId}/items`);
 
   const tok = getBearer();
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     method: "GET",
     headers: tok ? { Authorization: `Bearer ${tok}`, Accept: "application/json" } : { Accept: "application/json" },
     cache: "no-store",

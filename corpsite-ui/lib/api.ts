@@ -15,14 +15,12 @@ import type {
 
 import { getSessionAccessToken, logout, setSessionAccessToken } from "./auth";
 import { formatApiError } from "./i18n";
+import { buildUrl as buildApiUrl, resolveApiUrl } from "./apiBase";
 
 function env(name: string, fallback = ""): string {
   const v = process.env[name];
   return (v ?? fallback).toString().trim();
 }
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.toString().trim() || "http://46.247.42.47:8000";
 
 function truthyEnv(name: string): boolean {
   const v = env(name, "").toLowerCase();
@@ -91,18 +89,13 @@ export function toApiError(status: number, body: any, meta?: Record<string, any>
   return err;
 }
 
+export { resolveApiUrl } from "./apiBase";
+
 export function buildUrl(
   path: string,
   query?: Record<string, string | number | boolean | undefined | null>,
 ): URL {
-  const url = new URL(path, API_BASE_URL);
-  if (query) {
-    for (const [k, v] of Object.entries(query)) {
-      if (v === undefined || v === null) continue;
-      url.searchParams.set(k, String(v));
-    }
-  }
-  return url;
+  return buildApiUrl(path, query);
 }
 
 export function buildHeaders(
@@ -161,7 +154,7 @@ export async function apiFetchJson<T>(
   },
 ): Promise<T> {
   const method = opts?.method ?? "GET";
-  const url = buildUrl(path, opts?.query);
+  const url = buildUrl(path, opts?.query).toString();
 
   const headers: Record<string, string> = {
     ...(opts?.headers ?? {}),
@@ -173,7 +166,7 @@ export async function apiFetchJson<T>(
     bodyStr = JSON.stringify(opts.body);
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     method,
     headers: buildHeaders(headers, { noAuth: !!opts?.noAuth }),
     body: bodyStr,
@@ -184,7 +177,7 @@ export async function apiFetchJson<T>(
 
   if (!res.ok) {
     handleAuthFailureIfNeeded(res.status);
-    throw toApiError(res.status, body, { method, url: url.toString() });
+    throw toApiError(res.status, body, { method, url });
   }
 
   return body as T;
@@ -203,19 +196,27 @@ export async function apiAuthLogin(params: {
 }> {
   const login = (params.login ?? "").toString().trim().toLowerCase();
   const password = (params.password ?? "").toString();
+  const url = resolveApiUrl("/auth/login");
 
-  const body = await apiFetchJson<any>("/auth/login", {
+  const res = await fetch(url, {
     method: "POST",
-    noAuth: true,
-    body: { login, password },
+    headers: buildHeaders({ "Content-Type": "application/json" }, { noAuth: true }),
+    body: JSON.stringify({ login, password }),
+    cache: "no-store",
   });
+
+  const body = await readJsonSafe(res);
+
+  if (!res.ok) {
+    throw toApiError(res.status, body, { method: "POST", url });
+  }
 
   const token = sanitizeBearerToken(body?.access_token);
   if (!token) {
     throw toApiError(
       500,
       { message: "Backend did not return access_token" },
-      { method: "POST", url: "/auth/login" },
+      { method: "POST", url },
     );
   }
 

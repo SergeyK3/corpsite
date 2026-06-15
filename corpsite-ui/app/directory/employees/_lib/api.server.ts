@@ -1,15 +1,9 @@
 // corpsite-ui/app/directory/employees/_lib/api.server.ts
 import "server-only";
 
-type Json = any;
+import { buildUrl } from "@/lib/apiBase";
 
-function apiBase(): string {
-  return (
-    process.env.BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "http://127.0.0.1:8000"
-  );
-}
+type Json = any;
 
 function devUserId(): string {
   const appEnv = (process.env.APP_ENV || process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
@@ -17,21 +11,12 @@ function devUserId(): string {
   return process.env.DEV_X_USER_ID || process.env.NEXT_PUBLIC_DEV_X_USER_ID || "";
 }
 
-function buildUrl(path: string, params?: Record<string, any>): string {
-  const base = apiBase().replace(/\/+$/, "");
-  const url = new URL(`${base}${path.startsWith("/") ? "" : "/"}${path}`);
-
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v === undefined || v === null || v === "") continue;
-      url.searchParams.set(k, String(v));
-    }
-  }
-  return url.toString();
+function buildServerUrl(path: string, params?: Record<string, any>): string {
+  return buildUrl(path, params, { serverSide: true }).toString();
 }
 
 async function apiGet(path: string, params?: Record<string, any>): Promise<Json> {
-  const url = buildUrl(path, params);
+  const url = buildServerUrl(path, params);
   const uid = devUserId();
 
   const headers: Record<string, string> = {};

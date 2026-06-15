@@ -13,11 +13,7 @@ import type {
 } from "./types";
 import { getSessionAccessToken } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
-
-function getApiBase(): string {
-  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  return v || "http://127.0.0.1:8000";
-}
+import { resolveApiUrl } from "@/lib/apiBase";
 
 function getDevUserId(): string | null {
   const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
@@ -51,14 +47,13 @@ function maybeAddAuthHeader(headers: Record<string, string>) {
 }
 
 async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
-  const apiBase = getApiBase();
   const devUserId = getDevUserId();
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (devUserId) headers["X-User-Id"] = devUserId;
   maybeAddAuthHeader(headers);
 
-  const url = qs ? `${apiBase}${path}?${qs}` : `${apiBase}${path}`;
+  const url = qs ? `${resolveApiUrl(path)}?${qs}` : resolveApiUrl(path);
 
   const res = await fetch(url, {
     method: "GET",
@@ -75,7 +70,6 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
 }
 
 async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
-  const apiBase = getApiBase();
   const devUserId = getDevUserId();
 
   const headers: Record<string, string> = {
@@ -85,7 +79,7 @@ async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
   if (devUserId) headers["X-User-Id"] = devUserId;
   maybeAddAuthHeader(headers);
 
-  const res = await fetch(`${apiBase}${path}`, {
+  const res = await fetch(resolveApiUrl(path), {
     method: "POST",
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -101,7 +95,6 @@ async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
 }
 
 async function apiPatchJson<T>(path: string, body?: unknown): Promise<T> {
-  const apiBase = getApiBase();
   const devUserId = getDevUserId();
 
   const headers: Record<string, string> = {
@@ -111,7 +104,7 @@ async function apiPatchJson<T>(path: string, body?: unknown): Promise<T> {
   if (devUserId) headers["X-User-Id"] = devUserId;
   maybeAddAuthHeader(headers);
 
-  const res = await fetch(`${apiBase}${path}`, {
+  const res = await fetch(resolveApiUrl(path), {
     method: "PATCH",
     headers,
     body: body ? JSON.stringify(body) : undefined,

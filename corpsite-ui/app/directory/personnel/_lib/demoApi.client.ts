@@ -1,11 +1,7 @@
 // FILE: corpsite-ui/app/directory/personnel/_lib/demoApi.client.ts
 import { getSessionAccessToken } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
-
-function getApiBase(): string {
-  const v = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  return v || "http://127.0.0.1:8000";
-}
+import { resolveApiUrl } from "@/lib/apiBase";
 
 function getDevUserId(): string | null {
   const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
@@ -30,14 +26,13 @@ export function mapDemoApiError(e: unknown, fallback = "Ошибка запро�
 }
 
 async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
-  const apiBase = getApiBase();
   const devUserId = getDevUserId();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (devUserId) headers["X-User-Id"] = devUserId;
   const token = String(getSessionAccessToken?.() ?? "").trim();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const url = qs ? `${apiBase}${path}?${qs}` : `${apiBase}${path}`;
+  const url = qs ? `${resolveApiUrl(path)}?${qs}` : resolveApiUrl(path);
   const res = await fetch(url, { method: "GET", headers, cache: "no-store" });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
