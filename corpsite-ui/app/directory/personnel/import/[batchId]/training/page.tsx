@@ -1,4 +1,4 @@
-import PersonnelImportTrainingPageClient from "../../_components/PersonnelImportTrainingPageClient";
+import PersonnelImportTrainingPageClient from "../../../_components/PersonnelImportTrainingPageClient";
 
 export const dynamic = "force-dynamic";
 
