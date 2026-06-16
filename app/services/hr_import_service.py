@@ -15,6 +15,7 @@ from app.db.models.hr_import import (
     BATCH_STATUS_IN_REVIEW,
     BATCH_STATUS_PARSED,
     BATCH_STATUS_UPLOADED,
+    CLASSIFICATION_CATEGORY_ROW,
     CLASSIFICATION_DECLARATION,
     CLASSIFICATION_DUPLICATE_IIN,
     CLASSIFICATION_INVALID_IIN,
@@ -23,8 +24,13 @@ from app.db.models.hr_import import (
     CLASSIFICATION_SUMMARY_ROW,
     MATCH_STATUS_NOT_PROCESSED,
     REVIEW_STATUS_PENDING,
+    ROW_TYPE_DECLARATION_PERSON,
+    ROW_TYPE_DECLARATION_ROW,
+    ROW_TYPE_CATEGORY_ROW,
+    ROW_TYPE_SUMMARY_ROW,
     SOURCE_TYPE_HR_CONTROL_LIST,
 )
+from app.services.hr_import_document_candidate_service import parse_and_persist_document_candidates
 from scripts.import_hr_control_list import ParsedRow, build_audit, parse_workbook
 
 # Phase 2B workflow aliases (DB CHECK constraint uses Phase 2A names).
@@ -68,17 +74,23 @@ def create_batch(
 
 
 def _duplicate_iins(rows: list[ParsedRow]) -> set[str]:
-    counts = Counter(row.iin_digits for row in rows if row.iin_digits)
+    counts = Counter(
+        row.iin_digits for row in rows if row.iin_digits and row.is_employee_roster
+    )
     return {iin for iin, count in counts.items() if count > 1}
 
 
 def classify_row(row: ParsedRow, duplicate_iins: set[str]) -> str:
     """Primary row classification stored in normalized_payload.metadata."""
-    if row.sheet_type == "declaration":
+    if row.row_type in (ROW_TYPE_DECLARATION_PERSON, ROW_TYPE_DECLARATION_ROW):
         return CLASSIFICATION_DECLARATION
+    if row.row_type == ROW_TYPE_CATEGORY_ROW:
+        return CLASSIFICATION_CATEGORY_ROW
+    if row.row_type == ROW_TYPE_SUMMARY_ROW:
+        return CLASSIFICATION_SUMMARY_ROW
     if row.sheet_type == "part_time":
         return CLASSIFICATION_PART_TIME
-    if not row.full_name and not row.iin_digits:
+    if not row.is_employee_roster:
         return CLASSIFICATION_SUMMARY_ROW
     if row.iin_digits and not row.iin_valid:
         return CLASSIFICATION_INVALID_IIN
@@ -99,6 +111,9 @@ def _build_row_payloads(
             "sheet_type": row.sheet_type,
             "classification": classification,
             "iin_valid": row.iin_valid,
+            "row_type": row.row_type,
+            "declaration_group": row.declaration_group or None,
+            "is_employee_roster": row.is_employee_roster,
         },
     }
     return raw_payload, normalized_payload
@@ -253,6 +268,7 @@ def import_control_list(
     try:
         parsed_rows, warnings = parse_workbook(path)
         _persist_rows(conn, batch_id=batch_id, rows=parsed_rows)
+        parse_and_persist_document_candidates(conn, batch_id)
         _update_batch_counts(
             conn,
             batch_id=batch_id,

@@ -206,8 +206,104 @@ def test_resolve_sheet_type():
 def test_clean_iin_and_birth_date():
     assert clean_iin("900 101 300 123")[0:2] == ("900101300123", True)
     assert clean_iin("12345")[1] is False
+    assert clean_iin(580131300091.0) == ("580131300091", True, [])
+    assert clean_iin("580131300091.0") == ("580131300091", True, [])
     assert parse_birth_date(32874) == "1990-01-01"
     assert mask_iin("900101300123") == "9001****23"
+
+
+def _build_director_regression_sheet(ws) -> None:
+    """Doctors sheet with director row — regression for IIN 580131300091."""
+    ws.append([""] * 20)
+    ws.append([""] * 20)
+    ws.append([""] * 20)
+    ws.append([""] * 20)
+    ws.append([""] * 20)
+    ws.append([""] * 20)
+    ws.append(
+        [
+            "№",
+            "",
+            "Фамилия, имя, отчество",
+            "Год рождения",
+            "ИИН",
+            "пол",
+            "Национальность",
+            "Вуз, год окончания",
+            "Специальность по диплому",
+            "Занимаемая должность",
+        ]
+        + [""] * 10
+    )
+    ws.append(
+        [
+            1,
+            "АДМИНИСТРАТИВНЫЙ ПЕРСОНАЛ",
+            "Тулеутаев Мухтар Есетжанович",
+            datetime(1958, 1, 31),
+            580131300091.0,
+            "муж",
+            "",
+            "КазНМУ, 1982",
+            "Лечебное дело",
+            "Директор",
+        ]
+        + [""] * 10
+    )
+
+
+def test_director_iin_not_missing_after_float_excel_value(tmp_path: Path):
+    path = tmp_path / "director_iin.xlsx"
+    wb = Workbook()
+    wb.remove(wb.active)
+    _build_director_regression_sheet(wb.create_sheet("врачи"))
+    wb.save(path)
+
+    rows, _ = parse_workbook(path)
+    director = next(r for r in rows if r.full_name == "Тулеутаев Мухтар Есетжанович")
+    assert director.iin_digits == "580131300091"
+    assert director.iin_valid is True
+    assert director.data["iin"] == "580131300091"
+
+
+def test_director_iin_with_shifted_column_by_header(tmp_path: Path):
+    """IIN must resolve by header even when fixed profile column letter is wrong."""
+    path = tmp_path / "shifted_iin.xlsx"
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("врачи")
+    for _ in range(6):
+        ws.append([""] * 22)
+    ws.append(
+        [
+            "№",
+            "",
+            "Фамилия, имя, отчество",
+            "Год рождения",
+            "Примечание",
+            "ИИН",
+            "пол",
+        ]
+        + [""] * 15
+    )
+    ws.append(
+        [
+            1,
+            "АДМИНИСТРАТИВНЫЙ ПЕРСОНАЛ",
+            "Тулеутаев Мухтар Есетжанович",
+            datetime(1958, 1, 31),
+            "",
+            "580131300091",
+            "муж",
+        ]
+        + [""] * 15
+    )
+    wb.save(path)
+
+    rows, _ = parse_workbook(path)
+    director = next(r for r in rows if "Тулеутаев" in r.full_name)
+    assert director.iin_digits == "580131300091"
+    assert director.iin_valid is True
 
 
 def test_parses_doctors_layout_profile(tmp_path: Path):
@@ -225,6 +321,7 @@ def test_parses_doctors_layout_profile(tmp_path: Path):
     assert first.full_name == "Иванов Иван Иванович"
     assert first.department == "АДМИНИСТРАТИВНЫЙ ПЕРСОНАЛ"
     assert first.data["position_raw"] == "Директор"
+    assert first.education_training_raw == "2024 курс ПК"
     assert first.training_raw == "2024 курс ПК"
     assert first.certification_raw == "высшая"
 

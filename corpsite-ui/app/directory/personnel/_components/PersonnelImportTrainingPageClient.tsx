@@ -15,6 +15,13 @@ import {
   type EmployeeTrainingHistory,
 } from "../_lib/importApi.client";
 
+const SOURCE_FIELD_LABELS: Record<string, string> = {
+  education_training_raw: "column_m / education_training_raw",
+  education_raw: "column_h / education_raw",
+  certification_raw: "column_n / certification_raw",
+  training_raw: "training_raw",
+};
+
 const KIND_LABELS: Record<string, string> = {
   training: "Обучение",
   certification: "Сертификаты",
@@ -145,7 +152,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
           onChange={(e) => setKindFilter(e.target.value)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         >
-          <option value="">Все типы</option>
+          <option value="">Все</option>
           <option value="training">Обучение</option>
           <option value="certification">Сертификаты</option>
           <option value="education">Образование</option>
@@ -187,6 +194,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
                     <th className="px-3 py-2">Специальность</th>
                     <th className="px-3 py-2">Часы</th>
                     <th className="px-3 py-2">Дата</th>
+                    <th className="px-3 py-2">Источник</th>
                     <th className="px-3 py-2">Статус</th>
                   </tr>
                 </thead>
@@ -213,6 +221,9 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
                       <td className="px-3 py-2">{item.specialty || "—"}</td>
                       <td className="px-3 py-2">{item.hours ?? "—"}</td>
                       <td className="px-3 py-2">{item.issued_at ?? item.valid_until ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs text-zinc-500">
+                        {SOURCE_FIELD_LABELS[item.source_field] || item.source_field || "—"}
+                      </td>
                       <td className="px-3 py-2">{STATUS_LABELS[item.status] || item.status}</td>
                     </tr>
                   ))}
@@ -245,6 +256,9 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
                       <div className="text-xs text-zinc-500">
                         {KIND_LABELS[doc.document_kind]} · {doc.hours ? `${doc.hours} ч` : "—"} ·{" "}
                         {doc.issued_at ?? doc.valid_until ?? "без даты"}
+                        {doc.source_field
+                          ? ` · ${SOURCE_FIELD_LABELS[doc.source_field] || doc.source_field}`
+                          : ""}
                       </div>
                       {doc.external_url ? (
                         <a

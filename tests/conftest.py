@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, Optional
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -416,6 +417,14 @@ def create_unit(conn, name: str) -> Optional[int]:
     else:
         raise RuntimeError(f"Cannot detect unit id column in public.{ut}. cols={sorted(cols)}")
 
+    if "code" in cols:
+        existing = conn.execute(
+            text(f"SELECT {id_col} FROM public.{ut} WHERE code = :code LIMIT 1"),
+            {"code": name},
+        ).scalar_one_or_none()
+        if existing is not None:
+            return int(existing)
+
     values: Dict[str, Any] = {"name": name, "created_at": now}
     if "code" in cols:
         values["code"] = name
@@ -430,6 +439,14 @@ def create_role(conn, name: str) -> int:
         raise RuntimeError("Table public.roles does not exist")
 
     cols = get_columns(conn, "roles")
+    if "code" in cols:
+        existing = conn.execute(
+            text("SELECT role_id FROM public.roles WHERE code = :code LIMIT 1"),
+            {"code": name},
+        ).scalar_one_or_none()
+        if existing is not None:
+            return int(existing)
+
     values: Dict[str, Any] = {"name": name, "created_at": now}
     if "code" in cols:
         values["code"] = name
@@ -665,10 +682,12 @@ def seed() -> Iterator[Dict[str, Any]]:
     created_user_ids: list[int] = []
 
     with engine.begin() as conn:
-        created_unit_id = create_unit(conn, "pytest_unit")
+        suffix = uuid4().hex[:8]
+        unit_name = f"pytest_unit_{suffix}"
+        created_unit_id = create_unit(conn, unit_name)
 
-        executor_role_id = create_role(conn, "pytest_executor")
-        initiator_role_id = create_role(conn, "pytest_initiator")
+        executor_role_id = create_role(conn, f"pytest_executor_{suffix}")
+        initiator_role_id = create_role(conn, f"pytest_initiator_{suffix}")
         created_role_ids = [executor_role_id, initiator_role_id]
 
         executor_user_id = create_user(

@@ -256,17 +256,21 @@ def test_hr_import_staging_fk_and_source_unique(seed):
             ).scalar_one()
         )
 
+        candidate_values: dict = {
+            "row_id": row_id,
+            "proposed_document_type": "QUAL_UPGRADE",
+            "parsed_hours": 54,
+            "confidence_score": 0.75,
+            "review_status": "PENDING",
+        }
+        if "batch_id" in get_columns(conn, "hr_import_document_candidates"):
+            candidate_values["batch_id"] = batch_id
+            candidate_values["raw_text"] = "2024 курс ПК"
         candidate_id = insert_returning_id(
             conn,
             table="hr_import_document_candidates",
             id_col="candidate_id",
-            values={
-                "row_id": row_id,
-                "proposed_document_type": "QUAL_UPGRADE",
-                "parsed_hours": 54,
-                "confidence_score": 0.75,
-                "review_status": "PENDING",
-            },
+            values=candidate_values,
         )
         assert candidate_id > 0
 

@@ -31,6 +31,7 @@ OUTPUT_FIELDS = [
     "qualification_raw",
     "experience_raw",
     "training_raw",
+    "education_training_raw",
     "certification_raw",
     "degree_raw",
     "awards_raw",
@@ -96,13 +97,19 @@ HEADER_ALIASES: dict[str, list[str]] = {
         "общий стаж",
         "трудовой стаж",
     ],
-    "training_raw": [
-        "training_raw",
-        "training",
+    "education_training_raw": [
+        "education_training_raw",
+        "education_training",
+        "образование и обучение",
+        "обучение и образование",
         "повышение квалификации",
         "повышения квалификации",
         "пк",
         "обучение",
+    ],
+    "training_raw": [
+        "training_raw",
+        "training",
     ],
     "certification_raw": [
         "certification_raw",
@@ -122,10 +129,46 @@ SHEET_TYPE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("declaration", ("декларац",)),
     ("part_time", ("совмест", "совм")),
     ("doctors", ("врач",)),
-    ("nurses", ("медсестр", "медсестра", "м/с")),
+    ("nurses", ("медсестр", "медсестра", "м/с", "смр")),
     ("junior_staff", ("санитарк",)),
-    ("other_staff", ("прочее", "смр")),
+    ("other_staff", ("прочее", "прочие")),
 ]
+
+ROW_TYPE_EMPLOYEE = "EMPLOYEE"
+ROW_TYPE_CATEGORY_ROW = "CATEGORY_ROW"
+ROW_TYPE_SUMMARY_ROW = "SUMMARY_ROW"
+ROW_TYPE_DECLARATION_PERSON = "DECLARATION_PERSON"
+ROW_TYPE_DECLARATION_ROW = "DECLARATION_ROW"
+
+CATEGORY_ROW_LABELS_EXACT: frozenset[str] = frozenset(
+    {
+        "высшая",
+        "первая",
+        "вторая",
+        "декрет",
+        "пенсионеры",
+        "пенсионер",
+        "женщины",
+        "мужчины",
+        "всего",
+        "итого",
+        "доктор медицинских наук",
+        "кандидат мед.наук",
+        "кандидат медицинских наук",
+        "кандидат мед наук",
+        "без категории",
+        "нет категории",
+    }
+)
+
+CATEGORY_ROW_PREFIX_RE: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^женщины[-\s–—]", re.IGNORECASE),
+    re.compile(r"^мужчины[-\s–—]", re.IGNORECASE),
+    re.compile(r"^всего\b", re.IGNORECASE),
+    re.compile(r"^итого\b", re.IGNORECASE),
+    re.compile(r"^всего\s+\d", re.IGNORECASE),
+    re.compile(r"^итого\s+\d", re.IGNORECASE),
+)
 
 
 @dataclass(frozen=True)
@@ -150,7 +193,7 @@ LAYOUT_PROFILES: dict[str, SheetLayoutProfile] = {
             "position_raw": "J",
             "qualification_raw": "K",
             "experience_raw": "L",
-            "training_raw": "M",
+            "education_training_raw": "M",
             "certification_raw": "N",
             "degree_raw": "O",
             "awards_raw": "P",
@@ -191,6 +234,9 @@ LAYOUT_PROFILES: dict[str, SheetLayoutProfile] = {
 class ParsedRow:
     data: dict[str, str] = field(default_factory=dict)
     sheet_type: str = ""
+    row_type: str = ROW_TYPE_EMPLOYEE
+    declaration_group: str = ""
+    is_employee_roster: bool = True
     iin_valid: bool = False
     iin_digits: str = ""
     errors: list[str] = field(default_factory=list)
@@ -205,7 +251,11 @@ class ParsedRow:
 
     @property
     def training_raw(self) -> str:
-        return self.data.get("training_raw", "")
+        return self.data.get("training_raw", "") or self.data.get("education_training_raw", "")
+
+    @property
+    def education_training_raw(self) -> str:
+        return self.data.get("education_training_raw", "") or self.data.get("training_raw", "")
 
     @property
     def certification_raw(self) -> str:
@@ -254,6 +304,82 @@ def resolve_sheet_type(sheet_name: str) -> Optional[str]:
         if any(token in normalized for token in tokens):
             return sheet_type
     return None
+
+
+def resolve_declaration_group(sheet_name: str) -> str:
+    """Map declaration sheet title → staff group (врач / медсестра / …)."""
+    normalized = _norm_sheet_name(sheet_name)
+    if "медсестр" in normalized or "смр" in normalized or "м/с" in normalized:
+        return "nurses"
+    if "санитарк" in normalized:
+        return "junior_staff"
+    if "проч" in normalized:
+        return "other_staff"
+    if "врач" in normalized:
+        return "doctors"
+    return "other_staff"
+
+
+def _normalize_row_label(value: str) -> str:
+    text = _norm_header(value)
+    text = re.sub(r"\s*[-–—]\s*\d+\s*$", "", text)
+    return text.strip()
+
+
+def is_category_or_summary_label(name: str) -> bool:
+    """True when full_name cell is a category/total label, not a person."""
+    norm = _normalize_row_label(name)
+    if not norm:
+        return True
+    if norm in CATEGORY_ROW_LABELS_EXACT:
+        return True
+    raw_norm = _norm_header(name)
+    for pattern in CATEGORY_ROW_PREFIX_RE:
+        if pattern.search(raw_norm):
+            return True
+    if re.fullmatch(r"(всего|итого)\s+\d+", raw_norm):
+        return True
+    return False
+
+
+def looks_like_person_name(name: str) -> bool:
+    text = _to_text(name)
+    if not text or is_category_or_summary_label(text):
+        return False
+    parts = text.split()
+    if len(parts) < 2 or len(parts) > 5:
+        return False
+    for part in parts:
+        if re.fullmatch(r"\d+", part):
+            return False
+        if not re.match(r"^[А-ЯЁA-Z]", part):
+            return False
+        if not re.search(r"[а-яёa-z]", part):
+            return False
+    return True
+
+
+def infer_row_type(
+    *,
+    full_name: str,
+    sheet_type: str,
+    iin_digits: str,
+) -> tuple[str, bool]:
+    """Return (row_type, is_employee_roster)."""
+    if sheet_type == "declaration":
+        if looks_like_person_name(full_name):
+            return ROW_TYPE_DECLARATION_PERSON, False
+        return ROW_TYPE_DECLARATION_ROW, False
+
+    if not _to_text(full_name) and not iin_digits:
+        return ROW_TYPE_SUMMARY_ROW, False
+    if is_category_or_summary_label(full_name):
+        return ROW_TYPE_CATEGORY_ROW, False
+    if looks_like_person_name(full_name):
+        return ROW_TYPE_EMPLOYEE, True
+    if _to_text(full_name):
+        return ROW_TYPE_CATEGORY_ROW, False
+    return ROW_TYPE_SUMMARY_ROW, False
 
 
 def _header_matches(normalized_header: str, alias: str) -> bool:
@@ -349,16 +475,37 @@ def _cell_by_letter(ws, row_idx: int, letter: str) -> Any:
     return ws.cell(row=row_idx, column=_col_idx(letter)).value
 
 
-def _is_employee_row_profile(ws, row_idx: int, profile: SheetLayoutProfile) -> bool:
-    name_letter = profile.columns.get("full_name")
-    if name_letter and _to_text(_cell_by_letter(ws, row_idx, name_letter)):
+def _cell_for_field(
+    ws,
+    row_idx: int,
+    field_name: str,
+    profile: SheetLayoutProfile,
+    field_map: dict[str, int],
+) -> Any:
+    """Prefer header-detected column; fall back to layout profile letter."""
+    col_idx = field_map.get(field_name)
+    if col_idx:
+        return ws.cell(row=row_idx, column=col_idx).value
+    letter = profile.columns.get(field_name)
+    if letter:
+        return _cell_by_letter(ws, row_idx, letter)
+    return None
+
+
+def _is_employee_row_profile(
+    ws,
+    row_idx: int,
+    profile: SheetLayoutProfile,
+    field_map: dict[str, int],
+) -> bool:
+    name_raw = _cell_for_field(ws, row_idx, "full_name", profile, field_map)
+    if _to_text(name_raw):
         return True
 
-    iin_letter = profile.columns.get("iin")
-    if iin_letter:
-        digits = re.sub(r"\D", "", _to_text(_cell_by_letter(ws, row_idx, iin_letter)))
-        if digits:
-            return True
+    iin_raw = _cell_for_field(ws, row_idx, "iin", profile, field_map)
+    digits, _, _ = clean_iin(iin_raw)
+    if digits:
+        return True
 
     return False
 
@@ -404,10 +551,41 @@ def parse_birth_date(value: Any) -> str:
     return ""
 
 
+def _coerce_iin_text(value: Any) -> str:
+    """Normalize Excel/scalar IIN values to a digit-friendly string."""
+    if value is None or value == "":
+        return ""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value.is_integer() or abs(value - round(value)) < 1e-6:
+            return str(int(round(value)))
+        return format(value, ".0f")
+    text = _to_text(value)
+    if re.fullmatch(r"\d+\.0+", text):
+        return text.split(".", 1)[0]
+    lowered = text.lower()
+    if "e" in lowered:
+        try:
+            as_float = float(text.replace(",", "."))
+            if as_float.is_integer() or abs(as_float - round(as_float)) < 1e-6:
+                return str(int(round(as_float)))
+        except ValueError:
+            pass
+    return text
+
+
 def clean_iin(value: Any) -> tuple[str, bool, list[str]]:
-    digits = re.sub(r"\D", "", _to_text(value))
+    raw_text = _coerce_iin_text(value)
+    digits = re.sub(r"\D", "", raw_text)
     if not digits:
         return "", False, ["missing_iin"]
+    if len(digits) > 12 and digits.endswith("0") and re.search(r"\.0+\s*$", raw_text.replace(" ", "")):
+        digits = digits[:12]
+    if len(digits) == 11:
+        digits = f"0{digits}"
     if len(digits) != 12:
         return digits, False, [f"invalid_iin_length:{len(digits)}"]
     return digits, True, []
@@ -429,15 +607,29 @@ def _build_parsed_row(
     iin_digits, iin_valid, iin_errors = clean_iin(iin_raw)
     data["iin"] = iin_digits
 
-    errors: list[str] = list(iin_errors)
-    if not data["full_name"]:
-        errors.append("missing_full_name")
-    if not data["department"]:
-        errors.append("missing_department")
+    row_type, is_employee_roster = infer_row_type(
+        full_name=data.get("full_name", ""),
+        sheet_type=sheet_type,
+        iin_digits=iin_digits,
+    )
+    declaration_group = ""
+    if sheet_type == "declaration":
+        declaration_group = resolve_declaration_group(data.get("source_sheet", ""))
+
+    errors: list[str] = []
+    if is_employee_roster:
+        errors.extend(iin_errors)
+        if not data["full_name"]:
+            errors.append("missing_full_name")
+        if not data["department"]:
+            errors.append("missing_department")
 
     return ParsedRow(
         data=data,
         sheet_type=sheet_type,
+        row_type=row_type,
+        declaration_group=declaration_group,
+        is_employee_roster=is_employee_roster,
         iin_valid=iin_valid,
         iin_digits=iin_digits,
         errors=errors,
@@ -445,17 +637,18 @@ def _build_parsed_row(
 
 
 def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile) -> list[ParsedRow]:
-    header_row_idx, _ = find_header_row(ws)
+    header_row_idx, header_vals = find_header_row(ws)
     if not header_row_idx:
         return []
 
+    field_map = build_field_map(header_vals)
     section_col_idx = _col_idx(profile.section_col)
     merged_lookup = build_merged_section_lookup(ws, section_col_idx)
     current_department = ""
     parsed_rows: list[ParsedRow] = []
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        if not _is_employee_row_profile(ws, row_idx, profile):
+        if not _is_employee_row_profile(ws, row_idx, profile, field_map):
             section_only = resolve_section_department(
                 ws,
                 row_idx,
@@ -484,14 +677,19 @@ def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile
         data["department"] = current_department
 
         iin_raw = None
-        for field_name, letter in profile.columns.items():
-            raw = _cell_by_letter(ws, row_idx, letter)
+        for field_name in profile.columns:
+            raw = _cell_for_field(ws, row_idx, field_name, profile, field_map)
             if field_name == "iin":
                 iin_raw = raw
             if field_name == "birth_date":
                 data[field_name] = parse_birth_date(raw)
             else:
                 data[field_name] = _to_text(raw)
+
+        if data.get("education_training_raw"):
+            data["training_raw"] = data["education_training_raw"]
+        elif data.get("training_raw") and not data.get("education_training_raw"):
+            data["education_training_raw"] = data["training_raw"]
 
         parsed_rows.append(
             _build_parsed_row(data=data, sheet_type=sheet_type, iin_raw=iin_raw)
@@ -533,6 +731,11 @@ def parse_sheet_generic(ws, *, sheet_type: str) -> list[ParsedRow]:
             last_department = data["department"]
         elif last_department:
             data["department"] = last_department
+
+        if data.get("education_training_raw"):
+            data["training_raw"] = data["education_training_raw"]
+        elif data.get("training_raw") and not data.get("education_training_raw"):
+            data["education_training_raw"] = data["training_raw"]
 
         parsed_rows.append(
             _build_parsed_row(

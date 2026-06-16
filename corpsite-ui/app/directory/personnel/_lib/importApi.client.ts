@@ -159,6 +159,7 @@ export type DocumentCandidate = {
   fragment_index: number;
   confidence_score: number | null;
   parse_method: string;
+  source_field: string;
 };
 
 export type DocumentCandidatesSummary = {

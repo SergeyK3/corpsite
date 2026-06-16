@@ -46,7 +46,14 @@ CLASSIFICATION_INVALID_IIN = "INVALID_IIN"
 CLASSIFICATION_DUPLICATE_IIN = "DUPLICATE_IIN"
 CLASSIFICATION_DECLARATION = "DECLARATION"
 CLASSIFICATION_SUMMARY_ROW = "SUMMARY_ROW"
+CLASSIFICATION_CATEGORY_ROW = "CATEGORY_ROW"
 CLASSIFICATION_PART_TIME = "PART_TIME"
+
+ROW_TYPE_EMPLOYEE = "EMPLOYEE"
+ROW_TYPE_CATEGORY_ROW = "CATEGORY_ROW"
+ROW_TYPE_SUMMARY_ROW = "SUMMARY_ROW"
+ROW_TYPE_DECLARATION_PERSON = "DECLARATION_PERSON"
+ROW_TYPE_DECLARATION_ROW = "DECLARATION_ROW"
 
 REVIEW_STATUS_PENDING = "PENDING"
 REVIEW_STATUS_APPROVED = "APPROVED"
@@ -122,11 +129,18 @@ class HrImportDocumentCandidate(Base):
     __tablename__ = "hr_import_document_candidates"
     __table_args__ = (
         Index("ix_hr_import_document_candidates_row", "row_id"),
+        Index("ix_hr_import_document_candidates_batch", "batch_id"),
         Index("ix_hr_import_document_candidates_employee", "employee_id"),
         Index("ix_hr_import_document_candidates_review", "review_status"),
+        Index("ix_hr_import_document_candidates_batch_kind", "batch_id", "document_kind"),
     )
 
     candidate_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    batch_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("hr_import_batches.batch_id", ondelete="CASCADE"),
+        nullable=False,
+    )
     row_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("hr_import_rows.row_id", ondelete="CASCADE"),
@@ -137,9 +151,34 @@ class HrImportDocumentCandidate(Base):
         ForeignKey("employees.employee_id", ondelete="SET NULL"),
         nullable=True,
     )
+    employee_identity_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("employee_identities.identity_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    full_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    iin: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    department: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    position: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    document_kind: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'training'"))
     proposed_document_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    organization: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     parsed_hours: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
+    parsed_issued_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     parsed_valid_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    specialty: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    certificate_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    source_sheet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_row: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    external_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    storage_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    storage_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    fragment_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    parse_method: Mapped[Optional[str]] = mapped_column(Text, nullable=True, server_default=text("'regex_v1'"))
+    source_field: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confidence_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 4), nullable=True)
     review_status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'PENDING'"))
     created_document_id: Mapped[Optional[int]] = mapped_column(
