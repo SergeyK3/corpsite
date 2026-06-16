@@ -14,6 +14,7 @@ from app.services.employee_documents_service import (
     EmployeeDocumentValidationError,
     create_employee_document,
     get_employee_document,
+    get_employee_training_hours_summary,
     list_document_kinds,
     list_document_types,
     list_employee_documents,
@@ -39,6 +40,7 @@ class EmployeeDocumentCreateIn(BaseModel):
     document_number: Optional[str] = Field(default=None, max_length=200)
     issued_by: Optional[str] = Field(default=None, max_length=500)
     issued_at: Optional[date] = None
+    hours: Optional[int] = Field(default=None, ge=0)
     valid_until: Optional[date] = None
     file_url: Optional[str] = Field(default=None, max_length=2000)
     comment: Optional[str] = Field(default=None, max_length=2000)
@@ -58,6 +60,7 @@ class EmployeeDocumentUpdateIn(BaseModel):
     document_number: Optional[str] = Field(default=None, max_length=200)
     issued_by: Optional[str] = Field(default=None, max_length=500)
     issued_at: Optional[date] = None
+    hours: Optional[int] = Field(default=None, ge=0)
     valid_until: Optional[date] = None
     clear_valid_until: bool = False
     file_url: Optional[str] = Field(default=None, max_length=2000)
@@ -166,6 +169,25 @@ def get_employee_documents(
         raise as_http500(e)
 
 
+@router.get("/employee-documents/training-summary")
+def get_employee_training_summary(
+    employee_id: int = Query(..., ge=1),
+    as_of: Optional[date] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return call_service(
+            get_employee_training_hours_summary,
+            employee_id=employee_id,
+            as_of=as_of,
+        )
+    except EmployeeDocumentNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise as_http500(e)
+
+
 @router.get("/employee-documents/{document_id}")
 def get_employee_document_route(
     document_id: int = Path(..., ge=1),
@@ -201,6 +223,7 @@ def post_employee_document(
             document_number=payload.document_number,
             issued_by=payload.issued_by,
             issued_at=payload.issued_at,
+            hours=payload.hours,
             valid_until=payload.valid_until,
             file_url=payload.file_url,
             comment=payload.comment,
@@ -238,6 +261,7 @@ def put_employee_document(
             document_number=payload.document_number,
             issued_by=payload.issued_by,
             issued_at=payload.issued_at,
+            hours=payload.hours,
             valid_until=payload.valid_until,
             clear_valid_until=payload.clear_valid_until,
             file_url=payload.file_url,

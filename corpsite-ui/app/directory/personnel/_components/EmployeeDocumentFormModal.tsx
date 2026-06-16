@@ -41,6 +41,7 @@ type FormState = {
   document_number: string;
   issued_by: string;
   issued_at: string;
+  hours: string;
   valid_until: string;
   file_url: string;
   comment: string;
@@ -57,6 +58,7 @@ const EMPTY_FORM: FormState = {
   document_number: "",
   issued_by: "",
   issued_at: "",
+  hours: "",
   valid_until: "",
   file_url: "",
   comment: "",
@@ -108,6 +110,7 @@ export default function EmployeeDocumentFormModal({
   );
 
   const specialtyRequired = Boolean(selectedType?.requires_medical_specialty);
+  const hoursRequired = Boolean(selectedType?.tracks_hours);
 
   React.useEffect(() => {
     if (!open) return;
@@ -127,6 +130,10 @@ export default function EmployeeDocumentFormModal({
         document_number: documentRow.document_number || "",
         issued_by: documentRow.issued_by || "",
         issued_at: toDateInput(documentRow.issued_at),
+        hours:
+          documentRow.hours != null && Number.isFinite(documentRow.hours)
+            ? String(documentRow.hours)
+            : "",
         valid_until: toDateInput(documentRow.valid_until),
         file_url: documentRow.file_url || "",
         comment: documentRow.comment || "",
@@ -255,6 +262,22 @@ export default function EmployeeDocumentFormModal({
         }
       }
 
+      if (hoursRequired) {
+        if (!form.issued_at) {
+          setError("Укажите дату выдачи для документа с учётом часов.");
+          return;
+        }
+        const hoursVal = Number(form.hours);
+        if (!Number.isFinite(hoursVal) || hoursVal <= 0) {
+          setError("Укажите количество часов (целое число больше 0).");
+          return;
+        }
+        if (!Number.isInteger(hoursVal)) {
+          setError("Количество часов должно быть целым числом.");
+          return;
+        }
+      }
+
       const kindCode = selectedKind?.code;
       const titleValue =
         kindCode === "OTHER" ? form.title.trim() || null : form.title.trim() || null;
@@ -278,6 +301,7 @@ export default function EmployeeDocumentFormModal({
           document_number: form.document_number.trim() || null,
           issued_by: form.issued_by.trim() || null,
           issued_at: form.issued_at || null,
+          hours: hoursRequired ? Number(form.hours) : null,
           valid_until: selectedType?.has_valid_until ? form.valid_until || null : null,
           file_url: form.file_url.trim() || null,
           comment: form.comment.trim() || null,
@@ -303,6 +327,9 @@ export default function EmployeeDocumentFormModal({
         }
         if (form.issued_at !== initialForm.issued_at) {
           payload.issued_at = form.issued_at || null;
+        }
+        if (form.hours !== initialForm.hours) {
+          payload.hours = hoursRequired ? Number(form.hours) : null;
         }
         if (form.comment !== initialForm.comment) payload.comment = form.comment.trim() || null;
 
@@ -581,15 +608,33 @@ export default function EmployeeDocumentFormModal({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                Дата выдачи
+                Дата выдачи{hoursRequired ? " *" : ""}
               </label>
               <input
                 type="date"
+                required={hoursRequired}
                 value={form.issued_at}
                 onChange={(e) => setField("issued_at", e.target.value)}
                 className={selectClass}
               />
             </div>
+            {hoursRequired ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Количество часов *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  required
+                  value={form.hours}
+                  onChange={(e) => setField("hours", e.target.value)}
+                  placeholder="Например: 36"
+                  className={selectClass}
+                />
+              </div>
+            ) : null}
             {selectedType?.has_valid_until ? (
               <div>
                 <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">

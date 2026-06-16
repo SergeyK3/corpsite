@@ -421,6 +421,8 @@ def test_filters_and_inactive_employee_visibility(client, seed, privileged_heade
                     "document_type_id": seminar_type_id,
                     "title": f"Seminar {suffix} {uuid4().hex[:4]}",
                     "document_number": f"SEM-{suffix}-{uuid4().hex[:4]}",
+                    "issued_at": date.today().isoformat(),
+                    "hours": 16,
                 },
                 headers=privileged_headers,
             )
@@ -488,6 +490,8 @@ def test_get_single_document(client, seed, privileged_headers):
                 "employee_id": emp_id,
                 "document_type_id": seminar_type_id,
                 "title": "Single doc",
+                "issued_at": date.today().isoformat(),
+                "hours": 8,
             },
             headers=privileged_headers,
         )

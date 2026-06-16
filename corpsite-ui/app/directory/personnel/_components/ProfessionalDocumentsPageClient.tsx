@@ -12,6 +12,7 @@ import {
   expiryStatusMeta,
   fmtProfileDate,
   matchesDocumentQuickFilter,
+  trainingHoursStatusMeta,
   type DocumentQuickFilter,
 } from "../../employees/_lib/professionalProfile";
 import EmployeeDocumentFormModal from "./EmployeeDocumentFormModal";
@@ -22,6 +23,7 @@ import {
   listDocumentKinds,
   listDocumentTypes,
   listEmployeeDocuments,
+  getEmployeeTrainingHoursSummary,
   listMedicalSpecialties,
   listMedicalSpecialtyGroups,
   mapDocumentsApiError,
@@ -30,6 +32,7 @@ import {
   type EmployeeDocumentRow,
   type MedicalSpecialtyGroupRow,
   type MedicalSpecialtyRow,
+  type TrainingHoursSummary,
 } from "../_lib/documentsApi.client";
 
 const EXPIRY_FILTER_OPTIONS = [
@@ -104,6 +107,8 @@ export default function ProfessionalDocumentsPageClient() {
   const [quickFilter, setQuickFilter] = React.useState<DocumentQuickFilter>("ALL");
 
   const [reloadToken, setReloadToken] = React.useState(0);
+  const [trainingSummary, setTrainingSummary] = React.useState<TrainingHoursSummary | null>(null);
+  const [trainingSummaryLoading, setTrainingSummaryLoading] = React.useState(false);
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(searchQ.trim()), 300);
@@ -220,6 +225,37 @@ export default function ProfessionalDocumentsPageClient() {
     );
   }, [items, quickFilter, expiryFilter]);
 
+  const summaryEmployeeId = React.useMemo(() => {
+    if (visibleItems.length === 0) return null;
+    const ids = new Set(visibleItems.map((row) => row.employee_id));
+    if (ids.size !== 1) return null;
+    return visibleItems[0].employee_id;
+  }, [visibleItems]);
+
+  React.useEffect(() => {
+    if (!summaryEmployeeId) {
+      setTrainingSummary(null);
+      return;
+    }
+    let cancelled = false;
+    setTrainingSummaryLoading(true);
+    (async () => {
+      try {
+        const summary = await getEmployeeTrainingHoursSummary({
+          employee_id: summaryEmployeeId,
+        });
+        if (!cancelled) setTrainingSummary(summary);
+      } catch {
+        if (!cancelled) setTrainingSummary(null);
+      } finally {
+        if (!cancelled) setTrainingSummaryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [summaryEmployeeId, reloadToken]);
+
   function reloadDocuments() {
     setReloadToken((v) => v + 1);
   }
@@ -261,7 +297,22 @@ export default function ProfessionalDocumentsPageClient() {
     setQuickFilter(chip ? (chip.value as DocumentQuickFilter) : "ALL");
   }
 
-  const tableColSpan = 11;
+  const tableColSpan = 12;
+  const trainingMeta = trainingSummary
+    ? trainingHoursStatusMeta(trainingSummary.training_hours_status)
+    : null;
+  const trainingProgressPct = trainingSummary
+    ? Math.min(
+        100,
+        Math.round(
+          (trainingSummary.training_hours_last_5y / trainingSummary.training_hours_required) * 100
+        )
+      )
+    : 0;
+  const summaryEmployeeName =
+    summaryEmployeeId != null
+      ? visibleItems.find((row) => row.employee_id === summaryEmployeeId)?.employee_name
+      : null;
 
   return (
     <div className="space-y-4">
@@ -464,6 +515,64 @@ export default function ProfessionalDocumentsPageClient() {
         })}
       </div>
 
+      {summaryEmployeeId && (trainingSummaryLoading || trainingSummary) ? (
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+          {trainingSummaryLoading && !trainingSummary ? (
+            <div className="text-sm text-zinc-500">Загрузка сводки по часам…</div>
+          ) : trainingSummary ? (
+            <>
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                    Часы обучения: {summaryEmployeeName || `#${summaryEmployeeId}`}
+                  </div>
+                  <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    За 5 лет ({fmtProfileDate(trainingSummary.window_start)} —{" "}
+                    {fmtProfileDate(trainingSummary.as_of)})
+                  </div>
+                </div>
+                {trainingMeta ? (
+                  <span
+                    className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${trainingMeta.className}`}
+                  >
+                    {trainingMeta.label}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+                  {trainingSummary.training_hours_last_5y} / {trainingSummary.training_hours_required}{" "}
+                  ч
+                </span>
+                {trainingSummary.training_hours_remaining > 0 ? (
+                  <span className="ml-3 text-zinc-600 dark:text-zinc-400">
+                    Осталось {trainingSummary.training_hours_remaining} ч
+                  </span>
+                ) : null}
+                {trainingSummary.incomplete_documents_count > 0 ? (
+                  <span className="ml-3 text-amber-700 dark:text-amber-300">
+                    Неполных: {trainingSummary.incomplete_documents_count}
+                  </span>
+                ) : null}
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                <div
+                  className={[
+                    "h-full rounded-full",
+                    trainingSummary.training_hours_status === "MET"
+                      ? "bg-emerald-500"
+                      : trainingSummary.training_hours_status === "INCOMPLETE"
+                        ? "bg-amber-500"
+                        : "bg-orange-500",
+                  ].join(" ")}
+                  style={{ width: `${trainingProgressPct}%` }}
+                />
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
@@ -477,6 +586,7 @@ export default function ProfessionalDocumentsPageClient() {
                   "Обучение / программа",
                   "№ документа",
                   "Выдан",
+                  "Часы",
                   "Действует до",
                   "Статус срока",
                   "Файл",
@@ -540,6 +650,9 @@ export default function ProfessionalDocumentsPageClient() {
                         </td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
                           {fmtProfileDate(row.issued_at)}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                          {row.hours != null ? row.hours : "—"}
                         </td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
                           {fmtProfileDate(row.valid_until)}

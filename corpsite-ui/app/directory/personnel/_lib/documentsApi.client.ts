@@ -158,6 +158,8 @@ export type EmployeeDocumentRow = {
   document_number: string | null;
   issued_by: string | null;
   issued_at: string | null;
+  hours: number | null;
+  tracks_hours?: boolean;
   valid_until: string | null;
   file_url: string | null;
   comment: string | null;
@@ -183,6 +185,7 @@ export type EmployeeDocumentCreatePayload = {
   document_number?: string | null;
   issued_by?: string | null;
   issued_at?: string | null;
+  hours?: number | null;
   valid_until?: string | null;
   file_url?: string | null;
   comment?: string | null;
@@ -199,12 +202,39 @@ export type EmployeeDocumentUpdatePayload = {
   document_number?: string | null;
   issued_by?: string | null;
   issued_at?: string | null;
+  hours?: number | null;
   valid_until?: string | null;
   clear_valid_until?: boolean;
   file_url?: string | null;
   clear_file_url?: boolean;
   comment?: string | null;
 };
+
+export type TrainingHoursSummary = {
+  employee_id: number;
+  as_of: string;
+  window_start: string;
+  training_hours_last_5y: number;
+  training_hours_required: number;
+  training_hours_remaining: number;
+  training_hours_status: "MET" | "BELOW" | "EMPTY" | "INCOMPLETE";
+  incomplete_documents_count: number;
+  qualifying_documents_count: number;
+};
+
+export async function getEmployeeTrainingHoursSummary(args: {
+  employee_id: number;
+  as_of?: string;
+}): Promise<TrainingHoursSummary> {
+  const qs = buildQuery({
+    employee_id: args.employee_id,
+    as_of: args.as_of,
+  });
+  return apiGetJson<TrainingHoursSummary>(
+    "/directory/employee-documents/training-summary",
+    qs
+  );
+}
 
 export async function listDocumentTypes(isActive = true): Promise<ListResponse<DocumentTypeRow>> {
   const qs = buildQuery({ is_active: isActive });

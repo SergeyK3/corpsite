@@ -1,5 +1,5 @@
 # FILE: app/services/employee_documents_service.py
-"""ADR-037 Phase 1A: production employee documents registry."""
+"""ADR-037 Phase 1A/1B: production employee documents registry."""
 from __future__ import annotations
 
 from datetime import date
@@ -11,6 +11,14 @@ from app.db.engine import engine
 
 EXPIRY_WARN_60_DAYS = 60
 EXPIRY_WARN_30_DAYS = 30
+
+DEFAULT_TRAINING_HOURS_REQUIRED = 144
+TRAINING_WINDOW_YEARS = 5
+
+TRAINING_HOURS_STATUS_MET = "MET"
+TRAINING_HOURS_STATUS_BELOW = "BELOW"
+TRAINING_HOURS_STATUS_EMPTY = "EMPTY"
+TRAINING_HOURS_STATUS_INCOMPLETE = "INCOMPLETE"
 
 EXPIRY_STATUS_VALUES = frozenset(
     {"VALID", "EXPIRING_60", "EXPIRING_30", "EXPIRED", "NO_EXPIRY"}
@@ -141,6 +149,8 @@ def _map_document_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "document_number": row.get("document_number"),
         "issued_by": row.get("issued_by"),
         "issued_at": _serialize_date(row.get("issued_at")),
+        "hours": int(row["hours"]) if row.get("hours") is not None else None,
+        "tracks_hours": bool(row.get("tracks_hours", False)),
         "valid_until": _serialize_date(valid_until),
         "file_url": row.get("file_url"),
         "comment": row.get("comment"),
@@ -217,6 +227,49 @@ def _employee_exists(conn, employee_id: int) -> bool:
     return row is not None
 
 
+def _training_window_start(as_of: date) -> date:
+    """Rolling N-year window start (inclusive), calendar-aware via PostgreSQL in queries."""
+    try:
+        return as_of.replace(year=as_of.year - TRAINING_WINDOW_YEARS)
+    except ValueError:
+        # Feb 29 → Feb 28 on non-leap target year
+        return as_of.replace(year=as_of.year - TRAINING_WINDOW_YEARS, day=28)
+
+
+def _validate_hours_for_type(
+    doc_type: Dict[str, Any],
+    *,
+    hours: Optional[int],
+    issued_at: Optional[date],
+    lifecycle_status: str,
+) -> Optional[int]:
+    tracks = bool(doc_type.get("tracks_hours"))
+    if not tracks:
+        if hours is not None:
+            raise EmployeeDocumentValidationError(
+                "hours must be null for this document type."
+            )
+        return None
+
+    if lifecycle_status == LIFECYCLE_SUPERSEDED:
+        if hours is not None and int(hours) < 0:
+            raise EmployeeDocumentValidationError("hours must be >= 0.")
+        return int(hours) if hours is not None else None
+
+    if issued_at is None:
+        raise EmployeeDocumentValidationError(
+            "issued_at is required for this document type."
+        )
+    if hours is None:
+        raise EmployeeDocumentValidationError("hours is required for this document type.")
+    hours_int = int(hours)
+    if hours_int <= 0:
+        raise EmployeeDocumentValidationError(
+            "hours must be greater than 0 for this document type."
+        )
+    return hours_int
+
+
 def _validate_lifecycle_for_api(lifecycle_status: Optional[str], *, on_create: bool) -> str:
     status = (lifecycle_status or LIFECYCLE_ACTIVE).strip().upper()
     if status == LIFECYCLE_DRAFT:
@@ -236,11 +289,13 @@ def _validate_payload(
     document_type_id: int,
     document_kind_id: Optional[int],
     medical_specialty_id: Optional[int],
+    issued_at: Optional[date],
+    hours: Optional[int],
     valid_until: Optional[date],
     file_url: Optional[str],
     lifecycle_status: Optional[str],
     on_create: bool,
-) -> Tuple[Dict[str, Any], str]:
+) -> Tuple[Dict[str, Any], str, Optional[int]]:
     doc_type = _load_document_type(conn, document_type_id)
     if doc_type is None:
         raise EmployeeDocumentValidationError("document_type_id not found.")
@@ -284,7 +339,14 @@ def _validate_payload(
             )
         file_url = url or None
 
-    return doc_type, status
+    validated_hours = _validate_hours_for_type(
+        doc_type,
+        hours=hours,
+        issued_at=issued_at,
+        lifecycle_status=status,
+    )
+
+    return doc_type, status, validated_hours
 
 
 def _select_documents_base_sql() -> str:
@@ -309,6 +371,8 @@ def _select_documents_base_sql() -> str:
             ed.document_number,
             ed.issued_by,
             ed.issued_at,
+            ed.hours,
+            dt.tracks_hours,
             ed.valid_until,
             ed.file_url,
             ed.comment,
@@ -606,6 +670,7 @@ def create_employee_document(
     document_number: Optional[str] = None,
     issued_by: Optional[str] = None,
     issued_at: Optional[date] = None,
+    hours: Optional[int] = None,
     valid_until: Optional[date] = None,
     file_url: Optional[str] = None,
     comment: Optional[str] = None,
@@ -618,11 +683,13 @@ def create_employee_document(
         if not _employee_exists(conn, employee_id):
             raise EmployeeDocumentNotFoundError("employee_id not found.")
 
-        _, status = _validate_payload(
+        _, status, validated_hours = _validate_payload(
             conn,
             document_type_id=document_type_id,
             document_kind_id=document_kind_id,
             medical_specialty_id=medical_specialty_id,
+            issued_at=issued_at,
+            hours=hours,
             valid_until=valid_until,
             file_url=file_url,
             lifecycle_status=lifecycle_status,
@@ -642,6 +709,7 @@ def create_employee_document(
                     document_number,
                     issued_by,
                     issued_at,
+                    hours,
                     valid_until,
                     file_url,
                     comment,
@@ -658,6 +726,7 @@ def create_employee_document(
                     :document_number,
                     :issued_by,
                     :issued_at,
+                    :hours,
                     :valid_until,
                     :file_url,
                     :comment,
@@ -681,6 +750,7 @@ def create_employee_document(
                 "document_number": document_number,
                 "issued_by": issued_by,
                 "issued_at": issued_at,
+                "hours": validated_hours,
                 "valid_until": valid_until,
                 "file_url": file_url,
                 "comment": comment,
@@ -708,6 +778,7 @@ def update_employee_document(
     document_number: Optional[str] = None,
     issued_by: Optional[str] = None,
     issued_at: Optional[date] = None,
+    hours: Optional[int] = None,
     valid_until: Optional[date] = None,
     clear_valid_until: bool = False,
     file_url: Optional[str] = None,
@@ -762,17 +833,23 @@ def update_employee_document(
         else:
             merged_file_url = existing.get("file_url")
 
+        merged_issued_at = issued_at if issued_at is not None else existing.get("issued_at")
+
+        merged_hours = hours if hours is not None else existing.get("hours")
+
         merged_lifecycle = (
             lifecycle_status if lifecycle_status is not None else existing.get("lifecycle_status")
         )
 
-        _, status = _validate_payload(
+        _, status, validated_hours = _validate_payload(
             conn,
             document_type_id=merged_type_id,
             document_kind_id=int(merged_kind_id) if merged_kind_id is not None else None,
             medical_specialty_id=int(merged_specialty_id)
             if merged_specialty_id is not None
             else None,
+            issued_at=merged_issued_at,
+            hours=int(merged_hours) if merged_hours is not None else None,
             valid_until=merged_valid_until,
             file_url=merged_file_url,
             lifecycle_status=merged_lifecycle,
@@ -792,6 +869,7 @@ def update_employee_document(
                     document_number = :document_number,
                     issued_by = :issued_by,
                     issued_at = :issued_at,
+                    hours = :hours,
                     valid_until = :valid_until,
                     file_url = :file_url,
                     comment = :comment,
@@ -817,7 +895,8 @@ def update_employee_document(
                 if document_number is not None
                 else existing.get("document_number"),
                 "issued_by": issued_by if issued_by is not None else existing.get("issued_by"),
-                "issued_at": issued_at if issued_at is not None else existing.get("issued_at"),
+                "issued_at": merged_issued_at,
+                "hours": validated_hours,
                 "valid_until": merged_valid_until,
                 "file_url": merged_file_url,
                 "comment": comment if comment is not None else existing.get("comment"),
@@ -852,3 +931,103 @@ def soft_delete_employee_document(document_id: int) -> Optional[Dict[str, Any]]:
             "document_id": int(row["document_id"]),
             "lifecycle_status": str(row["lifecycle_status"]),
         }
+
+
+def get_employee_training_hours_summary(
+    *,
+    employee_id: int,
+    as_of: Optional[date] = None,
+    training_hours_required: Optional[int] = None,
+) -> Dict[str, Any]:
+    if not employee_documents_available():
+        raise RuntimeError("employee_documents tables are not available")
+
+    ref = as_of or date.today()
+    required = (
+        int(training_hours_required)
+        if training_hours_required is not None
+        else DEFAULT_TRAINING_HOURS_REQUIRED
+    )
+    window_start = _training_window_start(ref)
+
+    with engine.begin() as conn:
+        if not _employee_exists(conn, employee_id):
+            raise EmployeeDocumentNotFoundError("employee_id not found.")
+
+        incomplete_count = int(
+            conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM public.employee_documents ed
+                    JOIN public.document_types dt
+                        ON dt.document_type_id = ed.document_type_id
+                    WHERE ed.employee_id = :employee_id
+                      AND ed.lifecycle_status = :lifecycle_active
+                      AND dt.tracks_hours = TRUE
+                      AND (
+                          ed.issued_at IS NULL
+                          OR ed.hours IS NULL
+                          OR ed.hours <= 0
+                      )
+                    """
+                ),
+                {
+                    "employee_id": int(employee_id),
+                    "lifecycle_active": LIFECYCLE_ACTIVE,
+                },
+            ).scalar()
+            or 0
+        )
+
+        sum_row = conn.execute(
+            text(
+                """
+                SELECT
+                    COALESCE(SUM(ed.hours), 0)::int AS total_hours,
+                    COUNT(*)::int AS qualifying_documents_count
+                FROM public.employee_documents ed
+                JOIN public.document_types dt
+                    ON dt.document_type_id = ed.document_type_id
+                WHERE ed.employee_id = :employee_id
+                  AND ed.lifecycle_status = :lifecycle_active
+                  AND dt.tracks_hours = TRUE
+                  AND ed.issued_at IS NOT NULL
+                  AND ed.hours IS NOT NULL
+                  AND ed.hours > 0
+                  AND ed.issued_at >= :window_start
+                  AND ed.issued_at <= :as_of
+                """
+            ),
+            {
+                "employee_id": int(employee_id),
+                "lifecycle_active": LIFECYCLE_ACTIVE,
+                "window_start": window_start,
+                "as_of": ref,
+            },
+        ).mappings().first()
+
+    total = int(sum_row["total_hours"] if sum_row else 0)
+    qualifying_count = int(sum_row["qualifying_documents_count"] if sum_row else 0)
+    remaining = max(0, required - total)
+
+    if incomplete_count > 0:
+        status = TRAINING_HOURS_STATUS_INCOMPLETE
+    elif total >= required:
+        status = TRAINING_HOURS_STATUS_MET
+    elif total > 0:
+        status = TRAINING_HOURS_STATUS_BELOW
+    else:
+        status = TRAINING_HOURS_STATUS_EMPTY
+
+    return {
+        "employee_id": int(employee_id),
+        "as_of": ref.isoformat(),
+        "window_start": window_start.isoformat(),
+        "training_hours_last_5y": total,
+        "training_hours_required": required,
+        "training_hours_remaining": remaining,
+        "training_hours_status": status,
+        "incomplete_documents_count": incomplete_count,
+        "qualifying_documents_count": qualifying_count,
+    }

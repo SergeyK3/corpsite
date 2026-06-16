@@ -117,6 +117,12 @@ export default function EmployeeDocumentViewModal({
             <Field label="Кем выдан" value={row.issued_by} />
           </div>
           <Field label="Дата выдачи" value={fmtProfileDate(row.issued_at)} />
+          {row.tracks_hours || row.hours != null ? (
+            <Field
+              label="Количество часов"
+              value={row.hours != null ? `${row.hours} ч` : "—"}
+            />
+          ) : null}
           <Field label="Действует до" value={fmtProfileDate(row.valid_until)} />
           <Field
             label="Статус срока"

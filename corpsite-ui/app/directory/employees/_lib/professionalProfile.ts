@@ -218,3 +218,37 @@ export function expiryStatusMeta(status: string) {
     }
   );
 }
+
+export type TrainingHoursStatus = "MET" | "BELOW" | "EMPTY" | "INCOMPLETE";
+
+export const TRAINING_HOURS_STATUS_META: Record<
+  TrainingHoursStatus,
+  { label: string; className: string }
+> = {
+  MET: {
+    label: "Норма выполнена",
+    className: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
+  },
+  BELOW: {
+    label: "Ниже нормы",
+    className: "bg-orange-100 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200",
+  },
+  EMPTY: {
+    label: "Нет учёта часов",
+    className: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  },
+  INCOMPLETE: {
+    label: "Неполные данные",
+    className: "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  },
+};
+
+export function trainingHoursStatusMeta(status: TrainingHoursStatus | string) {
+  const key = String(status || "").toUpperCase() as TrainingHoursStatus;
+  return (
+    TRAINING_HOURS_STATUS_META[key] ?? {
+      label: status,
+      className: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+    }
+  );
+}
