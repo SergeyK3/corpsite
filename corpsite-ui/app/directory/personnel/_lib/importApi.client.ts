@@ -227,8 +227,10 @@ export type CertificatePortfolioRecord = PortfolioRecord & {
 
 export type EducationProfileSummary = {
   profile_id: number;
+  aggregate_key?: string;
   batch_id: number;
   row_id: number;
+  source_row_ids?: number[];
   employee_id: number | null;
   full_name: string;
   iin_masked: string;
@@ -249,8 +251,10 @@ export type EducationProfileSummary = {
 
 export type EducationProfileDetail = {
   profile_id: number;
+  aggregate_key?: string;
   batch_id: number;
   row_id: number;
+  source_row_ids?: number[];
   employee_id: number | null;
   source_sheet: string;
   source_row_number: number;

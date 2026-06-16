@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 
 import ImportBatchSubNav from "./ImportBatchSubNav";
 import ImportEducationProfileCardModal from "./ImportEducationProfileCardModal";
@@ -24,6 +23,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
   const [items, setItems] = React.useState<EducationProfileSummary[]>([]);
   const [total, setTotal] = React.useState(0);
   const [options, setOptions] = React.useState<DepartmentRecodingOptions | null>(null);
+  const [departmentGroup, setDepartmentGroup] = React.useState("");
   const [departmentFilter, setDepartmentFilter] = React.useState("");
   const [nameQuery, setNameQuery] = React.useState("");
   const [offset, setOffset] = React.useState(0);
@@ -36,11 +36,18 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
     getDepartmentRecodingOptions().then(setOptions).catch(() => setOptions(null));
   }, []);
 
+  const filteredDepartments = React.useMemo(() => {
+    const all = options?.departments ?? [];
+    if (!departmentGroup) return all;
+    return all.filter((d) => d.department_group === departmentGroup);
+  }, [options, departmentGroup]);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
       const dept = parseDepartmentFilterValue(departmentFilter);
       const data = await listEducationProfiles(batchId, {
+        department_group: departmentGroup || undefined,
         ...dept,
         q_name: nameQuery || undefined,
         limit,
@@ -54,7 +61,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
     } finally {
       setLoading(false);
     }
-  }, [batchId, departmentFilter, nameQuery, offset]);
+  }, [batchId, departmentGroup, departmentFilter, nameQuery, offset]);
 
   React.useEffect(() => {
     load();
@@ -83,7 +90,8 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
           Образовательные профили сотрудников из импорта
         </h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Batch #{batchId} — одна строка = один сотрудник (staging/review, без auto-apply)
+          Одна строка = один сотрудник. Документы и обучение — внутри карточки (staging/review, без
+          auto-apply).
         </p>
       </div>
 
@@ -93,7 +101,23 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
         </div>
       ) : null}
 
-      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3">
+      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-4">
+        <select
+          className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          value={departmentGroup}
+          onChange={(e) => {
+            setDepartmentGroup(e.target.value);
+            setDepartmentFilter("");
+            setOffset(0);
+          }}
+        >
+          <option value="">Все группы отделений</option>
+          {options?.groups.map((g) => (
+            <option key={g.value} value={g.value}>
+              {g.label}
+            </option>
+          ))}
+        </select>
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           value={departmentFilter}
@@ -103,7 +127,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
           }}
         >
           <option value="">Все отделы</option>
-          {options?.departments.map((d) => (
+          {filteredDepartments.map((d) => (
             <option key={departmentFilterOptionValue(d)} value={departmentFilterOptionValue(d)}>
               {d.org_unit_name}
             </option>
@@ -153,7 +177,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
                   </tr>
                 ) : (
                   items.map((row) => (
-                    <tr key={row.profile_id} className="border-t border-zinc-100 dark:border-zinc-800">
+                    <tr key={row.aggregate_key ?? row.profile_id} className="border-t border-zinc-100 dark:border-zinc-800">
                       <td className="px-3 py-2 font-medium">{row.full_name || "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs">{row.iin_masked || "—"}</td>
                       <td className="px-3 py-2">{row.org_unit_name || row.department_source || "—"}</td>
@@ -168,17 +192,10 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
                           type="button"
                           disabled={cardLoading}
                           onClick={() => openCard(row.profile_id)}
-                          className="text-blue-600 hover:underline disabled:opacity-50"
+                          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                         >
                           Карточка
                         </button>
-                        <span className="mx-1 text-zinc-300">|</span>
-                        <Link
-                          href={`/directory/personnel/import/${batchId}/review/${row.row_id}`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          Review
-                        </Link>
                       </td>
                     </tr>
                   ))

@@ -169,6 +169,94 @@ def test_archive_does_not_create_hr_events(staged_batch):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_duplicate_iin_aggregates_to_single_profile(staged_batch):
+    """Same IIN on multiple staging rows → one profile row (e.g. Абдалимова case)."""
+    with engine.connect() as conn:
+        source_row = conn.execute(
+            text(
+                """
+                SELECT row_id, normalized_payload, source_sheet, source_row_number
+                FROM public.hr_import_rows
+                WHERE batch_id = :batch_id
+                ORDER BY row_id
+                LIMIT 1
+                """
+            ),
+            {"batch_id": staged_batch},
+        ).mappings().first()
+        assert source_row is not None
+        payload = dict(source_row["normalized_payload"] or {})
+        payload["full_name"] = "Абдалимова Айгуль Тестовна"
+        payload["iin"] = "900101350123"
+        import json
+
+        payload_json = json.dumps(payload, ensure_ascii=False)
+    row_id = int(source_row["row_id"])
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_rows
+                SET normalized_payload = CAST(:payload AS JSONB),
+                    raw_payload = CAST(:payload AS JSONB)
+                WHERE row_id = :row_id
+                """
+            ),
+            {"payload": payload_json, "row_id": row_id},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_rows (
+                    batch_id, source_sheet, source_row_number,
+                    raw_payload, normalized_payload, match_status
+                )
+                SELECT :batch_id, source_sheet, source_row_number + 9000,
+                       CAST(:payload AS JSONB), CAST(:payload AS JSONB), match_status
+                FROM public.hr_import_rows
+                WHERE row_id = :row_id
+                """
+            ),
+            {
+                "batch_id": staged_batch,
+                "payload": payload_json,
+                "row_id": row_id,
+            },
+        )
+    try:
+        with engine.connect() as conn:
+            profiles = list_education_profiles(conn, staged_batch, q_name="Абдалимова", limit=500)
+            matching = [p for p in profiles["items"] if "Абдалимова" in p["full_name"]]
+        assert len(matching) == 1, "duplicate IIN rows must aggregate to one employee profile"
+        assert matching[0]["source_row_ids"] and len(matching[0]["source_row_ids"]) >= 2
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM public.hr_import_rows
+                    WHERE batch_id = :batch_id AND source_row_number >= 9000
+                    """
+                ),
+                {"batch_id": staged_batch},
+            )
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_rows
+                    SET normalized_payload = CAST(:payload AS JSONB),
+                        raw_payload = CAST(:payload AS JSONB)
+                    WHERE row_id = :row_id
+                    """
+                ),
+                {
+                    "payload": json.dumps(dict(source_row["normalized_payload"] or {}), ensure_ascii=False),
+                    "row_id": row_id,
+                },
+            )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_education_profiles_api(client: TestClient, privileged_headers, staged_batch):
     resp = client.get(
         f"/directory/personnel/import/batches/{staged_batch}/education-profiles",

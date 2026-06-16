@@ -349,6 +349,7 @@ def get_import_batch_education_portfolio(
 @router.get("/personnel/import/batches/{batch_id}/education-profiles")
 def get_import_batch_education_profiles(
     batch_id: int,
+    department_group: Optional[str] = Query(default=None),
     org_unit_id: Optional[int] = Query(default=None),
     org_unit_name: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
@@ -362,6 +363,7 @@ def get_import_batch_education_profiles(
         return _with_conn(
             list_education_profiles,
             batch_id=batch_id,
+            department_group=department_group,
             org_unit_id=org_unit_id,
             org_unit_name=org_unit_name,
             q_name=q_name,

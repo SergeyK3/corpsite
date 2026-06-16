@@ -131,7 +131,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             href={`/directory/personnel/import/${batchId}/training`}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
-            Документы / обучение
+            Образовательные профили
           </Link>
           <Link
             href={`/directory/personnel/import/${batchId}/review?mode=personnel`}
@@ -151,10 +151,10 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
       ) : (
         <>
           <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-            <StatCard label="Персонал (roster)" value={summary.employee_roster_rows ?? summary.total_rows} />
-            <StatCard label="Декларации" value={summary.declaration_rows ?? 0} />
+            <StatCard label="Строки сотрудников" value={summary.employee_roster_rows ?? summary.total_rows} />
+            <StatCard label="Декларационные листы" value={summary.declaration_rows ?? 0} />
             <StatCard
-              label="Технические / категории"
+              label="Технические / служебные строки"
               value={summary.technical_category_rows ?? 0}
             />
             <StatCard label="Без ИИН (персонал)" value={summary.missing_iin} />
@@ -171,27 +171,31 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
           </div>
 
           <section className="mb-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
               Разделы staging
             </h2>
+            <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+              Это строки исходного Excel-файла, сгруппированные по типам листов. Они не записаны в
+              кадровый контур.
+            </p>
             <div className="flex flex-wrap gap-2 text-sm">
               <Link
                 href={`/directory/personnel/import/${batchId}/review?mode=personnel`}
                 className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-700"
               >
-                Персонал ({summary.employee_roster_rows ?? 0})
+                Строки сотрудников ({summary.employee_roster_rows ?? 0})
               </Link>
               <Link
                 href={`/directory/personnel/import/${batchId}/review?mode=declaration`}
                 className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
-                Декларации ({summary.declaration_rows ?? 0})
+                Декларационные листы ({summary.declaration_rows ?? 0})
               </Link>
               <Link
                 href={`/directory/personnel/import/${batchId}/review?mode=technical`}
                 className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
-                Технические ({summary.technical_category_rows ?? 0})
+                Технические / служебные строки ({summary.technical_category_rows ?? 0})
               </Link>
             </div>
             {summary.by_declaration_group && Object.keys(summary.by_declaration_group).length > 0 ? (
@@ -207,25 +211,28 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
 
           <section className="mb-6 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
             <h2 className="border-b border-zinc-200 px-4 py-3 text-sm font-semibold dark:border-zinc-800">
-              Диагностика листов
+              Диагностика листов Excel
             </h2>
+            <p className="border-b border-zinc-200 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+              Строки исходного файла по листам — не сотрудники кадрового контура и не документы
+              реестра.
+            </p>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-zinc-50 text-left text-[11px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
                   <tr>
-                    <th className="px-3 py-2">Лист</th>
-                    <th className="px-3 py-2">Тип</th>
+                    <th className="px-3 py-2">Лист Excel</th>
+                    <th className="px-3 py-2">Интерпретированный тип</th>
                     <th className="px-3 py-2">Всего строк</th>
-                    <th className="px-3 py-2">Персонал</th>
+                    <th className="px-3 py-2">Строки сотрудников</th>
                     <th className="px-3 py-2">Декларации</th>
-                    <th className="px-3 py-2">Техн.</th>
-                    <th className="px-3 py-2">Candidates</th>
+                    <th className="px-3 py-2">Служебные</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sheetDiagnostics.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-6 text-center text-zinc-500">
+                      <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
                         Нет данных по листам
                       </td>
                     </tr>
@@ -238,7 +245,6 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
                         <td className="px-3 py-2">{sheet.employee_rows}</td>
                         <td className="px-3 py-2">{sheet.declaration_rows}</td>
                         <td className="px-3 py-2">{sheet.technical_rows}</td>
-                        <td className="px-3 py-2">{sheet.candidates_count}</td>
                       </tr>
                     ))
                   )}

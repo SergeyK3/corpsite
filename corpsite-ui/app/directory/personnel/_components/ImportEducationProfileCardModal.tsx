@@ -113,13 +113,14 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4">
-      <div className="my-4 w-full max-w-4xl rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-2 sm:p-4">
+      <div className="my-2 w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
           <div>
-            <h2 className="text-lg font-semibold">{detail.full_name || "Карточка сотрудника"}</h2>
+            <h2 className="text-xl font-semibold">{detail.full_name || "Карточка сотрудника"}</h2>
             <p className="text-sm text-zinc-500">
-              row #{detail.row_id} · {detail.source_sheet}:{detail.source_row_number}
+              staging · rows {detail.source_row_ids?.join(", ") ?? detail.row_id}
+              {detail.source_sheet ? ` · ${detail.source_sheet}:${detail.source_row_number}` : ""}
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-800">
@@ -127,12 +128,12 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </button>
         </div>
 
-        <div className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-4">
+        <div className="max-h-[80vh] space-y-8 overflow-y-auto px-6 py-5">
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
           <section>
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              1. Базовая информация
+            <h3 className="mb-3 text-base font-semibold text-zinc-800 dark:text-zinc-200">
+              Базовая информация
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="ФИО" value={basic.full_name} onChange={(v) => updateBasic("full_name", v)} />
@@ -173,13 +174,7 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
                 value={basic.employment_rate != null ? String(basic.employment_rate) : ""}
                 onChange={(v) => updateBasic("employment_rate", v)}
               />
-              <Field
-                label="Стаж"
-                value={basic.experience_raw}
-                onChange={(v) => updateBasic("experience_raw", v)}
-                multiline
-              />
-              <label className="block text-sm">
+              <label className="block text-sm sm:col-span-2">
                 <span className="mb-1 block text-xs text-zinc-500">Статус проверки</span>
                 <select
                   className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
@@ -195,9 +190,10 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              2. Учебное заведение
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">
+              Блок информации «Учебное заведение»
             </h3>
+            <p className="mb-2 text-xs text-zinc-500">из столбца H исходного файла</p>
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs text-zinc-500">
                 <tr>
@@ -224,9 +220,19 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
             </table>
           </section>
 
+          {basic.experience_raw ? (
+            <section>
+              <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">Стаж</h3>
+              <p className="mb-2 text-xs text-zinc-500">
+                Пока выводится текстом из импорта; расчёт стажа — отдельная задача.
+              </p>
+              <p className="whitespace-pre-wrap text-sm">{basic.experience_raw}</p>
+            </section>
+          ) : null}
+
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              3. Повышение квалификации
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">
+              Блок информации «Повышение квалификации»
             </h3>
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs text-zinc-500">
@@ -257,8 +263,8 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              4. Квалификационная категория
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">
+              Блок информации «Квалификационная категория»
             </h3>
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs text-zinc-500">
@@ -289,7 +295,7 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">5. Сертификаты</h3>
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">Блок «Сертификаты»</h3>
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs text-zinc-500">
                 <tr>
@@ -323,7 +329,7 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">6. Степень</h3>
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">Степень</h3>
             <p className="text-sm">
               {profile.degrees.candidate_medical_sciences ? "Кандидат медицинских наук" : null}
               {profile.degrees.doctor_medical_sciences ? "Доктор медицинских наук" : null}
@@ -334,7 +340,7 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">7. Награды</h3>
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">Блок «Награды»</h3>
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs text-zinc-500">
                 <tr>
@@ -362,7 +368,8 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">8. Примечание</h3>
+            <h3 className="mb-1 text-base font-semibold text-zinc-800 dark:text-zinc-200">Примечание</h3>
+            <p className="mb-2 text-xs text-zinc-500">декрет, инвалид, пенсионер, прочие комментарии</p>
             <Field
               label=""
               value={profile.notes_raw || ""}
