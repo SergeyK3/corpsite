@@ -16,6 +16,11 @@ const ITEMS = [
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
   },
+  {
+    href: "/directory/personnel/import",
+    title: "Импорт / аналитика",
+    prefixes: ["/directory/personnel/import"],
+  },
 ] as const;
 
 function isActive(pathname: string, prefixes: readonly string[], href: string): boolean {
