@@ -127,6 +127,12 @@ export default function PersonnelImportBatchesPageClient() {
                         Аналитика
                       </Link>
                       <Link
+                        href={`/directory/personnel/import/${row.batch_id}/review`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Review
+                      </Link>
+                      <Link
                         href={`/directory/personnel/import/${row.batch_id}/training`}
                         className="text-blue-600 hover:underline dark:text-blue-400"
                       >

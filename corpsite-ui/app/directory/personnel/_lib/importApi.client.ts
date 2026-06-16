@@ -56,12 +56,32 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiPostJson<T>(path: string): Promise<T> {
+async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
   const url = resolveApiUrl(path);
-  const res = await fetch(url, { method: "POST", headers: authHeaders(true), cache: "no-store" });
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeaders(true),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw parseErrorBody(res.status, body, "Не удалось выполнить операцию.");
+    const text = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, text, "Не удалось выполнить операцию.");
+  }
+  return res.json() as Promise<T>;
+}
+
+async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
+  const url = resolveApiUrl(path);
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: authHeaders(true),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, text, "Не удалось сохранить.");
   }
   return res.json() as Promise<T>;
 }
@@ -137,9 +157,15 @@ export type StagingRow = {
   birth_date: string;
   age: number | null;
   department: string;
+  org_unit_id?: number | null;
+  org_unit_name?: string;
+  department_group?: string;
   position_raw: string;
   training_raw: string;
   certification_raw: string;
+  certification_group?: string;
+  staff_type?: string;
+  is_part_time?: boolean;
   source_sheet: string;
   source_row_number: number;
   sheet_type: string;
@@ -147,6 +173,226 @@ export type StagingRow = {
   row_type?: string;
   declaration_group?: string;
   is_employee_roster?: boolean;
+};
+
+export type DepartmentRecodingOptions = {
+  groups: { value: string; label: string }[];
+  departments: {
+    org_unit_id: number | null;
+    org_unit_name: string;
+    department_group: string;
+    alias_count?: number;
+  }[];
+};
+
+export type PortfolioRecord = {
+  source_field: string;
+  source_text: string;
+  confidence: number;
+  parse_method: string;
+  document_id: number | null;
+};
+
+export type EducationPortfolioRecord = PortfolioRecord & {
+  record_type: string;
+  institution: string;
+  specialty: string;
+  completed_at: string;
+};
+
+export type TrainingPortfolioRecord = PortfolioRecord & {
+  title: string;
+  organization: string;
+  hours: number | null;
+  started_at: string;
+  completed_at: string;
+};
+
+export type CategoryPortfolioRecord = PortfolioRecord & {
+  category: string;
+  specialty: string;
+  issued_at: string;
+};
+
+export type CertificatePortfolioRecord = PortfolioRecord & {
+  kind?: string;
+  topic?: string;
+  specialty: string;
+  issued_at: string;
+  valid_until: string;
+  hours?: number | null;
+  link?: string;
+  certificate_number: string;
+};
+
+export type EducationProfileSummary = {
+  profile_id: number;
+  batch_id: number;
+  row_id: number;
+  employee_id: number | null;
+  full_name: string;
+  iin_masked: string;
+  department_source: string;
+  org_unit_id: number | null;
+  org_unit_name: string;
+  department_group: string;
+  position_raw: string;
+  education_count: number;
+  training_count: number;
+  certificate_count: number;
+  category_count: number;
+  award_count: number;
+  profile_status: string;
+  review_status: string;
+  review_status_label: string;
+};
+
+export type EducationProfileDetail = {
+  profile_id: number;
+  batch_id: number;
+  row_id: number;
+  employee_id: number | null;
+  source_sheet: string;
+  source_row_number: number;
+  full_name: string;
+  iin_masked: string;
+  profile_status: string;
+  review_status: string;
+  review_status_label: string;
+  department_recoding: {
+    org_unit_id: number | null;
+    org_unit_name: string;
+    department_group: string;
+  } | null;
+  profile: ImportProfile & { notes_raw?: string; status?: string; review_status?: string };
+};
+
+export type AwardPortfolioRecord = PortfolioRecord & {
+  title: string;
+  date: string;
+};
+
+export type ImportProfile = {
+  basic: {
+    full_name: string;
+    iin: string;
+    birth_date: string;
+    sex: string;
+    position_raw: string;
+    department_source: string;
+    experience_raw: string;
+    employment_rate: number | null;
+    qualification_raw: string;
+    nationality: string;
+    phone_raw: string;
+  };
+  education: Record<string, EducationPortfolioRecord[]>;
+  education_records: EducationPortfolioRecord[];
+  training_records: TrainingPortfolioRecord[];
+  category_records: CategoryPortfolioRecord[];
+  certificate_records: CertificatePortfolioRecord[];
+  award_records: AwardPortfolioRecord[];
+  degrees: {
+    candidate_medical_sciences: boolean;
+    doctor_medical_sciences: boolean;
+    raw_text: string;
+    records: PortfolioRecord[];
+  };
+  portfolio_totals: Record<string, number>;
+  notes_raw?: string;
+  status?: string;
+  review_status?: string;
+};
+
+export type AiExtractionDraft = {
+  draft_id?: number;
+  batch_id?: number;
+  row_id?: number;
+  parse_method: string;
+  status: string;
+  requires_review: boolean;
+  review_label: string;
+  extraction: {
+    education: Array<Record<string, unknown>>;
+    training: Array<Record<string, unknown>>;
+    certificates: Array<Record<string, unknown>>;
+    categories: Array<Record<string, unknown>>;
+    awards: Array<Record<string, unknown>>;
+    degrees: Array<Record<string, unknown>>;
+    warnings: string[];
+  };
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type RowReviewDetail = {
+  batch_id: number;
+  row_id: number;
+  employee_id?: number | null;
+  full_name: string;
+  iin_masked: string;
+  birth_date: string;
+  sex: string;
+  employment_rate: number | null;
+  department: string;
+  department_source: string;
+  department_recoding: {
+    org_unit_id: number | null;
+    org_unit_name: string;
+    department_group: string;
+  } | null;
+  position_raw: string;
+  staff_type: string;
+  is_part_time: boolean;
+  sheet_type: string;
+  classification: string;
+  declaration_group: string;
+  profile: ImportProfile;
+  education: { institution: string; year: string; specialty: string; raw_text: string }[];
+  experience_raw: string;
+  training: { title: string; year: string; hours: number | null; raw_text: string }[];
+  qualification_categories: {
+    category: string;
+    date: string;
+    specialty: string;
+    raw_text: string;
+    document_type: string;
+  }[];
+  certificates: {
+    kind: string;
+    topic: string;
+    date: string;
+    valid_until?: string;
+    hours: number | null;
+    link: string;
+    raw_text: string;
+  }[];
+  degrees: {
+    candidate_medical_sciences: boolean;
+    doctor_medical_sciences: boolean;
+    raw_text: string;
+  };
+  awards: { title: string; date: string }[];
+  notes: string[];
+  ai_extraction: AiExtractionDraft | null;
+  source_sheet: string;
+  source_row_number: number;
+};
+
+export type EducationPortfolio = {
+  batch_id: number;
+  education: DocumentCandidate[];
+  training: DocumentCandidate[];
+  categories: DocumentCandidate[];
+  certificates: DocumentCandidate[];
+  awards: DocumentCandidate[];
+  totals: {
+    education: number;
+    training: number;
+    categories: number;
+    certificates: number;
+    awards: number;
+  };
 };
 
 export type DocumentCandidate = {
@@ -274,6 +520,80 @@ export async function rebuildDocumentCandidates(batchId: number): Promise<Rebuil
 
 export async function getSheetDiagnostics(batchId: number): Promise<SheetDiagnostics> {
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/sheet-diagnostics`);
+}
+
+export async function getDepartmentRecodingOptions(): Promise<DepartmentRecodingOptions> {
+  return apiGetJson("/directory/personnel/import/department-recoding/options");
+}
+
+export async function getRowReviewDetail(batchId: number, rowId: number): Promise<RowReviewDetail> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/rows/${rowId}/review`);
+}
+
+export async function runRowAiExtraction(batchId: number, rowId: number): Promise<AiExtractionDraft> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/rows/${rowId}/ai-extraction`);
+}
+
+export async function listEducationProfiles(
+  batchId: number,
+  params: Record<string, string | number | boolean | null | undefined> = {}
+): Promise<{ batch_id: number; total: number; items: EducationProfileSummary[]; limit: number; offset: number }> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/education-profiles`, buildQuery(params));
+}
+
+export async function getEducationProfileDetail(
+  batchId: number,
+  profileId: number
+): Promise<EducationProfileDetail> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/education-profiles/${profileId}`);
+}
+
+export async function saveEducationProfile(
+  batchId: number,
+  profileId: number,
+  body: { profile?: ImportProfile; review_status?: string; profile_status?: string }
+): Promise<EducationProfileDetail> {
+  return apiPatchJson(`/directory/personnel/import/batches/${batchId}/education-profiles/${profileId}`, body);
+}
+
+export async function archiveEducationProfile(
+  batchId: number,
+  profileId: number
+): Promise<EducationProfileDetail> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/education-profiles/${profileId}/archive`);
+}
+
+/** Parse department filter value from dropdown (id or name: prefix). */
+export function parseDepartmentFilterValue(value: string): {
+  org_unit_id?: number;
+  org_unit_name?: string;
+} {
+  const v = value.trim();
+  if (!v) return {};
+  if (v.startsWith("name:")) return { org_unit_name: v.slice(5) };
+  const id = Number(v);
+  return Number.isFinite(id) ? { org_unit_id: id } : {};
+}
+
+export function departmentFilterOptionValue(d: {
+  org_unit_id: number | null;
+  org_unit_name: string;
+}): string {
+  return d.org_unit_id != null ? String(d.org_unit_id) : `name:${d.org_unit_name}`;
+}
+
+export async function getEducationPortfolio(batchId: number): Promise<EducationPortfolio> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/education-portfolio`);
+}
+
+export function getDeclarationsExportUrl(
+  batchId: number,
+  params: Record<string, string | number | undefined> = {}
+): string {
+  const q = buildQuery(params as Record<string, string | number | boolean | null | undefined>);
+  return resolveApiUrl(
+    `/directory/personnel/import/batches/${batchId}/declarations/export${q ? `?${q}` : ""}`
+  );
 }
 
 export async function getImportSummary(batchId: number): Promise<ImportSummary> {

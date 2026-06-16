@@ -17,6 +17,7 @@ from app.db.models.hr_import import (
     CLASSIFICATION_SUMMARY_ROW,
     ROW_TYPE_EMPLOYEE,
 )
+from app.services.department_recoding_service import lookup_recoding
 from scripts.import_hr_control_list import mask_iin
 
 TECHNICAL_CLASSIFICATIONS = frozenset(
@@ -112,6 +113,24 @@ def _classify_certification(value: str) -> str:
     return "other"
 
 
+def _infer_staff_type(row: dict[str, Any]) -> str:
+    """Map row to personnel staff bucket (part_time is a flag, not a bucket)."""
+    sheet_type = str(row.get("sheet_type") or "")
+    if sheet_type in ("doctors", "nurses", "junior_staff", "other_staff"):
+        return sheet_type
+    declaration_group = str(row.get("declaration_group") or "")
+    if declaration_group in ("doctors", "nurses", "junior_staff", "other_staff"):
+        return declaration_group
+    position = str(row.get("position_raw") or "").lower()
+    if any(k in position for k in ("врач", "доктор", "ординатор")):
+        return "doctors"
+    if any(k in position for k in ("медсестр", "смр", "м/с", "фельдшер")):
+        return "nurses"
+    if any(k in position for k in ("санитар", "уборщ", "прач")):
+        return "junior_staff"
+    return "other_staff"
+
+
 def is_real_employee_row(row: dict[str, Any]) -> bool:
     """True for actual staff rows on employee roster sheets."""
     if row.get("is_employee_roster") is False:
@@ -140,6 +159,14 @@ def is_declaration_no_iin_row(row: dict[str, Any]) -> bool:
     return is_declaration_row(row) and not row.get("iin")
 
 
+def _canonical_department_label(row: dict[str, Any]) -> str:
+    """Group/filter key: canonical org unit name after recoding, else raw import name."""
+    canonical = str(row.get("org_unit_name") or "").strip()
+    if canonical:
+        return canonical
+    return row.get("department") or "— не указано —"
+
+
 def is_missing_iin_employee_row(row: dict[str, Any]) -> bool:
     return is_real_employee_row(row) and not row.get("iin")
 
@@ -151,6 +178,32 @@ def _ensure_batch_exists(conn: Connection, batch_id: int) -> None:
     ).first()
     if not row:
         raise BatchNotFoundError(f"batch_id={batch_id} not found")
+
+
+def load_row_payload(conn: Connection, batch_id: int, row_id: int) -> dict[str, Any]:
+    _ensure_batch_exists(conn, batch_id)
+    db_row = conn.execute(
+        text(
+            """
+            SELECT row_id, source_sheet, source_row_number, normalized_payload, employee_id
+            FROM public.hr_import_rows
+            WHERE batch_id = :batch_id AND row_id = :row_id
+            """
+        ),
+        {"batch_id": batch_id, "row_id": row_id},
+    ).mappings().first()
+    if not db_row:
+        raise BatchNotFoundError(f"row_id={row_id} not found in batch {batch_id}")
+    payload = dict(db_row["normalized_payload"] or {})
+    metadata = dict(payload.pop("metadata", {}) or {})
+    return {
+        "row_id": int(db_row["row_id"]),
+        "source_sheet": str(db_row["source_sheet"] or ""),
+        "source_row_number": int(db_row["source_row_number"]),
+        "employee_id": int(db_row["employee_id"]) if db_row["employee_id"] else None,
+        "payload": payload,
+        "metadata": metadata,
+    }
 
 
 def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
@@ -181,6 +234,9 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
         row_type = str(metadata.get("row_type", "") or "")
         declaration_group = str(metadata.get("declaration_group", "") or "")
         is_employee_roster = bool(metadata.get("is_employee_roster", row_type == ROW_TYPE_EMPLOYEE))
+        is_part_time = bool(
+            metadata.get("is_part_time", False) or sheet_type == "part_time"
+        )
         iin_valid = bool(metadata.get("iin_valid", False))
         iin = str(payload.get("iin", "") or "").strip()
         birth = _parse_birth_date(str(payload.get("birth_date", "") or ""))
@@ -204,16 +260,38 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
                 "training_raw": str(payload.get("training_raw", "") or "").strip(),
                 "certification_raw": str(payload.get("certification_raw", "") or "").strip(),
                 "certification_group": _classify_certification(str(payload.get("certification_raw", "") or "")),
+                "education_raw": str(payload.get("education_raw", "") or "").strip(),
+                "experience_raw": str(payload.get("experience_raw", "") or "").strip(),
+                "degree_raw": str(payload.get("degree_raw", "") or "").strip(),
+                "awards_raw": str(payload.get("awards_raw", "") or "").strip(),
+                "note_raw": str(payload.get("note_raw", "") or "").strip(),
                 "sheet_type": sheet_type,
                 "classification": classification,
                 "row_type": row_type,
                 "declaration_group": declaration_group,
                 "is_employee_roster": is_employee_roster,
+                "is_part_time": is_part_time,
+                "staff_type": _infer_staff_type(
+                    {
+                        "sheet_type": sheet_type,
+                        "declaration_group": declaration_group,
+                        "position_raw": str(payload.get("position_raw", "") or ""),
+                    }
+                ),
                 "error_codes": list(db_row["error_codes"] or []),
                 "has_training": bool(str(payload.get("training_raw", "") or "").strip()),
                 "has_certification": bool(str(payload.get("certification_raw", "") or "").strip()),
             }
         )
+    recoding_cache: dict[str, Optional[dict[str, Any]]] = {}
+    for item in items:
+        dept = item["department"]
+        if dept not in recoding_cache:
+            recoding_cache[dept] = lookup_recoding(conn, dept)
+        rec = recoding_cache[dept]
+        item["org_unit_id"] = int(rec["org_unit_id"]) if rec and rec.get("org_unit_id") else None
+        item["org_unit_name"] = rec["org_unit_name"] if rec else ""
+        item["department_group"] = rec["department_group"] if rec else ""
     return items
 
 
@@ -309,11 +387,12 @@ def department_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
     grouped: dict[str, dict[str, Any]] = {}
 
     for row in rows:
-        dept = row["department"] or "— не указано —"
+        dept = _canonical_department_label(row)
         bucket = grouped.setdefault(
             dept,
             {
                 "department": dept,
+                "org_unit_id": row.get("org_unit_id"),
                 "total": 0,
                 "doctors": 0,
                 "nurses": 0,
@@ -369,10 +448,10 @@ def training_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
     rows = _load_staging_rows(conn, batch_id)
     employee_rows = [r for r in rows if is_real_employee_row(r)]
     with_training = [r for r in employee_rows if r["has_training"]]
-    by_department = Counter(r["department"] or "— не указано —" for r in with_training)
+    by_department = Counter(_canonical_department_label(r) for r in with_training)
     by_staff_type = Counter(r["sheet_type"] or "other_staff" for r in with_training)
 
-    dept_totals = Counter(r["department"] or "— не указано —" for r in employee_rows)
+    dept_totals = Counter(_canonical_department_label(r) for r in employee_rows)
     without_by_dept = {
         dept: total - by_department.get(dept, 0)
         for dept, total in dept_totals.items()
@@ -425,7 +504,7 @@ def certification_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
         "none": "без категории/сертификата",
     }
     by_group = Counter(r["certification_group"] for r in employee_rows)
-    by_department = Counter(r["department"] or "— не указано —" for r in with_cert)
+    by_department = Counter(_canonical_department_label(r) for r in with_cert)
 
     examples = []
     for row in with_cert[:5]:
@@ -578,6 +657,12 @@ def list_batch_rows(
     roster_scope: Optional[str] = None,
     q_name: Optional[str] = None,
     q_position: Optional[str] = None,
+    department_group: Optional[str] = None,
+    org_unit_id: Optional[int] = None,
+    org_unit_name: Optional[str] = None,
+    certification_category: Optional[str] = None,
+    staff_type: Optional[str] = None,
+    part_time: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -591,6 +676,35 @@ def list_batch_rows(
         filtered = [r for r in filtered if _matches_roster_scope(r, roster_scope)]
     if department:
         filtered = [r for r in filtered if r["department"] == department]
+    if department_group:
+        filtered = [r for r in filtered if r.get("department_group") == department_group]
+    if org_unit_id is not None:
+        filtered = [
+            r
+            for r in filtered
+            if r.get("org_unit_id") == org_unit_id
+            or (
+                org_unit_name
+                and (r.get("org_unit_name") or "").strip().lower() == org_unit_name.strip().lower()
+            )
+        ]
+    elif org_unit_name:
+        filtered = [
+            r
+            for r in filtered
+            if (r.get("org_unit_name") or "").strip().lower() == org_unit_name.strip().lower()
+        ]
+    if certification_category:
+        if certification_category == "none":
+            filtered = [r for r in filtered if r.get("certification_group") == "none"]
+        else:
+            filtered = [r for r in filtered if r.get("certification_group") == certification_category]
+    if staff_type:
+        filtered = [r for r in filtered if r.get("staff_type") == staff_type]
+    if part_time == "only":
+        filtered = [r for r in filtered if r.get("is_part_time")]
+    elif part_time == "exclude":
+        filtered = [r for r in filtered if not r.get("is_part_time")]
     if sheet_type:
         filtered = [r for r in filtered if r["sheet_type"] == sheet_type]
     if age_bucket:
@@ -618,6 +732,9 @@ def list_batch_rows(
             "birth_date": r["birth_date"],
             "age": r["age"],
             "department": r["department"],
+            "org_unit_id": r.get("org_unit_id"),
+            "org_unit_name": r.get("org_unit_name", ""),
+            "department_group": r.get("department_group", ""),
             "position_raw": r["position_raw"],
             "training_raw": r["training_raw"][:80] + ("…" if len(r["training_raw"]) > 80 else "")
             if r["training_raw"]
@@ -626,9 +743,12 @@ def list_batch_rows(
             + ("…" if len(r["certification_raw"]) > 80 else "")
             if r["certification_raw"]
             else "",
+            "certification_group": r.get("certification_group", "none"),
             "source_sheet": r["source_sheet"],
             "source_row_number": r["source_row_number"],
             "sheet_type": r["sheet_type"],
+            "staff_type": r.get("staff_type", ""),
+            "is_part_time": r.get("is_part_time", False),
             "classification": r["classification"],
             "row_type": r.get("row_type", ""),
             "declaration_group": r.get("declaration_group", ""),

@@ -372,6 +372,40 @@ def _serialize_candidate(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def education_portfolio(conn: Connection, batch_id: int) -> dict[str, Any]:
+    """Grouped document candidates for Education Portfolio review (Phase 2F)."""
+    all_items = list_document_candidates(conn, batch_id, limit=500, offset=0)["items"]
+    education = [i for i in all_items if i["document_kind"] == DOCUMENT_KIND_EDUCATION]
+    training = [i for i in all_items if i["document_kind"] == DOCUMENT_KIND_TRAINING]
+    categories = [
+        i
+        for i in all_items
+        if i["document_kind"] == DOCUMENT_KIND_CERTIFICATION
+        and i["document_type"] == "QUALIFICATION_CATEGORY"
+    ]
+    certificates = [
+        i
+        for i in all_items
+        if i["document_kind"] == DOCUMENT_KIND_CERTIFICATION
+        and i["document_type"] != "QUALIFICATION_CATEGORY"
+    ]
+    return {
+        "batch_id": batch_id,
+        "education": education,
+        "training": training,
+        "categories": categories,
+        "certificates": certificates,
+        "awards": [],
+        "totals": {
+            "education": len(education),
+            "training": len(training),
+            "categories": len(categories),
+            "certificates": len(certificates),
+            "awards": 0,
+        },
+    }
+
+
 def document_candidates_summary(conn: Connection, batch_id: int) -> dict[str, Any]:
     _ensure_batch_exists(conn, batch_id)
     rows = conn.execute(

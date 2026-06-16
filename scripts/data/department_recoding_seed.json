@@ -1,0 +1,218 @@
+[
+  {
+    "import_department_name": "АДМИНИСТРАТИВНО - УПРАВЛЕНЧЕСКИЙ ПЕРСОНАЛ",
+    "org_unit_name": "Администрация"
+  },
+  {
+    "import_department_name": "КАБИНЕТ ТРАНСФУЗИОЛОГИИ",
+    "org_unit_name": "Трансфузиология"
+  },
+  {
+    "import_department_name": "ПРИЕМНЫЙ ПОКОЙ",
+    "org_unit_name": "Приемное"
+  },
+  {
+    "import_department_name": "ОПЕРАЦИОННЫЙ БЛОК",
+    "org_unit_name": "Оперблок"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ АНЕСТЕЗИОЛОГИИ, РЕАНИМАЦИИ И ИНТЕНСИВНОЙ ТЕРАПИИ",
+    "org_unit_name": "Реанимация"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ХИРУРГИИ №1",
+    "org_unit_name": "Хирургия 1"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ХИРУРГИИ №2",
+    "org_unit_name": "Хирургия 2"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ХИРУРГИИ № 3",
+    "org_unit_name": "Опухоли головы"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ГИНЕКОЛОГИИ",
+    "org_unit_name": "Гинекология"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ХИМИОТЕРАПИИ №1",
+    "org_unit_name": "Химиотерапия 1"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ХИМИОТЕРАПИИ №2",
+    "org_unit_name": "Химиотерапия 2"
+  },
+  {
+    "import_department_name": "РОЖТО",
+    "org_unit_name": "Радиология"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ПАЛЛИАТИВНОЙ ПОМОЩИ",
+    "org_unit_name": "Паллиатив"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ПАЛЛИАТИВНОЙ ПОМОЩИ БЛОК G (Хоспис для взрослых)",
+    "org_unit_name": "хоспис"
+  },
+  {
+    "import_department_name": "ДИСПАНСЕРНОЕ ОТДЕЛЕНИЕ",
+    "org_unit_name": "Диспансер"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ЛУЧЕВОЙ ДИАГНОСТИКИ",
+    "org_unit_name": "Лучевая диагностика"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ЭНДОСКОПИИ",
+    "org_unit_name": "Эндоскопия"
+  },
+  {
+    "import_department_name": "ПАТОЛОГОАНАТОМИЧЕСКОЕ ОТДЕЛЕНИЕ",
+    "org_unit_name": "Патанатомия"
+  },
+  {
+    "import_department_name": "ЦИТОЛОГИЧЕСКАЯ ЛАБОРАТОРИЯ",
+    "org_unit_name": "Цитология"
+  },
+  {
+    "import_department_name": "КЛИНИКО - ДИАГНОСТИЧЕСКАЯ ЛАБОРОТОРИЯ",
+    "org_unit_name": "КДЛ"
+  },
+  {
+    "import_department_name": "ЦЕНТР АМБУЛАТОРНОЙ ХИРУРГИИ",
+    "org_unit_name": "ЦАХ"
+  },
+  {
+    "import_department_name": "ФАРМАЦЕВТИЧЕСКИЙ ПЕРСОНАЛ (ПРОВИЗОР)",
+    "org_unit_name": "Аптека"
+  },
+  {
+    "import_department_name": "ОРГАНИЗАЦИОННО - МЕТОДИЧЕСКИЙ ОТДЕЛ",
+    "org_unit_name": "Статотдел"
+  },
+  {
+    "import_department_name": "ИНСУЛЬТНОЕ ОТДЕЛЕНИЕ",
+    "org_unit_name": "Инсультный"
+  },
+  {
+    "import_department_name": "КДЛ",
+    "org_unit_name": "КДЛ"
+  },
+  {
+    "import_department_name": "ЦЕНТРАЛЬНОЕ СТЕРИЛИЗАЦИОННОЕ ОТДЕЛЕНИЕ",
+    "org_unit_name": "ЦСО"
+  },
+  {
+    "import_department_name": "ОТДЕЛ ФАРМАЦИИ",
+    "org_unit_name": "Аптека"
+  },
+  {
+    "import_department_name": "ИНСУЛЬТ ОРТАЛЫҒЫ",
+    "org_unit_name": "Инсультный"
+  },
+  {
+    "import_department_name": "РЕАБИЛИТАЦИЯ",
+    "org_unit_name": "Реабилитация"
+  },
+  {
+    "import_department_name": "ӘШҚ",
+    "org_unit_name": "Хозотдел"
+  },
+  {
+    "import_department_name": "ВЦРО",
+    "org_unit_name": "Радиология"
+  },
+  {
+    "import_department_name": "Хирургия № 3",
+    "org_unit_name": "Опухоли головы"
+  },
+  {
+    "import_department_name": "Лучевая диагностика",
+    "org_unit_name": "Лучевая диагностика"
+  },
+  {
+    "import_department_name": "Паллиативная помощь",
+    "org_unit_name": "Паллиатив"
+  },
+  {
+    "import_department_name": "ОАРИТ",
+    "org_unit_name": "Реанимация"
+  },
+  {
+    "import_department_name": "АНЕСТЕЗИОЛОТГИЯ и РЕАНИМАЦИЯ",
+    "org_unit_name": "Реанимация"
+  },
+  {
+    "import_department_name": "КЛИНИКА-ДИАГНОСТИЧЕСКАЯ ЛАБОРАТОРИЯ",
+    "org_unit_name": "КДЛ"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ОПУХОЛИ ГОЛОВЫ И ШЕИ",
+    "org_unit_name": "Опухоли головы"
+  },
+  {
+    "import_department_name": "ЦСО",
+    "org_unit_name": "ЦСО"
+  },
+  {
+    "import_department_name": "АДМИНИСТРАТИВНО-УПРАВЛЕНЧЕСКИЙ ПЕРСОНАЛ",
+    "org_unit_name": "Администрация"
+  },
+  {
+    "import_department_name": "КЛИНИКО-ДИАГНОСТИЧЕСКАЯ ЛАБОРАТОРИЯ",
+    "org_unit_name": "КДЛ"
+  },
+  {
+    "import_department_name": "АРХИВ",
+    "org_unit_name": "Архив"
+  },
+  {
+    "import_department_name": "ОТДЕЛ УПРАВЛЕНИЯ ЧЕЛОВЕЧЕСКИМИ РЕСУРСАМИ",
+    "org_unit_name": "Отдел кадров"
+  },
+  {
+    "import_department_name": "ОТДЕЛ БУХГАЛТЕРСКОГО УЧЕТА",
+    "org_unit_name": "Бухгалтерия"
+  },
+  {
+    "import_department_name": "ПЛАНОВО-ЭКОНОМИЧЕСКИЙ ОТДЕЛ",
+    "org_unit_name": "Экономический"
+  },
+  {
+    "import_department_name": "ОТДЕЛЕНИЕ ГОСУДАРСТВЕННЫХ ЗАКУПОК",
+    "org_unit_name": "Отдел госзакупок"
+  },
+  {
+    "import_department_name": "Прачка",
+    "org_unit_name": "Прачечная"
+  },
+  {
+    "import_department_name": "ХОЗЯЙСТВЕННЫЙ ПЕРСОНАЛ",
+    "org_unit_name": "Хозотдел"
+  },
+  {
+    "import_department_name": "IT бөлімі",
+    "org_unit_name": "IT"
+  },
+  {
+    "import_department_name": "СИТУАЦИОННЫЙ ЦЕНТР",
+    "org_unit_name": "Ситуационный центр"
+  },
+  {
+    "import_department_name": "ТИП АХЧ",
+    "org_unit_name": "Хозотдел"
+  },
+  {
+    "import_department_name": "АХЧ",
+    "org_unit_name": "Хозотдел"
+  },
+  {
+    "import_department_name": "РОЖТО лучевая терапия",
+    "org_unit_name": "Радиология"
+  },
+  {
+    "import_department_name": "Отдел менеджмента и качества",
+    "org_unit_name": "Отдел менеджмента и качества"
+  }
+]

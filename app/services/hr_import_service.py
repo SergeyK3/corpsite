@@ -114,6 +114,7 @@ def _build_row_payloads(
             "row_type": row.row_type,
             "declaration_group": row.declaration_group or None,
             "is_employee_roster": row.is_employee_roster,
+            "is_part_time": row.sheet_type == "part_time",
         },
     }
     return raw_payload, normalized_payload

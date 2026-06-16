@@ -4,6 +4,7 @@
 import * as React from "react";
 import Link from "next/link";
 
+import ImportBatchSubNav from "./ImportBatchSubNav";
 import PersonnelSubNav from "./PersonnelSubNav";
 import {
   getAgeDistribution,
@@ -113,6 +114,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
       <PersonnelSubNav />
+      <ImportBatchSubNav batchId={batchId} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Кадровый паспорт</h1>
@@ -132,10 +134,10 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             Документы / обучение
           </Link>
           <Link
-            href={`/directory/personnel/import/${batchId}/rows`}
+            href={`/directory/personnel/import/${batchId}/review?mode=personnel`}
             className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-            Просмотр строк
+            Review персонала
           </Link>
         </div>
       </div>
@@ -174,19 +176,19 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             </h2>
             <div className="flex flex-wrap gap-2 text-sm">
               <Link
-                href={`/directory/personnel/import/${batchId}/rows?roster_scope=personnel`}
+                href={`/directory/personnel/import/${batchId}/review?mode=personnel`}
                 className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-700"
               >
                 Персонал ({summary.employee_roster_rows ?? 0})
               </Link>
               <Link
-                href={`/directory/personnel/import/${batchId}/rows?roster_scope=declaration`}
+                href={`/directory/personnel/import/${batchId}/review?mode=declaration`}
                 className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
                 Декларации ({summary.declaration_rows ?? 0})
               </Link>
               <Link
-                href={`/directory/personnel/import/${batchId}/rows?roster_scope=technical`}
+                href={`/directory/personnel/import/${batchId}/review?mode=technical`}
                 className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
                 Технические ({summary.technical_category_rows ?? 0})
@@ -372,7 +374,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
                     <td className="px-4 py-2 font-medium">{r.count}</td>
                     <td className="px-4 py-2 text-right">
                       <Link
-                        href={`/directory/personnel/import/${batchId}/rows?risk_type=${r.risk_type}`}
+                        href={`/directory/personnel/import/${batchId}/review?mode=personnel&risk_type=${r.risk_type}`}
                         className="text-blue-600 hover:underline dark:text-blue-400"
                       >
                         показать строки
