@@ -1,5 +1,5 @@
 // FILE: corpsite-ui/app/directory/employees/_lib/professionalProfile.ts
-import type { ProfessionalDocumentRow } from "../../personnel/_lib/demoApi.client";
+import type { EmployeeDocumentRow } from "../../personnel/_lib/documentsApi.client";
 
 export type ProfessionalRiskLevel =
   | "OK"
@@ -14,36 +14,16 @@ export type ProfessionalProfileSummary = {
   riskLevel: ProfessionalRiskLevel;
   riskLabel: string;
   nearestExpiration: string | null;
-  documents: ProfessionalDocumentRow[];
+  documents: EmployeeDocumentRow[];
   available: boolean;
 };
-
-/** Demo: основные медицинские специальности (независимы от должности). */
-export const DEMO_MAIN_SPECIALTIES = [
-  "Врач-онколог",
-  "Врач-хирург",
-  "Врач-терапевт",
-  "Медицинская сестра",
-] as const;
-
-export type DemoMainSpecialty = (typeof DEMO_MAIN_SPECIALTIES)[number];
-
-/** Квалификационные категории врача (не типы документов). */
-export const QUALIFICATION_CATEGORIES = [
-  "Высшая категория",
-  "Первая категория",
-  "Вторая категория",
-  "Без категории",
-] as const;
-
-export type QualificationCategory = (typeof QUALIFICATION_CATEGORIES)[number];
 
 const RISK_ORDER: Record<string, number> = {
   EXPIRED: 0,
   EXPIRING_30: 1,
   EXPIRING_60: 2,
-  MISSING: 3,
-  VALID: 4,
+  VALID: 3,
+  NO_EXPIRY: 4,
 };
 
 export const RISK_META: Record<
@@ -89,137 +69,98 @@ export const DOCUMENT_STATUS_META: Record<string, { label: string; className: st
     label: "Истёк",
     className: "bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200",
   },
-  MISSING: {
-    label: "Нет данных",
+  NO_EXPIRY: {
+    label: "Без срока",
     className: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
   },
 };
 
-/** Summary card order for the documents register. */
+/** Summary card order for the documents register (ADR-037 Phase 1A). */
 export const DOCUMENT_STATUS_SUMMARY_ORDER = [
   "EXPIRED",
   "EXPIRING_30",
   "EXPIRING_60",
   "VALID",
-  "MISSING",
+  "NO_EXPIRY",
 ] as const;
 
-export function countDocumentsByStatus(
-  items: ProfessionalDocumentRow[]
+export function documentExpiryStatus(row: EmployeeDocumentRow): string {
+  return String(row.expiry_status || "").toUpperCase();
+}
+
+export function countDocumentsByExpiryStatus(
+  items: EmployeeDocumentRow[]
 ): Record<string, number> {
   const counts: Record<string, number> = {
     EXPIRED: 0,
     EXPIRING_30: 0,
     EXPIRING_60: 0,
     VALID: 0,
-    MISSING: 0,
+    NO_EXPIRY: 0,
   };
   for (const row of items) {
-    const key = String(row.status || "").toUpperCase();
+    const key = documentExpiryStatus(row);
     if (key in counts) counts[key] += 1;
   }
   return counts;
 }
 
-function worstDocumentStatus(documents: ProfessionalDocumentRow[]): string {
-  if (!documents.length) return "MISSING";
+function worstExpiryStatus(documents: EmployeeDocumentRow[]): string {
+  if (!documents.length) return "VALID";
   return documents.reduce((worst, row) => {
-    const status = String(row.status || "").toUpperCase();
+    const status = documentExpiryStatus(row);
     const currentRank = RISK_ORDER[status] ?? 99;
     const worstRank = RISK_ORDER[worst] ?? 99;
     return currentRank < worstRank ? status : worst;
-  }, "VALID");
+  }, "NO_EXPIRY");
 }
 
-function mapDocumentStatusToRisk(status: string): ProfessionalRiskLevel {
-  switch (status) {
+function mapWorstStatusToRisk(worst: string, documents: EmployeeDocumentRow[]): ProfessionalRiskLevel {
+  if (!documents.length) return "INCOMPLETE";
+  switch (worst) {
     case "EXPIRED":
       return "CRITICAL";
     case "EXPIRING_30":
       return "URGENT";
     case "EXPIRING_60":
       return "ATTENTION";
-    case "MISSING":
-      return "INCOMPLETE";
     default:
       return "OK";
   }
 }
 
-function nearestExpirationIso(documents: ProfessionalDocumentRow[]): string | null {
+function nearestExpirationIso(documents: EmployeeDocumentRow[]): string | null {
   const dates = documents
-    .map((d) => d.expires_at)
+    .map((d) => d.valid_until)
     .filter((v): v is string => Boolean(v))
     .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
   return dates[0] ?? null;
 }
 
-function hasRegisteredDocuments(documents: ProfessionalDocumentRow[]): boolean {
-  return documents.some((d) => d.certificate_id != null);
-}
+function inferMainSpecialtyFromDocuments(documents: EmployeeDocumentRow[]): string {
+  const credential = documents.find(
+    (d) =>
+      d.medical_specialty_name &&
+      (d.document_type_code === "SPECIALIST_CERTIFICATION")
+  );
+  if (credential?.medical_specialty_name) return credential.medical_specialty_name;
 
-/** Demo: основная специальность — независима от должности (заведующий может быть врачом-онкологом). */
-function inferMainSpecialty(employeeId: number): DemoMainSpecialty {
-  const demoByEmployee: Record<number, DemoMainSpecialty> = {
-    1: "Врач-онколог",
-    2: "Врач-хирург",
-    3: "Врач-терапевт",
-    4: "Медицинская сестра",
-  };
-
-  if (demoByEmployee[employeeId]) {
-    return demoByEmployee[employeeId];
-  }
-
-  return DEMO_MAIN_SPECIALTIES[Math.abs(employeeId) % DEMO_MAIN_SPECIALTIES.length];
-}
-
-/** Demo: квалификационная категория врача — отдельно от типов документов и должности. */
-function inferQualificationCategory(
-  employeeId: number,
-  documents: ProfessionalDocumentRow[],
-  mainSpecialty: DemoMainSpecialty
-): QualificationCategory {
-  if (mainSpecialty === "Медицинская сестра") {
-    return "Без категории";
-  }
-
-  if (!hasRegisteredDocuments(documents)) {
-    return "Без категории";
-  }
-
-  const demoByEmployee: Record<number, QualificationCategory> = {
-    1: "Высшая категория",
-    2: "Первая категория",
-    3: "Вторая категория",
-    4: "Без категории",
-  };
-
-  if (demoByEmployee[employeeId]) {
-    return demoByEmployee[employeeId];
-  }
-
-  const tiers: QualificationCategory[] = [
-    "Высшая категория",
-    "Первая категория",
-    "Вторая категория",
-  ];
-  return tiers[Math.abs(employeeId) % tiers.length];
+  const anySpecialty = documents.find((d) => d.medical_specialty_name);
+  return anySpecialty?.medical_specialty_name || "—";
 }
 
 export function buildProfessionalProfileSummary(args: {
   employeeId: number;
-  documents: ProfessionalDocumentRow[];
+  documents: EmployeeDocumentRow[];
   available: boolean;
 }): ProfessionalProfileSummary {
   const employeeDocuments = args.documents.filter((d) => d.employee_id === args.employeeId);
-  const worst = worstDocumentStatus(employeeDocuments);
-  const riskLevel = mapDocumentStatusToRisk(worst);
-  const mainSpecialty = inferMainSpecialty(args.employeeId);
+  const worst = worstExpiryStatus(employeeDocuments);
+  const riskLevel = mapWorstStatusToRisk(worst, employeeDocuments);
 
   return {
-    mainSpecialty,
-    category: inferQualificationCategory(args.employeeId, employeeDocuments, mainSpecialty),
+    mainSpecialty: inferMainSpecialtyFromDocuments(employeeDocuments),
+    category: "—",
     riskLevel,
     riskLabel: RISK_META[riskLevel].label,
     nearestExpiration: nearestExpirationIso(employeeDocuments),
@@ -228,29 +169,8 @@ export function buildProfessionalProfileSummary(args: {
   };
 }
 
-/** Register row enrichment — same source as EmployeeDrawer professional profile. */
-export function getEmployeeProfessionalContext(
-  employeeId: number,
-  allDocuments: ProfessionalDocumentRow[]
-): Pick<ProfessionalProfileSummary, "mainSpecialty" | "category"> {
-  const profile = buildProfessionalProfileSummary({
-    employeeId,
-    documents: allDocuments,
-    available: true,
-  });
-  return {
-    mainSpecialty: profile.mainSpecialty,
-    category: profile.category,
-  };
-}
-
-/** Statuses that need management attention (demo register quick filter). */
-export const PROBLEMATIC_DOCUMENT_STATUSES = new Set([
-  "EXPIRED",
-  "EXPIRING_30",
-  "EXPIRING_60",
-  "MISSING",
-]);
+/** Statuses that need management attention. */
+export const PROBLEMATIC_DOCUMENT_STATUSES = new Set(["EXPIRED", "EXPIRING_30", "EXPIRING_60"]);
 
 export type DocumentQuickFilter =
   | ""
@@ -259,7 +179,8 @@ export type DocumentQuickFilter =
   | "EXPIRED"
   | "EXPIRING_30"
   | "EXPIRING_60"
-  | "MISSING";
+  | "VALID"
+  | "NO_EXPIRY";
 
 export const DOCUMENT_QUICK_FILTERS: { value: DocumentQuickFilter; label: string }[] = [
   { value: "ALL", label: "Все" },
@@ -267,7 +188,8 @@ export const DOCUMENT_QUICK_FILTERS: { value: DocumentQuickFilter; label: string
   { value: "EXPIRED", label: "Истёк" },
   { value: "EXPIRING_30", label: "≤ 30 дней" },
   { value: "EXPIRING_60", label: "≤ 60 дней" },
-  { value: "MISSING", label: "Нет данных" },
+  { value: "VALID", label: "Действует" },
+  { value: "NO_EXPIRY", label: "Без срока" },
 ];
 
 export function matchesDocumentQuickFilter(
@@ -285,4 +207,14 @@ export function fmtProfileDate(v: string | null | undefined): string {
   const dt = new Date(v);
   if (Number.isNaN(dt.getTime())) return v;
   return dt.toLocaleDateString("ru-RU");
+}
+
+export function expiryStatusMeta(status: string) {
+  const key = String(status || "").toUpperCase();
+  return (
+    DOCUMENT_STATUS_META[key] ?? {
+      label: status,
+      className: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+    }
+  );
 }

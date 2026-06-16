@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  fetchProfessionalDocumentsAvailability,
-  listProfessionalDocuments,
-} from "../../personnel/_lib/demoApi.client";
+  listEmployeeDocuments,
+  mapDocumentsApiError,
+  type EmployeeDocumentRow,
+} from "../../personnel/_lib/documentsApi.client";
 import {
   buildProfessionalProfileSummary,
-  DOCUMENT_STATUS_META,
+  documentExpiryStatus,
+  expiryStatusMeta,
   fmtProfileDate,
   RISK_META,
 } from "../_lib/professionalProfile";
@@ -22,34 +24,37 @@ type Props = {
 export default function EmployeeProfessionalProfile({ employeeId }: Props) {
   const [loading, setLoading] = useState(true);
   const [available, setAvailable] = useState(false);
-
-  const [documents, setDocuments] = useState<
-    Awaited<ReturnType<typeof listProfessionalDocuments>>["items"]
-  >([]);
+  const [error, setError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<EmployeeDocumentRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    const numericId = Number(employeeId);
+
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      setDocuments([]);
+      setAvailable(false);
+      setLoading(false);
+      return;
+    }
 
     (async () => {
       setLoading(true);
+      setError(null);
       try {
-        const isAvailable = await fetchProfessionalDocumentsAvailability();
-        if (cancelled) return;
-        setAvailable(isAvailable);
-
-        if (!isAvailable) {
-          setDocuments([]);
-          return;
-        }
-
-        const body = await listProfessionalDocuments();
+        const body = await listEmployeeDocuments({
+          employee_id: numericId,
+          lifecycle_status: "ACTIVE",
+          limit: 100,
+        });
         if (cancelled) return;
         setDocuments(Array.isArray(body.items) ? body.items : []);
-      } catch {
-        if (!cancelled) {
-          setAvailable(false);
-          setDocuments([]);
-        }
+        setAvailable(true);
+      } catch (e) {
+        if (cancelled) return;
+        setDocuments([]);
+        setAvailable(false);
+        setError(mapDocumentsApiError(e, "Не удалось загрузить документы сотрудника."));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,7 +82,7 @@ export default function EmployeeProfessionalProfile({ employeeId }: Props) {
     });
   }, [available, documents, employeeId]);
 
-  if (!loading && !profile.available) {
+  if (!loading && !available && !error) {
     return null;
   }
 
@@ -91,22 +96,24 @@ export default function EmployeeProfessionalProfile({ employeeId }: Props) {
             Профессиональный профиль
           </h3>
           <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            Сводка квалификации на основе подтверждающих документов
+            Сводка на основе зарегистрированных документов
           </p>
         </div>
-        {profile.available ? (
-          <Link
-            href="/directory/personnel/documents"
-            className="text-xs font-medium text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            Реестр документов →
-          </Link>
-        ) : null}
+        <Link
+          href="/directory/personnel/documents"
+          className="text-xs font-medium text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          Реестр документов →
+        </Link>
       </div>
 
       {loading ? (
         <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
           Загрузка профиля…
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/55 dark:bg-amber-950/35 dark:text-amber-200">
+          {error}
         </div>
       ) : (
         <div className="space-y-4">
@@ -171,20 +178,19 @@ export default function EmployeeProfessionalProfile({ employeeId }: Props) {
                       </td>
                     </tr>
                   ) : (
-                    profile.documents.map((row, idx) => {
-                      const statusKey = String(row.status || "").toUpperCase();
-                      const statusMeta =
-                        DOCUMENT_STATUS_META[statusKey] ?? DOCUMENT_STATUS_META.MISSING;
+                    profile.documents.map((row) => {
+                      const statusKey = documentExpiryStatus(row);
+                      const statusMeta = expiryStatusMeta(statusKey);
                       return (
                         <tr
-                          key={`${row.certificate_type_name}-${idx}`}
+                          key={row.document_id}
                           className="border-t border-zinc-200 dark:border-zinc-800"
                         >
                           <td className="px-3 py-2 text-zinc-900 dark:text-zinc-50">
-                            {row.certificate_type_name}
+                            {row.document_type_name}
                           </td>
                           <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
-                            {fmtProfileDate(row.expires_at)}
+                            {fmtProfileDate(row.valid_until)}
                           </td>
                           <td className="px-3 py-2">
                             <span

@@ -3,6 +3,11 @@
 
 Track B (personnel-events) is production-safe when ``employee_events`` exists.
 ADR-034 professional documents are local-demo-only (optional demo tables).
+
+Deprecated (ADR-037 Phase 1A+):
+  GET /directory/professional-documents*
+  Use GET /directory/employee-documents* instead. Endpoints remain for backward
+  compatibility; UI must not call them after Phase 1A UI migration.
 """
 from __future__ import annotations
 
@@ -56,7 +61,7 @@ def list_personnel_events_register(
 def professional_documents_availability(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, bool]:
-    """Whether local ADR-034 demo tables are installed."""
+    """Deprecated (ADR-037): whether local ADR-034 demo tables are installed."""
     return {"available": professional_documents_available()}
 
 
@@ -64,7 +69,7 @@ def professional_documents_availability(
 def list_professional_documents(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """ADR-034 local demo: professional documents register (empty when tables absent)."""
+    """Deprecated (ADR-037): ADR-034 local demo register. Use /employee-documents."""
     try:
         if not _is_privileged(user):
             raise HTTPException(status_code=403, detail="Forbidden.")

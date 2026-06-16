@@ -15,6 +15,7 @@ from .positions_routes import router as positions_router
 from .users_routes import router as users_router
 from .working_contacts_routes import router as working_contacts_router
 from .personnel_demo_routes import router as personnel_demo_router
+from .employee_documents_routes import router as employee_documents_router
 
 router = APIRouter(prefix="/directory", tags=["directory"])
 
@@ -39,3 +40,4 @@ router.include_router(contacts_router)
 router.include_router(users_router)
 router.include_router(working_contacts_router)
 router.include_router(personnel_demo_router)
+router.include_router(employee_documents_router)
