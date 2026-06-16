@@ -24,6 +24,11 @@ from app.services.hr_import_analytics_service import (
     risk_analytics,
     training_analytics,
 )
+from app.services.hr_import_document_candidate_service import (
+    document_candidates_summary,
+    employee_training_history,
+    list_document_candidates,
+)
 from app.services.hr_import_service import import_control_list
 
 from .common import as_http500, call_service
@@ -166,6 +171,74 @@ def get_import_batch_risks(
         raise as_http500(e)
 
 
+@router.get("/personnel/import/batches/{batch_id}/document-candidates")
+def get_import_batch_document_candidates(
+    batch_id: int,
+    document_kind: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    department: Optional[str] = Query(default=None),
+    q_name: Optional[str] = Query(default=None),
+    has_hours: Optional[bool] = Query(default=None),
+    has_valid_until: Optional[bool] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(
+            list_document_candidates,
+            batch_id=batch_id,
+            document_kind=document_kind,
+            status=status,
+            department=department,
+            q_name=q_name,
+            has_hours=has_hours,
+            has_valid_until=has_valid_until,
+            limit=limit,
+            offset=offset,
+        )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/document-candidates/summary")
+def get_import_batch_document_candidates_summary(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(document_candidates_summary, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/document-candidates/employees/{row_id}")
+def get_import_batch_employee_training_history(
+    batch_id: int,
+    row_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(employee_training_history, batch_id=batch_id, row_id=row_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
 @router.get("/personnel/import/batches/{batch_id}/rows")
 def get_import_batch_rows(
     batch_id: int,
@@ -175,6 +248,7 @@ def get_import_batch_rows(
     has_training: Optional[bool] = Query(default=None),
     has_certification: Optional[bool] = Query(default=None),
     risk_type: Optional[str] = Query(default=None),
+    roster_scope: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
     q_position: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
@@ -192,6 +266,7 @@ def get_import_batch_rows(
             has_training=has_training,
             has_certification=has_certification,
             risk_type=risk_type,
+            roster_scope=roster_scope,
             q_name=q_name,
             q_position=q_position,
             limit=limit,

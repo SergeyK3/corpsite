@@ -121,6 +121,12 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             ← Импорты
           </Link>
           <Link
+            href={`/directory/personnel/import/${batchId}/training`}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            Обучение / candidates
+          </Link>
+          <Link
             href={`/directory/personnel/import/${batchId}/rows`}
             className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
@@ -137,16 +143,60 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
         <div className="py-12 text-center text-zinc-500">Загрузка аналитики…</div>
       ) : (
         <>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-            <StatCard label="Всего строк" value={summary.total_rows} />
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <StatCard label="Персонал (roster)" value={summary.employee_roster_rows ?? summary.total_rows} />
+            <StatCard label="Декларации" value={summary.declaration_rows ?? 0} />
+            <StatCard
+              label="Технические / категории"
+              value={summary.technical_category_rows ?? 0}
+            />
+            <StatCard label="Без ИИН (персонал)" value={summary.missing_iin} />
             <StatCard label="Валидных ИИН" value={summary.valid_iin} />
+          </div>
+
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+            <StatCard label="Всего строк в batch" value={summary.total_rows} hint="включая декларации" />
             <StatCard label="Врачи" value={summary.by_sheet_type.doctors ?? 0} />
             <StatCard label="СМР" value={summary.by_sheet_type.nurses ?? 0} />
-            <StatCard label="Младший персонал" value={summary.by_sheet_type.junior_staff ?? 0} />
             <StatCard label="С обучением" value={summary.with_training} />
             <StatCard label="С категорией" value={summary.with_certification} />
             <StatCard label="Рисков (сумма)" value={riskTotal} hint="см. блок рисков" />
           </div>
+
+          <section className="mb-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Разделы staging
+            </h2>
+            <div className="flex flex-wrap gap-2 text-sm">
+              <Link
+                href={`/directory/personnel/import/${batchId}/rows?roster_scope=personnel`}
+                className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-700"
+              >
+                Персонал ({summary.employee_roster_rows ?? 0})
+              </Link>
+              <Link
+                href={`/directory/personnel/import/${batchId}/rows?roster_scope=declaration`}
+                className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                Декларации ({summary.declaration_rows ?? 0})
+              </Link>
+              <Link
+                href={`/directory/personnel/import/${batchId}/rows?roster_scope=technical`}
+                className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                Технические ({summary.technical_category_rows ?? 0})
+              </Link>
+            </div>
+            {summary.by_declaration_group && Object.keys(summary.by_declaration_group).length > 0 ? (
+              <ul className="mt-3 space-y-1 text-xs text-zinc-500">
+                {Object.entries(summary.by_declaration_group).map(([group, count]) => (
+                  <li key={group}>
+                    {SHEET_TYPE_LABELS[group] || group}: {count}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
 
           <div className="mb-6 grid gap-4 lg:grid-cols-2">
             <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
@@ -221,9 +271,17 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
               </ul>
             </section>
             <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                Обучение ({trainingTotal})
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                  Обучение ({trainingTotal})
+                </h2>
+                <Link
+                  href={`/directory/personnel/import/${batchId}/training`}
+                  className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  candidates →
+                </Link>
+              </div>
               <ul className="space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
                 {trainingExamples.map((ex) => (
                   <li key={ex.row_id}>

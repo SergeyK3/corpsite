@@ -10,12 +10,22 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.db.models.hr_import import (
+    CLASSIFICATION_CATEGORY_ROW,
     CLASSIFICATION_DECLARATION,
     CLASSIFICATION_DUPLICATE_IIN,
     CLASSIFICATION_INVALID_IIN,
     CLASSIFICATION_SUMMARY_ROW,
+    ROW_TYPE_EMPLOYEE,
 )
 from scripts.import_hr_control_list import mask_iin
+
+TECHNICAL_CLASSIFICATIONS = frozenset(
+    {
+        CLASSIFICATION_DECLARATION,
+        CLASSIFICATION_SUMMARY_ROW,
+        CLASSIFICATION_CATEGORY_ROW,
+    }
+)
 
 AGE_BUCKETS: tuple[tuple[str, int, Optional[int]], ...] = (
     ("under_30", 0, 29),
@@ -102,6 +112,38 @@ def _classify_certification(value: str) -> str:
     return "other"
 
 
+def is_real_employee_row(row: dict[str, Any]) -> bool:
+    """True for actual staff rows on employee roster sheets."""
+    if row.get("is_employee_roster") is False:
+        return False
+    row_type = str(row.get("row_type") or "")
+    if row_type:
+        return row_type == ROW_TYPE_EMPLOYEE
+    if row.get("classification") in TECHNICAL_CLASSIFICATIONS:
+        return False
+    if row.get("sheet_type") == "declaration":
+        return False
+    return True
+
+
+def is_declaration_row(row: dict[str, Any]) -> bool:
+    return row.get("sheet_type") == "declaration" or row.get("classification") == CLASSIFICATION_DECLARATION
+
+
+def is_technical_no_iin_row(row: dict[str, Any]) -> bool:
+    if is_declaration_row(row):
+        return False
+    return not row.get("iin") and not is_real_employee_row(row)
+
+
+def is_declaration_no_iin_row(row: dict[str, Any]) -> bool:
+    return is_declaration_row(row) and not row.get("iin")
+
+
+def is_missing_iin_employee_row(row: dict[str, Any]) -> bool:
+    return is_real_employee_row(row) and not row.get("iin")
+
+
 def _ensure_batch_exists(conn: Connection, batch_id: int) -> None:
     row = conn.execute(
         text("SELECT 1 FROM public.hr_import_batches WHERE batch_id = :batch_id"),
@@ -136,6 +178,9 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
         metadata = dict(payload.pop("metadata", {}) or {})
         sheet_type = str(metadata.get("sheet_type", "") or "")
         classification = str(metadata.get("classification", "") or "")
+        row_type = str(metadata.get("row_type", "") or "")
+        declaration_group = str(metadata.get("declaration_group", "") or "")
+        is_employee_roster = bool(metadata.get("is_employee_roster", row_type == ROW_TYPE_EMPLOYEE))
         iin_valid = bool(metadata.get("iin_valid", False))
         iin = str(payload.get("iin", "") or "").strip()
         birth = _parse_birth_date(str(payload.get("birth_date", "") or ""))
@@ -161,6 +206,9 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
                 "certification_group": _classify_certification(str(payload.get("certification_raw", "") or "")),
                 "sheet_type": sheet_type,
                 "classification": classification,
+                "row_type": row_type,
+                "declaration_group": declaration_group,
+                "is_employee_roster": is_employee_roster,
                 "error_codes": list(db_row["error_codes"] or []),
                 "has_training": bool(str(payload.get("training_raw", "") or "").strip()),
                 "has_certification": bool(str(payload.get("certification_raw", "") or "").strip()),
@@ -199,31 +247,45 @@ def list_batches(conn: Connection) -> dict[str, Any]:
 
 def batch_summary(conn: Connection, batch_id: int) -> dict[str, Any]:
     rows = _load_staging_rows(conn, batch_id)
-    iin_counts = Counter(r["iin"] for r in rows if r["iin"])
+    employee_rows = [r for r in rows if is_real_employee_row(r)]
+    iin_counts = Counter(r["iin"] for r in employee_rows if r["iin"])
     duplicate_iins = {iin for iin, count in iin_counts.items() if count > 1}
 
     by_sheet_type: dict[str, int] = defaultdict(int)
-    for row in rows:
+    for row in employee_rows:
         key = row["sheet_type"] or "other_staff"
         by_sheet_type[key] += 1
+
+    by_declaration_group: dict[str, int] = defaultdict(int)
+    for row in rows:
+        if is_declaration_row(row) and row.get("declaration_group"):
+            by_declaration_group[row["declaration_group"]] += 1
 
     return {
         "batch_id": batch_id,
         "total_rows": len(rows),
-        "valid_iin": sum(1 for r in rows if r["iin_valid"]),
-        "by_sheet_type": {k: by_sheet_type.get(k, 0) for k in STAFF_TYPE_LABELS},
-        "with_training": sum(1 for r in rows if r["has_training"]),
-        "with_certification": sum(1 for r in rows if r["has_certification"]),
-        "missing_full_name": sum(1 for r in rows if not r["full_name"]),
-        "missing_iin": sum(1 for r in rows if not r["iin"]),
-        "invalid_iin": sum(1 for r in rows if r["iin"] and not r["iin_valid"]),
+        "employee_roster_rows": len(employee_rows),
+        "declaration_rows": sum(1 for r in rows if is_declaration_row(r)),
+        "technical_category_rows": sum(
+            1 for r in rows if not is_real_employee_row(r) and not is_declaration_row(r)
+        ),
+        "valid_iin": sum(1 for r in employee_rows if r["iin_valid"]),
+        "by_sheet_type": {k: by_sheet_type.get(k, 0) for k in STAFF_TYPE_LABELS if k != "declaration"},
+        "by_declaration_group": dict(by_declaration_group),
+        "with_training": sum(1 for r in employee_rows if r["has_training"]),
+        "with_certification": sum(1 for r in employee_rows if r["has_certification"]),
+        "missing_full_name": sum(1 for r in employee_rows if not r["full_name"]),
+        "missing_iin": sum(1 for r in rows if is_missing_iin_employee_row(r)),
+        "technical_no_iin_rows": sum(1 for r in rows if is_technical_no_iin_row(r)),
+        "declaration_no_iin_rows": sum(1 for r in rows if is_declaration_no_iin_row(r)),
+        "invalid_iin": sum(1 for r in employee_rows if r["iin"] and not r["iin_valid"]),
         "duplicate_iin_groups": len(duplicate_iins),
-        "duplicate_iin_rows": sum(1 for r in rows if r["iin"] in duplicate_iins),
+        "duplicate_iin_rows": sum(1 for r in employee_rows if r["iin"] in duplicate_iins),
     }
 
 
 def age_distribution(conn: Connection, batch_id: int) -> dict[str, Any]:
-    rows = _load_staging_rows(conn, batch_id)
+    rows = [r for r in _load_staging_rows(conn, batch_id) if is_real_employee_row(r)]
     counts = {key: 0 for key, _, _ in AGE_BUCKETS}
     counts["unknown"] = 0
     for row in rows:
@@ -243,7 +305,7 @@ def age_distribution(conn: Connection, batch_id: int) -> dict[str, Any]:
 
 
 def department_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
-    rows = _load_staging_rows(conn, batch_id)
+    rows = [r for r in _load_staging_rows(conn, batch_id) if is_real_employee_row(r)]
     grouped: dict[str, dict[str, Any]] = {}
 
     for row in rows:
@@ -294,7 +356,7 @@ def department_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
 
 
 def position_analytics(conn: Connection, batch_id: int, *, limit: int = 20) -> dict[str, Any]:
-    rows = _load_staging_rows(conn, batch_id)
+    rows = [r for r in _load_staging_rows(conn, batch_id) if is_real_employee_row(r)]
     counts = Counter(r["position_normalized"] for r in rows if r["position_normalized"] != "—")
     top = counts.most_common(limit)
     return {
@@ -305,11 +367,12 @@ def position_analytics(conn: Connection, batch_id: int, *, limit: int = 20) -> d
 
 def training_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
     rows = _load_staging_rows(conn, batch_id)
-    with_training = [r for r in rows if r["has_training"]]
+    employee_rows = [r for r in rows if is_real_employee_row(r)]
+    with_training = [r for r in employee_rows if r["has_training"]]
     by_department = Counter(r["department"] or "— не указано —" for r in with_training)
     by_staff_type = Counter(r["sheet_type"] or "other_staff" for r in with_training)
 
-    dept_totals = Counter(r["department"] or "— не указано —" for r in rows)
+    dept_totals = Counter(r["department"] or "— не указано —" for r in employee_rows)
     without_by_dept = {
         dept: total - by_department.get(dept, 0)
         for dept, total in dept_totals.items()
@@ -351,7 +414,8 @@ def training_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
 
 def certification_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
     rows = _load_staging_rows(conn, batch_id)
-    with_cert = [r for r in rows if r["has_certification"]]
+    employee_rows = [r for r in rows if is_real_employee_row(r)]
+    with_cert = [r for r in employee_rows if r["has_certification"]]
     group_labels = {
         "highest": "высшая категория",
         "first": "первая категория",
@@ -360,7 +424,7 @@ def certification_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
         "other": "прочее",
         "none": "без категории/сертификата",
     }
-    by_group = Counter(r["certification_group"] for r in rows)
+    by_group = Counter(r["certification_group"] for r in employee_rows)
     by_department = Counter(r["department"] or "— не указано —" for r in with_cert)
 
     examples = []
@@ -399,7 +463,8 @@ def certification_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
 
 def risk_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
     rows = _load_staging_rows(conn, batch_id)
-    iin_counts = Counter(r["iin"] for r in rows if r["iin"])
+    employee_rows = [r for r in rows if is_real_employee_row(r)]
+    iin_counts = Counter(r["iin"] for r in employee_rows if r["iin"])
     duplicate_iins = {iin for iin, count in iin_counts.items() if count > 1}
 
     def _risk(key: str, label: str, predicate) -> dict[str, Any]:
@@ -412,26 +477,49 @@ def risk_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
         }
 
     risks = [
-        _risk("age_65_plus", "Сотрудники 65+", lambda r: r["age"] is not None and r["age"] >= 65),
-        _risk("missing_iin", "Без ИИН", lambda r: not r["iin"]),
-        _risk("invalid_iin", "Некорректный ИИН", lambda r: r["classification"] == CLASSIFICATION_INVALID_IIN),
+        _risk(
+            "age_65_plus",
+            "Сотрудники 65+",
+            lambda r: is_real_employee_row(r) and r["age"] is not None and r["age"] >= 65,
+        ),
+        _risk("missing_iin", "Без ИИН", is_missing_iin_employee_row),
+        _risk("technical_no_iin", "Служебные/категорийные без ИИН", is_technical_no_iin_row),
+        _risk("declaration_no_iin", "Декларации без ИИН", is_declaration_no_iin_row),
+        _risk(
+            "invalid_iin",
+            "Некорректный ИИН",
+            lambda r: is_real_employee_row(r) and r["classification"] == CLASSIFICATION_INVALID_IIN,
+        ),
         _risk(
             "duplicate_iin",
             "Дубликаты ИИН",
-            lambda r: r["iin"] in duplicate_iins or r["classification"] == CLASSIFICATION_DUPLICATE_IIN,
+            lambda r: is_real_employee_row(r)
+            and (r["iin"] in duplicate_iins or r["classification"] == CLASSIFICATION_DUPLICATE_IIN),
         ),
-        _risk("without_training", "Без обучения", lambda r: not r["has_training"]),
-        _risk("without_certification", "Без категории/сертификата", lambda r: not r["has_certification"]),
-        _risk("unknown_department", "Неизвестное отделение", lambda r: not r["department"]),
+        _risk(
+            "without_training",
+            "Без обучения",
+            lambda r: is_real_employee_row(r) and not r["has_training"],
+        ),
+        _risk(
+            "without_certification",
+            "Без категории/сертификата",
+            lambda r: is_real_employee_row(r) and not r["has_certification"],
+        ),
+        _risk(
+            "unknown_department",
+            "Неизвестное отделение",
+            lambda r: is_real_employee_row(r) and not r["department"],
+        ),
         _risk(
             "summary_rows",
             "Итоговые/служебные строки",
-            lambda r: r["classification"] == CLASSIFICATION_SUMMARY_ROW,
+            lambda r: r["classification"] in (CLASSIFICATION_SUMMARY_ROW, CLASSIFICATION_CATEGORY_ROW),
         ),
         _risk(
             "declaration_rows",
             "Декларационные строки",
-            lambda r: r["classification"] == CLASSIFICATION_DECLARATION,
+            lambda r: is_declaration_row(r),
         ),
     ]
     return {"batch_id": batch_id, "items": risks}
@@ -439,24 +527,42 @@ def risk_analytics(conn: Connection, batch_id: int) -> dict[str, Any]:
 
 def _row_matches_risk(row: dict[str, Any], risk_type: str, duplicate_iins: set[str]) -> bool:
     if risk_type == "age_65_plus":
-        return row["age"] is not None and row["age"] >= 65
+        return is_real_employee_row(row) and row["age"] is not None and row["age"] >= 65
     if risk_type == "missing_iin":
-        return not row["iin"]
+        return is_missing_iin_employee_row(row)
+    if risk_type == "technical_no_iin":
+        return is_technical_no_iin_row(row)
+    if risk_type == "declaration_no_iin":
+        return is_declaration_no_iin_row(row)
     if risk_type == "invalid_iin":
-        return row["classification"] == CLASSIFICATION_INVALID_IIN
+        return is_real_employee_row(row) and row["classification"] == CLASSIFICATION_INVALID_IIN
     if risk_type == "duplicate_iin":
-        return row["iin"] in duplicate_iins or row["classification"] == CLASSIFICATION_DUPLICATE_IIN
+        return is_real_employee_row(row) and (
+            row["iin"] in duplicate_iins or row["classification"] == CLASSIFICATION_DUPLICATE_IIN
+        )
     if risk_type == "without_training":
-        return not row["has_training"]
+        return is_real_employee_row(row) and not row["has_training"]
     if risk_type == "without_certification":
-        return not row["has_certification"]
+        return is_real_employee_row(row) and not row["has_certification"]
     if risk_type == "unknown_department":
-        return not row["department"]
+        return is_real_employee_row(row) and not row["department"]
     if risk_type == "summary_rows":
-        return row["classification"] == CLASSIFICATION_SUMMARY_ROW
+        return row["classification"] in (CLASSIFICATION_SUMMARY_ROW, CLASSIFICATION_CATEGORY_ROW)
     if risk_type == "declaration_rows":
-        return row["classification"] == CLASSIFICATION_DECLARATION
+        return is_declaration_row(row)
     return False
+
+
+def _matches_roster_scope(row: dict[str, Any], roster_scope: Optional[str]) -> bool:
+    if not roster_scope or roster_scope == "all":
+        return True
+    if roster_scope == "personnel":
+        return is_real_employee_row(row)
+    if roster_scope == "declaration":
+        return is_declaration_row(row)
+    if roster_scope == "technical":
+        return not is_real_employee_row(row) and not is_declaration_row(row)
+    return True
 
 
 def list_batch_rows(
@@ -469,16 +575,20 @@ def list_batch_rows(
     has_training: Optional[bool] = None,
     has_certification: Optional[bool] = None,
     risk_type: Optional[str] = None,
+    roster_scope: Optional[str] = None,
     q_name: Optional[str] = None,
     q_position: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
     rows = _load_staging_rows(conn, batch_id)
-    iin_counts = Counter(r["iin"] for r in rows if r["iin"])
+    employee_rows = [r for r in rows if is_real_employee_row(r)]
+    iin_counts = Counter(r["iin"] for r in employee_rows if r["iin"])
     duplicate_iins = {iin for iin, count in iin_counts.items() if count > 1}
 
     filtered = rows
+    if roster_scope:
+        filtered = [r for r in filtered if _matches_roster_scope(r, roster_scope)]
     if department:
         filtered = [r for r in filtered if r["department"] == department]
     if sheet_type:
@@ -520,6 +630,9 @@ def list_batch_rows(
             "source_row_number": r["source_row_number"],
             "sheet_type": r["sheet_type"],
             "classification": r["classification"],
+            "row_type": r.get("row_type", ""),
+            "declaration_group": r.get("declaration_group", ""),
+            "is_employee_roster": r.get("is_employee_roster", False),
         }
         for r in page
     ]

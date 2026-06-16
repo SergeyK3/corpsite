@@ -38,6 +38,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
   const [hasTraining, setHasTraining] = React.useState(searchParams.get("has_training") || "");
   const [hasCertification, setHasCertification] = React.useState(searchParams.get("has_certification") || "");
   const [riskType, setRiskType] = React.useState(searchParams.get("risk_type") || "");
+  const [rosterScope, setRosterScope] = React.useState(searchParams.get("roster_scope") || "personnel");
   const [qName, setQName] = React.useState(searchParams.get("q_name") || "");
   const [qPosition, setQPosition] = React.useState(searchParams.get("q_position") || "");
   const [offset, setOffset] = React.useState(0);
@@ -52,6 +53,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
       has_training: hasTraining === "" ? undefined : hasTraining === "true",
       has_certification: hasCertification === "" ? undefined : hasCertification === "true",
       risk_type: riskType || undefined,
+      roster_scope: rosterScope || undefined,
       q_name: qName || undefined,
       q_position: qPosition || undefined,
       limit,
@@ -72,6 +74,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
     hasTraining,
     hasCertification,
     riskType,
+    rosterScope,
     qName,
     qPosition,
     offset,
@@ -89,6 +92,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
     if (hasTraining) q.set("has_training", hasTraining);
     if (hasCertification) q.set("has_certification", hasCertification);
     if (riskType) q.set("risk_type", riskType);
+    if (rosterScope && rosterScope !== "personnel") q.set("roster_scope", rosterScope);
     if (qName) q.set("q_name", qName);
     if (qPosition) q.set("q_position", qPosition);
     const qs = q.toString();
@@ -110,6 +114,31 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
         >
           ← Кадровый паспорт
         </Link>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(
+          [
+            ["personnel", "Персонал"],
+            ["declaration", "Декларации"],
+            ["technical", "Технические"],
+            ["all", "Все строки"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setRosterScope(value)}
+            className={[
+              "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+              rosterScope === value
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3 lg:grid-cols-4">

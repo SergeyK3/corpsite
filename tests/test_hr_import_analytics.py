@@ -89,7 +89,9 @@ def test_age_distribution_groups(staged_batch):
         summary = batch_summary(conn, staged_batch)
     keys = {b["key"] for b in result["buckets"]}
     assert keys == {"under_30", "30_39", "40_49", "50_59", "60_64", "65_plus"}
-    assert sum(b["count"] for b in result["buckets"]) + result["unknown"] == summary["total_rows"]
+    assert sum(b["count"] for b in result["buckets"]) + result["unknown"] == summary.get(
+        "employee_roster_rows", summary["total_rows"]
+    )
     assert sum(b["count"] for b in result["buckets"]) >= 1
 
 

@@ -69,12 +69,18 @@ export type ImportBatchRow = {
 export type ImportSummary = {
   batch_id: number;
   total_rows: number;
+  employee_roster_rows?: number;
+  declaration_rows?: number;
+  technical_category_rows?: number;
   valid_iin: number;
   by_sheet_type: Record<string, number>;
+  by_declaration_group?: Record<string, number>;
   with_training: number;
   with_certification: number;
   missing_full_name: number;
   missing_iin: number;
+  technical_no_iin_rows?: number;
+  declaration_no_iin_rows?: number;
   invalid_iin: number;
   duplicate_iin_groups: number;
   duplicate_iin_rows: number;
@@ -118,7 +124,80 @@ export type StagingRow = {
   source_row_number: number;
   sheet_type: string;
   classification: string;
+  row_type?: string;
+  declaration_group?: string;
+  is_employee_roster?: boolean;
 };
+
+export type DocumentCandidate = {
+  candidate_id: number;
+  batch_id: number;
+  row_id: number;
+  employee_id: number | null;
+  employee_identity_id: number | null;
+  full_name: string;
+  iin_masked: string;
+  department: string;
+  position: string;
+  document_type: string;
+  document_kind: string;
+  title: string;
+  organization: string;
+  issued_at: string | null;
+  valid_until: string | null;
+  hours: number | null;
+  specialty: string;
+  category: string;
+  certificate_number: string;
+  raw_text: string;
+  source_sheet: string;
+  source_row: number | null;
+  external_url: string;
+  storage_type: string;
+  storage_path: string;
+  status: string;
+  fragment_index: number;
+  confidence_score: number | null;
+  parse_method: string;
+};
+
+export type DocumentCandidatesSummary = {
+  batch_id: number;
+  total_candidates: number;
+  by_kind: { training: number; certification: number; education?: number };
+  by_status: Record<string, number>;
+};
+
+export type EmployeeTrainingHistory = {
+  batch_id: number;
+  employee: {
+    row_id: number;
+    employee_id: number | null;
+    full_name: string;
+    iin_masked: string;
+    department: string;
+    position: string;
+  };
+  items: DocumentCandidate[];
+};
+
+export async function getDocumentCandidatesSummary(batchId: number): Promise<DocumentCandidatesSummary> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/document-candidates/summary`);
+}
+
+export async function listDocumentCandidates(
+  batchId: number,
+  params: Record<string, string | number | boolean | null | undefined> = {}
+): Promise<{ total: number; items: DocumentCandidate[]; limit: number; offset: number }> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/document-candidates`, buildQuery(params));
+}
+
+export async function getEmployeeTrainingHistory(
+  batchId: number,
+  rowId: number
+): Promise<EmployeeTrainingHistory> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/document-candidates/employees/${rowId}`);
+}
 
 export async function listImportBatches(): Promise<{ items: ImportBatchRow[] }> {
   return apiGetJson("/directory/personnel/import/batches");
