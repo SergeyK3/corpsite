@@ -142,8 +142,8 @@ function AiExtractionSection({
               <ul className="mt-1 space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
                 {extraction!.education.map((item, i) => (
                   <li key={i}>
-                    {item.institution || item.specialty || "—"} · conf.{" "}
-                    {Math.round((item.confidence ?? 0) * 100)}%
+                    {String(item.institution || item.specialty || "—")} · conf.{" "}
+                    {Math.round(Number(item.confidence ?? 0) * 100)}%
                   </li>
                 ))}
               </ul>

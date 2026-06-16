@@ -17,6 +17,9 @@ import {
   type EducationProfileSummary,
 } from "../_lib/importApi.client";
 
+/** Phase 2F.3 — employee education profiles (not document-candidates). */
+export const PERSONNEL_IMPORT_TRAINING_UI_PHASE = "2f3-education-profiles";
+
 export default function PersonnelImportTrainingPageClient({ batchId }: { batchId: number }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -81,7 +84,11 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div
+      className="mx-auto max-w-7xl px-4 py-6"
+      data-ui-phase={PERSONNEL_IMPORT_TRAINING_UI_PHASE}
+      data-batch-id={batchId}
+    >
       <PersonnelSubNav />
       <ImportBatchSubNav batchId={batchId} />
 
@@ -90,8 +97,8 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
           Образовательные профили сотрудников из импорта
         </h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Одна строка = один сотрудник. Документы и обучение — внутри карточки (staging/review, без
-          auto-apply).
+          Одна строка = один сотрудник. Обучение, сертификаты и категории — внутри карточки (staging,
+          без auto-apply).
         </p>
       </div>
 
@@ -157,36 +164,27 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
               <thead className="bg-zinc-50 text-left text-[11px] uppercase text-zinc-500 dark:bg-zinc-900">
                 <tr>
                   <th className="px-3 py-2">ФИО</th>
-                  <th className="px-3 py-2">ИИН</th>
                   <th className="px-3 py-2">Отделение</th>
                   <th className="px-3 py-2">Должность</th>
-                  <th className="px-3 py-2">Образ.</th>
-                  <th className="px-3 py-2">ПК</th>
-                  <th className="px-3 py-2">Серт.</th>
-                  <th className="px-3 py-2">Кат.</th>
-                  <th className="px-3 py-2">Статус</th>
                   <th className="px-3 py-2">Действие</th>
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
+                    <td colSpan={4} className="px-4 py-8 text-center text-zinc-500">
                       Нет сотрудников по выбранным фильтрам
                     </td>
                   </tr>
                 ) : (
                   items.map((row) => (
-                    <tr key={row.aggregate_key ?? row.profile_id} className="border-t border-zinc-100 dark:border-zinc-800">
+                    <tr
+                      key={row.aggregate_key ?? row.profile_id}
+                      className="border-t border-zinc-100 dark:border-zinc-800"
+                    >
                       <td className="px-3 py-2 font-medium">{row.full_name || "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{row.iin_masked || "—"}</td>
                       <td className="px-3 py-2">{row.org_unit_name || row.department_source || "—"}</td>
                       <td className="px-3 py-2">{row.position_raw || "—"}</td>
-                      <td className="px-3 py-2 text-center">{row.education_count}</td>
-                      <td className="px-3 py-2 text-center">{row.training_count}</td>
-                      <td className="px-3 py-2 text-center">{row.certificate_count}</td>
-                      <td className="px-3 py-2 text-center">{row.category_count}</td>
-                      <td className="px-3 py-2">{row.review_status_label}</td>
                       <td className="px-3 py-2">
                         <button
                           type="button"
@@ -194,7 +192,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
                           onClick={() => openCard(row.profile_id)}
                           className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                         >
-                          Карточка
+                          Изменить
                         </button>
                       </td>
                     </tr>

@@ -286,9 +286,13 @@ export default function EmployeesPageClient(props: Props) {
   React.useEffect(() => {
     if (prevOrgGroupRef.current !== orgGroupId) {
       prevOrgGroupRef.current = orgGroupId;
+      if (departmentId || orgUnitId) {
+        updateUrl({ department_id: "", org_unit_id: "" }, { resetOffset: true });
+        return;
+      }
       if (offsetNum !== 0) setPageOffset(0);
     }
-  }, [orgGroupId, offsetNum]);
+  }, [orgGroupId, offsetNum, departmentId, orgUnitId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -319,11 +323,10 @@ export default function EmployeesPageClient(props: Props) {
   React.useEffect(() => {
     let cancelled = false;
 
-    async function loadOrgUnits() {
+    async function loadOrgUnitsForFilter() {
       try {
         const tree = await getOrgUnitsTree({
           org_group_id: orgGroupId ?? undefined,
-          org_unit_id: orgUnitId || undefined,
         });
         if (cancelled) return;
         setOrgUnitOptions(flattenOrgUnits(tree.items ?? []));
@@ -333,11 +336,11 @@ export default function EmployeesPageClient(props: Props) {
       }
     }
 
-    void loadOrgUnits();
+    void loadOrgUnitsForFilter();
     return () => {
       cancelled = true;
     };
-  }, [orgGroupId, orgUnitId]);
+  }, [orgGroupId]);
 
   React.useEffect(() => {
     setCreateInitialValues(buildDefaultCreateValues(orgUnitId));
@@ -503,6 +506,28 @@ export default function EmployeesPageClient(props: Props) {
   const depList = Array.isArray(departments) ? departments : [];
   const posList = Array.isArray(positions) ? positions : [];
 
+  const departmentOptions = React.useMemo(() => {
+    if (orgGroupId != null) {
+      const seen = new Set<number>();
+      return orgUnitOptions.filter((unit) => {
+        if (seen.has(unit.id)) return false;
+        seen.add(unit.id);
+        return true;
+      });
+    }
+    const seen = new Set<number>();
+    return depList
+      .filter((d) => d.id != null)
+      .map((d) => ({ id: Number(d.id), label: String(d.name ?? `#${d.id}`) }))
+      .filter((d) => {
+        if (seen.has(d.id)) return false;
+        seen.add(d.id);
+        return true;
+      });
+  }, [orgGroupId, orgUnitOptions, depList]);
+
+  const departmentFilterValue = orgGroupId != null ? orgUnitId : departmentId;
+
   return (
     <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
@@ -521,7 +546,7 @@ export default function EmployeesPageClient(props: Props) {
               <OrgScopeFilter
                 basePath={routeBase}
                 className="min-w-[240px]"
-                resetParamsOnChange={["offset"]}
+                resetParamsOnChange={["offset", "department_id", "org_unit_id"]}
               />
 
               <form
@@ -546,14 +571,25 @@ export default function EmployeesPageClient(props: Props) {
               </form>
 
               <select
-                value={departmentId}
-                onChange={(e) => updateUrl({ department_id: e.target.value }, { resetOffset: true })}
+                value={departmentFilterValue}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (orgGroupId != null) {
+                    updateUrl({ org_unit_id: value, department_id: "" }, { resetOffset: true });
+                  } else {
+                    updateUrl({ department_id: value, org_unit_id: "" }, { resetOffset: true });
+                  }
+                }}
                 className="h-9 min-w-[220px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 <option value="">Все отделы</option>
-                {depList.map((d) => (
-                  <option key={d.id} value={String(d.id)} className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-                    {d.name ?? `#${d.id}`}
+                {departmentOptions.map((d) => (
+                  <option
+                    key={d.id}
+                    value={String(d.id)}
+                    className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                  >
+                    {d.label}
                   </option>
                 ))}
               </select>
