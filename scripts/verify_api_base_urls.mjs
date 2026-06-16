@@ -11,20 +11,74 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const apiBasePath = path.join(repoRoot, "corpsite-ui", "lib", "apiBase.ts");
 
+const DEFAULT_DEV_BACKEND = "http://127.0.0.1:8000";
+
 function normalizeApiBase(base) {
   return base.trim().replace(/\/+$/, "");
 }
 
-function resolveApiUrl(path, { base, origin = "https://mmc.004.kz" } = {}) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const trimmed = normalizeApiBase(base);
+function isAbsoluteHttpUrl(base) {
+  return /^https?:\/\//i.test(base);
+}
 
-  if (/^https?:\/\//i.test(trimmed)) {
-    return `${trimmed}${normalizedPath}`;
+function isRelativeApiPrefix(base) {
+  const normalized = normalizeApiBase(base);
+  return normalized === "/api" || normalized === "api";
+}
+
+function clientPublicBase(base, nodeEnv, { localHost = false } = {}) {
+  const raw = normalizeApiBase(base ?? "");
+
+  if (nodeEnv === "development" || localHost) {
+    if (!raw) return DEFAULT_DEV_BACKEND;
+    if (isRelativeApiPrefix(raw)) return DEFAULT_DEV_BACKEND;
+    return raw;
   }
 
-  const prefix = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return `${origin}${prefix}${normalizedPath}`;
+  return raw || DEFAULT_DEV_BACKEND;
+}
+
+function serverSideBackendBase({ base, backendUrl = "" }) {
+  const backend = normalizeApiBase(backendUrl ?? "");
+  if (backend) return backend;
+
+  const publicBase = normalizeApiBase(base ?? "");
+  if (publicBase && isAbsoluteHttpUrl(publicBase)) return publicBase;
+
+  return DEFAULT_DEV_BACKEND;
+}
+
+function resolveApiUrl(
+  path,
+  {
+    base = "",
+    origin = "https://mmc.004.kz",
+    nodeEnv = "production",
+    serverSide = false,
+    backendUrl = "",
+    hasWindow = true,
+    localHost = false,
+  } = {},
+) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (serverSide) {
+    return `${serverSideBackendBase({ base, backendUrl })}${normalizedPath}`;
+  }
+
+  const resolvedBase = clientPublicBase(base, nodeEnv, { localHost: localHost || (hasWindow && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) });
+
+  if (isAbsoluteHttpUrl(resolvedBase)) {
+    return `${resolvedBase}${normalizedPath}`;
+  }
+
+  const prefix = resolvedBase.startsWith("/") ? resolvedBase : `/${resolvedBase}`;
+
+  if (hasWindow) {
+    return `${origin}${prefix}${normalizedPath}`;
+  }
+
+  return `${serverSideBackendBase({ base, backendUrl })}${normalizedPath}`;
 }
 
 function verifyApiBaseSource() {
@@ -58,6 +112,11 @@ function verifyApiBaseSource() {
     console.error("FAIL apiBase.ts must keep static process.env.BACKEND_URL for SSR");
   }
 
+  if (!src.includes("process.env.NODE_ENV")) {
+    failed += 1;
+    console.error("FAIL apiBase.ts must gate dev /api override on process.env.NODE_ENV");
+  }
+
   if (failed === 0) {
     console.log("OK   apiBase.ts static env access for NEXT_PUBLIC_API_BASE_URL");
   }
@@ -67,27 +126,85 @@ function verifyApiBaseSource() {
 
 const cases = [
   {
+    name: "dev empty base → direct backend auth/me",
+    base: "",
+    path: "/auth/me",
+    nodeEnv: "development",
+    want: `${DEFAULT_DEV_BACKEND}/auth/me`,
+  },
+  {
+    name: "dev /api → direct backend auth/me",
+    base: "/api",
+    path: "/auth/me",
+    nodeEnv: "development",
+    want: `${DEFAULT_DEV_BACKEND}/auth/me`,
+  },
+  {
+    name: "dev api (no slash) → direct backend auth/me",
+    base: "api",
+    path: "/auth/me",
+    nodeEnv: "development",
+    want: `${DEFAULT_DEV_BACKEND}/auth/me`,
+  },
+  {
+    name: "prod /api + localhost origin → local override to direct backend",
+    base: "/api",
+    path: "/auth/me",
+    nodeEnv: "production",
+    origin: "http://localhost:3000",
+    want: `${DEFAULT_DEV_BACKEND}/auth/me`,
+  },
+  {
+    name: "absolute http://127.0.0.1:8000 → direct backend auth/me",
+    base: "http://127.0.0.1:8000",
+    path: "/auth/me",
+    nodeEnv: "development",
+    want: "http://127.0.0.1:8000/auth/me",
+  },
+  {
+    name: "serverSide BACKEND_URL bypasses /api",
+    base: "/api",
+    path: "/auth/me",
+    nodeEnv: "production",
+    serverSide: true,
+    backendUrl: "http://127.0.0.1:8000",
+    want: "http://127.0.0.1:8000/auth/me",
+  },
+  {
+    name: "serverSide no BACKEND_URL → DEFAULT_DEV_BACKEND",
+    base: "/api",
+    path: "/auth/me",
+    nodeEnv: "production",
+    serverSide: true,
+    backendUrl: "",
+    want: `${DEFAULT_DEV_BACKEND}/auth/me`,
+  },
+  {
     name: "prod relative /api",
     base: "/api",
     path: "/directory/employees",
+    nodeEnv: "production",
     want: "https://mmc.004.kz/api/directory/employees",
   },
   {
     name: "prod absolute base",
     base: "https://mmc.004.kz/api",
     path: "/auth/login",
+    nodeEnv: "production",
     want: "https://mmc.004.kz/api/auth/login",
   },
   {
     name: "prod auth/me relative /api",
     base: "/api",
     path: "/auth/me",
+    nodeEnv: "production",
     want: "https://mmc.004.kz/api/auth/me",
   },
   {
     name: "dev direct backend",
     base: "http://127.0.0.1:8000",
     path: "/tasks",
+    nodeEnv: "development",
     want: "http://127.0.0.1:8000/tasks",
   },
 ];
@@ -95,7 +212,7 @@ const cases = [
 let failed = verifyApiBaseSource();
 
 for (const c of cases) {
-  const got = resolveApiUrl(c.path, { base: c.base });
+  const got = resolveApiUrl(c.path, c);
   if (got !== c.want) {
     failed += 1;
     console.error(`FAIL ${c.name}\n  want: ${c.want}\n  got:  ${got}`);
