@@ -670,6 +670,30 @@ def print_preview(rows: list[ParsedRow], limit: int = 10) -> None:
         )
 
 
+def print_stage_summary(
+    batch_id: int,
+    summary: dict[str, Any],
+    warnings: list[str],
+) -> None:
+    print("HR Control List Import — staging summary")
+    print("=" * 40)
+    print(f"mode: stage")
+    print(f"batch_id: {batch_id}")
+    print(f"total_rows: {summary['total_rows']}")
+    print(f"valid_iin: {summary['valid_iin']}")
+    print(f"invalid_iin: {summary['invalid_iin']}")
+    print(f"duplicate_iin_groups: {summary['duplicate_iin_groups']}")
+    print(f"duplicate_iin_rows: {summary['duplicate_iin_rows']}")
+    print(f"missing_full_name: {summary['missing_full_name']}")
+    print(f"missing_department: {summary['missing_department']}")
+    print(f"with_training: {summary['with_training']}")
+    print(f"with_certification: {summary['with_certification']}")
+    if warnings:
+        print("warnings:")
+        for warning in warnings:
+            print(f"  - {warning}")
+
+
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Parse HR control list Excel into staging preview CSVs.")
     parser.add_argument("--file", required=True, help="Path to control list .xlsx")
@@ -683,6 +707,17 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Parse and export preview only (default: true)",
+    )
+    parser.add_argument(
+        "--stage",
+        action="store_true",
+        help="Parse and persist batch + rows to hr_import_* staging tables",
+    )
+    parser.add_argument(
+        "--imported-by",
+        type=int,
+        default=None,
+        help="users.user_id for imported_by (default: lowest user_id in DB)",
     )
     parser.add_argument(
         "--apply",
@@ -702,6 +737,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not source_path.is_file():
         print(f"File not found: {source_path}", file=sys.stderr)
         return 1
+
+    if args.stage:
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+        from app.db.engine import engine
+        from app.services.hr_import_service import import_control_list, resolve_default_imported_by
+
+        with engine.begin() as conn:
+            imported_by = args.imported_by
+            if imported_by is None:
+                imported_by = resolve_default_imported_by(conn)
+            batch_id, summary, warnings = import_control_list(
+                conn,
+                file_path=source_path,
+                imported_by=imported_by,
+            )
+        print_stage_summary(batch_id, summary, warnings)
+        return 0
 
     rows, warnings = parse_workbook(source_path)
     audit = build_audit(rows)

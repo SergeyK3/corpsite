@@ -34,11 +34,19 @@ BATCH_STATUS_PARTIALLY_APPLIED = "PARTIALLY_APPLIED"
 BATCH_STATUS_FAILED = "FAILED"
 BATCH_STATUS_CANCELLED = "CANCELLED"
 
+MATCH_STATUS_NOT_PROCESSED = "NOT_PROCESSED"
 MATCH_STATUS_AUTO = "AUTO_MATCH"
 MATCH_STATUS_REVIEW = "REVIEW_REQUIRED"
 MATCH_STATUS_NO_MATCH = "NO_MATCH"
 MATCH_STATUS_INVALID = "INVALID_DATA"
 MATCH_STATUS_SKIPPED = "SKIPPED"
+
+CLASSIFICATION_NORMAL = "NORMAL"
+CLASSIFICATION_INVALID_IIN = "INVALID_IIN"
+CLASSIFICATION_DUPLICATE_IIN = "DUPLICATE_IIN"
+CLASSIFICATION_DECLARATION = "DECLARATION"
+CLASSIFICATION_SUMMARY_ROW = "SUMMARY_ROW"
+CLASSIFICATION_PART_TIME = "PART_TIME"
 
 REVIEW_STATUS_PENDING = "PENDING"
 REVIEW_STATUS_APPROVED = "APPROVED"
@@ -98,7 +106,7 @@ class HrImportRow(Base):
         nullable=False,
         server_default=text("'{}'::jsonb"),
     )
-    match_status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'REVIEW_REQUIRED'"))
+    match_status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'NOT_PROCESSED'"))
     review_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_codes: Mapped[Optional[list[str]]] = mapped_column(ARRAY(Text), nullable=True)
     employee_id: Mapped[Optional[int]] = mapped_column(
