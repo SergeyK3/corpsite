@@ -56,6 +56,26 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function apiPostJson<T>(path: string): Promise<T> {
+  const url = resolveApiUrl(path);
+  const res = await fetch(url, { method: "POST", headers: authHeaders(true), cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, body, "Не удалось выполнить операцию.");
+  }
+  return res.json() as Promise<T>;
+}
+
+async function apiDeleteJson<T>(path: string): Promise<T> {
+  const url = resolveApiUrl(path);
+  const res = await fetch(url, { method: "DELETE", headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, body, "Не удалось удалить.");
+  }
+  return res.json() as Promise<T>;
+}
+
 export type ImportBatchRow = {
   batch_id: number;
   file_name: string;
@@ -182,6 +202,46 @@ export type EmployeeTrainingHistory = {
   items: DocumentCandidate[];
 };
 
+export type SheetDiagnosticRow = {
+  sheet_name: string;
+  sheet_type: string;
+  rows_total: number;
+  employee_rows: number;
+  declaration_rows: number;
+  technical_rows: number;
+  candidates_count: number;
+};
+
+export type SheetDiagnostics = {
+  batch_id: number;
+  items: SheetDiagnosticRow[];
+  totals: {
+    rows_total: number;
+    employee_rows: number;
+    declaration_rows: number;
+    technical_rows: number;
+    candidates_count: number;
+  };
+};
+
+export type RebuildCandidatesResult = {
+  batch_id: number;
+  deleted_candidates: number;
+  preserved_candidates: number;
+  training_candidates: number;
+  certification_candidates: number;
+  education_candidates: number;
+  total_candidates: number;
+  skipped?: boolean;
+};
+
+export type DeleteBatchResult = {
+  batch_id: number;
+  deleted: boolean;
+  deleted_rows: number;
+  deleted_candidates: number;
+};
+
 export async function getDocumentCandidatesSummary(batchId: number): Promise<DocumentCandidatesSummary> {
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/document-candidates/summary`);
 }
@@ -202,6 +262,18 @@ export async function getEmployeeTrainingHistory(
 
 export async function listImportBatches(): Promise<{ items: ImportBatchRow[] }> {
   return apiGetJson("/directory/personnel/import/batches");
+}
+
+export async function deleteImportBatch(batchId: number): Promise<DeleteBatchResult> {
+  return apiDeleteJson(`/directory/personnel/import/batches/${batchId}`);
+}
+
+export async function rebuildDocumentCandidates(batchId: number): Promise<RebuildCandidatesResult> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/document-candidates/rebuild`);
+}
+
+export async function getSheetDiagnostics(batchId: number): Promise<SheetDiagnostics> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/sheet-diagnostics`);
 }
 
 export async function getImportSummary(batchId: number): Promise<ImportSummary> {

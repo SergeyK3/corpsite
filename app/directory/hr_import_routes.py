@@ -17,17 +17,20 @@ from app.services.hr_import_analytics_service import (
     age_distribution,
     batch_summary,
     certification_analytics,
+    delete_batch,
     department_analytics,
     list_batch_rows,
     list_batches,
     position_analytics,
     risk_analytics,
+    sheet_diagnostics,
     training_analytics,
 )
 from app.services.hr_import_document_candidate_service import (
     document_candidates_summary,
     employee_training_history,
     list_document_candidates,
+    rebuild_document_candidates,
 )
 from app.services.hr_import_service import import_control_list
 
@@ -52,6 +55,22 @@ def get_import_batches(
     require_privileged_or_403(user)
     try:
         return _with_conn(list_batches)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.delete("/personnel/import/batches/{batch_id}")
+def delete_import_batch(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(delete_batch, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -171,6 +190,22 @@ def get_import_batch_risks(
         raise as_http500(e)
 
 
+@router.get("/personnel/import/batches/{batch_id}/sheet-diagnostics")
+def get_import_batch_sheet_diagnostics(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(sheet_diagnostics, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
 @router.get("/personnel/import/batches/{batch_id}/document-candidates")
 def get_import_batch_document_candidates(
     batch_id: int,
@@ -180,6 +215,7 @@ def get_import_batch_document_candidates(
     q_name: Optional[str] = Query(default=None),
     has_hours: Optional[bool] = Query(default=None),
     has_valid_until: Optional[bool] = Query(default=None),
+    no_link: Optional[bool] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -195,6 +231,7 @@ def get_import_batch_document_candidates(
             q_name=q_name,
             has_hours=has_hours,
             has_valid_until=has_valid_until,
+            no_link=no_link,
             limit=limit,
             offset=offset,
         )
@@ -214,6 +251,22 @@ def get_import_batch_document_candidates_summary(
     require_privileged_or_403(user)
     try:
         return _with_conn(document_candidates_summary, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/document-candidates/rebuild")
+def post_import_batch_rebuild_document_candidates(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(rebuild_document_candidates, batch_id=batch_id)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:

@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import PersonnelSubNav from "./PersonnelSubNav";
 import {
+  deleteImportBatch,
   listImportBatches,
   mapImportApiError,
   type ImportBatchRow,
@@ -24,27 +25,41 @@ export default function PersonnelImportBatchesPageClient() {
   const [items, setItems] = React.useState<ImportBatchRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<number | null>(null);
+
+  const loadBatches = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await listImportBatches();
+      setItems(data.items);
+      setError(null);
+    } catch (e) {
+      setError(mapImportApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    listImportBatches()
-      .then((data) => {
-        if (!cancelled) {
-          setItems(data.items);
-          setError(null);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(mapImportApiError(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    loadBatches();
+  }, [loadBatches]);
+
+  async function handleDelete(batchId: number, fileName: string) {
+    const ok = window.confirm(
+      `Удалить batch #${batchId} (${fileName})?\n\nБудут удалены staging-строки и candidates. Сотрудники и employee_documents не затрагиваются.`
+    );
+    if (!ok) return;
+    setDeletingId(batchId);
+    try {
+      await deleteImportBatch(batchId);
+      setItems((prev) => prev.filter((row) => row.batch_id !== batchId));
+      setError(null);
+    } catch (e) {
+      setError(mapImportApiError(e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -104,12 +119,28 @@ export default function PersonnelImportBatchesPageClient() {
                   <td className="px-4 py-3">{row.total_rows}</td>
                   <td className="px-4 py-3">{row.error_rows}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/directory/personnel/import/${row.batch_id}`}
-                      className="text-blue-600 hover:underline dark:text-blue-400"
-                    >
-                      Открыть аналитику
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        href={`/directory/personnel/import/${row.batch_id}`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Аналитика
+                      </Link>
+                      <Link
+                        href={`/directory/personnel/import/${row.batch_id}/training`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Документы
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={deletingId === row.batch_id}
+                        onClick={() => handleDelete(row.batch_id, row.file_name)}
+                        className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                      >
+                        {deletingId === row.batch_id ? "Удаление…" : "Удалить"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

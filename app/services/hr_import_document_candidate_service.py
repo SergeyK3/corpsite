@@ -21,6 +21,9 @@ DOCUMENT_KIND_TRAINING = "training"
 DOCUMENT_KIND_CERTIFICATION = "certification"
 DOCUMENT_KIND_EDUCATION = "education"
 
+# Rebuild removes only staging candidates; confirmed/linked records are preserved.
+REBUILDABLE_REVIEW_STATUSES = ("PENDING", "REJECTED")
+
 
 def _lookup_identity_id(conn: Connection, iin: str) -> Optional[int]:
     if not iin:
@@ -206,28 +209,7 @@ def _phase_2c_schema_ready(conn: Connection) -> bool:
     return row is not None
 
 
-def parse_and_persist_document_candidates(conn: Connection, batch_id: int) -> dict[str, int]:
-    """Idempotently rebuild document candidates for a batch. Never writes employee_documents."""
-    if not _phase_2c_schema_ready(conn):
-        return {
-            "batch_id": batch_id,
-            "training_candidates": 0,
-            "certification_candidates": 0,
-            "education_candidates": 0,
-            "total_candidates": 0,
-            "skipped": True,
-        }
-    _ensure_batch_exists(conn, batch_id)
-    conn.execute(
-        text(
-            """
-            DELETE FROM public.hr_import_document_candidates
-            WHERE batch_id = :batch_id
-            """
-        ),
-        {"batch_id": batch_id},
-    )
-
+def _parse_and_insert_candidates(conn: Connection, batch_id: int) -> dict[str, int]:
     training_count = 0
     certification_count = 0
     education_count = 0
@@ -247,13 +229,106 @@ def parse_and_persist_document_candidates(conn: Connection, batch_id: int) -> di
         for fragment in parse_education_raw(row["education_raw"], row["diploma_specialty_raw"]):
             _insert_candidate(conn, row=row, fragment=fragment, employee_identity_id=identity_id)
             education_count += 1
-
     return {
-        "batch_id": batch_id,
         "training_candidates": training_count,
         "certification_candidates": certification_count,
         "education_candidates": education_count,
-        "total_candidates": training_count + certification_count + education_count,
+    }
+
+
+def parse_and_persist_document_candidates(conn: Connection, batch_id: int) -> dict[str, int]:
+    """Idempotently rebuild all document candidates for a batch. Never writes employee_documents."""
+    if not _phase_2c_schema_ready(conn):
+        return {
+            "batch_id": batch_id,
+            "training_candidates": 0,
+            "certification_candidates": 0,
+            "education_candidates": 0,
+            "total_candidates": 0,
+            "skipped": True,
+        }
+    _ensure_batch_exists(conn, batch_id)
+    conn.execute(
+        text(
+            """
+            DELETE FROM public.hr_import_document_candidates
+            WHERE batch_id = :batch_id
+            """
+        ),
+        {"batch_id": batch_id},
+    )
+    counts = _parse_and_insert_candidates(conn, batch_id)
+    return {
+        "batch_id": batch_id,
+        **counts,
+        "total_candidates": (
+            counts["training_candidates"]
+            + counts["certification_candidates"]
+            + counts["education_candidates"]
+        ),
+    }
+
+
+def rebuild_document_candidates(conn: Connection, batch_id: int) -> dict[str, Any]:
+    """Re-parse staging rows; remove only rebuildable candidates (PENDING/REJECTED, no linked doc)."""
+    if not _phase_2c_schema_ready(conn):
+        return {
+            "batch_id": batch_id,
+            "deleted_candidates": 0,
+            "preserved_candidates": 0,
+            "training_candidates": 0,
+            "certification_candidates": 0,
+            "education_candidates": 0,
+            "total_candidates": 0,
+            "skipped": True,
+        }
+    _ensure_batch_exists(conn, batch_id)
+    preserved = int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM public.hr_import_document_candidates
+                WHERE batch_id = :batch_id
+                  AND (
+                    created_document_id IS NOT NULL
+                    OR review_status NOT IN ('PENDING', 'REJECTED')
+                  )
+                """
+            ),
+            {"batch_id": batch_id},
+        ).scalar_one()
+    )
+    deleted = conn.execute(
+        text(
+            """
+            DELETE FROM public.hr_import_document_candidates
+            WHERE batch_id = :batch_id
+              AND created_document_id IS NULL
+              AND review_status IN ('PENDING', 'REJECTED')
+            """
+        ),
+        {"batch_id": batch_id},
+    ).rowcount
+    counts = _parse_and_insert_candidates(conn, batch_id)
+    new_total = int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM public.hr_import_document_candidates
+                WHERE batch_id = :batch_id
+                """
+            ),
+            {"batch_id": batch_id},
+        ).scalar_one()
+    )
+    return {
+        "batch_id": batch_id,
+        "deleted_candidates": int(deleted),
+        "preserved_candidates": preserved,
+        **counts,
+        "total_candidates": new_total,
     }
 
 
@@ -344,6 +419,7 @@ def list_document_candidates(
     q_name: Optional[str] = None,
     has_hours: Optional[bool] = None,
     has_valid_until: Optional[bool] = None,
+    no_link: Optional[bool] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -372,6 +448,8 @@ def list_document_candidates(
         clauses.append("parsed_valid_until IS NOT NULL")
     elif has_valid_until is False:
         clauses.append("parsed_valid_until IS NULL")
+    if no_link is True:
+        clauses.append("(external_url IS NULL OR TRIM(external_url) = '')")
 
     where_sql = " AND ".join(clauses)
     total = int(

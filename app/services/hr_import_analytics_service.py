@@ -637,3 +637,87 @@ def list_batch_rows(
         for r in page
     ]
     return {"batch_id": batch_id, "total": total, "limit": limit, "offset": offset, "items": items}
+
+
+def delete_batch(conn: Connection, batch_id: int) -> dict[str, Any]:
+    """Delete import batch; cascades to hr_import_rows and hr_import_document_candidates."""
+    _ensure_batch_exists(conn, batch_id)
+    row_counts = conn.execute(
+        text(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM public.hr_import_rows WHERE batch_id = :batch_id) AS rows,
+                (SELECT COUNT(*) FROM public.hr_import_document_candidates WHERE batch_id = :batch_id) AS candidates
+            """
+        ),
+        {"batch_id": batch_id},
+    ).mappings().one()
+    conn.execute(
+        text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
+        {"batch_id": batch_id},
+    )
+    return {
+        "batch_id": batch_id,
+        "deleted": True,
+        "deleted_rows": int(row_counts["rows"]),
+        "deleted_candidates": int(row_counts["candidates"]),
+    }
+
+
+def sheet_diagnostics(conn: Connection, batch_id: int) -> dict[str, Any]:
+    """Per Excel sheet breakdown — helps explain low row counts after upload."""
+    rows = _load_staging_rows(conn, batch_id)
+    candidate_counts: dict[str, int] = defaultdict(int)
+    cand_rows = conn.execute(
+        text(
+            """
+            SELECT source_sheet, COUNT(*) AS cnt
+            FROM public.hr_import_document_candidates
+            WHERE batch_id = :batch_id
+            GROUP BY source_sheet
+            """
+        ),
+        {"batch_id": batch_id},
+    ).mappings().all()
+    for row in cand_rows:
+        candidate_counts[str(row["source_sheet"] or "")] = int(row["cnt"])
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        sheet_name = row["source_sheet"] or "—"
+        bucket = grouped.setdefault(
+            sheet_name,
+            {
+                "sheet_name": sheet_name,
+                "sheet_type": row["sheet_type"] or "",
+                "rows_total": 0,
+                "employee_rows": 0,
+                "declaration_rows": 0,
+                "technical_rows": 0,
+                "candidates_count": candidate_counts.get(sheet_name, 0),
+            },
+        )
+        bucket["rows_total"] += 1
+        if is_real_employee_row(row):
+            bucket["employee_rows"] += 1
+        elif is_declaration_row(row):
+            bucket["declaration_rows"] += 1
+        else:
+            bucket["technical_rows"] += 1
+        if row["sheet_type"] and not bucket["sheet_type"]:
+            bucket["sheet_type"] = row["sheet_type"]
+
+    items = sorted(grouped.values(), key=lambda x: x["sheet_name"])
+    return {
+        "batch_id": batch_id,
+        "items": items,
+        "totals": {
+            "rows_total": len(rows),
+            "employee_rows": sum(1 for r in rows if is_real_employee_row(r)),
+            "declaration_rows": sum(1 for r in rows if is_declaration_row(r)),
+            "technical_rows": sum(
+                1 for r in rows if not is_real_employee_row(r) and not is_declaration_row(r)
+            ),
+            "candidates_count": sum(candidate_counts.values()),
+        },
+    }

@@ -12,6 +12,7 @@ import {
   getImportSummary,
   getPositionAnalytics,
   getRiskAnalytics,
+  getSheetDiagnostics,
   getTrainingAnalytics,
   mapImportApiError,
   SHEET_TYPE_LABELS,
@@ -20,6 +21,7 @@ import {
   type ImportSummary,
   type PositionRow,
   type RiskRow,
+  type SheetDiagnosticRow,
 } from "../_lib/importApi.client";
 
 function StatCard({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
@@ -66,6 +68,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
   const [certGroups, setCertGroups] = React.useState<{ group: string; label: string; count: number }[]>([]);
   const [certTotal, setCertTotal] = React.useState(0);
   const [risks, setRisks] = React.useState<RiskRow[]>([]);
+  const [sheetDiagnostics, setSheetDiagnostics] = React.useState<SheetDiagnosticRow[]>([]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -78,8 +81,9 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
       getTrainingAnalytics(batchId),
       getCertificationAnalytics(batchId),
       getRiskAnalytics(batchId),
+      getSheetDiagnostics(batchId),
     ])
-      .then(([s, age, dept, pos, train, cert, risk]) => {
+      .then(([s, age, dept, pos, train, cert, risk, sheets]) => {
         if (cancelled) return;
         setSummary(s);
         setAgeBuckets(age.buckets);
@@ -90,6 +94,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
         setCertGroups(cert.by_group);
         setCertTotal(cert.total_with_certification);
         setRisks(risk.items.filter((r) => r.count > 0));
+        setSheetDiagnostics(sheets.items);
         setError(null);
       })
       .catch((e) => {
@@ -124,7 +129,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             href={`/directory/personnel/import/${batchId}/training`}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
-            Обучение / candidates
+            Документы / обучение
           </Link>
           <Link
             href={`/directory/personnel/import/${batchId}/rows`}
@@ -196,6 +201,48 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
                 ))}
               </ul>
             ) : null}
+          </section>
+
+          <section className="mb-6 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <h2 className="border-b border-zinc-200 px-4 py-3 text-sm font-semibold dark:border-zinc-800">
+              Диагностика листов
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-zinc-50 text-left text-[11px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
+                  <tr>
+                    <th className="px-3 py-2">Лист</th>
+                    <th className="px-3 py-2">Тип</th>
+                    <th className="px-3 py-2">Всего строк</th>
+                    <th className="px-3 py-2">Персонал</th>
+                    <th className="px-3 py-2">Декларации</th>
+                    <th className="px-3 py-2">Техн.</th>
+                    <th className="px-3 py-2">Candidates</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sheetDiagnostics.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-center text-zinc-500">
+                        Нет данных по листам
+                      </td>
+                    </tr>
+                  ) : (
+                    sheetDiagnostics.map((sheet) => (
+                      <tr key={sheet.sheet_name} className="border-t border-zinc-100 dark:border-zinc-800">
+                        <td className="px-3 py-2 font-medium">{sheet.sheet_name}</td>
+                        <td className="px-3 py-2">{SHEET_TYPE_LABELS[sheet.sheet_type] || sheet.sheet_type || "—"}</td>
+                        <td className="px-3 py-2">{sheet.rows_total}</td>
+                        <td className="px-3 py-2">{sheet.employee_rows}</td>
+                        <td className="px-3 py-2">{sheet.declaration_rows}</td>
+                        <td className="px-3 py-2">{sheet.technical_rows}</td>
+                        <td className="px-3 py-2">{sheet.candidates_count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <div className="mb-6 grid gap-4 lg:grid-cols-2">
@@ -279,7 +326,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
                   href={`/directory/personnel/import/${batchId}/training`}
                   className="text-xs text-blue-600 hover:underline dark:text-blue-400"
                 >
-                  candidates →
+                  Документы / обучение →
                 </Link>
               </div>
               <ul className="space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
