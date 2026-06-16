@@ -19,6 +19,40 @@
 4. Установите зависимости:
    pip install -r requirements.txt
 
+## Local Development
+
+Одна команда из корня репозитория (встроенный терминал Cursor):
+
+```bash
+npm run dev
+```
+
+Скрипт последовательно:
+
+1. `docker compose up -d --wait` — Postgres с ожиданием healthcheck
+2. backend — `uvicorn` на `http://127.0.0.1:8000`
+3. ожидание `http-get://127.0.0.1:8000/health` (GET, не HEAD)
+4. frontend — Next.js на `http://localhost:3000`
+
+Откройте в браузере: **http://localhost:3000**
+
+`Ctrl+C` в терминале останавливает backend и frontend (через `concurrently -k`).
+
+### Предварительные требования
+
+- Docker Desktop (для Postgres)
+- Python 3.x с зависимостями проекта (`pip install -r requirements.txt` или активный `venv`)
+- Node.js 20+
+- Файл `.env` в корне (скопируйте из `.env.example`)
+
+### Отдельные команды
+
+| Команда | Назначение |
+|---------|------------|
+| `npm run db` | Только Postgres (`docker compose up -d --wait`) |
+| `npm run backend` | Только FastAPI backend |
+| `npm run frontend` | Только Next.js UI |
+
 ## Использование
 
 (Добавьте инструкции по использованию)
