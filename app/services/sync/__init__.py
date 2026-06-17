@@ -11,6 +11,14 @@ from app.services.sync.package_schema import (
     SyncPackageWriteResult,
 )
 from app.services.sync.export_service import SyncExportError, SyncExportResult, export_hr_sync_package
+from app.services.sync.import_service import (
+    EmployeeResolveResult,
+    EmployeeResolveStatus,
+    SyncImportError,
+    SyncImportResult,
+    import_hr_sync_package,
+    resolve_employee_key,
+)
 from app.services.sync.package_validator import validate_sync_package
 from app.services.sync.package_writer import write_sync_package
 
@@ -19,12 +27,18 @@ __all__ = [
     "READER_VERSION",
     "SCHEMA_VERSION",
     "EmployeeImportProfileOverrideSyncRecord",
+    "EmployeeResolveResult",
+    "EmployeeResolveStatus",
     "EmployeeSyncRecord",
     "SyncExportError",
     "SyncExportResult",
+    "SyncImportError",
+    "SyncImportResult",
     "SyncPackageValidationResult",
     "SyncPackageWriteResult",
     "export_hr_sync_package",
+    "import_hr_sync_package",
+    "resolve_employee_key",
     "validate_sync_package",
     "write_sync_package",
 ]
