@@ -1,8 +1,8 @@
 """Employee import card (Карта2) — staging profile linked to directory employee."""
 from __future__ import annotations
 
-import json
 import re
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import text
@@ -10,14 +10,19 @@ from sqlalchemy.engine import Connection
 
 from app.services.department_recoding_service import lookup_recoding
 from app.services.hr_import_analytics_service import BatchNotFoundError, load_row_payload
+from app.services.employee_import_profile_override_service import (
+    delete_employee_override,
+    employee_overrides_available,
+    load_employee_override,
+    upsert_employee_override,
+)
 from app.services.hr_import_education_profile_service import (
     PROFILE_STATUS_ACTIVE,
     REVIEW_STATUS_PENDING,
-    _load_profile_meta,
+    _load_effective_profile_meta,
     _profile_columns_available,
     _resolve_merged_profile,
 )
-from app.services.hr_import_profile_override_service import prepare_profile_override_for_storage
 
 
 class EmployeeImportCardNotFoundError(LookupError):
@@ -30,7 +35,8 @@ _ROW_SELECT = """
         r.batch_id,
         r.source_sheet,
         r.source_row_number,
-        r.employee_id
+        r.employee_id,
+        b.imported_at
     FROM public.hr_import_rows r
     JOIN public.hr_import_batches b ON b.batch_id = r.batch_id
 """
@@ -65,17 +71,28 @@ def _roster_row_filters() -> str:
     """
 
 
-def _find_import_row_for_employee(conn: Connection, employee_id: int) -> Optional[dict[str, Any]]:
+def _find_import_row_for_employee(
+    conn: Connection,
+    employee_id: int,
+    *,
+    batch_id: Optional[int] = None,
+) -> Optional[dict[str, Any]]:
+    batch_filter = "AND r.batch_id = :batch_id" if batch_id is not None else ""
+    params: dict[str, Any] = {"employee_id": employee_id}
+    if batch_id is not None:
+        params["batch_id"] = batch_id
+
     row = conn.execute(
         text(
             f"""
             {_ROW_SELECT}
             WHERE r.employee_id = :employee_id
+              {batch_filter}
             ORDER BY {_row_preference_order()}
             LIMIT 1
             """
         ),
-        {"employee_id": employee_id},
+        params,
     ).mappings().first()
     if row:
         return dict(row)
@@ -102,11 +119,12 @@ def _find_import_row_for_employee(conn: Connection, employee_id: int) -> Optiona
                 {_ROW_SELECT}
                 WHERE regexp_replace(COALESCE(r.normalized_payload->>'iin', ''), '[^0-9]', '', 'g') = :iin
                   AND {_roster_row_filters()}
+                  {batch_filter}
                 ORDER BY {_row_preference_order()}
                 LIMIT 1
                 """
             ),
-            {"iin": iin_digits},
+            {**params, "iin": iin_digits},
         ).mappings().first()
         if row:
             return dict(row)
@@ -125,13 +143,51 @@ def _find_import_row_for_employee(conn: Connection, employee_id: int) -> Optiona
             {_ROW_SELECT}
             WHERE lower(replace(trim(r.normalized_payload->>'full_name'), 'ё', 'е')) = :norm_name
               AND {_roster_row_filters()}
+              {batch_filter}
             ORDER BY {_row_preference_order()}
             LIMIT 1
             """
         ),
-        {"norm_name": norm_name},
+        {**params, "norm_name": norm_name},
     ).mappings().first()
     return dict(row) if row else None
+
+
+def _get_latest_import_batch(conn: Connection) -> Optional[dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT batch_id, imported_at
+            FROM public.hr_import_batches
+            ORDER BY imported_at DESC NULLS LAST, batch_id DESC
+            LIMIT 1
+            """
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _compute_import_integrity(
+    conn: Connection,
+    employee_id: int,
+    card_batch_id: int,
+) -> dict[str, Any]:
+    latest = _get_latest_import_batch(conn)
+    if not latest:
+        return {
+            "latest_batch_id": None,
+            "card_batch_id": card_batch_id,
+            "missing_from_latest_import": False,
+        }
+    latest_batch_id = int(latest["batch_id"])
+    in_latest = _find_import_row_for_employee(conn, employee_id, batch_id=latest_batch_id)
+    missing = in_latest is None or int(card_batch_id) != latest_batch_id
+    return {
+        "latest_batch_id": latest_batch_id,
+        "card_batch_id": card_batch_id,
+        "missing_from_latest_import": missing,
+    }
+
 
 
 def get_employee_import_card(conn: Connection, employee_id: int) -> dict[str, Any]:
@@ -146,14 +202,31 @@ def get_employee_import_card(conn: Connection, employee_id: int) -> dict[str, An
     metadata = staging["metadata"]
     department = str(payload.get("department", "") or "").strip()
     recoding = lookup_recoding(conn, department)
-    meta = _load_profile_meta(conn, batch_id, row_id)
+    meta = _load_effective_profile_meta(
+        conn,
+        batch_id,
+        row_id,
+        employee_id=employee_id,
+        payload=payload,
+        row_employee_id=staging.get("employee_id"),
+    )
     profile = _resolve_merged_profile(payload, meta)
+    employee_override = load_employee_override(conn, employee_id)
+    integrity = _compute_import_integrity(conn, employee_id, batch_id)
 
-    return {
+    result = {
         "batch_id": batch_id,
         "row_id": row_id,
         "profile_id": row_id,
         "employee_id": employee_id,
+        "card_batch_id": integrity["card_batch_id"],
+        "latest_batch_id": integrity["latest_batch_id"],
+        "missing_from_latest_import": integrity["missing_from_latest_import"],
+        "base_batch_id": employee_override.get("base_batch_id") if employee_override else None,
+        "base_row_id": employee_override.get("base_row_id") if employee_override else None,
+        "base_imported_at": employee_override.get("base_imported_at") if employee_override else None,
+        "created_by": employee_override.get("created_by") if employee_override else None,
+        "updated_by": employee_override.get("updated_by") if employee_override else None,
         "source_sheet": staging["source_sheet"],
         "source_row_number": staging["source_row_number"],
         "full_name": str(payload.get("full_name", "") or ""),
@@ -170,8 +243,9 @@ def get_employee_import_card(conn: Connection, employee_id: int) -> dict[str, An
         "profile": profile,
         "profile_status": meta["profile_status"],
         "review_status": meta["profile_review_status"],
-        "has_override": bool(meta.get("profile_override")),
+        "has_override": bool(employee_override or meta.get("profile_override")),
     }
+    return result
 
 
 def save_employee_import_card(
@@ -179,9 +253,12 @@ def save_employee_import_card(
     employee_id: int,
     *,
     profile: dict[str, Any],
+    updated_by: Optional[int] = None,
 ) -> dict[str, Any]:
-    if not _profile_columns_available(conn):
-        raise BatchNotFoundError("profile staging columns not available — run alembic upgrade head")
+    if not employee_overrides_available(conn) and not _profile_columns_available(conn):
+        raise BatchNotFoundError(
+            "profile persistence not available — run alembic upgrade head"
+        )
 
     loc = _find_import_row_for_employee(conn, employee_id)
     if not loc:
@@ -189,46 +266,39 @@ def save_employee_import_card(
 
     batch_id = int(loc["batch_id"])
     row_id = int(loc["row_id"])
-    override = prepare_profile_override_for_storage(profile)
-    conn.execute(
-        text(
-            """
-            UPDATE public.hr_import_rows
-            SET profile_override = CAST(:profile_override AS JSONB),
-                profile_status = COALESCE(profile_status, :profile_status),
-                profile_review_status = COALESCE(profile_review_status, :review_status)
-            WHERE batch_id = :batch_id AND row_id = :row_id
-            """
-        ),
-        {
-            "batch_id": batch_id,
-            "row_id": row_id,
-            "profile_override": json.dumps(override, ensure_ascii=False),
-            "profile_status": PROFILE_STATUS_ACTIVE,
-            "review_status": REVIEW_STATUS_PENDING,
-        },
+    base_imported_at = loc.get("imported_at")
+    if base_imported_at is not None and not isinstance(base_imported_at, datetime):
+        base_imported_at = None
+
+    upsert_employee_override(
+        conn,
+        employee_id,
+        profile=profile,
+        profile_status=PROFILE_STATUS_ACTIVE,
+        review_status=REVIEW_STATUS_PENDING,
+        updated_by=updated_by,
+        base_batch_id=batch_id,
+        base_row_id=row_id,
+        base_imported_at=base_imported_at,
     )
     return get_employee_import_card(conn, employee_id)
 
 
-def delete_employee_import_card(conn: Connection, employee_id: int) -> dict[str, Any]:
-    if not _profile_columns_available(conn):
-        raise BatchNotFoundError("profile staging columns not available — run alembic upgrade head")
+def delete_employee_import_card(
+    conn: Connection,
+    employee_id: int,
+    *,
+    updated_by: Optional[int] = None,
+) -> dict[str, Any]:
+    del updated_by  # reserved for future audit trail on delete
+    if not employee_overrides_available(conn) and not _profile_columns_available(conn):
+        raise BatchNotFoundError(
+            "profile persistence not available — run alembic upgrade head"
+        )
 
     loc = _find_import_row_for_employee(conn, employee_id)
     if not loc:
         raise EmployeeImportCardNotFoundError(f"import card not found for employee_id={employee_id}")
 
-    batch_id = int(loc["batch_id"])
-    row_id = int(loc["row_id"])
-    conn.execute(
-        text(
-            """
-            UPDATE public.hr_import_rows
-            SET profile_override = NULL
-            WHERE batch_id = :batch_id AND row_id = :row_id
-            """
-        ),
-        {"batch_id": batch_id, "row_id": row_id},
-    )
+    delete_employee_override(conn, employee_id)
     return get_employee_import_card(conn, employee_id)

@@ -45,9 +45,27 @@ corpsite_sync_YYYYMMDD_HHMMSS.zip
 - hr_import_ai_extraction_drafts.jsonl
 
 ## Обязательные этапы
-- Phase A — Persistence Foundation
-- Phase B — Sync Foundation
+- Phase A — Persistence Foundation ✅
+- Phase A.1 — Import Integrity Hardening ✅ ([ADR-038-A1](ADR-038-A1-import-integrity-hardening.md))
+- Phase B — Sync Foundation ([ADR-038-B Stage 0](ADR-038-B-sync-foundation.md))
 - Phase C — Preview & Conflict Engine
+
+## Merge-модель (Phase A / A.1)
+
+Карта формируется как **section-level replace**:
+
+```
+display_profile = apply_profile_override(import_base, employee_override)
+```
+
+Для каждой секции (`education`, `training`, `categories`, `certificates`, `degree`, `awards`, `notes`):
+если ключ **присутствует** в override — секция **полностью заменяется**;
+данные импорта для этой секции **не мержатся** по элементам.
+
+**Known limitation (до Phase C):** новые данные импорта в overridden-секции не отображаются.
+Пример: override certificates=[B] скрывает certificate C из нового импорта.
+
+Тест: `test_certificate_override_hides_new_import_certificate`.
 
 ## Дополнительные этапы
 - Phase D — Admin UI

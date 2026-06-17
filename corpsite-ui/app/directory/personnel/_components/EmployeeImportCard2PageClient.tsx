@@ -242,6 +242,12 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+        {detail?.missing_from_latest_import ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Сотрудник отсутствует в последней выгрузке (batch #{detail.latest_batch_id ?? "—"}).
+            Карта построена по batch #{detail.card_batch_id}. Данные могут быть устаревшими.
+          </div>
+        ) : null}
         {success ? (
           <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
             {success}

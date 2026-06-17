@@ -593,6 +593,14 @@ export type EmployeeImportCard2Detail = {
   row_id: number;
   profile_id: number;
   employee_id: number;
+  card_batch_id: number;
+  latest_batch_id: number | null;
+  missing_from_latest_import: boolean;
+  base_batch_id: number | null;
+  base_row_id: number | null;
+  base_imported_at: string | null;
+  created_by: number | null;
+  updated_by: number | null;
   source_sheet: string;
   source_row_number: number;
   full_name: string;

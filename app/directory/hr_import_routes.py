@@ -103,7 +103,12 @@ def patch_personnel_employee_import_card(
     if not isinstance(profile, dict):
         raise HTTPException(status_code=422, detail="profile object is required")
     try:
-        return _with_conn(save_employee_import_card, employee_id=employee_id, profile=profile)
+        return _with_conn(
+            save_employee_import_card,
+            employee_id=employee_id,
+            profile=profile,
+            updated_by=int(user["user_id"]),
+        )
     except EmployeeImportCardNotFoundError as e:
         raise _employee_import_card_not_found(e)
     except BatchNotFoundError as e:
@@ -121,7 +126,11 @@ def delete_personnel_employee_import_card(
 ) -> Dict[str, Any]:
     require_privileged_or_403(user)
     try:
-        return _with_conn(delete_employee_import_card, employee_id=employee_id)
+        return _with_conn(
+            delete_employee_import_card,
+            employee_id=employee_id,
+            updated_by=int(user["user_id"]),
+        )
     except EmployeeImportCardNotFoundError as e:
         raise _employee_import_card_not_found(e)
     except BatchNotFoundError as e:
@@ -486,6 +495,7 @@ def patch_import_batch_education_profile(
             profile=body.get("profile"),
             review_status=body.get("review_status"),
             profile_status=body.get("profile_status"),
+            updated_by=int(user["user_id"]),
         )
     except BatchNotFoundError as e:
         raise _batch_not_found(e)

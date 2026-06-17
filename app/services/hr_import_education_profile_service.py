@@ -21,6 +21,11 @@ from app.services.hr_import_profile_override_service import (
     is_section_override,
     prepare_profile_override_for_storage,
 )
+from app.services.employee_import_profile_override_service import (
+    load_employee_override,
+    resolve_directory_employee_id,
+    upsert_employee_override,
+)
 from app.services.hr_import_profile_service import build_import_profile
 from scripts.import_hr_control_list import mask_iin
 
@@ -112,6 +117,31 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
+def _load_effective_profile_meta(
+    conn: Connection,
+    batch_id: int,
+    row_id: int,
+    *,
+    employee_id: Optional[int] = None,
+    payload: Optional[dict[str, Any]] = None,
+    row_employee_id: Optional[int] = None,
+) -> dict[str, Any]:
+    """Row meta merged with employee-level override when directory employee is known."""
+    meta = _load_profile_meta(conn, batch_id, row_id)
+    resolved_id = employee_id
+    if resolved_id is None:
+        resolved_id = resolve_directory_employee_id(
+            conn,
+            row_employee_id=row_employee_id,
+            payload=payload,
+        )
+    if resolved_id is not None:
+        employee_meta = load_employee_override(conn, resolved_id)
+        if employee_meta is not None:
+            return employee_meta
+    return meta
+
+
 def _resolve_merged_profile(payload: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
     base = build_import_profile(payload)
     override = meta.get("profile_override")
@@ -127,6 +157,17 @@ def _resolve_merged_profile(payload: dict[str, Any], meta: dict[str, Any]) -> di
     profile["status"] = meta["profile_status"]
     profile["review_status"] = meta["profile_review_status"]
     return profile
+
+
+def _resolve_group_employee_id(conn: Connection, group: dict[str, Any]) -> Optional[int]:
+    primary = group["primary"]
+    staging = primary["staging"]
+    payload = primary["payload"]
+    return resolve_directory_employee_id(
+        conn,
+        row_employee_id=staging.get("employee_id"),
+        payload=payload,
+    )
 
 
 def _record_dedupe_key(record: dict[str, Any], fields: tuple[str, ...]) -> tuple[str, ...]:
@@ -249,7 +290,13 @@ def _build_group_members(
         staging = load_row_payload(conn, batch_id, row["row_id"])
         payload = staging["payload"]
         identity_key = _employee_identity_key(row, payload)
-        meta = _load_profile_meta(conn, batch_id, row["row_id"])
+        meta = _load_effective_profile_meta(
+            conn,
+            batch_id,
+            row["row_id"],
+            payload=payload,
+            row_employee_id=staging.get("employee_id"),
+        )
         recoding = lookup_recoding(conn, str(row.get("department") or ""))
         profile = _resolve_merged_profile(payload, meta)
         grouped[identity_key].append(
@@ -480,6 +527,7 @@ def update_education_profile(
     profile: Optional[dict[str, Any]] = None,
     review_status: Optional[str] = None,
     profile_status: Optional[str] = None,
+    updated_by: Optional[int] = None,
 ) -> dict[str, Any]:
     if not _profile_columns_available(conn):
         raise BatchNotFoundError("profile staging columns not available — run alembic upgrade head")
@@ -498,6 +546,30 @@ def update_education_profile(
         review_status=review_status,
         profile_status=profile_status,
     )
+    resolved_employee_id = _resolve_group_employee_id(conn, group)
+    if stored_profile is not None and resolved_employee_id is not None:
+        batch_row = conn.execute(
+            text(
+                """
+                SELECT imported_at
+                FROM public.hr_import_batches
+                WHERE batch_id = :batch_id
+                """
+            ),
+            {"batch_id": batch_id},
+        ).first()
+        base_imported_at = batch_row[0] if batch_row else None
+        upsert_employee_override(
+            conn,
+            resolved_employee_id,
+            profile=stored_profile,
+            profile_status=profile_status,
+            review_status=review_status,
+            updated_by=updated_by,
+            base_batch_id=batch_id,
+            base_row_id=int(group["primary_row_id"]),
+            base_imported_at=base_imported_at,
+        )
     return get_education_profile(conn, batch_id, group["primary_row_id"])
 
 

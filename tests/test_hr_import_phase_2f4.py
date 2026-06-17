@@ -16,6 +16,7 @@ from app.services.hr_import_education_profile_service import (
     list_education_profiles,
     update_education_profile,
 )
+from app.services.employee_import_profile_override_service import load_employee_override
 from app.services.hr_import_employee_card_service import get_employee_import_card, save_employee_import_card
 from app.services.hr_import_profile_override_service import apply_profile_override, extract_editable_sections_override
 from app.services.hr_import_service import import_control_list
@@ -286,17 +287,9 @@ def test_employee_import_card_save_uses_section_override(staged_batch, seed):
             {"notes": "комментарий", "degree": "доктор медицинских наук"},
         )
         save_employee_import_card(conn, employee_id, profile=edited)
-        row = conn.execute(
-            text(
-                """
-                SELECT profile_override
-                FROM public.hr_import_rows
-                WHERE batch_id = :batch_id AND row_id = :row_id
-                """
-            ),
-            {"batch_id": detail["batch_id"], "row_id": detail["row_id"]},
-        ).scalar_one()
-    override = dict(row or {})
+        employee_override = load_employee_override(conn, employee_id)
+    assert employee_override is not None
+    override = employee_override["profile_override"]
     assert "notes" in override
     assert "degree" in override
     assert "basic" not in override
