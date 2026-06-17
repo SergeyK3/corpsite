@@ -3,6 +3,8 @@
 
 import * as React from "react";
 
+import { loadTenant } from "@/lib/tenant";
+
 import {
   downloadBase64Zip,
   exportSyncPackage,
@@ -10,6 +12,7 @@ import {
   formatSyncTimestamp,
   mapSyncApiError,
   previewSyncPackage,
+  zipSizeKbFromBase64,
   type SyncExportResponse,
   type SyncPreviewItem,
   type SyncPreviewResponse,
@@ -21,20 +24,58 @@ type ActivityRecord = {
   detail: string;
 };
 
+type ExportResultView = SyncExportResponse & {
+  exportedAt: string;
+  zipSizeKb: number;
+};
+
 const STATUS_STYLES: Record<string, string> = {
-  new: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-  update: "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200",
+  identical: "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200",
+  new: "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200",
+  update: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
   merge: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200",
-  identical: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  conflict: "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-200",
+  conflict: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
   orphan: "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200",
   ambiguous: "bg-yellow-100 text-yellow-900 dark:bg-yellow-950 dark:text-yellow-200",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  new: "Новый",
+  update: "Изменение",
+  merge: "Объединение",
+  identical: "Идентичный",
+  conflict: "Конфликт",
+  orphan: "Сирота",
+  ambiguous: "Неоднозначный",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  insert: "Вставка",
+  update: "Обновление",
+  skip: "Пропуск",
+  review_required: "Требует проверки",
+};
+
+const PREVIEW_SUMMARY_TILES: Array<{
+  key: keyof SyncPreviewResponse;
+  label: string;
+  tone?: string;
+}> = [
+  { key: "new_count", label: "Новые" },
+  { key: "update_count", label: "Изменения" },
+  { key: "merge_count", label: "Объединение" },
+  { key: "identical_count", label: "Идентичные" },
+  { key: "orphan_count", label: "Сироты" },
+  { key: "ambiguous_count", label: "Неоднозначные" },
+  { key: "conflict_count", label: "Конфликты", tone: "border-red-300 dark:border-red-800" },
+  { key: "apply_allowed_count", label: "Готово к применению" },
+];
+
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_STYLES[status] ?? "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
+  const label = STATUS_LABELS[status] ?? status;
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
   );
 }
 
@@ -59,12 +100,12 @@ function PreviewTable({ items }: { items: SyncPreviewItem[] }) {
       <table className="min-w-full text-left text-sm">
         <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
           <tr>
-            <th className="px-3 py-2">Employee Key</th>
+            <th className="px-3 py-2">Ключ сотрудника</th>
             <th className="px-3 py-2">Сотрудник</th>
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2">Action</th>
-            <th className="px-3 py-2">Changed Sections</th>
-            <th className="px-3 py-2">Reason</th>
+            <th className="px-3 py-2">Статус</th>
+            <th className="px-3 py-2">Действие</th>
+            <th className="px-3 py-2">Изменённые разделы</th>
+            <th className="px-3 py-2">Причина</th>
           </tr>
         </thead>
         <tbody>
@@ -75,13 +116,13 @@ function PreviewTable({ items }: { items: SyncPreviewItem[] }) {
               <td className="px-3 py-2">
                 <StatusBadge status={item.status} />
                 {item.status === "conflict" ? (
-                  <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                    Conflict · Review required
+                  <div className="mt-1 text-xs font-medium text-red-700 dark:text-red-300">
+                    Конфликт · Требует проверки
                     {item.conflict_type ? ` (${item.conflict_type})` : ""}
                   </div>
                 ) : null}
               </td>
-              <td className="px-3 py-2">{item.action}</td>
+              <td className="px-3 py-2">{ACTION_LABELS[item.action] ?? item.action}</td>
               <td className="px-3 py-2">
                 {item.changed_sections?.length ? item.changed_sections.join(", ") : "—"}
               </td>
@@ -97,6 +138,8 @@ function PreviewTable({ items }: { items: SyncPreviewItem[] }) {
 }
 
 export default function SyncAdminClient() {
+  const previewResultsRef = React.useRef<HTMLDivElement | null>(null);
+
   const [schemaVersion, setSchemaVersion] = React.useState("—");
   const [packageVersion, setPackageVersion] = React.useState("—");
   const [metaError, setMetaError] = React.useState<string | null>(null);
@@ -108,7 +151,7 @@ export default function SyncAdminClient() {
   const [notes, setNotes] = React.useState("");
   const [exporting, setExporting] = React.useState(false);
   const [exportError, setExportError] = React.useState<string | null>(null);
-  const [exportResult, setExportResult] = React.useState<SyncExportResponse | null>(null);
+  const [exportResult, setExportResult] = React.useState<ExportResultView | null>(null);
 
   const [packageFile, setPackageFile] = React.useState<File | null>(null);
   const [previewing, setPreviewing] = React.useState(false);
@@ -122,10 +165,16 @@ export default function SyncAdminClient() {
     let cancelled = false;
     (async () => {
       try {
-        const meta = await fetchSyncMeta();
+        const [meta, tenant] = await Promise.all([fetchSyncMeta(), loadTenant()]);
         if (cancelled) return;
         setSchemaVersion(meta.schema_version);
         setPackageVersion(meta.package_version);
+        if (tenant.orgId) {
+          setSourceOrgId((prev) => prev || tenant.orgId!);
+        }
+        if (tenant.orgName) {
+          setSourceOrgName((prev) => prev || tenant.orgName);
+        }
       } catch (err) {
         if (!cancelled) setMetaError(mapSyncApiError(err, "Не удалось загрузить метаданные sync."));
       }
@@ -134,6 +183,11 @@ export default function SyncAdminClient() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!previewResult) return;
+    previewResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [previewResult]);
 
   const onExport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,13 +205,18 @@ export default function SyncAdminClient() {
         environment,
         notes: notes.trim() || undefined,
       });
-      setExportResult(result);
+      const exportedAt = new Date().toISOString();
+      const enriched: ExportResultView = {
+        ...result,
+        exportedAt,
+        zipSizeKb: zipSizeKbFromBase64(result.package_base64),
+      };
+      setExportResult(enriched);
       downloadBase64Zip(result.package_base64, result.package_name);
-      const at = new Date().toISOString();
       setLastExport({
-        at,
+        at: exportedAt,
         label: result.package_name,
-        detail: `employees=${result.employee_count}, overrides=${result.override_count}, validation=${result.validation_ok ? "ok" : "fail"}`,
+        detail: `сотрудники=${result.employee_count}, overrides=${result.override_count}, ${zipSizeKbFromBase64(result.package_base64)} КБ`,
       });
     } catch (err) {
       setExportError(mapSyncApiError(err, "Не удалось выполнить экспорт."));
@@ -181,7 +240,7 @@ export default function SyncAdminClient() {
       setLastPreview({
         at,
         label: result.package_name || packageFile.name,
-        detail: `records=${result.total_records}, identical=${result.identical_count}, conflict=${result.conflict_count}, apply_allowed=${result.apply_allowed_count}`,
+        detail: `всего=${result.total_records}, идентичные=${result.identical_count}, конфликты=${result.conflict_count}`,
       });
     } catch (err) {
       setPreviewError(mapSyncApiError(err, "Не удалось выполнить preview."));
@@ -292,9 +351,11 @@ export default function SyncAdminClient() {
             <div className="font-medium text-green-900 dark:text-green-100">Экспорт выполнен</div>
             <ul className="mt-2 space-y-1 text-green-800 dark:text-green-200">
               <li>Имя пакета: {exportResult.package_name}</li>
-              <li>employees: {exportResult.employee_count}</li>
-              <li>overrides: {exportResult.override_count}</li>
-              <li>validation_ok: {exportResult.validation_ok ? "true" : "false"}</li>
+              <li>Размер ZIP: {exportResult.zipSizeKb} КБ</li>
+              <li>Дата/время: {formatSyncTimestamp(exportResult.exportedAt)}</li>
+              <li>Сотрудники: {exportResult.employee_count}</li>
+              <li>Overrides: {exportResult.override_count}</li>
+              <li>Проверка: {exportResult.validation_ok ? "успешно" : "ошибка"}</li>
             </ul>
             {exportResult.warnings.length ? (
               <ul className="mt-2 list-disc pl-5 text-xs">
@@ -334,7 +395,7 @@ export default function SyncAdminClient() {
             disabled={previewing}
             className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {previewing ? "Preview…" : "Предпросмотр"}
+            {previewing ? "Предпросмотр…" : "Предпросмотр"}
           </button>
         </form>
         {previewError ? (
@@ -342,10 +403,10 @@ export default function SyncAdminClient() {
         ) : null}
 
         {previewResult ? (
-          <div className="mt-6 space-y-4">
+          <div ref={previewResultsRef} className="mt-6 scroll-mt-4 space-y-4">
             {!previewResult.validation_ok ? (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-                validation_ok: false
+                Проверка пакета не пройдена
                 {previewResult.errors.length ? (
                   <ul className="mt-2 list-disc pl-5 text-xs">
                     {previewResult.errors.map((err) => (
@@ -357,18 +418,18 @@ export default function SyncAdminClient() {
             ) : null}
 
             <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
-              <SummaryTile label="new" value={previewResult.new_count} />
-              <SummaryTile label="update" value={previewResult.update_count} />
-              <SummaryTile label="merge" value={previewResult.merge_count} />
-              <SummaryTile label="identical" value={previewResult.identical_count} />
-              <SummaryTile label="orphan" value={previewResult.orphan_count} />
-              <SummaryTile label="ambiguous" value={previewResult.ambiguous_count} />
-              <SummaryTile label="conflict" value={previewResult.conflict_count} tone="border-amber-300 dark:border-amber-800" />
-              <SummaryTile label="apply_allowed" value={previewResult.apply_allowed_count} />
+              {PREVIEW_SUMMARY_TILES.map(({ key, label, tone }) => (
+                <SummaryTile
+                  key={key}
+                  label={label}
+                  value={Number(previewResult[key] ?? 0)}
+                  tone={tone}
+                />
+              ))}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <SummaryTile label="skipped" value={previewResult.skipped_count} />
-              <SummaryTile label="total_records" value={previewResult.total_records} />
+              <SummaryTile label="Пропущено" value={previewResult.skipped_count} />
+              <SummaryTile label="Всего записей" value={previewResult.total_records} />
             </div>
 
             {previewResult.warnings.length ? (

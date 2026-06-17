@@ -139,3 +139,12 @@ export function formatSyncTimestamp(iso?: string | null): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("ru-RU");
 }
+
+/** Approximate decoded zip size in KB from base64 payload. */
+export function zipSizeKbFromBase64(packageBase64: string): number {
+  const trimmed = packageBase64.trim();
+  if (!trimmed) return 0;
+  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0;
+  const bytes = Math.floor((trimmed.length * 3) / 4) - padding;
+  return Math.max(1, Math.round(bytes / 1024));
+}
