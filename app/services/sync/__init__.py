@@ -19,6 +19,12 @@ from app.services.sync.import_service import (
     import_hr_sync_package,
     resolve_employee_key,
 )
+from app.services.sync.preview_service import (
+    SyncPreviewItem,
+    SyncPreviewResult,
+    preview_hr_sync_package,
+    preview_result_to_dict,
+)
 from app.services.sync.package_validator import validate_sync_package
 from app.services.sync.package_writer import write_sync_package
 
@@ -34,10 +40,14 @@ __all__ = [
     "SyncExportResult",
     "SyncImportError",
     "SyncImportResult",
+    "SyncPreviewItem",
+    "SyncPreviewResult",
     "SyncPackageValidationResult",
     "SyncPackageWriteResult",
     "export_hr_sync_package",
     "import_hr_sync_package",
+    "preview_hr_sync_package",
+    "preview_result_to_dict",
     "resolve_employee_key",
     "validate_sync_package",
     "write_sync_package",
