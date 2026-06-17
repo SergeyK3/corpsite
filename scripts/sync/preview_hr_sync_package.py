@@ -31,11 +31,13 @@ def main() -> int:
         print(f"total_records={result.total_records}")
         print(f"new={result.new_count}")
         print(f"update={result.update_count}")
+        print(f"merge={result.merge_count}")
         print(f"identical={result.identical_count}")
         print(f"orphan={result.orphan_count}")
         print(f"ambiguous={result.ambiguous_count}")
         print(f"conflict={result.conflict_count}")
         print(f"skipped={result.skipped_count}")
+        print(f"apply_allowed={result.apply_allowed_count}")
 
     for warning in result.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)

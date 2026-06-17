@@ -296,6 +296,25 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text_val = value.strip()
+    if text_val.endswith("Z"):
+        text_val = text_val[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text_val)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def parse_semver(value: str) -> tuple[Optional[tuple[int, int]], Optional[str]]:
     match = _SEMVER_RE.match((value or "").strip())
     if not match:

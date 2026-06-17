@@ -26,6 +26,8 @@ Phase B создаёт **механизм обмена** кадровыми да
 
 **B.4 ✅ (2026-06-17):** `app/services/sync/preview_service.py`, `scripts/sync/preview_hr_sync_package.py`; `tests/test_adr038_phase_b4_preview_engine.py`.
 
+**C.1 ✅ (2026-06-17):** `app/services/sync/conflict_policy.py`; apply gate в import; [ADR-038-C.1](ADR-038-C-conflict-policy.md).
+
 ---
 
 ## 1. Имя и структура пакета
@@ -446,8 +448,7 @@ Editable sections: `education`, `training`, `categories`, `certificates`, `degre
 #### Limitations (B.4)
 
 - Нет UI, approval workflow, auto-apply после preview
-- `conflict` не блокирует B.3 `--apply` (apply и preview независимы)
-- Нет section-level merge resolution (Phase C)
+- ~~`conflict` не блокирует B.3 `--apply`~~ → исправлено в [C.1](ADR-038-C-conflict-policy.md) (apply gate)
 - `_sync_provenance` на target исключается из сравнения `profile_override`
 
 **Explicitly out of Phase B:** UI, scheduled jobs, bidirectional sync, full Conflict Engine UI (Phase C).
@@ -471,7 +472,8 @@ Editable sections: `education`, `training`, `categories`, `certificates`, `degre
 - **B.2 ✅** — DB export engine, CLI, post-export validation.
 - **B.3 ✅** — import engine, dry-run/apply, employee_key resolver, orphan/ambiguous skip.
 - **B.4 ✅** — preview/diff engine, section classification, read-only guarantee.
-- **Следующий шаг: Phase C** — Conflict Engine UI, section merge, approval workflow.
+- **C.1 ✅** — conflict policy, apply gate, section merge on import.
+- **Следующий шаг: Phase C.2** — conflict resolution workflow, audit log, optional UI.
 
 ---
 

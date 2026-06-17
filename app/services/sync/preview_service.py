@@ -1,9 +1,7 @@
-"""ADR-038 Phase B.4 — HR sync package preview / diff engine."""
+"""ADR-038 Phase B.4 / C.1 — HR sync package preview / diff engine."""
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,26 +11,23 @@ from app.services.employee_import_profile_override_service import (
     employee_overrides_available,
     load_employee_override,
 )
+from app.services.sync.conflict_policy import (
+    STATUS_CONFLICT,
+    STATUS_IDENTICAL,
+    STATUS_MERGE,
+    STATUS_NEW,
+    STATUS_UPDATE,
+    SyncOverrideClassification,
+    classify_sync_override,
+    present_sections,
+)
 from app.services.sync.import_service import (
     EmployeeResolveStatus,
     _load_override_records,
-    _parse_iso_datetime,
     resolve_employee_key,
 )
 from app.services.sync.package_schema import EmployeeImportProfileOverrideSyncRecord
 from app.services.sync.package_validator import validate_sync_package
-
-EDITABLE_SECTIONS = (
-    "education",
-    "training",
-    "categories",
-    "certificates",
-    "degree",
-    "awards",
-    "notes",
-)
-
-_SYNC_PROVENANCE_KEY = "_sync_provenance"
 
 
 @dataclass
@@ -47,6 +42,9 @@ class SyncPreviewItem:
     changed_sections: list[str] = field(default_factory=list)
     incoming_sections: list[str] = field(default_factory=list)
     target_sections: list[str] = field(default_factory=list)
+    conflict_type: Optional[str] = None
+    conflict_sections: list[str] = field(default_factory=list)
+    apply_allowed: bool = False
 
 
 @dataclass
@@ -56,11 +54,13 @@ class SyncPreviewResult:
     total_records: int = 0
     new_count: int = 0
     update_count: int = 0
+    merge_count: int = 0
     identical_count: int = 0
     orphan_count: int = 0
     ambiguous_count: int = 0
     conflict_count: int = 0
     skipped_count: int = 0
+    apply_allowed_count: int = 0
     items: list[SyncPreviewItem] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -72,133 +72,48 @@ def preview_result_to_dict(result: SyncPreviewResult) -> dict[str, Any]:
     return payload
 
 
-def _stable_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
-def _strip_sync_metadata(override: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in override.items() if key != _SYNC_PROVENANCE_KEY}
-
-
-def _present_sections(override: dict[str, Any]) -> list[str]:
-    return [section for section in EDITABLE_SECTIONS if section in override]
-
-
-def _sections_differ(incoming: dict[str, Any], target: dict[str, Any], section: str) -> bool:
-    incoming_has = section in incoming
-    target_has = section in target
-    if not incoming_has and not target_has:
-        return False
-    if incoming_has != target_has:
-        return True
-    return _stable_json(incoming.get(section)) != _stable_json(target.get(section))
-
-
-def _diff_sections(
-    incoming: dict[str, Any],
-    target: dict[str, Any],
-) -> tuple[list[str], list[str], list[str]]:
-    incoming_clean = _strip_sync_metadata(incoming)
-    target_clean = _strip_sync_metadata(target)
-    incoming_sections = _present_sections(incoming_clean)
-    target_sections = _present_sections(target_clean)
-    candidate_sections = sorted(set(incoming_sections) | set(target_sections))
-    changed_sections = [
-        section for section in candidate_sections if _sections_differ(incoming_clean, target_clean, section)
-    ]
-    return incoming_sections, target_sections, changed_sections
-
-
-def _overrides_identical(incoming: dict[str, Any], target: dict[str, Any]) -> bool:
-    return _stable_json(_strip_sync_metadata(incoming)) == _stable_json(_strip_sync_metadata(target))
-
-
-def _classify_resolved_override(
+def classification_to_preview_item(
     record: EmployeeImportProfileOverrideSyncRecord,
     *,
-    employee_id: int,
-    target_override: Optional[dict[str, Any]],
+    employee_id: Optional[int],
+    target_updated_at: Optional[str],
+    classification: SyncOverrideClassification,
 ) -> SyncPreviewItem:
-    incoming_profile = record.profile_override
-    incoming_updated_at = record.updated_at
-    target_updated_at = target_override.get("updated_at") if target_override else None
-
-    if not target_override:
-        return SyncPreviewItem(
-            employee_key=record.employee_key,
-            target_employee_id=employee_id,
-            status="new",
-            action="insert",
-            reason="no target override",
-            incoming_updated_at=incoming_updated_at,
-            target_updated_at=None,
-            incoming_sections=_present_sections(incoming_profile),
-            target_sections=[],
-            changed_sections=_present_sections(incoming_profile),
-        )
-
-    target_profile = target_override.get("profile_override") or {}
-    incoming_sections, target_sections, changed_sections = _diff_sections(incoming_profile, target_profile)
-
-    if _overrides_identical(incoming_profile, target_profile):
-        return SyncPreviewItem(
-            employee_key=record.employee_key,
-            target_employee_id=employee_id,
-            status="identical",
-            action="skip",
-            reason="profile_override unchanged",
-            incoming_updated_at=incoming_updated_at,
-            target_updated_at=target_updated_at,
-            incoming_sections=incoming_sections,
-            target_sections=target_sections,
-            changed_sections=[],
-        )
-
-    incoming_dt = _parse_iso_datetime(incoming_updated_at)
-    target_dt = _parse_iso_datetime(target_updated_at)
-    if target_dt and incoming_dt and target_dt > incoming_dt:
-        return SyncPreviewItem(
-            employee_key=record.employee_key,
-            target_employee_id=employee_id,
-            status="conflict",
-            action="review_required",
-            reason="target updated_at is newer than incoming",
-            incoming_updated_at=incoming_updated_at,
-            target_updated_at=target_updated_at,
-            incoming_sections=incoming_sections,
-            target_sections=target_sections,
-            changed_sections=changed_sections,
-        )
-
     return SyncPreviewItem(
         employee_key=record.employee_key,
         target_employee_id=employee_id,
-        status="update",
-        action="update",
-        reason="incoming override differs from target",
-        incoming_updated_at=incoming_updated_at,
+        status=classification.status,
+        action=classification.action,
+        reason=classification.reason,
+        incoming_updated_at=record.updated_at,
         target_updated_at=target_updated_at,
-        incoming_sections=incoming_sections,
-        target_sections=target_sections,
-        changed_sections=changed_sections,
+        changed_sections=classification.changed_sections,
+        incoming_sections=classification.incoming_sections,
+        target_sections=classification.target_sections,
+        conflict_type=classification.conflict_type,
+        conflict_sections=classification.conflict_sections,
+        apply_allowed=classification.apply_allowed,
     )
 
 
 def _increment_counts(result: SyncPreviewResult, item: SyncPreviewItem) -> None:
-    status = item.status
-    if status == "new":
+    if item.status == STATUS_NEW:
         result.new_count += 1
-    elif status == "update":
+    elif item.status == STATUS_UPDATE:
         result.update_count += 1
-    elif status == "identical":
+    elif item.status == STATUS_MERGE:
+        result.merge_count += 1
+    elif item.status == STATUS_IDENTICAL:
         result.identical_count += 1
-    elif status == "orphan":
+    elif item.status == "orphan":
         result.orphan_count += 1
-    elif status == "ambiguous":
+    elif item.status == "ambiguous":
         result.ambiguous_count += 1
-    elif status == "conflict":
+    elif item.status == STATUS_CONFLICT:
         result.conflict_count += 1
 
+    if item.apply_allowed:
+        result.apply_allowed_count += 1
     if item.action in {"skip", "review_required"}:
         result.skipped_count += 1
 
@@ -237,6 +152,7 @@ def preview_hr_sync_package(
     for record in override_records:
         resolution = resolve_employee_key(conn, record.employee_key)
         if resolution.status == EmployeeResolveStatus.ORPHAN:
+            incoming_sections = present_sections(record.profile_override)
             item = SyncPreviewItem(
                 employee_key=record.employee_key,
                 target_employee_id=None,
@@ -245,12 +161,13 @@ def preview_hr_sync_package(
                 reason="employee_key not found",
                 incoming_updated_at=record.updated_at,
                 target_updated_at=None,
-                incoming_sections=_present_sections(record.profile_override),
-                target_sections=[],
-                changed_sections=_present_sections(record.profile_override),
+                incoming_sections=incoming_sections,
+                changed_sections=incoming_sections,
+                apply_allowed=False,
             )
             result.warnings.append(f"employee_key not found: {record.employee_key}")
         elif resolution.status == EmployeeResolveStatus.AMBIGUOUS:
+            incoming_sections = present_sections(record.profile_override)
             item = SyncPreviewItem(
                 employee_key=record.employee_key,
                 target_employee_id=None,
@@ -259,9 +176,9 @@ def preview_hr_sync_package(
                 reason=f"employee_key ambiguous candidates={list(resolution.candidate_ids)}",
                 incoming_updated_at=record.updated_at,
                 target_updated_at=None,
-                incoming_sections=_present_sections(record.profile_override),
-                target_sections=[],
-                changed_sections=_present_sections(record.profile_override),
+                incoming_sections=incoming_sections,
+                changed_sections=incoming_sections,
+                apply_allowed=False,
             )
             result.warnings.append(
                 f"employee_key ambiguous: {record.employee_key} candidates={list(resolution.candidate_ids)}"
@@ -269,10 +186,12 @@ def preview_hr_sync_package(
         else:
             assert resolution.employee_id is not None
             target_override = load_employee_override(conn, resolution.employee_id)
-            item = _classify_resolved_override(
+            classification = classify_sync_override(record, target_override=target_override)
+            item = classification_to_preview_item(
                 record,
                 employee_id=resolution.employee_id,
-                target_override=target_override,
+                target_updated_at=target_override.get("updated_at") if target_override else None,
+                classification=classification,
             )
 
         result.items.append(item)

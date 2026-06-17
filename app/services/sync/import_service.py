@@ -12,12 +12,23 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from app.services.employee_import_profile_override_service import employee_overrides_available
+from app.services.employee_import_profile_override_service import (
+    employee_overrides_available,
+    load_employee_override,
+)
 from app.services.hr_import_profile_override_service import prepare_profile_override_for_storage
+from app.services.sync.conflict_policy import (
+    STATUS_CONFLICT,
+    STATUS_IDENTICAL,
+    STATUS_MERGE,
+    STATUS_UPDATE,
+    classify_sync_override,
+)
 from app.services.sync.package_schema import (
     EmployeeImportProfileOverrideSyncRecord,
     digits_only,
     normalize_full_name,
+    parse_iso_datetime,
 )
 from app.services.sync.package_validator import validate_sync_package
 
@@ -47,12 +58,18 @@ class SyncImportResult:
     resolved_count: int = 0
     orphan_count: int = 0
     ambiguous_count: int = 0
+    identical_count: int = 0
+    conflict_count: int = 0
+    merge_count: int = 0
+    apply_allowed_count: int = 0
     applied_count: int = 0
     skipped_count: int = 0
+    blocked_count: int = 0
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     validation_ok: bool = False
     dry_run: bool = True
+    apply_gate_enforced: bool = True
 
 
 _SYNC_PROVENANCE_KEY = "_sync_provenance"
@@ -197,8 +214,17 @@ def resolve_employee_key(conn: Connection, employee_key: str) -> EmployeeResolve
     return EmployeeResolveResult(status=EmployeeResolveStatus.ORPHAN)
 
 
-def _build_profile_override_for_import(record: EmployeeImportProfileOverrideSyncRecord) -> dict[str, Any]:
-    override = prepare_profile_override_for_storage(record.profile_override)
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    return parse_iso_datetime(value)
+
+
+def _build_profile_override_for_import(
+    record: EmployeeImportProfileOverrideSyncRecord,
+    *,
+    profile_body: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    source_profile = profile_body if profile_body is not None else record.profile_override
+    override = prepare_profile_override_for_storage(source_profile)
     provenance = {
         "base_source_file": record.base_source_file,
         "base_source_batch_id": record.base_source_batch_id,
@@ -219,8 +245,9 @@ def _apply_sync_override(
     *,
     employee_id: int,
     record: EmployeeImportProfileOverrideSyncRecord,
+    profile_body: Optional[dict[str, Any]] = None,
 ) -> None:
-    profile_override = _build_profile_override_for_import(record)
+    profile_override = _build_profile_override_for_import(record, profile_body=profile_body)
     created_at = _parse_iso_datetime(record.created_at) or datetime.now(timezone.utc)
     updated_at = _parse_iso_datetime(record.updated_at) or created_at
     base_imported_at = _parse_iso_datetime(record.base_imported_at)
@@ -320,10 +347,15 @@ def import_hr_sync_package(
     *,
     package_path: Path,
     apply_changes: bool = False,
+    enforce_apply_gate: bool = True,
 ) -> SyncImportResult:
     """Import overrides from a validated sync package (dry-run or apply)."""
     dry_run = not apply_changes
-    result = SyncImportResult(package_path=package_path, dry_run=dry_run)
+    result = SyncImportResult(
+        package_path=package_path,
+        dry_run=dry_run,
+        apply_gate_enforced=enforce_apply_gate,
+    )
 
     if not employee_overrides_available(conn):
         result.errors.append(
@@ -345,25 +377,60 @@ def import_hr_sync_package(
 
     for record in override_records:
         resolution = resolve_employee_key(conn, record.employee_key)
-        if resolution.status == EmployeeResolveStatus.RESOLVED:
-            result.resolved_count += 1
-            if apply_changes:
-                assert resolution.employee_id is not None
-                _apply_sync_override(conn, employee_id=resolution.employee_id, record=record)
-                result.applied_count += 1
+        if resolution.status != EmployeeResolveStatus.RESOLVED:
+            result.skipped_count += 1
+            if resolution.status == EmployeeResolveStatus.ORPHAN:
+                result.orphan_count += 1
+                result.warnings.append(f"employee_key not found: {record.employee_key}")
+            elif resolution.status == EmployeeResolveStatus.AMBIGUOUS:
+                result.ambiguous_count += 1
+                result.warnings.append(
+                    f"employee_key ambiguous: {record.employee_key} "
+                    f"candidates={list(resolution.candidate_ids)}"
+                )
             continue
 
-        result.skipped_count += 1
-        if resolution.status == EmployeeResolveStatus.ORPHAN:
-            result.orphan_count += 1
+        assert resolution.employee_id is not None
+        result.resolved_count += 1
+        target_override = load_employee_override(conn, resolution.employee_id)
+        classification = classify_sync_override(record, target_override=target_override)
+
+        if classification.status == STATUS_IDENTICAL:
+            result.identical_count += 1
+            result.skipped_count += 1
+            continue
+
+        if classification.status == STATUS_CONFLICT:
+            result.conflict_count += 1
+            result.blocked_count += 1
+            result.skipped_count += 1
+            conflict_label = classification.conflict_type or "CONFLICT"
+            sections = ",".join(classification.conflict_sections) or "-"
             result.warnings.append(
-                f"employee_key not found: {record.employee_key}"
+                f"apply blocked ({conflict_label}) employee_key={record.employee_key} sections={sections}"
             )
-        elif resolution.status == EmployeeResolveStatus.AMBIGUOUS:
-            result.ambiguous_count += 1
-            result.warnings.append(
-                f"employee_key ambiguous: {record.employee_key} "
-                f"candidates={list(resolution.candidate_ids)}"
-            )
+            continue
+
+        if classification.apply_allowed:
+            result.apply_allowed_count += 1
+        if classification.status == STATUS_MERGE:
+            result.merge_count += 1
+
+        if not apply_changes:
+            continue
+
+        if enforce_apply_gate and not classification.apply_allowed:
+            result.blocked_count += 1
+            result.skipped_count += 1
+            continue
+
+        profile_body = classification.merged_profile_override
+        _apply_sync_override(
+            conn,
+            employee_id=resolution.employee_id,
+            record=record,
+            profile_body=profile_body,
+        )
+        result.applied_count += 1
 
     return result

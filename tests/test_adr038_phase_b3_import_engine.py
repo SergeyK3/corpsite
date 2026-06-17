@@ -300,7 +300,27 @@ def test_name_fallback_resolution(import_targets) -> None:
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_upsert_existing_override(import_targets, tmp_path: Path) -> None:
     package_path_v1 = _package_for_targets(tmp_path / "v1", import_targets, notes="version 1")
-    package_path_v2 = _package_for_targets(tmp_path / "v2", import_targets, notes="version 2")
+    employees_v2 = [
+        EmployeeSyncRecord(
+            employee_key=f"iin:{import_targets['iin_value']}",
+            full_name="Иванов",
+            source_employee_id=import_targets["employee_iin_id"],
+            iin=import_targets["iin_value"],
+            status="active",
+        )
+    ]
+    overrides_v2 = [
+        EmployeeImportProfileOverrideSyncRecord(
+            employee_key=f"iin:{import_targets['iin_value']}",
+            profile_override={
+                "notes": "version 1",
+                "certificates": [{"kind": "Cert B", "topic": "topic", "date": "2021-01-01"}],
+            },
+            created_at="2026-06-01T10:00:00+00:00",
+            updated_at="2026-06-15T12:30:00+00:00",
+        )
+    ]
+    package_path_v2 = _write_package(tmp_path / "v2", employees=employees_v2, overrides=overrides_v2)
 
     with engine.begin() as conn:
         import_hr_sync_package(conn, package_path=package_path_v1, apply_changes=True)
@@ -310,7 +330,8 @@ def test_upsert_existing_override(import_targets, tmp_path: Path) -> None:
     with engine.connect() as conn:
         loaded = load_employee_override(conn, import_targets["employee_iin_id"])
     assert loaded is not None
-    assert loaded["profile_override"]["notes"] == "version 2"
+    assert loaded["profile_override"]["notes"] == "version 1"
+    assert loaded["profile_override"]["certificates"][0]["kind"] == "Cert B"
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

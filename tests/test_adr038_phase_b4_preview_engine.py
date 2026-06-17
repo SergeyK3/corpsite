@@ -16,6 +16,7 @@ from app.services.employee_import_profile_override_service import (
     load_employee_override,
     upsert_employee_override,
 )
+from app.services.sync.conflict_policy import CONFLICT_TYPE_SECTION_OVERLAP
 from app.services.sync.preview_service import preview_hr_sync_package
 from app.services.sync.package_schema import (
     EmployeeImportProfileOverrideSyncRecord,
@@ -185,7 +186,7 @@ def preview_fixture(seed, tmp_path: Path):
             upsert_employee_override(
                 conn,
                 employee_ids["update"],
-                profile={"notes": "old target notes"},
+                profile={"training": [{"topic": "old target training"}]},
                 updated_by=user_id,
             )
             conn.execute(
@@ -373,9 +374,10 @@ def test_preview_valid_package(preview_fixture) -> None:
     assert result.validation_ok is True
     assert result.total_records == 7
     assert result.new_count == 1
-    assert result.update_count == 2
+    assert result.update_count == 0
+    assert result.merge_count == 1
     assert result.identical_count == 1
-    assert result.conflict_count == 1
+    assert result.conflict_count == 2
     assert result.orphan_count == 1
     assert result.ambiguous_count == 1
 
@@ -400,11 +402,11 @@ def test_identical_override_classified_as_skip(preview_fixture) -> None:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_changed_override_classified_as_update(preview_fixture) -> None:
+def test_changed_override_classified_as_merge(preview_fixture) -> None:
     with engine.connect() as conn:
         result = preview_hr_sync_package(conn, package_path=preview_fixture["package_path"])
     item = _item_by_key(result, preview_fixture["keys"]["update"])
-    assert item.status == "update"
+    assert item.status == "merge"
     assert item.action == "update"
     assert "notes" in item.changed_sections
 
@@ -441,6 +443,8 @@ def test_changed_sections_detects_certificates_training_notes(preview_fixture) -
     with engine.connect() as conn:
         result = preview_hr_sync_package(conn, package_path=preview_fixture["package_path"])
     item = _item_by_key(result, preview_fixture["keys"]["sections"])
+    assert item.status == "conflict"
+    assert item.conflict_type == CONFLICT_TYPE_SECTION_OVERLAP
     assert "certificates" in item.changed_sections
     assert "notes" in item.changed_sections
     assert "training" in item.changed_sections

@@ -50,6 +50,11 @@ def main() -> int:
     print(f"orphan={result.orphan_count}")
     print(f"ambiguous={result.ambiguous_count}")
     print(f"applied={result.applied_count}")
+    print(f"blocked={result.blocked_count}")
+    print(f"conflict={result.conflict_count}")
+    print(f"merge={result.merge_count}")
+    print(f"identical={result.identical_count}")
+    print(f"apply_allowed={result.apply_allowed_count}")
     print(f"skipped={result.skipped_count}")
 
     for warning in result.warnings:
