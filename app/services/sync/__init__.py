@@ -10,6 +10,7 @@ from app.services.sync.package_schema import (
     SyncPackageValidationResult,
     SyncPackageWriteResult,
 )
+from app.services.sync.export_service import SyncExportError, SyncExportResult, export_hr_sync_package
 from app.services.sync.package_validator import validate_sync_package
 from app.services.sync.package_writer import write_sync_package
 
@@ -19,8 +20,11 @@ __all__ = [
     "SCHEMA_VERSION",
     "EmployeeImportProfileOverrideSyncRecord",
     "EmployeeSyncRecord",
+    "SyncExportError",
+    "SyncExportResult",
     "SyncPackageValidationResult",
     "SyncPackageWriteResult",
+    "export_hr_sync_package",
     "validate_sync_package",
     "write_sync_package",
 ]

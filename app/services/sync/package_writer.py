@@ -36,6 +36,16 @@ def _package_filename(source_instance_id: str, exported_at: datetime) -> str:
     return f"corpsite_sync_{safe_instance}_{stamp}.zip"
 
 
+def resolve_sync_package_path(
+    output_path: Path,
+    *,
+    source_instance_id: str,
+    exported_at: datetime,
+) -> Path:
+    package_name = _package_filename(source_instance_id, exported_at)
+    return output_path if output_path.suffix == ".zip" else output_path / package_name
+
+
 def write_sync_package(
     output_path: Path,
     *,
@@ -47,6 +57,8 @@ def write_sync_package(
     environment: str = "local",
     notes: Optional[str] = None,
     exported_at: Optional[datetime] = None,
+    metadata_extensions: Optional[dict[str, Any]] = None,
+    allow_overwrite: bool = False,
 ) -> SyncPackageWriteResult:
     """Build a v1 sync package zip from in-memory records (no DB export)."""
     if isinstance(source_organization, SourceOrganization):
@@ -76,6 +88,8 @@ def write_sync_package(
         "environment": environment,
         "notes": notes,
     }
+    if metadata_extensions:
+        metadata.update(metadata_extensions)
     file_contents["metadata.json"] = encode_json(metadata)
 
     employee_records = [record.to_dict() for record in employees]
@@ -117,6 +131,9 @@ def write_sync_package(
     package_name = _package_filename(source_instance_id, export_moment)
     target_path = output_path if output_path.suffix == ".zip" else output_path / package_name
     target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if target_path.exists() and not allow_overwrite:
+        raise FileExistsError(f"sync package already exists: {target_path}")
 
     with zipfile.ZipFile(target_path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for filename in sorted(file_contents):
