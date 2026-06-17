@@ -77,7 +77,7 @@ export type SyncPreviewResponse = {
 };
 
 export function mapSyncApiError(err: unknown, fallback: string): string {
-  return formatThrownError(err, fallback);
+  return formatThrownError(err, { fallback });
 }
 
 export async function fetchSyncMeta(): Promise<SyncMeta> {
