@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
 import { resolveApiUrl } from "@/lib/apiBase";
-import { isAuthed, logout as authLogout } from "@/lib/auth";
+import { getSessionAccessToken, isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
 import {
   formatThrownError,
@@ -89,12 +89,7 @@ function normalizeList<T>(body: any): T[] {
 }
 
 function getBearer(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return (window.sessionStorage.getItem("access_token") ?? "").toString().trim();
-  } catch {
-    return "";
-  }
+  return getSessionAccessToken();
 }
 
 async function apiGetRuns(): Promise<RegularTaskRun[]> {

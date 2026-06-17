@@ -5,7 +5,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import PersonnelSubNav from "./PersonnelSubNav";
 import { mapImportApiError, uploadControlList, type ImportSummary } from "../_lib/importApi.client";
 
 export default function PersonnelImportUploadPageClient() {
@@ -39,8 +38,7 @@ export default function PersonnelImportUploadPageClient() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <PersonnelSubNav />
+    <div className="px-4 py-3">
       <div className="mb-4">
         <h1 className="text-xl font-semibold">Загрузка контрольного списка</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">

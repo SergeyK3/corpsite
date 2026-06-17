@@ -3,14 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 
-import ImportBatchSubNav from "./ImportBatchSubNav";
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   getRowReviewDetail,
   mapImportApiError,
   runRowAiExtraction,
   type RowReviewDetail,
 } from "../_lib/importApi.client";
+import { calcRecordValidityNote } from "../_lib/importProfileEditor";
 
 const EDUCATION_SECTION_LABELS: Record<string, string> = {
   basic: "Базовое образование",
@@ -211,9 +210,7 @@ export default function PersonnelImportRowReviewPageClient({
   const profile = detail?.profile;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <PersonnelSubNav />
-      <ImportBatchSubNav batchId={batchId} />
+    <div className="px-4 py-3">
       <div className="mb-4">
         <Link
           href={`/directory/personnel/import/${batchId}/review`}
@@ -299,19 +296,39 @@ export default function PersonnelImportRowReviewPageClient({
 
           <SectionTable
             title="Квалификационные категории"
-            headers={["Категория", "Специальность", "Дата"]}
+            headers={["Категория", "Специальность", "Дата", "Примечание"]}
             rows={
-              profile?.category_records.map((q) => [q.category, q.specialty, q.issued_at]) ??
-              detail.qualification_categories.map((q) => [q.category, q.specialty, q.date])
+              profile?.category_records.map((q) => [
+                q.category,
+                q.specialty,
+                q.issued_at,
+                calcRecordValidityNote(q.issued_at) ?? "",
+              ]) ??
+              detail.qualification_categories.map((q) => [
+                q.category,
+                q.specialty,
+                q.date,
+                calcRecordValidityNote(q.date) ?? "",
+              ])
             }
           />
 
           <SectionTable
             title="Сертификаты"
-            headers={["Специальность", "Дата выдачи", "Дата окончания"]}
+            headers={["Специальность", "Дата выдачи", "Дата окончания", "Примечание"]}
             rows={
-              profile?.certificate_records.map((c) => [c.specialty, c.issued_at, c.valid_until]) ??
-              detail.certificates.map((c) => [c.topic, c.date, c.valid_until || ""])
+              profile?.certificate_records.map((c) => [
+                c.specialty,
+                c.issued_at,
+                c.valid_until,
+                calcRecordValidityNote(c.issued_at) ?? "",
+              ]) ??
+              detail.certificates.map((c) => [
+                c.topic,
+                c.date,
+                c.valid_until || "",
+                calcRecordValidityNote(c.date) ?? "",
+              ])
             }
           />
 

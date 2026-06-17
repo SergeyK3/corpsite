@@ -1,6 +1,8 @@
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeesTable.tsx
 "use client";
 
+import Link from "next/link";
+
 import type { EmployeeListItem } from "../_lib/types";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
@@ -12,6 +14,7 @@ type Props = {
   loading: boolean;
   onOpenEmployee: (employee_id: string) => void;
   onChangePage: (nextOffset: number) => void;
+  showCard2Button?: boolean;
 };
 
 function formatDate(d: string | null): string {
@@ -46,6 +49,7 @@ export default function EmployeesTable({
   loading,
   onOpenEmployee,
   onChangePage,
+  showCard2Button = false,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
@@ -134,7 +138,7 @@ export default function EmployeesTable({
 
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
-                        {!!employeeId && (
+                        {!showCard2Button && !!employeeId ? (
                           <button
                             type="button"
                             onClick={() => onOpenEmployee(employeeId)}
@@ -142,7 +146,15 @@ export default function EmployeesTable({
                           >
                             Открыть
                           </button>
-                        )}
+                        ) : null}
+                        {showCard2Button && !!employeeId ? (
+                          <Link
+                            href={`/directory/personnel/employees/${encodeURIComponent(employeeId)}/import-card`}
+                            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                          >
+                            Открыть
+                          </Link>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

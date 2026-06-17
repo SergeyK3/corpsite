@@ -11,7 +11,7 @@ import type {
   UserDTO,
   UserCreatePayload,
 } from "./types";
-import { getSessionAccessToken } from "@/lib/auth";
+import { buildHeaders } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
 
@@ -41,23 +41,19 @@ export function mapApiErrorToMessage(e: unknown, fallback = "Ошибка зап
   return formatThrownError(e, { fallback });
 }
 
-function maybeAddAuthHeader(headers: Record<string, string>) {
-  const token = String(getSessionAccessToken?.() ?? "").trim();
-  if (token) headers.Authorization = `Bearer ${token}`;
+function apiAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { Accept: "application/json", ...extra };
+  const devUserId = getDevUserId();
+  if (devUserId) headers["X-User-Id"] = devUserId;
+  return buildHeaders(headers) as Record<string, string>;
 }
 
 async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
-  const devUserId = getDevUserId();
-
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (devUserId) headers["X-User-Id"] = devUserId;
-  maybeAddAuthHeader(headers);
-
   const url = qs ? `${resolveApiUrl(path)}?${qs}` : resolveApiUrl(path);
 
   const res = await fetch(url, {
     method: "GET",
-    headers,
+    headers: apiAuthHeaders(),
     cache: "no-store",
   });
 
@@ -70,18 +66,9 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
 }
 
 async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
-  const devUserId = getDevUserId();
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (devUserId) headers["X-User-Id"] = devUserId;
-  maybeAddAuthHeader(headers);
-
   const res = await fetch(resolveApiUrl(path), {
     method: "POST",
-    headers,
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
   });
@@ -95,18 +82,9 @@ async function apiPostJson<T>(path: string, body?: unknown): Promise<T> {
 }
 
 async function apiPatchJson<T>(path: string, body?: unknown): Promise<T> {
-  const devUserId = getDevUserId();
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (devUserId) headers["X-User-Id"] = devUserId;
-  maybeAddAuthHeader(headers);
-
   const res = await fetch(resolveApiUrl(path), {
     method: "PATCH",
-    headers,
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
   });

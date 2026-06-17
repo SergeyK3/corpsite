@@ -2,10 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
-import ImportBatchSubNav from "./ImportBatchSubNav";
-import PersonnelSubNav from "./PersonnelSubNav";
+import ImportCategoryCardModal from "./ImportCategoryCardModal";
 import {
   departmentFilterOptionValue,
   getDepartmentRecodingOptions,
@@ -16,15 +15,12 @@ import {
   type DepartmentRecodingOptions,
   type StagingRow,
 } from "../_lib/importApi.client";
+import {
+  formatMedicalCategoryLabel,
+  MEDICAL_CATEGORY_FILTER_OPTIONS,
+} from "../_lib/importCategoryUtils";
 
 type ReviewMode = "personnel" | "declaration" | "technical";
-
-const STAFF_TYPE_LABELS: Record<string, string> = {
-  doctors: "Врачи",
-  nurses: "Медсестры",
-  junior_staff: "Санитарки",
-  other_staff: "Прочие",
-};
 
 const DECLARATION_TYPE_LABELS: Record<string, string> = {
   doctors: "Врачи",
@@ -34,7 +30,14 @@ const DECLARATION_TYPE_LABELS: Record<string, string> = {
   part_time: "Совместители",
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
+const STAFF_TYPE_LABELS: Record<string, string> = {
+  doctors: "Врачи",
+  nurses: "Медсестры",
+  junior_staff: "Санитарки",
+  other_staff: "Прочие",
+};
+
+const TECHNICAL_CATEGORY_LABELS: Record<string, string> = {
   highest: "Высшая",
   first: "Первая",
   second: "Вторая",
@@ -56,15 +59,15 @@ function ReviewFilters({
 }) {
   const departments =
     options?.departments.filter(
-      (d) => !values.department_group || d.department_group === values.department_group
+      (d) => !values.org_group_id || String(d.org_group_id) === values.org_group_id
     ) ?? [];
 
   return (
     <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3 lg:grid-cols-4">
       <select
         className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-        value={values.department_group}
-        onChange={(e) => onChange("department_group", e.target.value)}
+        value={values.org_group_id}
+        onChange={(e) => onChange("org_group_id", e.target.value)}
       >
         <option value="">Все группы</option>
         {options?.groups.map((g) => (
@@ -92,22 +95,9 @@ function ReviewFilters({
             value={values.certification_category}
             onChange={(e) => onChange("certification_category", e.target.value)}
           >
-            <option value="">Все категории</option>
-            {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-            value={values.staff_type}
-            onChange={(e) => onChange("staff_type", e.target.value)}
-          >
-            <option value="">Все типы персонала</option>
-            {Object.entries(STAFF_TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
+            {MEDICAL_CATEGORY_FILTER_OPTIONS.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -143,7 +133,7 @@ function ReviewFilters({
           onChange={(e) => onChange("certification_category", e.target.value)}
         >
           <option value="">Все категории</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+          {Object.entries(TECHNICAL_CATEGORY_LABELS).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
             </option>
@@ -161,7 +151,6 @@ function ReviewFilters({
 }
 
 export default function PersonnelImportReviewPageClient({ batchId }: { batchId: number }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const mode = (searchParams.get("mode") as ReviewMode) || "personnel";
 
@@ -171,10 +160,11 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   const [error, setError] = React.useState<string | null>(null);
   const [options, setOptions] = React.useState<DepartmentRecodingOptions | null>(null);
   const [offset, setOffset] = React.useState(0);
+  const [categoryRowId, setCategoryRowId] = React.useState<number | null>(null);
   const limit = 50;
 
   const [filters, setFilters] = React.useState({
-    department_group: searchParams.get("department_group") || "",
+    org_group_id: searchParams.get("org_group_id") || searchParams.get("department_group") || "",
     org_unit_id: searchParams.get("org_unit_id") || "",
     certification_category: searchParams.get("certification_category") || "",
     staff_type: searchParams.get("staff_type") || "",
@@ -183,22 +173,46 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   });
 
   React.useEffect(() => {
+    setOffset(0);
+    setCategoryRowId(null);
+  }, [batchId, mode]);
+
+  React.useEffect(() => {
+    setFilters({
+      org_group_id: searchParams.get("org_group_id") || searchParams.get("department_group") || "",
+      org_unit_id: searchParams.get("org_unit_id") || "",
+      certification_category: searchParams.get("certification_category") || "",
+      staff_type: searchParams.get("staff_type") || "",
+      part_time: searchParams.get("part_time") || "",
+      q_name: searchParams.get("q_name") || "",
+    });
+    setOffset(0);
+  }, [searchParams]);
+
+  React.useEffect(() => {
     getDepartmentRecodingOptions().then(setOptions).catch(() => setOptions(null));
   }, []);
 
   const load = React.useCallback(() => {
     setLoading(true);
-    listStagingRows(batchId, {
+    const params: Record<string, string | number | boolean | null | undefined> = {
       roster_scope: mode,
-      department_group: filters.department_group || undefined,
+      org_group_id: filters.org_group_id ? Number(filters.org_group_id) : undefined,
       ...parseDepartmentFilterValue(filters.org_unit_id),
       certification_category: filters.certification_category || undefined,
-      staff_type: filters.staff_type || undefined,
       part_time: filters.part_time || undefined,
       q_name: filters.q_name || undefined,
       limit,
       offset,
-    })
+    };
+
+    if (mode === "personnel") {
+      params.staff_types = "doctors,nurses";
+    } else if (filters.staff_type) {
+      params.staff_type = filters.staff_type;
+    }
+
+    listStagingRows(batchId, params)
       .then((data) => {
         setItems(data.items);
         setTotal(data.total);
@@ -212,17 +226,10 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
     load();
   }, [load]);
 
-  function setMode(next: ReviewMode) {
-    const q = new URLSearchParams(searchParams.toString());
-    q.set("mode", next);
-    router.replace(`/directory/personnel/import/${batchId}/review?${q.toString()}`);
-    setOffset(0);
-  }
-
   function updateFilter(key: string, value: string) {
     setFilters((prev) => {
       const next = { ...prev, [key]: value };
-      if (key === "department_group") {
+      if (key === "org_group_id") {
         next.org_unit_id = "";
       }
       return next;
@@ -235,20 +242,31 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   }
 
   const exportUrl = getDeclarationsExportUrl(batchId, {
-    department_group: filters.department_group || undefined,
+    org_group_id: filters.org_group_id ? Number(filters.org_group_id) : undefined,
     ...parseDepartmentFilterValue(filters.org_unit_id),
     staff_type: filters.staff_type || undefined,
     q_name: filters.q_name || undefined,
   });
 
+  const pageTitle =
+    mode === "declaration" ? "Декларации" : mode === "technical" ? "Технические" : "Мед. категории";
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <PersonnelSubNav />
-      <ImportBatchSubNav batchId={batchId} />
+    <div className="px-4 py-3">
+      <ImportCategoryCardModal
+        batchId={batchId}
+        rowId={categoryRowId}
+        open={categoryRowId != null}
+        onClose={() => setCategoryRowId(null)}
+      />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Review импорта</h1>
-          <p className="text-sm text-zinc-500">Batch #{batchId} · read-only · без apply</p>
+          <h1 className="text-xl font-semibold">{pageTitle}</h1>
+          <p className="text-sm text-zinc-500">
+            Batch #{batchId} · read-only · без apply
+            {mode === "personnel" ? " · только врачи и медсёстры" : ""}
+          </p>
         </div>
         {mode === "declaration" ? (
           <div className="flex gap-2 print:hidden">
@@ -269,28 +287,6 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
         ) : null}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2 print:hidden">
-        {(
-          [
-            ["personnel", "Персонал"],
-            ["declaration", "Декларации"],
-            ["technical", "Технические"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setMode(value)}
-            className={[
-              "rounded-lg px-3 py-1.5 text-sm font-medium",
-              mode === value ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900",
-            ].join(" ")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <div className="print:hidden">
         <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
       </div>
@@ -306,7 +302,6 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                   <th className="px-3 py-2">ФИО</th>
                   <th className="px-3 py-2">Отделение</th>
                   <th className="px-3 py-2">Тип декларации</th>
-                  <th className="px-3 py-2" />
                 </>
               ) : mode === "technical" ? (
                 <>
@@ -320,11 +315,10 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
               ) : (
                 <>
                   <th className="px-3 py-2">ФИО</th>
-                  <th className="px-3 py-2">ИИН</th>
                   <th className="px-3 py-2">Отделение</th>
-                  <th className="px-3 py-2">Тип</th>
-                  <th className="px-3 py-2">Категория</th>
                   <th className="px-3 py-2">Должность</th>
+                  <th className="px-3 py-2">Категория</th>
+                  <th className="px-3 py-2">Дата категории</th>
                   <th className="px-3 py-2" />
                 </>
               )}
@@ -353,14 +347,6 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                       row.declaration_group ||
                       "—"}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <Link
-                      href={`/directory/personnel/import/${batchId}/review/${row.row_id}`}
-                      className="text-blue-600 hover:underline"
-                    >
-                      Открыть
-                    </Link>
-                  </td>
                 </tr>
               ))
             ) : mode === "technical" ? (
@@ -371,7 +357,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                   <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
                   <td className="px-3 py-2">{row.position_raw || "—"}</td>
                   <td className="px-3 py-2">
-                    {CATEGORY_LABELS[row.certification_group || "none"] || "—"}
+                    {TECHNICAL_CATEGORY_LABELS[row.certification_group || "none"] || "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Link
@@ -394,20 +380,20 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs">{row.iin_masked || "—"}</td>
                   <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
-                  <td className="px-3 py-2">{STAFF_TYPE_LABELS[row.staff_type || ""] || "—"}</td>
-                  <td className="px-3 py-2">
-                    {CATEGORY_LABELS[row.certification_group || "none"] || "—"}
-                  </td>
                   <td className="px-3 py-2">{row.position_raw || "—"}</td>
+                  <td className="px-3 py-2">
+                    {formatMedicalCategoryLabel(row.latest_medical_category) || "—"}
+                  </td>
+                  <td className="px-3 py-2">{row.latest_medical_category_date || "—"}</td>
                   <td className="px-3 py-2 text-right">
-                    <Link
-                      href={`/directory/personnel/import/${batchId}/review/${row.row_id}`}
+                    <button
+                      type="button"
+                      onClick={() => setCategoryRowId(row.row_id)}
                       className="text-blue-600 hover:underline"
                     >
                       Открыть
-                    </Link>
+                    </button>
                   </td>
                 </tr>
               ))

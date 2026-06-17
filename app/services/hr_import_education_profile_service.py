@@ -16,6 +16,11 @@ from app.services.hr_import_analytics_service import (
     is_real_employee_row,
     load_row_payload,
 )
+from app.services.hr_import_profile_override_service import (
+    apply_profile_override,
+    is_section_override,
+    prepare_profile_override_for_storage,
+)
 from app.services.hr_import_profile_service import build_import_profile
 from scripts.import_hr_control_list import mask_iin
 
@@ -111,10 +116,14 @@ def _resolve_merged_profile(payload: dict[str, Any], meta: dict[str, Any]) -> di
     base = build_import_profile(payload)
     override = meta.get("profile_override")
     if override and isinstance(override, dict):
-        profile = _deep_merge(base, override)
+        if is_section_override(override):
+            profile = apply_profile_override(base, override)
+        else:
+            profile = _deep_merge(base, override)
     else:
         profile = base
-    profile["notes_raw"] = str(payload.get("note_raw", "") or "")
+    if "notes" not in (override or {}) and not profile.get("notes_raw"):
+        profile["notes_raw"] = str(payload.get("note_raw", "") or "")
     profile["status"] = meta["profile_status"]
     profile["review_status"] = meta["profile_review_status"]
     return profile
@@ -311,6 +320,7 @@ def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[
         "department_source": str(payload.get("department", "") or ""),
         "org_unit_id": int(recoding["org_unit_id"]) if recoding and recoding.get("org_unit_id") else None,
         "org_unit_name": recoding["org_unit_name"] if recoding else "",
+        "org_group_id": primary["row"].get("org_group_id"),
         "department_group": recoding["department_group"] if recoding else "",
         "position_raw": str(payload.get("position_raw", "") or ""),
         "education_count": int(totals.get("education", 0)),
@@ -363,6 +373,7 @@ def list_education_profiles(
     batch_id: int,
     *,
     department_group: Optional[str] = None,
+    org_group_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     org_unit_name: Optional[str] = None,
     q_name: Optional[str] = None,
@@ -387,8 +398,17 @@ def list_education_profiles(
         }
         rows = [r for r in rows if r["row_id"] not in archived_ids]
 
-    if department_group:
-        rows = [r for r in rows if r.get("department_group") == department_group]
+    effective_org_group_id = org_group_id
+    if effective_org_group_id is None and department_group:
+        try:
+            parsed = int(str(department_group).strip())
+            if parsed >= 1:
+                effective_org_group_id = parsed
+        except ValueError:
+            pass
+
+    if effective_org_group_id is not None:
+        rows = [r for r in rows if r.get("org_group_id") == effective_org_group_id]
     if org_unit_id is not None or org_unit_name:
         rows = [
             r
@@ -469,11 +489,12 @@ def update_education_profile(
         raise ValueError(f"invalid review_status: {review_status}")
     if profile_status is not None and profile_status not in (PROFILE_STATUS_ACTIVE, PROFILE_STATUS_ARCHIVED):
         raise ValueError(f"invalid profile_status: {profile_status}")
+    stored_profile = prepare_profile_override_for_storage(profile) if profile is not None else None
     _apply_to_aggregate_rows(
         conn,
         batch_id,
         group,
-        profile=profile,
+        profile=stored_profile,
         review_status=review_status,
         profile_status=profile_status,
     )

@@ -181,3 +181,35 @@ def test_rows_route_masks_iin(client: TestClient, privileged_headers, staged_bat
     for item in resp.json()["items"]:
         assert "iin_masked" in item
         assert "iin" not in item
+
+
+def test_calc_category_validity_note_active():
+    from datetime import date
+
+    from app.services.hr_import_analytics_service import calc_record_validity_note
+
+    note = calc_record_validity_note("2022-01-15", on=date(2024, 6, 17))
+    assert note.startswith("осталось ")
+    years_part = note.split("осталось ", 1)[1].removesuffix(" лет")
+    assert years_part == "2,6"
+
+
+def test_calc_category_validity_note_expired():
+    from datetime import date
+
+    from app.services.hr_import_analytics_service import (
+        CATEGORY_VALIDITY_EXPIRED_NOTE,
+        calc_category_validity_note,
+    )
+
+    note = calc_category_validity_note("2018-01-01", on=date(2026, 6, 17))
+    assert note == CATEGORY_VALIDITY_EXPIRED_NOTE
+
+
+def test_calc_category_validity_note_year_only_date():
+    from datetime import date
+
+    from app.services.hr_import_analytics_service import calc_category_validity_note
+
+    note = calc_category_validity_note("2019", on=date(2026, 6, 17))
+    assert note == "утратила силу"

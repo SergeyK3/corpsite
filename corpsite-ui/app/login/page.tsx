@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { apiAuthLogin } from "@/lib/api";
-import { isAuthed, setSessionLogin } from "@/lib/auth";
+import { apiAuthLogin, apiAuthMe } from "@/lib/api";
+import { isAuthed, logout, setSessionLogin } from "@/lib/auth";
 
 const LAST_LOGIN_KEY = "corpsite.lastLogin";
 
@@ -26,11 +26,25 @@ export default function LoginPage() {
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
 
-  // If already authed -> go home
+  // If already authed with a valid token -> go home.
+  // Stale tokens are ignored so the form stays usable.
   useEffect(() => {
-    if (isAuthed()) {
-      router.replace("/");
-    }
+    if (!isAuthed()) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await apiAuthMe();
+        if (!cancelled) router.replace("/");
+      } catch {
+        if (!cancelled) logout();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   // Load last login

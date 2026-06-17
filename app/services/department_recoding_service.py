@@ -248,37 +248,98 @@ def _canonical_option_key(org_unit_id: Any, org_unit_name: str) -> str:
     return f"name:{_norm_name(org_unit_name)}"
 
 
-def list_recoding_options(conn: Connection) -> dict[str, Any]:
-    """Return all unique canonical departments from recoding table (right column)."""
-    if not _table_exists(conn):
-        return {"groups": [], "departments": []}
+def _deps_group_table_exists(conn: Connection) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'deps_group'
+            LIMIT 1
+            """
+        )
+    ).first()
+    return row is not None
+
+
+def _org_units_table_exists(conn: Connection) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'org_units'
+            LIMIT 1
+            """
+        )
+    ).first()
+    return row is not None
+
+
+def load_org_unit_group_ids(conn: Connection) -> dict[int, int]:
+    """Map org_units.unit_id → deps_group.group_id."""
+    if not _org_units_table_exists(conn):
+        return {}
     rows = conn.execute(
         text(
             """
-            SELECT
-                org_unit_name,
-                MAX(org_unit_id) AS org_unit_id,
-                MIN(department_group) AS department_group,
-                COUNT(*) AS alias_count
-            FROM public.department_recoding
-            WHERE is_active = TRUE AND TRIM(org_unit_name) <> ''
-            GROUP BY LOWER(TRIM(org_unit_name)), org_unit_name
-            ORDER BY org_unit_name
+            SELECT unit_id, group_id
+            FROM public.org_units
+            WHERE group_id IS NOT NULL
             """
         )
     ).mappings().all()
+    result: dict[int, int] = {}
+    for row in rows:
+        try:
+            unit_id = int(row["unit_id"])
+            group_id = int(row["group_id"])
+        except (TypeError, ValueError):
+            continue
+        if group_id >= 1:
+            result[unit_id] = group_id
+    return result
+
+
+def list_recoding_options(conn: Connection) -> dict[str, Any]:
+    """Groups from deps_group; departments from org_units (filter pairing by group_id)."""
+    if not _deps_group_table_exists(conn) or not _org_units_table_exists(conn):
+        return {"groups": [], "departments": []}
+
+    group_rows = conn.execute(
+        text(
+            """
+            SELECT group_id, group_name
+            FROM public.deps_group
+            ORDER BY group_id
+            """
+        )
+    ).mappings().all()
+    unit_rows = conn.execute(
+        text(
+            """
+            SELECT unit_id, name, group_id
+            FROM public.org_units
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND group_id IS NOT NULL
+            ORDER BY sort_order1 NULLS LAST, name
+            """
+        )
+    ).mappings().all()
+
     groups = [
-        {"value": DEPARTMENT_GROUP_CLINICAL, "label": "Клинические"},
-        {"value": DEPARTMENT_GROUP_PARACLINICAL, "label": "Параклинические"},
-        {"value": DEPARTMENT_GROUP_ADMINISTRATIVE, "label": "Административно-хозяйственные"},
+        {
+            "value": str(int(row["group_id"])),
+            "label": str(row["group_name"] or "").strip() or f"Группа {row['group_id']}",
+        }
+        for row in group_rows
+        if row.get("group_id") is not None
     ]
     departments = [
         {
-            "org_unit_id": int(r["org_unit_id"]) if r["org_unit_id"] else None,
-            "org_unit_name": r["org_unit_name"],
-            "department_group": r["department_group"],
-            "alias_count": int(r["alias_count"]),
+            "org_unit_id": int(row["unit_id"]),
+            "org_unit_name": str(row["name"] or "").strip(),
+            "org_group_id": int(row["group_id"]),
         }
-        for r in rows
+        for row in unit_rows
+        if row.get("unit_id") is not None and row.get("group_id") is not None
     ]
     return {"groups": groups, "departments": departments}

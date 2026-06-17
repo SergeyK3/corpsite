@@ -17,8 +17,11 @@ from app.db.models.hr_import import (
     CLASSIFICATION_SUMMARY_ROW,
     ROW_TYPE_EMPLOYEE,
 )
-from app.services.department_recoding_service import lookup_recoding
+from app.services.department_recoding_service import load_org_unit_group_ids, lookup_recoding
+from app.services.hr_import_document_parser import parse_certification_raw
 from scripts.import_hr_control_list import mask_iin
+
+MEDICAL_CATEGORY_KEYS = frozenset({"highest", "first", "second"})
 
 TECHNICAL_CLASSIFICATIONS = frozenset(
     {
@@ -113,6 +116,112 @@ def _classify_certification(value: str) -> str:
     return "other"
 
 
+def _format_category_date(value: Optional[date]) -> str:
+    if not value:
+        return ""
+    if value.month == 1 and value.day == 1 and value.year >= 1900:
+        return str(value.year)
+    return value.isoformat()
+
+
+CATEGORY_VALIDITY_TERM_YEARS = 5
+CATEGORY_VALIDITY_EXPIRED_NOTE = "утратила силу"
+
+
+def _parse_category_issued_date(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    if re.fullmatch(r"\d{4}", text):
+        return date(int(text), 1, 1)
+    dmy_match = re.fullmatch(r"(\d{2})\.(\d{2})\.(\d{4})", text)
+    if dmy_match:
+        return date(int(dmy_match.group(3)), int(dmy_match.group(2)), int(dmy_match.group(1)))
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _calc_years_between(from_d: date, to_d: date) -> float:
+    days = (to_d - from_d).days
+    if days < 0:
+        return 0.0
+    return round((days / 365.25) * 10) / 10
+
+
+def _format_validity_years_decimal(years: float) -> str:
+    normalized = max(0.0, years)
+    int_part = int(normalized)
+    dec_part = round((normalized - int_part) * 10)
+    return f"{int_part},{dec_part}"
+
+
+def calc_record_validity_note(issued_at: Any, *, on: Optional[date] = None) -> str:
+    from_d = _parse_category_issued_date(issued_at)
+    if not from_d:
+        return ""
+    today = on or date.today()
+    elapsed = _calc_years_between(from_d, today)
+    if elapsed > CATEGORY_VALIDITY_TERM_YEARS:
+        return CATEGORY_VALIDITY_EXPIRED_NOTE
+    remaining = max(0.0, CATEGORY_VALIDITY_TERM_YEARS - elapsed)
+    return f"осталось {_format_validity_years_decimal(remaining)} лет"
+
+
+def calc_category_validity_note(issued_at: Any, *, on: Optional[date] = None) -> str:
+    return calc_record_validity_note(issued_at, on=on)
+
+
+def _resolve_medical_category_key(category: Optional[str], raw_text: str) -> str:
+    cat = (category or "").strip().lower()
+    if cat in MEDICAL_CATEGORY_KEYS:
+        return cat
+    text_val = (raw_text or "").lower()
+    if "высш" in text_val:
+        return "highest"
+    if "перва" in text_val:
+        return "first"
+    if "втор" in text_val:
+        return "second"
+    return ""
+
+
+def _medical_category_entries(certification_raw: str) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for frag in parse_certification_raw(certification_raw):
+        if frag.proposed_document_type != "QUALIFICATION_CATEGORY":
+            continue
+        category_key = _resolve_medical_category_key(frag.category, frag.raw_text)
+        if not category_key:
+            continue
+        specialty = (frag.specialty or "").strip()
+        title = (frag.title or "").strip()
+        if not specialty and title and category_key not in title.lower():
+            specialty = title
+        entries.append(
+            {
+                "category": category_key,
+                "date": frag.parsed_issued_at or frag.parsed_valid_until,
+                "specialty": specialty,
+            }
+        )
+    return entries
+
+
+def _latest_medical_category(certification_raw: str) -> tuple[str, str]:
+    entries = _medical_category_entries(certification_raw)
+    if not entries:
+        return "none", ""
+    dated = [entry for entry in entries if entry["date"]]
+    latest = max(dated, key=lambda entry: entry["date"]) if dated else entries[-1]
+    return str(latest["category"]), _format_category_date(latest["date"])
+
+
 def _infer_staff_type(row: dict[str, Any]) -> str:
     """Map row to personnel staff bucket (part_time is a flag, not a bucket)."""
     sheet_type = str(row.get("sheet_type") or "")
@@ -157,6 +266,69 @@ def is_technical_no_iin_row(row: dict[str, Any]) -> bool:
 
 def is_declaration_no_iin_row(row: dict[str, Any]) -> bool:
     return is_declaration_row(row) and not row.get("iin")
+
+
+def _norm_person_name(value: str) -> str:
+    return " ".join((value or "").strip().lower().replace("ё", "е").split())
+
+
+def _build_roster_department_index(
+    items: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, str], str], dict[str, str], dict[str, str]]:
+    """Index employee roster departments by (iin, name), iin alone, and name alone."""
+    by_iin_name: dict[tuple[str, str], str] = {}
+    by_iin: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    for row in items:
+        if not is_real_employee_row(row):
+            continue
+        dept = str(row.get("department") or "").strip()
+        if not dept:
+            continue
+        iin = str(row.get("iin") or "").strip()
+        name_key = _norm_person_name(str(row.get("full_name") or ""))
+        if iin and name_key:
+            by_iin_name[(iin, name_key)] = dept
+        if iin and iin not in by_iin:
+            by_iin[iin] = dept
+        if name_key and name_key not in by_name:
+            by_name[name_key] = dept
+    return by_iin_name, by_iin, by_name
+
+
+def _resolve_declaration_department(
+    row: dict[str, Any],
+    *,
+    by_iin_name: dict[tuple[str, str], str],
+    by_iin: dict[str, str],
+    by_name: dict[str, str],
+) -> str:
+    """Fill missing declaration department from matching employee roster row."""
+    existing = str(row.get("department") or "").strip()
+    if existing:
+        return existing
+    iin = str(row.get("iin") or "").strip()
+    name_key = _norm_person_name(str(row.get("full_name") or ""))
+    if iin and name_key and (iin, name_key) in by_iin_name:
+        return by_iin_name[(iin, name_key)]
+    if iin and iin in by_iin:
+        return by_iin[iin]
+    if name_key and name_key in by_name:
+        return by_name[name_key]
+    return ""
+
+
+def _enrich_declaration_departments(items: list[dict[str, Any]]) -> None:
+    roster_by_iin_name, roster_by_iin, roster_by_name = _build_roster_department_index(items)
+    for item in items:
+        if not is_declaration_row(item):
+            continue
+        item["department"] = _resolve_declaration_department(
+            item,
+            by_iin_name=roster_by_iin_name,
+            by_iin=roster_by_iin,
+            by_name=roster_by_name,
+        )
 
 
 def _canonical_department_label(row: dict[str, Any]) -> str:
@@ -283,15 +455,22 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
                 "has_certification": bool(str(payload.get("certification_raw", "") or "").strip()),
             }
         )
+        latest_category, latest_category_date = _latest_medical_category(items[-1]["certification_raw"])
+        items[-1]["latest_medical_category"] = latest_category
+        items[-1]["latest_medical_category_date"] = latest_category_date
+    _enrich_declaration_departments(items)
+    org_unit_group_ids = load_org_unit_group_ids(conn)
     recoding_cache: dict[str, Optional[dict[str, Any]]] = {}
     for item in items:
         dept = item["department"]
         if dept not in recoding_cache:
             recoding_cache[dept] = lookup_recoding(conn, dept)
         rec = recoding_cache[dept]
-        item["org_unit_id"] = int(rec["org_unit_id"]) if rec and rec.get("org_unit_id") else None
+        org_unit_id = int(rec["org_unit_id"]) if rec and rec.get("org_unit_id") else None
+        item["org_unit_id"] = org_unit_id
         item["org_unit_name"] = rec["org_unit_name"] if rec else ""
         item["department_group"] = rec["department_group"] if rec else ""
+        item["org_group_id"] = org_unit_group_ids.get(org_unit_id) if org_unit_id else None
     return items
 
 
@@ -658,10 +837,12 @@ def list_batch_rows(
     q_name: Optional[str] = None,
     q_position: Optional[str] = None,
     department_group: Optional[str] = None,
+    org_group_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     org_unit_name: Optional[str] = None,
     certification_category: Optional[str] = None,
     staff_type: Optional[str] = None,
+    staff_types: Optional[str] = None,
     part_time: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
@@ -671,13 +852,22 @@ def list_batch_rows(
     iin_counts = Counter(r["iin"] for r in employee_rows if r["iin"])
     duplicate_iins = {iin for iin, count in iin_counts.items() if count > 1}
 
+    effective_org_group_id = org_group_id
+    if effective_org_group_id is None and department_group:
+        try:
+            parsed = int(str(department_group).strip())
+            if parsed >= 1:
+                effective_org_group_id = parsed
+        except ValueError:
+            pass
+
     filtered = rows
     if roster_scope:
         filtered = [r for r in filtered if _matches_roster_scope(r, roster_scope)]
     if department:
         filtered = [r for r in filtered if r["department"] == department]
-    if department_group:
-        filtered = [r for r in filtered if r.get("department_group") == department_group]
+    if effective_org_group_id is not None:
+        filtered = [r for r in filtered if r.get("org_group_id") == effective_org_group_id]
     if org_unit_id is not None:
         filtered = [
             r
@@ -695,10 +885,26 @@ def list_batch_rows(
             if (r.get("org_unit_name") or "").strip().lower() == org_unit_name.strip().lower()
         ]
     if certification_category:
-        if certification_category == "none":
+        use_latest_medical = roster_scope in (None, "personnel", "all")
+        if use_latest_medical:
+            if certification_category == "none":
+                filtered = [
+                    r for r in filtered if r.get("latest_medical_category", "none") in ("none", "")
+                ]
+            else:
+                filtered = [
+                    r for r in filtered if r.get("latest_medical_category") == certification_category
+                ]
+        elif certification_category == "none":
             filtered = [r for r in filtered if r.get("certification_group") == "none"]
         else:
-            filtered = [r for r in filtered if r.get("certification_group") == certification_category]
+            filtered = [
+                r for r in filtered if r.get("certification_group") == certification_category
+            ]
+    if staff_types:
+        allowed_staff_types = {part.strip() for part in staff_types.split(",") if part.strip()}
+        if allowed_staff_types:
+            filtered = [r for r in filtered if r.get("staff_type") in allowed_staff_types]
     if staff_type:
         filtered = [r for r in filtered if r.get("staff_type") == staff_type]
     if part_time == "only":
@@ -734,6 +940,7 @@ def list_batch_rows(
             "department": r["department"],
             "org_unit_id": r.get("org_unit_id"),
             "org_unit_name": r.get("org_unit_name", ""),
+            "org_group_id": r.get("org_group_id"),
             "department_group": r.get("department_group", ""),
             "position_raw": r["position_raw"],
             "training_raw": r["training_raw"][:80] + ("…" if len(r["training_raw"]) > 80 else "")
@@ -744,6 +951,8 @@ def list_batch_rows(
             if r["certification_raw"]
             else "",
             "certification_group": r.get("certification_group", "none"),
+            "latest_medical_category": r.get("latest_medical_category", "none"),
+            "latest_medical_category_date": r.get("latest_medical_category_date", ""),
             "source_sheet": r["source_sheet"],
             "source_row_number": r["source_row_number"],
             "sheet_type": r["sheet_type"],

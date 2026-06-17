@@ -176,7 +176,12 @@ def test_many_aliases_one_canonical_department():
             conn,
             table="org_units",
             id_col="unit_id",
-            values={"name": canonical_name, "code": f"TEST_{uuid4().hex[:8]}", "is_active": True},
+            values={
+                "name": canonical_name,
+                "code": f"TEST_{uuid4().hex[:8]}",
+                "is_active": True,
+                "group_id": 1,
+            },
         )
         for alias in aliases:
             conn.execute(
@@ -205,7 +210,7 @@ def test_many_aliases_one_canonical_department():
             ]
             assert len(matching) == 1
             assert matching[0]["org_unit_name"] == canonical_name
-            assert matching[0]["alias_count"] >= 3
+            assert matching[0]["org_group_id"] == 1
     finally:
         with engine.begin() as conn:
             for alias in aliases:

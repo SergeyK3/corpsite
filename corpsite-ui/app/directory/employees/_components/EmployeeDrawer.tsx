@@ -14,7 +14,7 @@ import {
 import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 import EmployeeTransferDrawer from "./EmployeeTransferDrawer";
-import EmployeeEventsTimeline from "./EmployeeEventsTimeline";
+import EmployeeAccountSections from "./EmployeeAccountSections";
 import EmployeeProfessionalProfile from "./EmployeeProfessionalProfile";
 import type { EmployeeTransferFormValues } from "./EmployeeTransferForm";
 
@@ -34,7 +34,6 @@ type Props = {
   employeeId: string | null;
   open: boolean;
   onClose: () => void;
-  onCreateUser?: (details: EmployeeDetails) => void;
   onSaved?: () => void;
   refreshToken?: number;
   /** Полный справочник из parent (как в Create); drawer догружает при необходимости. */
@@ -152,27 +151,6 @@ function normalizePositionOptions(raw: unknown): PositionOption[] {
     .sort((a: PositionOption, b: PositionOption) => a.label.localeCompare(b.label, "ru"));
 }
 
-function userStatusLabel(active: boolean | null | undefined): string {
-  if (active === true) return "Активен";
-  if (active === false) return "Неактивен";
-  return "—";
-}
-
-function resolveTelegramLabel(user: Record<string, unknown> | null | undefined): string {
-  if (!user) return "Telegram не привязан";
-
-  const username = user.telegram_username ?? user.telegramUsername;
-  if (username != null && String(username).trim()) {
-    const s = String(username).trim();
-    return s.startsWith("@") ? s : `@${s}`;
-  }
-
-  const id = user.telegram_id ?? user.telegramId;
-  if (id != null && String(id).trim()) return String(id).trim();
-
-  return "Telegram не привязан";
-}
-
 function SectionBlock({
   title,
   children,
@@ -194,7 +172,6 @@ export default function EmployeeDrawer({
   employeeId,
   open,
   onClose,
-  onCreateUser,
   onSaved,
   refreshToken = 0,
   positionCatalogOptions = [],
@@ -463,9 +440,7 @@ export default function EmployeeDrawer({
   const dateFrom = fmtDate((details as any)?.date_from ?? (details as any)?.dateFrom);
   const dateTo = fmtDate((details as any)?.date_to ?? (details as any)?.dateTo);
 
-  const linkedUser = (details as any)?.user ?? null;
   const canEdit = Boolean(details && isActive(details));
-  const telegramLabel = resolveTelegramLabel(linkedUser as Record<string, unknown> | null);
 
   const editOrgUnitId = employeeOrgUnitId(details);
   const unitPositionCount = unitPositionIds?.size ?? 0;
@@ -724,55 +699,8 @@ export default function EmployeeDrawer({
                 <EmployeeProfessionalProfile employeeId={employeeId} />
               ) : null}
 
-              <SectionBlock title="Учётная запись Corpsite">
-                <div className={readOnlyCardClass}>
-                  {linkedUser ? (
-                    <div className="space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
-                      <div>
-                        <span className="text-zinc-600 dark:text-zinc-400">Логин: </span>
-                        {linkedUser.login ?? "—"}
-                      </div>
-                      <div>
-                        <span className="text-zinc-600 dark:text-zinc-400">Роль доступа: </span>
-                        {linkedUser.role_name ?? linkedUser.role_id ?? "—"}
-                      </div>
-                      <div>
-                        <span className="text-zinc-600 dark:text-zinc-400">Статус доступа: </span>
-                        {userStatusLabel(linkedUser.is_active)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                          Доступ к Corpsite не создан
-                        </div>
-                        <div className="text-sm text-zinc-700 dark:text-zinc-300">
-                          Создайте доступ, если сотрудник должен входить в систему или получать задачи.
-                        </div>
-                      </div>
-                      {onCreateUser && mode === "view" ? (
-                        <button
-                          type="button"
-                          onClick={() => onCreateUser(details)}
-                          className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
-                        >
-                          Создать доступ к Corpsite
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              </SectionBlock>
-
-              <SectionBlock title="Telegram">
-                <div className={readOnlyCardClass}>
-                  <div className="text-sm text-zinc-900 dark:text-zinc-50">{telegramLabel}</div>
-                </div>
-              </SectionBlock>
-
-              {mode === "view" && employeeId ? (
-                <EmployeeEventsTimeline employeeId={employeeId} refreshToken={eventsRefreshToken} />
+              {employeeId ? (
+                <EmployeeAccountSections employeeId={employeeId} refreshToken={eventsRefreshToken} />
               ) : null}
             </div>
           ) : loading ? (

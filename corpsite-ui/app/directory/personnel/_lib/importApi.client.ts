@@ -1,5 +1,5 @@
 // FILE: corpsite-ui/app/directory/personnel/_lib/importApi.client.ts
-import { getSessionAccessToken } from "@/lib/auth";
+import { buildHeaders } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
 
@@ -26,20 +26,29 @@ function buildQuery(params: Record<string, string | number | boolean | null | un
 }
 
 function authHeaders(json = false): Record<string, string> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (json) headers["Content-Type"] = "application/json";
+  const extra: Record<string, string> = { Accept: "application/json" };
+  if (json) extra["Content-Type"] = "application/json";
   const devUserId = getDevUserId();
-  if (devUserId) headers["X-User-Id"] = devUserId;
-  const token = String(getSessionAccessToken?.() ?? "").trim();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  if (devUserId) extra["X-User-Id"] = devUserId;
+  return buildHeaders(extra) as Record<string, string>;
 }
 
 function parseErrorBody(status: number, body: string, fallback: string): Error {
   if (status === 403) {
     return new Error("Недостаточно прав для HR Import Analytics.");
   }
-  return new Error(body.trim() || fallback || `HTTP ${status}`);
+  const trimmed = body.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed) as { detail?: unknown };
+      if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+        return new Error(parsed.detail.trim());
+      }
+    } catch {
+      // keep raw body fallback
+    }
+  }
+  return new Error(trimmed || fallback || `HTTP ${status}`);
 }
 
 export function mapImportApiError(e: unknown, fallback = "Ошибка запроса."): string {
@@ -159,11 +168,14 @@ export type StagingRow = {
   department: string;
   org_unit_id?: number | null;
   org_unit_name?: string;
+  org_group_id?: number | null;
   department_group?: string;
   position_raw: string;
   training_raw: string;
   certification_raw: string;
   certification_group?: string;
+  latest_medical_category?: string;
+  latest_medical_category_date?: string;
   staff_type?: string;
   is_part_time?: boolean;
   source_sheet: string;
@@ -180,8 +192,7 @@ export type DepartmentRecodingOptions = {
   departments: {
     org_unit_id: number | null;
     org_unit_name: string;
-    department_group: string;
-    alias_count?: number;
+    org_group_id: number;
   }[];
 };
 
@@ -191,6 +202,12 @@ export type PortfolioRecord = {
   confidence: number;
   parse_method: string;
   document_id: number | null;
+};
+
+export type DegreePortfolioRecord = PortfolioRecord & {
+  degree_type?: string;
+  label: string;
+  completed_at?: string;
 };
 
 export type EducationPortfolioRecord = PortfolioRecord & {
@@ -300,13 +317,54 @@ export type ImportProfile = {
     candidate_medical_sciences: boolean;
     doctor_medical_sciences: boolean;
     raw_text: string;
-    records: PortfolioRecord[];
+    records: DegreePortfolioRecord[];
   };
   portfolio_totals: Record<string, number>;
   notes_raw?: string;
   status?: string;
   review_status?: string;
 };
+
+const EMPTY_IMPORT_PROFILE_BASIC: ImportProfile["basic"] = {
+  full_name: "",
+  iin: "",
+  birth_date: "",
+  sex: "",
+  position_raw: "",
+  department_source: "",
+  experience_raw: "",
+  employment_rate: null,
+  qualification_raw: "",
+  nationality: "",
+  phone_raw: "",
+};
+
+export function normalizeImportProfile(profile: ImportProfile | null | undefined): ImportProfile {
+  const source = profile ?? ({} as ImportProfile);
+  return {
+    basic: { ...EMPTY_IMPORT_PROFILE_BASIC, ...(source.basic ?? {}) },
+    education: source.education ?? {},
+    education_records: Array.isArray(source.education_records) ? source.education_records : [],
+    training_records: Array.isArray(source.training_records) ? source.training_records : [],
+    category_records: Array.isArray(source.category_records) ? source.category_records : [],
+    certificate_records: Array.isArray(source.certificate_records) ? source.certificate_records : [],
+    award_records: Array.isArray(source.award_records) ? source.award_records : [],
+    degrees: {
+      candidate_medical_sciences: Boolean(source.degrees?.candidate_medical_sciences),
+      doctor_medical_sciences: Boolean(source.degrees?.doctor_medical_sciences),
+      raw_text: String(source.degrees?.raw_text ?? ""),
+      records: Array.isArray(source.degrees?.records) ? source.degrees.records : [],
+    },
+    portfolio_totals: source.portfolio_totals ?? {},
+    notes_raw: source.notes_raw ?? "",
+    status: source.status,
+    review_status: source.review_status,
+  };
+}
+
+export function cloneImportProfile(profile: ImportProfile): ImportProfile {
+  return normalizeImportProfile(JSON.parse(JSON.stringify(profile)) as ImportProfile);
+}
 
 export type AiExtractionDraft = {
   draft_id?: number;
@@ -530,8 +588,74 @@ export async function getDepartmentRecodingOptions(): Promise<DepartmentRecoding
   return apiGetJson("/directory/personnel/import/department-recoding/options");
 }
 
+export type EmployeeImportCard2Detail = {
+  batch_id: number;
+  row_id: number;
+  profile_id: number;
+  employee_id: number;
+  source_sheet: string;
+  source_row_number: number;
+  full_name: string;
+  department_source: string;
+  department_recoding: {
+    org_unit_id: number | null;
+    org_unit_name: string;
+    department_group: string;
+  } | null;
+  position_raw: string;
+  sheet_type: string;
+  profile: ImportProfile;
+  profile_status: string;
+  review_status: string;
+  has_override: boolean;
+};
+
+export async function getEmployeeImportCard2(employeeId: string | number): Promise<EmployeeImportCard2Detail> {
+  return apiGetJson(`/directory/personnel/employees/${encodeURIComponent(String(employeeId))}/import-card`);
+}
+
+export async function saveEmployeeImportCard2(
+  employeeId: string | number,
+  profile: ImportProfile
+): Promise<EmployeeImportCard2Detail> {
+  return apiPatchJson(`/directory/personnel/employees/${encodeURIComponent(String(employeeId))}/import-card`, {
+    profile,
+  });
+}
+
+export async function deleteEmployeeImportCard2(employeeId: string | number): Promise<EmployeeImportCard2Detail> {
+  return apiDeleteJson(`/directory/personnel/employees/${encodeURIComponent(String(employeeId))}/import-card`);
+}
+
 export async function getRowReviewDetail(batchId: number, rowId: number): Promise<RowReviewDetail> {
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/rows/${rowId}/review`);
+}
+
+export type RowMedicalCategoryHistoryItem = {
+  date: string;
+  category: string;
+  category_label: string;
+  specialty: string;
+  validity_note?: string;
+};
+
+export type RowMedicalCategoryHistory = {
+  batch_id: number;
+  row_id: number;
+  full_name: string;
+  position_raw: string;
+  department: string;
+  org_unit_name: string;
+  items: RowMedicalCategoryHistoryItem[];
+};
+
+export async function getRowMedicalCategoryHistory(
+  batchId: number,
+  rowId: number
+): Promise<RowMedicalCategoryHistory> {
+  return apiGetJson(
+    `/directory/personnel/import/batches/${batchId}/rows/${rowId}/medical-categories`
+  );
 }
 
 export async function runRowAiExtraction(batchId: number, rowId: number): Promise<AiExtractionDraft> {

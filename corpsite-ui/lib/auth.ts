@@ -1,6 +1,8 @@
 // FILE: corpsite-ui/lib/auth.ts
 "use client";
 
+import { sanitizeBearerToken } from "./bearerToken";
+
 export const AUTH_SESSION_ACCESS_TOKEN_KEY = "access_token";
 export const AUTH_SESSION_LOGIN_KEY = "login";
 
@@ -39,64 +41,97 @@ function normalizeLogin(v: string): string {
   return (v ?? "").toString().trim().toLowerCase();
 }
 
-// -------------------- session storage helpers --------------------
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payloadB64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payloadB64 + "=".repeat((4 - (payloadB64.length % 4)) % 4);
+    const json = atob(padded);
+    const payload = JSON.parse(json);
+    return payload && typeof payload === "object" ? payload : null;
+  } catch {
+    return null;
+  }
+}
 
-export function getSessionAccessToken(): string {
+function isAccessTokenExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return false;
+  const exp = Number(payload.exp ?? 0);
+  if (!exp) return false;
+  return Date.now() / 1000 >= exp;
+}
+
+function readAuthStorage(key: string): string {
   if (typeof window === "undefined") return "";
   try {
-    return (window.sessionStorage.getItem(AUTH_SESSION_ACCESS_TOKEN_KEY) ?? "").toString().trim();
+    const fromLocal = (window.localStorage.getItem(key) ?? "").toString().trim();
+    if (fromLocal) return fromLocal;
+
+    const fromSession = (window.sessionStorage.getItem(key) ?? "").toString().trim();
+    if (!fromSession) return "";
+
+    window.localStorage.setItem(key, fromSession);
+    window.sessionStorage.removeItem(key);
+    return fromSession;
   } catch {
     return "";
   }
+}
+
+function writeAuthStorage(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  const next = (value ?? "").toString().trim();
+  if (!next) return;
+  try {
+    window.localStorage.setItem(key, next);
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function clearAuthStorage(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+// -------------------- auth storage helpers --------------------
+
+export function getSessionAccessToken(): string {
+  const token = sanitizeBearerToken(readAuthStorage(AUTH_SESSION_ACCESS_TOKEN_KEY));
+  if (!token) return "";
+  if (isAccessTokenExpired(token)) {
+    clearSessionAccessToken();
+    return "";
+  }
+  return token;
 }
 
 export function setSessionAccessToken(token: string): void {
-  if (typeof window === "undefined") return;
-  const t = (token ?? "").toString().trim();
-  if (!t) return;
-  try {
-    window.sessionStorage.setItem(AUTH_SESSION_ACCESS_TOKEN_KEY, t);
-  } catch {
-    // ignore
-  }
+  writeAuthStorage(AUTH_SESSION_ACCESS_TOKEN_KEY, sanitizeBearerToken(token));
 }
 
 export function clearSessionAccessToken(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(AUTH_SESSION_ACCESS_TOKEN_KEY);
-  } catch {
-    // ignore
-  }
+  clearAuthStorage(AUTH_SESSION_ACCESS_TOKEN_KEY);
 }
 
 export function setSessionLogin(login: string): void {
-  if (typeof window === "undefined") return;
-  const l = normalizeLogin(login);
-  if (!l) return;
-  try {
-    window.sessionStorage.setItem(AUTH_SESSION_LOGIN_KEY, l);
-  } catch {
-    // ignore
-  }
+  writeAuthStorage(AUTH_SESSION_LOGIN_KEY, normalizeLogin(login));
 }
 
 export function getSessionLogin(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return normalizeLogin(window.sessionStorage.getItem(AUTH_SESSION_LOGIN_KEY) ?? "");
-  } catch {
-    return "";
-  }
+  return normalizeLogin(readAuthStorage(AUTH_SESSION_LOGIN_KEY));
 }
 
 export function clearSessionLogin(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(AUTH_SESSION_LOGIN_KEY);
-  } catch {
-    // ignore
-  }
+  clearAuthStorage(AUTH_SESSION_LOGIN_KEY);
 }
 
 export function logout(): void {
@@ -105,5 +140,7 @@ export function logout(): void {
 }
 
 export function isAuthed(): boolean {
-  return !!getSessionAccessToken();
+  const token = getSessionAccessToken();
+  if (!token) return false;
+  return !isAccessTokenExpired(token);
 }

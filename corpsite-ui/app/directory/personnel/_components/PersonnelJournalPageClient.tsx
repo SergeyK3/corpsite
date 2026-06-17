@@ -5,7 +5,6 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   listPersonnelEvents,
   mapDemoApiError,
@@ -324,9 +323,7 @@ export default function PersonnelJournalPageClient() {
   }
 
   return (
-    <div className="space-y-4">
-      <PersonnelSubNav />
-
+    <div className="space-y-4 px-4 py-3">
       <div>
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Кадровый журнал</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">

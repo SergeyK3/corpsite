@@ -99,15 +99,17 @@ def test_recoding_options_all_canonical_departments(staged_batch):
             conn.execute(
                 text(
                     """
-                    SELECT COUNT(DISTINCT LOWER(TRIM(org_unit_name)))
-                    FROM public.department_recoding
-                    WHERE is_active = TRUE AND TRIM(org_unit_name) <> ''
+                    SELECT COUNT(*)
+                    FROM public.org_units
+                    WHERE COALESCE(is_active, TRUE) = TRUE
+                      AND group_id IS NOT NULL
                     """
                 )
             ).scalar_one()
         )
     assert len(options["departments"]) == db_count
-    assert len(options["departments"]) >= 10
+    assert len(options["groups"]) >= 1
+    assert all("org_group_id" in d for d in options["departments"])
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

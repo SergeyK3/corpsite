@@ -5,7 +5,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   listStagingRows,
   mapImportApiError,
@@ -101,8 +100,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <PersonnelSubNav />
+    <div className="px-4 py-3">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Строки импорта</h1>

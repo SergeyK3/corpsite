@@ -4,8 +4,6 @@
 import * as React from "react";
 import Link from "next/link";
 
-import ImportBatchSubNav from "./ImportBatchSubNav";
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   getAgeDistribution,
   getCertificationAnalytics,
@@ -14,7 +12,6 @@ import {
   getPositionAnalytics,
   getRiskAnalytics,
   getSheetDiagnostics,
-  getTrainingAnalytics,
   mapImportApiError,
   SHEET_TYPE_LABELS,
   type AgeBucket,
@@ -62,10 +59,6 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
   const [ageBuckets, setAgeBuckets] = React.useState<AgeBucket[]>([]);
   const [departments, setDepartments] = React.useState<DepartmentRow[]>([]);
   const [positions, setPositions] = React.useState<PositionRow[]>([]);
-  const [trainingTotal, setTrainingTotal] = React.useState(0);
-  const [trainingExamples, setTrainingExamples] = React.useState<
-    { row_id: number; full_name: string; department: string; training_raw: string }[]
-  >([]);
   const [certGroups, setCertGroups] = React.useState<{ group: string; label: string; count: number }[]>([]);
   const [certTotal, setCertTotal] = React.useState(0);
   const [risks, setRisks] = React.useState<RiskRow[]>([]);
@@ -79,19 +72,16 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
       getAgeDistribution(batchId),
       getDepartmentAnalytics(batchId),
       getPositionAnalytics(batchId),
-      getTrainingAnalytics(batchId),
       getCertificationAnalytics(batchId),
       getRiskAnalytics(batchId),
       getSheetDiagnostics(batchId),
     ])
-      .then(([s, age, dept, pos, train, cert, risk, sheets]) => {
+      .then(([s, age, dept, pos, cert, risk, sheets]) => {
         if (cancelled) return;
         setSummary(s);
         setAgeBuckets(age.buckets);
         setDepartments(dept.items.slice(0, 30));
         setPositions(pos.items);
-        setTrainingTotal(train.total_with_training);
-        setTrainingExamples(train.examples);
         setCertGroups(cert.by_group);
         setCertTotal(cert.total_with_certification);
         setRisks(risk.items.filter((r) => r.count > 0));
@@ -112,9 +102,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
   const riskTotal = risks.reduce((acc, r) => acc + r.count, 0);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <PersonnelSubNav />
-      <ImportBatchSubNav batchId={batchId} />
+    <div className="px-4 py-3">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Кадровый паспорт</h1>
@@ -137,7 +125,7 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             href={`/directory/personnel/import/${batchId}/review?mode=personnel`}
             className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-            Review персонала
+            Мед. категории
           </Link>
         </div>
       </div>
@@ -311,43 +299,19 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             </div>
           </section>
 
-          <div className="mb-6 grid gap-4 lg:grid-cols-2">
-            <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">Top 20 должностей</h2>
-              <ul className="space-y-1 text-sm">
-                {positions.map((p) => (
-                  <li key={p.position} className="flex justify-between gap-2">
-                    <span className="truncate" title={p.position}>
-                      {p.position}
-                    </span>
-                    <span className="font-medium">{p.count}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-            <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                  Обучение ({trainingTotal})
-                </h2>
-                <Link
-                  href={`/directory/personnel/import/${batchId}/training`}
-                  className="text-xs text-blue-600 hover:underline dark:text-blue-400"
-                >
-                  Документы / обучение →
-                </Link>
-              </div>
-              <ul className="space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
-                {trainingExamples.map((ex) => (
-                  <li key={ex.row_id}>
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{ex.full_name}</span>
-                    <span className="text-zinc-400"> · {ex.department}</span>
-                    <div className="mt-0.5">{ex.training_raw}</div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </div>
+          <section className="mb-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">Top 20 должностей</h2>
+            <ul className="space-y-1 text-sm">
+              {positions.map((p) => (
+                <li key={p.position} className="flex justify-between gap-2">
+                  <span className="truncate" title={p.position}>
+                    {p.position}
+                  </span>
+                  <span className="font-medium">{p.count}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
 
           <section className="mb-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">

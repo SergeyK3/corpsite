@@ -2,9 +2,7 @@
 
 import * as React from "react";
 
-import ImportBatchSubNav from "./ImportBatchSubNav";
 import ImportEducationProfileCardModal from "./ImportEducationProfileCardModal";
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   departmentFilterOptionValue,
   getDepartmentRecodingOptions,
@@ -26,7 +24,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
   const [items, setItems] = React.useState<EducationProfileSummary[]>([]);
   const [total, setTotal] = React.useState(0);
   const [options, setOptions] = React.useState<DepartmentRecodingOptions | null>(null);
-  const [departmentGroup, setDepartmentGroup] = React.useState("");
+  const [orgGroupId, setOrgGroupId] = React.useState("");
   const [departmentFilter, setDepartmentFilter] = React.useState("");
   const [nameQuery, setNameQuery] = React.useState("");
   const [offset, setOffset] = React.useState(0);
@@ -41,16 +39,16 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
 
   const filteredDepartments = React.useMemo(() => {
     const all = options?.departments ?? [];
-    if (!departmentGroup) return all;
-    return all.filter((d) => d.department_group === departmentGroup);
-  }, [options, departmentGroup]);
+    if (!orgGroupId) return all;
+    return all.filter((d) => String(d.org_group_id) === orgGroupId);
+  }, [options, orgGroupId]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
       const dept = parseDepartmentFilterValue(departmentFilter);
       const data = await listEducationProfiles(batchId, {
-        department_group: departmentGroup || undefined,
+        org_group_id: orgGroupId ? Number(orgGroupId) : undefined,
         ...dept,
         q_name: nameQuery || undefined,
         limit,
@@ -64,7 +62,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
     } finally {
       setLoading(false);
     }
-  }, [batchId, departmentGroup, departmentFilter, nameQuery, offset]);
+  }, [batchId, orgGroupId, departmentFilter, nameQuery, offset]);
 
   React.useEffect(() => {
     load();
@@ -85,13 +83,10 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
 
   return (
     <div
-      className="mx-auto max-w-7xl px-4 py-6"
+      className="px-4 py-3"
       data-ui-phase={PERSONNEL_IMPORT_TRAINING_UI_PHASE}
       data-batch-id={batchId}
     >
-      <PersonnelSubNav />
-      <ImportBatchSubNav batchId={batchId} />
-
       <div className="mb-4">
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
           Образовательные профили сотрудников из импорта
@@ -111,9 +106,9 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
       <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-4">
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          value={departmentGroup}
+          value={orgGroupId}
           onChange={(e) => {
-            setDepartmentGroup(e.target.value);
+            setOrgGroupId(e.target.value);
             setDepartmentFilter("");
             setOffset(0);
           }}

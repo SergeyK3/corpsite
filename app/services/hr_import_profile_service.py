@@ -107,6 +107,7 @@ def _parse_degrees(raw: str) -> dict[str, Any]:
             {
                 "degree_type": "candidate_medical_sciences",
                 "label": "Кандидат медицинских наук",
+                "completed_at": "",
                 "source_field": "degree_raw",
                 "source_text": raw or "",
                 "confidence": 0.85,
@@ -119,6 +120,7 @@ def _parse_degrees(raw: str) -> dict[str, Any]:
             {
                 "degree_type": "doctor_medical_sciences",
                 "label": "Доктор медицинских наук",
+                "completed_at": "",
                 "source_field": "degree_raw",
                 "source_text": raw or "",
                 "confidence": 0.85,

@@ -77,6 +77,9 @@ export const RECORD_STATUS_LABELS: Readonly<Record<string, string>> = {
 
 const API_MESSAGE_LABELS: Readonly<Record<string, string>> = {
   "request failed": "Не удалось выполнить запрос",
+  "failed to fetch": "Не удалось связаться с сервером. Проверьте, что backend запущен (npm run dev).",
+  "networkerror when attempting to fetch resource.":
+    "Не удалось связаться с сервером. Проверьте, что backend запущен (npm run dev).",
   "backend did not return access_token": "Сервер не вернул токен доступа",
 
   "task not found": "Задача не найдена",

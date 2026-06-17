@@ -17,7 +17,10 @@ from app.services.hr_import_analytics_service import (
     BatchNotFoundError,
     _classify_certification,
     _ensure_batch_exists,
+    _format_category_date,
+    calc_category_validity_note,
     _infer_staff_type,
+    _medical_category_entries,
     is_declaration_row,
     is_real_employee_row,
     load_row_payload,
@@ -195,46 +198,90 @@ def get_row_review_detail(conn: Connection, batch_id: int, row_id: int) -> dict[
     }
 
 
+MEDICAL_CATEGORY_LABELS = {
+    "highest": "высшая",
+    "first": "первая",
+    "second": "вторая",
+}
+
+
+def get_row_medical_category_history(conn: Connection, batch_id: int, row_id: int) -> dict[str, Any]:
+    row = load_row_payload(conn, batch_id, row_id)
+    payload = row["payload"]
+    recoding = lookup_recoding(conn, str(payload.get("department", "") or "").strip())
+    entries = _medical_category_entries(str(payload.get("certification_raw", "") or ""))
+    sorted_entries = sorted(
+        entries,
+        key=lambda entry: (entry["date"] or date.min, entry["category"]),
+        reverse=True,
+    )
+    return {
+        "batch_id": batch_id,
+        "row_id": row_id,
+        "full_name": str(payload.get("full_name", "") or "").strip(),
+        "position_raw": str(payload.get("position_raw", "") or "").strip(),
+        "department": str(payload.get("department", "") or "").strip(),
+        "org_unit_name": recoding["org_unit_name"] if recoding else "",
+        "items": [
+            {
+                "date": _format_category_date(entry["date"]),
+                "category": entry["category"],
+                "category_label": MEDICAL_CATEGORY_LABELS.get(entry["category"], ""),
+                "specialty": entry["specialty"],
+                "validity_note": calc_category_validity_note(entry["date"]),
+            }
+            for entry in sorted_entries
+        ],
+    }
+
+
 def export_declarations_excel(
     conn: Connection,
     batch_id: int,
     *,
     department_group: Optional[str] = None,
+    org_group_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
+    org_unit_name: Optional[str] = None,
     staff_type: Optional[str] = None,
     q_name: Optional[str] = None,
 ) -> bytes:
-    from app.services.hr_import_analytics_service import _load_staging_rows
+    from app.services.hr_import_analytics_service import _canonical_department_label, _load_staging_rows
 
     rows = [r for r in _load_staging_rows(conn, batch_id) if is_declaration_row(r)]
-    recoding_cache: dict[str, Optional[dict[str, Any]]] = {}
 
-    def _recoding_for(dept: str) -> Optional[dict[str, Any]]:
-        if dept not in recoding_cache:
-            recoding_cache[dept] = lookup_recoding(conn, dept)
-        return recoding_cache[dept]
+    effective_org_group_id = org_group_id
+    if effective_org_group_id is None and department_group:
+        try:
+            parsed = int(str(department_group).strip())
+            if parsed >= 1:
+                effective_org_group_id = parsed
+        except ValueError:
+            pass
 
     filtered: list[dict[str, Any]] = []
     for row in rows:
-        rec = _recoding_for(row["department"])
-        if department_group and (not rec or rec.get("department_group") != department_group):
+        if effective_org_group_id is not None and row.get("org_group_id") != effective_org_group_id:
             continue
-        if org_unit_id is not None and (not rec or rec.get("org_unit_id") != org_unit_id):
-            continue
+        if org_unit_id is not None:
+            if row.get("org_unit_id") != org_unit_id and not (
+                org_unit_name
+                and (row.get("org_unit_name") or "").strip().lower()
+                == org_unit_name.strip().lower()
+            ):
+                continue
+        elif org_unit_name:
+            if (row.get("org_unit_name") or "").strip().lower() != org_unit_name.strip().lower():
+                continue
         if staff_type and _infer_staff_type(row) != staff_type:
             continue
         if q_name and q_name.strip().lower() not in row["full_name"].lower():
             continue
-        filtered.append({**row, "_recoding": rec})
+        filtered.append(row)
 
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in filtered:
-        rec = row.get("_recoding")
-        dept_label = (
-            rec["org_unit_name"]
-            if rec and rec.get("org_unit_name")
-            else row["department"] or "— без отделения —"
-        )
+        dept_label = _canonical_department_label(row)
         grouped.setdefault(dept_label, []).append(row)
 
     wb = Workbook()

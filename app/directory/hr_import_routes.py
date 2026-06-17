@@ -42,7 +42,17 @@ from app.services.hr_import_education_profile_service import (
     list_education_profiles,
     update_education_profile,
 )
-from app.services.hr_import_row_review_service import export_declarations_excel, get_row_review_detail
+from app.services.hr_import_employee_card_service import (
+    EmployeeImportCardNotFoundError,
+    delete_employee_import_card,
+    get_employee_import_card,
+    save_employee_import_card,
+)
+from app.services.hr_import_row_review_service import (
+    export_declarations_excel,
+    get_row_medical_category_history,
+    get_row_review_detail,
+)
 
 from app.services.hr_import_service import import_control_list
 
@@ -58,6 +68,68 @@ def _with_conn(fn, **kwargs):
 
 def _batch_not_found(exc: BatchNotFoundError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
+
+
+def _employee_import_card_not_found(exc: EmployeeImportCardNotFoundError) -> HTTPException:
+    return HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/personnel/employees/{employee_id}/import-card")
+def get_personnel_employee_import_card(
+    employee_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(get_employee_import_card, employee_id=employee_id)
+    except EmployeeImportCardNotFoundError as e:
+        raise _employee_import_card_not_found(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.patch("/personnel/employees/{employee_id}/import-card")
+def patch_personnel_employee_import_card(
+    employee_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    profile = body.get("profile")
+    if not isinstance(profile, dict):
+        raise HTTPException(status_code=422, detail="profile object is required")
+    try:
+        return _with_conn(save_employee_import_card, employee_id=employee_id, profile=profile)
+    except EmployeeImportCardNotFoundError as e:
+        raise _employee_import_card_not_found(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.delete("/personnel/employees/{employee_id}/import-card")
+def delete_personnel_employee_import_card(
+    employee_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(delete_employee_import_card, employee_id=employee_id)
+    except EmployeeImportCardNotFoundError as e:
+        raise _employee_import_card_not_found(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
 
 
 @router.get("/personnel/import/batches")
@@ -350,6 +422,7 @@ def get_import_batch_education_portfolio(
 def get_import_batch_education_profiles(
     batch_id: int,
     department_group: Optional[str] = Query(default=None),
+    org_group_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None),
     org_unit_name: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
@@ -364,6 +437,7 @@ def get_import_batch_education_profiles(
             list_education_profiles,
             batch_id=batch_id,
             department_group=department_group,
+            org_group_id=org_group_id,
             org_unit_id=org_unit_id,
             org_unit_name=org_unit_name,
             q_name=q_name,
@@ -478,7 +552,9 @@ def post_import_batch_row_ai_extraction(
 def get_import_batch_declarations_export(
     batch_id: int,
     department_group: Optional[str] = Query(default=None),
+    org_group_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None),
+    org_unit_name: Optional[str] = Query(default=None),
     staff_type: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -490,7 +566,9 @@ def get_import_batch_declarations_export(
                 conn,
                 batch_id,
                 department_group=department_group,
+                org_group_id=org_group_id,
                 org_unit_id=org_unit_id,
+                org_unit_name=org_unit_name,
                 staff_type=staff_type,
                 q_name=q_name,
             )
@@ -522,10 +600,12 @@ def get_import_batch_rows(
     q_name: Optional[str] = Query(default=None),
     q_position: Optional[str] = Query(default=None),
     department_group: Optional[str] = Query(default=None),
+    org_group_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None),
     org_unit_name: Optional[str] = Query(default=None),
     certification_category: Optional[str] = Query(default=None),
     staff_type: Optional[str] = Query(default=None),
+    staff_types: Optional[str] = Query(default=None),
     part_time: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -546,14 +626,33 @@ def get_import_batch_rows(
             q_name=q_name,
             q_position=q_position,
             department_group=department_group,
+            org_group_id=org_group_id,
             org_unit_id=org_unit_id,
             org_unit_name=org_unit_name,
             certification_category=certification_category,
             staff_type=staff_type,
+            staff_types=staff_types,
             part_time=part_time,
             limit=limit,
             offset=offset,
         )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/rows/{row_id}/medical-categories")
+def get_import_batch_row_medical_categories(
+    batch_id: int,
+    row_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(get_row_medical_category_history, batch_id=batch_id, row_id=row_id)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:

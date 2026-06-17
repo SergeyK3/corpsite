@@ -8,6 +8,9 @@ import pytest
 from openpyxl import Workbook
 
 from app.services.hr_import_analytics_service import (
+    _build_roster_department_index,
+    _enrich_declaration_departments,
+    _resolve_declaration_department,
     is_missing_iin_employee_row,
     is_real_employee_row,
 )
@@ -168,6 +171,65 @@ def test_category_rows_do_not_affect_missing_iin():
     assert not is_real_employee_row(category)
     assert not is_missing_iin_employee_row(employee)
     assert not is_missing_iin_employee_row(category)
+
+
+def test_declaration_department_resolved_from_roster_by_iin_and_name():
+    roster_row = {
+        "full_name": "Петрова Анна Сергеевна",
+        "iin": "900101300123",
+        "department": "ХИРУРГИЯ",
+        "sheet_type": "doctors",
+        "row_type": ROW_TYPE_EMPLOYEE,
+        "is_employee_roster": True,
+        "classification": "NORMAL",
+    }
+    declaration_row = {
+        "full_name": "Петрова Анна Сергеевна",
+        "iin": "900101300123",
+        "department": "",
+        "sheet_type": "declaration",
+        "classification": "DECLARATION",
+    }
+    by_iin_name, by_iin, by_name = _build_roster_department_index([roster_row])
+    resolved = _resolve_declaration_department(
+        declaration_row,
+        by_iin_name=by_iin_name,
+        by_iin=by_iin,
+        by_name=by_name,
+    )
+    assert resolved == "ХИРУРГИЯ"
+
+
+def test_declaration_department_prefers_iin_name_over_ambiguous_iin():
+    items = [
+        {
+            "full_name": "Иванов Иван Иванович",
+            "iin": "900101300123",
+            "department": "АДМИН",
+            "sheet_type": "doctors",
+            "row_type": ROW_TYPE_EMPLOYEE,
+            "is_employee_roster": True,
+            "classification": "NORMAL",
+        },
+        {
+            "full_name": "Петрова Анна Сергеевна",
+            "iin": "900101300123",
+            "department": "ХИРУРГИЯ",
+            "sheet_type": "doctors",
+            "row_type": ROW_TYPE_EMPLOYEE,
+            "is_employee_roster": True,
+            "classification": "NORMAL",
+        },
+        {
+            "full_name": "Петрова Анна Сергеевна",
+            "iin": "900101300123",
+            "department": "",
+            "sheet_type": "declaration",
+            "classification": "DECLARATION",
+        },
+    ]
+    _enrich_declaration_departments(items)
+    assert items[2]["department"] == "ХИРУРГИЯ"
 
 
 def test_build_parsed_row_director_not_missing_iin():
