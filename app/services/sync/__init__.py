@@ -31,6 +31,7 @@ from app.services.sync.preview_service import (
     SyncPreviewResult,
     classification_to_preview_item,
     preview_hr_sync_package,
+    preview_result_to_api_dict,
     preview_result_to_dict,
 )
 from app.services.sync.package_validator import validate_sync_package
@@ -61,6 +62,7 @@ __all__ = [
     "import_hr_sync_package",
     "classification_to_preview_item",
     "preview_hr_sync_package",
+    "preview_result_to_api_dict",
     "preview_result_to_dict",
     "resolve_employee_key",
     "validate_sync_package",

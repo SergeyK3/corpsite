@@ -72,6 +72,30 @@ def preview_result_to_dict(result: SyncPreviewResult) -> dict[str, Any]:
     return payload
 
 
+def load_employee_name_map(package_path: Path) -> dict[str, str]:
+    """Map employee_key → full_name from package employees.jsonl."""
+    from app.services.sync.import_service import _read_jsonl_records
+
+    names: dict[str, str] = {}
+    for record in _read_jsonl_records(package_path, "employees.jsonl"):
+        key = record.get("employee_key")
+        name = record.get("full_name")
+        if key and name:
+            names[str(key)] = str(name).strip()
+    return names
+
+
+def preview_result_to_api_dict(result: SyncPreviewResult) -> dict[str, Any]:
+    """Serialize preview for HTTP API — adds employee_name per item."""
+    payload = preview_result_to_dict(result)
+    name_map = load_employee_name_map(result.package_path)
+    for item in payload.get("items") or []:
+        if isinstance(item, dict):
+            key = str(item.get("employee_key") or "")
+            item["employee_name"] = name_map.get(key)
+    return payload
+
+
 def classification_to_preview_item(
     record: EmployeeImportProfileOverrideSyncRecord,
     *,

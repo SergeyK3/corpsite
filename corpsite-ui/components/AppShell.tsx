@@ -29,6 +29,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     matchPrefixes: ["/admin/regular-tasks/catch-up"],
   },
   {
+    href: "/admin/sync",
+    title: "Синхронизация данных",
+    matchPrefixes: ["/admin/sync"],
+  },
+  {
     href: "/tasks",
     title: "Задачи",
     matchPrefixes: ["/tasks"],
@@ -229,7 +234,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     !isAdmin &&
     (pathname.startsWith("/directory") ||
       pathname.startsWith("/regular-tasks") ||
-      pathname.startsWith("/admin/regular-tasks"));
+      pathname.startsWith("/admin"));
 
   useEffect(() => {
     if (isLogin || loading) return;

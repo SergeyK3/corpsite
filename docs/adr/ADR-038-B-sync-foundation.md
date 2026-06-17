@@ -28,6 +28,8 @@ Phase B создаёт **механизм обмена** кадровыми да
 
 **C.1 ✅ (2026-06-17):** `app/services/sync/conflict_policy.py`; apply gate в import; [ADR-038-C.1](ADR-038-C-conflict-policy.md).
 
+**D.1 ✅ (2026-06-17):** read-only Sync Admin UI `/admin/sync`; API `GET/POST /directory/personnel/sync/*`; [ADR-038-D.1](ADR-038-D-sync-admin-ui.md).
+
 ---
 
 ## 1. Имя и структура пакета
@@ -473,7 +475,8 @@ Editable sections: `education`, `training`, `categories`, `certificates`, `degre
 - **B.3 ✅** — import engine, dry-run/apply, employee_key resolver, orphan/ambiguous skip.
 - **B.4 ✅** — preview/diff engine, section classification, read-only guarantee.
 - **C.1 ✅** — conflict policy, apply gate, section merge on import.
-- **Следующий шаг: Phase C.2** — conflict resolution workflow, audit log, optional UI.
+- **D.1 ✅** — read-only Sync Admin UI (export, upload, preview); см. [ADR-038-D.1](ADR-038-D-sync-admin-ui.md).
+- **Следующий шаг: Phase D.2** — Apply UI с apply gate; затем **C.2** — conflict resolution workflow, audit log.
 
 ---
 
