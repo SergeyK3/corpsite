@@ -31,6 +31,7 @@ from app.db.models.hr_import import (
     SOURCE_TYPE_HR_CONTROL_LIST,
 )
 from app.services.hr_import_document_candidate_service import parse_and_persist_document_candidates
+from app.services.hr_import_normalized_record_service import populate_normalized_records
 from scripts.import_hr_control_list import ParsedRow, build_audit, parse_workbook
 
 # Phase 2B workflow aliases (DB CHECK constraint uses Phase 2A names).
@@ -270,6 +271,7 @@ def import_control_list(
         parsed_rows, warnings = parse_workbook(path)
         _persist_rows(conn, batch_id=batch_id, rows=parsed_rows)
         parse_and_persist_document_candidates(conn, batch_id)
+        populate_normalized_records(conn, batch_id)
         _update_batch_counts(
             conn,
             batch_id=batch_id,
