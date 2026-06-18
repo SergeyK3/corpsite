@@ -334,19 +334,38 @@ export default function SyncAdminClient() {
 
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const meta = await fetchSyncMeta();
-        if (cancelled) return;
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    // Start both requests synchronously before any await (mount bootstrap).
+    const metaPromise = fetchSyncMeta();
+    const historyPromise = fetchSyncHistory(30, 0);
+
+    void (async () => {
+      const [metaOutcome, historyOutcome] = await Promise.allSettled([metaPromise, historyPromise]);
+      if (cancelled) return;
+
+      if (metaOutcome.status === "fulfilled") {
+        const meta = metaOutcome.value;
         setSchemaVersion(meta.schema_version);
         setPackageVersion(meta.package_version);
         setAuditLogAvailable(Boolean(meta.audit_log_available));
-      } catch (err) {
-        if (!cancelled) setMetaError(mapSyncApiError(err, "Не удалось загрузить метаданные sync."));
-      } finally {
-        if (!cancelled) setMetaLoaded(true);
+      } else {
+        setMetaError(mapSyncApiError(metaOutcome.reason, "Не удалось загрузить метаданные sync."));
       }
+      setMetaLoaded(true);
+
+      if (historyOutcome.status === "fulfilled") {
+        const historyResult = historyOutcome.value;
+        setHistory(historyResult);
+        setAuditLogAvailable(Boolean(historyResult.audit_log_available));
+      } else {
+        setHistoryError(mapSyncApiError(historyOutcome.reason, "Не удалось загрузить историю sync."));
+      }
+      setHistoryLoading(false);
     })();
+
     return () => {
       cancelled = true;
     };
@@ -372,10 +391,6 @@ export default function SyncAdminClient() {
       cancelled = true;
     };
   }, []);
-
-  React.useEffect(() => {
-    void refreshHistory();
-  }, [refreshHistory]);
 
   React.useEffect(() => {
     if (!previewResult) return;
