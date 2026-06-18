@@ -797,6 +797,108 @@ export async function uploadControlList(file: File): Promise<{
   return res.json();
 }
 
+export type NormalizedRecordKind = "training" | "certificate" | "category" | "education";
+
+export type NormalizedRecordReviewStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "promoted"
+  | "superseded";
+
+export type NormalizedRecordSummary = {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  promoted: number;
+  superseded: number;
+  by_kind: Record<NormalizedRecordKind, number>;
+  skipped?: boolean;
+};
+
+export type NormalizedRecord = {
+  record_id: number;
+  normalized_record_id: number;
+  batch_id: number;
+  row_id: number;
+  employee_id: number | null;
+  full_name: string;
+  iin_masked: string;
+  fragment_index: number;
+  source_field: string;
+  source_text: string;
+  source_record_key: string;
+  record_kind: NormalizedRecordKind;
+  document_type_id: number | null;
+  document_type_code: string | null;
+  title: string | null;
+  provider: string | null;
+  hours: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
+  document_number: string | null;
+  specialty_text: string | null;
+  medical_specialty_id: number | null;
+  file_url: string | null;
+  parse_method: string;
+  confidence: number | null;
+  review_status: NormalizedRecordReviewStatus;
+  reviewed_at: string | null;
+  reviewed_by: number | null;
+  review_notes: string | null;
+  promoted_document_id: number | null;
+  promoted_at: string | null;
+  promoted_by: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function getNormalizedRecordsSummary(batchId?: number): Promise<NormalizedRecordSummary> {
+  return apiGetJson(
+    "/directory/personnel/import/normalized-records/summary",
+    buildQuery({ batch_id: batchId })
+  );
+}
+
+export async function listNormalizedRecords(
+  params: {
+    batch_id?: number;
+    employee_id?: number;
+    review_status?: NormalizedRecordReviewStatus;
+    record_kind?: NormalizedRecordKind;
+    q_name?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<{ total: number; limit: number; offset: number; items: NormalizedRecord[]; skipped?: boolean }> {
+  return apiGetJson("/directory/personnel/import/normalized-records", buildQuery(params));
+}
+
+export async function patchNormalizedRecordReview(
+  recordId: number,
+  body: { review_status: NormalizedRecordReviewStatus; review_notes?: string }
+): Promise<NormalizedRecord> {
+  return apiPatchJson(`/directory/personnel/import/normalized-records/${recordId}`, body);
+}
+
+export const NORMALIZED_RECORD_KIND_LABELS: Record<NormalizedRecordKind, string> = {
+  training: "Обучение",
+  certificate: "Сертификат",
+  category: "Категория",
+  education: "Награда",
+};
+
+export const NORMALIZED_REVIEW_STATUS_LABELS: Record<NormalizedRecordReviewStatus, string> = {
+  pending: "Ожидает проверки",
+  approved: "Утверждено",
+  rejected: "Отклонено",
+  promoted: "Промотировано",
+  superseded: "Заменено",
+};
+
 export const SHEET_TYPE_LABELS: Record<string, string> = {
   doctors: "Врачи",
   nurses: "Медсестра / СМР",

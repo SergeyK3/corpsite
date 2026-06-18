@@ -754,6 +754,7 @@ def get_import_normalized_records(
     employee_id: Optional[int] = Query(default=None, ge=1),
     review_status: Optional[str] = Query(default=None),
     record_kind: Optional[str] = Query(default=None),
+    q_name: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -766,6 +767,7 @@ def get_import_normalized_records(
             employee_id=employee_id,
             review_status=review_status,
             record_kind=record_kind,
+            q_name=q_name,
             limit=limit,
             offset=offset,
         )

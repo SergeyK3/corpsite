@@ -19,6 +19,7 @@ from app.services.hr_import_education_profile_service import (
     _load_effective_profile_meta,
     _resolve_merged_profile,
 )
+from scripts.import_hr_control_list import mask_iin
 
 REVIEW_STATUS_PENDING = "pending"
 REVIEW_STATUS_APPROVED = "approved"
@@ -797,12 +798,16 @@ def _isoformat_or_none(value: Any) -> Optional[str]:
 
 def _serialize_normalized_record(row: dict[str, Any]) -> dict[str, Any]:
     confidence = row.get("confidence")
+    full_name = str(row.get("full_name") or "").strip()
+    iin_raw = str(row.get("row_iin") or row.get("iin") or "").strip()
     return {
         "record_id": int(row["normalized_record_id"]),
         "normalized_record_id": int(row["normalized_record_id"]),
         "batch_id": int(row["batch_id"]),
         "row_id": int(row["row_id"]),
         "employee_id": int(row["employee_id"]) if row.get("employee_id") is not None else None,
+        "full_name": full_name,
+        "iin_masked": mask_iin(iin_raw) if iin_raw else "",
         "fragment_index": int(row.get("fragment_index") or 0),
         "source_field": row.get("source_field") or "",
         "source_text": row.get("source_text") or "",
@@ -920,6 +925,34 @@ def review_normalized_records_summary(
     }
 
 
+def _normalized_record_list_join_sql() -> str:
+    return """
+        FROM public.hr_import_normalized_records nr
+        JOIN public.hr_import_rows r ON r.row_id = nr.row_id
+    """
+
+
+def _normalized_record_identity_sql() -> str:
+    return """
+        trim(COALESCE(r.normalized_payload->>'full_name', '')) AS full_name,
+        trim(COALESCE(r.normalized_payload->>'iin', '')) AS row_iin
+    """
+
+
+def _fetch_normalized_record_row(conn: Connection, record_id: int) -> Optional[dict[str, Any]]:
+    row = conn.execute(
+        text(
+            f"""
+            SELECT nr.*, {_normalized_record_identity_sql()}
+            {_normalized_record_list_join_sql()}
+            WHERE nr.normalized_record_id = :record_id
+            """
+        ),
+        {"record_id": record_id},
+    ).mappings().first()
+    return dict(row) if row is not None else None
+
+
 def list_review_normalized_records(
     conn: Connection,
     *,
@@ -927,6 +960,7 @@ def list_review_normalized_records(
     employee_id: Optional[int] = None,
     review_status: Optional[str] = None,
     record_kind: Optional[str] = None,
+    q_name: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -950,32 +984,38 @@ def list_review_normalized_records(
     clauses: list[str] = []
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     if batch_id is not None:
-        clauses.append("batch_id = :batch_id")
+        clauses.append("nr.batch_id = :batch_id")
         params["batch_id"] = batch_id
     if employee_id is not None:
-        clauses.append("employee_id = :employee_id")
+        clauses.append("nr.employee_id = :employee_id")
         params["employee_id"] = employee_id
     if review_status is not None:
-        clauses.append("review_status = :review_status")
+        clauses.append("nr.review_status = :review_status")
         params["review_status"] = review_status
     if record_kind is not None:
-        clauses.append("record_kind = :record_kind")
+        clauses.append("nr.record_kind = :record_kind")
         params["record_kind"] = record_kind
+    if q_name:
+        clauses.append(
+            "lower(trim(COALESCE(r.normalized_payload->>'full_name', ''))) LIKE :q_name_pattern"
+        )
+        params["q_name_pattern"] = f"%{q_name.strip().lower()}%"
 
     where_sql = " AND ".join(clauses) if clauses else "TRUE"
+    join_sql = _normalized_record_list_join_sql()
     total = int(
         conn.execute(
-            text(f"SELECT COUNT(*) FROM public.hr_import_normalized_records WHERE {where_sql}"),
+            text(f"SELECT COUNT(*) {join_sql} WHERE {where_sql}"),
             params,
         ).scalar_one()
     )
     db_rows = conn.execute(
         text(
             f"""
-            SELECT *
-            FROM public.hr_import_normalized_records
+            SELECT nr.*, {_normalized_record_identity_sql()}
+            {join_sql}
             WHERE {where_sql}
-            ORDER BY created_at DESC, normalized_record_id DESC
+            ORDER BY nr.created_at DESC, nr.normalized_record_id DESC
             LIMIT :limit OFFSET :offset
             """
         ),
@@ -1006,22 +1046,13 @@ def update_normalized_record_review(
     if not normalized_records_available(conn):
         raise NormalizedRecordNotFoundError(record_id)
 
-    row = conn.execute(
-        text(
-            """
-            SELECT *
-            FROM public.hr_import_normalized_records
-            WHERE normalized_record_id = :record_id
-            """
-        ),
-        {"record_id": record_id},
-    ).mappings().first()
+    row = _fetch_normalized_record_row(conn, record_id)
     if row is None:
         raise NormalizedRecordNotFoundError(record_id)
 
     current_status = str(row["review_status"])
     if review_status == current_status:
-        return _serialize_normalized_record(dict(row))
+        return _serialize_normalized_record(row)
 
     allowed = ALLOWED_REVIEW_TRANSITIONS.get(current_status, frozenset())
     if review_status not in allowed:
@@ -1068,14 +1099,7 @@ def update_normalized_record_review(
             },
         )
 
-    updated = conn.execute(
-        text(
-            """
-            SELECT *
-            FROM public.hr_import_normalized_records
-            WHERE normalized_record_id = :record_id
-            """
-        ),
-        {"record_id": record_id},
-    ).mappings().first()
-    return _serialize_normalized_record(dict(updated))
+    updated = _fetch_normalized_record_row(conn, record_id)
+    if updated is None:
+        raise NormalizedRecordNotFoundError(record_id)
+    return _serialize_normalized_record(updated)

@@ -25,7 +25,7 @@ const BASE_ITEMS = [
 
 type ImportNavItem =
   | {
-      key: "import-list";
+      key: string;
       title: string;
       href: string;
       isActive: (pathname: string) => boolean;
@@ -37,6 +37,8 @@ type ImportNavItem =
       isActive: (pathname: string, batchId: number | null, reviewMode: string) => boolean;
     };
 
+const IMPORT_REVIEW_HREF = "/directory/personnel/import/review";
+
 const IMPORT_ITEMS: ImportNavItem[] = [
   {
     key: "import-list",
@@ -46,6 +48,13 @@ const IMPORT_ITEMS: ImportNavItem[] = [
       pathname === IMPORT_LIST_HREF ||
       pathname === `${IMPORT_LIST_HREF}/` ||
       pathname === `${IMPORT_LIST_HREF}/upload`,
+  },
+  {
+    key: "import-normalized-review",
+    title: "Проверка записей",
+    href: IMPORT_REVIEW_HREF,
+    isActive: (pathname: string) =>
+      pathname === IMPORT_REVIEW_HREF || pathname.startsWith(`${IMPORT_REVIEW_HREF}/`),
   },
   {
     key: "import-analytics",
