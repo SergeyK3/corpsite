@@ -20,6 +20,7 @@ from app.services.hr_import_normalized_record_service import (
     normalized_records_summary,
     populate_normalized_records,
     RECORD_KIND_CATEGORY,
+    RECORD_KIND_CERTIFICATE,
 )
 from app.services.hr_import_profile_service import build_import_profile
 from app.services.hr_import_service import import_control_list
@@ -29,6 +30,11 @@ from tests.test_import_hr_control_list import _build_doctors_sheet, get_layout_p
 MIXED_CATEGORY_CERT_TEXT = (
     'Высшая до 10.04.2023г. "Гигиена и эпидемиология" '
     'Сертификат "Гигиена-эпидемиология" 29.09.2028 г.'
+)
+
+MULTI_CERTIFICATE_TEXT = (
+    'Сертификат "Общая врачебная практика" до 14.07.2027г. '
+    '2. Сертификат "Онкология взрослаяг" до 01.08.2029'
 )
 
 
@@ -341,3 +347,111 @@ def test_populate_category_mixed_certification_text_no_check_violation(seed):
     assert cat["title"] == "highest"
     assert cat["issue_date"] is None
     assert cat["expiry_date"] == date(2023, 4, 10)
+
+
+def test_multi_certificate_text_staging_splits_and_dates():
+    profile = build_import_profile(
+        {
+            "full_name": "Test Employee",
+            "certification_raw": MULTI_CERTIFICATE_TEXT,
+        }
+    )
+    bad_enrichment = {
+        "fragment_index": 0,
+        "parsed_issued_at": date(2029, 1, 1),
+        "parsed_valid_until": date(2027, 7, 14),
+        "parse_method": "regex_v1",
+        "confidence_score": 0.85,
+    }
+    candidate_index = {
+        (1, "certification_raw", norm_source_text(MULTI_CERTIFICATE_TEXT)): bad_enrichment,
+        (1, "certification_raw", 0): bad_enrichment,
+    }
+    rows = _build_staging_rows_for_profile(
+        batch_id=1,
+        row_id=1,
+        employee_id=None,
+        profile=profile,
+        candidate_index=candidate_index,
+        document_type_ids={},
+        open_employee_keys=set(),
+    )
+    certs = [row for row in rows if row["record_kind"] == RECORD_KIND_CERTIFICATE]
+    assert len(certs) == 2
+    by_title = {row["title"]: row for row in certs}
+    first = by_title["Общая врачебная практика"]
+    second = by_title["Онкология взрослаяг"]
+    assert first["expiry_date"] == date(2027, 7, 14)
+    assert first["issue_date"] is None
+    assert second["expiry_date"] == date(2029, 8, 1)
+    assert second["issue_date"] is None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_populate_multi_certificate_text_no_check_violation(seed):
+    _require_phase_3c()
+    suffix = uuid4().hex[:8]
+    payload = {
+        "full_name": "Multi Certificate",
+        "certification_raw": MULTI_CERTIFICATE_TEXT,
+        "metadata": {
+            "sheet_type": "doctors",
+            "row_type": "EMPLOYEE",
+            "is_employee_roster": True,
+            "classification": "NORMAL",
+        },
+    }
+    with engine.begin() as conn:
+        batch_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_batches (
+                    source_type, file_name, imported_by, status,
+                    total_rows, valid_rows, error_rows
+                )
+                VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 1, 1, 0)
+                RETURNING batch_id
+                """
+            ),
+            {
+                "file_name": f"multi_cert_{suffix}.xlsx",
+                "uid": int(seed["initiator_user_id"]),
+            },
+        ).scalar_one()
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_rows (
+                    batch_id, source_sheet, source_row_number,
+                    raw_payload, normalized_payload, match_status
+                )
+                VALUES (
+                    :batch_id, 'doctors', 8,
+                    CAST(:payload AS jsonb), CAST(:payload AS jsonb), 'NOT_PROCESSED'
+                )
+                """
+            ),
+            {"batch_id": batch_id, "payload": json.dumps(payload)},
+        )
+        populate_normalized_records(conn, batch_id)
+        certs = conn.execute(
+            text(
+                """
+                SELECT title, issue_date, expiry_date
+                FROM public.hr_import_normalized_records
+                WHERE batch_id = :batch_id
+                  AND record_kind = 'certificate'
+                ORDER BY expiry_date
+                """
+            ),
+            {"batch_id": batch_id},
+        ).mappings().all()
+        _delete_batch(conn, batch_id)
+
+    assert len(certs) == 2
+    assert certs[0]["title"] == "Общая врачебная практика"
+    assert certs[0]["issue_date"] is None
+    assert certs[0]["expiry_date"] == date(2027, 7, 14)
+    assert certs[1]["title"] == "Онкология взрослаяг"
+    assert certs[1]["issue_date"] is None
+    assert certs[1]["expiry_date"] == date(2029, 8, 1)

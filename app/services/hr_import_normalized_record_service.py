@@ -212,6 +212,85 @@ def _resolve_category_issue_expiry_dates(
     return issue_date, expiry_date
 
 
+_CERTIFICATE_QUOTED_TITLE_RE = re.compile(r"Сертификат\s*\"([^\"]+)\"", re.IGNORECASE)
+_NUMBERED_CERTIFICATE_SPLIT_RE = re.compile(r"(?<=\S)\s+(?=\d+\.\s*Сертификат)", re.IGNORECASE)
+
+
+def _extract_certificate_title_from_fragment(text: str) -> str:
+    match = _CERTIFICATE_QUOTED_TITLE_RE.search(text or "")
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def _split_certification_certificate_fragments(text: str) -> list[str]:
+    """Split mixed certification_raw into per-certificate fragments."""
+    text_val = (text or "").strip()
+    if not text_val:
+        return []
+
+    parts = _NUMBERED_CERTIFICATE_SPLIT_RE.split(text_val)
+    fragments: list[str] = []
+    for part in parts:
+        cleaned = re.sub(r"^\d+\.\s*", "", part.strip())
+        if cleaned:
+            fragments.append(cleaned)
+
+    if len(fragments) <= 1:
+        alt_parts = re.split(r"(?<=\S)\s+(?=Сертификат\s*\")", text_val, flags=re.IGNORECASE)
+        fragments = [part.strip() for part in alt_parts if part.strip()]
+
+    return fragments if fragments else [text_val]
+
+
+def _expand_certificate_records_for_staging(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    expanded: list[dict[str, Any]] = []
+    for record in records:
+        source_text = str(record.get("source_text") or "")
+        fragments = _split_certification_certificate_fragments(source_text)
+        if len(fragments) <= 1:
+            expanded.append(record)
+            continue
+        for frag_text in fragments:
+            title = _extract_certificate_title_from_fragment(frag_text)
+            expanded.append(
+                {
+                    **record,
+                    "source_text": frag_text,
+                    "topic": title or record.get("topic"),
+                    "issued_at": "",
+                    "valid_until": "",
+                }
+            )
+    return expanded
+
+
+def _resolve_certificate_issue_expiry_dates(
+    record: dict[str, Any],
+    enrichment: dict[str, Any],
+    source_text: str,
+) -> tuple[Optional[date], Optional[date]]:
+    """
+    Certificate rows: expiry from «до …» inside the same fragment; never borrow
+    issue_date from another certificate fragment or enrichment year scrape.
+    """
+    expiry_date = _parse_category_expiry_from_text(source_text)
+    if expiry_date is None:
+        expiry_date = _coerce_date(record.get("valid_until"))
+    if expiry_date is None:
+        expiry_date = _coerce_date(enrichment.get("parsed_valid_until"))
+
+    issue_date = None
+    record_issued = _coerce_date(record.get("issued_at"))
+    if record_issued is not None and expiry_date is not None and record_issued < expiry_date:
+        issue_date = record_issued
+
+    if issue_date is not None and expiry_date is not None and issue_date > expiry_date:
+        issue_date = None
+
+    return issue_date, expiry_date
+
+
 def _resolve_document_type_code(
     record_kind: str,
     *,
@@ -376,6 +455,8 @@ def _build_staging_rows_for_profile(
 
     staging_rows: list[dict[str, Any]] = []
     for record_kind, records in builders:
+        if record_kind == RECORD_KIND_CERTIFICATE:
+            records = _expand_certificate_records_for_staging(records)
         for fragment_index, record in enumerate(records):
             source_field = str(record.get("source_field") or "")
             source_text = str(record.get("source_text") or "")
@@ -407,20 +488,20 @@ def _build_staging_rows_for_profile(
             elif record_kind == RECORD_KIND_CERTIFICATE:
                 title = str(
                     record.get("topic")
+                    or _extract_certificate_title_from_fragment(source_text)
                     or record.get("kind")
                     or enrichment.get("title")
                     or source_text
                     or ""
                 )
                 provider = str(record.get("kind") or enrichment.get("organization") or "")
-                issue_date = _coerce_date(record.get("issued_at")) or _coerce_date(
-                    enrichment.get("parsed_issued_at")
+                issue_date, expiry_date = _resolve_certificate_issue_expiry_dates(
+                    record,
+                    enrichment,
+                    source_text,
                 )
                 start_date = None
                 end_date = None
-                expiry_date = _coerce_date(record.get("valid_until")) or _coerce_date(
-                    enrichment.get("parsed_valid_until")
-                )
                 hours = _coerce_hours(record.get("hours"))
                 if hours is None:
                     hours = _coerce_hours(enrichment.get("parsed_hours"))
