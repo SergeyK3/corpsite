@@ -57,9 +57,11 @@ from app.services.hr_import_row_review_service import (
 from app.services.hr_import_normalized_record_service import (
     InvalidReviewTransitionError,
     NormalizedRecordNotFoundError,
+    ReviewOverrideNotAllowedError,
     list_review_normalized_records,
     review_normalized_records_summary,
     update_normalized_record_review,
+    update_normalized_record_review_override,
 )
 from app.services.hr_import_promotion_service import PromotionRequestError, promote_normalized_records
 from app.services.hr_import_service import import_control_list
@@ -87,6 +89,10 @@ def _normalized_record_not_found(exc: NormalizedRecordNotFoundError) -> HTTPExce
 
 
 def _invalid_review_transition(exc: InvalidReviewTransitionError) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+def _review_override_not_allowed(exc: ReviewOverrideNotAllowedError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
 
@@ -831,9 +837,39 @@ def patch_import_normalized_record_review(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     require_privileged_or_403(user)
+    has_review_override = "review_override" in body
     review_status = body.get("review_status")
+
+    if has_review_override and review_status is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="review_override and review_status cannot be updated in the same request",
+        )
+
+    if has_review_override:
+        review_override = body.get("review_override")
+        if not isinstance(review_override, dict):
+            raise HTTPException(status_code=422, detail="review_override must be an object")
+        try:
+            return _with_conn(
+                update_normalized_record_review_override,
+                record_id=record_id,
+                review_override=review_override,
+                updated_by=int(user["user_id"]),
+            )
+        except NormalizedRecordNotFoundError as e:
+            raise _normalized_record_not_found(e)
+        except ReviewOverrideNotAllowedError as e:
+            raise _review_override_not_allowed(e)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise as_http500(e)
+
     if not review_status or not isinstance(review_status, str):
-        raise HTTPException(status_code=422, detail="review_status is required")
+        raise HTTPException(status_code=422, detail="review_status or review_override is required")
     try:
         return _with_conn(
             update_normalized_record_review,

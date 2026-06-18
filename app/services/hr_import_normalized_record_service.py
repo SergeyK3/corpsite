@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import date
 from decimal import Decimal
@@ -79,6 +80,33 @@ DEFAULT_DOCUMENT_TYPE_CODE: dict[str, Optional[str]] = {
     RECORD_KIND_CATEGORY: None,
     RECORD_KIND_EDUCATION: "EDUCATION_GRADUATION",
 }
+
+PAYLOAD_FIELDS = frozenset(
+    {
+        "title",
+        "provider",
+        "hours",
+        "start_date",
+        "end_date",
+        "issue_date",
+        "expiry_date",
+        "document_number",
+        "specialty_text",
+        "medical_specialty_id",
+        "file_url",
+    }
+)
+
+OVERRIDABLE_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
+    RECORD_KIND_EDUCATION: frozenset({"title", "provider", "issue_date", "document_number"}),
+    RECORD_KIND_TRAINING: frozenset({"title", "provider", "hours", "issue_date"}),
+    RECORD_KIND_CERTIFICATE: frozenset(
+        {"title", "specialty_text", "issue_date", "expiry_date", "document_number"}
+    ),
+    RECORD_KIND_CATEGORY: frozenset({"title", "specialty_text", "issue_date", "expiry_date"}),
+}
+
+DATE_OVERRIDE_FIELDS = frozenset({"start_date", "end_date", "issue_date", "expiry_date"})
 
 
 def normalized_records_available(conn: Connection) -> bool:
@@ -683,6 +711,7 @@ def _insert_staging_row(conn: Connection, row: dict[str, Any]) -> None:
                 updated_at = NOW()
             WHERE public.hr_import_normalized_records.promoted_document_id IS NULL
               AND public.hr_import_normalized_records.review_status IN ('pending', 'rejected', 'superseded')
+              AND public.hr_import_normalized_records.review_override_json IS NULL
             """
         ),
         row,
@@ -697,6 +726,7 @@ def _delete_rebuildable_records(conn: Connection, batch_id: int) -> int:
             WHERE batch_id = :batch_id
               AND promoted_document_id IS NULL
               AND review_status IN ('pending', 'rejected', 'superseded')
+              AND review_override_json IS NULL
             """
         ),
         {"batch_id": batch_id},
@@ -911,10 +941,136 @@ def _isoformat_or_none(value: Any) -> Optional[str]:
     return str(value)
 
 
+def _isoformat_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def review_override_available(conn: Connection) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'hr_import_normalized_records'
+              AND column_name = 'review_override_json'
+            """
+        )
+    ).first()
+    return row is not None
+
+
+def _parse_review_override_json(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        raw = value
+    elif isinstance(value, str):
+        text_val = value.strip()
+        if not text_val:
+            return {}
+        raw = json.loads(text_val)
+    else:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("review_override_json must be a JSON object")
+    return raw
+
+
+def _normalize_override_field(field: str, value: Any) -> Any:
+    if field in DATE_OVERRIDE_FIELDS:
+        coerced = _coerce_date(value)
+        return coerced.isoformat() if coerced is not None else None
+    if field == "hours":
+        if value is None or value == "":
+            return None
+        hours = int(value)
+        return hours
+    if field in {"title", "provider", "document_number", "specialty_text", "file_url"}:
+        if value is None:
+            return None
+        text_val = str(value).strip()
+        return text_val or None
+    if field == "medical_specialty_id":
+        if value is None or value == "":
+            return None
+        return int(value)
+    return value
+
+
+def _parsed_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for field in PAYLOAD_FIELDS:
+        if field == "hours":
+            payload[field] = int(row["hours"]) if row.get("hours") is not None else None
+        elif field == "medical_specialty_id":
+            payload[field] = (
+                int(row["medical_specialty_id"])
+                if row.get("medical_specialty_id") is not None
+                else None
+            )
+        elif field in DATE_OVERRIDE_FIELDS:
+            payload[field] = _isoformat_or_none(row.get(field))
+        else:
+            payload[field] = row.get(field)
+    return payload
+
+
+def merge_review_override(row: dict[str, Any]) -> dict[str, Any]:
+    """Overlay sparse review_override_json onto parsed DB columns for effective values."""
+    override = _parse_review_override_json(row.get("review_override_json"))
+    if not override:
+        return dict(row)
+    merged = dict(row)
+    for key, value in override.items():
+        if key in PAYLOAD_FIELDS:
+            merged[key] = value
+    return merged
+
+
+def _effective_payload(parsed_payload: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    if not override:
+        return dict(parsed_payload)
+    effective = dict(parsed_payload)
+    effective.update(override)
+    return effective
+
+
+class ReviewOverrideNotAllowedError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
+
+
+def _build_sparse_review_override(
+    parsed_payload: dict[str, Any],
+    submitted: dict[str, Any],
+    *,
+    record_kind: str,
+) -> dict[str, Any]:
+    allowed = OVERRIDABLE_FIELDS_BY_KIND.get(record_kind, frozenset())
+    sparse: dict[str, Any] = {}
+    for field in allowed:
+        if field not in submitted:
+            continue
+        normalized = _normalize_override_field(field, submitted[field])
+        parsed_normalized = _normalize_override_field(field, parsed_payload.get(field))
+        if normalized != parsed_normalized:
+            sparse[field] = normalized
+    return sparse
+
+
 def _serialize_normalized_record(row: dict[str, Any]) -> dict[str, Any]:
     confidence = row.get("confidence")
     full_name = str(row.get("full_name") or "").strip()
     iin_raw = str(row.get("row_iin") or row.get("iin") or "").strip()
+    parsed_values = _parsed_payload_from_row(row)
+    review_override = _parse_review_override_json(row.get("review_override_json"))
+    effective = _effective_payload(parsed_values, review_override)
     return {
         "record_id": int(row["normalized_record_id"]),
         "normalized_record_id": int(row["normalized_record_id"]),
@@ -930,19 +1086,23 @@ def _serialize_normalized_record(row: dict[str, Any]) -> dict[str, Any]:
         "record_kind": row.get("record_kind") or "",
         "document_type_id": int(row["document_type_id"]) if row.get("document_type_id") is not None else None,
         "document_type_code": row.get("document_type_code"),
-        "title": row.get("title"),
-        "provider": row.get("provider"),
-        "hours": int(row["hours"]) if row.get("hours") is not None else None,
-        "start_date": _isoformat_or_none(row.get("start_date")),
-        "end_date": _isoformat_or_none(row.get("end_date")),
-        "issue_date": _isoformat_or_none(row.get("issue_date")),
-        "expiry_date": _isoformat_or_none(row.get("expiry_date")),
-        "document_number": row.get("document_number"),
-        "specialty_text": row.get("specialty_text"),
-        "medical_specialty_id": int(row["medical_specialty_id"])
-        if row.get("medical_specialty_id") is not None
+        "title": effective.get("title"),
+        "provider": effective.get("provider"),
+        "hours": effective.get("hours"),
+        "start_date": effective.get("start_date"),
+        "end_date": effective.get("end_date"),
+        "issue_date": effective.get("issue_date"),
+        "expiry_date": effective.get("expiry_date"),
+        "document_number": effective.get("document_number"),
+        "specialty_text": effective.get("specialty_text"),
+        "medical_specialty_id": effective.get("medical_specialty_id"),
+        "file_url": effective.get("file_url"),
+        "parsed_values": parsed_values,
+        "review_override": review_override or None,
+        "review_override_updated_by": int(row["review_override_updated_by"])
+        if row.get("review_override_updated_by") is not None
         else None,
-        "file_url": row.get("file_url"),
+        "review_override_updated_at": _isoformat_or_none(row.get("review_override_updated_at")),
         "parse_method": row.get("parse_method") or "",
         "confidence": float(confidence) if isinstance(confidence, Decimal) else confidence,
         "review_status": row.get("review_status") or REVIEW_STATUS_PENDING,
@@ -1213,6 +1373,78 @@ def update_normalized_record_review(
                 "review_status": review_status,
             },
         )
+
+    updated = _fetch_normalized_record_row(conn, record_id)
+    if updated is None:
+        raise NormalizedRecordNotFoundError(record_id)
+    return _serialize_normalized_record(updated)
+
+
+def update_normalized_record_review_override(
+    conn: Connection,
+    record_id: int,
+    *,
+    review_override: dict[str, Any],
+    updated_by: int,
+) -> dict[str, Any]:
+    """ADR-039 Phase 3F.3 — save sparse manual corrections without mutating parsed columns."""
+    if not normalized_records_available(conn):
+        raise NormalizedRecordNotFoundError(record_id)
+    if not review_override_available(conn):
+        raise ReviewOverrideNotAllowedError("review_override_json column is not available")
+
+    row = _fetch_normalized_record_row(conn, record_id)
+    if row is None:
+        raise NormalizedRecordNotFoundError(record_id)
+
+    current_status = str(row["review_status"])
+    if current_status != REVIEW_STATUS_PENDING:
+        raise ReviewOverrideNotAllowedError(
+            f"review override is allowed only for pending records, got {current_status}"
+        )
+
+    record_kind = str(row.get("record_kind") or "")
+    if record_kind not in RECORD_KINDS:
+        raise ValueError(f"invalid record_kind: {record_kind}")
+
+    allowed = OVERRIDABLE_FIELDS_BY_KIND[record_kind]
+    unknown = set(review_override.keys()) - allowed
+    if unknown:
+        raise ValueError(f"unsupported review_override fields for {record_kind}: {sorted(unknown)}")
+
+    parsed_payload = _parsed_payload_from_row(row)
+    sparse = _build_sparse_review_override(
+        parsed_payload,
+        review_override,
+        record_kind=record_kind,
+    )
+
+    override_json = json.dumps(sparse, ensure_ascii=False) if sparse else None
+
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_import_normalized_records
+            SET
+                review_override_json = CAST(:review_override_json AS JSONB),
+                review_override_updated_by = CASE
+                    WHEN CAST(:review_override_json AS JSONB) IS NULL THEN NULL
+                    ELSE :updated_by
+                END,
+                review_override_updated_at = CASE
+                    WHEN CAST(:review_override_json AS JSONB) IS NULL THEN NULL
+                    ELSE NOW()
+                END,
+                updated_at = NOW()
+            WHERE normalized_record_id = :record_id
+            """
+        ),
+        {
+            "record_id": record_id,
+            "review_override_json": override_json,
+            "updated_by": int(updated_by),
+        },
+    )
 
     updated = _fetch_normalized_record_row(conn, record_id)
     if updated is None:

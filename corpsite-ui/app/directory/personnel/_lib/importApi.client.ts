@@ -830,6 +830,22 @@ export type NormalizedRecordSummary = {
   skipped?: boolean;
 };
 
+export type NormalizedRecordPayloadValues = {
+  title: string | null;
+  provider: string | null;
+  hours: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
+  document_number: string | null;
+  specialty_text: string | null;
+  medical_specialty_id: number | null;
+  file_url: string | null;
+};
+
+export type NormalizedRecordReviewOverride = Partial<NormalizedRecordPayloadValues>;
+
 export type NormalizedRecord = {
   record_id: number;
   normalized_record_id: number;
@@ -856,6 +872,10 @@ export type NormalizedRecord = {
   specialty_text: string | null;
   medical_specialty_id: number | null;
   file_url: string | null;
+  parsed_values?: NormalizedRecordPayloadValues;
+  review_override?: NormalizedRecordReviewOverride | null;
+  review_override_updated_by?: number | null;
+  review_override_updated_at?: string | null;
   parse_method: string;
   confidence: number | null;
   review_status: NormalizedRecordReviewStatus;
@@ -895,6 +915,15 @@ export async function patchNormalizedRecordReview(
   body: { review_status: NormalizedRecordReviewStatus; review_notes?: string }
 ): Promise<NormalizedRecord> {
   return apiPatchJson(`/directory/personnel/import/normalized-records/${recordId}`, body);
+}
+
+export async function patchNormalizedRecordReviewOverride(
+  recordId: number,
+  reviewOverride: NormalizedRecordReviewOverride
+): Promise<NormalizedRecord> {
+  return apiPatchJson(`/directory/personnel/import/normalized-records/${recordId}`, {
+    review_override: reviewOverride,
+  });
 }
 
 export type {

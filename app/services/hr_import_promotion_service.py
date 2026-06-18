@@ -13,6 +13,7 @@ from app.services.hr_import_normalized_record_service import (
     RECORD_KIND_TRAINING,
     REVIEW_STATUS_APPROVED,
     REVIEW_STATUS_PROMOTED,
+    merge_review_override,
     normalized_records_available,
 )
 
@@ -677,6 +678,7 @@ def promote_normalized_record(
     if row is None:
         raise PromotionRequestError(f"normalized record not found: {record_id}")
 
+    row = merge_review_override(row)
     item, plan = evaluate_promotion(conn, row, dry_run=dry_run)
     if dry_run or plan is None:
         return item

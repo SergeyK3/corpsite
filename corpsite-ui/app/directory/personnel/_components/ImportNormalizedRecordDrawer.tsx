@@ -7,7 +7,10 @@ import {
   NORMALIZED_REVIEW_STATUS_LABELS,
   mapImportApiError,
   patchNormalizedRecordReview,
+  patchNormalizedRecordReviewOverride,
   type NormalizedRecord,
+  type NormalizedRecordKind,
+  type NormalizedRecordReviewOverride,
   type NormalizedRecordReviewStatus,
 } from "../_lib/importApi.client";
 
@@ -17,6 +20,16 @@ type Props = {
   onClose: () => void;
   onReviewed: (record: NormalizedRecord) => void;
   onToast: (message: string, kind?: "success" | "error") => void;
+};
+
+type EditDraft = {
+  title: string;
+  provider: string;
+  hours: string;
+  issue_date: string;
+  expiry_date: string;
+  document_number: string;
+  specialty_text: string;
 };
 
 function reviewStatusBadgeClass(status: NormalizedRecordReviewStatus): string {
@@ -39,13 +52,121 @@ function formatDate(value: string | null | undefined): string {
   return d.toLocaleDateString("ru-RU");
 }
 
-function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+function toInputDate(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.slice(0, 10);
+}
+
+function draftFromRecord(record: NormalizedRecord): EditDraft {
+  return {
+    title: record.title ?? "",
+    provider: record.provider ?? "",
+    hours: record.hours != null ? String(record.hours) : "",
+    issue_date: toInputDate(record.issue_date),
+    expiry_date: toInputDate(record.expiry_date),
+    document_number: record.document_number ?? "",
+    specialty_text: record.specialty_text ?? "",
+  };
+}
+
+function buildOverridePayload(
+  kind: NormalizedRecordKind,
+  draft: EditDraft
+): NormalizedRecordReviewOverride {
+  const payload: NormalizedRecordReviewOverride = {};
+  if (kind === "education" || kind === "training" || kind === "certificate") {
+    payload.title = draft.title.trim() || null;
+  }
+  if (kind === "education" || kind === "training") {
+    payload.provider = draft.provider.trim() || null;
+  }
+  if (kind === "training") {
+    payload.hours = draft.hours.trim() ? Number(draft.hours) : null;
+    payload.issue_date = draft.issue_date || null;
+  }
+  if (kind === "education") {
+    payload.issue_date = draft.issue_date || null;
+    payload.document_number = draft.document_number.trim() || null;
+  }
+  if (kind === "certificate") {
+    payload.specialty_text = draft.specialty_text.trim() || null;
+    payload.issue_date = draft.issue_date || null;
+    payload.expiry_date = draft.expiry_date || null;
+    payload.document_number = draft.document_number.trim() || null;
+  }
+  if (kind === "category") {
+    payload.title = draft.title.trim() || null;
+    payload.specialty_text = draft.specialty_text.trim() || null;
+    payload.issue_date = draft.issue_date || null;
+    payload.expiry_date = draft.expiry_date || null;
+  }
+  return payload;
+}
+
+function FieldRow({
+  label,
+  value,
+  parsedHint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  parsedHint?: string | null;
+}) {
   return (
     <div className="grid gap-1 sm:grid-cols-[140px_1fr] sm:gap-3">
       <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="text-sm text-zinc-900 dark:text-zinc-100">{value || "—"}</div>
+      <div>
+        <div className="text-sm text-zinc-900 dark:text-zinc-100">{value || "—"}</div>
+        {parsedHint ? (
+          <div className="mt-0.5 text-xs text-zinc-500">Исходный парсинг: {parsedHint}</div>
+        ) : null}
+      </div>
     </div>
   );
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  parsedHint,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  parsedHint?: string | null;
+}) {
+  return (
+    <label className="grid gap-1 sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3">
+      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
+      <span>
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+        />
+        {parsedHint ? (
+          <span className="mt-0.5 block text-xs text-zinc-500">Исходный парсинг: {parsedHint}</span>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+function parsedHint(
+  record: NormalizedRecord,
+  field: keyof NormalizedRecordReviewOverride,
+  formatter: (v: string | null | undefined) => string = (v) => v || "—"
+): string | null {
+  const parsed = record.parsed_values?.[field];
+  const effective = record[field as keyof NormalizedRecord];
+  if (parsed == null && effective == null) return null;
+  const parsedText = formatter(parsed as string | null | undefined);
+  const effectiveText = formatter(effective as string | null | undefined);
+  return parsedText !== effectiveText ? parsedText : null;
 }
 
 function PayloadSection({ record }: { record: NormalizedRecord }) {
@@ -54,14 +175,14 @@ function PayloadSection({ record }: { record: NormalizedRecord }) {
   if (kind === "training") {
     return (
       <div className="space-y-3">
-        <FieldRow label="Название курса" value={record.title} />
-        <FieldRow label="Организация" value={record.provider} />
-        <FieldRow label="Часы" value={record.hours != null ? String(record.hours) : null} />
-        <FieldRow label="Дата начала" value={formatDate(record.start_date)} />
-        <FieldRow label="Дата окончания" value={formatDate(record.end_date)} />
-        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} />
-        <FieldRow label="Документ" value={record.file_url ? <a href={record.file_url} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">{record.file_url}</a> : null} />
-        <FieldRow label="Номер документа" value={record.document_number} />
+        <FieldRow label="Название курса" value={record.title} parsedHint={parsedHint(record, "title")} />
+        <FieldRow label="Организация" value={record.provider} parsedHint={parsedHint(record, "provider")} />
+        <FieldRow
+          label="Часы"
+          value={record.hours != null ? String(record.hours) : null}
+          parsedHint={parsedHint(record, "hours", (v) => (v != null ? String(v) : "—"))}
+        />
+        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} parsedHint={parsedHint(record, "issue_date", formatDate)} />
       </div>
     );
   }
@@ -69,13 +190,11 @@ function PayloadSection({ record }: { record: NormalizedRecord }) {
   if (kind === "certificate") {
     return (
       <div className="space-y-3">
-        <FieldRow label="Название" value={record.title} />
-        <FieldRow label="Организация" value={record.provider} />
-        <FieldRow label="Специальность" value={record.specialty_text} />
-        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} />
-        <FieldRow label="Действует до" value={formatDate(record.expiry_date)} />
-        <FieldRow label="Номер документа" value={record.document_number} />
-        <FieldRow label="Документ" value={record.file_url ? <a href={record.file_url} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">{record.file_url}</a> : null} />
+        <FieldRow label="Название" value={record.title} parsedHint={parsedHint(record, "title")} />
+        <FieldRow label="Специальность" value={record.specialty_text} parsedHint={parsedHint(record, "specialty_text")} />
+        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} parsedHint={parsedHint(record, "issue_date", formatDate)} />
+        <FieldRow label="Действует до" value={formatDate(record.expiry_date)} parsedHint={parsedHint(record, "expiry_date", formatDate)} />
+        <FieldRow label="Номер документа" value={record.document_number} parsedHint={parsedHint(record, "document_number")} />
       </div>
     );
   }
@@ -83,10 +202,10 @@ function PayloadSection({ record }: { record: NormalizedRecord }) {
   if (kind === "category") {
     return (
       <div className="space-y-3">
-        <FieldRow label="Категория" value={record.title} />
-        <FieldRow label="Специальность" value={record.specialty_text} />
-        <FieldRow label="Действует до" value={formatDate(record.expiry_date)} />
-        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} />
+        <FieldRow label="Категория" value={record.title} parsedHint={parsedHint(record, "title")} />
+        <FieldRow label="Специальность" value={record.specialty_text} parsedHint={parsedHint(record, "specialty_text")} />
+        <FieldRow label="Дата присвоения" value={formatDate(record.issue_date)} parsedHint={parsedHint(record, "issue_date", formatDate)} />
+        <FieldRow label="Действует до" value={formatDate(record.expiry_date)} parsedHint={parsedHint(record, "expiry_date", formatDate)} />
       </div>
     );
   }
@@ -94,11 +213,10 @@ function PayloadSection({ record }: { record: NormalizedRecord }) {
   if (kind === "education") {
     return (
       <div className="space-y-3">
-        <FieldRow label="Название" value={record.title} />
-        <FieldRow label="Организация" value={record.provider} />
-        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} />
-        <FieldRow label="Номер документа" value={record.document_number} />
-        <FieldRow label="Документ" value={record.file_url ? <a href={record.file_url} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">{record.file_url}</a> : null} />
+        <FieldRow label="Название" value={record.title} parsedHint={parsedHint(record, "title")} />
+        <FieldRow label="Организация" value={record.provider} parsedHint={parsedHint(record, "provider")} />
+        <FieldRow label="Дата выдачи" value={formatDate(record.issue_date)} parsedHint={parsedHint(record, "issue_date", formatDate)} />
+        <FieldRow label="Номер документа" value={record.document_number} parsedHint={parsedHint(record, "document_number")} />
       </div>
     );
   }
@@ -110,25 +228,95 @@ function PayloadSection({ record }: { record: NormalizedRecord }) {
   );
 }
 
+function EditPayloadSection({
+  record,
+  draft,
+  onChange,
+}: {
+  record: NormalizedRecord;
+  draft: EditDraft;
+  onChange: (draft: EditDraft) => void;
+}) {
+  const kind = record.record_kind;
+  const set = (key: keyof EditDraft, value: string) => onChange({ ...draft, [key]: value });
+
+  if (kind === "training") {
+    return (
+      <div className="space-y-3">
+        <EditField label="Название курса" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
+        <EditField label="Организация" value={draft.provider} onChange={(v) => set("provider", v)} parsedHint={parsedHint(record, "provider")} />
+        <EditField label="Часы" value={draft.hours} onChange={(v) => set("hours", v)} type="number" parsedHint={parsedHint(record, "hours", (v) => (v != null ? String(v) : "—"))} />
+        <EditField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
+      </div>
+    );
+  }
+
+  if (kind === "certificate") {
+    return (
+      <div className="space-y-3">
+        <EditField label="Название" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
+        <EditField label="Специальность" value={draft.specialty_text} onChange={(v) => set("specialty_text", v)} parsedHint={parsedHint(record, "specialty_text")} />
+        <EditField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
+        <EditField label="Действует до" value={draft.expiry_date} onChange={(v) => set("expiry_date", v)} type="date" parsedHint={parsedHint(record, "expiry_date", formatDate)} />
+        <EditField label="Номер документа" value={draft.document_number} onChange={(v) => set("document_number", v)} parsedHint={parsedHint(record, "document_number")} />
+      </div>
+    );
+  }
+
+  if (kind === "category") {
+    return (
+      <div className="space-y-3">
+        <EditField label="Категория" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
+        <EditField label="Специальность" value={draft.specialty_text} onChange={(v) => set("specialty_text", v)} parsedHint={parsedHint(record, "specialty_text")} />
+        <EditField label="Дата присвоения" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
+        <EditField label="Действует до" value={draft.expiry_date} onChange={(v) => set("expiry_date", v)} type="date" parsedHint={parsedHint(record, "expiry_date", formatDate)} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <EditField label="Название" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
+      <EditField label="Организация" value={draft.provider} onChange={(v) => set("provider", v)} parsedHint={parsedHint(record, "provider")} />
+      <EditField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
+      <EditField label="Номер документа" value={draft.document_number} onChange={(v) => set("document_number", v)} parsedHint={parsedHint(record, "document_number")} />
+    </div>
+  );
+}
+
 export default function ImportNormalizedRecordDrawer({ record, open, onClose, onReviewed, onToast }: Props) {
   const [notes, setNotes] = React.useState("");
   const [acting, setActing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState<EditDraft>({
+    title: "",
+    provider: "",
+    hours: "",
+    issue_date: "",
+    expiry_date: "",
+    document_number: "",
+    specialty_text: "",
+  });
 
   React.useEffect(() => {
     if (!open) return;
     setNotes(record?.review_notes || "");
     setError(null);
+    setEditing(false);
+    if (record) {
+      setDraft(draftFromRecord(record));
+    }
   }, [open, record]);
 
   React.useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !editing) onClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, editing]);
 
   async function applyStatus(target: NormalizedRecordReviewStatus) {
     if (!record) return;
@@ -157,13 +345,36 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
     }
   }
 
+  async function saveOverride() {
+    if (!record) return;
+    setActing(true);
+    setError(null);
+    try {
+      const updated = await patchNormalizedRecordReviewOverride(
+        record.record_id,
+        buildOverridePayload(record.record_kind, draft)
+      );
+      onReviewed(updated);
+      setEditing(false);
+      onToast("Исправления сохранены", "success");
+    } catch (e) {
+      const message = mapImportApiError(e);
+      setError(message);
+      onToast(message, "error");
+    } finally {
+      setActing(false);
+    }
+  }
+
   if (!open || !record) return null;
 
   const status = record.review_status;
-  const canApprove = status === "pending";
-  const canReject = status === "pending";
-  const canReturnPending = status === "approved" || status === "rejected";
+  const canApprove = status === "pending" && !editing;
+  const canReject = status === "pending" && !editing;
+  const canEdit = status === "pending";
+  const canReturnPending = (status === "approved" || status === "rejected") && !editing;
   const locked = status === "promoted" || status === "superseded";
+  const hasOverride = Boolean(record.review_override && Object.keys(record.review_override).length > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -208,6 +419,14 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
                 </span>
               }
             />
+            {hasOverride ? (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+                Есть ручные исправления
+                {record.review_override_updated_at
+                  ? ` · ${formatDate(record.review_override_updated_at)}`
+                  : ""}
+              </div>
+            ) : null}
           </section>
 
           <section className="space-y-3">
@@ -218,17 +437,40 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Нормализованные данные</h3>
-            <PayloadSection record={record} />
-            <div className="grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
-              <div>Метод: {record.parse_method}</div>
-              <div>Уверенность: {record.confidence != null ? record.confidence : "—"}</div>
-              <div>Ключ: {record.source_record_key}</div>
-              <div>Тип документа: {record.document_type_code || "—"}</div>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {editing ? "Исправить перед утверждением" : "Нормализованные данные"}
+              </h3>
+              {canEdit && !editing ? (
+                <button
+                  type="button"
+                  disabled={acting}
+                  onClick={() => {
+                    setDraft(draftFromRecord(record));
+                    setEditing(true);
+                  }}
+                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                >
+                  Редактировать
+                </button>
+              ) : null}
             </div>
+            {editing ? (
+              <EditPayloadSection record={record} draft={draft} onChange={setDraft} />
+            ) : (
+              <PayloadSection record={record} />
+            )}
+            {!editing ? (
+              <div className="grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
+                <div>Метод: {record.parse_method}</div>
+                <div>Уверенность: {record.confidence != null ? record.confidence : "—"}</div>
+                <div>Ключ: {record.source_record_key}</div>
+                <div>Тип документа: {record.document_type_code || "—"}</div>
+              </div>
+            ) : null}
           </section>
 
-          {!locked ? (
+          {!locked && !editing ? (
             <section className="space-y-2">
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300" htmlFor="review-notes">
                 Комментарий проверки
@@ -242,44 +484,70 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
                 placeholder="Необязательно"
               />
             </section>
-          ) : (
+          ) : locked ? (
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
               Статус «{NORMALIZED_REVIEW_STATUS_LABELS[status]}» не может быть изменён вручную.
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2 border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          {canApprove ? (
-            <button
-              type="button"
-              disabled={acting}
-              onClick={() => applyStatus("approved")}
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              Утвердить
-            </button>
-          ) : null}
-          {canReject ? (
-            <button
-              type="button"
-              disabled={acting}
-              onClick={() => applyStatus("rejected")}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              Отклонить
-            </button>
-          ) : null}
-          {canReturnPending ? (
-            <button
-              type="button"
-              disabled={acting}
-              onClick={() => applyStatus("pending")}
-              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-            >
-              Вернуть в ожидание
-            </button>
-          ) : null}
+          {editing ? (
+            <>
+              <button
+                type="button"
+                disabled={acting}
+                onClick={saveOverride}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {acting ? "Сохранение…" : "Сохранить исправления"}
+              </button>
+              <button
+                type="button"
+                disabled={acting}
+                onClick={() => {
+                  setDraft(draftFromRecord(record));
+                  setEditing(false);
+                }}
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                Отмена
+              </button>
+            </>
+          ) : (
+            <>
+              {canApprove ? (
+                <button
+                  type="button"
+                  disabled={acting}
+                  onClick={() => applyStatus("approved")}
+                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  Утвердить
+                </button>
+              ) : null}
+              {canReject ? (
+                <button
+                  type="button"
+                  disabled={acting}
+                  onClick={() => applyStatus("rejected")}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Отклонить
+                </button>
+              ) : null}
+              {canReturnPending ? (
+                <button
+                  type="button"
+                  disabled={acting}
+                  onClick={() => applyStatus("pending")}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                >
+                  Вернуть в ожидание
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>
