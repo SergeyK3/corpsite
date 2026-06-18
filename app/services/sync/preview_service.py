@@ -23,6 +23,7 @@ from app.services.sync.conflict_policy import (
 )
 from app.services.sync.import_service import (
     EmployeeResolveStatus,
+    SyncImportResult,
     _load_override_records,
     resolve_employee_key,
 )
@@ -94,6 +95,44 @@ def preview_result_to_api_dict(result: SyncPreviewResult) -> dict[str, Any]:
             key = str(item.get("employee_key") or "")
             item["employee_name"] = name_map.get(key)
     return payload
+
+
+def sync_apply_result_to_api_dict(
+    import_result: SyncImportResult,
+    preview_result: SyncPreviewResult,
+    *,
+    dry_run: bool,
+    package_name: str,
+    notes: Optional[str] = None,
+) -> dict[str, Any]:
+    """Serialize apply/dry-run outcome for HTTP API (ADR-038 Phase D.2)."""
+    preview_payload = preview_result_to_api_dict(preview_result)
+    warnings = list(import_result.warnings)
+    for warning in preview_result.warnings:
+        if warning not in warnings:
+            warnings.append(warning)
+    errors = list(import_result.errors)
+    if not errors:
+        errors = list(preview_result.errors)
+    return {
+        "package_name": package_name,
+        "dry_run": dry_run,
+        "validation_ok": import_result.validation_ok,
+        "notes": notes,
+        "summary": {
+            "resolved": import_result.resolved_count,
+            "applied": import_result.applied_count,
+            "skipped": import_result.skipped_count,
+            "identical": import_result.identical_count,
+            "blocked": import_result.blocked_count,
+            "conflict": import_result.conflict_count,
+            "orphan": import_result.orphan_count,
+            "ambiguous": import_result.ambiguous_count,
+        },
+        "items": preview_payload.get("items") or [],
+        "warnings": warnings,
+        "errors": errors,
+    }
 
 
 def classification_to_preview_item(

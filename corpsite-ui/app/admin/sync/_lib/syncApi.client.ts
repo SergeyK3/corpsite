@@ -116,6 +116,50 @@ export async function previewSyncPackage(file: File): Promise<SyncPreviewRespons
   return body as SyncPreviewResponse;
 }
 
+export type SyncApplySummary = {
+  resolved: number;
+  applied: number;
+  skipped: number;
+  identical: number;
+  blocked: number;
+  conflict: number;
+  orphan: number;
+  ambiguous: number;
+};
+
+export type SyncApplyResponse = {
+  package_name: string;
+  dry_run: boolean;
+  validation_ok: boolean;
+  notes?: string | null;
+  summary: SyncApplySummary;
+  items: SyncPreviewItem[];
+  warnings: string[];
+  errors: string[];
+};
+
+export async function applySyncPackage(
+  file: File,
+  options?: { dry_run?: boolean; notes?: string },
+): Promise<SyncApplyResponse> {
+  const url = resolveApiUrl("/directory/personnel/sync/apply");
+  const form = new FormData();
+  form.append("file", file);
+  form.append("dry_run", options?.dry_run ? "true" : "false");
+  if (options?.notes?.trim()) {
+    form.append("notes", options.notes.trim());
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+  });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body);
+  return body as SyncApplyResponse;
+}
+
 export function downloadBase64Zip(packageBase64: string, packageName: string): void {
   const binary = atob(packageBase64);
   const bytes = new Uint8Array(binary.length);

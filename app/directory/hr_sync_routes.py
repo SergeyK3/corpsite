@@ -1,5 +1,5 @@
 # FILE: app/directory/hr_sync_routes.py
-"""HR sync package admin API — export and preview only (ADR-038 Phase D.1)."""
+"""HR sync package admin API — export, preview, and apply (ADR-038 Phase D.1/D.2)."""
 from __future__ import annotations
 
 import base64
@@ -8,15 +8,20 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.rbac import require_privileged_or_403
 from app.services.sync.export_service import SyncExportError, export_hr_sync_package
+from app.services.sync.import_service import import_hr_sync_package
 from app.services.sync.package_schema import PACKAGE_VERSION, SCHEMA_VERSION
-from app.services.sync.preview_service import preview_hr_sync_package, preview_result_to_api_dict
+from app.services.sync.preview_service import (
+    preview_hr_sync_package,
+    preview_result_to_api_dict,
+    sync_apply_result_to_api_dict,
+)
 
 from .common import as_http500
 
@@ -126,6 +131,73 @@ async def post_sync_preview(
         payload = preview_result_to_api_dict(result)
         payload["package_name"] = filename
         return payload
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@router.post("/personnel/sync/apply")
+async def post_sync_apply(
+    file: UploadFile = File(...),
+    dry_run: bool = Form(False),
+    notes: Optional[str] = Form(None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Apply sync package with apply gate — dry-run or real apply, no force apply."""
+    require_privileged_or_403(user)
+
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Expected .zip sync package file.")
+
+    trimmed_notes = notes.strip() if notes else None
+    if trimmed_notes and len(trimmed_notes) > 2000:
+        raise HTTPException(status_code=400, detail="Notes must be at most 2000 characters.")
+
+    tmp_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+            tmp_path = tmp.name
+            content = await file.read()
+            if not content:
+                raise HTTPException(status_code=400, detail="Empty file.")
+            tmp.write(content)
+
+        package_path = Path(tmp_path)
+        with engine.connect() as conn:
+            preview_result = preview_hr_sync_package(conn, package_path=package_path)
+
+        if dry_run:
+            with engine.connect() as conn:
+                import_result = import_hr_sync_package(
+                    conn,
+                    package_path=package_path,
+                    apply_changes=False,
+                    enforce_apply_gate=True,
+                )
+        else:
+            with engine.begin() as conn:
+                import_result = import_hr_sync_package(
+                    conn,
+                    package_path=package_path,
+                    apply_changes=True,
+                    enforce_apply_gate=True,
+                )
+
+        return sync_apply_result_to_api_dict(
+            import_result,
+            preview_result,
+            dry_run=dry_run,
+            package_name=filename,
+            notes=trimmed_notes,
+        )
     except HTTPException:
         raise
     except Exception as exc:

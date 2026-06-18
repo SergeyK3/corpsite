@@ -1,4 +1,4 @@
-"""ADR-038 Phase D.1 — HR sync admin API tests."""
+"""ADR-038 Phase D.1/D.2 — HR sync admin API tests."""
 from __future__ import annotations
 
 import base64
@@ -16,6 +16,7 @@ from app.db.engine import engine
 from app.main import app
 from app.services.employee_import_profile_override_service import (
     employee_overrides_available,
+    load_employee_override,
     upsert_employee_override,
 )
 from app.services.sync.conflict_policy import CONFLICT_TYPE_SECTION_OVERLAP
@@ -25,6 +26,7 @@ from app.services.sync.package_schema import (
     EmployeeImportProfileOverrideSyncRecord,
     EmployeeSyncRecord,
     build_employee_key,
+    normalize_full_name,
 )
 from app.services.sync.package_writer import write_sync_package
 from tests.conftest import auth_headers, get_columns, insert_returning_id
@@ -404,5 +406,288 @@ def test_sync_preview_table_contract(client: TestClient, privileged_headers, see
             "apply_allowed",
         ):
             assert key in item
+    finally:
+        _cleanup_employee(employee_id)
+
+
+def _post_sync_apply(client, headers, package_path: Path, *, dry_run: bool = False, notes: str | None = None):
+    data = {"dry_run": "true" if dry_run else "false"}
+    if notes is not None:
+        data["notes"] = notes
+    with package_path.open("rb") as fh:
+        return client.post(
+            "/directory/personnel/sync/apply",
+            headers=headers,
+            files={"file": (package_path.name, fh, "application/zip")},
+            data=data,
+        )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_apply_forbidden_without_privilege(client: TestClient, seed, tmp_path: Path):
+    _require_sync_tables()
+    package_path = _write_package(tmp_path, employees=[], overrides=[])
+    resp = _post_sync_apply(client, auth_headers(seed["executor_user_id"]), package_path)
+    assert resp.status_code == 403
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_apply_no_force_apply_route(client: TestClient, privileged_headers):
+    _require_sync_tables()
+    resp = client.post("/directory/personnel/sync/force-apply", headers=privileged_headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_apply_api_identical_dry_run_and_real(client: TestClient, privileged_headers, seed, tmp_path: Path):
+    _require_sync_tables()
+    suffix = uuid4().hex[:8]
+    iin = _random_iin()
+    full_name = f"Sync Apply Identical {suffix}"
+    employee_key = build_employee_key(iin=iin, full_name=full_name)
+    employee_id: int | None = None
+    try:
+        profile = {"notes": [{"text": f"apply-identical-{suffix}"}]}
+        employee_id = _seed_sync_employee(seed, full_name=full_name, iin=iin, profile=profile)
+
+        stamp = "20260618_100000"
+        exported_at = datetime.strptime(stamp, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+        package_path = _write_package(
+            tmp_path,
+            employees=[
+                EmployeeSyncRecord(
+                    employee_key=employee_key,
+                    source_employee_id=employee_id,
+                    full_name=full_name,
+                    iin=iin,
+                    status="active",
+                )
+            ],
+            overrides=[
+                EmployeeImportProfileOverrideSyncRecord(
+                    employee_key=employee_key,
+                    profile_override=profile,
+                    profile_status="active",
+                    profile_review_status="pending",
+                    created_at=exported_at.isoformat(),
+                    updated_at=exported_at.isoformat(),
+                    source_employee_id=employee_id,
+                )
+            ],
+            stamp=stamp,
+        )
+
+        with engine.connect() as conn:
+            before = load_employee_override(conn, employee_id)
+        before_updated_at = before.get("updated_at") if before else None
+
+        dry_resp = _post_sync_apply(client, privileged_headers, package_path, dry_run=True)
+        assert dry_resp.status_code == 200, dry_resp.text
+        dry_body = dry_resp.json()
+        assert dry_body["dry_run"] is True
+        assert dry_body["validation_ok"] is True
+        assert dry_body["summary"]["applied"] == 0
+        assert dry_body["summary"]["identical"] == 1
+        assert dry_body["summary"]["skipped"] == 1
+        assert len(dry_body["items"]) == 1
+
+        apply_resp = _post_sync_apply(client, privileged_headers, package_path, dry_run=False)
+        assert apply_resp.status_code == 200, apply_resp.text
+        apply_body = apply_resp.json()
+        assert apply_body["dry_run"] is False
+        assert apply_body["summary"]["applied"] == 0
+        assert apply_body["summary"]["identical"] == 1
+        assert apply_body["summary"]["skipped"] == 1
+
+        with engine.connect() as conn:
+            after = load_employee_override(conn, employee_id)
+        assert after is not None
+        assert after.get("updated_at") == before_updated_at
+    finally:
+        _cleanup_employee(employee_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_apply_api_blocks_conflict(client: TestClient, privileged_headers, seed, tmp_path: Path):
+    _require_sync_tables()
+    suffix = uuid4().hex[:8]
+    iin = _random_iin()
+    full_name = f"Sync Apply Conflict {suffix}"
+    employee_key = build_employee_key(iin=iin, full_name=full_name)
+    employee_id: int | None = None
+    try:
+        employee_id = _seed_sync_employee(
+            seed,
+            full_name=full_name,
+            iin=iin,
+            profile={"certificates": [{"kind": "target"}]},
+        )
+
+        stamp = "20260618_110000"
+        exported_at = datetime.strptime(stamp, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+        package_path = _write_package(
+            tmp_path,
+            employees=[
+                EmployeeSyncRecord(
+                    employee_key=employee_key,
+                    source_employee_id=employee_id,
+                    full_name=full_name,
+                    iin=iin,
+                    status="active",
+                )
+            ],
+            overrides=[
+                EmployeeImportProfileOverrideSyncRecord(
+                    employee_key=employee_key,
+                    profile_override={"certificates": [{"kind": "incoming"}]},
+                    profile_status="active",
+                    profile_review_status="pending",
+                    created_at=exported_at.isoformat(),
+                    updated_at=exported_at.isoformat(),
+                    source_employee_id=employee_id,
+                )
+            ],
+            stamp=stamp,
+        )
+
+        resp = _post_sync_apply(client, privileged_headers, package_path, dry_run=False)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["summary"]["applied"] == 0
+        assert body["summary"]["blocked"] == 1
+        assert body["summary"]["conflict"] == 1
+
+        with engine.connect() as conn:
+            loaded = load_employee_override(conn, employee_id)
+        assert loaded is not None
+        assert loaded["profile_override"]["certificates"][0]["kind"] == "target"
+    finally:
+        _cleanup_employee(employee_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_apply_api_blocks_orphan_and_ambiguous(client: TestClient, privileged_headers, seed, tmp_path: Path):
+    _require_sync_tables()
+    suffix = uuid4().hex[:8]
+    orphan_key = f"name:{normalize_full_name(f'Orphan {suffix}')}"
+    ambiguous_name = f"Ambiguous {suffix}"
+    ambiguous_key = f"name:{normalize_full_name(ambiguous_name)}"
+    employee_ids: list[int] = []
+    try:
+        with engine.begin() as conn:
+            for _idx in range(2):
+                employee_id = _create_employee(
+                    conn,
+                    full_name=ambiguous_name,
+                    org_unit_id=seed["unit_id"],
+                )
+                employee_ids.append(employee_id)
+
+        stamp = "20260618_120000"
+        exported_at = datetime.strptime(stamp, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+        package_path = _write_package(
+            tmp_path,
+            employees=[
+                EmployeeSyncRecord(
+                    employee_key=orphan_key,
+                    full_name=f"Orphan {suffix}",
+                    status="active",
+                ),
+                EmployeeSyncRecord(
+                    employee_key=ambiguous_key,
+                    full_name=ambiguous_name,
+                    status="active",
+                ),
+            ],
+            overrides=[
+                EmployeeImportProfileOverrideSyncRecord(
+                    employee_key=orphan_key,
+                    profile_override={"notes": [{"text": "orphan"}]},
+                    profile_status="active",
+                    profile_review_status="pending",
+                    created_at=exported_at.isoformat(),
+                    updated_at=exported_at.isoformat(),
+                ),
+                EmployeeImportProfileOverrideSyncRecord(
+                    employee_key=ambiguous_key,
+                    profile_override={"notes": [{"text": "ambiguous"}]},
+                    profile_status="active",
+                    profile_review_status="pending",
+                    created_at=exported_at.isoformat(),
+                    updated_at=exported_at.isoformat(),
+                ),
+            ],
+            stamp=stamp,
+        )
+
+        resp = _post_sync_apply(client, privileged_headers, package_path, dry_run=False)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["summary"]["applied"] == 0
+        assert body["summary"]["orphan"] == 1
+        assert body["summary"]["ambiguous"] == 1
+        assert body["summary"]["skipped"] == 2
+    finally:
+        for employee_id in employee_ids:
+            _cleanup_employee(employee_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_apply_api_applies_allowed_new_override(client: TestClient, privileged_headers, seed, tmp_path: Path):
+    _require_sync_tables()
+    suffix = uuid4().hex[:8]
+    iin = _random_iin()
+    full_name = f"Sync Apply New {suffix}"
+    employee_key = build_employee_key(iin=iin, full_name=full_name)
+    employee_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            employee_id = _create_employee(conn, full_name=full_name, org_unit_id=seed["unit_id"])
+            _attach_iin(
+                conn,
+                employee_id=employee_id,
+                iin_value=iin,
+                created_by=seed["initiator_user_id"],
+            )
+
+        stamp = "20260618_130000"
+        exported_at = datetime.strptime(stamp, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+        package_path = _write_package(
+            tmp_path,
+            employees=[
+                EmployeeSyncRecord(
+                    employee_key=employee_key,
+                    source_employee_id=employee_id,
+                    full_name=full_name,
+                    iin=iin,
+                    status="active",
+                )
+            ],
+            overrides=[
+                EmployeeImportProfileOverrideSyncRecord(
+                    employee_key=employee_key,
+                    profile_override={"notes": [{"text": f"new-{suffix}"}]},
+                    profile_status="active",
+                    profile_review_status="pending",
+                    created_at=exported_at.isoformat(),
+                    updated_at=exported_at.isoformat(),
+                    source_employee_id=employee_id,
+                )
+            ],
+            stamp=stamp,
+        )
+
+        resp = _post_sync_apply(client, privileged_headers, package_path, dry_run=False, notes="api apply test")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["notes"] == "api apply test"
+        assert body["summary"]["applied"] == 1
+        assert body["items"][0]["status"] == "new"
+        assert body["items"][0]["apply_allowed"] is True
+
+        with engine.connect() as conn:
+            loaded = load_employee_override(conn, employee_id)
+        assert loaded is not None
+        assert loaded["profile_override"]["notes"][0]["text"] == f"new-{suffix}"
     finally:
         _cleanup_employee(employee_id)

@@ -6,6 +6,7 @@ import * as React from "react";
 import { loadTenant } from "@/lib/tenant";
 
 import {
+  applySyncPackage,
   downloadBase64Zip,
   exportSyncPackage,
   fetchSyncMeta,
@@ -13,6 +14,7 @@ import {
   mapSyncApiError,
   previewSyncPackage,
   zipSizeKbFromBase64,
+  type SyncApplyResponse,
   type SyncExportResponse,
   type SyncPreviewItem,
   type SyncPreviewResponse,
@@ -158,6 +160,11 @@ export default function SyncAdminClient() {
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [previewResult, setPreviewResult] = React.useState<SyncPreviewResponse | null>(null);
 
+  const [applying, setApplying] = React.useState(false);
+  const [dryRunning, setDryRunning] = React.useState(false);
+  const [applyError, setApplyError] = React.useState<string | null>(null);
+  const [applyResult, setApplyResult] = React.useState<SyncApplyResponse | null>(null);
+
   const [lastExport, setLastExport] = React.useState<ActivityRecord | null>(null);
   const [lastPreview, setLastPreview] = React.useState<ActivityRecord | null>(null);
 
@@ -188,6 +195,20 @@ export default function SyncAdminClient() {
     if (!previewResult) return;
     previewResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [previewResult]);
+
+  const canApplySection =
+    Boolean(packageFile) && Boolean(previewResult) && Boolean(previewResult?.validation_ok);
+  const applyAllowedCount = previewResult?.apply_allowed_count ?? 0;
+  const canDryRunApply = canApplySection;
+  const canRealApply = canApplySection && applyAllowedCount > 0;
+
+  const onPackageFileChange = (file: File | null) => {
+    setPackageFile(file);
+    setPreviewResult(null);
+    setApplyResult(null);
+    setPreviewError(null);
+    setApplyError(null);
+  };
 
   const onExport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,6 +254,8 @@ export default function SyncAdminClient() {
     }
     setPreviewing(true);
     setPreviewError(null);
+    setApplyResult(null);
+    setApplyError(null);
     try {
       const result = await previewSyncPackage(packageFile);
       setPreviewResult(result);
@@ -249,12 +272,55 @@ export default function SyncAdminClient() {
     }
   };
 
+  const runApply = async (dryRun: boolean) => {
+    if (!packageFile) {
+      setApplyError("Выберите ZIP-пакет.");
+      return;
+    }
+    if (!previewResult) {
+      setApplyError("Сначала выполните предпросмотр пакета.");
+      return;
+    }
+    if (!previewResult.validation_ok) {
+      setApplyError("Пакет не прошёл проверку — применение недоступно.");
+      return;
+    }
+    if (!dryRun && previewResult.apply_allowed_count === 0) {
+      setApplyError("Нет записей, разрешённых для применения.");
+      return;
+    }
+    if (
+      !dryRun &&
+      !window.confirm(
+        "Вы собираетесь применить sync-пакет.\n\nБудут применены только разрешённые изменения.\nКонфликты, сироты и неоднозначные записи применены не будут.",
+      )
+    ) {
+      return;
+    }
+
+    if (dryRun) {
+      setDryRunning(true);
+    } else {
+      setApplying(true);
+    }
+    setApplyError(null);
+    try {
+      const result = await applySyncPackage(packageFile, { dry_run: dryRun });
+      setApplyResult(result);
+    } catch (err) {
+      setApplyError(mapSyncApiError(err, dryRun ? "Не удалось выполнить dry-run." : "Не удалось применить пакет."));
+    } finally {
+      setApplying(false);
+      setDryRunning(false);
+    }
+  };
+
   return (
     <div className="px-4 py-3 max-w-6xl">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Синхронизация данных (HR Sync)</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Read-only интерфейс: экспорт пакета, загрузка и предпросмотр. Apply и разрешение конфликтов недоступны (Phase D.1).
+          Экспорт пакета, предпросмотр и безопасное применение с apply gate (Phase D.2). Разрешение конфликтов недоступно.
         </p>
       </div>
 
@@ -387,7 +453,7 @@ export default function SyncAdminClient() {
               type="file"
               accept=".zip,application/zip"
               className="mt-2 block w-full text-sm"
-              onChange={(e) => setPackageFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => onPackageFileChange(e.target.files?.[0] ?? null)}
             />
           </label>
           <button
@@ -441,6 +507,91 @@ export default function SyncAdminClient() {
             ) : null}
 
             <PreviewTable items={previewResult.items} />
+
+            <div className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+              <h3 className="text-base font-semibold">Применение пакета</h3>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                Применяются только записи, разрешённые apply gate. Конфликты, сироты, неоднозначные и идентичные записи не изменяют БД.
+              </p>
+              <div className="mt-4 grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+                <SummaryTile label="Готово к применению" value={previewResult.apply_allowed_count} />
+                <SummaryTile
+                  label="Заблокировано"
+                  value={previewResult.conflict_count}
+                  tone="border-amber-300 dark:border-amber-800"
+                />
+                <SummaryTile
+                  label="Конфликты"
+                  value={previewResult.conflict_count}
+                  tone="border-red-300 dark:border-red-800"
+                />
+                <SummaryTile label="Сироты" value={previewResult.orphan_count} />
+                <SummaryTile label="Неоднозначные" value={previewResult.ambiguous_count} />
+                <SummaryTile label="Идентичные/пропущенные" value={previewResult.identical_count + previewResult.skipped_count} />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!canDryRunApply || dryRunning || applying}
+                  onClick={() => runApply(true)}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                >
+                  {dryRunning ? "Dry-run…" : "Проверить применение (dry-run)"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canRealApply || applying || dryRunning}
+                  onClick={() => runApply(false)}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {applying ? "Применение…" : "Применить пакет"}
+                </button>
+              </div>
+              {!previewResult ? (
+                <p className="mt-2 text-xs text-zinc-500">Выполните предпросмотр, чтобы активировать применение.</p>
+              ) : null}
+              {previewResult && previewResult.apply_allowed_count === 0 ? (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Нет разрешённых записей для реального применения. Dry-run доступен для проверки.
+                </p>
+              ) : null}
+              {applyError ? (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{applyError}</div>
+              ) : null}
+              {applyResult ? (
+                <div
+                  className={`mt-4 rounded-xl border p-4 text-sm ${
+                    applyResult.dry_run
+                      ? "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950"
+                      : "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950"
+                  }`}
+                >
+                  <div className="font-medium">
+                    {applyResult.dry_run ? "Dry-run выполнен (БД не изменена)" : "Пакет применён"}
+                  </div>
+                  <div className="mt-3 grid gap-2 grid-cols-2 sm:grid-cols-4">
+                    <SummaryTile label="Применено" value={applyResult.summary.applied} />
+                    <SummaryTile label="Пропущено" value={applyResult.summary.skipped} />
+                    <SummaryTile label="Заблокировано" value={applyResult.summary.blocked} />
+                    <SummaryTile label="Идентичные" value={applyResult.summary.identical} />
+                  </div>
+                  {applyResult.errors.length ? (
+                    <ul className="mt-3 list-disc pl-5 text-xs text-red-700 dark:text-red-300">
+                      {applyResult.errors.map((err) => (
+                        <li key={err}>{err}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {applyResult.warnings.length ? (
+                    <ul className="mt-2 list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">
+                      {applyResult.warnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </section>
