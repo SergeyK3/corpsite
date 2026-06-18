@@ -9,27 +9,51 @@ import {
   applySyncPackage,
   downloadBase64Zip,
   exportSyncPackage,
+  fetchSyncHistory,
+  fetchSyncHistoryItem,
   fetchSyncMeta,
+  formatSyncAuditOperation,
+  formatSyncAuditSummary,
   formatSyncTimestamp,
   mapSyncApiError,
   previewSyncPackage,
   zipSizeKbFromBase64,
   type SyncApplyResponse,
+  type SyncAuditLogItem,
   type SyncExportResponse,
+  type SyncHistoryResponse,
   type SyncPreviewItem,
   type SyncPreviewResponse,
 } from "../_lib/syncApi.client";
-
-type ActivityRecord = {
-  at: string;
-  label: string;
-  detail: string;
-};
 
 type ExportResultView = SyncExportResponse & {
   exportedAt: string;
   zipSizeKb: number;
 };
+
+function HistoryDetailPanel({ item }: { item: SyncAuditLogItem }) {
+  return (
+    <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="font-medium">{formatSyncAuditOperation(item)} · #{item.sync_audit_id}</div>
+      <div className="mt-1 text-zinc-600 dark:text-zinc-400">{formatSyncAuditSummary(item)}</div>
+      {item.notes ? <div className="mt-1">Notes: {item.notes}</div> : null}
+      {item.warnings?.length ? (
+        <ul className="mt-2 list-disc pl-5 text-amber-700 dark:text-amber-300">
+          {item.warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
+      {item.errors?.length ? (
+        <ul className="mt-2 list-disc pl-5 text-red-700 dark:text-red-300">
+          {item.errors.map((err) => (
+            <li key={err}>{err}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 const STATUS_STYLES: Record<string, string> = {
   identical: "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200",
@@ -165,8 +189,26 @@ export default function SyncAdminClient() {
   const [applyError, setApplyError] = React.useState<string | null>(null);
   const [applyResult, setApplyResult] = React.useState<SyncApplyResponse | null>(null);
 
-  const [lastExport, setLastExport] = React.useState<ActivityRecord | null>(null);
-  const [lastPreview, setLastPreview] = React.useState<ActivityRecord | null>(null);
+  const [auditLogAvailable, setAuditLogAvailable] = React.useState(false);
+  const [history, setHistory] = React.useState<SyncHistoryResponse | null>(null);
+  const [historyError, setHistoryError] = React.useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [expandedAuditId, setExpandedAuditId] = React.useState<number | null>(null);
+  const [expandedAuditItem, setExpandedAuditItem] = React.useState<SyncAuditLogItem | null>(null);
+
+  const refreshHistory = React.useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const result = await fetchSyncHistory(30, 0);
+      setHistory(result);
+      setAuditLogAvailable(result.audit_log_available);
+    } catch (err) {
+      setHistoryError(mapSyncApiError(err, "Не удалось загрузить историю sync."));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -176,6 +218,7 @@ export default function SyncAdminClient() {
         if (cancelled) return;
         setSchemaVersion(meta.schema_version);
         setPackageVersion(meta.package_version);
+        setAuditLogAvailable(Boolean(meta.audit_log_available));
         if (tenant.orgId) {
           setSourceOrgId((prev) => prev || tenant.orgId!);
         }
@@ -185,11 +228,18 @@ export default function SyncAdminClient() {
       } catch (err) {
         if (!cancelled) setMetaError(mapSyncApiError(err, "Не удалось загрузить метаданные sync."));
       }
+      if (!cancelled) {
+        try {
+          await refreshHistory();
+        } catch {
+          /* refreshHistory sets its own error */
+        }
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshHistory]);
 
   React.useEffect(() => {
     if (!previewResult) return;
@@ -201,6 +251,26 @@ export default function SyncAdminClient() {
   const applyAllowedCount = previewResult?.apply_allowed_count ?? 0;
   const canDryRunApply = canApplySection;
   const canRealApply = canApplySection && applyAllowedCount > 0;
+
+  const lastExportEntry = history?.items.find((item) => item.operation === "export") ?? null;
+  const lastPreviewEntry =
+    history?.items.find((item) => item.operation === "preview" || item.operation === "apply") ?? null;
+
+  const toggleHistoryDetail = async (syncAuditId: number) => {
+    if (expandedAuditId === syncAuditId) {
+      setExpandedAuditId(null);
+      setExpandedAuditItem(null);
+      return;
+    }
+    setExpandedAuditId(syncAuditId);
+    setExpandedAuditItem(null);
+    try {
+      const item = await fetchSyncHistoryItem(syncAuditId);
+      setExpandedAuditItem(item);
+    } catch (err) {
+      setHistoryError(mapSyncApiError(err, "Не удалось загрузить детали записи."));
+    }
+  };
 
   const onPackageFileChange = (file: File | null) => {
     setPackageFile(file);
@@ -234,11 +304,7 @@ export default function SyncAdminClient() {
       };
       setExportResult(enriched);
       downloadBase64Zip(result.package_base64, result.package_name);
-      setLastExport({
-        at: exportedAt,
-        label: result.package_name,
-        detail: `сотрудники=${result.employee_count}, overrides=${result.override_count}, ${zipSizeKbFromBase64(result.package_base64)} КБ`,
-      });
+      await refreshHistory();
     } catch (err) {
       setExportError(mapSyncApiError(err, "Не удалось выполнить экспорт."));
     } finally {
@@ -259,12 +325,7 @@ export default function SyncAdminClient() {
     try {
       const result = await previewSyncPackage(packageFile);
       setPreviewResult(result);
-      const at = new Date().toISOString();
-      setLastPreview({
-        at,
-        label: result.package_name || packageFile.name,
-        detail: `всего=${result.total_records}, идентичные=${result.identical_count}, конфликты=${result.conflict_count}`,
-      });
+      await refreshHistory();
     } catch (err) {
       setPreviewError(mapSyncApiError(err, "Не удалось выполнить preview."));
     } finally {
@@ -307,6 +368,7 @@ export default function SyncAdminClient() {
     try {
       const result = await applySyncPackage(packageFile, { dry_run: dryRun });
       setApplyResult(result);
+      await refreshHistory();
     } catch (err) {
       setApplyError(mapSyncApiError(err, dryRun ? "Не удалось выполнить dry-run." : "Не удалось применить пакет."));
     } finally {
@@ -320,13 +382,13 @@ export default function SyncAdminClient() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Синхронизация данных (HR Sync)</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Экспорт пакета, предпросмотр и безопасное применение с apply gate (Phase D.2). Разрешение конфликтов недоступно.
+          Экспорт, предпросмотр, безопасное применение и audit log операций sync (Phase D.3).
         </p>
       </div>
 
       <section className="mb-6 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Состояние Sync</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <div className="text-xs text-zinc-500">Schema</div>
             <div className="font-medium">{schemaVersion}</div>
@@ -336,14 +398,28 @@ export default function SyncAdminClient() {
             <div className="font-medium">{packageVersion}</div>
           </div>
           <div>
-            <div className="text-xs text-zinc-500">Последний экспорт</div>
-            <div className="text-sm">{lastExport ? formatSyncTimestamp(lastExport.at) : "—"}</div>
-            {lastExport ? <div className="text-xs text-zinc-500">{lastExport.detail}</div> : null}
+            <div className="text-xs text-zinc-500">Audit log</div>
+            <div className="font-medium">{auditLogAvailable ? "доступен" : "недоступен"}</div>
           </div>
           <div>
-            <div className="text-xs text-zinc-500">Последний preview</div>
-            <div className="text-sm">{lastPreview ? formatSyncTimestamp(lastPreview.at) : "—"}</div>
-            {lastPreview ? <div className="text-xs text-zinc-500">{lastPreview.detail}</div> : null}
+            <div className="text-xs text-zinc-500">Последний экспорт</div>
+            <div className="text-sm">
+              {lastExportEntry ? formatSyncTimestamp(lastExportEntry.happened_at) : "—"}
+            </div>
+            {lastExportEntry ? (
+              <div className="text-xs text-zinc-500">{formatSyncAuditSummary(lastExportEntry)}</div>
+            ) : null}
+          </div>
+          <div>
+            <div className="text-xs text-zinc-500">Последний preview/apply</div>
+            <div className="text-sm">
+              {lastPreviewEntry ? formatSyncTimestamp(lastPreviewEntry.happened_at) : "—"}
+            </div>
+            {lastPreviewEntry ? (
+              <div className="text-xs text-zinc-500">
+                {formatSyncAuditOperation(lastPreviewEntry)} · {formatSyncAuditSummary(lastPreviewEntry)}
+              </div>
+            ) : null}
           </div>
         </div>
         {metaError ? (
@@ -591,6 +667,96 @@ export default function SyncAdminClient() {
                   ) : null}
                 </div>
               ) : null}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold">История sync (audit log)</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Журнал операций export / preview / apply. Пакеты ZIP в БД не хранятся.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={historyLoading}
+            onClick={() => refreshHistory()}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            {historyLoading ? "Обновление…" : "Обновить"}
+          </button>
+        </div>
+        {historyError ? (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{historyError}</div>
+        ) : null}
+        {!auditLogAvailable ? (
+          <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
+            Audit log недоступен — выполните миграцию БД (`alembic upgrade head`).
+          </p>
+        ) : null}
+        {auditLogAvailable && history && !history.items.length ? (
+          <p className="mt-4 text-sm text-zinc-500">Записей пока нет.</p>
+        ) : null}
+        {auditLogAvailable && history && history.items.length ? (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                <tr>
+                  <th className="px-3 py-2">Когда</th>
+                  <th className="px-3 py-2">Операция</th>
+                  <th className="px-3 py-2">Пакет</th>
+                  <th className="px-3 py-2">Пользователь</th>
+                  <th className="px-3 py-2">Итог</th>
+                  <th className="px-3 py-2">Статус</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {history.items.map((item) => (
+                  <React.Fragment key={item.sync_audit_id}>
+                    <tr className="border-t border-zinc-200 dark:border-zinc-800">
+                      <td className="px-3 py-2 whitespace-nowrap">{formatSyncTimestamp(item.happened_at)}</td>
+                      <td className="px-3 py-2">{formatSyncAuditOperation(item)}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{item.package_name || "—"}</td>
+                      <td className="px-3 py-2">{item.actor_login || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
+                        {formatSyncAuditSummary(item)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.validation_ok === false ? (
+                          <span className="text-red-700 dark:text-red-300">ошибка</span>
+                        ) : item.warnings_count || item.errors_count ? (
+                          <span className="text-amber-700 dark:text-amber-300">warn</span>
+                        ) : (
+                          <span className="text-green-700 dark:text-green-300">ok</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                          onClick={() => toggleHistoryDetail(item.sync_audit_id)}
+                        >
+                          {expandedAuditId === item.sync_audit_id ? "Скрыть" : "Детали"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expandedAuditId === item.sync_audit_id && expandedAuditItem ? (
+                      <tr className="border-t border-zinc-200 dark:border-zinc-800">
+                        <td colSpan={7} className="px-3 py-2">
+                          <HistoryDetailPanel item={expandedAuditItem} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+            <div className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+              Показано {history.items.length} из {history.total}
             </div>
           </div>
         ) : null}

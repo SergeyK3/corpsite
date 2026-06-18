@@ -20,6 +20,35 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 export type SyncMeta = {
   schema_version: string;
   package_version: string;
+  audit_log_available?: boolean;
+};
+
+export type SyncAuditOperation = "export" | "preview" | "apply";
+
+export type SyncAuditLogItem = {
+  sync_audit_id: number;
+  happened_at: string;
+  actor_user_id?: number | null;
+  actor_login?: string | null;
+  operation: SyncAuditOperation;
+  dry_run: boolean;
+  package_name?: string | null;
+  validation_ok?: boolean | null;
+  notes?: string | null;
+  summary: Record<string, number>;
+  context?: Record<string, unknown>;
+  warnings_count: number;
+  errors_count: number;
+  warnings?: string[];
+  errors?: string[];
+};
+
+export type SyncHistoryResponse = {
+  audit_log_available: boolean;
+  total: number;
+  limit: number;
+  offset: number;
+  items: SyncAuditLogItem[];
 };
 
 export type SyncExportRequest = {
@@ -38,6 +67,7 @@ export type SyncExportResponse = {
   warnings: string[];
   validation_ok: boolean;
   package_base64: string;
+  audit_id?: number;
 };
 
 export type SyncPreviewItem = {
@@ -74,6 +104,7 @@ export type SyncPreviewResponse = {
   items: SyncPreviewItem[];
   warnings: string[];
   errors: string[];
+  audit_id?: number;
 };
 
 export function mapSyncApiError(err: unknown, fallback: string): string {
@@ -136,6 +167,7 @@ export type SyncApplyResponse = {
   items: SyncPreviewItem[];
   warnings: string[];
   errors: string[];
+  audit_id?: number;
 };
 
 export async function applySyncPackage(
@@ -158,6 +190,47 @@ export async function applySyncPackage(
   const body = await readJsonSafe(res);
   if (!res.ok) throw toApiError(res.status, body);
   return body as SyncApplyResponse;
+}
+
+export async function fetchSyncHistory(limit = 20, offset = 0): Promise<SyncHistoryResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  const url = resolveApiUrl(`/directory/personnel/sync/history?${params.toString()}`);
+  const res = await fetch(url, { method: "GET", headers: authHeaders(), cache: "no-store" });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body);
+  return body as SyncHistoryResponse;
+}
+
+export async function fetchSyncHistoryItem(syncAuditId: number): Promise<SyncAuditLogItem> {
+  const url = resolveApiUrl(`/directory/personnel/sync/history/${syncAuditId}`);
+  const res = await fetch(url, { method: "GET", headers: authHeaders(), cache: "no-store" });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body);
+  return body as SyncAuditLogItem;
+}
+
+export function formatSyncAuditOperation(item: SyncAuditLogItem): string {
+  if (item.operation === "export") return "Экспорт";
+  if (item.operation === "preview") return "Предпросмотр";
+  if (item.operation === "apply") return item.dry_run ? "Dry-run" : "Применение";
+  return item.operation;
+}
+
+export function formatSyncAuditSummary(item: SyncAuditLogItem): string {
+  const s = item.summary ?? {};
+  if (item.operation === "export") {
+    return `сотрудники=${s.employee_count ?? 0}, overrides=${s.override_count ?? 0}`;
+  }
+  if (item.operation === "preview") {
+    return `всего=${s.total_records ?? 0}, конфликты=${s.conflict_count ?? 0}, apply=${s.apply_allowed_count ?? 0}`;
+  }
+  if (item.operation === "apply") {
+    return `applied=${s.applied ?? 0}, skipped=${s.skipped ?? 0}, blocked=${s.blocked ?? 0}`;
+  }
+  return "—";
 }
 
 export function downloadBase64Zip(packageBase64: string, packageName: string): void {

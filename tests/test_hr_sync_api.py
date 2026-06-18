@@ -1,4 +1,4 @@
-"""ADR-038 Phase D.1/D.2 — HR sync admin API tests."""
+"""ADR-038 Phase D.1/D.2/D.3 — HR sync admin API tests."""
 from __future__ import annotations
 
 import base64
@@ -19,6 +19,7 @@ from app.services.employee_import_profile_override_service import (
     load_employee_override,
     upsert_employee_override,
 )
+from app.services.sync.audit_service import sync_audit_log_available
 from app.services.sync.conflict_policy import CONFLICT_TYPE_SECTION_OVERLAP
 from app.services.sync.package_schema import (
     PACKAGE_VERSION,
@@ -45,6 +46,13 @@ def _require_sync_tables() -> None:
     with engine.connect() as conn:
         if not employee_overrides_available(conn):
             pytest.skip("employee_import_profile_overrides not available — run alembic upgrade head")
+
+
+def _require_sync_audit_log() -> None:
+    _require_sync_tables()
+    with engine.connect() as conn:
+        if not sync_audit_log_available(conn):
+            pytest.skip("hr_sync_audit_log not available — run alembic upgrade head")
 
 
 @pytest.fixture
@@ -160,6 +168,7 @@ def test_sync_meta_api(client: TestClient, privileged_headers):
     body = resp.json()
     assert body["schema_version"] == SCHEMA_VERSION
     assert body["package_version"] == PACKAGE_VERSION
+    assert "audit_log_available" in body
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -689,5 +698,131 @@ def test_sync_apply_api_applies_allowed_new_override(client: TestClient, privile
             loaded = load_employee_override(conn, employee_id)
         assert loaded is not None
         assert loaded["profile_override"]["notes"][0]["text"] == f"new-{suffix}"
+    finally:
+        _cleanup_employee(employee_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_history_forbidden_without_privilege(client: TestClient, seed):
+    _require_sync_audit_log()
+    resp = client.get("/directory/personnel/sync/history", headers=auth_headers(seed["executor_user_id"]))
+    assert resp.status_code == 403
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_history_lists_export_entry(client: TestClient, privileged_headers, seed, tmp_path: Path):
+    _require_sync_audit_log()
+    suffix = uuid4().hex[:8]
+    iin = _random_iin()
+    employee_id: int | None = None
+    try:
+        employee_id = _seed_sync_employee(
+            seed,
+            full_name=f"Sync History {suffix}",
+            iin=iin,
+            profile={"notes": [{"text": f"history-{suffix}"}]},
+        )
+        export_resp = client.post(
+            "/directory/personnel/sync/export",
+            headers={**privileged_headers, "Content-Type": "application/json"},
+            json={
+                "source_instance_id": "vps-pilot",
+                "source_organization_id": "org-history",
+                "source_organization_name": "History Org",
+                "environment": "server",
+                "notes": "history test",
+            },
+        )
+        assert export_resp.status_code == 200, export_resp.text
+        export_body = export_resp.json()
+        assert export_body.get("audit_id")
+
+        history_resp = client.get("/directory/personnel/sync/history", headers=privileged_headers)
+        assert history_resp.status_code == 200, history_resp.text
+        history_body = history_resp.json()
+        assert history_body["audit_log_available"] is True
+        assert history_body["total"] >= 1
+        latest = history_body["items"][0]
+        assert latest["operation"] == "export"
+        assert latest["package_name"]
+        assert latest["summary"]["employee_count"] >= 1
+        assert latest["notes"] == "history test"
+
+        detail_resp = client.get(
+            f"/directory/personnel/sync/history/{latest['sync_audit_id']}",
+            headers=privileged_headers,
+        )
+        assert detail_resp.status_code == 200, detail_resp.text
+        detail = detail_resp.json()
+        assert detail["operation"] == "export"
+        assert "warnings" in detail
+    finally:
+        _cleanup_employee(employee_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_sync_preview_and_apply_create_audit_entries(
+    client: TestClient,
+    privileged_headers,
+    seed,
+    tmp_path: Path,
+):
+    _require_sync_audit_log()
+    suffix = uuid4().hex[:8]
+    iin = _random_iin()
+    full_name = f"Sync Audit Trail {suffix}"
+    employee_key = build_employee_key(iin=iin, full_name=full_name)
+    employee_id: int | None = None
+    try:
+        profile = {"notes": [{"text": f"audit-{suffix}"}]}
+        employee_id = _seed_sync_employee(seed, full_name=full_name, iin=iin, profile=profile)
+
+        stamp = "20260618_140000"
+        exported_at = datetime.strptime(stamp, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+        package_path = _write_package(
+            tmp_path,
+            employees=[
+                EmployeeSyncRecord(
+                    employee_key=employee_key,
+                    source_employee_id=employee_id,
+                    full_name=full_name,
+                    iin=iin,
+                    status="active",
+                )
+            ],
+            overrides=[
+                EmployeeImportProfileOverrideSyncRecord(
+                    employee_key=employee_key,
+                    profile_override=profile,
+                    profile_status="active",
+                    profile_review_status="pending",
+                    created_at=exported_at.isoformat(),
+                    updated_at=exported_at.isoformat(),
+                    source_employee_id=employee_id,
+                )
+            ],
+            stamp=stamp,
+        )
+
+        with package_path.open("rb") as fh:
+            preview_resp = client.post(
+                "/directory/personnel/sync/preview",
+                headers=privileged_headers,
+                files={"file": (package_path.name, fh, "application/zip")},
+            )
+        assert preview_resp.status_code == 200, preview_resp.text
+        assert preview_resp.json().get("audit_id")
+
+        dry_resp = _post_sync_apply(client, privileged_headers, package_path, dry_run=True)
+        assert dry_resp.status_code == 200, dry_resp.text
+        assert dry_resp.json().get("audit_id")
+
+        history_resp = client.get("/directory/personnel/sync/history?limit=10", headers=privileged_headers)
+        assert history_resp.status_code == 200, history_resp.text
+        operations = [item["operation"] for item in history_resp.json()["items"]]
+        assert "preview" in operations
+        assert "apply" in operations
+        apply_entries = [item for item in history_resp.json()["items"] if item["operation"] == "apply"]
+        assert any(item["dry_run"] is True for item in apply_entries)
     finally:
         _cleanup_employee(employee_id)
