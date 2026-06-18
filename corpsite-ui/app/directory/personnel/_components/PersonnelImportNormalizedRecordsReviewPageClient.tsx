@@ -21,6 +21,85 @@ import {
 
 export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3e-normalized-records-review";
 
+const REVIEW_HELP_EXPANDED_STORAGE_KEY = "corpsite_personnel_import_normalized_review_help_expanded";
+
+function RowOpenHint() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs text-zinc-400 transition group-hover:text-blue-600 dark:group-hover:text-blue-400"
+      aria-hidden="true"
+    >
+      <svg
+        className="h-4 w-4 shrink-0 opacity-60 transition group-hover:opacity-100"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+      >
+        <path
+          fillRule="evenodd"
+          d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+          clipRule="evenodd"
+        />
+      </svg>
+      <span className="whitespace-nowrap">Нажмите для просмотра</span>
+    </span>
+  );
+}
+
+function NormalizedRecordsReviewHelpPanel({ onCollapse }: { onCollapse: () => void }) {
+  return (
+    <div
+      className="mt-3 rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-4 text-sm text-zinc-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-zinc-300"
+      data-help-panel="normalized-records-review"
+      data-help-visible="true"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          Проверка нормализованных записей
+        </h2>
+        <button
+          type="button"
+          onClick={onCollapse}
+          className="relative z-10 shrink-0 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-600 hover:bg-white dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+        >
+          Свернуть
+        </button>
+      </div>
+
+      <p className="leading-relaxed">
+        Система автоматически преобразует данные кадрового импорта в структурированные записи:
+      </p>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        <li>Образование</li>
+        <li>Обучение</li>
+        <li>Сертификаты</li>
+        <li>Категории</li>
+      </ul>
+      <p className="mt-3 leading-relaxed">
+        Все записи на этой странице являются результатом автоматического анализа импортированных данных
+        и требуют проверки ответственным сотрудником.
+      </p>
+
+      <p className="mt-4 font-medium text-zinc-900 dark:text-zinc-100">Порядок работы:</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5">
+        <li>Нажмите на строку записи.</li>
+        <li>В открывшейся карточке проверьте данные.</li>
+        <li>Сверьте запись с кадровыми документами сотрудника.</li>
+        <li>При корректных данных нажмите «Утвердить».</li>
+        <li>При ошибке нажмите «Отклонить».</li>
+        <li>Если требуется повторная проверка — «Вернуть в ожидание».</li>
+      </ol>
+
+      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        <p className="font-medium">Важно:</p>
+        <p className="mt-1 leading-relaxed">
+          Утверждение на этом этапе НЕ записывает данные в кадровую карточку сотрудника. Записи
+          остаются в staging-слое до запуска механизма promotion (ADR-039 Phase 3F).
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function reviewStatusBadgeClass(status: NormalizedRecordReviewStatus): string {
   switch (status) {
     case "pending":
@@ -70,6 +149,29 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
   const [selected, setSelected] = React.useState<NormalizedRecord | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [toast, setToast] = React.useState<ToastState>(null);
+  const [isHelpExpanded, setIsHelpExpanded] = React.useState(true);
+  const [helpStorageReady, setHelpStorageReady] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(REVIEW_HELP_EXPANDED_STORAGE_KEY);
+      if (stored === "false") {
+        setIsHelpExpanded(false);
+      }
+    } catch {
+      // ignore private mode / quota
+    }
+    setHelpStorageReady(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!helpStorageReady) return;
+    try {
+      window.localStorage.setItem(REVIEW_HELP_EXPANDED_STORAGE_KEY, isHelpExpanded ? "true" : "false");
+    } catch {
+      // ignore private mode / quota
+    }
+  }, [isHelpExpanded, helpStorageReady]);
 
   React.useEffect(() => {
     listImportBatches()
@@ -164,12 +266,22 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
       ) : null}
 
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-          Проверка нормализованных записей
-        </h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Staging-слой перед промотированием в реестр документов. Утверждение не записывает данные в кадровую карточку.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Проверка нормализованных записей
+          </h1>
+          <button
+            type="button"
+            onClick={() => setIsHelpExpanded((v) => !v)}
+            aria-expanded={isHelpExpanded}
+            className="relative z-10 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm text-blue-800 hover:bg-blue-100 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60"
+          >
+            Как работать с этим экраном?
+          </button>
+        </div>
+        {isHelpExpanded ? (
+          <NormalizedRecordsReviewHelpPanel onCollapse={() => setIsHelpExpanded(false)} />
+        ) : null}
       </div>
 
       {error ? (
@@ -276,12 +388,13 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                   <th className="px-3 py-2">Название</th>
                   <th className="px-3 py-2">Источник</th>
                   <th className="px-3 py-2">Дата создания</th>
+                  <th className="px-3 py-2 w-44" aria-label="Действие" />
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                       Нет записей по выбранным фильтрам
                     </td>
                   </tr>
@@ -289,8 +402,9 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                   items.map((row) => (
                     <tr
                       key={row.record_id}
-                      className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50"
+                      className="group cursor-pointer border-t border-zinc-100 transition hover:bg-blue-50/60 dark:border-zinc-800 dark:hover:bg-blue-950/20"
                       onClick={() => openRecord(row)}
+                      title="Нажмите для просмотра"
                     >
                       <td className="px-3 py-2">
                         <span
@@ -307,6 +421,9 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                       <td className="px-3 py-2 max-w-[220px] truncate">{row.title || row.source_text || "—"}</td>
                       <td className="px-3 py-2">{row.source_field || "—"}</td>
                       <td className="px-3 py-2">{formatCreatedAt(row.created_at)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <RowOpenHint />
+                      </td>
                     </tr>
                   ))
                 )}
