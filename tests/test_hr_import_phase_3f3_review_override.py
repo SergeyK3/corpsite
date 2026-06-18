@@ -273,6 +273,78 @@ def _promote(
     return resp.json()
 
 
+def _patch_json(
+    client: TestClient,
+    headers: dict[str, str],
+    record_id: int,
+    body: dict,
+):
+    return client.patch(
+        f"/directory/personnel/import/normalized-records/{record_id}",
+        headers={**headers, "Content-Type": "application/json"},
+        json=body,
+    )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_patch_review_override_only_does_not_require_review_status(
+    client: TestClient,
+    privileged_headers,
+    pending_education_record,
+):
+    """Regression: save corrections via review_override without review_status."""
+    record_id = pending_education_record["record_id"]
+    resp = _patch_json(
+        client,
+        privileged_headers,
+        record_id,
+        {
+            "review_override": {
+                "issue_date": "1982-06-15",
+                "document_number": "DOC-123",
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["review_status"] == "pending"
+    assert body["issue_date"].startswith("1982-06-15")
+    assert body["document_number"] == "DOC-123"
+    assert "review_status is required" not in resp.text
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_patch_without_review_status_or_override_returns_422(
+    client: TestClient,
+    privileged_headers,
+    pending_education_record,
+):
+    record_id = pending_education_record["record_id"]
+    resp = _patch_json(client, privileged_headers, record_id, {})
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"] == "review_status or review_override is required"
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_patch_with_both_review_status_and_override_returns_400(
+    client: TestClient,
+    privileged_headers,
+    pending_education_record,
+):
+    record_id = pending_education_record["record_id"]
+    resp = _patch_json(
+        client,
+        privileged_headers,
+        record_id,
+        {
+            "review_status": "approved",
+            "review_override": {"document_number": "X-1"},
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert "cannot be updated in the same request" in resp.json()["detail"]
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_save_override_for_education(
     client: TestClient,

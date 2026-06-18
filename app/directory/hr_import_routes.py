@@ -842,7 +842,7 @@ def patch_import_normalized_record_review(
 
     if has_review_override and review_status is not None:
         raise HTTPException(
-            status_code=422,
+            status_code=400,
             detail="review_override and review_status cannot be updated in the same request",
         )
 
