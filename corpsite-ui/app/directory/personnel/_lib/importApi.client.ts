@@ -797,14 +797,27 @@ export async function uploadControlList(file: File): Promise<{
   return res.json();
 }
 
-export type NormalizedRecordKind = "training" | "certificate" | "category" | "education";
-
 export type NormalizedRecordReviewStatus =
   | "pending"
   | "approved"
   | "rejected"
   | "promoted"
   | "superseded";
+
+export type {
+  NormalizedRecordKind,
+} from "./normalizedRecordLabels";
+
+export {
+  NORMALIZED_RECORD_KINDS,
+  NORMALIZED_RECORD_KIND_LABELS,
+  NORMALIZED_RECORD_KIND_SUMMARY_LABELS,
+  getNormalizedRecordKindLabel,
+  getNormalizedRecordKindSummaryLabel,
+  isNormalizedRecordKind,
+} from "./normalizedRecordLabels";
+
+import type { NormalizedRecordKind } from "./normalizedRecordLabels";
 
 export type NormalizedRecordSummary = {
   total: number;
@@ -883,13 +896,6 @@ export async function patchNormalizedRecordReview(
 ): Promise<NormalizedRecord> {
   return apiPatchJson(`/directory/personnel/import/normalized-records/${recordId}`, body);
 }
-
-export const NORMALIZED_RECORD_KIND_LABELS: Record<NormalizedRecordKind, string> = {
-  training: "Обучение",
-  certificate: "Сертификат",
-  category: "Категория",
-  education: "Награда",
-};
 
 export const NORMALIZED_REVIEW_STATUS_LABELS: Record<NormalizedRecordReviewStatus, string> = {
   pending: "Ожидает проверки",

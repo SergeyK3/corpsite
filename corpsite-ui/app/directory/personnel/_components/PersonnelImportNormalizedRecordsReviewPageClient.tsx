@@ -9,6 +9,8 @@ import {
   listNormalizedRecords,
   mapImportApiError,
   NORMALIZED_RECORD_KIND_LABELS,
+  NORMALIZED_RECORD_KINDS,
+  NORMALIZED_RECORD_KIND_SUMMARY_LABELS,
   NORMALIZED_REVIEW_STATUS_LABELS,
   type ImportBatchRow,
   type NormalizedRecord,
@@ -142,12 +144,10 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
     setToast({ message, kind });
   }
 
-  const kindCards: { key: NormalizedRecordKind; label: string }[] = [
-    { key: "training", label: "Обучение" },
-    { key: "certificate", label: "Сертификаты" },
-    { key: "category", label: "Категории" },
-    { key: "education", label: "Награды" },
-  ];
+  const kindCards = NORMALIZED_RECORD_KINDS.map((key) => ({
+    key,
+    label: NORMALIZED_RECORD_KIND_SUMMARY_LABELS[key],
+  }));
 
   return (
     <div className="px-4 py-3" data-ui-phase={PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE}>
