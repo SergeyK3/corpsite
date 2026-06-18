@@ -61,6 +61,7 @@ from app.services.hr_import_normalized_record_service import (
     review_normalized_records_summary,
     update_normalized_record_review,
 )
+from app.services.hr_import_promotion_service import PromotionRequestError, promote_normalized_records
 from app.services.hr_import_service import import_control_list
 
 from .common import as_http500, call_service
@@ -804,6 +805,48 @@ def patch_import_normalized_record_review(
     except InvalidReviewTransitionError as e:
         raise _invalid_review_transition(e)
     except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/normalized-records/promote")
+def post_import_normalized_records_promote(
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    record_ids_raw = body.get("record_ids")
+    record_ids: Optional[list[int]] = None
+    if record_ids_raw is not None:
+        if not isinstance(record_ids_raw, list) or not record_ids_raw:
+            raise HTTPException(status_code=422, detail="record_ids must be a non-empty list")
+        record_ids = [int(record_id) for record_id in record_ids_raw]
+
+    batch_id = body.get("batch_id")
+    filters = body.get("filters") if isinstance(body.get("filters"), dict) else {}
+    dry_run = bool(body.get("dry_run", False))
+    stop_on_first_error = bool(body.get("stop_on_first_error", False))
+
+    try:
+        return _with_conn(
+            promote_normalized_records,
+            promoted_by=int(user["user_id"]),
+            dry_run=dry_run,
+            record_ids=record_ids,
+            batch_id=int(batch_id) if batch_id is not None else None,
+            employee_id=int(filters["employee_id"]) if filters.get("employee_id") is not None else None,
+            record_kind=str(filters["record_kind"]).strip().lower()
+            if filters.get("record_kind")
+            else None,
+            review_status=str(filters["review_status"]).strip().lower()
+            if filters.get("review_status")
+            else None,
+            stop_on_first_error=stop_on_first_error,
+        )
+    except PromotionRequestError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
