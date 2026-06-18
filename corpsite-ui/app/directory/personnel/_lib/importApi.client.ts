@@ -818,6 +818,19 @@ export {
 } from "./normalizedRecordLabels";
 
 import type { NormalizedRecordKind } from "./normalizedRecordLabels";
+import type { EmployeeBindingInfo } from "./normalizedRecordBindingLabels";
+
+export type {
+  EmployeeBindingInfo,
+  EmployeeBindingStatus,
+  EmployeeBindingMethod,
+} from "./normalizedRecordBindingLabels";
+
+export {
+  EMPLOYEE_BINDING_STATUS_LABELS,
+  EMPLOYEE_BINDING_METHOD_LABELS,
+  employeeBindingBadgeClass,
+} from "./normalizedRecordBindingLabels";
 
 export type NormalizedRecordSummary = {
   total: number;
@@ -852,6 +865,7 @@ export type NormalizedRecord = {
   batch_id: number;
   row_id: number;
   employee_id: number | null;
+  employee_binding?: EmployeeBindingInfo;
   full_name: string;
   iin_masked: string;
   fragment_index: number;
@@ -903,11 +917,77 @@ export async function listNormalizedRecords(
     review_status?: NormalizedRecordReviewStatus;
     record_kind?: NormalizedRecordKind;
     q_name?: string;
+    binding_status?: "bound" | "unbound" | "conflict";
     limit?: number;
     offset?: number;
   } = {}
 ): Promise<{ total: number; limit: number; offset: number; items: NormalizedRecord[]; skipped?: boolean }> {
   return apiGetJson("/directory/personnel/import/normalized-records", buildQuery(params));
+}
+
+export async function patchNormalizedRecordEmployeeBinding(
+  recordId: number,
+  employeeId: number
+): Promise<NormalizedRecord> {
+  return apiPatchJson(`/directory/personnel/import/normalized-records/${recordId}`, {
+    employee_id: employeeId,
+  });
+}
+
+export async function repairBatchEmployeeBindings(
+  batchId: number
+): Promise<{
+  batch_id: number;
+  rows_processed: number;
+  bound: number;
+  already_bound: number;
+  unbound: number;
+  conflict: number;
+  normalized_records_updated: number;
+}> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/employee-bindings/repair`, {});
+}
+
+export type RosterPromotionOutcome =
+  | "would_create"
+  | "would_update"
+  | "already_linked"
+  | "exists"
+  | "conflict"
+  | "blocked";
+
+export type RosterPromotionItem = {
+  row_id: number;
+  outcome: RosterPromotionOutcome;
+  full_name: string;
+  iin: string;
+  iin_masked: string;
+  employee_id?: number | null;
+  target_employee_id?: number | null;
+  org_unit_id?: number | null;
+  org_unit_name?: string;
+  position_id?: number | null;
+  position_name?: string;
+  needs_hr_review?: boolean;
+  reason?: string | null;
+  candidate_employee_ids?: number[];
+};
+
+export type RosterPromotionResponse = {
+  batch_id: number;
+  dry_run: boolean;
+  total_rows: number;
+  summary: Record<RosterPromotionOutcome, number>;
+  items: RosterPromotionItem[];
+  applied?: RosterPromotionItem[];
+  binding_repair?: Record<string, unknown>;
+};
+
+export async function promoteImportRosterBatch(
+  batchId: number,
+  body: { dry_run?: boolean; row_ids?: number[] } = {}
+): Promise<RosterPromotionResponse> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/roster-promotion`, body);
 }
 
 export async function patchNormalizedRecordReview(

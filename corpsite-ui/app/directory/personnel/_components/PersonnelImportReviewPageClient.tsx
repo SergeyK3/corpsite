@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import ImportCategoryCardModal from "./ImportCategoryCardModal";
+import ImportRosterPromotionPanel from "./ImportRosterPromotionPanel";
 import {
   departmentFilterOptionValue,
   getDepartmentRecodingOptions,
@@ -288,7 +289,9 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       </div>
 
       <div className="print:hidden">
-        <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
+        <ImportRosterPromotionPanel batchId={batchId} />
+
+      <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
       </div>
 
       {error ? <div className="mb-4 text-sm text-red-600">{error}</div> : null}

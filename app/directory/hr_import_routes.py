@@ -54,16 +54,25 @@ from app.services.hr_import_row_review_service import (
     get_row_review_detail,
 )
 
+from app.services.hr_import_employee_binding_service import (
+    EmployeeBindingNotAllowedError,
+    NormalizedRecordNotFoundError as BindingNormalizedRecordNotFoundError,
+    bind_normalized_record_to_employee,
+    repair_batch_employee_bindings,
+)
 from app.services.hr_import_normalized_record_service import (
     InvalidReviewTransitionError,
     NormalizedRecordNotFoundError,
     ReviewOverrideNotAllowedError,
+    _fetch_normalized_record_row,
+    _serialize_normalized_record,
     list_review_normalized_records,
     review_normalized_records_summary,
     update_normalized_record_review,
     update_normalized_record_review_override,
 )
 from app.services.hr_import_promotion_service import PromotionRequestError, promote_normalized_records
+from app.services.hr_import_roster_promotion_service import promote_roster_batch
 from app.services.hr_import_service import import_control_list
 
 from .common import as_http500, call_service
@@ -190,6 +199,10 @@ def delete_import_batch(
         raise
     except Exception as e:
         raise as_http500(e)
+
+
+def _employee_binding_not_allowed(exc: EmployeeBindingNotAllowedError) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/personnel/import/batches/{batch_id}/summary")
@@ -762,6 +775,7 @@ def get_import_normalized_records(
     review_status: Optional[str] = Query(default=None),
     record_kind: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
+    binding_status: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -775,6 +789,7 @@ def get_import_normalized_records(
             review_status=review_status,
             record_kind=record_kind,
             q_name=q_name,
+            binding_status=binding_status,
             limit=limit,
             offset=offset,
         )
@@ -782,6 +797,38 @@ def get_import_normalized_records(
         raise _batch_not_found(e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/roster-promotion")
+def post_import_batch_roster_promotion(
+    batch_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """ADR-039 Phase 3H — create/update directory employees from import roster rows."""
+    require_privileged_or_403(user)
+    dry_run = bool(body.get("dry_run", True))
+    row_ids_raw = body.get("row_ids")
+    row_ids: Optional[list[int]] = None
+    if row_ids_raw is not None:
+        if not isinstance(row_ids_raw, list):
+            raise HTTPException(status_code=422, detail="row_ids must be a list")
+        row_ids = [int(rid) for rid in row_ids_raw if rid is not None]
+
+    try:
+        return _with_conn(
+            promote_roster_batch,
+            batch_id=batch_id,
+            created_by=int(user["user_id"]),
+            dry_run=dry_run,
+            row_ids=row_ids,
+        )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -830,6 +877,23 @@ def post_import_normalized_records_promote(
         raise as_http500(e)
 
 
+@router.post("/personnel/import/batches/{batch_id}/employee-bindings/repair")
+def post_import_batch_employee_bindings_repair(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """ADR-039 Phase 3G — auto-bind import rows and propagate employee_id to normalized records."""
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(repair_batch_employee_bindings, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
 @router.patch("/personnel/import/normalized-records/{record_id}")
 def patch_import_normalized_record_review(
     record_id: int,
@@ -839,6 +903,50 @@ def patch_import_normalized_record_review(
     require_privileged_or_403(user)
     has_review_override = "review_override" in body
     review_status = body.get("review_status")
+    employee_id_raw = body.get("employee_id")
+
+    if employee_id_raw is not None:
+        if has_review_override or review_status is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="employee_id cannot be combined with review_status or review_override",
+            )
+        try:
+            employee_id = int(employee_id_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="employee_id must be an integer")
+        if employee_id < 1:
+            raise HTTPException(status_code=422, detail="employee_id must be positive")
+
+        def _bind(conn, *, record_id: int, employee_id: int, bound_by: int):
+            bind_normalized_record_to_employee(
+                conn,
+                record_id,
+                employee_id=employee_id,
+                bound_by=bound_by,
+            )
+            row = _fetch_normalized_record_row(conn, record_id)
+            if row is None:
+                raise NormalizedRecordNotFoundError(record_id)
+            return _serialize_normalized_record(row, conn=conn)
+
+        try:
+            return _with_conn(
+                _bind,
+                record_id=record_id,
+                employee_id=employee_id,
+                bound_by=int(user["user_id"]),
+            )
+        except BindingNormalizedRecordNotFoundError as e:
+            raise _normalized_record_not_found(e)
+        except EmployeeBindingNotAllowedError as e:
+            raise _employee_binding_not_allowed(e)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise as_http500(e)
 
     if has_review_override and review_status is not None:
         raise HTTPException(

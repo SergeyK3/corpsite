@@ -5,6 +5,8 @@ import * as React from "react";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
 import NormalizedRecordsPromotionPanel from "./NormalizedRecordsPromotionPanel";
 import {
+  EMPLOYEE_BINDING_STATUS_LABELS,
+  employeeBindingBadgeClass,
   getNormalizedRecordsSummary,
   listImportBatches,
   listNormalizedRecords,
@@ -13,6 +15,7 @@ import {
   NORMALIZED_RECORD_KINDS,
   NORMALIZED_RECORD_KIND_SUMMARY_LABELS,
   NORMALIZED_REVIEW_STATUS_LABELS,
+  repairBatchEmployeeBindings,
   type ImportBatchRow,
   type NormalizedRecord,
   type NormalizedRecordKind,
@@ -20,7 +23,7 @@ import {
   type NormalizedRecordSummary,
 } from "../_lib/importApi.client";
 
-export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3f-normalized-records-promotion";
+export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3g-employee-binding";
 
 const REVIEW_HELP_EXPANDED_STORAGE_KEY = "corpsite_personnel_import_normalized_review_help_expanded";
 
@@ -148,7 +151,9 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
   const [reviewStatus, setReviewStatus] = React.useState("");
   const [recordKind, setRecordKind] = React.useState("");
   const [nameQuery, setNameQuery] = React.useState("");
+  const [bindingStatus, setBindingStatus] = React.useState("");
   const [offset, setOffset] = React.useState(0);
+  const [repairing, setRepairing] = React.useState(false);
   const limit = 50;
 
   const [selected, setSelected] = React.useState<NormalizedRecord | null>(null);
@@ -196,10 +201,11 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
       review_status: reviewStatus ? (reviewStatus as NormalizedRecordReviewStatus) : undefined,
       record_kind: recordKind ? (recordKind as NormalizedRecordKind) : undefined,
       q_name: nameQuery.trim() || undefined,
+      binding_status: bindingStatus ? (bindingStatus as "bound" | "unbound" | "conflict") : undefined,
       limit,
       offset,
     }),
-    [batchId, reviewStatus, recordKind, nameQuery, offset]
+    [batchId, reviewStatus, recordKind, nameQuery, bindingStatus, offset]
   );
 
   const loadSummary = React.useCallback(async () => {
@@ -254,6 +260,27 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
 
   function showToast(message: string, kind: "success" | "error" = "success") {
     setToast({ message, kind });
+  }
+
+  async function handleRepairBindings() {
+    if (!batchId) {
+      showToast("Выберите импорт для восстановления привязок", "error");
+      return;
+    }
+    setRepairing(true);
+    try {
+      const result = await repairBatchEmployeeBindings(Number(batchId));
+      showToast(
+        `Привязки восстановлены: +${result.bound}, уже было ${result.already_bound}, конфликтов ${result.conflict}`,
+        "success"
+      );
+      loadSummary();
+      loadList();
+    } catch (e) {
+      showToast(mapImportApiError(e), "error");
+    } finally {
+      setRepairing(false);
+    }
   }
 
   const kindCards = NORMALIZED_RECORD_KINDS.map((key) => ({
@@ -323,7 +350,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
         ) : null}
       </section>
 
-      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-4">
+      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-5">
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           value={batchId}
@@ -379,7 +406,37 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
           }}
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         />
+        <select
+          className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          value={bindingStatus}
+          onChange={(e) => {
+            setBindingStatus(e.target.value);
+            setOffset(0);
+          }}
+        >
+          <option value="">Все привязки</option>
+          {(Object.keys(EMPLOYEE_BINDING_STATUS_LABELS) as Array<keyof typeof EMPLOYEE_BINDING_STATUS_LABELS>).map(
+            (status) => (
+              <option key={status} value={status}>
+                {EMPLOYEE_BINDING_STATUS_LABELS[status]}
+              </option>
+            )
+          )}
+        </select>
       </div>
+
+      {batchId ? (
+        <div className="mb-4">
+          <button
+            type="button"
+            disabled={repairing || Boolean(summary?.skipped)}
+            onClick={handleRepairBindings}
+            className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
+          >
+            {repairing ? "Восстановление привязок…" : "Восстановить привязки сотрудников"}
+          </button>
+        </div>
+      ) : null}
 
       <NormalizedRecordsPromotionPanel
         batchId={batchId}
@@ -401,6 +458,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
               <thead className="bg-zinc-50 text-left text-[11px] uppercase text-zinc-500 dark:bg-zinc-900">
                 <tr>
                   <th className="px-3 py-2">Статус</th>
+                  <th className="px-3 py-2">Привязка</th>
                   <th className="px-3 py-2">Тип записи</th>
                   <th className="px-3 py-2">Сотрудник</th>
                   <th className="px-3 py-2">ИИН</th>
@@ -413,12 +471,15 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                       Нет записей по выбранным фильтрам
                     </td>
                   </tr>
                 ) : (
-                  items.map((row) => (
+                  items.map((row) => {
+                    const rowBindingStatus =
+                      row.employee_binding?.status ?? (row.employee_id ? "bound" : "unbound");
+                    return (
                     <tr
                       key={row.record_id}
                       className="group cursor-pointer border-t border-zinc-100 transition hover:bg-blue-50/60 dark:border-zinc-800 dark:hover:bg-blue-950/20"
@@ -433,6 +494,13 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                         </span>
                       </td>
                       <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${employeeBindingBadgeClass(rowBindingStatus)}`}
+                        >
+                          {EMPLOYEE_BINDING_STATUS_LABELS[rowBindingStatus] || rowBindingStatus}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
                         {NORMALIZED_RECORD_KIND_LABELS[row.record_kind] || row.record_kind}
                       </td>
                       <td className="px-3 py-2 font-medium">{row.full_name || "—"}</td>
@@ -444,7 +512,8 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                         <RowOpenHint />
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

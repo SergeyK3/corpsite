@@ -3,9 +3,13 @@
 import * as React from "react";
 
 import {
+  EMPLOYEE_BINDING_METHOD_LABELS,
+  EMPLOYEE_BINDING_STATUS_LABELS,
+  employeeBindingBadgeClass,
   NORMALIZED_RECORD_KIND_LABELS,
   NORMALIZED_REVIEW_STATUS_LABELS,
   mapImportApiError,
+  patchNormalizedRecordEmployeeBinding,
   patchNormalizedRecordReview,
   patchNormalizedRecordReviewOverride,
   type NormalizedRecord,
@@ -298,6 +302,7 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
     document_number: "",
     specialty_text: "",
   });
+  const [manualEmployeeId, setManualEmployeeId] = React.useState("");
 
   React.useEffect(() => {
     if (!open) return;
@@ -306,6 +311,7 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
     setEditing(false);
     if (record) {
       setDraft(draftFromRecord(record));
+      setManualEmployeeId(record.employee_id ? String(record.employee_id) : "");
     }
   }, [open, record]);
 
@@ -345,6 +351,28 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
     }
   }
 
+  async function saveEmployeeBinding() {
+    if (!record) return;
+    const employeeId = Number(manualEmployeeId);
+    if (!Number.isInteger(employeeId) || employeeId < 1) {
+      setError("Укажите корректный ID сотрудника");
+      return;
+    }
+    setActing(true);
+    setError(null);
+    try {
+      const updated = await patchNormalizedRecordEmployeeBinding(record.record_id, employeeId);
+      onReviewed(updated);
+      onToast("Сотрудник привязан", "success");
+    } catch (e) {
+      const message = mapImportApiError(e);
+      setError(message);
+      onToast(message, "error");
+    } finally {
+      setActing(false);
+    }
+  }
+
   async function saveOverride() {
     if (!record) return;
     setActing(true);
@@ -375,6 +403,9 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
   const canReturnPending = (status === "approved" || status === "rejected") && !editing;
   const locked = status === "promoted" || status === "superseded";
   const hasOverride = Boolean(record.review_override && Object.keys(record.review_override).length > 0);
+  const binding = record.employee_binding;
+  const bindingStatus = binding?.status ?? (record.employee_id ? "bound" : "unbound");
+  const canBindEmployee = !locked && bindingStatus !== "bound";
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -405,6 +436,37 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
             <FieldRow label="Сотрудник" value={record.full_name || (record.employee_id ? `ID ${record.employee_id}` : "—")} />
             <FieldRow label="ИИН" value={record.iin_masked || "—"} />
             <FieldRow
+              label="Привязка"
+              value={
+                <span className="space-y-1">
+                  <span
+                    className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${employeeBindingBadgeClass(bindingStatus)}`}
+                  >
+                    {EMPLOYEE_BINDING_STATUS_LABELS[bindingStatus] || bindingStatus}
+                  </span>
+                  {binding?.method ? (
+                    <span className="block text-xs text-zinc-500">
+                      {EMPLOYEE_BINDING_METHOD_LABELS[binding.method] || binding.method}
+                    </span>
+                  ) : null}
+                  {binding?.directory_employee_name ? (
+                    <span className="block text-xs text-zinc-600 dark:text-zinc-400">
+                      Справочник: {binding.directory_employee_name}
+                      {binding.employee_id ? ` (ID ${binding.employee_id})` : ""}
+                    </span>
+                  ) : null}
+                  {binding?.reason ? (
+                    <span className="block text-xs text-amber-700 dark:text-amber-300">{binding.reason}</span>
+                  ) : null}
+                  {binding?.candidate_employee_ids && binding.candidate_employee_ids.length > 0 ? (
+                    <span className="block text-xs text-zinc-500">
+                      Кандидаты: {binding.candidate_employee_ids.join(", ")}
+                    </span>
+                  ) : null}
+                </span>
+              }
+            />
+            <FieldRow
               label="Тип записи"
               value={NORMALIZED_RECORD_KIND_LABELS[record.record_kind] || record.record_kind}
             />
@@ -428,6 +490,35 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
               </div>
             ) : null}
           </section>
+
+          {canBindEmployee && !editing ? (
+            <section className="space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Ручная привязка</h3>
+              <p className="text-xs text-zinc-500">
+                Укажите ID сотрудника из кадрового справочника. Привязка применится ко всем записям этой строки импорта.
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="grid gap-1 text-sm">
+                  <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">ID сотрудника</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={manualEmployeeId}
+                    onChange={(e) => setManualEmployeeId(e.target.value)}
+                    className="w-40 rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={acting}
+                  onClick={saveEmployeeBinding}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Привязать
+                </button>
+              </div>
+            </section>
+          ) : null}
 
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Исходный текст</h3>

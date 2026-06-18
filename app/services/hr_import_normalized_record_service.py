@@ -749,6 +749,12 @@ def _populate_batch(conn: Connection, batch_id: int) -> dict[str, int]:
         row_id = row["row_id"]
         payload = row["payload"]
         employee_id = row["employee_id"]
+        if employee_id is None:
+            from app.services.hr_import_employee_binding_service import auto_bind_import_row
+
+            binding = auto_bind_import_row(conn, row_id)
+            if binding.employee_id is not None:
+                employee_id = binding.employee_id
         meta = _load_effective_profile_meta(
             conn,
             batch_id,
@@ -941,14 +947,6 @@ def _isoformat_or_none(value: Any) -> Optional[str]:
     return str(value)
 
 
-def _isoformat_or_none(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return str(value)
-
-
 def review_override_available(conn: Connection) -> bool:
     row = conn.execute(
         text(
@@ -1064,19 +1062,46 @@ def _build_sparse_review_override(
     return sparse
 
 
-def _serialize_normalized_record(row: dict[str, Any]) -> dict[str, Any]:
+def _serialize_normalized_record(row: dict[str, Any], *, conn: Optional[Connection] = None) -> dict[str, Any]:
     confidence = row.get("confidence")
     full_name = str(row.get("full_name") or "").strip()
     iin_raw = str(row.get("row_iin") or row.get("iin") or "").strip()
     parsed_values = _parsed_payload_from_row(row)
     review_override = _parse_review_override_json(row.get("review_override_json"))
     effective = _effective_payload(parsed_values, review_override)
+    row_employee_id = int(row["employee_id"]) if row.get("employee_id") is not None else None
+    directory_employee_name = str(row.get("directory_employee_name") or "").strip() or None
+    payload_for_binding = {
+        "full_name": full_name,
+        "iin": iin_raw,
+        "metadata": _parse_review_override_json(row.get("row_metadata_json")),
+    }
+    employee_binding: dict[str, Any]
+    if conn is not None:
+        from app.services.hr_import_employee_binding_service import binding_info_for_row
+
+        employee_binding = binding_info_for_row(
+            conn,
+            row_employee_id=row_employee_id,
+            payload=payload_for_binding,
+            directory_employee_name=directory_employee_name,
+        )
+    else:
+        employee_binding = {
+            "status": "bound" if row_employee_id else "unbound",
+            "method": None,
+            "reason": None,
+            "employee_id": row_employee_id,
+            "directory_employee_name": directory_employee_name,
+            "candidate_employee_ids": [],
+        }
     return {
         "record_id": int(row["normalized_record_id"]),
         "normalized_record_id": int(row["normalized_record_id"]),
         "batch_id": int(row["batch_id"]),
         "row_id": int(row["row_id"]),
-        "employee_id": int(row["employee_id"]) if row.get("employee_id") is not None else None,
+        "employee_id": row_employee_id,
+        "employee_binding": employee_binding,
         "full_name": full_name,
         "iin_masked": mask_iin(iin_raw) if iin_raw else "",
         "fragment_index": int(row.get("fragment_index") or 0),
@@ -1204,13 +1229,16 @@ def _normalized_record_list_join_sql() -> str:
     return """
         FROM public.hr_import_normalized_records nr
         JOIN public.hr_import_rows r ON r.row_id = nr.row_id
+        LEFT JOIN public.employees e ON e.employee_id = nr.employee_id
     """
 
 
 def _normalized_record_identity_sql() -> str:
     return """
         trim(COALESCE(r.normalized_payload->>'full_name', '')) AS full_name,
-        trim(COALESCE(r.normalized_payload->>'iin', '')) AS row_iin
+        trim(COALESCE(r.normalized_payload->>'iin', '')) AS row_iin,
+        r.normalized_payload->'metadata' AS row_metadata_json,
+        trim(COALESCE(e.full_name, '')) AS directory_employee_name
     """
 
 
@@ -1236,6 +1264,7 @@ def list_review_normalized_records(
     review_status: Optional[str] = None,
     record_kind: Optional[str] = None,
     q_name: Optional[str] = None,
+    binding_status: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -1276,6 +1305,16 @@ def list_review_normalized_records(
         )
         params["q_name_pattern"] = f"%{q_name.strip().lower()}%"
 
+    binding_status_norm = (binding_status or "").strip().lower()
+    if binding_status_norm == "bound":
+        clauses.append("nr.employee_id IS NOT NULL")
+    elif binding_status_norm in {"unbound", "conflict"}:
+        clauses.append("nr.employee_id IS NULL")
+        clauses.append(
+            "COALESCE(r.normalized_payload->'metadata'->>'employee_binding_status', 'unbound') = :binding_status"
+        )
+        params["binding_status"] = binding_status_norm
+
     where_sql = " AND ".join(clauses) if clauses else "TRUE"
     join_sql = _normalized_record_list_join_sql()
     total = int(
@@ -1297,11 +1336,13 @@ def list_review_normalized_records(
         params,
     ).mappings().all()
 
+    items = [_serialize_normalized_record(dict(row), conn=conn) for row in db_rows]
+
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "items": [_serialize_normalized_record(dict(row)) for row in db_rows],
+        "items": items,
         "skipped": False,
     }
 
@@ -1327,7 +1368,7 @@ def update_normalized_record_review(
 
     current_status = str(row["review_status"])
     if review_status == current_status:
-        return _serialize_normalized_record(row)
+        return _serialize_normalized_record(row, conn=conn)
 
     allowed = ALLOWED_REVIEW_TRANSITIONS.get(current_status, frozenset())
     if review_status not in allowed:
@@ -1377,7 +1418,7 @@ def update_normalized_record_review(
     updated = _fetch_normalized_record_row(conn, record_id)
     if updated is None:
         raise NormalizedRecordNotFoundError(record_id)
-    return _serialize_normalized_record(updated)
+    return _serialize_normalized_record(updated, conn=conn)
 
 
 def update_normalized_record_review_override(
@@ -1449,4 +1490,4 @@ def update_normalized_record_review_override(
     updated = _fetch_normalized_record_row(conn, record_id)
     if updated is None:
         raise NormalizedRecordNotFoundError(record_id)
-    return _serialize_normalized_record(updated)
+    return _serialize_normalized_record(updated, conn=conn)
