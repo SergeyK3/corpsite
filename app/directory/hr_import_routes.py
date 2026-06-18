@@ -782,36 +782,6 @@ def get_import_normalized_records(
         raise as_http500(e)
 
 
-@router.patch("/personnel/import/normalized-records/{record_id}")
-def patch_import_normalized_record_review(
-    record_id: int,
-    body: Dict[str, Any] = Body(default={}),
-    user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
-    require_privileged_or_403(user)
-    review_status = body.get("review_status")
-    if not review_status or not isinstance(review_status, str):
-        raise HTTPException(status_code=422, detail="review_status is required")
-    try:
-        return _with_conn(
-            update_normalized_record_review,
-            record_id=record_id,
-            review_status=review_status.strip().lower(),
-            reviewed_by=int(user["user_id"]),
-            review_notes=body.get("review_notes"),
-        )
-    except NormalizedRecordNotFoundError as e:
-        raise _normalized_record_not_found(e)
-    except InvalidReviewTransitionError as e:
-        raise _invalid_review_transition(e)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise as_http500(e)
-
-
 @router.post("/personnel/import/normalized-records/promote")
 def post_import_normalized_records_promote(
     body: Dict[str, Any] = Body(default={}),
@@ -847,6 +817,36 @@ def post_import_normalized_records_promote(
             stop_on_first_error=stop_on_first_error,
         )
     except PromotionRequestError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.patch("/personnel/import/normalized-records/{record_id}")
+def patch_import_normalized_record_review(
+    record_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    review_status = body.get("review_status")
+    if not review_status or not isinstance(review_status, str):
+        raise HTTPException(status_code=422, detail="review_status is required")
+    try:
+        return _with_conn(
+            update_normalized_record_review,
+            record_id=record_id,
+            review_status=review_status.strip().lower(),
+            reviewed_by=int(user["user_id"]),
+            review_notes=body.get("review_notes"),
+        )
+    except NormalizedRecordNotFoundError as e:
+        raise _normalized_record_not_found(e)
+    except InvalidReviewTransitionError as e:
+        raise _invalid_review_transition(e)
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
