@@ -163,6 +163,127 @@ function PreviewTable({ items }: { items: SyncPreviewItem[] }) {
   );
 }
 
+function SyncHistoryPanel({
+  auditLogAvailable,
+  metaLoaded,
+  history,
+  historyError,
+  historyLoading,
+  onRefresh,
+  expandedAuditId,
+  expandedAuditItem,
+  onToggleDetail,
+}: {
+  auditLogAvailable: boolean;
+  metaLoaded: boolean;
+  history: SyncHistoryResponse | null;
+  historyError: string | null;
+  historyLoading: boolean;
+  onRefresh: () => void;
+  expandedAuditId: number | null;
+  expandedAuditItem: SyncAuditLogItem | null;
+  onToggleDetail: (syncAuditId: number) => void;
+}) {
+  const auditUnavailable = metaLoaded && !historyLoading && !auditLogAvailable;
+  const historyEmpty =
+    auditLogAvailable && history !== null && !historyLoading && history.items.length === 0;
+
+  return (
+    <section className="mb-6 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold">История sync (audit log)</h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Журнал операций export / preview / apply. Пакеты ZIP в БД не хранятся.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={historyLoading}
+          onClick={onRefresh}
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          {historyLoading ? "Обновление…" : "Обновить"}
+        </button>
+      </div>
+      {historyError ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{historyError}</div>
+      ) : null}
+      {historyLoading && !history ? (
+        <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">Загрузка истории sync…</p>
+      ) : null}
+      {auditUnavailable ? (
+        <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
+          Audit log недоступен — выполните миграцию БД (`alembic upgrade head`).
+        </p>
+      ) : null}
+      {historyEmpty ? (
+        <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">История sync пуста</p>
+      ) : null}
+      {auditLogAvailable && history && history.items.length > 0 ? (
+        <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <th className="px-3 py-2">Когда</th>
+                <th className="px-3 py-2">Операция</th>
+                <th className="px-3 py-2">Пакет</th>
+                <th className="px-3 py-2">Пользователь</th>
+                <th className="px-3 py-2">Итог</th>
+                <th className="px-3 py-2">Статус</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {history.items.map((item) => (
+                <React.Fragment key={item.sync_audit_id}>
+                  <tr className="border-t border-zinc-200 dark:border-zinc-800">
+                    <td className="px-3 py-2 whitespace-nowrap">{formatSyncTimestamp(item.happened_at)}</td>
+                    <td className="px-3 py-2">{formatSyncAuditOperation(item)}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{item.package_name || "—"}</td>
+                    <td className="px-3 py-2">{item.actor_login || "—"}</td>
+                    <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
+                      {formatSyncAuditSummary(item)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {item.validation_ok === false ? (
+                        <span className="text-red-700 dark:text-red-300">ошибка</span>
+                      ) : item.warnings_count || item.errors_count ? (
+                        <span className="text-amber-700 dark:text-amber-300">warn</span>
+                      ) : (
+                        <span className="text-green-700 dark:text-green-300">ok</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                        onClick={() => onToggleDetail(item.sync_audit_id)}
+                      >
+                        {expandedAuditId === item.sync_audit_id ? "Скрыть" : "Детали"}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedAuditId === item.sync_audit_id && expandedAuditItem ? (
+                    <tr className="border-t border-zinc-200 dark:border-zinc-800">
+                      <td colSpan={7} className="px-3 py-2">
+                        <HistoryDetailPanel item={expandedAuditItem} />
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+            Показано {history.items.length} из {history.total}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function SyncAdminClient() {
   const previewResultsRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -190,9 +311,10 @@ export default function SyncAdminClient() {
   const [applyResult, setApplyResult] = React.useState<SyncApplyResponse | null>(null);
 
   const [auditLogAvailable, setAuditLogAvailable] = React.useState(false);
+  const [metaLoaded, setMetaLoaded] = React.useState(false);
   const [history, setHistory] = React.useState<SyncHistoryResponse | null>(null);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
-  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyLoading, setHistoryLoading] = React.useState(true);
   const [expandedAuditId, setExpandedAuditId] = React.useState<number | null>(null);
   const [expandedAuditItem, setExpandedAuditItem] = React.useState<SyncAuditLogItem | null>(null);
 
@@ -214,31 +336,45 @@ export default function SyncAdminClient() {
     let cancelled = false;
     (async () => {
       try {
-        const [meta, tenant] = await Promise.all([fetchSyncMeta(), loadTenant()]);
+        const meta = await fetchSyncMeta();
         if (cancelled) return;
         setSchemaVersion(meta.schema_version);
         setPackageVersion(meta.package_version);
         setAuditLogAvailable(Boolean(meta.audit_log_available));
+      } catch (err) {
+        if (!cancelled) setMetaError(mapSyncApiError(err, "Не удалось загрузить метаданные sync."));
+      } finally {
+        if (!cancelled) setMetaLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const tenant = await loadTenant();
+        if (cancelled) return;
         if (tenant.orgId) {
           setSourceOrgId((prev) => prev || tenant.orgId!);
         }
         if (tenant.orgName) {
           setSourceOrgName((prev) => prev || tenant.orgName);
         }
-      } catch (err) {
-        if (!cancelled) setMetaError(mapSyncApiError(err, "Не удалось загрузить метаданные sync."));
-      }
-      if (!cancelled) {
-        try {
-          await refreshHistory();
-        } catch {
-          /* refreshHistory sets its own error */
-        }
+      } catch {
+        /* tenant.json is optional for sync admin */
       }
     })();
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  React.useEffect(() => {
+    void refreshHistory();
   }, [refreshHistory]);
 
   React.useEffect(() => {
@@ -399,7 +535,13 @@ export default function SyncAdminClient() {
           </div>
           <div>
             <div className="text-xs text-zinc-500">Audit log</div>
-            <div className="font-medium">{auditLogAvailable ? "доступен" : "недоступен"}</div>
+            <div className="font-medium">
+              {!metaLoaded && historyLoading
+                ? "…"
+                : auditLogAvailable
+                  ? "доступен"
+                  : "недоступен"}
+            </div>
           </div>
           <div>
             <div className="text-xs text-zinc-500">Последний экспорт</div>
@@ -426,6 +568,18 @@ export default function SyncAdminClient() {
           <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{metaError}</div>
         ) : null}
       </section>
+
+      <SyncHistoryPanel
+        auditLogAvailable={auditLogAvailable}
+        metaLoaded={metaLoaded}
+        history={history}
+        historyError={historyError}
+        historyLoading={historyLoading}
+        onRefresh={() => void refreshHistory()}
+        expandedAuditId={expandedAuditId}
+        expandedAuditItem={expandedAuditItem}
+        onToggleDetail={toggleHistoryDetail}
+      />
 
       <section className="mb-6 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
         <h2 className="text-base font-semibold">Экспорт пакета</h2>
@@ -667,96 +821,6 @@ export default function SyncAdminClient() {
                   ) : null}
                 </div>
               ) : null}
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="mb-6 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-semibold">История sync (audit log)</h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Журнал операций export / preview / apply. Пакеты ZIP в БД не хранятся.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={historyLoading}
-            onClick={() => refreshHistory()}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          >
-            {historyLoading ? "Обновление…" : "Обновить"}
-          </button>
-        </div>
-        {historyError ? (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{historyError}</div>
-        ) : null}
-        {!auditLogAvailable ? (
-          <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
-            Audit log недоступен — выполните миграцию БД (`alembic upgrade head`).
-          </p>
-        ) : null}
-        {auditLogAvailable && history && !history.items.length ? (
-          <p className="mt-4 text-sm text-zinc-500">Записей пока нет.</p>
-        ) : null}
-        {auditLogAvailable && history && history.items.length ? (
-          <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-                <tr>
-                  <th className="px-3 py-2">Когда</th>
-                  <th className="px-3 py-2">Операция</th>
-                  <th className="px-3 py-2">Пакет</th>
-                  <th className="px-3 py-2">Пользователь</th>
-                  <th className="px-3 py-2">Итог</th>
-                  <th className="px-3 py-2">Статус</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {history.items.map((item) => (
-                  <React.Fragment key={item.sync_audit_id}>
-                    <tr className="border-t border-zinc-200 dark:border-zinc-800">
-                      <td className="px-3 py-2 whitespace-nowrap">{formatSyncTimestamp(item.happened_at)}</td>
-                      <td className="px-3 py-2">{formatSyncAuditOperation(item)}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{item.package_name || "—"}</td>
-                      <td className="px-3 py-2">{item.actor_login || "—"}</td>
-                      <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
-                        {formatSyncAuditSummary(item)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {item.validation_ok === false ? (
-                          <span className="text-red-700 dark:text-red-300">ошибка</span>
-                        ) : item.warnings_count || item.errors_count ? (
-                          <span className="text-amber-700 dark:text-amber-300">warn</span>
-                        ) : (
-                          <span className="text-green-700 dark:text-green-300">ok</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="text-xs text-blue-600 hover:underline dark:text-blue-400"
-                          onClick={() => toggleHistoryDetail(item.sync_audit_id)}
-                        >
-                          {expandedAuditId === item.sync_audit_id ? "Скрыть" : "Детали"}
-                        </button>
-                      </td>
-                    </tr>
-                    {expandedAuditId === item.sync_audit_id && expandedAuditItem ? (
-                      <tr className="border-t border-zinc-200 dark:border-zinc-800">
-                        <td colSpan={7} className="px-3 py-2">
-                          <HistoryDetailPanel item={expandedAuditItem} />
-                        </td>
-                      </tr>
-                    ) : null}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-            <div className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800">
-              Показано {history.items.length} из {history.total}
             </div>
           </div>
         ) : null}

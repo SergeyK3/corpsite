@@ -119,6 +119,9 @@ export async function fetchSyncMeta(): Promise<SyncMeta> {
   return body as SyncMeta;
 }
 
+/** Alias for audit checklist / legacy naming. */
+export const getSyncMeta = fetchSyncMeta;
+
 export async function exportSyncPackage(payload: SyncExportRequest): Promise<SyncExportResponse> {
   const url = resolveApiUrl("/directory/personnel/sync/export");
   const res = await fetch(url, {
@@ -203,6 +206,9 @@ export async function fetchSyncHistory(limit = 20, offset = 0): Promise<SyncHist
   if (!res.ok) throw toApiError(res.status, body);
   return body as SyncHistoryResponse;
 }
+
+/** Alias for audit checklist / legacy naming. */
+export const getSyncHistory = fetchSyncHistory;
 
 export async function fetchSyncHistoryItem(syncAuditId: number): Promise<SyncAuditLogItem> {
   const url = resolveApiUrl(`/directory/personnel/sync/history/${syncAuditId}`);
