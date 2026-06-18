@@ -1,6 +1,7 @@
 """Tests for ADR-039 Phase 3C — normalized record population from import profile/candidates."""
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -11,15 +12,24 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.services.hr_import_normalized_record_service import (
+    _build_staging_rows_for_profile,
     compute_source_record_key,
     list_normalized_records,
+    norm_source_text,
     normalized_records_available,
     normalized_records_summary,
     populate_normalized_records,
+    RECORD_KIND_CATEGORY,
 )
+from app.services.hr_import_profile_service import build_import_profile
 from app.services.hr_import_service import import_control_list
 from tests.conftest import table_exists
 from tests.test_import_hr_control_list import _build_doctors_sheet, get_layout_profile, parse_sheet_with_profile
+
+MIXED_CATEGORY_CERT_TEXT = (
+    'Высшая до 10.04.2023г. "Гигиена и эпидемиология" '
+    'Сертификат "Гигиена-эпидемиология" 29.09.2028 г.'
+)
 
 
 def _db_available() -> bool:
@@ -227,3 +237,107 @@ def test_column_m_maps_before_populate(seed, tmp_path: Path):
 
     assert training["total"] >= 1
     assert training["items"][0]["hours"] == 72
+
+
+def test_category_mixed_certification_text_staging_dates():
+    profile = build_import_profile(
+        {
+            "full_name": "Test Employee",
+            "certification_raw": MIXED_CATEGORY_CERT_TEXT,
+        }
+    )
+    enrichment = {
+        "fragment_index": 0,
+        "parsed_issued_at": date(2028, 9, 29),
+        "parsed_valid_until": date(2023, 4, 10),
+        "parse_method": "regex_v1",
+        "confidence_score": 0.85,
+        "certificate_number": "123",
+    }
+    candidate_index = {
+        (1, "certification_raw", norm_source_text(MIXED_CATEGORY_CERT_TEXT)): enrichment,
+        (1, "certification_raw", 0): enrichment,
+    }
+    rows = _build_staging_rows_for_profile(
+        batch_id=1,
+        row_id=1,
+        employee_id=None,
+        profile=profile,
+        candidate_index=candidate_index,
+        document_type_ids={},
+        open_employee_keys=set(),
+    )
+    category_rows = [row for row in rows if row["record_kind"] == RECORD_KIND_CATEGORY]
+    assert category_rows
+    cat = category_rows[0]
+    assert cat["title"] == "highest"
+    assert cat["expiry_date"] == date(2023, 4, 10)
+    assert cat["issue_date"] is None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_populate_category_mixed_certification_text_no_check_violation(seed):
+    _require_phase_3c()
+    suffix = uuid4().hex[:8]
+    payload = {
+        "full_name": "Category Mixed Cert",
+        "certification_raw": MIXED_CATEGORY_CERT_TEXT,
+        "metadata": {
+            "sheet_type": "doctors",
+            "row_type": "EMPLOYEE",
+            "is_employee_roster": True,
+            "classification": "NORMAL",
+        },
+    }
+    with engine.begin() as conn:
+        batch_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_batches (
+                    source_type, file_name, imported_by, status,
+                    total_rows, valid_rows, error_rows
+                )
+                VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 1, 1, 0)
+                RETURNING batch_id
+                """
+            ),
+            {
+                "file_name": f"category_mixed_{suffix}.xlsx",
+                "uid": int(seed["initiator_user_id"]),
+            },
+        ).scalar_one()
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_rows (
+                    batch_id, source_sheet, source_row_number,
+                    raw_payload, normalized_payload, match_status
+                )
+                VALUES (
+                    :batch_id, 'doctors', 8,
+                    CAST(:payload AS jsonb), CAST(:payload AS jsonb), 'NOT_PROCESSED'
+                )
+                """
+            ),
+            {"batch_id": batch_id, "payload": json.dumps(payload)},
+        )
+        populate_normalized_records(conn, batch_id)
+        cat = conn.execute(
+            text(
+                """
+                SELECT title, issue_date, expiry_date
+                FROM public.hr_import_normalized_records
+                WHERE batch_id = :batch_id
+                  AND record_kind = 'category'
+                ORDER BY normalized_record_id
+                LIMIT 1
+                """
+            ),
+            {"batch_id": batch_id},
+        ).mappings().first()
+        _delete_batch(conn, batch_id)
+
+    assert cat is not None
+    assert cat["title"] == "highest"
+    assert cat["issue_date"] is None
+    assert cat["expiry_date"] == date(2023, 4, 10)

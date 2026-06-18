@@ -15,6 +15,7 @@ from app.services.hr_import_analytics_service import (
     _ensure_batch_exists,
     is_real_employee_row,
 )
+from app.services.hr_import_document_parser import VALID_UNTIL_RE, _parse_dmy
 from app.services.hr_import_education_profile_service import (
     _load_effective_profile_meta,
     _resolve_merged_profile,
@@ -177,6 +178,38 @@ def _coerce_confidence(value: Any) -> Optional[float]:
     if score < 0 or score > 1:
         return None
     return round(score, 4)
+
+
+def _parse_category_expiry_from_text(text: str) -> Optional[date]:
+    """Category validity end date from «до DD.MM.YYYY» in source text."""
+    match = VALID_UNTIL_RE.search(text or "")
+    if not match:
+        return None
+    return _parse_dmy(match.group(1))
+
+
+def _resolve_category_issue_expiry_dates(
+    record: dict[str, Any],
+    enrichment: dict[str, Any],
+    source_text: str,
+) -> tuple[Optional[date], Optional[date]]:
+    """
+    Category rows: expiry from «до …»; issue_date only when profile issued_at is
+    strictly before category expiry. Never borrow certificate issue dates from enrichment.
+    """
+    expiry_date = _parse_category_expiry_from_text(source_text)
+    if expiry_date is None:
+        expiry_date = _coerce_date(enrichment.get("parsed_valid_until"))
+
+    issue_date = None
+    record_issued = _coerce_date(record.get("issued_at"))
+    if record_issued is not None and expiry_date is not None and record_issued < expiry_date:
+        issue_date = record_issued
+
+    if issue_date is not None and expiry_date is not None and issue_date > expiry_date:
+        issue_date = None
+
+    return issue_date, expiry_date
 
 
 def _resolve_document_type_code(
@@ -396,12 +429,13 @@ def _build_staging_rows_for_profile(
             elif record_kind == RECORD_KIND_CATEGORY:
                 title = str(record.get("category") or enrichment.get("title") or source_text or "")
                 provider = ""
-                issue_date = _coerce_date(record.get("issued_at")) or _coerce_date(
-                    enrichment.get("parsed_issued_at")
+                issue_date, expiry_date = _resolve_category_issue_expiry_dates(
+                    record,
+                    enrichment,
+                    source_text,
                 )
                 start_date = None
                 end_date = None
-                expiry_date = _coerce_date(enrichment.get("parsed_valid_until"))
                 hours = _coerce_hours(enrichment.get("parsed_hours"))
                 document_number = str(enrichment.get("certificate_number") or "")
                 specialty_text = str(record.get("specialty") or enrichment.get("specialty") or "")
