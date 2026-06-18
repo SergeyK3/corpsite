@@ -21,11 +21,42 @@ from app.services.hr_import_education_profile_service import (
 )
 
 REVIEW_STATUS_PENDING = "pending"
+REVIEW_STATUS_APPROVED = "approved"
+REVIEW_STATUS_REJECTED = "rejected"
+REVIEW_STATUS_PROMOTED = "promoted"
+REVIEW_STATUS_SUPERSEDED = "superseded"
 
 RECORD_KIND_TRAINING = "training"
 RECORD_KIND_CERTIFICATE = "certificate"
 RECORD_KIND_CATEGORY = "category"
 RECORD_KIND_EDUCATION = "education"
+
+REVIEW_STATUSES = frozenset(
+    {
+        REVIEW_STATUS_PENDING,
+        REVIEW_STATUS_APPROVED,
+        REVIEW_STATUS_REJECTED,
+        REVIEW_STATUS_PROMOTED,
+        REVIEW_STATUS_SUPERSEDED,
+    }
+)
+
+ALLOWED_REVIEW_TRANSITIONS: dict[str, frozenset[str]] = {
+    REVIEW_STATUS_PENDING: frozenset({REVIEW_STATUS_APPROVED, REVIEW_STATUS_REJECTED}),
+    REVIEW_STATUS_APPROVED: frozenset({REVIEW_STATUS_PENDING}),
+    REVIEW_STATUS_REJECTED: frozenset({REVIEW_STATUS_PENDING}),
+    REVIEW_STATUS_PROMOTED: frozenset(),
+    REVIEW_STATUS_SUPERSEDED: frozenset(),
+}
+
+RECORD_KINDS = frozenset(
+    {
+        RECORD_KIND_TRAINING,
+        RECORD_KIND_CERTIFICATE,
+        RECORD_KIND_CATEGORY,
+        RECORD_KIND_EDUCATION,
+    }
+)
 
 PROPOSED_TO_DOCUMENT_TYPE_CODE: dict[str, Optional[str]] = {
     "TRAINING_HOURS": "CONTINUING_EDUCATION",
@@ -739,3 +770,312 @@ def list_normalized_records(
         "items": items,
         "skipped": False,
     }
+
+
+class NormalizedRecordNotFoundError(Exception):
+    def __init__(self, record_id: int) -> None:
+        self.record_id = record_id
+        super().__init__(f"Normalized record {record_id} not found")
+
+
+class InvalidReviewTransitionError(Exception):
+    def __init__(self, current_status: str, target_status: str) -> None:
+        self.current_status = current_status
+        self.target_status = target_status
+        super().__init__(
+            f"Cannot change review_status from {current_status} to {target_status}"
+        )
+
+
+def _isoformat_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _serialize_normalized_record(row: dict[str, Any]) -> dict[str, Any]:
+    confidence = row.get("confidence")
+    return {
+        "record_id": int(row["normalized_record_id"]),
+        "normalized_record_id": int(row["normalized_record_id"]),
+        "batch_id": int(row["batch_id"]),
+        "row_id": int(row["row_id"]),
+        "employee_id": int(row["employee_id"]) if row.get("employee_id") is not None else None,
+        "fragment_index": int(row.get("fragment_index") or 0),
+        "source_field": row.get("source_field") or "",
+        "source_text": row.get("source_text") or "",
+        "source_record_key": row.get("source_record_key") or "",
+        "record_kind": row.get("record_kind") or "",
+        "document_type_id": int(row["document_type_id"]) if row.get("document_type_id") is not None else None,
+        "document_type_code": row.get("document_type_code"),
+        "title": row.get("title"),
+        "provider": row.get("provider"),
+        "hours": int(row["hours"]) if row.get("hours") is not None else None,
+        "start_date": _isoformat_or_none(row.get("start_date")),
+        "end_date": _isoformat_or_none(row.get("end_date")),
+        "issue_date": _isoformat_or_none(row.get("issue_date")),
+        "expiry_date": _isoformat_or_none(row.get("expiry_date")),
+        "document_number": row.get("document_number"),
+        "specialty_text": row.get("specialty_text"),
+        "medical_specialty_id": int(row["medical_specialty_id"])
+        if row.get("medical_specialty_id") is not None
+        else None,
+        "file_url": row.get("file_url"),
+        "parse_method": row.get("parse_method") or "",
+        "confidence": float(confidence) if isinstance(confidence, Decimal) else confidence,
+        "review_status": row.get("review_status") or REVIEW_STATUS_PENDING,
+        "reviewed_at": _isoformat_or_none(row.get("reviewed_at")),
+        "reviewed_by": int(row["reviewed_by"]) if row.get("reviewed_by") is not None else None,
+        "review_notes": row.get("review_notes"),
+        "promoted_document_id": int(row["promoted_document_id"])
+        if row.get("promoted_document_id") is not None
+        else None,
+        "promoted_at": _isoformat_or_none(row.get("promoted_at")),
+        "promoted_by": int(row["promoted_by"]) if row.get("promoted_by") is not None else None,
+        "created_at": _isoformat_or_none(row.get("created_at")),
+        "updated_at": _isoformat_or_none(row.get("updated_at")),
+    }
+
+
+def _empty_review_summary() -> dict[str, Any]:
+    return {
+        "total": 0,
+        "pending": 0,
+        "approved": 0,
+        "rejected": 0,
+        "promoted": 0,
+        "superseded": 0,
+        "by_kind": {
+            RECORD_KIND_TRAINING: 0,
+            RECORD_KIND_CERTIFICATE: 0,
+            RECORD_KIND_CATEGORY: 0,
+            RECORD_KIND_EDUCATION: 0,
+        },
+        "skipped": True,
+    }
+
+
+def review_normalized_records_summary(
+    conn: Connection,
+    *,
+    batch_id: Optional[int] = None,
+) -> dict[str, Any]:
+    """ADR-039 Phase 3D — aggregate review counts for staging normalized records."""
+    if batch_id is not None:
+        _ensure_batch_exists(conn, batch_id)
+    if not normalized_records_available(conn):
+        return _empty_review_summary()
+
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+    if batch_id is not None:
+        clauses.append("batch_id = :batch_id")
+        params["batch_id"] = batch_id
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+    status_rows = conn.execute(
+        text(
+            f"""
+            SELECT review_status, COUNT(*) AS cnt
+            FROM public.hr_import_normalized_records
+            {where_sql}
+            GROUP BY review_status
+            """
+        ),
+        params,
+    ).mappings().all()
+    kind_rows = conn.execute(
+        text(
+            f"""
+            SELECT record_kind, COUNT(*) AS cnt
+            FROM public.hr_import_normalized_records
+            {where_sql}
+            GROUP BY record_kind
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    by_status = {str(row["review_status"]): int(row["cnt"]) for row in status_rows}
+    by_kind_raw = {str(row["record_kind"]): int(row["cnt"]) for row in kind_rows}
+    by_kind = {
+        RECORD_KIND_TRAINING: by_kind_raw.get(RECORD_KIND_TRAINING, 0),
+        RECORD_KIND_CERTIFICATE: by_kind_raw.get(RECORD_KIND_CERTIFICATE, 0),
+        RECORD_KIND_CATEGORY: by_kind_raw.get(RECORD_KIND_CATEGORY, 0),
+        RECORD_KIND_EDUCATION: by_kind_raw.get(RECORD_KIND_EDUCATION, 0),
+    }
+    total = sum(by_status.values())
+
+    return {
+        "total": total,
+        "pending": by_status.get(REVIEW_STATUS_PENDING, 0),
+        "approved": by_status.get(REVIEW_STATUS_APPROVED, 0),
+        "rejected": by_status.get(REVIEW_STATUS_REJECTED, 0),
+        "promoted": by_status.get(REVIEW_STATUS_PROMOTED, 0),
+        "superseded": by_status.get(REVIEW_STATUS_SUPERSEDED, 0),
+        "by_kind": by_kind,
+        "skipped": False,
+    }
+
+
+def list_review_normalized_records(
+    conn: Connection,
+    *,
+    batch_id: Optional[int] = None,
+    employee_id: Optional[int] = None,
+    review_status: Optional[str] = None,
+    record_kind: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """ADR-039 Phase 3D — list staging normalized records with review filters."""
+    if batch_id is not None:
+        _ensure_batch_exists(conn, batch_id)
+    if review_status is not None and review_status not in REVIEW_STATUSES:
+        raise ValueError(f"invalid review_status: {review_status}")
+    if record_kind is not None and record_kind not in RECORD_KINDS:
+        raise ValueError(f"invalid record_kind: {record_kind}")
+
+    if not normalized_records_available(conn):
+        return {
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "items": [],
+            "skipped": True,
+        }
+
+    clauses: list[str] = []
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if batch_id is not None:
+        clauses.append("batch_id = :batch_id")
+        params["batch_id"] = batch_id
+    if employee_id is not None:
+        clauses.append("employee_id = :employee_id")
+        params["employee_id"] = employee_id
+    if review_status is not None:
+        clauses.append("review_status = :review_status")
+        params["review_status"] = review_status
+    if record_kind is not None:
+        clauses.append("record_kind = :record_kind")
+        params["record_kind"] = record_kind
+
+    where_sql = " AND ".join(clauses) if clauses else "TRUE"
+    total = int(
+        conn.execute(
+            text(f"SELECT COUNT(*) FROM public.hr_import_normalized_records WHERE {where_sql}"),
+            params,
+        ).scalar_one()
+    )
+    db_rows = conn.execute(
+        text(
+            f"""
+            SELECT *
+            FROM public.hr_import_normalized_records
+            WHERE {where_sql}
+            ORDER BY created_at DESC, normalized_record_id DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [_serialize_normalized_record(dict(row)) for row in db_rows],
+        "skipped": False,
+    }
+
+
+def update_normalized_record_review(
+    conn: Connection,
+    record_id: int,
+    *,
+    review_status: str,
+    reviewed_by: int,
+    review_notes: Optional[str] = None,
+) -> dict[str, Any]:
+    """ADR-039 Phase 3D — transition review_status without writing employee_documents."""
+    if review_status not in REVIEW_STATUSES:
+        raise ValueError(f"invalid review_status: {review_status}")
+
+    if not normalized_records_available(conn):
+        raise NormalizedRecordNotFoundError(record_id)
+
+    row = conn.execute(
+        text(
+            """
+            SELECT *
+            FROM public.hr_import_normalized_records
+            WHERE normalized_record_id = :record_id
+            """
+        ),
+        {"record_id": record_id},
+    ).mappings().first()
+    if row is None:
+        raise NormalizedRecordNotFoundError(record_id)
+
+    current_status = str(row["review_status"])
+    if review_status == current_status:
+        return _serialize_normalized_record(dict(row))
+
+    allowed = ALLOWED_REVIEW_TRANSITIONS.get(current_status, frozenset())
+    if review_status not in allowed:
+        raise InvalidReviewTransitionError(current_status, review_status)
+
+    if review_status in {REVIEW_STATUS_APPROVED, REVIEW_STATUS_REJECTED}:
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_normalized_records
+                SET
+                    review_status = :review_status,
+                    reviewed_at = NOW(),
+                    reviewed_by = :reviewed_by,
+                    review_notes = :review_notes,
+                    updated_at = NOW()
+                WHERE normalized_record_id = :record_id
+                """
+            ),
+            {
+                "record_id": record_id,
+                "review_status": review_status,
+                "reviewed_by": reviewed_by,
+                "review_notes": review_notes,
+            },
+        )
+    else:
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_normalized_records
+                SET
+                    review_status = :review_status,
+                    reviewed_at = NULL,
+                    reviewed_by = NULL,
+                    review_notes = NULL,
+                    updated_at = NOW()
+                WHERE normalized_record_id = :record_id
+                """
+            ),
+            {
+                "record_id": record_id,
+                "review_status": review_status,
+            },
+        )
+
+    updated = conn.execute(
+        text(
+            """
+            SELECT *
+            FROM public.hr_import_normalized_records
+            WHERE normalized_record_id = :record_id
+            """
+        ),
+        {"record_id": record_id},
+    ).mappings().first()
+    return _serialize_normalized_record(dict(updated))

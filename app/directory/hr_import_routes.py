@@ -54,6 +54,13 @@ from app.services.hr_import_row_review_service import (
     get_row_review_detail,
 )
 
+from app.services.hr_import_normalized_record_service import (
+    InvalidReviewTransitionError,
+    NormalizedRecordNotFoundError,
+    list_review_normalized_records,
+    review_normalized_records_summary,
+    update_normalized_record_review,
+)
 from app.services.hr_import_service import import_control_list
 
 from .common import as_http500, call_service
@@ -72,6 +79,14 @@ def _batch_not_found(exc: BatchNotFoundError) -> HTTPException:
 
 def _employee_import_card_not_found(exc: EmployeeImportCardNotFoundError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
+
+
+def _normalized_record_not_found(exc: NormalizedRecordNotFoundError) -> HTTPException:
+    return HTTPException(status_code=404, detail=str(exc))
+
+
+def _invalid_review_transition(exc: InvalidReviewTransitionError) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/personnel/employees/{employee_id}/import-card")
@@ -715,3 +730,80 @@ async def upload_import_control_list(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
+@router.get("/personnel/import/normalized-records/summary")
+def get_import_normalized_records_summary(
+    batch_id: Optional[int] = Query(default=None, ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(review_normalized_records_summary, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/normalized-records")
+def get_import_normalized_records(
+    batch_id: Optional[int] = Query(default=None, ge=1),
+    employee_id: Optional[int] = Query(default=None, ge=1),
+    review_status: Optional[str] = Query(default=None),
+    record_kind: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(
+            list_review_normalized_records,
+            batch_id=batch_id,
+            employee_id=employee_id,
+            review_status=review_status,
+            record_kind=record_kind,
+            limit=limit,
+            offset=offset,
+        )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.patch("/personnel/import/normalized-records/{record_id}")
+def patch_import_normalized_record_review(
+    record_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    review_status = body.get("review_status")
+    if not review_status or not isinstance(review_status, str):
+        raise HTTPException(status_code=422, detail="review_status is required")
+    try:
+        return _with_conn(
+            update_normalized_record_review,
+            record_id=record_id,
+            review_status=review_status.strip().lower(),
+            reviewed_by=int(user["user_id"]),
+            review_notes=body.get("review_notes"),
+        )
+    except NormalizedRecordNotFoundError as e:
+        raise _normalized_record_not_found(e)
+    except InvalidReviewTransitionError as e:
+        raise _invalid_review_transition(e)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
