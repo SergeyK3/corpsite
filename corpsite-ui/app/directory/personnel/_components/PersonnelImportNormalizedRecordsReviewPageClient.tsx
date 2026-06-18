@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
+import NormalizedRecordsPromotionPanel from "./NormalizedRecordsPromotionPanel";
 import {
   getNormalizedRecordsSummary,
   listImportBatches,
@@ -19,7 +20,7 @@ import {
   type NormalizedRecordSummary,
 } from "../_lib/importApi.client";
 
-export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3e-normalized-records-review";
+export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3f-normalized-records-promotion";
 
 const REVIEW_HELP_EXPANDED_STORAGE_KEY = "corpsite_personnel_import_normalized_review_help_expanded";
 
@@ -87,13 +88,15 @@ function NormalizedRecordsReviewHelpPanel({ onCollapse }: { onCollapse: () => vo
         <li>При корректных данных нажмите «Утвердить».</li>
         <li>При ошибке нажмите «Отклонить».</li>
         <li>Если требуется повторная проверка — «Вернуть в ожидание».</li>
+        <li>После утверждения записей выберите импорт и выполните Dry Run promotion.</li>
+        <li>Если dry-run успешен — подтвердите Promote для записи в кадровую карточку.</li>
       </ol>
 
       <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         <p className="font-medium">Важно:</p>
         <p className="mt-1 leading-relaxed">
-          Утверждение на этом этапе НЕ записывает данные в кадровую карточку сотрудника. Записи
-          остаются в staging-слое до запуска механизма promotion (ADR-039 Phase 3F).
+          Утверждение на этом этапе НЕ записывает данные в кадровую карточку сотрудника. Для записи
+          используйте блок Promotion: сначала Dry Run, затем Promote с подтверждением.
         </p>
       </div>
     </div>
@@ -108,6 +111,8 @@ function reviewStatusBadgeClass(status: NormalizedRecordReviewStatus): string {
       return "border-green-200 bg-green-100 text-green-900 dark:border-green-800 dark:bg-green-950/50 dark:text-green-200";
     case "rejected":
       return "border-red-200 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200";
+    case "promoted":
+      return "border-blue-200 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200";
     default:
       return "border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
   }
@@ -242,6 +247,11 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
     loadSummary();
   }
 
+  function handlePromotionCompleted() {
+    loadSummary();
+    loadList();
+  }
+
   function showToast(message: string, kind: "success" | "error" = "success") {
     setToast({ message, kind });
   }
@@ -289,11 +299,12 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
       ) : null}
 
       <section className="mb-4 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryCard label="Всего" value={summary?.total ?? 0} />
           <SummaryCard label="Ожидают проверки" value={summary?.pending ?? 0} />
           <SummaryCard label="Утверждено" value={summary?.approved ?? 0} />
           <SummaryCard label="Отклонено" value={summary?.rejected ?? 0} />
+          <SummaryCard label="Промотировано" value={summary?.promoted ?? 0} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {kindCards.map((card) => (
@@ -369,6 +380,14 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         />
       </div>
+
+      <NormalizedRecordsPromotionPanel
+        batchId={batchId}
+        recordKind={recordKind}
+        tableUnavailable={Boolean(summary?.skipped)}
+        onCompleted={handlePromotionCompleted}
+        onToast={showToast}
+      />
 
       <section className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
         <div className="border-b border-zinc-200 px-4 py-3 text-sm font-semibold dark:border-zinc-800">

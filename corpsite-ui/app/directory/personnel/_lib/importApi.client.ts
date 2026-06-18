@@ -897,6 +897,84 @@ export async function patchNormalizedRecordReview(
   return apiPatchJson(`/directory/personnel/import/normalized-records/${recordId}`, body);
 }
 
+export type {
+  PromotionBlockerCode,
+} from "./normalizedRecordPromotionLabels";
+
+export {
+  PROMOTION_BLOCKER_CODES,
+  PROMOTION_BLOCKER_LABELS,
+  PROMOTION_BLOCKER_PANEL_GROUPS,
+  PROMOTION_SKIP_REASON_LABELS,
+  getPromotionBlockerLabel,
+  sumBlockersByCodes,
+} from "./normalizedRecordPromotionLabels";
+
+export type PromotionBlocker = {
+  code: string;
+  message: string;
+  field?: string;
+};
+
+export type PromotionPreview = {
+  document_type_code?: string | null;
+  medical_specialty_id?: number | null;
+  title?: string | null;
+  training_title?: string | null;
+  issued_by?: string | null;
+  issued_at?: string | null;
+  end_date?: string | null;
+  valid_until?: string | null;
+  hours?: number | null;
+  document_number?: string | null;
+  file_url?: string | null;
+  source_record_key?: string | null;
+};
+
+export type PromotionItemResult = {
+  record_id: number;
+  normalized_record_id: number;
+  record_kind: string;
+  employee_id: number | null;
+  outcome: string;
+  document_id?: number;
+  reason?: string;
+  blockers?: PromotionBlocker[];
+  preview?: PromotionPreview;
+};
+
+export type PromotionResponse = {
+  dry_run: boolean;
+  requested: number;
+  promoted: number;
+  would_promote: number;
+  skipped: number;
+  would_skip: number;
+  failed: number;
+  would_fail: number;
+  items: PromotionItemResult[];
+  summary_by_blocker: Record<string, number>;
+  skipped_unavailable?: boolean;
+};
+
+export type PromoteNormalizedRecordsRequest = {
+  record_ids?: number[];
+  batch_id?: number;
+  filters?: {
+    employee_id?: number;
+    record_kind?: string;
+    review_status?: string;
+  };
+  dry_run?: boolean;
+  stop_on_first_error?: boolean;
+};
+
+export async function promoteNormalizedRecords(
+  body: PromoteNormalizedRecordsRequest
+): Promise<PromotionResponse> {
+  return apiPostJson("/directory/personnel/import/normalized-records/promote", body);
+}
+
 export const NORMALIZED_REVIEW_STATUS_LABELS: Record<NormalizedRecordReviewStatus, string> = {
   pending: "Ожидает проверки",
   approved: "Утверждено",
