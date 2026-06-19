@@ -1019,9 +1019,7 @@ export async function patchNormalizedRecordEmployeeBinding(
   });
 }
 
-export async function repairBatchEmployeeBindings(
-  batchId: number
-): Promise<{
+export type RepairBatchEmployeeBindingsResult = {
   batch_id: number;
   rows_processed: number;
   bound: number;
@@ -1029,7 +1027,11 @@ export async function repairBatchEmployeeBindings(
   unbound: number;
   conflict: number;
   normalized_records_updated: number;
-}> {
+};
+
+export async function repairBatchEmployeeBindings(
+  batchId: number
+): Promise<RepairBatchEmployeeBindingsResult> {
   return apiPostJson(`/directory/personnel/import/batches/${batchId}/employee-bindings/repair`, {});
 }
 

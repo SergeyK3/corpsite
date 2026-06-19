@@ -8,6 +8,9 @@ import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
 import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
 import NormalizedRecordsPromotionPanel from "./NormalizedRecordsPromotionPanel";
 import {
+  RestoreImportBatchBindingsPanel,
+} from "./RestoreImportBatchBindingsPanel";
+import {
   EMPLOYEE_BINDING_STATUS_LABELS,
   employeeBindingBadgeClass,
   getNormalizedRecord,
@@ -19,12 +22,12 @@ import {
   NORMALIZED_RECORD_KINDS,
   NORMALIZED_RECORD_KIND_SUMMARY_LABELS,
   NORMALIZED_REVIEW_STATUS_LABELS,
-  repairBatchEmployeeBindings,
   type ImportBatchRow,
   type NormalizedRecord,
   type NormalizedRecordKind,
   type NormalizedRecordReviewStatus,
   type NormalizedRecordSummary,
+  type RepairBatchEmployeeBindingsResult,
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 
@@ -144,7 +147,12 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 
 type ToastState = { message: string; kind: "success" | "error" } | null;
 
-export default function PersonnelImportNormalizedRecordsReviewPageClient() {
+type Props = {
+  /** When set, review is scoped to a single import batch (batch filter pre-selected). */
+  initialBatchId?: number;
+};
+
+export default function PersonnelImportNormalizedRecordsReviewPageClient({ initialBatchId }: Props = {}) {
   const [loading, setLoading] = React.useState(true);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -152,14 +160,13 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
   const [items, setItems] = React.useState<NormalizedRecord[]>([]);
   const [total, setTotal] = React.useState(0);
   const [batches, setBatches] = React.useState<ImportBatchRow[]>([]);
-  const [batchId, setBatchId] = React.useState("");
+  const [batchId, setBatchId] = React.useState(initialBatchId ? String(initialBatchId) : "");
   const [reviewStatus, setReviewStatus] = React.useState("");
   const [recordKind, setRecordKind] = React.useState("");
   const [nameQuery, setNameQuery] = React.useState("");
   const [bindingStatus, setBindingStatus] = React.useState("");
   const [showUnchanged, setShowUnchanged] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
-  const [repairing, setRepairing] = React.useState(false);
   const limit = 50;
 
   const [selected, setSelected] = React.useState<NormalizedRecord | null>(null);
@@ -215,6 +222,8 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
     const timer = window.setTimeout(() => setToast(null), 3200);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  const selectedBatchId = batchId ? Number(batchId) : null;
 
   const listParams = React.useMemo(
     () => ({
@@ -298,25 +307,13 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
     setToast({ message, kind });
   }
 
-  async function handleRepairBindings() {
-    if (!batchId) {
-      showToast("Выберите импорт для восстановления привязок", "error");
-      return;
-    }
-    setRepairing(true);
-    try {
-      const result = await repairBatchEmployeeBindings(Number(batchId));
-      showToast(
-        `Привязки восстановлены: +${result.bound}, уже было ${result.already_bound}, конфликтов ${result.conflict}`,
-        "success"
-      );
-      loadSummary();
-      loadList();
-    } catch (e) {
-      showToast(mapImportApiError(e), "error");
-    } finally {
-      setRepairing(false);
-    }
+  function handleBindingsRepaired(result: RepairBatchEmployeeBindingsResult) {
+    showToast(
+      `Привязки восстановлены: +${result.bound}, уже было ${result.already_bound}, конфликтов ${result.conflict}`,
+      "success"
+    );
+    loadSummary();
+    loadList();
   }
 
   const kindCards = NORMALIZED_RECORD_KINDS.map((key) => ({
@@ -478,18 +475,12 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
         </div>
       ) : null}
 
-      {batchId ? (
-        <div className="mb-4">
-          <button
-            type="button"
-            disabled={repairing || Boolean(summary?.skipped)}
-            onClick={handleRepairBindings}
-            className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
-          >
-            {repairing ? "Восстановление привязок…" : "Восстановить привязки сотрудников"}
-          </button>
-        </div>
-      ) : null}
+      <RestoreImportBatchBindingsPanel
+        batchId={selectedBatchId}
+        disabled={Boolean(summary?.skipped)}
+        onRepaired={handleBindingsRepaired}
+        onError={(message) => showToast(message, "error")}
+      />
 
       <NormalizedRecordsPromotionPanel
         batchId={batchId}
