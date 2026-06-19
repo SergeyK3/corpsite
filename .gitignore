@@ -63,6 +63,8 @@ docs/*
 !docs/RBAC_VISIBILITY_118_AUDIT.md
 !docs/ops/
 !docs/ops/**
+!docs/deploy/
+!docs/deploy/**
 !docs/workshop/
 !docs/workshop/**
 !docs/demo/

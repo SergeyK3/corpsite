@@ -8,18 +8,24 @@
 # Deploy (always build before start):
 #   git pull && sudo ./scripts/deploy_frontend.sh
 #
-# Adjust paths below if the repo lives outside /opt/projects/corpsite/app.
+# Adjust User/Group and paths if your install differs.
+# Current VPS (mmc.004.kz): User=ubuntu Group=ubuntu.
+# For a dedicated service account, create it first, e.g.:
+#   sudo useradd --system --home /opt/projects/corpsite --shell /usr/sbin/nologin corpsite
+#   sudo chown -R corpsite:corpsite /opt/projects/corpsite/app
 
 [Unit]
 Description=Corpsite Next.js Frontend
 Documentation=file:/opt/projects/corpsite/app/docs/deploy/frontend.md
 After=network-online.target
 Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=120
 
 [Service]
 Type=simple
-User=corpsite
-Group=corpsite
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/projects/corpsite/app/corpsite-ui
 Environment=NODE_ENV=production
 Environment=PORT=3000
@@ -32,10 +38,6 @@ ExecStart=/usr/bin/npm run start --silent
 Restart=always
 RestartSec=5
 RestartPreventExitStatus=203
-
-# Avoid tight restart loops on repeated start failures.
-StartLimitBurst=5
-StartLimitIntervalSec=120
 
 StandardOutput=journal
 StandardError=journal
