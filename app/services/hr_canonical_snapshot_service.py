@@ -23,6 +23,7 @@ from app.services.hr_import_analytics_service import (
 )
 from app.services.hr_import_education_profile_service import (
     _load_effective_profile_meta,
+    _merge_profiles,
     _resolve_merged_profile,
 )
 from app.services.hr_import_normalized_record_service import (
@@ -74,6 +75,18 @@ VOLATILE_PAYLOAD_KEYS = frozenset(
         "source_record_key",
         "directory_employee_name",
         "_canonical_correction_fields",
+        "provenance",
+    }
+)
+
+COMBINABLE_ROSTER_FIELDS = frozenset(
+    {
+        "training_raw",
+        "certification_raw",
+        "education_raw",
+        "degree_raw",
+        "experience_raw",
+        "note_raw",
     }
 )
 
@@ -376,6 +389,210 @@ def build_normalized_effective_payload(row: dict[str, Any]) -> dict[str, Any]:
     return effective
 
 
+def _merge_text_field(primary: str, secondary: str) -> str:
+    left = (primary or "").strip()
+    right = (secondary or "").strip()
+    if not right or right == left:
+        return left
+    if not left:
+        return right
+    if right in left:
+        return left
+    if left in right:
+        return right
+    return f"{left}; {right}"
+
+
+def _roster_entry_sort_key(entry: dict[str, Any]) -> tuple[Any, ...]:
+    payload = entry.get("payload") or {}
+    filled = sum(1 for field in ROSTER_COMPARE_FIELDS if str(payload.get(field) or "").strip())
+    return (
+        0 if entry.get("employee_id") is not None else 1,
+        -filled,
+        int(entry.get("source_row_id") or 0),
+    )
+
+
+def _normalized_entry_sort_key(entry: dict[str, Any]) -> tuple[Any, ...]:
+    payload = entry.get("payload") or {}
+    has_corrections = 1 if payload.get("_canonical_correction_fields") else 0
+    filled = sum(
+        1
+        for field in NORMALIZED_COMPARE_FIELDS
+        if payload.get(field) not in (None, "", [], {})
+    )
+    return (
+        0 if entry.get("employee_id") is not None else 1,
+        -has_corrections,
+        -filled,
+        int(entry.get("source_normalized_record_id") or 0),
+    )
+
+
+def _attach_provenance(
+    payload: dict[str, Any],
+    *,
+    source_row_ids: list[int],
+    source_normalized_record_ids: list[int],
+    duplicate_match_key_merged_count: int,
+) -> dict[str, Any]:
+    enriched = dict(payload)
+    provenance: dict[str, Any] = {
+        "source_row_ids": sorted({int(value) for value in source_row_ids if value is not None}),
+        "source_normalized_record_ids": sorted(
+            {int(value) for value in source_normalized_record_ids if value is not None}
+        ),
+    }
+    if duplicate_match_key_merged_count > 1:
+        provenance["duplicate_match_key_merged_count"] = duplicate_match_key_merged_count
+    enriched["provenance"] = provenance
+    return enriched
+
+
+def _merge_roster_snapshot_entries(group: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(group, key=_roster_entry_sort_key)
+    primary = ordered[0]
+    merged_payload = dict(primary["payload"])
+
+    profiles = [
+        dict(entry["payload"].get("merged_profile") or {})
+        for entry in ordered
+        if entry["payload"].get("merged_profile")
+    ]
+    if len(profiles) > 1:
+        merged_payload["merged_profile"] = _merge_profiles(profiles)
+    elif profiles:
+        merged_payload["merged_profile"] = profiles[0]
+
+    for entry in ordered[1:]:
+        secondary = entry["payload"]
+        for field in ROSTER_COMPARE_FIELDS:
+            if field == "merged_profile":
+                continue
+            if field in COMBINABLE_ROSTER_FIELDS:
+                merged_payload[field] = _merge_text_field(
+                    str(merged_payload.get(field) or ""),
+                    str(secondary.get(field) or ""),
+                )
+            elif not str(merged_payload.get(field) or "").strip():
+                merged_payload[field] = secondary.get(field)
+
+    source_row_ids = [int(entry["source_row_id"]) for entry in group if entry.get("source_row_id") is not None]
+    merged_payload = _attach_provenance(
+        merged_payload,
+        source_row_ids=source_row_ids,
+        source_normalized_record_ids=[],
+        duplicate_match_key_merged_count=len(group),
+    )
+
+    employee_id = next((entry.get("employee_id") for entry in ordered if entry.get("employee_id") is not None), None)
+    match_key = str(primary["match_key"])
+    entity_scope = match_key
+    return {
+        "entity_scope": entity_scope,
+        "record_kind": RECORD_KIND_ROSTER,
+        "match_key": match_key,
+        "canonical_hash": compute_canonical_hash(
+            record_kind=RECORD_KIND_ROSTER,
+            entity_scope=entity_scope,
+            payload=merged_payload,
+        ),
+        "employee_id": employee_id,
+        "iin": merged_payload.get("iin") or None,
+        "payload": merged_payload,
+        "source_row_id": int(primary["source_row_id"]) if primary.get("source_row_id") is not None else None,
+        "source_normalized_record_id": None,
+    }
+
+
+def _merge_normalized_snapshot_entries(group: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(group, key=_normalized_entry_sort_key)
+    primary = ordered[0]
+    merged_payload = dict(primary["payload"])
+
+    for entry in ordered[1:]:
+        secondary = entry["payload"]
+        for field in NORMALIZED_COMPARE_FIELDS:
+            current = merged_payload.get(field)
+            candidate = secondary.get(field)
+            if current in (None, "", [], {}) and candidate not in (None, "", [], {}):
+                merged_payload[field] = candidate
+        correction_fields = sorted(
+            set(merged_payload.get("_canonical_correction_fields") or [])
+            | set(secondary.get("_canonical_correction_fields") or [])
+        )
+        if correction_fields:
+            merged_payload["_canonical_correction_fields"] = correction_fields
+
+    source_row_ids = [int(entry["source_row_id"]) for entry in group if entry.get("source_row_id") is not None]
+    source_normalized_record_ids = [
+        int(entry["source_normalized_record_id"])
+        for entry in group
+        if entry.get("source_normalized_record_id") is not None
+    ]
+    merged_payload = _attach_provenance(
+        merged_payload,
+        source_row_ids=source_row_ids,
+        source_normalized_record_ids=source_normalized_record_ids,
+        duplicate_match_key_merged_count=len(group),
+    )
+
+    record_kind = str(primary["record_kind"])
+    match_key = str(primary["match_key"])
+    entity_scope = str(primary["entity_scope"])
+    employee_id = next((entry.get("employee_id") for entry in ordered if entry.get("employee_id") is not None), None)
+    return {
+        "entity_scope": entity_scope,
+        "record_kind": record_kind,
+        "match_key": match_key,
+        "canonical_hash": compute_canonical_hash(
+            record_kind=record_kind,
+            entity_scope=entity_scope,
+            payload=merged_payload,
+        ),
+        "employee_id": employee_id,
+        "iin": None,
+        "payload": merged_payload,
+        "source_row_id": int(primary["source_row_id"]) if primary.get("source_row_id") is not None else None,
+        "source_normalized_record_id": (
+            int(primary["source_normalized_record_id"])
+            if primary.get("source_normalized_record_id") is not None
+            else None
+        ),
+    }
+
+
+def dedupe_snapshot_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Collapse duplicate match_key rows into one merged canonical entry per key."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        grouped.setdefault(str(entry["match_key"]), []).append(entry)
+
+    duplicate_groups = sum(1 for group in grouped.values() if len(group) > 1)
+    duplicate_entry_count = sum(len(group) - 1 for group in grouped.values() if len(group) > 1)
+
+    deduped: list[dict[str, Any]] = []
+    for match_key in sorted(grouped.keys()):
+        group = grouped[match_key]
+        if len(group) == 1:
+            deduped.append(group[0])
+            continue
+        record_kind = str(group[0]["record_kind"])
+        if record_kind == RECORD_KIND_ROSTER:
+            deduped.append(_merge_roster_snapshot_entries(group))
+        else:
+            deduped.append(_merge_normalized_snapshot_entries(group))
+
+    if duplicate_entry_count > 0:
+        logger.info(
+            "canonical snapshot deduplicated duplicate match_keys: groups=%s removed=%s",
+            duplicate_groups,
+            duplicate_entry_count,
+        )
+
+    return deduped, duplicate_entry_count
+
+
 def _build_roster_effective_payload(
     conn: Connection,
     *,
@@ -598,7 +815,8 @@ def build_canonical_snapshot_from_batch(
         raise BatchNotFoundError(f"batch_id={batch_id} not found")
 
     source_type = str(batch["source_type"] or SOURCE_TYPE_HR_CONTROL_LIST)
-    entries = _collect_snapshot_entries(conn, batch_id)
+    raw_entries = _collect_snapshot_entries(conn, batch_id)
+    entries, duplicate_match_keys_merged = dedupe_snapshot_entries(raw_entries)
     version = _next_snapshot_version(conn, source_type)
 
     prior_active = get_active_snapshot(conn, source_type=source_type)
@@ -720,6 +938,7 @@ def build_canonical_snapshot_from_batch(
         "version": version,
         "status": SNAPSHOT_STATUS_ACTIVE,
         "entry_count": len(entries),
+        "duplicate_match_keys_merged": duplicate_match_keys_merged,
         "superseded_snapshot_id": int(prior_active["snapshot_id"]) if prior_active else None,
     }
 

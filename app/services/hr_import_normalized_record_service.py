@@ -11,9 +11,11 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from app.db.models.hr_import import ROW_TYPE_EMPLOYEE, SOURCE_TYPE_HR_CONTROL_LIST
 from app.services.hr_import_analytics_service import (
     BatchNotFoundError,
     _ensure_batch_exists,
+    has_strong_employee_identity,
     is_real_employee_row,
 )
 from app.services.hr_import_document_parser import VALID_UNTIL_RE, _parse_dmy
@@ -347,6 +349,13 @@ def _load_document_type_ids(conn: Connection) -> dict[str, int]:
 
 def _load_rows_for_population(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
     _ensure_batch_exists(conn, batch_id)
+    batch_source_type = str(
+        conn.execute(
+            text("SELECT source_type FROM public.hr_import_batches WHERE batch_id = :batch_id"),
+            {"batch_id": batch_id},
+        ).scalar_one_or_none()
+        or SOURCE_TYPE_HR_CONTROL_LIST
+    )
     db_rows = conn.execute(
         text(
             """
@@ -366,13 +375,31 @@ def _load_rows_for_population(conn: Connection, batch_id: int) -> list[dict[str,
         sheet_type = str(metadata.get("sheet_type", "") or "")
         classification = str(metadata.get("classification", "") or "")
         row_type = str(metadata.get("row_type", "") or "")
-        is_employee_roster = bool(metadata.get("is_employee_roster", row_type == "employee"))
+        full_name = str(payload.get("full_name", "") or "").strip()
+        iin = str(payload.get("iin", "") or "").strip()
+        employee_number = str(payload.get("employee_number", "") or "").strip()
+        if "is_employee_roster" in metadata:
+            is_employee_roster = bool(metadata["is_employee_roster"])
+        elif row_type:
+            is_employee_roster = row_type.upper() == ROW_TYPE_EMPLOYEE
+        else:
+            is_employee_roster = has_strong_employee_identity(
+                {
+                    "full_name": full_name,
+                    "iin": iin,
+                    "employee_number": employee_number,
+                    "source_type": batch_source_type,
+                }
+            )
         analytics_row = {
             "sheet_type": sheet_type,
             "classification": classification,
             "row_type": row_type,
             "is_employee_roster": is_employee_roster,
-            "iin": str(payload.get("iin", "") or "").strip(),
+            "full_name": full_name,
+            "iin": iin,
+            "employee_number": employee_number,
+            "source_type": batch_source_type,
         }
         if not is_real_employee_row(analytics_row):
             continue

@@ -14,7 +14,10 @@
 | **F** | Materialized HR change events (`hr_change_events`) | ✅ |
 | **G** | HR change events UI | ✅ |
 
-**Operator runbook:** [docs/runbooks/hr-canonical-snapshot-monthly-diff.md](../runbooks/hr-canonical-snapshot-monthly-diff.md)
+**Operator runbooks:**
+
+- [Dual Personnel Registry](../runbooks/hr-dual-personnel-registry.md) — два кадровых контура (operational vs HR canonical)
+- [Canonical Snapshot & Monthly Diff](../runbooks/hr-canonical-snapshot-monthly-diff.md) — monthly diff workflow *(если оформлен отдельно)*
 
 ## Дата
 
@@ -22,6 +25,8 @@
 
 ## Связанные документы
 
+- [ADR-041 — Dual Personnel Registry Model](./ADR-041-dual-personnel-registry-model.md) — **Canonical Snapshot ≠ Operational Employee registry**; optional `employee_id` binding
+- [Runbook — Dual Personnel Registry](../runbooks/hr-dual-personnel-registry.md)
 - [Operator runbook — Canonical Snapshot & Monthly Diff](../runbooks/hr-canonical-snapshot-monthly-diff.md)
 - [ADR-038 — Employee Identity & HR Import Architecture](./ADR-038-employee-identity-hr-import-architecture.md) — staging, match engine, batch lifecycle
 - [ADR-038-A1 — Import Integrity Hardening](./ADR-038-A1-import-integrity-hardening.md) — `employee_import_profile_overrides`, `missing_from_latest_import`
@@ -81,6 +86,9 @@ ADR-040 закрывает gap: **единый канонический сним
 Ввести **Canonical HR Snapshot** — версионированный эталон кадровой выгрузки, материализованный после review + promotion batch.
 
 Все последующие импорты проходят **Diff against Canonical Snapshot**; в review по умолчанию попадают только отличия.
+
+> **Canonical Snapshot ≠ Employee registry (ADR-041).**  
+> Канонический снимок описывает **HR Canonical Registry** (полный контрольный список из `HR_CONTROL_LIST`), а не раздел «Персонал → Сотрудники». Запись в snapshot может существовать без `employee_id` и без учётной записи Corpsite. Operational registry (`employees`) и HR canonical registry развиваются параллельно; monthly diff сравнивает incoming import с canonical snapshot, не с live `employees`.
 
 ---
 
@@ -399,7 +407,7 @@ Persisted only for `CHANGED` and `CONFLICT`. Hash compare uses effective merged 
 - Without active canonical snapshot all incoming logical records receive `NEW`.
 - Re-import of identical file against snapshot → `UNCHANGED` (verified in tests).
 
-**Phase B — test coverage (`040a` + `040b`, 17 tests):**
+**Phase B — test coverage (`040a` + `040b` + business scenarios, 20 tests):**
 
 - repeat import → `UNCHANGED`
 - new employee → `NEW` + prior snapshot entry → `REMOVED`
@@ -408,6 +416,9 @@ Persisted only for `CHANGED` and `CONFLICT`. Hash compare uses effective merged 
 - no active snapshot → all `NEW`
 - auto-diff on upload
 - roster dry-run promotion unaffected
+- **business scenario A** — repeat same-month import after snapshot → all `UNCHANGED`, review by exception empty (`test_hr_import_phase_040b_monthly_diff_business_scenarios.py`)
+- **business scenario B** — next-month import → `UNCHANGED` / `NEW` / `CHANGED` / `REMOVED` in one batch
+- **business scenario C** — manual review correction preserved → `CONFLICT` on stale re-import, canonical not overwritten
 
 **Phase C deliverables:**
 

@@ -10,6 +10,7 @@
 
 ## Связанные документы
 
+- [ADR-041 — Dual Personnel Registry Model](./ADR-041-dual-personnel-registry-model.md) — `employee_id` на staging **optional**; HR import не создаёт Employee автоматически
 - [ADR-039 Phase 3A — Architectural Audit](./ADR-039-hr-professional-profile-normalization.md) *(если оформлен отдельно)*
 - [ADR-037 — Employee Documents Registry](./ADR-037-employee-documents-registry.md)
 - [ADR-038 Phase 2C — Training Documents Normalization](./ADR-038-Phase-2C-training-documents-normalization.md)
@@ -379,6 +380,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_hinr_employee_source_key_open
 
 > **Note:** `employee_id IS NULL` rows (unmatched import) dedup only via `(row_id, source_record_key)`.
 > After employee match, application must recompute key scope or merge duplicates before promotion.
+
+> **ADR-041 — binding optional:** отсутствие `employee_id` на `hr_import_rows` / `hr_import_normalized_records` — **нормальное** состояние для HR analytics и canonical snapshot. Привязка к operational `employees` (Phase 3G: по ИИН / по ФИО) — опциональное улучшение match key, не обязательный результат импорта. Promotion в `employee_documents` по-прежнему требует `employee_id` (gate для operational documents).
 
 ---
 

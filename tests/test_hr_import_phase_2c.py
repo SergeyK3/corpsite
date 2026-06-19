@@ -15,9 +15,11 @@ from app.db.models.hr_import import (
     CLASSIFICATION_DECLARATION,
     CLASSIFICATION_NORMAL,
     CLASSIFICATION_SUMMARY_ROW,
+    SOURCE_TYPE_HR_CONTROL_LIST,
 )
 from app.services.hr_import_analytics_service import (
     batch_summary,
+    has_strong_employee_identity,
     is_declaration_no_iin_row,
     is_missing_iin_employee_row,
     is_real_employee_row,
@@ -139,6 +141,44 @@ def test_is_real_employee_row_excludes_technical():
     )
     assert not is_real_employee_row({"classification": CLASSIFICATION_NORMAL, "sheet_type": "declaration", "iin": ""})
     assert is_real_employee_row({"classification": CLASSIFICATION_NORMAL, "sheet_type": "doctors", "iin": ""})
+
+
+def test_has_strong_employee_identity_signals():
+    assert has_strong_employee_identity({"full_name": "Иванов И.И.", "iin": "123456789012"})
+    assert has_strong_employee_identity({"employee_number": "A-100"})
+    assert has_strong_employee_identity({"source_type": SOURCE_TYPE_HR_CONTROL_LIST})
+    assert not has_strong_employee_identity({"full_name": "Иванов И.И.", "iin": ""})
+    assert not has_strong_employee_identity({})
+
+
+def test_is_real_employee_row_control_list_metadata_gap():
+    """HR_CONTROL_LIST rows without row_type still qualify when identity fields are present."""
+    control_list_row = {
+        "classification": CLASSIFICATION_NORMAL,
+        "sheet_type": "doctors",
+        "is_employee_roster": False,
+        "full_name": "Петров П.П.",
+        "iin": "123456789012",
+        "source_type": SOURCE_TYPE_HR_CONTROL_LIST,
+    }
+    assert is_real_employee_row(control_list_row)
+
+    summary_row = {
+        "classification": CLASSIFICATION_SUMMARY_ROW,
+        "sheet_type": "doctors",
+        "is_employee_roster": False,
+        "row_type": "SUMMARY_ROW",
+        "source_type": SOURCE_TYPE_HR_CONTROL_LIST,
+    }
+    assert not is_real_employee_row(summary_row)
+
+    employee_number_row = {
+        "classification": CLASSIFICATION_NORMAL,
+        "sheet_type": "nurses",
+        "is_employee_roster": False,
+        "employee_number": "EMP-42",
+    }
+    assert is_real_employee_row(employee_number_row)
 
 
 def test_missing_iin_vs_technical_no_iin():

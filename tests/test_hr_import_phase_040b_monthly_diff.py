@@ -357,16 +357,33 @@ def _patch_snapshot_roster_correction(
     conn,
     *,
     batch_id: int,
-    corrected_iin: str,
+    corrected_iin: str | None = None,
+    corrected_position: str | None = None,
 ) -> None:
+    correction_fields: list[str] = []
+    payload_expr = "e.payload"
+    params: dict[str, object] = {"batch_id": batch_id}
+    if corrected_iin is not None:
+        payload_expr = f"jsonb_set({payload_expr}, '{{iin}}', to_jsonb(CAST(:corrected_iin AS text)), true)"
+        params["corrected_iin"] = corrected_iin
+        correction_fields.append("iin")
+    if corrected_position is not None:
+        payload_expr = (
+            f"jsonb_set({payload_expr}, '{{position_raw}}', to_jsonb(CAST(:corrected_position AS text)), true)"
+        )
+        params["corrected_position"] = corrected_position
+        correction_fields.append("position_raw")
+    if not correction_fields:
+        raise ValueError("at least one corrected field is required")
+    params["correction_fields"] = json.dumps(correction_fields)
     updated = conn.execute(
         text(
-            """
+            f"""
             UPDATE public.hr_canonical_snapshot_entries AS e
             SET payload = jsonb_set(
-                    jsonb_set(e.payload, '{iin}', to_jsonb(CAST(:corrected_iin AS text)), true),
-                    '{_canonical_correction_fields}',
-                    '["iin"]'::jsonb,
+                    {payload_expr},
+                    '{{_canonical_correction_fields}}',
+                    CAST(:correction_fields AS jsonb),
                     true
                 )
             FROM public.hr_canonical_snapshots AS s
@@ -376,7 +393,7 @@ def _patch_snapshot_roster_correction(
             RETURNING e.entry_id, e.payload
             """
         ),
-        {"batch_id": batch_id, "corrected_iin": corrected_iin},
+        params,
     ).mappings().all()
     if not updated:
         raise AssertionError(f"no roster snapshot entry found for batch_id={batch_id}")

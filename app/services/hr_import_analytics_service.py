@@ -16,6 +16,7 @@ from app.db.models.hr_import import (
     CLASSIFICATION_INVALID_IIN,
     CLASSIFICATION_SUMMARY_ROW,
     ROW_TYPE_EMPLOYEE,
+    SOURCE_TYPE_HR_CONTROL_LIST,
 )
 from app.services.department_recoding_service import load_org_unit_group_ids, lookup_recoding
 from app.services.hr_import_document_parser import parse_certification_raw
@@ -239,13 +240,28 @@ def _infer_staff_type(row: dict[str, Any]) -> str:
     return "other_staff"
 
 
+def has_strong_employee_identity(row: dict[str, Any]) -> bool:
+    """True when row payload has enough identity signals for personnel normalization."""
+    full_name = str(row.get("full_name") or "").strip()
+    iin = str(row.get("iin") or "").strip()
+    employee_number = str(row.get("employee_number") or "").strip()
+    source_type = str(row.get("source_type") or "").strip()
+    if full_name and iin:
+        return True
+    if employee_number:
+        return True
+    if source_type == SOURCE_TYPE_HR_CONTROL_LIST:
+        return True
+    return False
+
+
 def is_real_employee_row(row: dict[str, Any]) -> bool:
     """True for actual staff rows on employee roster sheets."""
-    if row.get("is_employee_roster") is False:
+    if row.get("is_employee_roster") is False and not has_strong_employee_identity(row):
         return False
     row_type = str(row.get("row_type") or "")
     if row_type:
-        return row_type == ROW_TYPE_EMPLOYEE
+        return row_type.upper() == ROW_TYPE_EMPLOYEE
     if row.get("classification") in TECHNICAL_CLASSIFICATIONS:
         return False
     if row.get("sheet_type") == "declaration":

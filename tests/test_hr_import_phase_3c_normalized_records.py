@@ -455,3 +455,69 @@ def test_populate_multi_certificate_text_no_check_violation(seed):
     assert certs[1]["title"] == "Онкология взрослаяг"
     assert certs[1]["issue_date"] is None
     assert certs[1]["expiry_date"] == date(2029, 8, 1)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_populate_normalized_records_missing_row_type_metadata(seed):
+    """Regression: HR_CONTROL_LIST roster rows without row_type must still populate staging."""
+    _require_phase_3c()
+    suffix = uuid4().hex[:8]
+    payload = {
+        "full_name": "Metadata Gap Employee",
+        "iin": "123456789012",
+        "education_raw": "КазНМУ, 1982; ПК 144 ч",
+        "certification_raw": 'Сертификат "Терапия" до 01.01.2028',
+        "metadata": {
+            "sheet_type": "doctors",
+            "classification": "NORMAL",
+        },
+    }
+    with engine.begin() as conn:
+        batch_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_batches (
+                    source_type, file_name, imported_by, status,
+                    total_rows, valid_rows, error_rows
+                )
+                VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 1, 1, 0)
+                RETURNING batch_id
+                """
+            ),
+            {
+                "file_name": f"missing_row_type_{suffix}.xlsx",
+                "uid": int(seed["initiator_user_id"]),
+            },
+        ).scalar_one()
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_rows (
+                    batch_id, source_sheet, source_row_number,
+                    raw_payload, normalized_payload, match_status
+                )
+                VALUES (
+                    :batch_id, 'doctors', 8,
+                    CAST(:payload AS jsonb), CAST(:payload AS jsonb), 'NOT_PROCESSED'
+                )
+                """
+            ),
+            {"batch_id": batch_id, "payload": json.dumps(payload)},
+        )
+        result = populate_normalized_records(conn, batch_id)
+        total = int(
+            conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM public.hr_import_normalized_records
+                    WHERE batch_id = :batch_id
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).scalar_one()
+        )
+        _delete_batch(conn, batch_id)
+
+    assert result["total_records"] > 0
+    assert total > 0

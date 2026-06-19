@@ -16,6 +16,7 @@
 - [ADR-014 — Data Sync Policy](./ADR-014-data-sync-policy.md) — legacy `employees_import*`, delta-import сотрудников
 - [ADR-032 — Employee Transfer Architecture](./ADR-032-employee-transfer-architecture.md) — кадровые операции перевода
 - [ADR-036 — HR Events Unified Model](./ADR-036-hr-events-unified-model.md) — разделение проф. документов и кадровых приказов
+- [ADR-041 — Dual Personnel Registry Model](./ADR-041-dual-personnel-registry-model.md) — operational `employees` vs HR canonical registry; optional binding
 - Phase 0 / 0B: `scripts/import_hr_control_list.py` (dry-run parser, commit `47a0a0f`)
 - Phase 1: domain mapping review (без apply)
 
@@ -673,6 +674,16 @@ Pipeline §3; statuses AUTO_MATCH / REVIEW_REQUIRED / NO_MATCH / INVALID_DATA / 
 - Employee mutations → HIRE / CORRECTION / (future) secondary assignment for part_time;
 - Documents → ADR-037 validated insert;
 - Batch transactional with partial failure → PARTIALLY_APPLIED + detailed log.
+
+## D9. Employee binding (Phase 3G) — optional, not import outcome
+
+**См. [ADR-041 — Dual Personnel Registry Model](./ADR-041-dual-personnel-registry-model.md).**
+
+- HR import **не создаёт** `employees` автоматически при upload.
+- `hr_import_rows.employee_id` и `hr_import_normalized_records.employee_id` — **опциональная** связь с operational registry.
+- Auto-bind (по ИИН, по ФИО) и «Восстановить привязки в этом импорте» (`repair_batch_employee_bindings`) — batch-scoped repair, когда сотрудник **уже существует** в «Персонал → Сотрудники».
+- Статус «Не привязана» в import review — допустим для HR canonical analytics; не блокирует canonical snapshot или monthly diff.
+- Полный кадровый состав живёт в **HR Canonical Registry** (ADR-040); operational registry (~пилотный состав) — отдельный контур.
 
 ---
 

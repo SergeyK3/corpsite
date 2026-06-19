@@ -486,6 +486,9 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
         batchId={batchId}
         recordKind={recordKind}
         tableUnavailable={Boolean(summary?.skipped)}
+        approvedInBatch={summary?.approved ?? 0}
+        pendingInBatch={summary?.pending ?? 0}
+        normalizedInBatch={summary?.total ?? 0}
         onCompleted={handlePromotionCompleted}
         onToast={showToast}
       />

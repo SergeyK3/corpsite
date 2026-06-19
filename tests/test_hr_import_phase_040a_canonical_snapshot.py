@@ -1,6 +1,7 @@
 """Tests for ADR-040 Phase A — canonical HR snapshot foundation."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from app.services.hr_canonical_snapshot_service import (
     canonical_snapshot_available,
     compute_canonical_hash,
     compute_roster_match_key,
+    dedupe_snapshot_entries,
     refresh_canonical_snapshot_after_promotion,
 )
 from app.services.hr_import_normalized_record_service import (
@@ -610,3 +612,146 @@ def test_refresh_helper_builds_snapshot_when_schema_available(seed, tmp_path: Pa
     finally:
         with engine.begin() as conn:
             _cleanup_promotion_batch(conn, batch_id)
+
+
+def test_dedupe_snapshot_entries_merges_duplicate_roster_match_keys() -> None:
+    match_key = "iin:123456789012"
+    raw_entries = [
+        {
+            "entity_scope": match_key,
+            "record_kind": "roster",
+            "match_key": match_key,
+            "canonical_hash": "hash-a",
+            "employee_id": None,
+            "iin": "123456789012",
+            "payload": {
+                "full_name": "Dup Employee",
+                "iin": "123456789012",
+                "education_raw": "КазНМУ, 1982",
+            },
+            "source_row_id": 10,
+            "source_normalized_record_id": None,
+        },
+        {
+            "entity_scope": match_key,
+            "record_kind": "roster",
+            "match_key": match_key,
+            "canonical_hash": "hash-b",
+            "employee_id": None,
+            "iin": "123456789012",
+            "payload": {
+                "full_name": "Dup Employee",
+                "iin": "123456789012",
+                "certification_raw": 'Сертификат "Терапия" до 01.01.2028',
+                "training_raw": "ПК 72 ч",
+            },
+            "source_row_id": 11,
+            "source_normalized_record_id": None,
+        },
+    ]
+
+    deduped, merged_count = dedupe_snapshot_entries(raw_entries)
+
+    assert merged_count == 1
+    assert len(deduped) == 1
+    payload = deduped[0]["payload"]
+    assert "КазНМУ, 1982" in payload["education_raw"]
+    assert "Сертификат" in payload["certification_raw"]
+    assert "ПК 72 ч" in payload["training_raw"]
+    assert payload["provenance"]["source_row_ids"] == [10, 11]
+    assert payload["provenance"]["duplicate_match_key_merged_count"] == 2
+
+
+def test_snapshot_build_deduplicates_duplicate_roster_match_key(seed) -> None:
+    _require_phase_040a()
+    suffix = uuid4().hex[:8]
+    iin = _test_iin(suffix)
+    metadata = {
+        "sheet_type": "doctors",
+        "classification": "NORMAL",
+        "row_type": "EMPLOYEE",
+        "is_employee_roster": True,
+    }
+    row_payloads = (
+        {
+            "full_name": "Duplicate Snapshot Employee",
+            "iin": iin,
+            "education_raw": "КазНМУ, 1982",
+            "metadata": metadata,
+        },
+        {
+            "full_name": "Duplicate Snapshot Employee",
+            "iin": iin,
+            "certification_raw": 'Сертификат "Терапия" до 01.01.2028',
+            "training_raw": "ПК 72 ч",
+            "metadata": metadata,
+        },
+    )
+
+    with engine.begin() as conn:
+        batch_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_batches (
+                    source_type, file_name, imported_by, status,
+                    total_rows, valid_rows, error_rows
+                )
+                VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 2, 2, 0)
+                RETURNING batch_id
+                """
+            ),
+            {
+                "file_name": f"dup_snapshot_{suffix}.xlsx",
+                "uid": int(seed["initiator_user_id"]),
+            },
+        ).scalar_one()
+        for row_num, payload in enumerate(row_payloads, start=8):
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO public.hr_import_rows (
+                        batch_id, source_sheet, source_row_number,
+                        raw_payload, normalized_payload, match_status
+                    )
+                    VALUES (
+                        :batch_id, 'doctors', :row_num,
+                        CAST(:payload AS jsonb), CAST(:payload AS jsonb), 'NOT_PROCESSED'
+                    )
+                    """
+                ),
+                {
+                    "batch_id": batch_id,
+                    "row_num": row_num,
+                    "payload": json.dumps(payload),
+                },
+            )
+        result = build_canonical_snapshot_from_batch(
+            conn,
+            batch_id,
+            promoted_by=int(seed["initiator_user_id"]),
+        )
+        entries = conn.execute(
+            text(
+                """
+                SELECT match_key, payload
+                FROM public.hr_canonical_snapshot_entries
+                WHERE snapshot_id = :snapshot_id
+                  AND record_kind = 'roster'
+                  AND match_key = :match_key
+                """
+            ),
+            {
+                "snapshot_id": int(result["snapshot_id"]),
+                "match_key": f"iin:{iin}",
+            },
+        ).mappings().all()
+        _delete_batch(conn, batch_id)
+
+    assert result["created"] is True
+    assert result["duplicate_match_keys_merged"] >= 1
+    assert len(entries) == 1
+    payload = entries[0]["payload"]
+    assert "КазНМУ, 1982" in payload["education_raw"]
+    assert "Сертификат" in payload["certification_raw"]
+    assert "ПК 72 ч" in payload["training_raw"]
+    assert payload["provenance"]["duplicate_match_key_merged_count"] == 2
