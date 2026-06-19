@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
@@ -73,6 +74,7 @@ from app.services.hr_import_row_review_service import (
 )
 
 from app.services.hr_import_employee_binding_service import (
+    EmployeeBindingDuplicateKeyError,
     EmployeeBindingNotAllowedError,
     NormalizedRecordNotFoundError as BindingNormalizedRecordNotFoundError,
     bind_normalized_record_to_employee,
@@ -225,7 +227,24 @@ def delete_import_batch(
 
 
 def _employee_binding_not_allowed(exc: EmployeeBindingNotAllowedError) -> HTTPException:
-    return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=409, detail=exc.message)
+
+
+def _employee_binding_duplicate_key(exc: EmployeeBindingDuplicateKeyError) -> HTTPException:
+    return HTTPException(status_code=409, detail=exc.message)
+
+
+def _employee_binding_integrity_error(exc: IntegrityError) -> HTTPException:
+    message = str(exc)
+    if "uq_hinr_employee_source_key_open" in message:
+        return HTTPException(
+            status_code=409,
+            detail=(
+                "Запись с таким source_record_key уже привязана к этому сотруднику. "
+                "Обновите страницу или запустите «Восстановить привязки» для batch."
+            ),
+        )
+    return as_http500(exc)
 
 
 @router.get("/personnel/import/batches/{batch_id}/summary")
@@ -947,6 +966,7 @@ def get_import_normalized_records(
     review_status: Optional[str] = Query(default=None),
     record_kind: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
+    q_iin: Optional[str] = Query(default=None),
     binding_status: Optional[str] = Query(default=None),
     hide_unchanged: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
@@ -962,6 +982,7 @@ def get_import_normalized_records(
             review_status=review_status,
             record_kind=record_kind,
             q_name=q_name,
+            q_iin=q_iin,
             binding_status=binding_status,
             hide_unchanged=hide_unchanged,
             limit=limit,
@@ -1064,6 +1085,8 @@ def post_import_batch_employee_bindings_repair(
         raise _batch_not_found(e)
     except HTTPException:
         raise
+    except IntegrityError as e:
+        raise _employee_binding_integrity_error(e)
     except Exception as e:
         raise as_http500(e)
 
@@ -1131,6 +1154,10 @@ def patch_import_normalized_record_review(
             raise _normalized_record_not_found(e)
         except EmployeeBindingNotAllowedError as e:
             raise _employee_binding_not_allowed(e)
+        except EmployeeBindingDuplicateKeyError as e:
+            raise _employee_binding_duplicate_key(e)
+        except IntegrityError as e:
+            raise _employee_binding_integrity_error(e)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except HTTPException:

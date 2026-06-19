@@ -990,6 +990,7 @@ export async function listNormalizedRecords(
     review_status?: NormalizedRecordReviewStatus;
     record_kind?: NormalizedRecordKind;
     q_name?: string;
+    q_iin?: string;
     binding_status?: "bound" | "unbound" | "conflict";
     hide_unchanged?: boolean;
     limit?: number;

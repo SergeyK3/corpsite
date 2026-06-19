@@ -822,6 +822,7 @@ def populate_normalized_records(conn: Connection, batch_id: int) -> dict[str, An
     _ensure_batch_exists(conn, batch_id)
     deleted = _delete_rebuildable_records(conn, batch_id)
     counts = _populate_batch(conn, batch_id)
+    dedupe_result = dedupe_open_normalized_records(conn, batch_id=batch_id)
     total = sum(counts.values())
     return {
         "batch_id": batch_id,
@@ -831,8 +832,73 @@ def populate_normalized_records(conn: Connection, batch_id: int) -> dict[str, An
         "education_records": counts[RECORD_KIND_EDUCATION],
         "total_records": total,
         "deleted_records": deleted,
+        "dedupe": dedupe_result,
         "skipped": False,
     }
+
+
+def dedupe_open_normalized_records(
+    conn: Connection,
+    *,
+    batch_id: Optional[int] = None,
+) -> dict[str, int]:
+    """Supersede duplicate open records that share (employee_id, source_record_key)."""
+    params: dict[str, Any] = {"open_statuses": ["pending", "approved"]}
+    batch_filter = ""
+    if batch_id is not None:
+        batch_filter = "AND batch_id = :batch_id"
+        params["batch_id"] = int(batch_id)
+
+    duplicate_groups = conn.execute(
+        text(
+            f"""
+            SELECT employee_id, source_record_key, array_agg(normalized_record_id ORDER BY normalized_record_id) AS record_ids
+            FROM public.hr_import_normalized_records
+            WHERE employee_id IS NOT NULL
+              AND promoted_document_id IS NULL
+              AND review_status = ANY(:open_statuses)
+              {batch_filter}
+            GROUP BY employee_id, source_record_key
+            HAVING COUNT(*) > 1
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    superseded = 0
+    groups = 0
+    for group in duplicate_groups:
+        record_ids = [int(rid) for rid in (group["record_ids"] or [])]
+        if len(record_ids) < 2:
+            continue
+        groups += 1
+        keep_id = record_ids[0]
+        for duplicate_id in record_ids[1:]:
+            result = conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_normalized_records
+                    SET
+                        review_status = :review_status,
+                        review_notes = COALESCE(review_notes, '') || CASE
+                            WHEN COALESCE(review_notes, '') = '' THEN :reason
+                            ELSE E'\n' || :reason
+                        END,
+                        updated_at = NOW()
+                    WHERE normalized_record_id = :record_id
+                      AND promoted_document_id IS NULL
+                      AND review_status = ANY(:open_statuses)
+                    """
+                ),
+                {
+                    "record_id": duplicate_id,
+                    "review_status": REVIEW_STATUS_SUPERSEDED,
+                    "reason": f"[dedupe] duplicate of normalized_record_id={keep_id}",
+                    "open_statuses": ["pending", "approved"],
+                },
+            )
+            superseded += int(result.rowcount or 0)
+    return {"duplicate_groups": groups, "superseded": superseded}
 
 
 def normalized_records_summary(conn: Connection, batch_id: int) -> dict[str, Any]:
@@ -1369,6 +1435,7 @@ def list_review_normalized_records(
     review_status: Optional[str] = None,
     record_kind: Optional[str] = None,
     q_name: Optional[str] = None,
+    q_iin: Optional[str] = None,
     binding_status: Optional[str] = None,
     hide_unchanged: bool = False,
     limit: int = 100,
@@ -1410,6 +1477,17 @@ def list_review_normalized_records(
             "lower(trim(COALESCE(r.normalized_payload->>'full_name', ''))) LIKE :q_name_pattern"
         )
         params["q_name_pattern"] = f"%{q_name.strip().lower()}%"
+
+    if q_iin:
+        iin_digits = _digits_only(str(q_iin))
+        if iin_digits:
+            clauses.append(
+                """
+                regexp_replace(COALESCE(r.normalized_payload->>'iin', ''), '[^0-9]', '', 'g')
+                    LIKE :q_iin_pattern
+                """
+            )
+            params["q_iin_pattern"] = f"%{iin_digits}%"
 
     binding_status_norm = (binding_status or "").strip().lower()
     if binding_status_norm == "bound":

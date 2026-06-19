@@ -450,7 +450,11 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Общие данные</h3>
             <FieldRow label="Сотрудник" value={record.full_name || (record.employee_id ? `ID ${record.employee_id}` : "—")} />
-            <FieldRow label="ИИН" value={displayNormalizedRecordIin(record)} />
+            <FieldRow label="Employee ID" value={record.employee_id != null ? String(record.employee_id) : "—"} />
+            <FieldRow
+              label="ИИН"
+              value={<span className="font-mono text-sm">{displayNormalizedRecordIin(record)}</span>}
+            />
             <FieldRow
               label="Привязка"
               value={
@@ -485,6 +489,11 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
             <FieldRow
               label="Тип записи"
               value={NORMALIZED_RECORD_KIND_LABELS[record.record_kind] || record.record_kind}
+            />
+            <FieldRow label="Тип документа" value={record.document_type_code || "—"} />
+            <FieldRow
+              label="source_record_key"
+              value={<span className="break-all font-mono text-xs">{record.source_record_key || "—"}</span>}
             />
             <FieldRow label="Источник" value={record.source_field} />
             <FieldRow

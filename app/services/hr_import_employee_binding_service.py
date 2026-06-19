@@ -9,9 +9,14 @@ from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models.hr_import import MATCH_STATUS_AUTO, MATCH_STATUS_NO_MATCH, MATCH_STATUS_REVIEW
-from app.services.hr_import_normalized_record_service import compute_source_record_key
+from app.services.hr_import_normalized_record_service import (
+    REVIEW_STATUS_SUPERSEDED,
+    compute_source_record_key,
+    dedupe_open_normalized_records,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +30,17 @@ BINDING_METHOD_ROW_LINK = "row_link"
 BINDING_METHOD_MANUAL = "manual"
 
 REBUILDABLE_REVIEW_STATUSES = ("pending", "approved", "rejected", "superseded")
+OPEN_EMPLOYEE_DEDUP_STATUSES = ("pending", "approved")
+
+
+class EmployeeBindingDuplicateKeyError(Exception):
+    """Raised when binding would violate uq_hinr_employee_source_key_open."""
+
+    def __init__(self, message: str, *, employee_id: int, source_record_key: str) -> None:
+        self.message = message
+        self.employee_id = employee_id
+        self.source_record_key = source_record_key
+        super().__init__(message)
 
 
 def _norm_name(value: str) -> str:
@@ -298,11 +314,77 @@ def persist_row_employee_binding(
     return binding
 
 
+def _find_open_record_by_employee_source_key(
+    conn: Connection,
+    *,
+    employee_id: int,
+    source_record_key: str,
+    exclude_record_id: Optional[int] = None,
+) -> Optional[int]:
+    params: dict[str, Any] = {
+        "employee_id": int(employee_id),
+        "source_record_key": source_record_key,
+        "statuses": list(OPEN_EMPLOYEE_DEDUP_STATUSES),
+    }
+    exclude_sql = ""
+    if exclude_record_id is not None:
+        exclude_sql = "AND normalized_record_id <> :exclude_record_id"
+        params["exclude_record_id"] = int(exclude_record_id)
+    row = conn.execute(
+        text(
+            f"""
+            SELECT normalized_record_id
+            FROM public.hr_import_normalized_records
+            WHERE employee_id = :employee_id
+              AND source_record_key = :source_record_key
+              AND promoted_document_id IS NULL
+              AND review_status = ANY(:statuses)
+              {exclude_sql}
+            ORDER BY normalized_record_id
+            LIMIT 1
+            """
+        ),
+        params,
+    ).scalar_one_or_none()
+    return int(row) if row is not None else None
+
+
+def _supersede_normalized_record(
+    conn: Connection,
+    record_id: int,
+    *,
+    reason: str,
+) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_import_normalized_records
+            SET
+                review_status = :review_status,
+                review_notes = COALESCE(review_notes, '') || CASE
+                    WHEN COALESCE(review_notes, '') = '' THEN :reason
+                    ELSE E'\n' || :reason
+                END,
+                updated_at = NOW()
+            WHERE normalized_record_id = :record_id
+              AND promoted_document_id IS NULL
+              AND review_status = ANY(:open_statuses)
+            """
+        ),
+        {
+            "record_id": int(record_id),
+            "review_status": REVIEW_STATUS_SUPERSEDED,
+            "reason": reason,
+            "open_statuses": list(OPEN_EMPLOYEE_DEDUP_STATUSES),
+        },
+    )
+
+
 def propagate_employee_id_to_normalized_records(
     conn: Connection,
     row_id: int,
     employee_id: int,
-) -> int:
+) -> dict[str, int]:
     """Update employee_id and recompute source_record_key for rebuildable normalized records."""
     rows = conn.execute(
         text(
@@ -328,7 +410,12 @@ def propagate_employee_id_to_normalized_records(
     ).mappings().all()
 
     updated = 0
+    superseded = 0
+    skipped = 0
+    assigned_keys: set[tuple[int, str]] = set()
+
     for record in rows:
+        record_id = int(record["normalized_record_id"])
         new_key = compute_source_record_key(
             row_id=row_id,
             employee_id=employee_id,
@@ -341,25 +428,79 @@ def propagate_employee_id_to_normalized_records(
             source_field=str(record.get("source_field") or ""),
             fragment_index=int(record.get("fragment_index") or 0),
         )
-        conn.execute(
-            text(
-                """
-                UPDATE public.hr_import_normalized_records
-                SET
-                    employee_id = :employee_id,
-                    source_record_key = :source_record_key,
-                    updated_at = NOW()
-                WHERE normalized_record_id = :record_id
-                """
-            ),
-            {
-                "record_id": int(record["normalized_record_id"]),
-                "employee_id": employee_id,
-                "source_record_key": new_key,
-            },
+        open_key = (employee_id, new_key)
+        if open_key in assigned_keys:
+            _supersede_normalized_record(
+                conn,
+                record_id,
+                reason="[binding] duplicate source_record_key within import row",
+            )
+            superseded += 1
+            continue
+
+        existing_id = _find_open_record_by_employee_source_key(
+            conn,
+            employee_id=employee_id,
+            source_record_key=new_key,
+            exclude_record_id=record_id,
         )
+        if existing_id is not None:
+            _supersede_normalized_record(
+                conn,
+                record_id,
+                reason=f"[binding] duplicate of normalized_record_id={existing_id}",
+            )
+            superseded += 1
+            continue
+
+        try:
+            result = conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_normalized_records
+                    SET
+                        employee_id = :employee_id,
+                        source_record_key = :source_record_key,
+                        updated_at = NOW()
+                    WHERE normalized_record_id = :record_id
+                      AND promoted_document_id IS NULL
+                      AND review_status = ANY(:open_statuses)
+                    """
+                ),
+                {
+                    "record_id": record_id,
+                    "employee_id": employee_id,
+                    "source_record_key": new_key,
+                    "open_statuses": list(OPEN_EMPLOYEE_DEDUP_STATUSES),
+                },
+            )
+            if int(result.rowcount or 0) == 0:
+                skipped += 1
+                continue
+        except IntegrityError as exc:
+            if "uq_hinr_employee_source_key_open" not in str(exc):
+                raise
+            existing_id = _find_open_record_by_employee_source_key(
+                conn,
+                employee_id=employee_id,
+                source_record_key=new_key,
+                exclude_record_id=record_id,
+            )
+            if existing_id is not None:
+                _supersede_normalized_record(
+                    conn,
+                    record_id,
+                    reason=f"[binding] duplicate of normalized_record_id={existing_id}",
+                )
+                superseded += 1
+            else:
+                skipped += 1
+            continue
+
+        assigned_keys.add(open_key)
         updated += 1
-    return updated
+
+    return {"updated": updated, "superseded": superseded, "skipped": skipped}
 
 
 def auto_bind_import_row(conn: Connection, row_id: int) -> EmployeeBindingResult:
@@ -388,8 +529,13 @@ def auto_bind_import_row(conn: Connection, row_id: int) -> EmployeeBindingResult
     return binding
 
 
+def _sum_propagate_stats(stats: dict[str, int]) -> int:
+    return int(stats.get("updated") or 0)
+
+
 def repair_batch_employee_bindings(conn: Connection, batch_id: int) -> dict[str, Any]:
     """Backfill/repair employee bindings for all rows in a batch."""
+    dedupe_result = dedupe_open_normalized_records(conn, batch_id=batch_id)
     rows = conn.execute(
         text(
             """
@@ -410,6 +556,8 @@ def repair_batch_employee_bindings(conn: Connection, batch_id: int) -> dict[str,
         "unbound": 0,
         "conflict": 0,
         "normalized_records_updated": 0,
+        "normalized_records_superseded": 0,
+        "dedupe": dedupe_result,
         "items": [],
     }
 
@@ -417,8 +565,9 @@ def repair_batch_employee_bindings(conn: Connection, batch_id: int) -> dict[str,
         row_id = int(row["row_id"])
         summary["rows_processed"] += 1
         if row.get("employee_id"):
-            updated = propagate_employee_id_to_normalized_records(conn, row_id, int(row["employee_id"]))
-            summary["normalized_records_updated"] += updated
+            stats = propagate_employee_id_to_normalized_records(conn, row_id, int(row["employee_id"]))
+            summary["normalized_records_updated"] += _sum_propagate_stats(stats)
+            summary["normalized_records_superseded"] += int(stats.get("superseded") or 0)
             summary["already_bound"] += 1
             summary["items"].append(
                 {
@@ -426,7 +575,8 @@ def repair_batch_employee_bindings(conn: Connection, batch_id: int) -> dict[str,
                     "status": BINDING_STATUS_BOUND,
                     "method": BINDING_METHOD_ROW_LINK,
                     "employee_id": int(row["employee_id"]),
-                    "normalized_records_updated": updated,
+                    "normalized_records_updated": _sum_propagate_stats(stats),
+                    "normalized_records_superseded": int(stats.get("superseded") or 0),
                 }
             )
             continue
@@ -435,16 +585,21 @@ def repair_batch_employee_bindings(conn: Connection, batch_id: int) -> dict[str,
         item = {"row_id": row_id, **binding.to_dict()}
         if binding.status == BINDING_STATUS_BOUND:
             summary["bound"] += 1
-            item["normalized_records_updated"] = propagate_employee_id_to_normalized_records(
+            stats = propagate_employee_id_to_normalized_records(
                 conn, row_id, int(binding.employee_id)  # type: ignore[arg-type]
             )
+            item["normalized_records_updated"] = _sum_propagate_stats(stats)
+            item["normalized_records_superseded"] = int(stats.get("superseded") or 0)
             summary["normalized_records_updated"] += item["normalized_records_updated"]
+            summary["normalized_records_superseded"] += item["normalized_records_superseded"]
         elif binding.status == BINDING_STATUS_CONFLICT:
             summary["conflict"] += 1
         else:
             summary["unbound"] += 1
         summary["items"].append(item)
 
+    post_dedupe = dedupe_open_normalized_records(conn, batch_id=batch_id)
+    summary["post_bind_dedupe"] = post_dedupe
     return summary
 
 
@@ -471,7 +626,7 @@ def bind_normalized_record_to_employee(
     row = conn.execute(
         text(
             """
-            SELECT nr.normalized_record_id, nr.row_id, nr.review_status
+            SELECT nr.normalized_record_id, nr.row_id, nr.batch_id, nr.review_status
             FROM public.hr_import_normalized_records nr
             WHERE nr.normalized_record_id = :record_id
             """
@@ -486,6 +641,8 @@ def bind_normalized_record_to_employee(
 
     if not _employee_exists(conn, employee_id):
         raise ValueError(f"employee {employee_id} not found")
+
+    dedupe_open_normalized_records(conn, batch_id=int(row["batch_id"]))
 
     row_id = int(row["row_id"])
     binding = EmployeeBindingResult(

@@ -164,6 +164,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
   const [reviewStatus, setReviewStatus] = React.useState("");
   const [recordKind, setRecordKind] = React.useState("");
   const [nameQuery, setNameQuery] = React.useState("");
+  const [iinQuery, setIinQuery] = React.useState("");
   const [bindingStatus, setBindingStatus] = React.useState("");
   const [showUnchanged, setShowUnchanged] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
@@ -231,17 +232,18 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
       review_status: reviewStatus ? (reviewStatus as NormalizedRecordReviewStatus) : undefined,
       record_kind: recordKind ? (recordKind as NormalizedRecordKind) : undefined,
       q_name: nameQuery.trim() || undefined,
+      q_iin: iinQuery.trim() || undefined,
       binding_status: bindingStatus ? (bindingStatus as "bound" | "unbound" | "conflict") : undefined,
       hide_unchanged: batchId ? !showUnchanged : undefined,
       limit,
       offset,
     }),
-    [batchId, reviewStatus, recordKind, nameQuery, bindingStatus, showUnchanged, offset]
+    [batchId, reviewStatus, recordKind, nameQuery, iinQuery, bindingStatus, showUnchanged, offset]
   );
 
   React.useEffect(() => {
     setOffset(0);
-  }, [batchId, reviewStatus, recordKind, nameQuery, bindingStatus, showUnchanged]);
+  }, [batchId, reviewStatus, recordKind, nameQuery, iinQuery, bindingStatus, showUnchanged]);
 
   const loadSummary = React.useCallback(async () => {
     setSummaryLoading(true);
@@ -383,7 +385,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
         ) : null}
       </section>
 
-      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-5">
+      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-6">
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           value={batchId}
@@ -441,6 +443,17 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
             setOffset(0);
           }}
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+        />
+        <input
+          type="search"
+          inputMode="numeric"
+          placeholder="Поиск по ИИН"
+          value={iinQuery}
+          onChange={(e) => {
+            setIinQuery(e.target.value);
+            setOffset(0);
+          }}
+          className="rounded border border-zinc-300 px-3 py-2 text-sm font-mono dark:border-zinc-700 dark:bg-zinc-950"
         />
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
