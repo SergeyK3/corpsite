@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models.hr_import import ROW_TYPE_EMPLOYEE, SOURCE_TYPE_HR_CONTROL_LIST
 from app.services.hr_import_analytics_service import (
@@ -660,7 +661,118 @@ def _build_staging_rows_for_profile(
     return staging_rows
 
 
-def _insert_staging_row(conn: Connection, row: dict[str, Any]) -> None:
+OPEN_EMPLOYEE_DEDUP_STATUSES = (REVIEW_STATUS_PENDING, REVIEW_STATUS_APPROVED)
+
+
+def _find_open_record_by_employee_source_key(
+    conn: Connection,
+    *,
+    employee_id: int,
+    source_record_key: str,
+    exclude_record_id: Optional[int] = None,
+) -> Optional[int]:
+    params: dict[str, Any] = {
+        "employee_id": int(employee_id),
+        "source_record_key": source_record_key,
+        "statuses": list(OPEN_EMPLOYEE_DEDUP_STATUSES),
+    }
+    exclude_sql = ""
+    if exclude_record_id is not None:
+        exclude_sql = "AND normalized_record_id <> :exclude_record_id"
+        params["exclude_record_id"] = int(exclude_record_id)
+    row = conn.execute(
+        text(
+            f"""
+            SELECT normalized_record_id
+            FROM public.hr_import_normalized_records
+            WHERE employee_id = :employee_id
+              AND source_record_key = :source_record_key
+              AND promoted_document_id IS NULL
+              AND review_status = ANY(:statuses)
+              {exclude_sql}
+            ORDER BY normalized_record_id
+            LIMIT 1
+            """
+        ),
+        params,
+    ).scalar_one_or_none()
+    return int(row) if row is not None else None
+
+
+def _supersede_open_normalized_record(
+    conn: Connection,
+    record_id: int,
+    *,
+    reason: str,
+) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_import_normalized_records
+            SET
+                review_status = :review_status,
+                review_notes = COALESCE(review_notes, '') || CASE
+                    WHEN COALESCE(review_notes, '') = '' THEN :reason
+                    ELSE E'\n' || :reason
+                END,
+                updated_at = NOW()
+            WHERE normalized_record_id = :record_id
+              AND promoted_document_id IS NULL
+              AND review_status = ANY(:open_statuses)
+            """
+        ),
+        {
+            "record_id": int(record_id),
+            "review_status": REVIEW_STATUS_SUPERSEDED,
+            "reason": reason,
+            "open_statuses": list(OPEN_EMPLOYEE_DEDUP_STATUSES),
+        },
+    )
+
+
+def _supersede_conflicting_open_records_for_insert(
+    conn: Connection,
+    *,
+    employee_id: Optional[int],
+    source_record_key: str,
+    row_id: int,
+    batch_id: int,
+) -> int:
+    """Supersede open records that would block insert on uq_hinr_employee_source_key_open."""
+    if employee_id is None:
+        return 0
+    result = conn.execute(
+        text(
+            """
+            UPDATE public.hr_import_normalized_records
+            SET
+                review_status = :review_status,
+                review_notes = COALESCE(review_notes, '') || CASE
+                    WHEN COALESCE(review_notes, '') = '' THEN :reason
+                    ELSE E'\n' || :reason
+                END,
+                updated_at = NOW()
+            WHERE employee_id = :employee_id
+              AND source_record_key = :source_record_key
+              AND promoted_document_id IS NULL
+              AND review_status = ANY(:open_statuses)
+              AND NOT (row_id = :row_id AND batch_id = :batch_id)
+            """
+        ),
+        {
+            "employee_id": int(employee_id),
+            "source_record_key": source_record_key,
+            "row_id": int(row_id),
+            "batch_id": int(batch_id),
+            "review_status": REVIEW_STATUS_SUPERSEDED,
+            "reason": f"[populate] superseded for batch_id={batch_id} row_id={row_id}",
+            "open_statuses": list(OPEN_EMPLOYEE_DEDUP_STATUSES),
+        },
+    )
+    return int(result.rowcount or 0)
+
+
+def _execute_insert_staging_row(conn: Connection, row: dict[str, Any]) -> None:
     conn.execute(
         text(
             """
@@ -744,6 +856,36 @@ def _insert_staging_row(conn: Connection, row: dict[str, Any]) -> None:
     )
 
 
+def _insert_staging_row(conn: Connection, row: dict[str, Any]) -> None:
+    _supersede_conflicting_open_records_for_insert(
+        conn,
+        employee_id=row.get("employee_id"),
+        source_record_key=str(row["source_record_key"]),
+        row_id=int(row["row_id"]),
+        batch_id=int(row["batch_id"]),
+    )
+    try:
+        _execute_insert_staging_row(conn, row)
+    except IntegrityError as exc:
+        if "uq_hinr_employee_source_key_open" not in str(exc):
+            raise
+        employee_id = row.get("employee_id")
+        if employee_id is None:
+            raise
+        existing_id = _find_open_record_by_employee_source_key(
+            conn,
+            employee_id=int(employee_id),
+            source_record_key=str(row["source_record_key"]),
+        )
+        if existing_id is not None:
+            _supersede_open_normalized_record(
+                conn,
+                existing_id,
+                reason=f"[populate] superseded duplicate of batch_id={row['batch_id']} row_id={row['row_id']}",
+            )
+        _execute_insert_staging_row(conn, row)
+
+
 def _delete_rebuildable_records(conn: Connection, batch_id: int) -> int:
     result = conn.execute(
         text(
@@ -821,6 +963,7 @@ def populate_normalized_records(conn: Connection, batch_id: int) -> dict[str, An
 
     _ensure_batch_exists(conn, batch_id)
     deleted = _delete_rebuildable_records(conn, batch_id)
+    pre_dedupe = dedupe_open_normalized_records(conn)
     counts = _populate_batch(conn, batch_id)
     dedupe_result = dedupe_open_normalized_records(conn, batch_id=batch_id)
     total = sum(counts.values())
@@ -832,6 +975,7 @@ def populate_normalized_records(conn: Connection, batch_id: int) -> dict[str, An
         "education_records": counts[RECORD_KIND_EDUCATION],
         "total_records": total,
         "deleted_records": deleted,
+        "pre_dedupe": pre_dedupe,
         "dedupe": dedupe_result,
         "skipped": False,
     }

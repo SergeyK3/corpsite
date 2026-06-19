@@ -67,6 +67,41 @@ def test_infer_row_type_employee_with_iin():
     assert is_roster is True
 
 
+@pytest.mark.parametrize(
+    "full_name,iin_digits",
+    [
+        ("Әбитаев Ерхан Сайлаубекулы", "800115300290"),
+        ("Қайратов Нурлан", "900101300123"),
+        ("Өмірбеков Серик", "900101300124"),
+        ("Ілиясов Азамат", "900101300125"),
+    ],
+)
+def test_infer_row_type_kazakh_fio_with_valid_iin(full_name: str, iin_digits: str):
+    row_type, is_roster = infer_row_type(
+        full_name=full_name,
+        sheet_type="doctors",
+        iin_digits=iin_digits,
+    )
+    assert row_type == ROW_TYPE_EMPLOYEE
+    assert is_roster is True
+    assert looks_like_person_name(full_name)
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Категория врачей",
+        "Администрация",
+        "Отдел кадров",
+    ],
+)
+def test_department_labels_stay_category_row_without_iin(label: str):
+    row_type, is_roster = infer_row_type(full_name=label, sheet_type="doctors", iin_digits="")
+    assert row_type == ROW_TYPE_CATEGORY_ROW
+    assert is_roster is False
+    assert not looks_like_person_name(label)
+
+
 def test_declaration_sheet_type_from_title():
     assert resolve_sheet_type("врачи декларация") == "declaration"
     assert resolve_sheet_type("медсестра декларационные листы") == "declaration"

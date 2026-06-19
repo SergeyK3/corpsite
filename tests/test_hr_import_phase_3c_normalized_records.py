@@ -590,3 +590,135 @@ def test_populate_category_assigns_qualification_category_document_type(seed):
     assert row is not None
     assert row["document_type_code"] == "QUALIFICATION_CATEGORY"
     assert row["document_type_id"] is not None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_populate_supersedes_cross_batch_open_employee_source_key(seed, tmp_path: Path) -> None:
+    """Populate must not fail on uq_hinr_employee_source_key_open across batches."""
+    _require_phase_3c()
+    from tests.test_employee_documents_routes import _phase_1a_available
+    from tests.test_hr_import_phase_3g_employee_binding import (
+        _create_employee_with_iin,
+        _test_iin,
+    )
+
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    iin = _test_iin(f"8{suffix}")
+    full_name = f"PopulateDedupe {suffix}"
+    training_text = '"Менеджмент здравоохранения"-"Стратегический менеджмент", 54ч., 2018г.'
+    batch_a = None
+    batch_b = None
+    emp_id = None
+
+    try:
+        source_a = tmp_path / f"phase3c_cross_a_{suffix}.xlsx"
+        source_b = tmp_path / f"phase3c_cross_b_{suffix}.xlsx"
+        _build_doctors_sheet_with_column_m(source_a, training_text)
+        _build_doctors_sheet_with_column_m(source_b, training_text)
+
+        with engine.begin() as conn:
+            batch_a, _, _ = import_control_list(
+                conn,
+                file_path=source_a,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            batch_b, _, _ = import_control_list(
+                conn,
+                file_path=source_b,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            emp_id = _create_employee_with_iin(
+                conn,
+                full_name=full_name,
+                iin=iin,
+                org_unit_id=int(seed["unit_id"]),
+                created_by=int(seed["initiator_user_id"]),
+            )
+            for batch_id in (batch_a, batch_b):
+                conn.execute(
+                    text(
+                        """
+                        UPDATE public.hr_import_rows
+                        SET employee_id = :employee_id,
+                            normalized_payload = jsonb_set(
+                                normalized_payload,
+                                '{iin}',
+                                to_jsonb(CAST(:iin AS text)),
+                                true
+                            )
+                        WHERE batch_id = :batch_id
+                          AND COALESCE(normalized_payload->>'full_name', '') <> ''
+                        """
+                    ),
+                    {"employee_id": emp_id, "iin": iin, "batch_id": batch_id},
+                )
+
+        with engine.begin() as conn:
+            first = populate_normalized_records(conn, batch_a)
+            assert first["skipped"] is False
+            assert first["total_records"] >= 1
+            old_record = conn.execute(
+                text(
+                    """
+                    SELECT normalized_record_id, source_record_key
+                    FROM public.hr_import_normalized_records
+                    WHERE batch_id = :batch_id AND employee_id = :employee_id
+                    ORDER BY normalized_record_id
+                    LIMIT 1
+                    """
+                ),
+                {"batch_id": batch_a, "employee_id": emp_id},
+            ).mappings().first()
+            assert old_record is not None
+
+        with engine.begin() as conn:
+            second = populate_normalized_records(conn, batch_b)
+            assert second["skipped"] is False
+            assert second["total_records"] >= 1
+            old_status = conn.execute(
+                text(
+                    """
+                    SELECT review_status
+                    FROM public.hr_import_normalized_records
+                    WHERE normalized_record_id = :record_id
+                    """
+                ),
+                {"record_id": int(old_record["normalized_record_id"])},
+            ).scalar_one()
+            new_open = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM public.hr_import_normalized_records
+                    WHERE batch_id = :batch_id
+                      AND employee_id = :employee_id
+                      AND source_record_key = :source_record_key
+                      AND review_status IN ('pending', 'approved')
+                    """
+                ),
+                {
+                    "batch_id": batch_b,
+                    "employee_id": emp_id,
+                    "source_record_key": old_record["source_record_key"],
+                },
+            ).scalar_one()
+            assert int(new_open) == 1
+            assert old_status == "superseded"
+    finally:
+        if emp_id is not None or batch_a is not None or batch_b is not None:
+            with engine.begin() as conn:
+                if emp_id is not None:
+                    conn.execute(
+                        text("DELETE FROM public.employee_identities WHERE employee_id = :eid"),
+                        {"eid": emp_id},
+                    )
+                    conn.execute(
+                        text("DELETE FROM public.employees WHERE employee_id = :eid"),
+                        {"eid": emp_id},
+                    )
+                for batch_id in (batch_a, batch_b):
+                    if batch_id is not None:
+                        _delete_batch(conn, batch_id)

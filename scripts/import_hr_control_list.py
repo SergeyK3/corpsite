@@ -342,6 +342,32 @@ def is_category_or_summary_label(name: str) -> bool:
     return False
 
 
+# Kazakh letters used in Kazakhstani FIO alongside Russian Cyrillic (ADR-039).
+_KAZAKH_CYRILLIC_UPPER = "ӘҒҚҢӨҰҮҺІ"
+_KAZAKH_CYRILLIC_LOWER = "әғқңөұүһі"
+_NAME_PART_START_RE = re.compile(
+    rf"^[А-ЯЁ{_KAZAKH_CYRILLIC_UPPER}A-Z]"
+)
+_NAME_PART_LOWERCASE_RE = re.compile(
+    rf"[а-яё{_KAZAKH_CYRILLIC_LOWER}a-z]"
+)
+
+
+def _is_valid_iin_digits(iin_digits: str) -> bool:
+    return len(iin_digits) == 12 and iin_digits.isdigit()
+
+
+def _has_multi_word_name(name: str) -> bool:
+    """True when full_name looks like a person name with at least two words."""
+    text = _to_text(name)
+    if not text:
+        return False
+    parts = text.split()
+    if len(parts) < 2 or len(parts) > 5:
+        return False
+    return all(not re.fullmatch(r"\d+", part) for part in parts)
+
+
 def looks_like_person_name(name: str) -> bool:
     text = _to_text(name)
     if not text or is_category_or_summary_label(text):
@@ -352,9 +378,9 @@ def looks_like_person_name(name: str) -> bool:
     for part in parts:
         if re.fullmatch(r"\d+", part):
             return False
-        if not re.match(r"^[А-ЯЁA-Z]", part):
+        if not _NAME_PART_START_RE.match(part):
             return False
-        if not re.search(r"[а-яёa-z]", part):
+        if not _NAME_PART_LOWERCASE_RE.search(part):
             return False
     return True
 
@@ -375,6 +401,9 @@ def infer_row_type(
         return ROW_TYPE_SUMMARY_ROW, False
     if is_category_or_summary_label(full_name):
         return ROW_TYPE_CATEGORY_ROW, False
+    # ADR-039: valid IIN + multi-word FIO → EMPLOYEE even for non-Russian letters.
+    if _is_valid_iin_digits(iin_digits) and _has_multi_word_name(full_name):
+        return ROW_TYPE_EMPLOYEE, True
     if looks_like_person_name(full_name):
         return ROW_TYPE_EMPLOYEE, True
     if _to_text(full_name):
