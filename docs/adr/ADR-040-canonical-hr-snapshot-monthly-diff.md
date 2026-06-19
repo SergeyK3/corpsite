@@ -13,6 +13,7 @@
 | **E** | Review by exception — hide UNCHANGED по умолчанию | ✅ |
 | **F** | Materialized HR change events (`hr_change_events`) | ✅ |
 | **G** | HR change events UI | ✅ |
+| **H** | Changes workbook export to Excel | ✅ |
 
 **Operator runbooks:**
 
@@ -494,6 +495,25 @@ Persisted only for `CHANGED` and `CONFLICT`. Hash compare uses effective merged 
 | Deep links | `EmployeeImportCard2PageClient`, `ImportMonthlyDiffSummaryPanel` |
 | Tests | `hrChangeEventLabels.test.ts`, `hrChangeEventsApi.client.test.ts`, `HrChangeEventsTable.test.tsx`, `CanonicalSnapshotExportButton.test.tsx` |
 
+**Phase H deliverables (Changes workbook export):**
+
+| Artifact | Path |
+|----------|------|
+| Export service | `app/services/hr_change_events_export_service.py` |
+| Route | `GET /directory/personnel/hr-change-events/export.xlsx` |
+| UI button | `HrChangeEventsExportButton.tsx` — «Выгрузить изменения Excel» на странице «Изменения реестра» |
+| API client | `hrChangeEventsApi.client.ts` — `buildHrChangeEventsExportUrl`, `downloadHrChangeEventsExport` |
+| Tests | `tests/test_hr_import_phase_040h_hr_change_events_export.py`, `HrChangeEventsExportButton.test.tsx` |
+
+**Phase H — workbook format:**
+
+- Листы: `SUMMARY`, `NEW`, `CHANGED`, `REMOVED`, `CONFLICT`.
+- Источник: materialized `hr_change_events` (NEW / CHANGED / REMOVED) + monthly diff `CONFLICT` rows (`hr_import_rows.diff_status='CONFLICT'`) для связанных batch-ей.
+- `UNCHANGED` **не экспортируется**.
+- Колонки: `change_type`, `iin`, `fio`, `employee_id`, `match_key`, `department`, `position`, `field`, `old_value`, `new_value`, `source_batch_id`, `snapshot_from`, `snapshot_to`, `conflict_reason`, `updated_at`.
+- Фильтры (query params, как у list API + `q`): тип события, отделение, дата с/по, поиск сотрудника, deep-link batch/snapshot/employee.
+- Эталонный Excel (`canonical-snapshot/export.xlsx`) остаётся отдельной кнопкой.
+
 ---
 
 ## API Surface
@@ -504,6 +524,7 @@ Persisted only for `CHANGED` and `CONFLICT`. Hash compare uses effective merged 
 | POST | `/directory/personnel/import/batches/{id}/compute-diff` | B ✅ |
 | GET | `/directory/personnel/canonical-snapshot/export.xlsx` | D ✅ |
 | GET | `/directory/personnel/hr-change-events` | F ✅ |
+| GET | `/directory/personnel/hr-change-events/export.xlsx` | H ✅ |
 
 Review list endpoints support `hide_unchanged=true` (default in UI) to exclude `UNCHANGED` server-side before pagination.
 

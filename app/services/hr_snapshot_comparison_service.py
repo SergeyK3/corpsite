@@ -591,8 +591,7 @@ def _serialize_change_event(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_hr_change_events(
-    conn: Connection,
+def _build_hr_change_events_filters(
     *,
     employee_id: Optional[int] = None,
     department: Optional[str] = None,
@@ -603,12 +602,7 @@ def list_hr_change_events(
     prior_snapshot_id: Optional[int] = None,
     new_snapshot_id: Optional[int] = None,
     source_batch_id: Optional[int] = None,
-    limit: int = 100,
-    offset: int = 0,
-) -> dict[str, Any]:
-    if not hr_change_events_available(conn):
-        raise SnapshotComparisonError("hr_change_events is not available")
-
+) -> tuple[str, dict[str, Any]]:
     if event_type is not None:
         normalized_type = event_type.strip().upper()
         if normalized_type not in EVENT_TYPES:
@@ -616,10 +610,7 @@ def list_hr_change_events(
         event_type = normalized_type
 
     where_parts = ["TRUE"]
-    params: dict[str, Any] = {
-        "limit": int(limit),
-        "offset": int(offset),
-    }
+    params: dict[str, Any] = {}
 
     if employee_id is not None:
         where_parts.append("e.employee_id = :employee_id")
@@ -658,7 +649,40 @@ def list_hr_change_events(
         )
         params["source_batch_id"] = int(source_batch_id)
 
-    where_sql = " AND ".join(where_parts)
+    return " AND ".join(where_parts), params
+
+
+def list_hr_change_events(
+    conn: Connection,
+    *,
+    employee_id: Optional[int] = None,
+    department: Optional[str] = None,
+    org_unit_id: Optional[int] = None,
+    event_type: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    prior_snapshot_id: Optional[int] = None,
+    new_snapshot_id: Optional[int] = None,
+    source_batch_id: Optional[int] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    if not hr_change_events_available(conn):
+        raise SnapshotComparisonError("hr_change_events is not available")
+
+    where_sql, params = _build_hr_change_events_filters(
+        employee_id=employee_id,
+        department=department,
+        org_unit_id=org_unit_id,
+        event_type=event_type,
+        date_from=date_from,
+        date_to=date_to,
+        prior_snapshot_id=prior_snapshot_id,
+        new_snapshot_id=new_snapshot_id,
+        source_batch_id=source_batch_id,
+    )
+    params["limit"] = int(limit)
+    params["offset"] = int(offset)
     total = conn.execute(
         text(
             f"""

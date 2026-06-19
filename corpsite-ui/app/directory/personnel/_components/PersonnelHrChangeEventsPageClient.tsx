@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import HrChangeEventDrawer from "./HrChangeEventDrawer";
 import { HrChangeEventsTable } from "./HrChangeEventsTable";
 import CanonicalSnapshotExportButton from "./CanonicalSnapshotExportButton";
+import HrChangeEventsExportButton from "./HrChangeEventsExportButton";
 import {
   HR_CHANGE_EVENTS_BASE_PATH,
   HR_CHANGE_EVENT_FILTER_OPTIONS,
@@ -107,7 +108,10 @@ export default function PersonnelHrChangeEventsPageClient() {
             Материализованные изменения между версиями canonical snapshot после утверждения импорта
           </p>
         </div>
-        <CanonicalSnapshotExportButton includeMetadata />
+        <div className="flex flex-wrap items-center gap-2">
+          <HrChangeEventsExportButton filters={filters} />
+          <CanonicalSnapshotExportButton includeMetadata />
+        </div>
       </div>
 
       {filterHints.length > 0 ? (

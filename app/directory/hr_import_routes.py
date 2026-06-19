@@ -37,6 +37,10 @@ from app.services.hr_canonical_snapshot_export_service import (
     CanonicalSnapshotExportError,
     export_canonical_snapshot_xlsx,
 )
+from app.services.hr_change_events_export_service import (
+    HrChangeEventsExportError,
+    export_hr_change_events_xlsx,
+)
 from app.services.hr_snapshot_comparison_service import (
     SnapshotComparisonError,
     list_hr_change_events,
@@ -287,6 +291,51 @@ def list_hr_change_events_route(
             limit=limit,
             offset=offset,
         )
+    except SnapshotComparisonError as e:
+        raise HTTPException(status_code=503, detail=e.message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/hr-change-events/export.xlsx")
+def get_hr_change_events_export(
+    employee_id: Optional[int] = Query(default=None),
+    department: Optional[str] = Query(default=None),
+    org_unit_id: Optional[int] = Query(default=None),
+    event_type: Optional[str] = Query(default=None),
+    date_from: Optional[date] = Query(default=None),
+    date_to: Optional[date] = Query(default=None),
+    prior_snapshot_id: Optional[int] = Query(default=None),
+    new_snapshot_id: Optional[int] = Query(default=None),
+    source_batch_id: Optional[int] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    require_privileged_or_403(user)
+    try:
+        with engine.begin() as conn:
+            content, filename = export_hr_change_events_xlsx(
+                conn,
+                employee_id=employee_id,
+                department=department,
+                org_unit_id=org_unit_id,
+                event_type=event_type,
+                date_from=date_from,
+                date_to=date_to,
+                prior_snapshot_id=prior_snapshot_id,
+                new_snapshot_id=new_snapshot_id,
+                source_batch_id=source_batch_id,
+                q=q,
+            )
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except HrChangeEventsExportError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except SnapshotComparisonError as e:
         raise HTTPException(status_code=503, detail=e.message)
     except HTTPException:

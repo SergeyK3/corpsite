@@ -186,3 +186,31 @@ export async function listHrChangeEvents(
   }
   return res.json() as Promise<HrChangeEventsListResponse>;
 }
+
+export function buildHrChangeEventsExportUrl(filters: HrChangeEventsFilters = {}): string {
+  const qs = buildHrChangeEventsQueryParams(filters, { includeClientSearch: true }).toString();
+  return resolveApiUrl(`/directory/personnel/hr-change-events/export.xlsx${qs ? `?${qs}` : ""}`);
+}
+
+export async function downloadHrChangeEventsExport(
+  filters: HrChangeEventsFilters = {},
+): Promise<void> {
+  const url = buildHrChangeEventsExportUrl(filters);
+  const res = await fetch(url, { method: "GET", headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, body, "Не удалось выгрузить изменения Excel.");
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+  const filename = match?.[1] || "hr_registry_changes.xlsx";
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}

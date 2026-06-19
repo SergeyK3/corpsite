@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildHrChangeEventsExportUrl,
   buildHrChangeEventsHref,
   buildHrChangeEventsQueryParams,
   filterHrChangeEventsBySearch,
@@ -71,6 +72,21 @@ describe("hrChangeEventsApi.client", () => {
     expect(buildHrChangeEventsHref({ source_batch_id: 3 })).toBe(
       "/directory/personnel/hr-change-events?source_batch_id=3",
     );
+  });
+
+  it("builds export url with active filters", () => {
+    const url = buildHrChangeEventsExportUrl({
+      event_type: "NEW",
+      department: "Терапия",
+      q: "Иванов",
+      source_batch_id: 4,
+    });
+    expect(url).toContain("/directory/personnel/hr-change-events/export.xlsx");
+    expect(url).toContain("event_type=NEW");
+    expect(url).toContain("department=");
+    expect(url).toContain("q=");
+    expect(decodeURIComponent(url)).toContain("q=Иванов");
+    expect(url).toContain("source_batch_id=4");
   });
 
   it("filters items by employee search client-side", () => {
