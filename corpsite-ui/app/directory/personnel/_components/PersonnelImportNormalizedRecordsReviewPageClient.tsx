@@ -2,7 +2,10 @@
 
 import * as React from "react";
 
+import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
+import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
 import NormalizedRecordsPromotionPanel from "./NormalizedRecordsPromotionPanel";
 import {
   EMPLOYEE_BINDING_STATUS_LABELS,
@@ -152,6 +155,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
   const [recordKind, setRecordKind] = React.useState("");
   const [nameQuery, setNameQuery] = React.useState("");
   const [bindingStatus, setBindingStatus] = React.useState("");
+  const [showUnchanged, setShowUnchanged] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
   const [repairing, setRepairing] = React.useState(false);
   const limit = 50;
@@ -216,11 +220,16 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
       record_kind: recordKind ? (recordKind as NormalizedRecordKind) : undefined,
       q_name: nameQuery.trim() || undefined,
       binding_status: bindingStatus ? (bindingStatus as "bound" | "unbound" | "conflict") : undefined,
+      hide_unchanged: batchId ? !showUnchanged : undefined,
       limit,
       offset,
     }),
-    [batchId, reviewStatus, recordKind, nameQuery, bindingStatus, offset]
+    [batchId, reviewStatus, recordKind, nameQuery, bindingStatus, showUnchanged, offset]
   );
+
+  React.useEffect(() => {
+    setOffset(0);
+  }, [batchId, reviewStatus, recordKind, nameQuery, bindingStatus, showUnchanged]);
 
   const loadSummary = React.useCallback(async () => {
     setSummaryLoading(true);
@@ -444,6 +453,20 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
 
       {batchId ? (
         <div className="mb-4">
+          <ImportMonthlyDiffSummaryPanel
+            batchId={Number(batchId)}
+            showUnchanged={showUnchanged}
+            onShowUnchangedChange={setShowUnchanged}
+            onRecomputed={() => {
+              loadSummary();
+              loadList();
+            }}
+          />
+        </div>
+      ) : null}
+
+      {batchId ? (
+        <div className="mb-4">
           <button
             type="button"
             disabled={repairing || Boolean(summary?.skipped)}
@@ -474,6 +497,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
             <table className="min-w-full text-sm">
               <thead className="bg-zinc-50 text-left text-[11px] uppercase text-zinc-500 dark:bg-zinc-900">
                 <tr>
+                  <th className="px-3 py-2">Diff</th>
                   <th className="px-3 py-2">Статус</th>
                   <th className="px-3 py-2">Привязка</th>
                   <th className="px-3 py-2">Тип записи</th>
@@ -488,8 +512,18 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
-                      Нет записей по выбранным фильтрам
+                    <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
+                      {batchId && !showUnchanged ? (
+                        <div className="space-y-1">
+                          <p className="font-medium text-zinc-700 dark:text-zinc-300">Изменений не обнаружено</p>
+                          <p className="text-xs">
+                            No changes detected — нормализованные записи совпадают с эталоном или нет строк по
+                            фильтрам.
+                          </p>
+                        </div>
+                      ) : (
+                        "Нет записей по выбранным фильтрам"
+                      )}
                     </td>
                   </tr>
                 ) : (
@@ -503,6 +537,9 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                       onClick={() => openRecord(row)}
                       title="Нажмите для просмотра"
                     >
+                      <td className="px-3 py-2">
+                        <ImportDiffStatusBadge status={row.diff_status} compact />
+                      </td>
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${reviewStatusBadgeClass(row.review_status)}`}

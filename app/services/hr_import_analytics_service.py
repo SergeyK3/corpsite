@@ -907,6 +907,7 @@ def list_batch_rows(
     staff_type: Optional[str] = None,
     staff_types: Optional[str] = None,
     part_time: Optional[str] = None,
+    hide_unchanged: bool = False,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -991,8 +992,35 @@ def list_batch_rows(
         needle = q_position.strip().lower()
         filtered = [r for r in filtered if needle in r["position_raw"].lower()]
 
+    diff_by_row: dict[int, dict[str, Any]] = {}
+    if hide_unchanged:
+        try:
+            from app.services.hr_import_monthly_diff_service import (
+                load_row_diff_fields,
+                row_passes_hide_unchanged,
+            )
+
+            diff_by_row = load_row_diff_fields(conn, batch_id)
+            filtered = [
+                r
+                for r in filtered
+                if row_passes_hide_unchanged(
+                    diff_by_row.get(int(r["row_id"]), {}).get("diff_status"),
+                    hide_unchanged=True,
+                )
+            ]
+        except Exception:
+            diff_by_row = {}
+
     total = len(filtered)
     page = filtered[offset : offset + limit]
+    if not diff_by_row:
+        try:
+            from app.services.hr_import_monthly_diff_service import load_row_diff_fields
+
+            diff_by_row = load_row_diff_fields(conn, batch_id)
+        except Exception:
+            diff_by_row = {}
     items = [
         {
             "row_id": r["row_id"],
@@ -1025,10 +1053,18 @@ def list_batch_rows(
             "row_type": r.get("row_type", ""),
             "declaration_group": r.get("declaration_group", ""),
             "is_employee_roster": r.get("is_employee_roster", False),
+            **diff_by_row.get(int(r["row_id"]), {}),
         }
         for r in page
     ]
-    return {"batch_id": batch_id, "total": total, "limit": limit, "offset": offset, "items": items}
+    return {
+        "batch_id": batch_id,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "hide_unchanged": hide_unchanged,
+        "items": items,
+    }
 
 
 def delete_batch(conn: Connection, batch_id: int) -> dict[str, Any]:

@@ -195,7 +195,17 @@ def get_row_review_detail(conn: Connection, batch_id: int, row_id: int) -> dict[
         "awards": _parse_awards(str(payload.get("awards_raw", "") or "")),
         "notes": _parse_notes(str(payload.get("note_raw", "") or "")),
         "ai_extraction": ai_draft,
+        **_load_row_monthly_diff_fields(conn, batch_id, row_id),
     }
+
+
+def _load_row_monthly_diff_fields(conn: Connection, batch_id: int, row_id: int) -> dict[str, Any]:
+    try:
+        from app.services.hr_import_monthly_diff_service import load_row_diff_fields
+
+        return load_row_diff_fields(conn, batch_id).get(int(row_id), {})
+    except Exception:
+        return {}
 
 
 MEDICAL_CATEGORY_LABELS = {

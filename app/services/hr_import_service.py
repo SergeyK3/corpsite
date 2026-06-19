@@ -272,6 +272,9 @@ def import_control_list(
         _persist_rows(conn, batch_id=batch_id, rows=parsed_rows)
         parse_and_persist_document_candidates(conn, batch_id)
         populate_normalized_records(conn, batch_id)
+        from app.services.hr_import_monthly_diff_service import maybe_compute_batch_monthly_diff
+
+        diff_result = maybe_compute_batch_monthly_diff(conn, batch_id)
         _update_batch_counts(
             conn,
             batch_id=batch_id,
@@ -285,6 +288,8 @@ def import_control_list(
             status=BATCH_STATUS_REVIEW_READY,
         )
         summary = summarize_batch(conn, batch_id)
+        if diff_result is not None:
+            summary["monthly_diff"] = diff_result
         return batch_id, summary, warnings
     except Exception:
         conn.execute(

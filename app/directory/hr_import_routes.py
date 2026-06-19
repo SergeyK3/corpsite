@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -26,6 +27,19 @@ from app.services.hr_import_analytics_service import (
     risk_analytics,
     sheet_diagnostics,
     training_analytics,
+)
+from app.services.hr_import_monthly_diff_service import (
+    MonthlyDiffError,
+    compute_batch_monthly_diff,
+    get_batch_diff_summary,
+)
+from app.services.hr_canonical_snapshot_export_service import (
+    CanonicalSnapshotExportError,
+    export_canonical_snapshot_xlsx,
+)
+from app.services.hr_snapshot_comparison_service import (
+    SnapshotComparisonError,
+    list_hr_change_events,
 )
 from app.services.hr_import_document_candidate_service import (
     document_candidates_summary,
@@ -219,6 +233,108 @@ def get_import_batch_summary(
         return _with_conn(batch_summary, batch_id=batch_id)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/diff-summary")
+def get_import_batch_diff_summary(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(get_batch_diff_summary, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/hr-change-events")
+def list_hr_change_events_route(
+    employee_id: Optional[int] = Query(default=None),
+    department: Optional[str] = Query(default=None),
+    org_unit_id: Optional[int] = Query(default=None),
+    event_type: Optional[str] = Query(default=None),
+    date_from: Optional[date] = Query(default=None),
+    date_to: Optional[date] = Query(default=None),
+    prior_snapshot_id: Optional[int] = Query(default=None),
+    new_snapshot_id: Optional[int] = Query(default=None),
+    source_batch_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(
+            list_hr_change_events,
+            employee_id=employee_id,
+            department=department,
+            org_unit_id=org_unit_id,
+            event_type=event_type,
+            date_from=date_from,
+            date_to=date_to,
+            prior_snapshot_id=prior_snapshot_id,
+            new_snapshot_id=new_snapshot_id,
+            source_batch_id=source_batch_id,
+            limit=limit,
+            offset=offset,
+        )
+    except SnapshotComparisonError as e:
+        raise HTTPException(status_code=503, detail=e.message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/canonical-snapshot/export.xlsx")
+def get_canonical_snapshot_export(
+    source_type: str = Query(default="roster"),
+    snapshot_id: Optional[int] = Query(default=None, ge=1),
+    include_metadata: bool = Query(default=False),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    require_privileged_or_403(user)
+    try:
+        with engine.begin() as conn:
+            content, filename = export_canonical_snapshot_xlsx(
+                conn,
+                source_type=source_type,
+                snapshot_id=snapshot_id,
+                include_metadata=include_metadata,
+            )
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except CanonicalSnapshotExportError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/compute-diff")
+def post_import_batch_compute_diff(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(compute_batch_monthly_diff, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except MonthlyDiffError as e:
+        raise HTTPException(status_code=400, detail=e.message)
     except HTTPException:
         raise
     except Exception as e:
@@ -656,6 +772,7 @@ def get_import_batch_rows(
     staff_type: Optional[str] = Query(default=None),
     staff_types: Optional[str] = Query(default=None),
     part_time: Optional[str] = Query(default=None),
+    hide_unchanged: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -682,6 +799,7 @@ def get_import_batch_rows(
             staff_type=staff_type,
             staff_types=staff_types,
             part_time=part_time,
+            hide_unchanged=hide_unchanged,
             limit=limit,
             offset=offset,
         )
@@ -780,6 +898,7 @@ def get_import_normalized_records(
     record_kind: Optional[str] = Query(default=None),
     q_name: Optional[str] = Query(default=None),
     binding_status: Optional[str] = Query(default=None),
+    hide_unchanged: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -794,6 +913,7 @@ def get_import_normalized_records(
             record_kind=record_kind,
             q_name=q_name,
             binding_status=binding_status,
+            hide_unchanged=hide_unchanged,
             limit=limit,
             offset=offset,
         )

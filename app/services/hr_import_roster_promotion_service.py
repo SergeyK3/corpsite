@@ -531,4 +531,14 @@ def promote_roster_batch(
     result["dry_run"] = False
     result["applied"] = applied
     result["binding_repair"] = binding_summary
+
+    from app.services.hr_canonical_snapshot_service import refresh_canonical_snapshot_after_promotion
+
+    snapshot_result = refresh_canonical_snapshot_after_promotion(
+        conn,
+        batch_id,
+        promoted_by=created_by,
+    )
+    if snapshot_result is not None:
+        result["canonical_snapshot"] = snapshot_result
     return result

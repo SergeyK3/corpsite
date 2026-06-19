@@ -805,7 +805,7 @@ def promote_normalized_records(
         if stop_on_first_error and item.outcome in {OUTCOME_FAILED, OUTCOME_WOULD_FAIL}:
             break
 
-    return {
+    result = {
         "dry_run": dry_run,
         "requested": len(target_ids),
         "promoted": counts["promoted"],
@@ -817,3 +817,32 @@ def promote_normalized_records(
         "items": [item.to_dict() for item in items],
         "summary_by_blocker": summary_by_blocker,
     }
+
+    if not dry_run:
+        effective_batch_id = batch_id
+        if effective_batch_id is None and target_ids:
+            batch_row = conn.execute(
+                text(
+                    """
+                    SELECT batch_id
+                    FROM public.hr_import_normalized_records
+                    WHERE normalized_record_id = :record_id
+                    LIMIT 1
+                    """
+                ),
+                {"record_id": int(target_ids[0])},
+            ).first()
+            if batch_row:
+                effective_batch_id = int(batch_row[0])
+        if effective_batch_id is not None:
+            from app.services.hr_canonical_snapshot_service import refresh_canonical_snapshot_after_promotion
+
+            snapshot_result = refresh_canonical_snapshot_after_promotion(
+                conn,
+                int(effective_batch_id),
+                promoted_by=promoted_by,
+            )
+            if snapshot_result is not None:
+                result["canonical_snapshot"] = snapshot_result
+
+    return result

@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import ImportProfileCardSections from "./ImportProfileCardSections";
 import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
+import { buildHrChangeEventsHref } from "../_lib/hrChangeEventsApi.client";
 import {
   archiveEducationProfile,
   cloneImportProfile,
@@ -234,6 +236,13 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
               <p className="mt-0.5 text-xs text-zinc-500">
                 Batch #{detail.batch_id} · строка {detail.row_id}
                 {isArchived ? " · архив" : ""}
+                {" · "}
+                <Link
+                  href={buildHrChangeEventsHref({ employee_id: Number(employeeId) })}
+                  className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+                >
+                  История изменений реестра
+                </Link>
               </p>
             ) : null}
           </div>

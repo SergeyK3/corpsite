@@ -2,6 +2,9 @@
 import { buildHeaders } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
+import type { FieldDiffEntry, MonthlyDiffStatus } from "./monthlyDiffLabels";
+
+export type { FieldDiffEntry, MonthlyDiffStatus } from "./monthlyDiffLabels";
 
 function getDevUserId(): string | null {
   const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
@@ -187,6 +190,12 @@ export type StagingRow = {
   row_type?: string;
   declaration_group?: string;
   is_employee_roster?: boolean;
+  diff_status?: MonthlyDiffStatus | null;
+  canonical_snapshot_id?: number | null;
+  canonical_entry_id?: number | null;
+  canonical_hash?: string | null;
+  field_diffs?: Record<string, FieldDiffEntry> | null;
+  diff_computed_at?: string | null;
 };
 
 export type DepartmentRecodingOptions = {
@@ -441,6 +450,12 @@ export type RowReviewDetail = {
   ai_extraction: AiExtractionDraft | null;
   source_sheet: string;
   source_row_number: number;
+  diff_status?: MonthlyDiffStatus | null;
+  canonical_snapshot_id?: number | null;
+  canonical_entry_id?: number | null;
+  canonical_hash?: string | null;
+  field_diffs?: Record<string, FieldDiffEntry> | null;
+  diff_computed_at?: string | null;
 };
 
 export type EducationPortfolio = {
@@ -781,7 +796,13 @@ export async function getRiskAnalytics(batchId: number): Promise<{ items: RiskRo
 export async function listStagingRows(
   batchId: number,
   params: Record<string, string | number | boolean | null | undefined> = {}
-): Promise<{ total: number; items: StagingRow[]; limit: number; offset: number }> {
+): Promise<{
+  total: number;
+  items: StagingRow[];
+  limit: number;
+  offset: number;
+  hide_unchanged?: boolean;
+}> {
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/rows`, buildQuery(params));
 }
 
@@ -911,7 +932,49 @@ export type NormalizedRecord = {
   promoted_by: number | null;
   created_at: string | null;
   updated_at: string | null;
+  diff_status?: MonthlyDiffStatus | null;
+  canonical_snapshot_id?: number | null;
+  canonical_entry_id?: number | null;
+  canonical_hash?: string | null;
+  field_diffs?: Record<string, FieldDiffEntry> | null;
+  diff_computed_at?: string | null;
 };
+
+export type MonthlyDiffRemoval = {
+  removal_id?: number;
+  canonical_entry_id: number;
+  match_key: string;
+  record_kind: string;
+  canonical_hash?: string;
+  payload?: Record<string, unknown> | null;
+  diff_status: "REMOVED";
+  diff_computed_at?: string | null;
+};
+
+export type ImportBatchReviewVisibility = {
+  visible_records: number;
+  hidden_unchanged: number;
+  no_changes_detected: boolean;
+  review_complete: boolean;
+};
+
+export type ImportBatchDiffSummary = {
+  batch_id: number;
+  snapshot_id: number | null;
+  computed_at: string | null;
+  summary: Partial<Record<MonthlyDiffStatus, number>>;
+  removed: MonthlyDiffRemoval[];
+  skipped: boolean;
+  review_visibility?: ImportBatchReviewVisibility;
+};
+
+export async function getImportBatchDiffSummary(batchId: number): Promise<ImportBatchDiffSummary> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/diff-summary`);
+}
+
+export async function computeImportBatchDiff(batchId: number): Promise<ImportBatchDiffSummary> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/compute-diff`);
+}
 
 export async function getNormalizedRecordsSummary(batchId?: number): Promise<NormalizedRecordSummary> {
   return apiGetJson(
@@ -928,10 +991,18 @@ export async function listNormalizedRecords(
     record_kind?: NormalizedRecordKind;
     q_name?: string;
     binding_status?: "bound" | "unbound" | "conflict";
+    hide_unchanged?: boolean;
     limit?: number;
     offset?: number;
   } = {}
-): Promise<{ total: number; limit: number; offset: number; items: NormalizedRecord[]; skipped?: boolean }> {
+): Promise<{
+  total: number;
+  limit: number;
+  offset: number;
+  items: NormalizedRecord[];
+  skipped?: boolean;
+  hide_unchanged?: boolean;
+}> {
   return apiGetJson("/directory/personnel/import/normalized-records", buildQuery(params));
 }
 
@@ -1110,3 +1181,45 @@ export const SHEET_TYPE_LABELS: Record<string, string> = {
   part_time: "Совместители",
   declaration: "Декларации",
 };
+
+export type CanonicalSnapshotExportParams = {
+  source_type?: string;
+  snapshot_id?: number;
+  include_metadata?: boolean;
+};
+
+export function buildCanonicalSnapshotExportUrl(
+  params: CanonicalSnapshotExportParams = {},
+): string {
+  const q = buildQuery({
+    source_type: params.source_type ?? "roster",
+    snapshot_id: params.snapshot_id,
+    include_metadata: params.include_metadata,
+  });
+  return resolveApiUrl(
+    `/directory/personnel/canonical-snapshot/export.xlsx${q ? `?${q}` : ""}`,
+  );
+}
+
+export async function downloadCanonicalSnapshotExport(
+  params: CanonicalSnapshotExportParams = {},
+): Promise<void> {
+  const url = buildCanonicalSnapshotExportUrl(params);
+  const res = await fetch(url, { method: "GET", headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, body, "Не удалось выгрузить эталонный Excel.");
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+  const filename = match?.[1] || "canonical_snapshot.xlsx";
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}

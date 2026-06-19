@@ -21,6 +21,11 @@ const BASE_ITEMS = [
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
   },
+  {
+    href: "/directory/personnel/hr-change-events",
+    title: "Изменения реестра",
+    prefixes: ["/directory/personnel/hr-change-events"],
+  },
 ] as const;
 
 type ImportNavItem =

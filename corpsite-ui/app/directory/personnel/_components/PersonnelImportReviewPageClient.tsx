@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import ImportCategoryCardModal from "./ImportCategoryCardModal";
+import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
 import ImportRosterPromotionPanel from "./ImportRosterPromotionPanel";
 import {
   departmentFilterOptionValue,
@@ -162,6 +164,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   const [options, setOptions] = React.useState<DepartmentRecodingOptions | null>(null);
   const [offset, setOffset] = React.useState(0);
   const [categoryRowId, setCategoryRowId] = React.useState<number | null>(null);
+  const [showUnchanged, setShowUnchanged] = React.useState(false);
   const limit = 50;
 
   const [filters, setFilters] = React.useState({
@@ -176,7 +179,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   React.useEffect(() => {
     setOffset(0);
     setCategoryRowId(null);
-  }, [batchId, mode]);
+  }, [batchId, mode, showUnchanged]);
 
   React.useEffect(() => {
     setFilters({
@@ -203,6 +206,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       certification_category: filters.certification_category || undefined,
       part_time: filters.part_time || undefined,
       q_name: filters.q_name || undefined,
+      hide_unchanged: !showUnchanged,
       limit,
       offset,
     };
@@ -221,7 +225,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       })
       .catch((e) => setError(mapImportApiError(e)))
       .finally(() => setLoading(false));
-  }, [batchId, mode, filters, offset]);
+  }, [batchId, mode, filters, offset, showUnchanged]);
 
   React.useEffect(() => {
     load();
@@ -289,6 +293,12 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       </div>
 
       <div className="print:hidden">
+        <ImportMonthlyDiffSummaryPanel
+          batchId={batchId}
+          showUnchanged={showUnchanged}
+          onShowUnchangedChange={setShowUnchanged}
+          onRecomputed={load}
+        />
         <ImportRosterPromotionPanel batchId={batchId} />
 
       <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
@@ -303,12 +313,14 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
               {mode === "declaration" ? (
                 <>
                   <th className="px-3 py-2">ФИО</th>
+                  <th className="px-3 py-2">Diff</th>
                   <th className="px-3 py-2">Отделение</th>
                   <th className="px-3 py-2">Тип декларации</th>
                 </>
               ) : mode === "technical" ? (
                 <>
                   <th className="px-3 py-2">Название строки</th>
+                  <th className="px-3 py-2">Diff</th>
                   <th className="px-3 py-2">Возраст</th>
                   <th className="px-3 py-2">Отделение</th>
                   <th className="px-3 py-2">Должность</th>
@@ -318,6 +330,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
               ) : (
                 <>
                   <th className="px-3 py-2">ФИО</th>
+                  <th className="px-3 py-2">Diff</th>
                   <th className="px-3 py-2">Отделение</th>
                   <th className="px-3 py-2">Должность</th>
                   <th className="px-3 py-2">Категория</th>
@@ -330,20 +343,32 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                   Загрузка…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
-                  Строки не найдены
+                <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
+                  {!showUnchanged ? (
+                    <div className="space-y-1">
+                      <p className="font-medium text-zinc-700 dark:text-zinc-300">Изменений не обнаружено</p>
+                      <p className="text-xs">
+                        No changes detected — импорт совпадает с каноническим реестром или нет строк по фильтрам.
+                      </p>
+                    </div>
+                  ) : (
+                    "Строки не найдены"
+                  )}
                 </td>
               </tr>
             ) : mode === "declaration" ? (
               items.map((row) => (
                 <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">
                   <td className="px-3 py-2">{row.full_name || "—"}</td>
+                  <td className="px-3 py-2">
+                    <ImportDiffStatusBadge status={row.diff_status} compact />
+                  </td>
                   <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
                   <td className="px-3 py-2">
                     {DECLARATION_TYPE_LABELS[row.declaration_group || ""] ||
@@ -356,6 +381,9 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
               items.map((row) => (
                 <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">
                   <td className="px-3 py-2">{row.full_name || row.classification || "—"}</td>
+                  <td className="px-3 py-2">
+                    <ImportDiffStatusBadge status={row.diff_status} compact />
+                  </td>
                   <td className="px-3 py-2">{row.age ?? "—"}</td>
                   <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
                   <td className="px-3 py-2">{row.position_raw || "—"}</td>
@@ -382,6 +410,9 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                         совмещ
                       </span>
                     ) : null}
+                  </td>
+                  <td className="px-3 py-2">
+                    <ImportDiffStatusBadge status={row.diff_status} compact />
                   </td>
                   <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
                   <td className="px-3 py-2">{row.position_raw || "—"}</td>

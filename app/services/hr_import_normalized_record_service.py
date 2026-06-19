@@ -1141,6 +1141,29 @@ def _serialize_normalized_record(row: dict[str, Any], *, conn: Optional[Connecti
         "promoted_by": int(row["promoted_by"]) if row.get("promoted_by") is not None else None,
         "created_at": _isoformat_or_none(row.get("created_at")),
         "updated_at": _isoformat_or_none(row.get("updated_at")),
+        **_serialize_monthly_diff_fields(row),
+    }
+
+
+def _serialize_monthly_diff_fields(row: dict[str, Any]) -> dict[str, Any]:
+    if "diff_status" not in row:
+        return {}
+    field_diffs = row.get("field_diffs")
+    if isinstance(field_diffs, str):
+        import json
+
+        field_diffs = json.loads(field_diffs)
+    return {
+        "diff_status": row.get("diff_status"),
+        "canonical_snapshot_id": int(row["canonical_snapshot_id"])
+        if row.get("canonical_snapshot_id") is not None
+        else None,
+        "canonical_entry_id": int(row["canonical_entry_id"])
+        if row.get("canonical_entry_id") is not None
+        else None,
+        "canonical_hash": row.get("canonical_hash"),
+        "field_diffs": field_diffs,
+        "diff_computed_at": _isoformat_or_none(row.get("diff_computed_at")),
     }
 
 
@@ -1265,6 +1288,7 @@ def list_review_normalized_records(
     record_kind: Optional[str] = None,
     q_name: Optional[str] = None,
     binding_status: Optional[str] = None,
+    hide_unchanged: bool = False,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -1315,6 +1339,12 @@ def list_review_normalized_records(
         )
         params["binding_status"] = binding_status_norm
 
+    if hide_unchanged:
+        from app.services.hr_import_monthly_diff_service import monthly_diff_available
+
+        if monthly_diff_available(conn):
+            clauses.append("(nr.diff_status IS NULL OR nr.diff_status <> 'UNCHANGED')")
+
     where_sql = " AND ".join(clauses) if clauses else "TRUE"
     join_sql = _normalized_record_list_join_sql()
     total = int(
@@ -1342,6 +1372,7 @@ def list_review_normalized_records(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "hide_unchanged": hide_unchanged,
         "items": items,
         "skipped": False,
     }

@@ -3,6 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 
+import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import {
   getRowReviewDetail,
   mapImportApiError,
@@ -226,7 +228,10 @@ export default function PersonnelImportRowReviewPageClient({
       ) : (
         <div className="space-y-4">
           <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <h1 className="text-xl font-semibold">{detail.full_name || "—"}</h1>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold">{detail.full_name || "—"}</h1>
+              <ImportDiffStatusBadge status={detail.diff_status} />
+            </div>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <div>
                 <span className="text-zinc-500">ИИН:</span> {detail.iin_masked || "—"}
@@ -263,6 +268,8 @@ export default function PersonnelImportRowReviewPageClient({
               {detail.employee_id ? ` · employee_id=${detail.employee_id}` : ""}
             </div>
           </section>
+
+          <ImportFieldDiffPanel fieldDiffs={detail.field_diffs} recordKind="roster" />
 
           {profile
             ? Object.entries(profile.education).map(([key, records]) => (

@@ -10,6 +10,7 @@ import {
   mapImportApiError,
   type ImportBatchRow,
 } from "../_lib/importApi.client";
+import CanonicalSnapshotExportButton from "./CanonicalSnapshotExportButton";
 
 function fmtDate(value: string | null): string {
   if (!value) return "—";
@@ -69,12 +70,15 @@ export default function PersonnelImportBatchesPageClient() {
             Staging-данные из Excel. Без apply и без изменения сотрудников.
           </p>
         </div>
-        <Link
-          href="/directory/personnel/import/upload"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Загрузить файл
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <CanonicalSnapshotExportButton />
+          <Link
+            href="/directory/personnel/import/upload"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Загрузить файл
+          </Link>
+        </div>
       </div>
 
       {error ? (

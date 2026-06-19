@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import {
   EMPLOYEE_BINDING_METHOD_LABELS,
   EMPLOYEE_BINDING_STATUS_LABELS,
@@ -429,6 +431,19 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
           {error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
+          ) : null}
+
+          {record.diff_status ? (
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Сравнение с эталоном</h3>
+                <ImportDiffStatusBadge status={record.diff_status} />
+              </div>
+              <ImportFieldDiffPanel
+                fieldDiffs={record.field_diffs}
+                recordKind={record.record_kind}
+              />
+            </section>
           ) : null}
 
           <section className="space-y-3">
