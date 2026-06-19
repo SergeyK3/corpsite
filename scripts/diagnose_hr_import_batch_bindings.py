@@ -11,14 +11,72 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
 from app.db.engine import engine
+
+BATCH_TABLE = "hr_import_batches"
+FILENAME_COLUMN_CANDIDATES = ("file_name", "source_filename")
+
+
+def _table_column_names(conn: Connection, table_name: str, *, schema: str = "public") -> set[str]:
+    rows = conn.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = :schema
+              AND table_name = :table_name
+            """
+        ),
+        {"schema": schema, "table_name": table_name},
+    ).scalars().all()
+    return {str(name) for name in rows}
+
+
+def batch_filename_sql_expr(available_columns: Iterable[str]) -> str:
+    """Return SQL expression for batch filename across schema variants."""
+    cols = set(available_columns)
+    present = [name for name in FILENAME_COLUMN_CANDIDATES if name in cols]
+    if not present:
+        return "NULL"
+    if len(present) == 1:
+        return present[0]
+    return f"COALESCE({', '.join(present)})"
+
+
+def batch_header_select_sql(available_columns: Iterable[str]) -> str:
+    """Build SELECT for hr_import_batches header fields."""
+    cols = set(available_columns)
+    required = {"batch_id", "imported_at", "status"}
+    missing = sorted(required - cols)
+    if missing:
+        raise ValueError(f"hr_import_batches missing required columns: {', '.join(missing)}")
+
+    filename_expr = batch_filename_sql_expr(cols)
+    return f"""
+        SELECT
+            batch_id,
+            {filename_expr} AS file_name,
+            imported_at,
+            status
+        FROM public.hr_import_batches
+        WHERE batch_id = :batch_id
+    """
+
+
+def fetch_batch_header(conn: Connection, batch_id: int) -> dict | None:
+    columns = _table_column_names(conn, BATCH_TABLE)
+    sql = batch_header_select_sql(columns)
+    row = conn.execute(text(sql), {"batch_id": batch_id}).mappings().first()
+    return dict(row) if row is not None else None
 
 
 def _print_section(title: str) -> None:
@@ -38,20 +96,11 @@ def diagnose_batch(
     iin_digits = "".join(ch for ch in (iin or "") if ch.isdigit())
 
     with engine.connect() as conn:
-        batch = conn.execute(
-            text(
-                """
-                SELECT batch_id, source_filename, imported_at, status
-                FROM public.hr_import_batches
-                WHERE batch_id = :batch_id
-                """
-            ),
-            {"batch_id": batch_id},
-        ).mappings().first()
+        batch = fetch_batch_header(conn, batch_id)
         if batch is None:
             print(f"Batch {batch_id} not found")
             return
-        print(json.dumps(dict(batch), default=str, indent=2))
+        print(json.dumps(batch, default=str, indent=2))
 
         if iin_digits:
             _print_section(f"Normalized records by IIN {iin_digits}")
