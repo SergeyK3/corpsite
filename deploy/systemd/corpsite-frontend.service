@@ -1,0 +1,45 @@
+# Corpsite Next.js frontend (production).
+#
+# Install:
+#   sudo cp deploy/systemd/corpsite-frontend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable corpsite-frontend
+#
+# Deploy (always build before start):
+#   git pull && sudo ./scripts/deploy_frontend.sh
+#
+# Adjust paths below if the repo lives outside /opt/projects/corpsite/app.
+
+[Unit]
+Description=Corpsite Next.js Frontend
+Documentation=file:/opt/projects/corpsite/app/docs/deploy/frontend.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=corpsite
+Group=corpsite
+WorkingDirectory=/opt/projects/corpsite/app/corpsite-ui
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=CORPSITE_UI_DIR=/opt/projects/corpsite/app/corpsite-ui
+
+# Refuse to start without a production build (exit 203 → no restart loop).
+ExecStartPre=/opt/projects/corpsite/app/scripts/check_frontend_build.sh
+ExecStart=/usr/bin/npm run start --silent
+
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=203
+
+# Avoid tight restart loops on repeated start failures.
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=corpsite-frontend
+
+[Install]
+WantedBy=multi-user.target

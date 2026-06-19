@@ -56,7 +56,7 @@
 2. Скопируй обновлённые файлы проекта на сервер.
 3. Примени миграции БД до запуска новой версии backend.
 4. Обнови backend-зависимости, если они изменились.
-5. Собери или обнови frontend.
+5. Собери или обнови frontend (`sudo ./scripts/deploy_frontend.sh` — см. `docs/deploy/frontend.md`).
 6. Запусти backend и frontend.
 7. Выполни smoke-check ниже.
 
@@ -73,6 +73,8 @@
 9. `/directory/personnel` открывается как HTML (Next.js), а API-запросы идут на `/api/directory/...` и возвращают JSON.
 
 Same-origin routing (mmc.004.kz): см. `docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md`.
+
+Frontend-only deploy (после `git pull` с изменениями UI): см. `docs/deploy/frontend.md`.
 
 PowerShell helper:
 

@@ -160,20 +160,19 @@ npm run build
 
 5. **Rebuild frontend** (env is baked at build time for `NEXT_PUBLIC_*`):
    ```bash
-   cd /opt/projects/corpsite/app/corpsite-ui
-   npm ci
-   npm run build
+   cd /opt/projects/corpsite/app
+   sudo ./scripts/deploy_frontend.sh
    ```
+   See `docs/deploy/frontend.md` — do **not** restart frontend without running this script.
 
-6. **Restart services** (no DB migration required):
+6. **Restart backend** (if needed):
    ```bash
    sudo systemctl restart corpsite-backend
-   sudo systemctl restart corpsite-frontend
    ```
 
 7. **Smoke checks** — run curl commands above; log in via UI; open `/directory/personnel` and `/directory/employees`; confirm network tab shows `/api/directory/...` returning JSON.
 
-8. **Rollback** — restore previous nginx config + `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000` (or prior value), rebuild frontend, reload nginx, restart services.
+8. **Rollback** — restore previous nginx config + `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000` (or prior value), run `sudo ./scripts/deploy_frontend.sh`, reload nginx, restart services.
 
 ---
 
