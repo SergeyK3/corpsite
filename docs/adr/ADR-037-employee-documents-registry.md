@@ -527,6 +527,17 @@ Org-wide register (replaces demo `GET /professional-documents`).
 | `has_valid_until` → `valid_until` required | 422 |
 | `!has_valid_until` → `valid_until` must be null | 422 |
 | `file_url` max 2000 chars | 422 |
+
+**HR import promotion (ADR-039 Phase 3F):** Manual POST/PUT rules above apply to the personnel UI. Promotion from `hr_import_normalized_records` uses a narrower override:
+
+| Import `record_kind` | `medical_specialty_id` on promotion |
+|----------------------|-----------------------------------|
+| `category` | Optional — `QUALIFICATION_CATEGORY` has `requires_medical_specialty = FALSE`; free-text `specialty_text` kept in staging and reflected in promoted `title` / `source_text` |
+| `training` | Optional — unresolved or empty `specialty_text` does not block promotion; FK set only when catalog resolves exactly |
+| `certificate` | Required when `SPECIALIST_CERTIFICATION.requires_medical_specialty` (unchanged) |
+
+Category and non-clinical training rows are **HR evidence records** in the import contour; specialty FK remains required for manual specialist credentials and certificate promotion.
+
 | `lifecycle_status` must be `ACTIVE` (default) or omitted; `DRAFT` rejected in Phase 1A | 422 |
 | POST/PUT/DELETE must **not** insert/update `employee_events` | — |
 

@@ -521,3 +521,72 @@ def test_populate_normalized_records_missing_row_type_metadata(seed):
 
     assert result["total_records"] > 0
     assert total > 0
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_populate_category_assigns_qualification_category_document_type(seed):
+    """Regression: category rows from profile must map to QUALIFICATION_CATEGORY."""
+    _require_phase_3c()
+    suffix = uuid4().hex[:8]
+    payload = {
+        "full_name": "Category Doc Type Employee",
+        "iin": "123456789012",
+        "certification_raw": "Высшая категория врач организация здравоохранения до 31.12.2030",
+        "metadata": {
+            "sheet_type": "doctors",
+            "classification": "NORMAL",
+            "row_type": "EMPLOYEE",
+            "is_employee_roster": True,
+        },
+    }
+    with engine.begin() as conn:
+        batch_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_batches (
+                    source_type, file_name, imported_by, status,
+                    total_rows, valid_rows, error_rows
+                )
+                VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 1, 1, 0)
+                RETURNING batch_id
+                """
+            ),
+            {
+                "file_name": f"category_dtype_{suffix}.xlsx",
+                "uid": int(seed["initiator_user_id"]),
+            },
+        ).scalar_one()
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_rows (
+                    batch_id, source_sheet, source_row_number,
+                    raw_payload, normalized_payload, match_status
+                )
+                VALUES (
+                    :batch_id, 'doctors', 8,
+                    CAST(:payload AS jsonb), CAST(:payload AS jsonb), 'NOT_PROCESSED'
+                )
+                """
+            ),
+            {"batch_id": batch_id, "payload": json.dumps(payload)},
+        )
+        populate_normalized_records(conn, batch_id)
+        row = conn.execute(
+            text(
+                """
+                SELECT document_type_code, document_type_id
+                FROM public.hr_import_normalized_records
+                WHERE batch_id = :batch_id
+                  AND record_kind = 'category'
+                ORDER BY normalized_record_id
+                LIMIT 1
+                """
+            ),
+            {"batch_id": batch_id},
+        ).mappings().first()
+        _delete_batch(conn, batch_id)
+
+    assert row is not None
+    assert row["document_type_code"] == "QUALIFICATION_CATEGORY"
+    assert row["document_type_id"] is not None

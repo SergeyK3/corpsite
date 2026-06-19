@@ -746,10 +746,26 @@ def downgrade() -> None:
 | D6 | `training_hour_requirements.specialty_group_id` not free-text category | FK to existing `medical_specialty_groups` |
 | D7 | Partial unique indexes over full UNIQUE | Allow SUPERSEDED / rejected duplicates in history |
 | D8 | No backfill from `document_candidates` in 3B | Avoids data migration risk; Phase 3C job |
+| D9 | Category → `QUALIFICATION_CATEGORY`; training/category promotion without specialty FK | HR import rows are evidence records; `record_kind` is the semantic kind; reviewers must not pick `document_type` or `medical_specialty` for category/training; certificates remain strict |
 
 ---
 
-## 8. Open Items for Phase 3C (service layer)
+## 8. Import promotion policy (ADR-039 Phase 3F + ADR-037)
+
+Normalized import promotion maps staging rows into `employee_documents`. Policy as of Phase 3F.2:
+
+| `record_kind` | `document_type` | `medical_specialty_id` on promotion |
+|---------------|-----------------|-------------------------------------|
+| `category` | Auto `QUALIFICATION_CATEGORY` at populate | **Optional** — free-text `specialty_text` preserved; no catalog match required |
+| `training` | Default `CONTINUING_EDUCATION` | **Optional** — admin/non-clinical ПК may promote with `NULL`; resolved FK used when exact catalog match exists |
+| `certificate` | `SPECIALIST_CERTIFICATION` | **Required** when `document_types.requires_medical_specialty = TRUE` |
+| `education` | `EDUCATION_GRADUATION` | Not required |
+
+Reviewers do **not** manually choose `document_type` or `medical_specialty` for category/training rows.
+
+---
+
+## 9. Open Items for Phase 3C (service layer)
 
 1. Trigger or application code to maintain `updated_at` on `hr_import_normalized_records`.
 2. Resolve `document_type_code` → `document_type_id` via seed lookup table mapping parser codes (`TRAINING_HOURS` → `CONTINUING_EDUCATION`).

@@ -285,6 +285,15 @@ def _promote(client: TestClient, headers: dict[str, str], body: dict) -> dict:
 def test_qualification_category_document_type_seed():
     _require_phase_3f()
     with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.document_types
+                SET requires_medical_specialty = FALSE
+                WHERE code = 'QUALIFICATION_CATEGORY'
+                """
+            )
+        )
         row = conn.execute(
             text(
                 """
@@ -296,7 +305,7 @@ def test_qualification_category_document_type_seed():
         ).mappings().one()
     assert row["category"] == "CREDENTIAL"
     assert bool(row["has_valid_until"]) is True
-    assert bool(row["requires_medical_specialty"]) is True
+    assert bool(row["requires_medical_specialty"]) is False
     assert bool(row["tracks_hours"]) is False
 
 
@@ -478,7 +487,7 @@ def test_employee_required_blocker(client: TestClient, privileged_headers, appro
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_medical_specialty_unresolved_for_training(
+def test_training_promotes_without_medical_specialty(
     client: TestClient,
     privileged_headers,
     approved_education_record,
@@ -497,9 +506,112 @@ def test_medical_specialty_unresolved_for_training(
                         WHERE code = 'CONTINUING_EDUCATION'
                         LIMIT 1
                     ),
+                    title = 'Внедрение HR-менеджмента в организациях здравоохранения',
                     issue_date = DATE '2024-01-01',
                     hours = 72,
                     specialty_text = NULL,
+                    medical_specialty_id = NULL
+                WHERE normalized_record_id = :record_id
+                """
+            ),
+            {"record_id": record_id},
+        )
+
+    resp = _promote(client, privileged_headers, {"record_ids": [record_id]})
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["items"][0]
+    assert item["outcome"] == "promoted"
+    assert item["resolved_document_type_code"] == "CONTINUING_EDUCATION"
+    assert item.get("resolved_medical_specialty_id") is None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_category_promotes_with_qualification_category_and_free_text_specialty(
+    client: TestClient,
+    privileged_headers,
+    approved_education_record,
+    seed,
+):
+    record_id = approved_education_record["record_id"]
+    batch_id = approved_education_record["batch_id"]
+    row_id = approved_education_record["row_id"]
+    emp_id = approved_education_record["employee_id"]
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_normalized_records
+                SET record_kind = 'category',
+                    document_type_code = 'QUALIFICATION_CATEGORY',
+                    document_type_id = (
+                        SELECT document_type_id
+                        FROM public.document_types
+                        WHERE code = 'QUALIFICATION_CATEGORY'
+                        LIMIT 1
+                    ),
+                    title = 'Врач',
+                    specialty_text = 'организация здравоохранения',
+                    expiry_date = DATE '2030-12-31',
+                    issue_date = NULL,
+                    hours = NULL,
+                    medical_specialty_id = NULL,
+                    source_text = 'Категория врач организация здравоохранения до 31.12.2030'
+                WHERE normalized_record_id = :record_id
+                """
+            ),
+            {"record_id": record_id},
+        )
+
+    resp = _promote(client, privileged_headers, {"record_ids": [record_id]})
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["items"][0]
+    assert item["outcome"] == "promoted"
+    assert item["resolved_document_type_code"] == "QUALIFICATION_CATEGORY"
+    assert item.get("resolved_medical_specialty_id") is None
+
+    with engine.begin() as conn:
+        doc = conn.execute(
+            text(
+                """
+                SELECT title, medical_specialty_id, source_text
+                FROM public.employee_documents
+                WHERE document_id = :document_id
+                """
+            ),
+            {"document_id": int(item["document_id"])},
+        ).mappings().one()
+        _delete_batch(conn, batch_id)
+
+    assert "Врач" in doc["title"]
+    assert "организация здравоохранения" in doc["title"]
+    assert doc["medical_specialty_id"] is None
+    assert doc["source_text"]
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_certificate_still_requires_medical_specialty(
+    client: TestClient,
+    privileged_headers,
+    approved_education_record,
+):
+    record_id = approved_education_record["record_id"]
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_normalized_records
+                SET record_kind = 'certificate',
+                    document_type_code = 'SPECIALIST_CERTIFICATION',
+                    document_type_id = (
+                        SELECT document_type_id
+                        FROM public.document_types
+                        WHERE code = 'SPECIALIST_CERTIFICATION'
+                        LIMIT 1
+                    ),
+                    title = 'Сертификат специалиста',
+                    specialty_text = 'Несуществующая специальность XYZ',
+                    expiry_date = DATE '2028-01-01',
                     medical_specialty_id = NULL
                 WHERE normalized_record_id = :record_id
                 """

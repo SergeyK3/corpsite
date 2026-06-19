@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.services.hr_import_normalized_record_service import (
+    RECORD_KIND_CATEGORY,
+    RECORD_KIND_CERTIFICATE,
     RECORD_KIND_TRAINING,
     REVIEW_STATUS_APPROVED,
     REVIEW_STATUS_PROMOTED,
@@ -264,11 +266,39 @@ def _isoformat_or_none(value: Any) -> Optional[str]:
     return str(value)
 
 
+def _specialty_required_for_promotion(record_kind: str, doc_type: dict[str, Any]) -> bool:
+    """Certificates keep ADR-037 specialty FK rules; category/training import rows do not."""
+    if record_kind in (RECORD_KIND_CATEGORY, RECORD_KIND_TRAINING):
+        return False
+    if record_kind == RECORD_KIND_CERTIFICATE:
+        return bool(doc_type.get("requires_medical_specialty"))
+    return bool(doc_type.get("requires_medical_specialty"))
+
+
+def _resolve_optional_medical_specialty_id(
+    conn: Connection,
+    row: dict[str, Any],
+) -> Optional[int]:
+    return resolve_medical_specialty_id(
+        conn,
+        specialty_text=str(row.get("specialty_text") or ""),
+        existing_id=int(row["medical_specialty_id"])
+        if row.get("medical_specialty_id") is not None
+        else None,
+    )
+
+
 def _map_titles(row: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
     title_val = row.get("title")
     title = str(title_val).strip() if title_val else None
     if row.get("record_kind") == RECORD_KIND_TRAINING:
         return None, title
+    if row.get("record_kind") == RECORD_KIND_CATEGORY:
+        specialty = str(row.get("specialty_text") or "").strip()
+        if title and specialty and specialty.lower() not in title.lower():
+            title = f"{title} — {specialty}"
+        elif not title and specialty:
+            title = specialty
     return title, None
 
 
@@ -405,15 +435,8 @@ def evaluate_promotion(
             None,
         )
 
-    medical_specialty_id = None
-    if bool(doc_type.get("requires_medical_specialty")):
-        medical_specialty_id = resolve_medical_specialty_id(
-            conn,
-            specialty_text=str(row.get("specialty_text") or ""),
-            existing_id=int(row["medical_specialty_id"])
-            if row.get("medical_specialty_id") is not None
-            else None,
-        )
+    if _specialty_required_for_promotion(record_kind, doc_type):
+        medical_specialty_id = _resolve_optional_medical_specialty_id(conn, row)
         if medical_specialty_id is None:
             return (
                 PromotionItemResult(
@@ -432,6 +455,8 @@ def evaluate_promotion(
                 ),
                 None,
             )
+    else:
+        medical_specialty_id = _resolve_optional_medical_specialty_id(conn, row)
 
     issue_date = _coerce_date(row.get("issue_date"))
     expiry_date = _coerce_date(row.get("expiry_date"))
