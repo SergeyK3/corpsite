@@ -113,6 +113,8 @@ export type ImportBatchRow = {
   total_rows: number;
   valid_rows: number;
   error_rows: number;
+  /** Present when requested via ?with_normalized_records=true */
+  normalized_record_count?: number;
 };
 
 export type ImportSummary = {
@@ -568,8 +570,16 @@ export async function getEmployeeTrainingHistory(
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/document-candidates/employees/${rowId}`);
 }
 
-export async function listImportBatches(): Promise<{ items: ImportBatchRow[] }> {
-  return apiGetJson("/directory/personnel/import/batches");
+export async function listImportBatches(options?: {
+  withNormalizedRecords?: boolean;
+}): Promise<{ items: ImportBatchRow[] }> {
+  const query = buildQuery({
+    with_normalized_records: options?.withNormalizedRecords ? true : undefined,
+  });
+  const path = query
+    ? `/directory/personnel/import/batches?${query}`
+    : "/directory/personnel/import/batches";
+  return apiGetJson(path);
 }
 
 export async function deleteImportBatch(batchId: number): Promise<DeleteBatchResult> {

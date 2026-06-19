@@ -184,10 +184,24 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
   }, [isHelpExpanded, helpStorageReady]);
 
   React.useEffect(() => {
-    listImportBatches()
+    listImportBatches({ withNormalizedRecords: true })
       .then((data) => setBatches(data.items))
       .catch(() => setBatches([]));
   }, []);
+
+  const selectableBatches = React.useMemo(
+    () => batches.filter((batch) => (batch.normalized_record_count ?? 0) > 0),
+    [batches]
+  );
+
+  React.useEffect(() => {
+    if (!batchId) return;
+    const selected = batches.find((batch) => String(batch.batch_id) === batchId);
+    if (selected && (selected.normalized_record_count ?? 0) === 0) {
+      setBatchId("");
+      setOffset(0);
+    }
+  }, [batches, batchId]);
 
   React.useEffect(() => {
     if (!toast) return;
@@ -360,11 +374,14 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
           }}
         >
           <option value="">Все импорты</option>
-          {batches.map((batch) => (
-            <option key={batch.batch_id} value={batch.batch_id}>
-              {batch.file_name} (#{batch.batch_id})
-            </option>
-          ))}
+          {selectableBatches.map((batch) => {
+            const recordCount = batch.normalized_record_count ?? 0;
+            return (
+              <option key={batch.batch_id} value={String(batch.batch_id)}>
+                {batch.file_name} (#{batch.batch_id}) — {recordCount} записей
+              </option>
+            );
+          })}
         </select>
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"

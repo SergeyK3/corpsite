@@ -474,7 +474,65 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
     return items
 
 
-def list_batches(conn: Connection) -> dict[str, Any]:
+def _normalized_records_table_exists(conn: Connection) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = 'hr_import_normalized_records'
+            LIMIT 1
+            """
+        )
+    ).first()
+    return row is not None
+
+
+def list_batches(
+    conn: Connection,
+    *,
+    with_normalized_record_count: bool = False,
+) -> dict[str, Any]:
+    if with_normalized_record_count and _normalized_records_table_exists(conn):
+        rows = conn.execute(
+            text(
+                """
+                SELECT
+                    b.batch_id,
+                    b.file_name,
+                    b.imported_at,
+                    b.status,
+                    b.total_rows,
+                    b.valid_rows,
+                    b.error_rows,
+                    COALESCE(nr.normalized_record_count, 0) AS normalized_record_count
+                FROM public.hr_import_batches b
+                LEFT JOIN (
+                    SELECT batch_id, COUNT(*)::int AS normalized_record_count
+                    FROM public.hr_import_normalized_records
+                    GROUP BY batch_id
+                ) nr ON nr.batch_id = b.batch_id
+                ORDER BY b.imported_at DESC, b.batch_id DESC
+                """
+            )
+        ).mappings().all()
+        return {
+            "items": [
+                {
+                    "batch_id": int(r["batch_id"]),
+                    "file_name": r["file_name"],
+                    "imported_at": r["imported_at"].isoformat() if r["imported_at"] else None,
+                    "status": r["status"],
+                    "total_rows": int(r["total_rows"]),
+                    "valid_rows": int(r["valid_rows"]),
+                    "error_rows": int(r["error_rows"]),
+                    "normalized_record_count": int(r["normalized_record_count"]),
+                }
+                for r in rows
+            ]
+        }
+
     rows = conn.execute(
         text(
             """
@@ -496,6 +554,11 @@ def list_batches(conn: Connection) -> dict[str, Any]:
                 "total_rows": int(r["total_rows"]),
                 "valid_rows": int(r["valid_rows"]),
                 "error_rows": int(r["error_rows"]),
+                **(
+                    {"normalized_record_count": 0}
+                    if with_normalized_record_count
+                    else {}
+                ),
             }
             for r in rows
         ]

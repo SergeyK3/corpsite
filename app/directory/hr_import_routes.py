@@ -174,11 +174,15 @@ def delete_personnel_employee_import_card(
 
 @router.get("/personnel/import/batches")
 def get_import_batches(
+    with_normalized_records: bool = Query(default=False),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     require_privileged_or_403(user)
     try:
-        return _with_conn(list_batches)
+        return _with_conn(
+            list_batches,
+            with_normalized_record_count=with_normalized_records,
+        )
     except HTTPException:
         raise
     except Exception as e:

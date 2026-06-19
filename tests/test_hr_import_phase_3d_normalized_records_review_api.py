@@ -307,3 +307,50 @@ def test_review_api_forbidden_without_privilege(client: TestClient, seed, staged
         json={"review_status": "approved"},
     )
     assert patch_resp.status_code == 403
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_batches_with_normalized_record_counts(
+    client: TestClient,
+    privileged_headers,
+    seed,
+    staged_batch_with_records,
+):
+    _require_phase_3d()
+    resp = client.get(
+        "/directory/personnel/import/batches?with_normalized_records=true",
+        headers=privileged_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    staged = next(
+        item for item in resp.json()["items"] if item["batch_id"] == staged_batch_with_records
+    )
+    assert staged["normalized_record_count"] > 0
+
+    with engine.begin() as conn:
+        empty_batch_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_import_batches (
+                    source_type, file_name, imported_by, status,
+                    total_rows, valid_rows, error_rows
+                )
+                VALUES ('HR_CONTROL_LIST', 'pytest-empty-normalized', :uid, 'PARSED', 0, 0, 0)
+                RETURNING batch_id
+                """
+            ),
+            {"uid": int(seed["initiator_user_id"])},
+        ).scalar_one()
+    try:
+        resp2 = client.get(
+            "/directory/personnel/import/batches?with_normalized_records=true",
+            headers=privileged_headers,
+        )
+        empty = next(item for item in resp2.json()["items"] if item["batch_id"] == empty_batch_id)
+        assert empty["normalized_record_count"] == 0
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
+                {"batch_id": empty_batch_id},
+            )
