@@ -72,7 +72,6 @@ VOLATILE_PAYLOAD_KEYS = frozenset(
         "source_field",
         "source_text",
         "source_record_key",
-        "iin_masked",
         "directory_employee_name",
         "_canonical_correction_fields",
     }

@@ -164,8 +164,10 @@ def test_export_active_snapshot(seed, tmp_path: Path) -> None:
             rows = _data_rows(content)
             assert len(rows) >= 1
             full_name_idx = headers.index("ФИО")
+            iin_idx = headers.index("ИИН")
             position_idx = headers.index("Должность")
             assert rows[0][full_name_idx] == full_name
+            assert rows[0][iin_idx] == iin
             assert rows[0][position_idx] == position
     finally:
         with engine.begin() as conn:

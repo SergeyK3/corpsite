@@ -543,7 +543,7 @@ Seed aliases from:
 **HR видит:**
 
 - Filterable table: match_status=REVIEW_REQUIRED | NO_MATCH;
-- Columns: ФИО, masked IIN, department (raw → mapped), position (raw → parsed), sheet, errors;
+- Columns: ФИО, IIN, department (raw → mapped), position (raw → parsed), sheet, errors;
 - Row actions: Approve match / Select employee / Reject row / Create alias;
 - Bulk: approve selected matches.
 
@@ -596,12 +596,13 @@ Seed aliases from:
 | **Подтверждение apply batch** | Privileged HR | same; **re-auth or confirm dialog** recommended Phase 2B |
 | **Создание employee_documents из candidates** | Privileged HR | same as ADR-037 CRUD |
 | **Apply изменений employees** | Privileged HR | через HIRE/CORRECTION events, not raw UPDATE |
-| **Просмотр полного ИИН** | Privileged HR | API masks by default (`5801****91`); full IIN on explicit expand + audit log Phase 3 |
+| **Просмотр полного ИИН** | Privileged HR | Authenticated personnel/admin API и UI возвращают полный 12-значный ИИН; защита — RBAC и `require_privileged_or_403`, не masking |
 | **System admin** | Tech access, **не** штатный HR apply | ADR-033: admin не выполняет кадровые операции |
 
 ## 9.2. PII controls
 
-- `normalized_payload` in DB: IIN stored full (needed for match); API returns masked.
+- `normalized_payload` in DB: IIN stored full (needed for match); authenticated API/UI return full IIN.
+- Masking допускается только в неавторизованных CLI preview (`import_hr_control_list.py --preview`).
 - Batch files: не хранить xlsx на disk после parse (optional: store encrypted blob in object storage Phase 3).
 - Audit: `imported_by`, `applied_by`, `reviewed_by` на каждой строке.
 - Retention: `hr_import_rows` retain 24 months, then archive (policy TBD with legal).
@@ -698,7 +699,7 @@ Pipeline §3; statuses AUTO_MATCH / REVIEW_REQUIRED / NO_MATCH / INVALID_DATA / 
 |------|------------|
 | Low AUTO rate → HR fatigue | Bulk approve UI; alias seeding; improve parser |
 | Wrong document parse | confidence scores; mandatory review; raw_fragment visible |
-| IIN data leak | API masking; privileged-only; audit |
+| IIN data leak | RBAC (`require_privileged_or_403`); audit; no public API |
 | Silent org change | Block direct org_unit UPDATE; force TRANSFER workflow |
 | Part-time model unclear | Phase 2: link only; Phase 3: `employee_assignments` if needed |
 

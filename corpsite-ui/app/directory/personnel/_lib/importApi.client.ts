@@ -1006,6 +1006,10 @@ export async function listNormalizedRecords(
   return apiGetJson("/directory/personnel/import/normalized-records", buildQuery(params));
 }
 
+export async function getNormalizedRecord(recordId: number): Promise<NormalizedRecord> {
+  return apiGetJson(`/directory/personnel/import/normalized-records/${recordId}`);
+}
+
 export async function patchNormalizedRecordEmployeeBinding(
   recordId: number,
   employeeId: number

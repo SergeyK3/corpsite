@@ -15,7 +15,6 @@ from app.services.hr_import_document_parser import (
     parse_education_raw,
     parse_education_training_raw,
 )
-from scripts.import_hr_control_list import mask_iin
 
 DOCUMENT_KIND_TRAINING = "training"
 DOCUMENT_KIND_CERTIFICATION = "certification"
@@ -345,7 +344,7 @@ def _serialize_candidate(row: dict[str, Any]) -> dict[str, Any]:
         if row.get("employee_identity_id")
         else None,
         "full_name": row.get("full_name") or "",
-        "iin_masked": mask_iin(iin) if iin else "",
+        "iin": iin,
         "department": row.get("department") or "",
         "position": row.get("position") or "",
         "document_type": row.get("proposed_document_type") or "",
@@ -585,7 +584,7 @@ def employee_training_history(
             "row_id": int(anchor["row_id"]),
             "employee_id": int(anchor["employee_id"]) if anchor.get("employee_id") else None,
             "full_name": anchor.get("full_name") or "",
-            "iin_masked": mask_iin(iin) if iin else "",
+            "iin": iin,
             "department": anchor.get("department") or "",
             "position": anchor.get("position") or "",
         },

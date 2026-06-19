@@ -232,6 +232,10 @@ API и UI для `CHANGED` возвращают `field_diffs[]`:
 
 **Out of scope (Phase D):** побайтовое воспроизведение исходного внешнего Excel-шаблона; sheet «Отсутствуют в выгрузке» для REMOVED.
 
+### IIN display policy (authenticated contour)
+
+В authenticated personnel/admin API, UI, canonical snapshot payload/hash и export.xlsx ИИН передаётся **полностью** (12 цифр). Masking не используется: защита обеспечивается авторизацией и RBAC (`require_privileged_or_403`). Исключение — CLI preview в `import_hr_control_list.py` (неавторизованный debug output).
+
 ---
 
 ## Phase A — Canonical Snapshot Schema (DDL)

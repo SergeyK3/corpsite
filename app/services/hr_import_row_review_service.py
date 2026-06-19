@@ -31,7 +31,6 @@ from app.services.hr_import_document_parser import (
     parse_education_training_raw,
     split_raw_fragments,
 )
-from scripts.import_hr_control_list import mask_iin
 
 AWARD_SPLIT_RE = re.compile(r"[\n;]+")
 DEGREE_PATTERNS = (
@@ -166,7 +165,7 @@ def get_row_review_detail(conn: Connection, batch_id: int, row_id: int) -> dict[
         "source_row_number": row["source_row_number"],
         "employee_id": row["employee_id"],
         "full_name": str(payload.get("full_name", "") or ""),
-        "iin_masked": mask_iin(iin) if iin else "",
+        "iin": iin,
         "birth_date": str(payload.get("birth_date", "") or ""),
         "sex": profile["basic"]["sex"],
         "employment_rate": profile["basic"]["employment_rate"],

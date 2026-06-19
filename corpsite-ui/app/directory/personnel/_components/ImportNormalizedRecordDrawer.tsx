@@ -19,6 +19,7 @@ import {
   type NormalizedRecordReviewOverride,
   type NormalizedRecordReviewStatus,
 } from "../_lib/importApi.client";
+import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 
 type Props = {
   record: NormalizedRecord | null;
@@ -449,7 +450,7 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Общие данные</h3>
             <FieldRow label="Сотрудник" value={record.full_name || (record.employee_id ? `ID ${record.employee_id}` : "—")} />
-            <FieldRow label="ИИН" value={record.iin || "—"} />
+            <FieldRow label="ИИН" value={displayNormalizedRecordIin(record)} />
             <FieldRow
               label="Привязка"
               value={

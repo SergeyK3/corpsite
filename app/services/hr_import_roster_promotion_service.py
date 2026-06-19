@@ -48,7 +48,6 @@ class RosterPromotionItem:
     outcome: str
     full_name: str
     iin: str
-    iin_masked: str
     employee_id: Optional[int] = None
     target_employee_id: Optional[int] = None
     org_unit_id: Optional[int] = None
@@ -65,7 +64,6 @@ class RosterPromotionItem:
             "outcome": self.outcome,
             "full_name": self.full_name,
             "iin": self.iin,
-            "iin_masked": self.iin_masked,
             "employee_id": self.employee_id,
             "target_employee_id": self.target_employee_id,
             "org_unit_id": self.org_unit_id,
@@ -76,13 +74,6 @@ class RosterPromotionItem:
             "reason": self.reason,
             "candidate_employee_ids": self.candidate_employee_ids,
         }
-
-
-def _mask_iin(iin: str) -> str:
-    digits = _digits_only(iin)
-    if len(digits) != 12:
-        return digits or "—"
-    return f"{digits[:4]}******{digits[-2:]}"
 
 
 def _parse_payload(value: Any) -> dict[str, Any]:
@@ -252,7 +243,6 @@ def _evaluate_single_row(conn: Connection, row: dict[str, Any]) -> RosterPromoti
         outcome=OUTCOME_BLOCKED,
         full_name=full_name,
         iin=iin,
-        iin_masked=_mask_iin(iin),
         employee_id=linked_employee_id,
     )
 
@@ -427,7 +417,6 @@ def promote_roster_batch(
             outcome=str(item_dict["outcome"]),
             full_name=str(item_dict.get("full_name") or ""),
             iin=str(item_dict.get("iin") or ""),
-            iin_masked=str(item_dict.get("iin_masked") or ""),
             employee_id=item_dict.get("employee_id"),
             target_employee_id=item_dict.get("target_employee_id"),
             org_unit_id=item_dict.get("org_unit_id"),

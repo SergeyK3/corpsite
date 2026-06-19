@@ -140,15 +140,16 @@ def test_risks_counts_invalid_missing_duplicates_65plus(staged_batch):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_rows_mask_iin(staged_batch):
+def test_rows_return_full_iin(staged_batch):
     with engine.connect() as conn:
         result = list_batch_rows(conn, staged_batch, limit=50)
     assert result["total"] >= 5
     for item in result["items"]:
-        iin = item["iin_masked"]
+        iin = item.get("iin", "")
+        assert "iin_masked" not in item
         if iin and iin != "***":
-            assert "****" in iin
-            assert len(iin) < 12
+            assert "****" not in iin
+            assert len(iin) == 12 or not iin.isdigit()
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -172,15 +173,18 @@ def test_summary_route(client: TestClient, privileged_headers, staged_batch):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_rows_route_masks_iin(client: TestClient, privileged_headers, staged_batch):
+def test_rows_route_returns_full_iin(client: TestClient, privileged_headers, staged_batch):
     resp = client.get(
         f"/directory/personnel/import/batches/{staged_batch}/rows?limit=10",
         headers=privileged_headers,
     )
     assert resp.status_code == 200, resp.text
     for item in resp.json()["items"]:
-        assert "iin_masked" in item
-        assert "iin" not in item
+        assert "iin" in item
+        assert "iin_masked" not in item
+        iin = item.get("iin") or ""
+        if iin and iin != "***":
+            assert "****" not in iin
 
 
 def test_calc_category_validity_note_active():

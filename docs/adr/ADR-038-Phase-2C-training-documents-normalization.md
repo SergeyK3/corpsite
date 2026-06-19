@@ -112,8 +112,8 @@ ix_hr_import_doc_candidates_iin            ON (batch_id, iin)  -- internal joins
 | Layer | IIN |
 |-------|-----|
 | DB `hr_import_document_candidates.iin` | full 12 digits (staging, privileged) |
-| API list/detail | `iin_masked` only (`9001****23`) |
-| API | **never** field `iin` |
+| Authenticated API list/detail | full `iin` field |
+| CLI preview (`import_hr_control_list.py`) | masked (non-authenticated debug output only) |
 
 ---
 
@@ -179,7 +179,7 @@ parse_and_persist_document_candidates(conn, batch_id)
 
 Query filters: `document_kind`, `status`, `department`, `q_name`, `has_hours`, `has_valid_until`.
 
-Specialist key: `row_id` or masked grouping by `full_name+iin_masked` for unmatched employees.
+Specialist key: `row_id` or grouping by `full_name+iin` for unmatched employees.
 
 ---
 
@@ -215,7 +215,7 @@ Specialist key: `row_id` or masked grouping by `full_name+iin_masked` for unmatc
 | `test_missing_iin_excludes_declaration_and_summary` | DECLARATION/SUMMARY_ROW not in `missing_iin`; counted in `technical_no_iin` |
 | `test_document_candidates_from_training_raw` | import sample → candidates with `document_kind=training` |
 | `test_parser_hours_and_dates` | unit tests on parser: hours, year, DD.MM.YYYY |
-| `test_candidates_api_masks_iin` | API returns `iin_masked`, not `iin` |
+| `test_candidates_api_returns_full_iin` | Authenticated API returns full `iin`, not `iin_masked` |
 | `test_no_employee_documents_created` | after import + candidate build, `employee_documents` count unchanged |
 
 ---

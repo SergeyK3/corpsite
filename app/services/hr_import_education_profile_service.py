@@ -27,7 +27,6 @@ from app.services.employee_import_profile_override_service import (
     upsert_employee_override,
 )
 from app.services.hr_import_profile_service import build_import_profile
-from scripts.import_hr_control_list import mask_iin
 
 PROFILE_STATUS_ACTIVE = "active"
 PROFILE_STATUS_ARCHIVED = "archived"
@@ -363,7 +362,7 @@ def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[
         "source_row_ids": group["source_row_ids"],
         "employee_id": primary["staging"].get("employee_id"),
         "full_name": str(payload.get("full_name", "") or ""),
-        "iin_masked": mask_iin(iin) if iin else "",
+        "iin": iin,
         "department_source": str(payload.get("department", "") or ""),
         "org_unit_id": int(recoding["org_unit_id"]) if recoding and recoding.get("org_unit_id") else None,
         "org_unit_name": recoding["org_unit_name"] if recoding else "",
@@ -400,7 +399,7 @@ def _serialize_profile_detail(group: dict[str, Any], *, batch_id: int) -> dict[s
         "source_sheet": primary["staging"]["source_sheet"],
         "source_row_number": primary["staging"]["source_row_number"],
         "full_name": str(payload.get("full_name", "") or ""),
-        "iin_masked": mask_iin(iin) if iin else "",
+        "iin": iin,
         "profile_status": group["profile_status"],
         "review_status": review_status,
         "review_status_label": REVIEW_STATUS_LABELS.get(review_status, review_status),

@@ -21,7 +21,6 @@ from app.services.hr_import_education_profile_service import (
     _load_effective_profile_meta,
     _resolve_merged_profile,
 )
-from scripts.import_hr_control_list import mask_iin
 
 REVIEW_STATUS_PENDING = "pending"
 REVIEW_STATUS_APPROVED = "approved"
@@ -1062,18 +1061,66 @@ def _build_sparse_review_override(
     return sparse
 
 
+def _digits_only(value: str) -> str:
+    return re.sub(r"\D", "", value or "")
+
+
+def _looks_masked_iin(value: str) -> bool:
+    return "*" in value
+
+
+def _lookup_employee_iin(conn: Connection, employee_id: int) -> str:
+    row = conn.execute(
+        text(
+            """
+            SELECT regexp_replace(COALESCE(identity_value, ''), '[^0-9]', '', 'g') AS iin_digits
+            FROM public.employee_identities
+            WHERE employee_id = :employee_id
+              AND identity_type = 'IIN'
+              AND valid_to IS NULL
+            ORDER BY is_primary DESC, identity_id
+            LIMIT 1
+            """
+        ),
+        {"employee_id": employee_id},
+    ).scalar()
+    digits = _digits_only(str(row or ""))
+    return digits if len(digits) == 12 else ""
+
+
+def _resolve_display_iin(
+    conn: Optional[Connection],
+    *,
+    payload_iin: str,
+    employee_id: Optional[int],
+) -> str:
+    """Return full 12-digit IIN for authenticated API/UI; never return masked placeholders."""
+    raw = str(payload_iin or "").strip()
+    digits = _digits_only(raw)
+    if len(digits) == 12 and not _looks_masked_iin(raw):
+        return digits
+    if conn is not None and employee_id is not None:
+        linked = _lookup_employee_iin(conn, int(employee_id))
+        if linked:
+            return linked
+    if len(digits) == 12:
+        return digits
+    return ""
+
+
 def _serialize_normalized_record(row: dict[str, Any], *, conn: Optional[Connection] = None) -> dict[str, Any]:
     confidence = row.get("confidence")
     full_name = str(row.get("full_name") or "").strip()
+    row_employee_id = int(row["employee_id"]) if row.get("employee_id") is not None else None
     iin_raw = str(row.get("row_iin") or row.get("iin") or "").strip()
+    display_iin = _resolve_display_iin(conn, payload_iin=iin_raw, employee_id=row_employee_id)
     parsed_values = _parsed_payload_from_row(row)
     review_override = _parse_review_override_json(row.get("review_override_json"))
     effective = _effective_payload(parsed_values, review_override)
-    row_employee_id = int(row["employee_id"]) if row.get("employee_id") is not None else None
     directory_employee_name = str(row.get("directory_employee_name") or "").strip() or None
     payload_for_binding = {
         "full_name": full_name,
-        "iin": iin_raw,
+        "iin": display_iin or iin_raw,
         "metadata": _parse_review_override_json(row.get("row_metadata_json")),
     }
     employee_binding: dict[str, Any]
@@ -1103,7 +1150,7 @@ def _serialize_normalized_record(row: dict[str, Any], *, conn: Optional[Connecti
         "employee_id": row_employee_id,
         "employee_binding": employee_binding,
         "full_name": full_name,
-        "iin_masked": mask_iin(iin_raw) if iin_raw else "",
+        "iin": display_iin,
         "fragment_index": int(row.get("fragment_index") or 0),
         "source_field": row.get("source_field") or "",
         "source_text": row.get("source_text") or "",
@@ -1277,6 +1324,14 @@ def _fetch_normalized_record_row(conn: Connection, record_id: int) -> Optional[d
         {"record_id": record_id},
     ).mappings().first()
     return dict(row) if row is not None else None
+
+
+def get_review_normalized_record(conn: Connection, record_id: int) -> dict[str, Any]:
+    """Return a single normalized record for review drawer/detail."""
+    row = _fetch_normalized_record_row(conn, record_id)
+    if row is None:
+        raise NormalizedRecordNotFoundError(record_id)
+    return _serialize_normalized_record(row, conn=conn)
 
 
 def list_review_normalized_records(

@@ -6,7 +6,7 @@ import type { NormalizedRecord } from "../_lib/importApi.client";
 
 const fullIin = "851101300451";
 
-const sampleRecord: NormalizedRecord = {
+const baseRecord: NormalizedRecord = {
   record_id: 42,
   normalized_record_id: 42,
   batch_id: 7,
@@ -53,19 +53,45 @@ const sampleRecord: NormalizedRecord = {
   updated_at: "2026-06-01T10:00:00.000Z",
 };
 
+function renderDrawer(record: NormalizedRecord) {
+  render(
+    <ImportNormalizedRecordDrawer
+      record={record}
+      open
+      onClose={vi.fn()}
+      onReviewed={vi.fn()}
+      onToast={vi.fn()}
+    />
+  );
+}
+
 describe("ImportNormalizedRecordDrawer", () => {
   it("renders full IIN without masking", () => {
-    render(
-      <ImportNormalizedRecordDrawer
-        record={sampleRecord}
-        open
-        onClose={vi.fn()}
-        onReviewed={vi.fn()}
-        onToast={vi.fn()}
-      />
-    );
+    renderDrawer(baseRecord);
 
     expect(screen.getByText(fullIin)).toBeInTheDocument();
+    expect(screen.queryByText(/8511\*+/)).not.toBeInTheDocument();
+  });
+
+  it("does not render masked IIN from legacy b483232 API payloads", () => {
+    renderDrawer({
+      ...baseRecord,
+      iin: "8511****51",
+    });
+
+    expect(screen.queryByText(/8511\*+/)).not.toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("does not render iin_masked even when present on the object", () => {
+    const legacyRecord = {
+      ...baseRecord,
+      iin: "",
+      iin_masked: "8511****51",
+    } as NormalizedRecord & { iin_masked?: string };
+
+    renderDrawer(legacyRecord);
+
     expect(screen.queryByText(/8511\*+/)).not.toBeInTheDocument();
   });
 });

@@ -310,12 +310,15 @@ def test_document_candidates_created_from_training_raw(staged_batch):
     first = result["items"][0]
     assert first["document_kind"] == "training"
     assert first["raw_text"]
-    assert "iin_masked" in first
-    assert "iin" not in first
+    assert "iin" in first
+    assert "iin_masked" not in first
+    iin = first.get("iin") or ""
+    if iin:
+        assert "****" not in iin
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_candidates_api_masks_iin(client: TestClient, privileged_headers, staged_batch):
+def test_candidates_api_returns_full_iin(client: TestClient, privileged_headers, staged_batch):
     batch_id, _, _ = staged_batch
     resp = client.get(
         f"/directory/personnel/import/batches/{batch_id}/document-candidates?limit=20",
@@ -323,8 +326,11 @@ def test_candidates_api_masks_iin(client: TestClient, privileged_headers, staged
     )
     assert resp.status_code == 200, resp.text
     for item in resp.json()["items"]:
-        assert "iin_masked" in item
-        assert "iin" not in item
+        assert "iin" in item
+        assert "iin_masked" not in item
+        iin = item.get("iin") or ""
+        if iin:
+            assert "****" not in iin
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

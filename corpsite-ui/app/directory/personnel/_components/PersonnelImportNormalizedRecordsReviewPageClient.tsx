@@ -10,6 +10,7 @@ import NormalizedRecordsPromotionPanel from "./NormalizedRecordsPromotionPanel";
 import {
   EMPLOYEE_BINDING_STATUS_LABELS,
   employeeBindingBadgeClass,
+  getNormalizedRecord,
   getNormalizedRecordsSummary,
   listImportBatches,
   listNormalizedRecords,
@@ -25,6 +26,7 @@ import {
   type NormalizedRecordReviewStatus,
   type NormalizedRecordSummary,
 } from "../_lib/importApi.client";
+import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 
 export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3g-employee-binding";
 
@@ -162,6 +164,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
 
   const [selected, setSelected] = React.useState<NormalizedRecord | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerLoading, setDrawerLoading] = React.useState(false);
   const [toast, setToast] = React.useState<ToastState>(null);
   const [isHelpExpanded, setIsHelpExpanded] = React.useState(true);
   const [helpStorageReady, setHelpStorageReady] = React.useState(false);
@@ -265,9 +268,19 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
     loadList();
   }, [loadList]);
 
-  function openRecord(record: NormalizedRecord) {
+  async function openRecord(record: NormalizedRecord) {
     setSelected(record);
     setDrawerOpen(true);
+    setDrawerLoading(true);
+    try {
+      const fresh = await getNormalizedRecord(record.record_id);
+      setSelected(fresh);
+      setItems((prev) => prev.map((item) => (item.record_id === fresh.record_id ? fresh : item)));
+    } catch (e) {
+      showToast(mapImportApiError(e), "error");
+    } finally {
+      setDrawerLoading(false);
+    }
   }
 
   function handleReviewed(updated: NormalizedRecord) {
@@ -558,7 +571,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                         {NORMALIZED_RECORD_KIND_LABELS[row.record_kind] || row.record_kind}
                       </td>
                       <td className="px-3 py-2 font-medium">{row.full_name || "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{row.iin || "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{displayNormalizedRecordIin(row)}</td>
                       <td className="px-3 py-2 max-w-[220px] truncate">{row.title || row.source_text || "—"}</td>
                       <td className="px-3 py-2">{row.source_field || "—"}</td>
                       <td className="px-3 py-2">{formatCreatedAt(row.created_at)}</td>

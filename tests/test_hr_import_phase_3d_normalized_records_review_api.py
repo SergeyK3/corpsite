@@ -354,3 +354,144 @@ def test_batches_with_normalized_record_counts(
                 text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
                 {"batch_id": empty_batch_id},
             )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_normalized_records_api_returns_full_iin(
+    client: TestClient,
+    privileged_headers,
+    staged_batch_with_records,
+):
+    batch_id = staged_batch_with_records
+    resp = client.get(
+        f"/directory/personnel/import/normalized-records?batch_id={batch_id}&limit=50",
+        headers=privileged_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert items
+    for item in items:
+        assert "iin" in item
+        assert "iin_masked" not in item
+        iin = item.get("iin") or ""
+    if iin:
+        assert "****" not in iin
+        assert len(iin) == 12
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_normalized_record_detail_api_returns_full_iin(
+    client: TestClient,
+    privileged_headers,
+    staged_batch_with_records,
+):
+    batch_id = staged_batch_with_records
+    list_resp = client.get(
+        f"/directory/personnel/import/normalized-records?batch_id={batch_id}&limit=1",
+        headers=privileged_headers,
+    )
+    assert list_resp.status_code == 200, list_resp.text
+    record_id = list_resp.json()["items"][0]["record_id"]
+
+    detail_resp = client.get(
+        f"/directory/personnel/import/normalized-records/{record_id}",
+        headers=privileged_headers,
+    )
+    assert detail_resp.status_code == 200, detail_resp.text
+    body = detail_resp.json()
+    assert "iin" in body
+    assert "iin_masked" not in body
+    iin = body.get("iin") or ""
+    if iin:
+        assert "****" not in iin
+        assert len(iin) == 12
+
+
+def test_serialize_normalized_record_returns_iin_not_iin_masked() -> None:
+    from app.services.hr_import_normalized_record_service import _serialize_normalized_record
+
+    item = _serialize_normalized_record(
+        {
+            "normalized_record_id": 1,
+            "batch_id": 2,
+            "row_id": 3,
+            "employee_id": None,
+            "row_iin": "851101300451",
+            "full_name": "Test User",
+            "fragment_index": 0,
+            "source_field": "training_raw",
+            "source_text": "sample",
+            "source_record_key": "training:0",
+            "record_kind": "training",
+            "document_type_id": None,
+            "document_type_code": None,
+            "parse_method": "rule",
+            "confidence": 0.9,
+            "review_status": "pending",
+        },
+        conn=None,
+    )
+    assert item["iin"] == "851101300451"
+    assert "iin_masked" not in item
+
+
+def test_serialize_normalized_record_never_returns_masked_placeholder() -> None:
+    from app.services.hr_import_normalized_record_service import _serialize_normalized_record
+
+    item = _serialize_normalized_record(
+        {
+            "normalized_record_id": 1,
+            "batch_id": 2,
+            "row_id": 3,
+            "employee_id": None,
+            "row_iin": "8511****51",
+            "full_name": "Test User",
+            "fragment_index": 0,
+            "source_field": "training_raw",
+            "source_text": "sample",
+            "source_record_key": "training:0",
+            "record_kind": "training",
+            "document_type_id": None,
+            "document_type_code": None,
+            "parse_method": "rule",
+            "confidence": 0.9,
+            "review_status": "pending",
+        },
+        conn=None,
+    )
+    assert item["iin"] == ""
+    assert "iin_masked" not in item
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_row_review_api_returns_full_iin(
+    client: TestClient,
+    privileged_headers,
+    staged_batch_with_records,
+):
+    batch_id = staged_batch_with_records
+    with engine.connect() as conn:
+        row_id = conn.execute(
+            text(
+                """
+                SELECT row_id
+                FROM public.hr_import_rows
+                WHERE batch_id = :batch_id
+                ORDER BY row_id
+                LIMIT 1
+                """
+            ),
+            {"batch_id": batch_id},
+        ).scalar_one()
+    resp = client.get(
+        f"/directory/personnel/import/batches/{batch_id}/rows/{row_id}/review",
+        headers=privileged_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "iin" in body
+    assert "iin_masked" not in body
+    iin = body.get("iin") or ""
+    if iin:
+        assert "****" not in iin
+        assert len(iin) == 12

@@ -19,7 +19,6 @@ from app.db.models.hr_import import (
 )
 from app.services.department_recoding_service import load_org_unit_group_ids, lookup_recoding
 from app.services.hr_import_document_parser import parse_certification_raw
-from scripts.import_hr_control_list import mask_iin
 
 MEDICAL_CATEGORY_KEYS = frozenset({"highest", "first", "second"})
 
@@ -421,7 +420,6 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
                 "source_row_number": int(db_row["source_row_number"]),
                 "full_name": str(payload.get("full_name", "") or "").strip(),
                 "iin": iin,
-                "iin_masked": mask_iin(iin),
                 "iin_valid": iin_valid,
                 "birth_date": birth.isoformat() if birth else "",
                 "age": age,
@@ -1025,7 +1023,7 @@ def list_batch_rows(
         {
             "row_id": r["row_id"],
             "full_name": r["full_name"],
-            "iin_masked": r["iin_masked"],
+            "iin": r["iin"],
             "birth_date": r["birth_date"],
             "age": r["age"],
             "department": r["department"],

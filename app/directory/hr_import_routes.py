@@ -80,6 +80,7 @@ from app.services.hr_import_normalized_record_service import (
     ReviewOverrideNotAllowedError,
     _fetch_normalized_record_row,
     _serialize_normalized_record,
+    get_review_normalized_record,
     list_review_normalized_records,
     review_normalized_records_summary,
     update_normalized_record_review,
@@ -1012,6 +1013,22 @@ def post_import_batch_employee_bindings_repair(
         return _with_conn(repair_batch_employee_bindings, batch_id=batch_id)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/normalized-records/{record_id}")
+def get_import_normalized_record(
+    record_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(get_review_normalized_record, record_id=record_id)
+    except NormalizedRecordNotFoundError as e:
+        raise _normalized_record_not_found(e)
     except HTTPException:
         raise
     except Exception as e:

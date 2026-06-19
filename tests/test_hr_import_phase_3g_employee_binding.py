@@ -581,3 +581,65 @@ def test_manual_binding_api(seed, tmp_path: Path, privileged_headers):
                 _delete_batch(conn, batch_id)
             if emp_id:
                 conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": emp_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_repair_bindings_api_uses_full_iin(seed, tmp_path: Path, privileged_headers):
+    _require_phase_3g()
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    employee_name = f"Repair Bind Employee {suffix}"
+    import_name = f"Repair Bind Import {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+    emp_id = None
+
+    try:
+        with engine.begin() as conn:
+            emp_id = _create_employee_with_iin(
+                conn,
+                full_name=employee_name,
+                iin=iin,
+                org_unit_id=int(seed["unit_id"]),
+                created_by=int(seed["initiator_user_id"]),
+            )
+
+        batch_id = _import_batch(tmp_path, seed, full_name=import_name, iin=iin)
+
+        with engine.begin() as conn:
+            row_id = _first_row_id(conn, batch_id)
+            current_employee_id = conn.execute(
+                text("SELECT employee_id FROM public.hr_import_rows WHERE row_id = :row_id"),
+                {"row_id": row_id},
+            ).scalar_one()
+            assert current_employee_id is None
+
+        client = TestClient(app)
+        repair_response = client.post(
+            f"/directory/personnel/import/batches/{batch_id}/employee-bindings/repair",
+            headers=privileged_headers,
+        )
+        assert repair_response.status_code == 200, repair_response.text
+        repair_body = repair_response.json()
+        assert repair_body["bound"] >= 1
+
+        list_response = client.get(
+            f"/directory/personnel/import/normalized-records?batch_id={batch_id}&limit=50",
+            headers=privileged_headers,
+        )
+        assert list_response.status_code == 200, list_response.text
+        for item in list_response.json()["items"]:
+            assert item.get("iin") == iin
+            assert "****" not in (item.get("iin") or "")
+            if item.get("employee_binding", {}).get("status") == BINDING_STATUS_BOUND:
+                assert item["employee_binding"]["method"] == BINDING_METHOD_IIN
+                assert item["employee_id"] == emp_id
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if emp_id:
+                conn.execute(text("DELETE FROM public.employee_identities WHERE employee_id = :id"), {"id": emp_id})
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": emp_id})
