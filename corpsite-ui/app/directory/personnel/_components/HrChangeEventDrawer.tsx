@@ -79,6 +79,12 @@ export default function HrChangeEventDrawer({ event, open, onClose }: Props) {
 
           <dl className="grid gap-3 text-sm">
             <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">ИИН</dt>
+              <dd className="mt-0.5 font-mono text-sm text-zinc-800 dark:text-zinc-200">
+                {event.iin || "—"}
+              </dd>
+            </div>
+            <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">Отделение</dt>
               <dd className="mt-0.5 text-zinc-800 dark:text-zinc-200">
                 {formatHrChangeEventValue(event.department)}

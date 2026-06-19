@@ -234,7 +234,7 @@ export default function PersonnelImportRowReviewPageClient({
             </div>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <div>
-                <span className="text-zinc-500">ИИН:</span> {detail.iin_masked || "—"}
+                <span className="text-zinc-500">ИИН:</span> {detail.iin || "—"}
               </div>
               <div>
                 <span className="text-zinc-500">Дата рождения:</span> {detail.birth_date || "—"}

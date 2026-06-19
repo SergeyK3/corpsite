@@ -168,7 +168,7 @@ export default function ImportRosterPromotionPanel({ batchId }: Props) {
                     </span>
                   </td>
                   <td className="px-2 py-2">{item.full_name || "—"}</td>
-                  <td className="px-2 py-2">{item.iin_masked || item.iin || "—"}</td>
+                  <td className="px-2 py-2 font-mono text-xs">{item.iin || "—"}</td>
                   <td className="px-2 py-2">{item.org_unit_name || "—"}</td>
                   <td className="px-2 py-2">{item.position_name || "—"}</td>
                   <td className="px-2 py-2 text-xs text-zinc-500">{item.reason || "—"}</td>

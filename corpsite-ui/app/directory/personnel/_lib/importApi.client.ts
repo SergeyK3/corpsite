@@ -167,7 +167,7 @@ export type RiskRow = {
 export type StagingRow = {
   row_id: number;
   full_name: string;
-  iin_masked: string;
+  iin: string;
   birth_date: string;
   age: number | null;
   department: string;
@@ -261,7 +261,7 @@ export type EducationProfileSummary = {
   source_row_ids?: number[];
   employee_id: number | null;
   full_name: string;
-  iin_masked: string;
+  iin: string;
   department_source: string;
   org_unit_id: number | null;
   org_unit_name: string;
@@ -287,7 +287,7 @@ export type EducationProfileDetail = {
   source_sheet: string;
   source_row_number: number;
   full_name: string;
-  iin_masked: string;
+  iin: string;
   profile_status: string;
   review_status: string;
   review_status_label: string;
@@ -403,7 +403,7 @@ export type RowReviewDetail = {
   row_id: number;
   employee_id?: number | null;
   full_name: string;
-  iin_masked: string;
+  iin: string;
   birth_date: string;
   sex: string;
   employment_rate: number | null;
@@ -481,7 +481,7 @@ export type DocumentCandidate = {
   employee_id: number | null;
   employee_identity_id: number | null;
   full_name: string;
-  iin_masked: string;
+  iin: string;
   department: string;
   position: string;
   document_type: string;
@@ -520,7 +520,7 @@ export type EmployeeTrainingHistory = {
     row_id: number;
     employee_id: number | null;
     full_name: string;
-    iin_masked: string;
+    iin: string;
     department: string;
     position: string;
   };
@@ -898,7 +898,7 @@ export type NormalizedRecord = {
   employee_id: number | null;
   employee_binding?: EmployeeBindingInfo;
   full_name: string;
-  iin_masked: string;
+  iin: string;
   fragment_index: number;
   source_field: string;
   source_text: string;
@@ -1042,7 +1042,6 @@ export type RosterPromotionItem = {
   outcome: RosterPromotionOutcome;
   full_name: string;
   iin: string;
-  iin_masked: string;
   employee_id?: number | null;
   target_employee_id?: number | null;
   org_unit_id?: number | null;

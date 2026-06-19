@@ -104,7 +104,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Строки импорта</h1>
-          <p className="text-sm text-zinc-500">Batch #{batchId} · ИИН маскирован · read-only</p>
+          <p className="text-sm text-zinc-500">Batch #{batchId} · read-only</p>
         </div>
         <Link
           href={`/directory/personnel/import/${batchId}`}
@@ -249,7 +249,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
               items.map((row) => (
                 <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">
                   <td className="px-3 py-2">{row.full_name || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{row.iin_masked || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{row.iin || "—"}</td>
                   <td className="px-3 py-2">{row.birth_date || "—"}</td>
                   <td className="px-3 py-2">{row.age ?? "—"}</td>
                   <td className="max-w-[160px] truncate px-3 py-2" title={row.department}>

@@ -558,7 +558,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient() {
                         {NORMALIZED_RECORD_KIND_LABELS[row.record_kind] || row.record_kind}
                       </td>
                       <td className="px-3 py-2 font-medium">{row.full_name || "—"}</td>
-                      <td className="px-3 py-2">{row.iin_masked || "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{row.iin || "—"}</td>
                       <td className="px-3 py-2 max-w-[220px] truncate">{row.title || row.source_text || "—"}</td>
                       <td className="px-3 py-2">{row.source_field || "—"}</td>
                       <td className="px-3 py-2">{formatCreatedAt(row.created_at)}</td>
