@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.personnel_admin_schemas import (
     EffectivePersonResponse,
+    IdentityReconciliationPreviewRequest,
+    IdentityReconciliationReportResponse,
     LifecycleRunDetail,
     LifecycleRunListResponse,
     LifecycleRunReportResponse,
@@ -46,6 +48,10 @@ from app.services.hr_review_override_service import (
     reconfirm_override_tx,
     reject_override_tx,
     revoke_override_tx,
+)
+from app.services.identity_reconciliation_service import (
+    IdentityReconciliationError,
+    run_r1a_dry_run,
 )
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
@@ -375,4 +381,36 @@ def admin_get_effective_person(
             snapshot_id=snapshot_id,
         )
     except EffectiveCanonicalError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.post(
+    "/identity/reconciliation/r1a/preview",
+    response_model=IdentityReconciliationReportResponse,
+)
+def admin_preview_identity_reconciliation_r1a(
+    body: IdentityReconciliationPreviewRequest,
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 B1 — read-only R1a identity materialization preview."""
+    try:
+        with engine.connect() as conn:
+            return run_r1a_dry_run(conn, snapshot_id=body.snapshot_id)
+    except IdentityReconciliationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.get(
+    "/identity/reconciliation/r1a/preview",
+    response_model=IdentityReconciliationReportResponse,
+)
+def admin_preview_identity_reconciliation_r1a_get(
+    snapshot_id: Optional[int] = Query(default=None, ge=1),
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 B1 — read-only R1a preview (GET convenience)."""
+    try:
+        with engine.connect() as conn:
+            return run_r1a_dry_run(conn, snapshot_id=snapshot_id)
+    except IdentityReconciliationError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc

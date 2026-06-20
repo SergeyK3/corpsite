@@ -197,6 +197,56 @@ class ValidationResponse(BaseModel):
     checks: List[ValidationCheckResponse]
     warnings_count: int = 0
     errors_count: int = 0
+
+
+class IdentityReconciliationPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: Optional[int] = Field(default=None, ge=1)
+
+
+class IdentityReconciliationCandidate(BaseModel):
+    person_id: int
+    full_name: Optional[str] = None
+    match_key: str = ""
+    canonical_person_key: str = ""
+    employee_id: Optional[int] = None
+    resolved_iin: Optional[str] = None
+    source: Optional[str] = None
+    outcome: str
+    would_update_person_iin: bool = False
+    would_insert_employee_identity: bool = False
+    message: Optional[str] = None
+    error_code: Optional[str] = None
+
+
+class IdentityReconciliationGate(BaseModel):
+    gate_id: str
+    severity: str
+    blocks_execute: bool
+    count: int
+    passed: bool
+    message: str = ""
+    violations: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class IdentityReconciliationReportResponse(BaseModel):
+    phase: str
+    dry_run: bool
+    snapshot_id: Optional[int] = None
+    generated_at: str
+    blocking: bool
+    execute_allowed: bool
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    gates: List[IdentityReconciliationGate] = Field(default_factory=list)
+    apply_preview: List[Dict[str, Any]] = Field(default_factory=list)
+    conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    incomplete: List[Dict[str, Any]] = Field(default_factory=list)
+    already_filled: List[Dict[str, Any]] = Field(default_factory=list)
+    employee_identity_gaps: List[Dict[str, Any]] = Field(default_factory=list)
+    candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
     validated_at: Optional[str] = None
