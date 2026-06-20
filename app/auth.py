@@ -15,6 +15,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.security.directory_scope import is_privileged
+from app.security.auth_policy import (
+    fetch_user_auth_policy_row,
+    fetch_user_auth_policy_row_by_login,
+    is_password_change_allowed_path,
+    is_user_locked,
+    record_login_failed,
+    record_login_success,
+    require_password_not_expired_or_change_allowed,
+    validate_token_version_claim,
+)
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -155,11 +166,13 @@ def _sign(message: bytes, secret: str) -> bytes:
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).digest()
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, *, token_version: Optional[int] = None) -> str:
     now = int(time.time())
     exp = now + _jwt_ttl_seconds()
     header = {"alg": "HS256", "typ": "JWT"}
-    payload = {"sub": str(int(user_id)), "iat": now, "exp": exp}
+    payload: Dict[str, Any] = {"sub": str(int(user_id)), "iat": now, "exp": exp}
+    if token_version is not None:
+        payload["token_version"] = int(token_version)
 
     header_b64 = _b64url(_json_dumps(header))
     payload_b64 = _b64url(_json_dumps(payload))
@@ -203,11 +216,15 @@ def _normalize_telegram_username(value: Any) -> Optional[str]:
 
 
 def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
+    policy_row = fetch_user_auth_policy_row(int(user_id))
+    if not policy_row:
+        return None
+
     with engine.connect() as conn:
         row = conn.execute(
             text(
                 """
-                SELECT 
+                SELECT
                     u.user_id,
                     u.role_id,
                     r.name AS role_name_ru,
@@ -217,7 +234,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                     u.telegram_id,
                     u.telegram_username
                 FROM public.users u
-                LEFT JOIN public.roles r 
+                LEFT JOIN public.roles r
                     ON r.role_id = u.role_id
                 WHERE u.user_id = :uid
                 """
@@ -237,34 +254,38 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         "login": str(row["login"]) if row["login"] is not None else None,
         "telegram_bound": _telegram_bound_from_id(row.get("telegram_id")),
         "telegram_username": _normalize_telegram_username(row.get("telegram_username")),
+        "must_change_password": bool(policy_row.get("must_change_password") or False),
+        "token_version": int(policy_row.get("token_version") or 1),
+        "locked_at": policy_row.get("locked_at"),
+        "locked_reason": policy_row.get("locked_reason"),
     }
 
 
+def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
+    """Add backend-aligned privilege flags for UI (no enforcement)."""
+    out = dict(user)
+    out["is_privileged"] = is_privileged(out)
+    out["is_system_admin"] = int(out.get("role_id") or 0) == 2
+    return out
+
+
 def _get_user_auth_row_by_login(login: str) -> Optional[Dict[str, Any]]:
-    l = (login or "").strip().lower()
-    if not l:
-        return None
-    with engine.connect() as conn:
-        row = conn.execute(
-            text(
-                """
-                SELECT user_id, role_id, unit_id, is_active, login, password_hash
-                FROM public.users
-                WHERE lower(login) = :login
-                LIMIT 1
-                """
-            ),
-            {"login": l},
-        ).fetchone()
+    row = fetch_user_auth_policy_row_by_login(login)
     if not row:
         return None
     return {
-        "user_id": int(row[0]),
-        "role_id": int(row[1]) if row[1] is not None else None,
-        "unit_id": int(row[2]) if row[2] is not None else None,
-        "is_active": bool(row[3]),
-        "login": str(row[4]) if row[4] is not None else None,
-        "password_hash": str(row[5]) if row[5] is not None else "",
+        "user_id": int(row["user_id"]),
+        "role_id": int(row["role_id"]) if row.get("role_id") is not None else None,
+        "unit_id": int(row["unit_id"]) if row.get("unit_id") is not None else None,
+        "is_active": bool(row.get("is_active")),
+        "login": str(row["login"]) if row.get("login") is not None else None,
+        "password_hash": str(row.get("password_hash") or ""),
+        "locked_at": row.get("locked_at"),
+        "locked_until": row.get("locked_until"),
+        "locked_reason": row.get("locked_reason"),
+        "failed_login_count": int(row.get("failed_login_count") or 0),
+        "token_version": int(row.get("token_version") or 1),
+        "must_change_password": bool(row.get("must_change_password") or False),
     }
 
 
@@ -272,6 +293,7 @@ def _get_user_auth_row_by_login(login: str) -> Optional[Dict[str, Any]]:
 # Dependencies (for other routers)
 # -----------------------
 def get_current_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials = Security(_bearer),
 ) -> Dict[str, Any]:
     token = (creds.credentials or "").strip()
@@ -294,8 +316,13 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="User not found")
     if not u["is_active"]:
         raise HTTPException(status_code=403, detail="Пользователь неактивен")
+    if is_user_locked(u):
+        raise HTTPException(status_code=403, detail="Account locked.")
 
-    return u
+    validate_token_version_claim(payload, u)
+    require_password_not_expired_or_change_allowed(request, u)
+
+    return _enrich_user_context(u)
 
 
 def get_current_user_id(user: Dict[str, Any] = Depends(get_current_user)) -> int:
@@ -315,24 +342,85 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=8, max_length=200)
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest) -> TokenResponse:
-    u = _get_user_auth_row_by_login(payload.login)
+def login(payload: LoginRequest, request: Request) -> TokenResponse:
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    login_value = (payload.login or "").strip()
+
+    u = _get_user_auth_row_by_login(login_value)
     if not u:
+        record_login_failed(
+            user_id=None,
+            login=login_value,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            failure_reason="unknown_login",
+        )
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     if not u["is_active"]:
+        record_login_failed(
+            user_id=int(u["user_id"]),
+            login=login_value,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            failure_reason="inactive_user",
+        )
         raise HTTPException(status_code=403, detail="Пользователь неактивен")
+
+    if is_user_locked(u):
+        record_login_failed(
+            user_id=int(u["user_id"]),
+            login=login_value,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            failure_reason="account_locked",
+        )
+        raise HTTPException(status_code=403, detail="Account locked.")
 
     ph = (u.get("password_hash") or "").strip()
     if not ph:
+        record_login_failed(
+            user_id=int(u["user_id"]),
+            login=login_value,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            failure_reason="password_not_set",
+        )
         raise HTTPException(status_code=403, detail="Пароль для пользователя не задан")
 
     if not verify_password(payload.password, ph):
+        record_login_failed(
+            user_id=int(u["user_id"]),
+            login=login_value,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            failure_reason="invalid_credentials",
+        )
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
-    token = create_access_token(int(u["user_id"]))
+    record_login_success(
+        user_id=int(u["user_id"]),
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    token = create_access_token(int(u["user_id"]), token_version=int(u.get("token_version") or 1))
     return TokenResponse(access_token=token, token_type="bearer")
+
+
+@router.post("/password-change")
+def password_change(_payload: PasswordChangeRequest) -> Dict[str, Any]:
+    """Stub for future self-service password change (Phase C1/C2)."""
+    raise HTTPException(
+        status_code=501,
+        detail="Password change endpoint is not implemented yet.",
+    )
 
 
 @router.get("/me")

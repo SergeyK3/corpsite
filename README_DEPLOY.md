@@ -72,6 +72,22 @@
 8. В production не отображается debug-интерфейс.
 9. `/directory/personnel` открывается как HTML (Next.js), а API-запросы идут на `/api/directory/...` и возвращают JSON.
 
+### ADR-042 post-deploy smoke (personnel access / sysadmin cabinet)
+
+После деплоя с миграциями ADR-042 (revisions `u3v4w5x6y7z8` … `w5x6y7z8a9b0`):
+
+1. **Миграции:** `alembic upgrade head` → `alembic current` и `alembic heads` должны показать `w5x6y7z8a9b0`.
+2. **Validation SQL:** `psql "$DATABASE_URL" -f docs/adr/ADR-042-phase-b2-validation.sql` — пустые check-queries = OK (drift #10 может требовать reconcile).
+3. **Admin API** (JWT admin, `role_id=2` или privileged):
+   - `GET /api/admin/access/roles` → 200
+   - `GET /api/admin/access/guard-mode` → 200
+   - `GET /api/admin/users` → 200
+   - `GET /api/admin/security-audit` → 200
+4. **UI:** `/admin/system` — 5 вкладок (Пользователи, Доступы, Enrollment, Назначения, Аудит); roles dropdown и target search работают.
+5. **Feature flags** остаются OFF (defaults): `ADR042_ADMIN_GUARD_MODE=legacy`, `ADR042_TOKEN_VERSION_ENFORCEMENT=false`, `ADR042_MUST_CHANGE_PASSWORD_ENFORCEMENT=false`.
+
+Детали: `docs/adr/ADR-042-phase-b2-migration-plan.md`, `docs/adr/ADR-042-phase-c1-sysadmin-ui.md`.
+
 Same-origin routing (mmc.004.kz): см. `docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md`.
 
 Frontend-only deploy (после `git pull` с изменениями UI): см. `docs/deploy/frontend.md`.

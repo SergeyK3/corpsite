@@ -34,6 +34,7 @@ from app.security.directory_scope import is_privileged
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
 from app.services.regular_tasks_public_router import router as regular_tasks_public_router
 from app.api.regular_tasks import router as regular_tasks_router  # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
+from app.api.admin_router import router as admin_router
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -105,6 +106,9 @@ app.include_router(directory_router)
 # Regular tasks
 app.include_router(regular_tasks_public_router)  # /regular-tasks
 app.include_router(regular_tasks_router)         # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
+
+# ADR-042 Phase B4 — sysadmin API (privileged guard, no enforcement)
+app.include_router(admin_router)
 
 # -----------------------
 # Routers (internal)

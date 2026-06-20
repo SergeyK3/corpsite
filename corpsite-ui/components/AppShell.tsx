@@ -6,6 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
+import {
+  canSeeAdminShell,
+  canSeeSysadminCabinetNav,
+  isForbiddenAdminRoute,
+} from "@/lib/adminNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
 
@@ -27,6 +32,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     href: "/admin/regular-tasks/catch-up",
     title: "Догоняющий запуск",
     matchPrefixes: ["/admin/regular-tasks/catch-up"],
+  },
+  {
+    href: "/admin/system",
+    title: "Кабинет системного администратора",
+    matchPrefixes: ["/admin/system"],
   },
   {
     href: "/admin/sync",
@@ -226,15 +236,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return t || "Сотрудник";
   }, [me]);
 
-  const roleId = Number(me?.role_id ?? 0);
-  const isAdmin = roleId === 2;
+  const isAdmin = canSeeAdminShell(me);
+  const showSysadminNav = canSeeSysadminCabinetNav(me);
+
+  const sidebarNavItems = useMemo(() => {
+    return PRIMARY_ADMIN_NAV.filter((item) => {
+      if (item.href === "/admin/system") return showSysadminNav;
+      return isAdmin;
+    });
+  }, [isAdmin, showSysadminNav]);
 
   const forbiddenNonAdminRoute =
-    !loading &&
-    !isAdmin &&
-    (pathname.startsWith("/directory") ||
-      pathname.startsWith("/regular-tasks") ||
-      pathname.startsWith("/admin"));
+    !loading && !!me && isForbiddenAdminRoute(pathname, me);
+
+  const privilegedSysadminOnly =
+    !isAdmin && showSysadminNav && pathname.startsWith("/admin/system");
 
   useEffect(() => {
     if (isLogin || loading) return;
@@ -322,7 +338,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <aside className="space-y-2.5">
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 <div className="space-y-1">
-                  <SidebarNav pathname={pathname} items={PRIMARY_ADMIN_NAV} />
+                  <SidebarNav pathname={pathname} items={sidebarNavItems} />
                   <RareSidebarGroup pathname={pathname} />
                 </div>
               </div>
@@ -332,6 +348,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
             <section className="min-w-0">{children}</section>
           </div>
+        ) : privilegedSysadminOnly ? (
+          <section className="min-w-0">{children}</section>
         ) : (
           <div className="grid grid-cols-1 gap-4">
             <section className="min-w-0">

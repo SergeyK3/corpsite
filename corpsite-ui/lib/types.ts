@@ -12,6 +12,9 @@ export type MeInfo = {
   unit_id?: number;
   telegram_bound?: boolean;
   telegram_username?: string | null;
+  /** From GET /auth/me — backend is_privileged() (role_id=2 or env allowlist). */
+  is_privileged?: boolean;
+  is_system_admin?: boolean;
 };
 
 export type TelegramBindCodeResponse = {
