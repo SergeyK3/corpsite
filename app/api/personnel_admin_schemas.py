@@ -247,6 +247,18 @@ class IdentityReconciliationReportResponse(BaseModel):
     candidates: List[Dict[str, Any]] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
-    warnings: List[str] = Field(default_factory=list)
-    errors: List[str] = Field(default_factory=list)
     validated_at: Optional[str] = None
+
+
+class IdentityReconciliationExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: Optional[int] = Field(default=None, ge=1)
+    person_id: Optional[int] = Field(default=None, ge=1)
+    limit: Optional[int] = Field(default=None, ge=1, le=500)
+
+
+class IdentityReconciliationExecuteResponse(IdentityReconciliationReportResponse):
+    run_id: Optional[int] = None
+    execute_summary: Dict[str, Any] = Field(default_factory=dict)
+    item_results: List[Dict[str, Any]] = Field(default_factory=list)

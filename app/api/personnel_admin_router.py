@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.personnel_admin_schemas import (
     EffectivePersonResponse,
+    IdentityReconciliationExecuteRequest,
+    IdentityReconciliationExecuteResponse,
     IdentityReconciliationPreviewRequest,
     IdentityReconciliationReportResponse,
     LifecycleRunDetail,
@@ -52,6 +54,7 @@ from app.services.hr_review_override_service import (
 from app.services.identity_reconciliation_service import (
     IdentityReconciliationError,
     run_r1a_dry_run,
+    run_r1a_execute,
 )
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
@@ -412,5 +415,28 @@ def admin_preview_identity_reconciliation_r1a_get(
     try:
         with engine.connect() as conn:
             return run_r1a_dry_run(conn, snapshot_id=snapshot_id)
+    except IdentityReconciliationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.post(
+    "/identity/reconciliation/r1a/execute",
+    response_model=IdentityReconciliationExecuteResponse,
+)
+def admin_execute_identity_reconciliation_r1a(
+    body: IdentityReconciliationExecuteRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 B2 — R1a identity materialization execute (admin only; not for production without approval)."""
+    actor_user_id = int(admin["user_id"])
+    try:
+        with engine.connect() as conn:
+            return run_r1a_execute(
+                conn,
+                actor_user_id=actor_user_id,
+                snapshot_id=body.snapshot_id,
+                person_id=body.person_id,
+                limit=body.limit,
+            )
     except IdentityReconciliationError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc

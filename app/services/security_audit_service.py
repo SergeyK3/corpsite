@@ -52,6 +52,7 @@ _ALLOWED_EVENT_TYPES = frozenset(
         "ENROLLMENT_COMPLETED",
         "USER_BLOCKED",
         "USER_UNBLOCKED",
+        "PERSON_IIN_RECONCILED",
     }
 )
 

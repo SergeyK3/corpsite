@@ -1,7 +1,4 @@
-"""ADR-044 B1 — Identity reconciliation dry-run (R1a preview only).
-
-Read-only analysis: no UPDATE persons, no INSERT employee_identities, no execute mode.
-"""
+"""ADR-044 B1/B2 — Identity reconciliation (R1a dry-run and execute)."""
 from __future__ import annotations
 
 import json
@@ -378,7 +375,6 @@ def resolve_iin_for_person(
             "ambiguous": False,
         }
 
-    resolved_values: dict[str, tuple[str, Any]] = {}
     for source, resolver in (
         (SOURCE_P3, lambda: _resolve_p3_canonical_iin(
             conn,
@@ -398,31 +394,15 @@ def resolve_iin_for_person(
         hit = resolver()
         if hit:
             chain.append({"source": source, "iin": hit[0], "raw": hit[1]})
-            resolved_values[source] = hit
+            return {
+                "iin": hit[0],
+                "source": source,
+                "raw_value": hit[1],
+                "chain": chain,
+                "ambiguous": False,
+            }
 
-    if not resolved_values:
-        return {"iin": None, "source": None, "raw_value": None, "chain": chain, "ambiguous": False}
-
-    distinct_iins = {v[0] for v in resolved_values.values()}
-    if len(distinct_iins) > 1:
-        return {
-            "iin": None,
-            "source": None,
-            "raw_value": None,
-            "chain": chain,
-            "ambiguous": True,
-            "conflict_sources": list(resolved_values.keys()),
-        }
-
-    first_source = next(iter(resolved_values))
-    iin, raw = resolved_values[first_source]
-    return {
-        "iin": iin,
-        "source": first_source,
-        "raw_value": raw,
-        "chain": chain,
-        "ambiguous": False,
-    }
+    return {"iin": None, "source": None, "raw_value": None, "chain": chain, "ambiguous": False}
 
 
 def _load_active_ei(conn: Connection, employee_id: int) -> Optional[dict[str, Any]]:
@@ -1083,3 +1063,562 @@ def run_r1a_dry_run_tx(*, snapshot_id: Optional[int] = None) -> dict[str, Any]:
 
     with engine.connect() as conn:
         return run_r1a_dry_run(conn, snapshot_id=snapshot_id)
+
+
+RUN_STATUS_RUNNING = "running"
+RUN_STATUS_COMPLETED = "completed"
+RUN_STATUS_FAILED = "failed"
+
+ITEM_STATUS_PLANNED = "planned"
+ITEM_STATUS_APPLIED = "applied"
+ITEM_STATUS_SKIPPED = "skipped"
+ITEM_STATUS_FAILED = "failed"
+
+ACTION_UPDATE_PERSON_IIN = "UPDATE_PERSON_IIN"
+ACTION_INSERT_EMPLOYEE_IDENTITY = "INSERT_EMPLOYEE_IDENTITY"
+ACTION_NOOP = "NOOP"
+ACTION_SKIP = "SKIP"
+
+
+def reconciliation_tables_available(conn: Connection) -> bool:
+    return _table_exists(conn, "identity_reconciliation_runs") and _table_exists(
+        conn, "identity_reconciliation_items"
+    )
+
+
+def _insert_employee_identity_iin(
+    conn: Connection,
+    *,
+    employee_id: int,
+    iin: str,
+    created_by: int,
+) -> Optional[int]:
+    """Insert active IIN row if missing. Returns identity_id or None if already exists."""
+    existing = conn.execute(
+        text(
+            """
+            SELECT identity_id
+            FROM public.employee_identities
+            WHERE employee_id = :employee_id
+              AND identity_type = 'IIN'
+              AND valid_to IS NULL
+            LIMIT 1
+            """
+        ),
+        {"employee_id": int(employee_id)},
+    ).mappings().first()
+    if existing:
+        return None
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.employee_identities (
+                employee_id,
+                identity_type,
+                identity_value,
+                is_primary,
+                created_by
+            )
+            VALUES (:employee_id, 'IIN', :iin, TRUE, :created_by)
+            RETURNING identity_id
+            """
+        ),
+        {"employee_id": int(employee_id), "iin": iin, "created_by": int(created_by)},
+    ).mappings().first()
+    return int(row["identity_id"]) if row else None
+
+
+def _reclassify_person_candidate(
+    conn: Connection,
+    *,
+    person_id: int,
+    snapshot_id: int,
+) -> dict[str, Any]:
+    """Re-scan and classify a single person (race-safe re-validation)."""
+    row = conn.execute(
+        text(
+            """
+            SELECT person_id, full_name, match_key, iin, person_status
+            FROM public.persons
+            WHERE person_id = :person_id
+            """
+        ),
+        {"person_id": int(person_id)},
+    ).mappings().first()
+    if not row:
+        raise IdentityReconciliationError(f"person_id={person_id} not found")
+    person = dict(row)
+    employees = _load_linked_employees(conn, int(person_id))
+    employee_ids = [int(e["employee_id"]) for e in employees]
+    primary_employee_id = employee_ids[0] if employee_ids else None
+    canonical_key, key_warnings = resolve_canonical_person_key(
+        conn,
+        person_id=int(person_id),
+        match_key=str(person.get("match_key") or ""),
+        employee_ids=employee_ids,
+        snapshot_id=int(snapshot_id),
+    )
+    resolved = resolve_iin_for_person(
+        conn,
+        snapshot_id=int(snapshot_id),
+        canonical_person_key=canonical_key,
+        employee_id=primary_employee_id,
+    )
+    active_ei = (
+        _load_active_ei(conn, primary_employee_id) if primary_employee_id is not None else None
+    )
+    classified = classify_candidate(
+        conn,
+        person=person,
+        resolved=resolved,
+        employee_id=primary_employee_id,
+        active_ei=active_ei,
+        canonical_person_key=canonical_key,
+    )
+    if key_warnings:
+        classified["warnings"] = key_warnings
+    return classified
+
+
+def _create_reconciliation_run(
+    conn: Connection,
+    *,
+    actor_user_id: int,
+    snapshot_id: Optional[int],
+    dry_run: bool,
+) -> int:
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.identity_reconciliation_runs (
+                phase, dry_run, actor_user_id, snapshot_id, status
+            )
+            VALUES (:phase, :dry_run, :actor_user_id, :snapshot_id, :status)
+            RETURNING run_id
+            """
+        ),
+        {
+            "phase": PHASE_R1A,
+            "dry_run": dry_run,
+            "actor_user_id": int(actor_user_id),
+            "snapshot_id": snapshot_id,
+            "status": RUN_STATUS_RUNNING,
+        },
+    ).mappings().first()
+    return int(row["run_id"])
+
+
+def _insert_reconciliation_item(
+    conn: Connection,
+    *,
+    run_id: int,
+    person_id: int,
+    employee_id: Optional[int],
+    previous_iin: Optional[str],
+    resolved_iin: Optional[str],
+    source: Optional[str],
+    outcome: str,
+    action: str,
+    status: str,
+    error: Optional[str] = None,
+    rollback_payload: Optional[dict[str, Any]] = None,
+) -> int:
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.identity_reconciliation_items (
+                run_id, person_id, employee_id, previous_iin, resolved_iin,
+                source, outcome, action, status, error, rollback_payload
+            )
+            VALUES (
+                :run_id, :person_id, :employee_id, :previous_iin, :resolved_iin,
+                :source, :outcome, :action, :status, :error, CAST(:rollback_payload AS jsonb)
+            )
+            RETURNING item_id
+            """
+        ),
+        {
+            "run_id": int(run_id),
+            "person_id": int(person_id),
+            "employee_id": employee_id,
+            "previous_iin": previous_iin,
+            "resolved_iin": resolved_iin,
+            "source": source,
+            "outcome": outcome,
+            "action": action,
+            "status": status,
+            "error": error,
+            "rollback_payload": json.dumps(rollback_payload or {}),
+        },
+    ).mappings().first()
+    return int(row["item_id"])
+
+
+def _finalize_reconciliation_run(
+    conn: Connection,
+    *,
+    run_id: int,
+    status: str,
+    summary: dict[str, Any],
+) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE public.identity_reconciliation_runs
+            SET status = :status,
+                finished_at = now(),
+                summary = CAST(:summary AS jsonb)
+            WHERE run_id = :run_id
+            """
+        ),
+        {
+            "run_id": int(run_id),
+            "status": status,
+            "summary": json.dumps(summary),
+        },
+    )
+
+
+def apply_candidate(
+    conn: Connection,
+    *,
+    candidate: dict[str, Any],
+    snapshot_id: int,
+    actor_user_id: int,
+    run_id: int,
+) -> dict[str, Any]:
+    """Apply R1a materialization for one person within the caller transaction."""
+    from app.services.security_audit_service import write_security_event
+
+    person_id = int(candidate["person_id"])
+    match_key_before = str(candidate.get("match_key") or "")
+
+    locked = conn.execute(
+        text(
+            """
+            SELECT person_id, full_name, match_key, iin, person_status
+            FROM public.persons
+            WHERE person_id = :person_id
+              AND iin IS NULL
+            FOR UPDATE
+            """
+        ),
+        {"person_id": person_id},
+    ).mappings().first()
+
+    if not locked:
+        fresh = conn.execute(
+            text(
+                """
+                SELECT person_id, match_key, iin
+                FROM public.persons
+                WHERE person_id = :person_id
+                """
+            ),
+            {"person_id": person_id},
+        ).mappings().first()
+        outcome = OUTCOME_SKIP_ALREADY_FILLED
+        if fresh and normalize_iin(fresh.get("iin")) is None:
+            outcome = OUTCOME_SKIP_INCOMPLETE
+        _insert_reconciliation_item(
+            conn,
+            run_id=run_id,
+            person_id=person_id,
+            employee_id=candidate.get("employee_id"),
+            previous_iin=normalize_iin(fresh.get("iin")) if fresh else None,
+            resolved_iin=candidate.get("resolved_iin"),
+            source=candidate.get("source"),
+            outcome=outcome,
+            action=ACTION_SKIP,
+            status=ITEM_STATUS_SKIPPED,
+            error="person iin already set or row missing",
+            rollback_payload={"person_id": person_id, "match_key": match_key_before},
+        )
+        return {
+            "person_id": person_id,
+            "outcome": outcome,
+            "status": ITEM_STATUS_SKIPPED,
+            "person_updated": False,
+            "ei_inserted": False,
+        }
+
+    previous_iin = normalize_iin(locked.get("iin"))
+    match_key_before = str(locked.get("match_key") or match_key_before)
+
+    classified = _reclassify_person_candidate(
+        conn, person_id=person_id, snapshot_id=int(snapshot_id)
+    )
+    if classified.get("outcome") != OUTCOME_APPLY:
+        _insert_reconciliation_item(
+            conn,
+            run_id=run_id,
+            person_id=person_id,
+            employee_id=classified.get("employee_id"),
+            previous_iin=previous_iin,
+            resolved_iin=classified.get("resolved_iin"),
+            source=classified.get("source"),
+            outcome=str(classified.get("outcome") or ACTION_SKIP),
+            action=ACTION_SKIP,
+            status=ITEM_STATUS_SKIPPED,
+            error=classified.get("message"),
+            rollback_payload={
+                "person_id": person_id,
+                "match_key": match_key_before,
+                "previous_iin": previous_iin,
+            },
+        )
+        return {
+            "person_id": person_id,
+            "outcome": classified.get("outcome"),
+            "status": ITEM_STATUS_SKIPPED,
+            "person_updated": False,
+            "ei_inserted": False,
+        }
+
+    resolved_iin = str(classified["resolved_iin"])
+    employee_id = classified.get("employee_id")
+    source = classified.get("source")
+    would_insert_ei = bool(classified.get("would_insert_employee_identity"))
+
+    conn.execute(
+        text(
+            """
+            UPDATE public.persons
+            SET iin = :iin, updated_at = now()
+            WHERE person_id = :person_id
+              AND iin IS NULL
+            """
+        ),
+        {"person_id": person_id, "iin": resolved_iin},
+    )
+
+    after_row = conn.execute(
+        text(
+            """
+            SELECT match_key, iin
+            FROM public.persons
+            WHERE person_id = :person_id
+            """
+        ),
+        {"person_id": person_id},
+    ).mappings().first()
+    match_key_after = str(after_row["match_key"] or "") if after_row else match_key_before
+    if match_key_after != match_key_before:
+        raise IdentityReconciliationError(
+            f"match_key drift detected for person_id={person_id}: "
+            f"{match_key_before!r} -> {match_key_after!r}"
+        )
+
+    ei_identity_id: Optional[int] = None
+    ei_inserted = False
+    if would_insert_ei and employee_id is not None:
+        ei_identity_id = _insert_employee_identity_iin(
+            conn,
+            employee_id=int(employee_id),
+            iin=resolved_iin,
+            created_by=int(actor_user_id),
+        )
+        ei_inserted = ei_identity_id is not None
+
+    rollback_payload: dict[str, Any] = {
+        "person_id": person_id,
+        "match_key": match_key_before,
+        "previous_iin": previous_iin,
+        "resolved_iin": resolved_iin,
+        "employee_id": employee_id,
+        "person_updated": True,
+        "ei_inserted": ei_inserted,
+    }
+    if ei_identity_id is not None:
+        rollback_payload["ei_identity_id"] = ei_identity_id
+
+    action = ACTION_UPDATE_PERSON_IIN
+
+    item_id = _insert_reconciliation_item(
+        conn,
+        run_id=run_id,
+        person_id=person_id,
+        employee_id=int(employee_id) if employee_id is not None else None,
+        previous_iin=previous_iin,
+        resolved_iin=resolved_iin,
+        source=source,
+        outcome=OUTCOME_APPLY,
+        action=action,
+        status=ITEM_STATUS_APPLIED,
+        rollback_payload=rollback_payload,
+    )
+
+    write_security_event(
+        event_type="PERSON_IIN_RECONCILED",
+        actor_user_id=int(actor_user_id),
+        target_person_id=person_id,
+        target_employee_id=int(employee_id) if employee_id is not None else None,
+        metadata={
+            "run_id": run_id,
+            "item_id": item_id,
+            "previous_iin": previous_iin,
+            "resolved_iin": resolved_iin,
+            "source": source,
+            "match_key": match_key_before,
+            "ei_inserted": ei_inserted,
+            "phase": PHASE_R1A,
+        },
+        conn=conn,
+    )
+
+    return {
+        "person_id": person_id,
+        "outcome": OUTCOME_APPLY,
+        "status": ITEM_STATUS_APPLIED,
+        "person_updated": True,
+        "ei_inserted": ei_inserted,
+        "resolved_iin": resolved_iin,
+        "item_id": item_id,
+        "match_key": match_key_after,
+    }
+
+
+def run_r1a_execute(
+    conn: Connection,
+    *,
+    actor_user_id: int,
+    snapshot_id: Optional[int] = None,
+    person_id: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> dict[str, Any]:
+    """Execute R1a identity materialization for APPLY candidates."""
+    from app.db.engine import engine
+
+    preview = build_reconciliation_report(conn, snapshot_id=snapshot_id)
+    if not preview.get("execute_allowed"):
+        raise IdentityReconciliationError(
+            "execute blocked by validation gates: "
+            + ", ".join(
+                g["gate_id"]
+                for g in preview.get("gates", [])
+                if g.get("blocks_execute") and g.get("count", 0) > 0
+            )
+            or "blocking condition"
+        )
+
+    sid = int(preview["snapshot_id"])
+    if not reconciliation_tables_available(conn):
+        raise IdentityReconciliationError(
+            "identity_reconciliation tables missing — run alembic upgrade head"
+        )
+
+    apply_candidates = list(preview.get("apply_preview") or [])
+    if person_id is not None:
+        apply_candidates = [c for c in apply_candidates if int(c["person_id"]) == int(person_id)]
+    if limit is not None:
+        apply_candidates = apply_candidates[: max(0, int(limit))]
+
+    with engine.begin() as run_conn:
+        run_id = _create_reconciliation_run(
+            run_conn,
+            actor_user_id=int(actor_user_id),
+            snapshot_id=sid,
+            dry_run=False,
+        )
+
+    item_results: list[dict[str, Any]] = []
+    applied = 0
+    skipped = 0
+    failed = 0
+    ei_inserted = 0
+
+    for candidate in apply_candidates:
+        try:
+            with engine.begin() as person_conn:
+                result = apply_candidate(
+                    person_conn,
+                    candidate=candidate,
+                    snapshot_id=sid,
+                    actor_user_id=int(actor_user_id),
+                    run_id=run_id,
+                )
+            item_results.append(result)
+            if result.get("status") == ITEM_STATUS_APPLIED:
+                applied += 1
+                if result.get("ei_inserted"):
+                    ei_inserted += 1
+            else:
+                skipped += 1
+        except Exception as exc:
+            failed += 1
+            err_msg = str(exc)
+            try:
+                with engine.begin() as err_conn:
+                    _insert_reconciliation_item(
+                        err_conn,
+                        run_id=run_id,
+                        person_id=int(candidate["person_id"]),
+                        employee_id=candidate.get("employee_id"),
+                        previous_iin=None,
+                        resolved_iin=candidate.get("resolved_iin"),
+                        source=candidate.get("source"),
+                        outcome=OUTCOME_APPLY,
+                        action=ACTION_SKIP,
+                        status=ITEM_STATUS_FAILED,
+                        error=err_msg,
+                        rollback_payload={
+                            "person_id": int(candidate["person_id"]),
+                            "match_key": candidate.get("match_key"),
+                        },
+                    )
+            except Exception:
+                pass
+            item_results.append(
+                {
+                    "person_id": int(candidate["person_id"]),
+                    "status": ITEM_STATUS_FAILED,
+                    "error": err_msg,
+                }
+            )
+
+    execute_summary = {
+        "candidates_selected": len(apply_candidates),
+        "applied": applied,
+        "skipped": skipped,
+        "failed": failed,
+        "ei_inserted": ei_inserted,
+        "preview_apply_count": preview.get("summary", {}).get("apply_count", 0),
+    }
+
+    run_status = RUN_STATUS_FAILED if failed and not applied else RUN_STATUS_COMPLETED
+    with engine.begin() as final_conn:
+        _finalize_reconciliation_run(
+            final_conn,
+            run_id=run_id,
+            status=run_status,
+            summary=execute_summary,
+        )
+
+    post_preview = build_reconciliation_report(conn, snapshot_id=sid)
+    return {
+        **post_preview,
+        "dry_run": False,
+        "run_id": run_id,
+        "execute_summary": execute_summary,
+        "item_results": item_results,
+    }
+
+
+def run_r1a_execute_tx(
+    *,
+    actor_user_id: int,
+    snapshot_id: Optional[int] = None,
+    person_id: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> dict[str, Any]:
+    """Convenience wrapper using engine connection."""
+    from app.db.engine import engine
+
+    with engine.connect() as conn:
+        return run_r1a_execute(
+            conn,
+            actor_user_id=actor_user_id,
+            snapshot_id=snapshot_id,
+            person_id=person_id,
+            limit=limit,
+        )
