@@ -165,7 +165,7 @@ export type ValidationResponse = {
 };
 
 export function mapPersonnelLifecycleApiError(err: unknown, fallback: string): string {
-  return formatThrownError(err, fallback);
+  return formatThrownError(err, { fallback });
 }
 
 export async function fetchLifecycleRuns(params?: {
