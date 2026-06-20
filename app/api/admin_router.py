@@ -16,6 +16,8 @@ from app.api.admin_schemas import (
     EffectiveAccessResponse,
     EnrollmentDecisionRequest,
     EnrollmentDetectRequest,
+    BulkEnrollmentRequest,
+    BulkReconcileRequest,
     EnrollmentQueueItemResponse,
     GuardModeResponse,
     SecurityAuditEventResponse,
@@ -33,13 +35,16 @@ from app.services.admin_users_service import (
 from app.services.assignment_reconciliation_service import (
     list_assignment_drift,
     reconcile_employee_primary_assignment,
+    reconcile_employees_bulk,
 )
-from app.services.enrollment_detector_service import detect_enrollment_candidates
+from app.services.enrollment_detector_service import detect_enrollment_candidates, explain_candidate
 from app.services.enrollment_service import (
     apply_enrollment,
     approve_enrollment,
+    approve_enrollment_bulk,
     list_enrollment_queue,
     reject_enrollment,
+    reject_enrollment_bulk,
 )
 from app.services.admin_reference_service import (
     get_guard_mode_info,
@@ -237,6 +242,41 @@ def admin_apply_enrollment(
         raise _value_error_to_http(exc) from exc
 
 
+@router.post("/enrollment/approve/bulk")
+def admin_approve_enrollment_bulk(
+    body: BulkEnrollmentRequest,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    return approve_enrollment_bulk(
+        queue_ids=body.queue_ids,
+        actor_user_id=int(admin["user_id"]),
+        comment=body.comment,
+    )
+
+
+@router.post("/enrollment/reject/bulk")
+def admin_reject_enrollment_bulk(
+    body: BulkEnrollmentRequest,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    return reject_enrollment_bulk(
+        queue_ids=body.queue_ids,
+        actor_user_id=int(admin["user_id"]),
+        comment=body.comment,
+    )
+
+
+@router.get("/enrollment/queue/{queue_id}/explain")
+def admin_explain_enrollment_queue_item(
+    queue_id: int,
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    try:
+        return explain_candidate(queue_id=int(queue_id))
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
+
+
 @router.get("/assignments/drift", response_model=AssignmentDriftResponse)
 def admin_list_assignment_drift(
     limit: int = Query(default=100, ge=1, le=2000),
@@ -244,6 +284,23 @@ def admin_list_assignment_drift(
     _admin: Dict[str, Any] = Depends(require_sysadmin_api),
 ) -> Dict[str, Any]:
     return list_assignment_drift(limit=limit, offset=offset)
+
+
+@router.post("/assignments/reconcile/bulk")
+def admin_reconcile_assignments_bulk(
+    body: BulkReconcileRequest,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    try:
+        return reconcile_employees_bulk(
+            employee_ids=body.employee_ids if not body.all_drift else None,
+            all_drift=body.all_drift,
+            dry_run=body.dry_run,
+            actor_user_id=int(admin["user_id"]),
+            limit=body.limit,
+        )
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
 
 
 @router.post("/assignments/reconcile/{employee_id}")

@@ -5,6 +5,7 @@ type ConfirmDialogProps = {
   open: boolean;
   title: string;
   message: string;
+  details?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
@@ -15,6 +16,7 @@ export default function ConfirmDialog({
   open,
   title,
   message,
+  details,
   confirmLabel = "Подтвердить",
   cancelLabel = "Отмена",
   onConfirm,
@@ -33,6 +35,7 @@ export default function ConfirmDialog({
           {title}
         </h3>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
+        {details ? <div className="mt-3 text-sm">{details}</div> : null}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"

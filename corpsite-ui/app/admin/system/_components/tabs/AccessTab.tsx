@@ -18,7 +18,7 @@ import {
   type EffectiveAccess,
   type GuardModeInfo,
 } from "../../_lib/adminSystemApi.client";
-import { ENFORCEMENT_NOTICE } from "../../_lib/adminSystemLabels";
+import { ENFORCEMENT_NOTICE, GRANT_SAFETY_WARNINGS, buildEffectiveAccessSummary } from "../../_lib/adminSystemLabels";
 import ErrorBanner, { InfoBanner, SuccessBanner } from "../shared/ErrorBanner";
 import TargetSearchField from "../shared/TargetSearchField";
 
@@ -172,12 +172,45 @@ export default function AccessTab() {
         </div>
         {effective && effectiveOpen ? (
           <div className="mt-3 rounded border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-            <div>
+            <h4 className="font-medium">Effective Access Resolution</h4>
+            <div className="mt-2">
               <strong>{effective.effective_role_code}</strong> ({effective.access_level}, rank{" "}
               {effective.level_rank})
             </div>
-            <details className="mt-2">
-              <summary className="cursor-pointer font-medium">Explanation / matched_grants</summary>
+
+            {(() => {
+              const { sources, resultLabel } = buildEffectiveAccessSummary(effective);
+              return (
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    Источник grants:
+                  </div>
+                  {sources.length ? (
+                    <ul className="space-y-1 text-sm">
+                      {sources.map((src) => (
+                        <li key={src.grant_id}>
+                          <span className="font-medium">{src.access_level}</span>
+                          <span className="text-zinc-500"> ← </span>
+                          <span>{src.source_type}</span>
+                          <span className="text-xs text-zinc-500">
+                            {" "}
+                            ({src.access_role_code}, grant #{src.grant_id})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-zinc-500">Нет matching grants → implicit NONE</p>
+                  )}
+                  <div className="rounded border border-zinc-200 bg-white p-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
+                    <span className="font-medium">Результат:</span> {resultLabel}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <details className="mt-3">
+              <summary className="cursor-pointer font-medium text-xs">Raw explanation</summary>
               <pre className="mt-2 max-h-64 overflow-auto text-xs">
                 {JSON.stringify(
                   {
@@ -218,9 +251,9 @@ export default function AccessTab() {
             </select>
           </label>
 
-          {selectedRole?.access_level === "NONE" || selectedRole?.code === "ACCESS_NONE" ? (
+          {selectedRole?.code && GRANT_SAFETY_WARNINGS[selectedRole.code] ? (
             <p className="text-sm text-amber-700 sm:col-span-2 dark:text-amber-300">
-              Grant ACCESS_NONE / NONE: пока не блокирует доступ, если enforcement выключен.
+              {GRANT_SAFETY_WARNINGS[selectedRole.code]}
             </p>
           ) : null}
 

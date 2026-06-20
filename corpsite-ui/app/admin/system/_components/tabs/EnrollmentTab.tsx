@@ -1,15 +1,19 @@
 // FILE: corpsite-ui/app/admin/system/_components/tabs/EnrollmentTab.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   applyEnrollmentQueueItem,
+  approveEnrollmentBulk,
   approveEnrollmentQueueItem,
   detectEnrollment,
+  fetchEnrollmentExplain,
   fetchEnrollmentQueue,
   mapAdminSystemApiError,
+  rejectEnrollmentBulk,
   rejectEnrollmentQueueItem,
+  type EnrollmentExplain,
   type EnrollmentQueueItem,
 } from "../../_lib/adminSystemApi.client";
 import { ENROLLMENT_APPLY_NOTICE, formatDateTime } from "../../_lib/adminSystemLabels";
@@ -25,8 +29,11 @@ export default function EnrollmentTab() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selected, setSelected] = useState<EnrollmentQueueItem | null>(null);
+  const [explain, setExplain] = useState<EnrollmentExplain | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [comment, setComment] = useState("");
   const [detectDryRun, setDetectDryRun] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,6 +45,7 @@ export default function EnrollmentTab() {
       });
       setItems(res.items);
       setTotal(res.total);
+      setSelectedIds(new Set());
     } catch (err) {
       setError(mapAdminSystemApiError(err, "Не удалось загрузить очередь"));
     } finally {
@@ -48,6 +56,38 @@ export default function EnrollmentTab() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const pageIds = useMemo(() => items.map((item) => item.queue_id), [items]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+
+  async function loadExplain(queueId: number): Promise<void> {
+    try {
+      const data = await fetchEnrollmentExplain(queueId);
+      setExplain(data);
+    } catch (err) {
+      setError(mapAdminSystemApiError(err, "Не удалось загрузить explain"));
+    }
+  }
+
+  async function handleSelectRow(item: EnrollmentQueueItem): Promise<void> {
+    setSelected(item);
+    setExplain(null);
+    await loadExplain(item.queue_id);
+  }
+
+  function toggleRow(queueId: number): void {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(queueId)) next.delete(queueId);
+      else next.add(queueId);
+      return next;
+    });
+  }
+
+  function toggleAllPage(): void {
+    if (allPageSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(pageIds));
+  }
 
   async function handleDetect(): Promise<void> {
     setError(null);
@@ -102,6 +142,44 @@ export default function EnrollmentTab() {
     }
   }
 
+  async function handleBulkApprove(): Promise<void> {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) {
+      setError("Выберите элементы очереди");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await approveEnrollmentBulk(ids, comment || undefined);
+      setSuccess(`Approved: ${res.succeeded}, failed: ${res.failed}`);
+      await load();
+    } catch (err) {
+      setError(mapAdminSystemApiError(err, "Bulk approve failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleBulkReject(): Promise<void> {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) {
+      setError("Выберите элементы очереди");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await rejectEnrollmentBulk(ids, comment || undefined);
+      setSuccess(`Rejected: ${res.succeeded}, failed: ${res.failed}`);
+      await load();
+    } catch (err) {
+      setError(mapAdminSystemApiError(err, "Bulk reject failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <InfoBanner message={ENROLLMENT_APPLY_NOTICE} />
@@ -138,6 +216,22 @@ export default function EnrollmentTab() {
         >
           Найти кандидатов
         </button>
+        <button
+          type="button"
+          disabled={busy || selectedIds.size === 0}
+          onClick={() => void handleBulkApprove()}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+        >
+          Approve Selected ({selectedIds.size})
+        </button>
+        <button
+          type="button"
+          disabled={busy || selectedIds.size === 0}
+          onClick={() => void handleBulkReject()}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+        >
+          Reject Selected
+        </button>
         <button type="button" onClick={() => void load()} className="rounded-lg border px-3 py-2 text-sm">
           Обновить
         </button>
@@ -145,7 +239,7 @@ export default function EnrollmentTab() {
 
       <p className="text-sm text-zinc-600">В очереди: {total}</p>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
           {loading ? (
             <p className="p-4 text-sm">Загрузка…</p>
@@ -153,6 +247,14 @@ export default function EnrollmentTab() {
             <table className="min-w-full text-sm">
               <thead className="bg-zinc-50 dark:bg-zinc-900">
                 <tr>
+                  <th className="px-3 py-2 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleAllPage}
+                      aria-label="Выбрать все"
+                    />
+                  </th>
                   <th className="px-3 py-2 text-left">ID</th>
                   <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-left">Reason</th>
@@ -164,11 +266,19 @@ export default function EnrollmentTab() {
                 {items.map((item) => (
                   <tr
                     key={item.queue_id}
-                    onClick={() => setSelected(item)}
+                    onClick={() => void handleSelectRow(item)}
                     className={`cursor-pointer border-t dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
                       selected?.queue_id === item.queue_id ? "bg-blue-50 dark:bg-blue-950/30" : ""
                     }`}
                   >
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.queue_id)}
+                        onChange={() => toggleRow(item.queue_id)}
+                        aria-label={`Выбрать queue ${item.queue_id}`}
+                      />
+                    </td>
                     <td className="px-3 py-2">{item.queue_id}</td>
                     <td className="px-3 py-2">{item.queue_status}</td>
                     <td className="px-3 py-2">{item.reason}</td>
@@ -186,10 +296,54 @@ export default function EnrollmentTab() {
         <aside className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
           <h3 className="font-medium">Карточка кандидата</h3>
           {selected ? (
-            <div className="mt-2 space-y-2 text-sm">
+            <div className="mt-2 space-y-3 text-sm">
               <div>Queue #{selected.queue_id}</div>
               <div>Status: {selected.queue_status}</div>
               <div>Reason: {selected.reason}</div>
+
+              {explain?.explanation ? (
+                <div className="rounded border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+                  <div className="font-medium">Explain panel</div>
+                  <div className="mt-2">
+                    <span className="font-medium">Причина:</span>{" "}
+                    {explain.explanation.reason_label ?? selected.reason}
+                  </div>
+                  {explain.explanation.source?.change_event_id ? (
+                    <div className="mt-1">
+                      <span className="font-medium">Источник:</span> hr_change_event #
+                      {explain.explanation.source.change_event_id}
+                      {explain.explanation.source.change_event_type
+                        ? ` (${explain.explanation.source.change_event_type})`
+                        : ""}
+                    </div>
+                  ) : null}
+                  {explain.explanation.person ? (
+                    <div className="mt-2">
+                      <div className="font-medium">Person</div>
+                      <div>ФИО: {explain.explanation.person.full_name ?? "—"}</div>
+                      <div>ИИН: {explain.explanation.person.iin ?? "—"}</div>
+                    </div>
+                  ) : null}
+                  {explain.explanation.assignment ? (
+                    <div className="mt-2">
+                      <div className="font-medium">Назначение</div>
+                      <div>
+                        Подразделение:{" "}
+                        {explain.explanation.assignment.org_unit_name ??
+                          explain.explanation.assignment.org_unit_id ??
+                          "—"}
+                      </div>
+                      <div>
+                        Должность:{" "}
+                        {explain.explanation.assignment.position_name ??
+                          explain.explanation.assignment.position_id ??
+                          "—"}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="text-xs text-zinc-500 break-all">{selected.idempotency_key}</div>
               {selected.decision_comment ? (
                 <div className="text-xs">Comment: {selected.decision_comment}</div>

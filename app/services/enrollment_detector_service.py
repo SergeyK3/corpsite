@@ -145,10 +145,24 @@ def explain_candidate(*, queue_id: int) -> Dict[str, Any]:
                     q.*,
                     ce.event_type AS change_event_type,
                     ce.match_key,
-                    ce.full_name AS change_full_name
+                    ce.full_name AS change_full_name,
+                    p.full_name AS person_full_name,
+                    p.iin AS person_iin,
+                    pa.org_unit_id,
+                    pa.position_id,
+                    ou.name AS org_unit_name,
+                    pos.name AS position_name
                 FROM public.enrollment_queue q
                 LEFT JOIN public.hr_change_events ce
                   ON ce.change_event_id = q.change_event_id
+                LEFT JOIN public.persons p
+                  ON p.person_id = q.person_id
+                LEFT JOIN public.person_assignments pa
+                  ON pa.assignment_id = q.assignment_id
+                LEFT JOIN public.org_units ou
+                  ON ou.unit_id = pa.org_unit_id
+                LEFT JOIN public.positions pos
+                  ON pos.position_id = pa.position_id
                 WHERE q.queue_id = :queue_id
                 LIMIT 1
                 """
@@ -159,22 +173,57 @@ def explain_candidate(*, queue_id: int) -> Dict[str, Any]:
             raise ValueError(f"Queue item not found: {queue_id}")
 
         item = dict(row)
+        reason_code = str(item.get("reason") or "")
+        reason_labels = {
+            "NEW_PERSON": "Новый person",
+            "NEW_ASSIGNMENT": "Новое назначение",
+            "CHANGED_ASSIGNMENT": "Изменение назначения",
+            "REMOVED_ASSIGNMENT": "Удаление назначения",
+            "RE_ENROLLMENT": "Повторное enrollment",
+            "HR_CHANGE": "Событие HR change",
+        }
         steps = [
             f"Queue #{item['queue_id']} status={item['queue_status']} reason={item['reason']}",
+            f"Причина: {reason_labels.get(reason_code, reason_code or '—')}",
             f"Idempotency key: {item['idempotency_key']}",
         ]
         if item.get("change_event_id"):
             steps.append(
-                f"Source hr_change_event #{item['change_event_id']} "
+                f"Источник: hr_change_event #{item['change_event_id']} "
                 f"type={item.get('change_event_type')}"
             )
         if item.get("person_id"):
-            steps.append(f"Person target: {item['person_id']}")
+            steps.append(f"Person #{item['person_id']}: {item.get('person_full_name') or '—'}")
+        if item.get("person_iin"):
+            steps.append(f"IIN: {item['person_iin']}")
         if item.get("assignment_id"):
-            steps.append(f"Assignment target: {item['assignment_id']}")
-        steps.append("Auto employee creation: disabled (Phase B3).")
+            org = item.get("org_unit_name") or item.get("org_unit_id") or "—"
+            pos = item.get("position_name") or item.get("position_id") or "—"
+            steps.append(
+                f"Assignment #{item['assignment_id']}: подразделение={org}, должность={pos}"
+            )
+        steps.append("Auto employee creation: disabled until apply.")
 
-        item["explanation"] = {"steps": steps}
+        item["explanation"] = {
+            "steps": steps,
+            "reason_label": reason_labels.get(reason_code, reason_code),
+            "person": {
+                "person_id": item.get("person_id"),
+                "full_name": item.get("person_full_name"),
+                "iin": item.get("person_iin"),
+            },
+            "assignment": {
+                "assignment_id": item.get("assignment_id"),
+                "org_unit_id": item.get("org_unit_id"),
+                "org_unit_name": item.get("org_unit_name"),
+                "position_id": item.get("position_id"),
+                "position_name": item.get("position_name"),
+            },
+            "source": {
+                "change_event_id": item.get("change_event_id"),
+                "change_event_type": item.get("change_event_type"),
+            },
+        }
         return item
 
 

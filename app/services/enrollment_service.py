@@ -299,6 +299,62 @@ def reject_enrollment(
     return {**item_out, "audit_id": audit_id}
 
 
+def approve_enrollment_bulk(
+    *,
+    queue_ids: List[int],
+    actor_user_id: int,
+    comment: Optional[str] = None,
+) -> Dict[str, Any]:
+    results: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    for queue_id in queue_ids:
+        try:
+            results.append(
+                approve_enrollment(
+                    queue_id=int(queue_id),
+                    actor_user_id=int(actor_user_id),
+                    comment=comment,
+                )
+            )
+        except ValueError as exc:
+            errors.append({"queue_id": int(queue_id), "error": str(exc)})
+    return {
+        "processed": len(queue_ids),
+        "succeeded": len(results),
+        "failed": len(errors),
+        "items": results,
+        "errors": errors,
+    }
+
+
+def reject_enrollment_bulk(
+    *,
+    queue_ids: List[int],
+    actor_user_id: int,
+    comment: Optional[str] = None,
+) -> Dict[str, Any]:
+    results: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    for queue_id in queue_ids:
+        try:
+            results.append(
+                reject_enrollment(
+                    queue_id=int(queue_id),
+                    actor_user_id=int(actor_user_id),
+                    comment=comment,
+                )
+            )
+        except ValueError as exc:
+            errors.append({"queue_id": int(queue_id), "error": str(exc)})
+    return {
+        "processed": len(queue_ids),
+        "succeeded": len(results),
+        "failed": len(errors),
+        "items": results,
+        "errors": errors,
+    }
+
+
 def _resolve_assignment_context(
     conn: Connection,
     *,

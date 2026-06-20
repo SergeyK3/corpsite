@@ -20,6 +20,30 @@ PERMISSION_CODES: FrozenSet[str] = frozenset(
 
 ADMIN_API_PERMISSIONS: FrozenSet[str] = frozenset({"SYSADMIN_CABINET", "ACCESS_ADMIN"})
 
+PERSONNEL_READ_PERMISSIONS: FrozenSet[str] = frozenset(
+    {"SYSADMIN_CABINET", "ACCESS_ADMIN", "HR_ENROLLMENT_MANAGER"}
+)
+
+HR_GOVERNANCE_PERMISSIONS: FrozenSet[str] = frozenset(
+    {"SYSADMIN_CABINET", "ACCESS_ADMIN", "HR_ENROLLMENT_MANAGER"}
+)
+
+
+def has_any_personnel_read_permission(user_id: int) -> bool:
+    try:
+        active_codes = set(list_active_access_role_codes(int(user_id)))
+    except ValueError:
+        return False
+    return bool(active_codes.intersection(PERSONNEL_READ_PERMISSIONS))
+
+
+def has_hr_governance_permission(user_id: int) -> bool:
+    try:
+        active_codes = set(list_active_access_role_codes(int(user_id)))
+    except ValueError:
+        return False
+    return bool(active_codes.intersection(HR_GOVERNANCE_PERMISSIONS))
+
 
 def has_admin_permission(user_id: int, permission_code: str) -> bool:
     code = (permission_code or "").strip().upper()

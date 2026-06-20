@@ -254,6 +254,10 @@ def reconcile_employee_primary_assignment(
             },
         )
 
+        changed_fields = {
+            field: {"from": diff[field]["employee"], "to": diff[field]["assignment"]}
+            for field in diff
+        }
         write_security_event(
             event_type="ACCESS_CHANGED",
             actor_user_id=actor_user_id,
@@ -261,7 +265,9 @@ def reconcile_employee_primary_assignment(
             metadata={
                 "action": "assignment_reconciled",
                 "employee_id": int(employee_id),
+                "assignment_id": comparison.get("assignment_id"),
                 "diff_fields": list(diff.keys()),
+                "changed_fields": changed_fields,
                 "dry_run": False,
             },
             conn=conn,
@@ -282,25 +288,62 @@ def reconcile_all(
     actor_user_id: Optional[int] = None,
     limit: int = 500,
 ) -> Dict[str, Any]:
-    drift = list_assignment_drift(limit=limit, offset=0)
+    return reconcile_employees_bulk(
+        employee_ids=None,
+        all_drift=True,
+        dry_run=dry_run,
+        actor_user_id=actor_user_id,
+        limit=limit,
+    )
+
+
+def reconcile_employees_bulk(
+    employee_ids: Optional[List[int]] = None,
+    *,
+    all_drift: bool = False,
+    dry_run: bool = True,
+    actor_user_id: Optional[int] = None,
+    limit: int = 500,
+) -> Dict[str, Any]:
+    if all_drift:
+        drift = list_assignment_drift(limit=limit, offset=0)
+        ids = [int(item["employee_id"]) for item in drift["items"]]
+        total_drift = int(drift["total"])
+    else:
+        ids = [int(eid) for eid in (employee_ids or [])]
+        total_drift = len(ids)
+
+    if not ids:
+        return {
+            "dry_run": dry_run,
+            "total_drift": total_drift,
+            "processed": 0,
+            "applied_count": 0,
+            "with_drift": 0,
+            "results": [],
+        }
+
     results: List[Dict[str, Any]] = []
     applied_count = 0
+    with_drift = 0
 
-    for item in drift["items"]:
-        eid = int(item["employee_id"])
+    for eid in ids:
         result = reconcile_employee_primary_assignment(
             eid,
             dry_run=dry_run,
             actor_user_id=actor_user_id,
         )
         results.append(result)
+        if result.get("has_drift"):
+            with_drift += 1
         if result.get("applied"):
             applied_count += 1
 
     return {
         "dry_run": dry_run,
-        "total_drift": drift["total"],
+        "total_drift": total_drift,
         "processed": len(results),
         "applied_count": applied_count,
+        "with_drift": with_drift,
         "results": results,
     }

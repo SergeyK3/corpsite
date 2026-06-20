@@ -138,7 +138,7 @@ def _collect_subject_ids(
 
 def _load_active_grants(conn, subjects: Dict[str, Set[int]]) -> List[Dict[str, Any]]:
     clauses: List[str] = []
-    params: Dict[str, Any] = {"now": _now()}
+    params: Dict[str, Any] = {}
 
     idx = 0
     for target_type, ids in subjects.items():
@@ -175,8 +175,8 @@ def _load_active_grants(conn, subjects: Dict[str, Set[int]]) -> List[Dict[str, A
             FROM public.access_grants g
             JOIN public.access_roles r ON r.access_role_id = g.access_role_id
             WHERE g.active_flag = TRUE
-              AND g.starts_at <= :now
-              AND (g.ends_at IS NULL OR g.ends_at > :now)
+              AND g.starts_at <= now()
+              AND (g.ends_at IS NULL OR g.ends_at > now())
               AND r.is_active = TRUE
               AND ({where_targets})
             ORDER BY r.level_rank DESC, g.grant_id
@@ -331,8 +331,20 @@ def explain_effective_access(
                 f"({g['access_level']}, rank={g['level_rank']}) "
                 f"on {g['target_type']}:{g['target_id']} resource={g['resource_key']}"
             )
+        base["explanation"]["resolution_sources"] = [
+            {
+                "grant_id": int(g["grant_id"]),
+                "access_role_code": g["access_role_code"],
+                "access_level": g["access_level"],
+                "level_rank": int(g["level_rank"]),
+                "source_type": g["target_type"],
+                "target_id": int(g["target_id"]),
+            }
+            for g in matched
+        ]
     else:
         steps.append("No matching allow grants → implicit NONE.")
+        base["explanation"]["resolution_sources"] = []
 
     deny = base.get("deny_grants") or []
     if deny:

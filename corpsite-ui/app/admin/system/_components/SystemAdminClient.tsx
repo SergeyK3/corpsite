@@ -1,6 +1,7 @@
 // FILE: corpsite-ui/app/admin/system/_components/SystemAdminClient.tsx
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import AccessTab from "./tabs/AccessTab";
@@ -37,6 +38,14 @@ export default function SystemAdminClient() {
         <h1 className="text-2xl font-semibold">Кабинет системного администратора</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
           Управление пользователями, доступами, enrollment и аудитом (ADR-042 Phase C1).
+        </p>
+        <p className="mt-2">
+          <Link
+            href="/admin/system/personnel-lifecycle"
+            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+          >
+            Personnel Lifecycle →
+          </Link>
         </p>
       </header>
 

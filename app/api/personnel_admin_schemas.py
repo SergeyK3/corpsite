@@ -1,0 +1,202 @@
+"""ADR-043 Phase C4.1 — Pydantic schemas for personnel lifecycle REST API."""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class LifecycleRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    previous_snapshot_id: int = Field(..., ge=1)
+    snapshot_id: int = Field(..., ge=1)
+    refresh_cache: bool = True
+    enqueue: bool = False
+    sync_persons: bool = False
+
+
+class LifecycleRunSummary(BaseModel):
+    run_id: int
+    previous_snapshot_id: int
+    snapshot_id: int
+    status: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    actor_user_id: Optional[int] = None
+    dry_run: bool
+    refresh_cache: bool
+    enqueue: bool
+    sync_persons: bool
+    effective_entries_processed: int = 0
+    events_created: int = 0
+    events_existing: int = 0
+    enrollment_created: int = 0
+    enrollment_existing: int = 0
+    persons_created: int = 0
+    persons_updated: int = 0
+    assignments_created: int = 0
+    assignments_updated: int = 0
+    assignments_closed: int = 0
+    warnings_count: int = 0
+    errors_count: int = 0
+
+
+class LifecycleRunListResponse(BaseModel):
+    items: List[LifecycleRunSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class LifecycleRunDetail(LifecycleRunSummary):
+    summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LifecycleRunReportResponse(BaseModel):
+    run_id: Optional[int] = None
+    previous_snapshot_id: int
+    snapshot_id: int
+    dry_run: bool
+    refresh_cache: bool
+    enqueue: bool
+    sync_persons: bool
+    run_status: str
+    duration_ms: float = 0.0
+    effective_cache: Dict[str, Any] = Field(default_factory=dict)
+    monthly_diff: Dict[str, Any] = Field(default_factory=dict)
+    personnel_events: Dict[str, Any] = Field(default_factory=dict)
+    enrollment: Dict[str, Any] = Field(default_factory=dict)
+    person_sync: Dict[str, Any] = Field(default_factory=dict)
+    validation: Dict[str, Any] = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PersonnelEventSummary(BaseModel):
+    personnel_event_id: int
+    previous_snapshot_id: int
+    snapshot_id: int
+    person_key: str
+    assignment_key: Optional[str] = None
+    event_type: str
+    status: str
+    field_path: Optional[str] = None
+    person_id: Optional[int] = None
+    assignment_id: Optional[int] = None
+    detected_at: Optional[str] = None
+    resolved_at: Optional[str] = None
+
+
+class PersonnelEventListResponse(BaseModel):
+    items: List[PersonnelEventSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class PersonnelEventDetail(PersonnelEventSummary):
+    source_event_id: Optional[int] = None
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    effective_old_value: Optional[Any] = None
+    effective_new_value: Optional[Any] = None
+    resolved_by_user_id: Optional[int] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OverrideSummary(BaseModel):
+    override_id: int
+    scope_type: str
+    scope_key: str
+    field_path: str
+    status: str
+    tier: int
+    owner_domain: str
+    person_key: Optional[str] = None
+    assignment_key: Optional[str] = None
+    stale_flag: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class OverrideListResponse(BaseModel):
+    items: List[OverrideSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class OverrideDetail(OverrideSummary):
+    person_id: Optional[int] = None
+    assignment_id: Optional[int] = None
+    canonical_value: Optional[Any] = None
+    override_value: Optional[Any] = None
+    justification: Optional[str] = None
+    evidence_url: Optional[str] = None
+    created_by_user_id: Optional[int] = None
+    approved_by_user_id: Optional[int] = None
+    approved_at: Optional[str] = None
+    supersedes_override_id: Optional[int] = None
+    superseded_by_override_id: Optional[int] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OverrideCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope_type: str = Field(..., min_length=1, max_length=32)
+    scope_key: str = Field(..., min_length=1, max_length=500)
+    field_path: str = Field(..., min_length=1, max_length=200)
+    override_value: Any
+    tier: int = Field(..., ge=0, le=2)
+    owner_domain: str = Field(..., min_length=1, max_length=32)
+    canonical_value: Optional[Any] = None
+    justification: Optional[str] = Field(default=None, max_length=4000)
+    evidence_url: Optional[str] = Field(default=None, max_length=2000)
+    person_key: Optional[str] = Field(default=None, max_length=500)
+    assignment_key: Optional[str] = Field(default=None, max_length=500)
+    person_id: Optional[int] = Field(default=None, ge=1)
+    assignment_id: Optional[int] = Field(default=None, ge=1)
+    supersedes_override_id: Optional[int] = Field(default=None, ge=1)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OverrideActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comment: Optional[str] = Field(default=None, max_length=2000)
+    reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+class EffectivePersonResponse(BaseModel):
+    snapshot_id: int
+    entry_id: int
+    person_key: str
+    assignment_key: Optional[str] = None
+    scope_type: str
+    record_kind: str
+    entity_scope: Optional[str] = None
+    canonical_payload: Dict[str, Any] = Field(default_factory=dict)
+    effective_payload: Dict[str, Any] = Field(default_factory=dict)
+    applied_override_ids: List[int] = Field(default_factory=list)
+
+
+class ValidationCheckResponse(BaseModel):
+    code: str
+    severity: str
+    count: int
+    samples: List[Dict[str, Any]] = Field(default_factory=list)
+    snapshots: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ValidationResponse(BaseModel):
+    previous_snapshot_id: int
+    snapshot_id: int
+    checks: List[ValidationCheckResponse]
+    warnings_count: int = 0
+    errors_count: int = 0
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+    validated_at: Optional[str] = None

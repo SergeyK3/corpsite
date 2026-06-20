@@ -10,10 +10,12 @@ import {
 } from "../../_lib/adminSystemApi.client";
 import {
   auditEventClass,
+  formatActorLabel,
+  formatAuditTargets,
   formatDateTime,
-  metadataHasSensitiveKeys,
 } from "../../_lib/adminSystemLabels";
 import ErrorBanner from "../shared/ErrorBanner";
+import AuditMetadataPanel from "../shared/AuditMetadataPanel";
 
 export default function AuditTab() {
   const [items, setItems] = useState<SecurityAuditEvent[]>([]);
@@ -150,7 +152,7 @@ export default function AuditTab() {
             </thead>
             <tbody>
               {items.map((ev) => {
-                const sensitive = metadataHasSensitiveKeys(ev.metadata);
+                const targets = formatAuditTargets(ev);
                 return (
                   <Fragment key={ev.audit_id}>
                     <tr className="border-t dark:border-zinc-800">
@@ -163,10 +165,19 @@ export default function AuditTab() {
                           {ev.event_type}
                         </span>
                       </td>
-                      <td className="px-3 py-2">{ev.actor_user_id ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        {formatActorLabel(ev.actor_user_id, ev.actor_label, ev.actor_login)}
+                      </td>
                       <td className="px-3 py-2 text-xs">
-                        u:{ev.target_user_id ?? "—"} p:{ev.target_person_id ?? "—"} e:
-                        {ev.target_employee_id ?? "—"}
+                        {targets.length ? (
+                          <ul className="space-y-0.5">
+                            {targets.map((line) => (
+                              <li key={line}>{line}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <button
@@ -176,21 +187,14 @@ export default function AuditTab() {
                             setExpanded(expanded === ev.audit_id ? null : ev.audit_id)
                           }
                         >
-                          metadata
+                          {expanded === ev.audit_id ? "Скрыть" : "Детали"}
                         </button>
                       </td>
                     </tr>
                     {expanded === ev.audit_id ? (
                       <tr className="bg-zinc-50 dark:bg-zinc-900">
                         <td colSpan={6} className="px-3 py-2">
-                          {sensitive.length ? (
-                            <p className="mb-2 text-xs font-medium text-red-600">
-                              Warning: sensitive keys in metadata: {sensitive.join(", ")}
-                            </p>
-                          ) : null}
-                          <pre className="max-h-40 overflow-auto text-xs">
-                            {JSON.stringify(ev.metadata ?? {}, null, 2)}
-                          </pre>
+                          <AuditMetadataPanel metadata={ev.metadata} />
                         </td>
                       </tr>
                     ) : null}

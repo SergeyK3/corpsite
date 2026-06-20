@@ -241,22 +241,34 @@ def list_security_events(
             text(
                 f"""
                 SELECT
-                    audit_id,
-                    event_type,
-                    happened_at,
-                    actor_user_id,
-                    target_user_id,
-                    target_person_id,
-                    target_employee_id,
-                    ip_address,
-                    user_agent,
-                    success,
-                    failure_reason,
-                    metadata,
-                    request_id
-                FROM public.security_audit_log
+                    sal.audit_id,
+                    sal.event_type,
+                    sal.happened_at,
+                    sal.actor_user_id,
+                    sal.target_user_id,
+                    sal.target_person_id,
+                    sal.target_employee_id,
+                    sal.ip_address,
+                    sal.user_agent,
+                    sal.success,
+                    sal.failure_reason,
+                    sal.metadata,
+                    sal.request_id,
+                    actor_u.login AS actor_login,
+                    COALESCE(actor_e.full_name, actor_u.login) AS actor_label,
+                    target_u.login AS target_user_login,
+                    COALESCE(target_ue.full_name, target_u.login) AS target_user_label,
+                    target_e.full_name AS target_employee_label,
+                    target_p.full_name AS target_person_label
+                FROM public.security_audit_log sal
+                LEFT JOIN public.users actor_u ON actor_u.user_id = sal.actor_user_id
+                LEFT JOIN public.employees actor_e ON actor_e.employee_id = actor_u.employee_id
+                LEFT JOIN public.users target_u ON target_u.user_id = sal.target_user_id
+                LEFT JOIN public.employees target_ue ON target_ue.employee_id = target_u.employee_id
+                LEFT JOIN public.employees target_e ON target_e.employee_id = sal.target_employee_id
+                LEFT JOIN public.persons target_p ON target_p.person_id = sal.target_person_id
                 WHERE {where_sql}
-                ORDER BY happened_at DESC, audit_id DESC
+                ORDER BY sal.happened_at DESC, sal.audit_id DESC
                 LIMIT :limit OFFSET :offset
                 """
             ),

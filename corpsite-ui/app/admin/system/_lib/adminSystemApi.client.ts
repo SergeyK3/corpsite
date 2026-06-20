@@ -127,6 +127,8 @@ export type ReconcileResult = {
   has_drift?: boolean;
   diff?: Record<string, unknown>;
   would_update?: Record<string, unknown>;
+  previous_diff?: Record<string, { employee?: unknown; assignment?: unknown }>;
+  assignment_id?: number | null;
   reason?: string;
 };
 
@@ -137,9 +139,15 @@ export type SecurityAuditEvent = {
   event_type: string;
   happened_at?: string | null;
   actor_user_id?: number | null;
+  actor_login?: string | null;
+  actor_label?: string | null;
   target_user_id?: number | null;
+  target_user_login?: string | null;
+  target_user_label?: string | null;
   target_person_id?: number | null;
+  target_person_label?: string | null;
   target_employee_id?: number | null;
+  target_employee_label?: string | null;
   success?: boolean;
   failure_reason?: string | null;
   metadata?: Record<string, unknown>;
@@ -161,6 +169,39 @@ export type AccessTargetSearchItem = {
   label?: string | null;
   subtitle?: string | null;
   metadata?: Record<string, unknown>;
+};
+
+export type BulkReconcileResult = {
+  dry_run: boolean;
+  total_drift: number;
+  processed: number;
+  applied_count: number;
+  with_drift: number;
+  results: ReconcileResult[];
+};
+
+export type BulkEnrollmentResult = {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  items: EnrollmentQueueItem[];
+  errors: { queue_id: number; error: string }[];
+};
+
+export type EnrollmentExplain = EnrollmentQueueItem & {
+  explanation?: {
+    steps?: string[];
+    reason_label?: string;
+    person?: { person_id?: number; full_name?: string; iin?: string };
+    assignment?: {
+      assignment_id?: number;
+      org_unit_id?: number;
+      org_unit_name?: string;
+      position_id?: number;
+      position_name?: string;
+    };
+    source?: { change_event_id?: number; change_event_type?: string };
+  };
 };
 
 export type GuardModeInfo = {
@@ -329,6 +370,47 @@ export async function reconcileAssignment(
     method: "POST",
     query: { dry_run: dryRun },
   });
+}
+
+export async function reconcileAssignmentsBulk(params: {
+  employee_ids?: number[];
+  all_drift?: boolean;
+  dry_run?: boolean;
+  limit?: number;
+}): Promise<BulkReconcileResult> {
+  return apiFetchJson<BulkReconcileResult>("/admin/assignments/reconcile/bulk", {
+    method: "POST",
+    body: {
+      employee_ids: params.employee_ids ?? [],
+      all_drift: params.all_drift ?? false,
+      dry_run: params.dry_run ?? true,
+      limit: params.limit ?? 500,
+    },
+  });
+}
+
+export async function approveEnrollmentBulk(
+  queueIds: number[],
+  comment?: string,
+): Promise<BulkEnrollmentResult> {
+  return apiFetchJson<BulkEnrollmentResult>("/admin/enrollment/approve/bulk", {
+    method: "POST",
+    body: { queue_ids: queueIds, comment: comment ?? null },
+  });
+}
+
+export async function rejectEnrollmentBulk(
+  queueIds: number[],
+  comment?: string,
+): Promise<BulkEnrollmentResult> {
+  return apiFetchJson<BulkEnrollmentResult>("/admin/enrollment/reject/bulk", {
+    method: "POST",
+    body: { queue_ids: queueIds, comment: comment ?? null },
+  });
+}
+
+export async function fetchEnrollmentExplain(queueId: number): Promise<EnrollmentExplain> {
+  return apiFetchJson<EnrollmentExplain>(`/admin/enrollment/queue/${queueId}/explain`);
 }
 
 export async function fetchSecurityAudit(params?: {

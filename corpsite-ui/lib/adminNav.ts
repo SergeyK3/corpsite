@@ -25,10 +25,23 @@ export function canSeeSysadminCabinetNav(me: MeInfo | null | undefined): boolean
   return isPrivilegedOperator(me);
 }
 
+/** ADR-043 C4.2 — personnel lifecycle section (ADMIN or HR_ENROLLMENT_MANAGER). */
+export function canSeePersonnelLifecycleNav(me: MeInfo | null | undefined): boolean {
+  if (canSeeSysadminCabinetNav(me)) return true;
+  return me?.has_personnel_admin === true;
+}
+
+export function isPersonnelLifecycleRoute(pathname: string): boolean {
+  return pathname === "/admin/system/personnel-lifecycle" || pathname.startsWith("/admin/system/personnel-lifecycle/");
+}
+
 export function isForbiddenAdminRoute(
   pathname: string,
   me: MeInfo | null | undefined,
 ): boolean {
+  if (isPersonnelLifecycleRoute(pathname)) {
+    return !canSeePersonnelLifecycleNav(me);
+  }
   if (pathname.startsWith("/admin/system")) {
     return !canSeeSysadminCabinetNav(me);
   }

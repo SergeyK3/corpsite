@@ -60,3 +60,86 @@ export function formatDateTime(iso?: string | null): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("ru-RU");
 }
+
+export function formatFieldValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "NULL";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+export const GRANT_SAFETY_WARNINGS: Record<string, string> = {
+  ACCESS_NONE:
+    "Внимание: роль ACCESS_NONE явно задаёт уровень NONE. При включённом enforcement может блокировать доступ.",
+  SYSADMIN_CABINET:
+    "Внимание: роль SYSADMIN_CABINET предоставляет доступ к кабинету системного администратора. Sidebar до Phase C2 остаётся по role_id=2.",
+  ACCESS_ADMIN:
+    "Внимание: роль ACCESS_ADMIN предоставляет полный административный доступ к API управления правами.",
+};
+
+export function formatActorLabel(
+  userId?: number | null,
+  label?: string | null,
+  login?: string | null,
+): string {
+  if (!userId) return "—";
+  if (label && label !== login) return `${label} (#${userId})`;
+  if (login) return `${login} (#${userId})`;
+  return `User #${userId}`;
+}
+
+export function formatAuditTargets(event: {
+  target_user_id?: number | null;
+  target_user_label?: string | null;
+  target_user_login?: string | null;
+  target_person_id?: number | null;
+  target_person_label?: string | null;
+  target_employee_id?: number | null;
+  target_employee_label?: string | null;
+}): string[] {
+  const lines: string[] = [];
+  if (event.target_user_id != null) {
+    lines.push(
+      formatActorLabel(
+        event.target_user_id,
+        event.target_user_label,
+        event.target_user_login,
+      ),
+    );
+  }
+  if (event.target_person_id != null) {
+    const name = event.target_person_label
+      ? `${event.target_person_label} (#${event.target_person_id})`
+      : `Person #${event.target_person_id}`;
+    lines.push(name);
+  }
+  if (event.target_employee_id != null) {
+    const name = event.target_employee_label
+      ? `${event.target_employee_label} (#${event.target_employee_id})`
+      : `Employee #${event.target_employee_id}`;
+    lines.push(name);
+  }
+  return lines;
+}
+
+export type ResolutionSource = {
+  grant_id?: number;
+  access_role_code?: string;
+  access_level?: string;
+  level_rank?: number;
+  source_type?: string;
+  target_id?: number;
+};
+
+export function buildEffectiveAccessSummary(effective: {
+  effective_role_code?: string;
+  access_level?: string;
+  level_rank?: number;
+  explanation?: { resolution_sources?: ResolutionSource[] };
+}): {
+  sources: ResolutionSource[];
+  resultLabel: string;
+} {
+  const sources = effective.explanation?.resolution_sources ?? [];
+  const resultLabel = `${effective.access_level ?? "—"} (${effective.effective_role_code ?? "—"}, rank ${effective.level_rank ?? "—"})`;
+  return { sources, resultLabel };
+}

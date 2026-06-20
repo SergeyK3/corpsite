@@ -116,9 +116,15 @@ class SecurityAuditEventResponse(BaseModel):
     event_type: str
     happened_at: Optional[str] = None
     actor_user_id: Optional[int] = None
+    actor_login: Optional[str] = None
+    actor_label: Optional[str] = None
     target_user_id: Optional[int] = None
+    target_user_login: Optional[str] = None
+    target_user_label: Optional[str] = None
     target_person_id: Optional[int] = None
+    target_person_label: Optional[str] = None
     target_employee_id: Optional[int] = None
+    target_employee_label: Optional[str] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     success: bool = True
@@ -173,3 +179,19 @@ class GuardModeResponse(BaseModel):
     message: str
     enforcement_active: bool = False
     shadow_mode: bool = False
+
+
+class BulkReconcileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    employee_ids: List[int] = Field(default_factory=list)
+    all_drift: bool = False
+    dry_run: bool = True
+    limit: int = Field(default=500, ge=1, le=2000)
+
+
+class BulkEnrollmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    queue_ids: List[int] = Field(..., min_length=1)
+    comment: Optional[str] = Field(default=None, max_length=2000)

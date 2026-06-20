@@ -8,8 +8,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiAuthMe } from "@/lib/api";
 import {
   canSeeAdminShell,
+  canSeePersonnelLifecycleNav,
   canSeeSysadminCabinetNav,
   isForbiddenAdminRoute,
+  isPersonnelLifecycleRoute,
 } from "@/lib/adminNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
@@ -37,6 +39,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     href: "/admin/system",
     title: "Кабинет системного администратора",
     matchPrefixes: ["/admin/system"],
+  },
+  {
+    href: "/admin/system/personnel-lifecycle",
+    title: "Personnel Lifecycle",
+    matchPrefixes: ["/admin/system/personnel-lifecycle"],
   },
   {
     href: "/admin/sync",
@@ -98,6 +105,9 @@ function isNavItemActive(pathname: string, item: NavItem): boolean {
     if (pathname === prefix) return true;
     if (!pathname.startsWith(`${prefix}/`)) return false;
     if (prefix === "/admin/regular-tasks" && pathname.startsWith("/admin/regular-tasks/catch-up")) {
+      return false;
+    }
+    if (prefix === "/admin/system" && pathname.startsWith("/admin/system/personnel-lifecycle")) {
       return false;
     }
     return true;
@@ -238,19 +248,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const isAdmin = canSeeAdminShell(me);
   const showSysadminNav = canSeeSysadminCabinetNav(me);
+  const showPersonnelLifecycleNav = canSeePersonnelLifecycleNav(me);
 
   const sidebarNavItems = useMemo(() => {
     return PRIMARY_ADMIN_NAV.filter((item) => {
+      if (item.href === "/admin/system/personnel-lifecycle") return showPersonnelLifecycleNav;
       if (item.href === "/admin/system") return showSysadminNav;
       return isAdmin;
     });
-  }, [isAdmin, showSysadminNav]);
+  }, [isAdmin, showPersonnelLifecycleNav, showSysadminNav]);
 
   const forbiddenNonAdminRoute =
     !loading && !!me && isForbiddenAdminRoute(pathname, me);
 
   const privilegedSysadminOnly =
-    !isAdmin && showSysadminNav && pathname.startsWith("/admin/system");
+    !isAdmin && showSysadminNav && pathname.startsWith("/admin/system") && !isPersonnelLifecycleRoute(pathname);
+
+  const personnelLifecycleOnly =
+    !isAdmin && !showSysadminNav && showPersonnelLifecycleNav && isPersonnelLifecycleRoute(pathname);
 
   useEffect(() => {
     if (isLogin || loading) return;
@@ -348,7 +363,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
             <section className="min-w-0">{children}</section>
           </div>
-        ) : privilegedSysadminOnly ? (
+        ) : privilegedSysadminOnly || personnelLifecycleOnly ? (
           <section className="min-w-0">{children}</section>
         ) : (
           <div className="grid grid-cols-1 gap-4">
