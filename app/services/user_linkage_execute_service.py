@@ -1,6 +1,7 @@
 """ADR-044 R2.4b — User → Employee linkage execute preview (dry-run plan, no writes)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -392,19 +393,219 @@ def _build_candidate_user_ids(
     preview_candidates: list[dict[str, Any]],
     latest_decisions: dict[int, dict[str, Any]],
     *,
-    user_id: Optional[int],
+    user_id: Optional[int] = None,
+    user_ids: Optional[list[int]] = None,
 ) -> list[int]:
-    user_ids: set[int] = {int(c["user_id"]) for c in preview_candidates}
+    user_ids_set: set[int] = {int(c["user_id"]) for c in preview_candidates}
     for uid, decision in latest_decisions.items():
         if str(decision.get("decision") or "") == DECISION_APPROVE:
-            user_ids.add(int(uid))
-    ordered = sorted(user_ids)
+            user_ids_set.add(int(uid))
+    ordered = sorted(user_ids_set)
     if user_id is not None:
         target = int(user_id)
         if target not in ordered:
             return []
         return [target]
+    if user_ids is not None:
+        allowed = {int(uid) for uid in user_ids}
+        ordered = [uid for uid in ordered if uid in allowed]
     return ordered
+
+
+def _check_r2_execute_blocking_gates(conn: Connection) -> list[dict[str, Any]]:
+    orphan_count = int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM public.users u
+                LEFT JOIN public.employees e ON e.employee_id = u.employee_id
+                WHERE u.employee_id IS NOT NULL
+                  AND e.employee_id IS NULL
+                """
+            )
+        ).scalar_one()
+    )
+    duplicate_count = int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM (
+                    SELECT u.employee_id
+                    FROM public.users u
+                    WHERE COALESCE(u.is_active, TRUE) = TRUE
+                      AND u.employee_id IS NOT NULL
+                    GROUP BY u.employee_id
+                    HAVING COUNT(*) > 1
+                ) dup
+                """
+            )
+        ).scalar_one()
+    )
+    inactive_target_count = int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM public.users u
+                JOIN public.employees e ON e.employee_id = u.employee_id
+                WHERE u.employee_id IS NOT NULL
+                  AND e.operational_status NOT IN ('draft', 'active', 'suspended')
+                """
+            )
+        ).scalar_one()
+    )
+    return [
+        {
+            "gate_id": "V3a_orphan_users_employee_id",
+            "severity": "error",
+            "blocks_execute": True,
+            "count": orphan_count,
+            "passed": orphan_count == 0,
+            "message": "users.employee_id must reference an existing employee",
+        },
+        {
+            "gate_id": "V3b_duplicate_user_per_employee",
+            "severity": "error",
+            "blocks_execute": True,
+            "count": duplicate_count,
+            "passed": duplicate_count == 0,
+            "message": "at most one active user per employee_id",
+        },
+        {
+            "gate_id": "R2_inactive_employee_target",
+            "severity": "error",
+            "blocks_execute": True,
+            "count": inactive_target_count,
+            "passed": inactive_target_count == 0,
+            "message": "users.employee_id must not point to inactive employees",
+        },
+    ]
+
+
+def _build_confirm_token(result: ExecutePreviewResult) -> str:
+    payload = {
+        "run_id": int(result.run_id),
+        "operation": result.operation,
+        "planned_items": sorted(
+            [
+                {
+                    "user_id": int(item["user_id"]),
+                    "proposed_employee_id": item.get("proposed_employee_id"),
+                    "source_decision_id": item.get("source_decision_id"),
+                }
+                for item in result.items
+                if item.get("action") == ACTION_LINK
+            ],
+            key=lambda row: int(row["user_id"]),
+        ),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"sha256:{digest}"
+
+
+def _planned_outcome_for_action(action: str) -> tuple[str, Optional[str]]:
+    if action == ACTION_LINK:
+        return "apply", None
+    if action.startswith("FAIL_"):
+        return "fail", action
+    return "skip", action
+
+
+def format_execute_preview_report(
+    result: ExecutePreviewResult,
+    *,
+    blocking_gates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Map service result to ADR R2.4 execute-preview API response shape."""
+    blocking = any(
+        gate.get("blocks_execute") and int(gate.get("count") or 0) > 0
+        for gate in blocking_gates
+    )
+    planned_link = int(result.summary.get("planned_link") or 0)
+    skipped_total = (
+        int(result.summary.get("skipped_not_approved") or 0)
+        + int(result.summary.get("skipped_preview_drift") or 0)
+        + int(result.summary.get("skipped_classification_regression") or 0)
+        + int(result.summary.get("skipped_excluded") or 0)
+        + int(result.summary.get("noop_already_linked") or 0)
+    )
+    failed_total = (
+        int(result.summary.get("failed_already_linked_different") or 0)
+        + int(result.summary.get("failed_employee_conflict") or 0)
+    )
+
+    items: list[dict[str, Any]] = []
+    for raw in result.items:
+        preview_snapshot = raw.get("preview_snapshot") or {}
+        decision_snapshot = raw.get("decision_snapshot") or {}
+        before_snapshot = raw.get("before_user_snapshot") or {}
+        action = str(raw.get("action") or "")
+        planned_outcome, skip_reason = _planned_outcome_for_action(action)
+        items.append(
+            {
+                "item_id": int(raw["item_id"]),
+                "user_id": int(raw["user_id"]),
+                "login": preview_snapshot.get("login") or before_snapshot.get("login"),
+                "proposed_employee_id": raw.get("proposed_employee_id"),
+                "employee_name": preview_snapshot.get("employee_name"),
+                "decision_id": decision_snapshot.get("decision_id"),
+                "decision_at": decision_snapshot.get("created_at"),
+                "classification": preview_snapshot.get("classification")
+                or decision_snapshot.get("classification"),
+                "match_strategy": preview_snapshot.get("match_strategy")
+                or decision_snapshot.get("match_strategy"),
+                "action": action,
+                "status": str(raw.get("status") or ""),
+                "reason_codes": list(raw.get("reason_codes") or []),
+                "planned_outcome": planned_outcome,
+                "skip_reason": skip_reason,
+            }
+        )
+
+    return {
+        "phase": result.phase,
+        "dry_run": result.dry_run,
+        "generated_at": result.generated_at,
+        "run_id": int(result.run_id),
+        "run_status": result.status,
+        "operation": result.operation,
+        "execute_allowed": planned_link > 0 and not blocking,
+        "blocking_gates": blocking_gates,
+        "summary": {
+            **result.summary,
+            "eligible": int(result.summary.get("total_evaluated") or 0),
+            "would_apply": planned_link,
+            "would_skip": skipped_total,
+            "would_fail": failed_total,
+            "drift_skipped": int(result.summary.get("skipped_preview_drift") or 0),
+        },
+        "items": items,
+        "confirm_token": _build_confirm_token(result),
+    }
+
+
+def build_user_linkage_execute_preview_report(
+    conn: Connection,
+    *,
+    actor_user_id: int,
+    limit: Optional[int] = None,
+    user_id: Optional[int] = None,
+    user_ids: Optional[list[int]] = None,
+) -> dict[str, Any]:
+    """Build dry-run execute plan and return API report payload."""
+    result = _build_user_linkage_execute_preview(
+        conn,
+        actor_user_id=int(actor_user_id),
+        limit=limit,
+        user_id=user_id,
+        user_ids=user_ids,
+    )
+    blocking_gates = _check_r2_execute_blocking_gates(conn)
+    return format_execute_preview_report(result, blocking_gates=blocking_gates)
 
 
 def _build_user_linkage_execute_preview(
@@ -413,6 +614,7 @@ def _build_user_linkage_execute_preview(
     actor_user_id: int,
     limit: Optional[int] = None,
     user_id: Optional[int] = None,
+    user_ids: Optional[list[int]] = None,
 ) -> ExecutePreviewResult:
     """Build dry-run execute plan and persist run + item journal rows."""
     if not execute_items_available(conn):
@@ -433,6 +635,7 @@ def _build_user_linkage_execute_preview(
         list(preview_by_user.values()),
         latest_decisions,
         user_id=user_id,
+        user_ids=user_ids,
     )
     if limit is not None:
         candidate_user_ids = candidate_user_ids[: int(limit)]
@@ -550,6 +753,7 @@ def build_user_linkage_execute_preview(
     actor_user_id: int,
     limit: Optional[int] = None,
     user_id: Optional[int] = None,
+    user_ids: Optional[list[int]] = None,
 ) -> ExecutePreviewResult:
     """Build dry-run execute plan using a dedicated DB transaction."""
     from app.db.engine import engine
@@ -560,4 +764,5 @@ def build_user_linkage_execute_preview(
             actor_user_id=actor_user_id,
             limit=limit,
             user_id=user_id,
+            user_ids=user_ids,
         )

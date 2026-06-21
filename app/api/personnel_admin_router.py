@@ -13,6 +13,8 @@ from app.api.personnel_admin_schemas import (
     IdentityReconciliationPreviewRequest,
     IdentityReconciliationReportResponse,
     UserLinkagePreviewResponse,
+    UserLinkageExecutePreviewRequest,
+    UserLinkageExecutePreviewResponse,
     UserLinkageReviewActionRequest,
     UserLinkageReviewAuditResponse,
     UserLinkageReviewDecisionResponse,
@@ -68,6 +70,10 @@ from app.services.user_linkage_review_service import (
     list_user_linkage_review_audit,
     list_user_linkage_review_queue,
     record_user_linkage_review_decision,
+)
+from app.services.user_linkage_execute_service import (
+    UserLinkageExecuteError,
+    build_user_linkage_execute_preview_report,
 )
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
@@ -591,3 +597,30 @@ def admin_defer_user_linkage_review(
         body=body,
         admin=admin,
     )
+
+
+@router.post(
+    "/identity/user-linkage/execute-preview",
+    response_model=UserLinkageExecutePreviewResponse,
+)
+def admin_user_linkage_execute_preview(
+    body: UserLinkageExecutePreviewRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.4c — dry-run execute plan for approved user linkage (no users.employee_id writes)."""
+    if body.user_id is not None and body.user_ids is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="provide either user_id or user_ids, not both",
+        )
+    try:
+        with engine.begin() as conn:
+            return build_user_linkage_execute_preview_report(
+                conn,
+                actor_user_id=int(admin["user_id"]),
+                limit=body.limit,
+                user_id=body.user_id,
+                user_ids=body.user_ids,
+            )
+    except UserLinkageExecuteError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc

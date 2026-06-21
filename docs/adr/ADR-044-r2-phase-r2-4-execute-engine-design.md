@@ -12,7 +12,7 @@
 | **R2.4** | **Execute engine design** | **Approved** |
 | **R2.4a** | **Execute journal schema (migration)** | **Implemented** |
 | R2.4b | Execute preview service + unit tests | **Implemented** |
-| R2.4c | API + execute confirm flow | Not started |
+| R2.4c | API + execute confirm flow | **Implemented** |
 | R2.5 | Manual admin link + V3 validation gate | Planned |
 
 ## Related documents
@@ -598,7 +598,7 @@ Localization: [OPS-008](../roadmap/ops-backlog.md).
 |------|-------------|------------|--------|
 | R2.4a | Migration: phase CHECK, `operation`, `user_linkage_execute_items`, `USER_EMPLOYEE_LINKED` | This ADR | **Done** — `e4f5a6b7c8d9` |
 | R2.4b | `user_linkage_execute_service.py` + unit tests | R2.4a | **Done** |
-| R2.4c | API + execute-preview confirm flow | R2.4b | Not started |
+| R2.4c | API + execute-preview confirm flow | R2.4b | **Done** |
 | R2.4d | Admin UI execute panel | R2.4c | Not started |
 | R2.5 | Manual PATCH link + L1 rollback tool + V3 sign-off | R2.4d | Planned |
 | OPS-007 | Telegram audit | R2.5 validation | Blocked |
@@ -700,6 +700,43 @@ Executable classifications: `REVIEW_REQUIRED`, `AMBIGUOUS`.
 python -m pytest tests/test_adr044_phase_r2_4b_user_linkage_execute_preview.py -v
 python -m pytest tests/test_adr044_phase_r2_4a_user_linkage_execute_schema.py -q
 python -m pytest tests/test_adr044_phase_r2_3_user_linkage_review.py -q
+```
+
+### 15.3 R2.4c Execute Preview API
+
+**Endpoint:** `POST /admin/personnel/identity/user-linkage/execute-preview`
+
+**Auth:** `require_personnel_admin_api` (403 for non-admin)
+
+**Request body** (`UserLinkageExecutePreviewRequest`):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `user_id` | int, optional | Evaluate a single user |
+| `user_ids` | int[], optional | Evaluate a subset (mutually exclusive with `user_id`) |
+| `limit` | int, optional | Cap evaluated users (1–500, stable `user_id` order) |
+
+Empty body evaluates all preview/approved candidates subject to `limit`.
+
+**Response** (`UserLinkageExecutePreviewResponse`):
+
+- Run journal fields: `run_id`, `run_status`, `operation`, `phase`, `dry_run`, `generated_at`
+- Plan: `summary`, `items[]` with `action`, `status`, `planned_outcome`, `skip_reason`
+- Sign-off: `execute_allowed`, `blocking_gates[]`, `confirm_token`
+
+**`execute_allowed`:** `planned_link > 0` and no blocking R2.1-derived gates (`V3a_orphan_users_employee_id`, `V3b_duplicate_user_per_employee`, `R2_inactive_employee_target`).
+
+**`confirm_token`:** `sha256:` digest of `{ run_id, operation, planned_items[] }` where `planned_items` are `LINK` rows only. Required for a future execute POST (R2.4d+).
+
+**Safety:** delegates to R2.4b service — **no `users.employee_id` updates**, review decisions unchanged.
+
+**Tests:** `tests/test_adr044_phase_r2_4c_user_linkage_execute_preview_api.py`
+
+**Verify:**
+
+```bash
+python -m pytest tests/test_adr044_phase_r2_4c_user_linkage_execute_preview_api.py -v
+python -m pytest tests/test_adr044_phase_r2_4b_user_linkage_execute_preview.py -q
 ```
 
 ---

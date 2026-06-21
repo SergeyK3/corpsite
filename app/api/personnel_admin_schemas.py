@@ -362,3 +362,68 @@ class UserLinkageReviewAuditResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class UserLinkageExecutePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: Optional[int] = Field(default=None, ge=1)
+    user_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=500)
+    limit: Optional[int] = Field(default=None, ge=1, le=500)
+
+
+class UserLinkageExecuteGate(BaseModel):
+    gate_id: str
+    severity: str
+    blocks_execute: bool
+    count: int
+    passed: bool
+    message: str = ""
+
+
+class UserLinkageExecutePreviewSummary(BaseModel):
+    total_evaluated: int = 0
+    planned_link: int = 0
+    noop_already_linked: int = 0
+    skipped_not_approved: int = 0
+    skipped_preview_drift: int = 0
+    skipped_classification_regression: int = 0
+    skipped_excluded: int = 0
+    failed_already_linked_different: int = 0
+    failed_employee_conflict: int = 0
+    eligible: int = 0
+    would_apply: int = 0
+    would_skip: int = 0
+    would_fail: int = 0
+    drift_skipped: int = 0
+
+
+class UserLinkageExecutePreviewItem(BaseModel):
+    item_id: int
+    user_id: int
+    login: Optional[str] = None
+    proposed_employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    decision_id: Optional[int] = None
+    decision_at: Optional[str] = None
+    classification: Optional[str] = None
+    match_strategy: Optional[str] = None
+    action: str
+    status: str
+    reason_codes: List[str] = Field(default_factory=list)
+    planned_outcome: str
+    skip_reason: Optional[str] = None
+
+
+class UserLinkageExecutePreviewResponse(BaseModel):
+    phase: str
+    dry_run: bool
+    generated_at: str
+    run_id: int
+    run_status: str
+    operation: str
+    execute_allowed: bool
+    blocking_gates: List[UserLinkageExecuteGate] = Field(default_factory=list)
+    summary: UserLinkageExecutePreviewSummary
+    items: List[UserLinkageExecutePreviewItem] = Field(default_factory=list)
+    confirm_token: str
