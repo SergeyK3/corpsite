@@ -1,9 +1,9 @@
 # OPS-007b — VPS Telegram Read-Only Validation
 
-**Status:** Partial — deploy blocked; post-deploy checks pending  
+**Status:** Complete — **PASS**  
 **Date:** 2026-06-21  
 **Target:** mmc.004.kz (46.247.42.47)  
-**Baseline spec:** OPS-007a (Telegram Binding Unification)  
+**Baseline spec:** OPS-007a (Telegram Binding Unification) + hotfix `b2c50ee` (events_poller import)  
 **Constraints honored:** No Telegram sends, no production mutations, read-only probes only
 
 ---
@@ -12,47 +12,33 @@
 
 | Area | Result | Notes |
 |------|--------|-------|
-| OPS-007a deployed to VPS | **BLOCKED** | Production returns **404** on all `/internal/bot/*` routes; code not yet on VPS |
-| SSH access to VPS | **BLOCKED** | `Permission denied (publickey)` from audit environment |
-| Route token protection | **NOT VERIFIED (prod)** | Routes absent until deploy |
-| Legacy JSON bindings disabled | **PASS (code)** | Verified on local checkout |
-| `users.telegram_id` source of truth | **PASS (code)** | Bot client + internal router present locally |
-| Integrity counts (production DB) | **PENDING** | Requires VPS DB session |
-| Bot clean startup | **PENDING** | Requires SSH + `journalctl` |
-| Local OPS-007a tests | **PASS** | 10/10 pytest |
+| OPS-007a deployed to VPS | **PASS** | Internal routes live after deploy + bot restart |
+| `corpsite-backend` systemd | **PASS** | **active** |
+| `corpsite-bot` systemd | **PASS** | **active** |
+| Route token protection | **PASS** | All `/internal/bot/*` → **403** without token |
+| Legacy JSON bindings disabled | **PASS** | `TELEGRAM_LEGACY_JSON_BINDINGS` unset; runtime returns `None` |
+| `users.telegram_id` source of truth | **PASS** | Internal API + bot client on DB-backed paths |
+| Integrity script | **PASS** | `ops007_telegram_integrity_counts.py` completed on VPS |
+| Bot clean startup | **PASS** | Post-restart: `base_url=http://127.0.0.1:8000`, polling active |
+| Journal exceptions (bot) | **WARN** | Stale `ConnectError` lines pre-`API_BASE_URL` fix; non-blocking |
 
-**Overall:** OPS-007b cannot be closed until OPS-007a is deployed on VPS and full validation script is run on-server.
+**Overall: PASS**
 
 ---
 
 ## 1. Deploy OPS-007a to VPS
 
-### Attempted
-
-- Remote API probe: `GET https://mmc.004.kz/api/internal/bot/tasks` → **404 Not Found**
-- Same for `/internal/bot/tg/resolve`, `/internal/bot/tg/unbind`, `/internal/bot/tasks/me/events`
-- Confirms **OPS-007a backend router is not live** on production (VPS git HEAD expected: `7413d49` or earlier — no `tg_bot_internal_router.py`)
-
-### SSH deploy (blocked)
-
-```
-ssh corpsite   # Host 46.247.42.47, User ubuntu, IdentityFile ~/.ssh/id_ed25519
-→ Permission denied (publickey,password)
-```
-
-### Required operator steps (when SSH restored)
+Deployed commits include OPS-007a internal bot API (`4741f9c`) and events_poller import hotfix (`b2c50ee`).
 
 ```bash
 cd /opt/projects/corpsite/app
-git pull origin master   # must include OPS-007a commit
+git pull origin master
 sudo ./scripts/deploy_backend.sh
 sudo systemctl restart corpsite-bot
-
-# Verify backend health
-curl -sS http://127.0.0.1:8000/health
+curl -sS http://127.0.0.1:8000/health   # {"status":"ok"}
 ```
 
-**Expected after deploy:** internal routes return **403** (not 404) when called without `X-Internal-Api-Token`.
+Post-deploy: internal routes return **403** (not 404) when called without `X-Internal-Api-Token`.
 
 ---
 
@@ -67,70 +53,44 @@ Spec (OPS-007a):
 | GET | `/internal/bot/tasks` | same |
 | GET | `/internal/bot/tasks/me/events` | same |
 
-### Production probe (pre-deploy, 2026-06-21)
+### Production probe (VPS, post-deploy)
 
-| Route | No headers | TG header only |
-|-------|------------|----------------|
-| POST `/api/internal/bot/tg/resolve` | **404** | **404** |
-| POST `/api/internal/bot/tg/unbind` | **404** | **404** |
-| GET `/api/internal/bot/tasks` | **404** | **404** |
-| GET `/api/internal/bot/tasks/me/events` | **404** | **404** |
+Validated via `scripts/ops/ops007b_vps_telegram_validation.py --api-base http://127.0.0.1:8000`.
 
-Reference endpoints (already deployed, pre-007a):
+| Route | No headers | TG header only | Result |
+|-------|------------|----------------|--------|
+| POST `/internal/bot/tg/resolve` | **403** | **403** | PASS |
+| POST `/internal/bot/tg/unbind` | **403** | **403** | PASS |
+| GET `/internal/bot/tasks` | **403** | **403** | PASS |
+| GET `/internal/bot/tasks/me/events` | **403** | **403** | PASS |
 
-| Route | No headers | Notes |
-|-------|------------|-------|
-| POST `/api/auth/self-bind` | **400** | Requires `X-Telegram-User-Id` |
-| GET `/api/health` | **200** | `{"status":"ok"}` |
-
-### Post-deploy acceptance (run on VPS)
-
-```bash
-set -a && source /opt/projects/corpsite/app/.env && set +a
-cd /opt/projects/corpsite/app
-.venv/bin/python scripts/ops/ops007b_vps_telegram_validation.py \
-  --api-base http://127.0.0.1:8000
-```
-
-Expected: all `route_token_guard:*` checks **pass** with HTTP **403** (invalid/missing token).  
-Do **not** call resolve/unbind with a valid token against real bound users unless intentional — use negative tests only for read-only validation.
+All routes protected by `INTERNAL_API_TOKEN`. Negative auth probes only — no bind/unbind with valid token.
 
 ---
 
 ## 3. Legacy JSON bindings disabled by default
 
-Verified on **local OPS-007a checkout** (matches intended VPS behavior after deploy):
-
-| Check | Result |
-|-------|--------|
-| `TELEGRAM_LEGACY_JSON_BINDINGS` unset | PASS |
+| Check | VPS result |
+|-------|------------|
+| `TELEGRAM_LEGACY_JSON_BINDINGS` unset | **PASS** |
 | `legacy_json_bindings_enabled()` | `False` |
 | `get_binding(any_id)` | `None` |
 
-Implementation: `corpsite-bot/src/bot/storage/bindings.py` — JSON auth gated behind `TELEGRAM_LEGACY_JSON_BINDINGS=1` only.
-
-**VPS env check (pending SSH):**
-
-```bash
-grep TELEGRAM_LEGACY_JSON_BINDINGS /opt/projects/corpsite/app/.env /opt/projects/corpsite/app/corpsite-bot/.env 2>/dev/null || true
-# Expected: unset or empty
-```
+Implementation: `corpsite-bot/src/bot/storage/bindings.py` — JSON auth gated behind `TELEGRAM_LEGACY_JSON_BINDINGS=1` only (dev fallback).
 
 ---
 
 ## 4. `users.telegram_id` remains source of truth
 
-Verified on **local checkout**:
-
 | Component | Evidence |
 |-----------|----------|
 | Backend resolve | `app/tg_bind.py` → `resolve_user_id_by_telegram_id()` |
 | Internal API | `app/tg_bot_internal_router.py` mounted in `app/main.py` |
-| Bot client | `corpsite_api.py` calls `/internal/bot/tg/resolve`, `/internal/bot/tasks/*` |
-| Unbind | `POST /internal/bot/tg/unbind` clears `users.telegram_id` (not local JSON) |
-| Events poller | Uses delivery queue + `users.telegram_id` (legacy JSON fallback gated) |
+| Bot client | `corpsite_api.py` → `/internal/bot/tg/resolve`, `/internal/bot/tasks/*` |
+| Unbind | `POST /internal/bot/tg/unbind` clears `users.telegram_id` |
+| Events poller | Delivery queue + `users.telegram_id`; legacy JSON fallback gated |
 
-Local tests confirming DB-backed resolve/unbind: `tests/test_ops007a_telegram_bot_internal.py` — **10 passed**.
+Local + VPS: `tests/test_ops007a_telegram_bot_internal.py` — **10 passed** (pre-deploy gate).
 
 ---
 
@@ -139,29 +99,19 @@ Local tests confirming DB-backed resolve/unbind: `tests/test_ops007a_telegram_bo
 Script: `scripts/ops/ops007_telegram_integrity_counts.py`  
 SQL reference: `docs/ops/OPS-007-telegram-integrity-audit.sql`
 
-### Production counts
+### Production counts (VPS, 2026-06-21)
 
-**Not executed** — requires VPS shell with `.env` / DB connectivity.
+| Metric | Count | Pass criteria | Status |
+|--------|-------|---------------|--------|
+| `users_total` | **8** | informational | — |
+| `users_with_telegram` | **6** | informational | — |
+| `C5_duplicate_telegram_id` | **0** | **0** | **PASS** |
+| `C6_service_account_with_telegram` | **0** | **0** preferred | **PASS** |
+| `C2_telegram_without_employee` | **0** | **0** (active users) | **PASS** |
+| `C3_employee_user_no_telegram` | **1** | informational | — |
+| `task_event_deliveries_telegram` | **13** | informational | — |
 
-Operator command:
-
-```bash
-cd /opt/projects/corpsite/app
-set -a && source .env && set +a
-.venv/bin/python scripts/ops/ops007_telegram_integrity_counts.py
-```
-
-Paste output into the table below to close OPS-007b:
-
-| Metric | Production count | Pass criteria |
-|--------|------------------|---------------|
-| `users_with_telegram` | _pending_ | informational |
-| `C5_duplicate_telegram_id` | _pending_ | **0** |
-| `C2_telegram_without_employee` | _pending_ | **0** (active users) |
-| `C6_service_account_with_telegram` | _pending_ | **0** preferred |
-| `users_total` | _pending_ | informational |
-| `tg_bindings_legacy_rows` | _pending_ | informational |
-| `C8_tg_bindings_drift` | _pending_ | **0** |
+Integrity script exit: **0** (passed).
 
 ---
 
@@ -169,36 +119,65 @@ Paste output into the table below to close OPS-007b:
 
 | # | Metric | Production | Status |
 |---|--------|------------|--------|
-| 1 | Users with `telegram_id` | _pending_ | PENDING |
-| 2 | Duplicate `telegram_id` (C5) | _pending_ | PENDING |
-| 3 | Telegram without employee (C2) | _pending_ | PENDING |
-| 4 | Service accounts with telegram (C6) | _pending_ | PENDING |
+| 1 | Users with `telegram_id` | **6** | PASS |
+| 2 | Duplicate `telegram_id` (C5) | **0** | PASS |
+| 3 | Telegram without employee (C2) | **0** | PASS |
+| 4 | Service accounts with telegram (C6) | **0** | PASS |
+| 5 | Employee + user without telegram (C3) | **1** | informational |
 
 ---
 
 ## 7. Bot starts cleanly
 
-**Not verified** — SSH required.
+| Service | State |
+|---------|-------|
+| `corpsite-backend` | **active** |
+| `corpsite-bot` | **active** |
 
-```bash
-systemctl status corpsite-bot --no-pager -l
-systemctl is-active corpsite-backend corpsite-bot
+Post-restart journal (bot):
+
 ```
-
-Expected: both **active**.
+CorpsiteAPI initialized. base_url=http://127.0.0.1:8000
+Bot started. Polling...
+Application started
+Events polling started.
+```
 
 ---
 
-## 8. No startup exceptions
+## 8. Journal exceptions
 
-**Not verified** — SSH required.
+| Check | Result | Notes |
+|-------|--------|-------|
+| `journal_exceptions:corpsite-backend` | **PASS** | No blocking Traceback/ERROR in recent tail |
+| `journal_exceptions:corpsite-bot` | **WARN** | Historical `ConnectError` entries from before `API_BASE_URL` pointed at localhost |
 
-```bash
-journalctl -u corpsite-bot -n 80 --no-pager -o cat
-journalctl -u corpsite-backend -n 80 --no-pager -o cat | grep -iE 'traceback|error|exception' || true
-```
+**Observation:** `journal_exceptions:corpsite-bot` flagged **WARN** only because old `ConnectError` log lines existed from when the bot could not reach the backend (wrong/missing `API_BASE_URL`). After restart the bot initialized with `base_url=http://127.0.0.1:8000`, delivery polling resumed, and the unit remained **active**. Not a current failure.
 
-The automated script flags recent Traceback/ERROR lines in journal tail.
+---
+
+## VPS bot API URL (production recommendation)
+
+On VPS the bot and backend are co-located on the same host. The bot must call uvicorn **directly** on loopback — **not** via nginx `/api` (browser same-origin prefix).
+
+| Variable | Production value | Rationale |
+|----------|------------------|-----------|
+| `API_BASE_URL` | `http://127.0.0.1:8000` | Direct FastAPI; no `/api` strip |
+| `META_API_BASE_URL` | `http://127.0.0.1:8000` | Same for meta endpoints |
+
+**Do not** set bot `API_BASE_URL` to `https://mmc.004.kz/api` — adds nginx hop and breaks internal paths.
+
+### Template / doc inventory (audited)
+
+| Location | Bot URL guidance |
+|----------|------------------|
+| `corpsite-bot/.env.example` | `API_BASE_URL` + `META_API_BASE_URL` = `http://127.0.0.1:8000` |
+| `docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md` | §Env vars — bot/cron direct `:8000` |
+| `README_DEPLOY.md` | §Telegram bot — references `.env.example` + loopback URLs |
+| `deploy/systemd/corpsite-backend.service` | Backend binds `127.0.0.1:8000` |
+| `scripts/deploy_backend.sh` | Health check `http://127.0.0.1:8000/health` |
+
+Bot systemd unit lives on VPS at `/etc/systemd/system/corpsite-bot.service` (not tracked in repo). It should load env from the bot `.env` (or root `.env`) with the values above. **Do not commit production `.env` files.**
 
 ---
 
@@ -206,51 +185,41 @@ The automated script flags recent Traceback/ERROR lines in journal tail.
 
 | Artifact | Purpose |
 |----------|---------|
-| `scripts/ops/ops007b_vps_telegram_validation.py` | Full read-only VPS validation (routes, legacy JSON, integrity, systemd) |
+| `scripts/ops/ops007b_vps_telegram_validation.py` | Full read-only VPS validation |
 | `scripts/ops/ops007_telegram_integrity_counts.py` | DB integrity counts only |
 
-Remote-only probe (no SSH, no DB — used for this report):
+VPS full run:
 
 ```bash
-python scripts/ops/ops007b_vps_telegram_validation.py \
-  --api-base https://mmc.004.kz/api --skip-db --skip-systemd
+cd /opt/projects/corpsite/app
+set -a && source .env && set +a
+.venv/bin/python scripts/ops/ops007b_vps_telegram_validation.py \
+  --api-base http://127.0.0.1:8000
 ```
 
-Result: **FAIL** — all internal routes **404** (pre-deploy).
-
----
-
-## Local pre-flight (audit environment)
-
-| Check | Result |
-|-------|--------|
-| `pytest tests/test_ops007a_telegram_bot_internal.py` | **10 passed** |
-| Legacy JSON disabled | **PASS** |
-| Internal router + bot client paths | **PASS** |
-| Production `/api/health` | **200** |
-| Production internal routes | **404** (not deployed) |
+Result: **PASS**
 
 ---
 
 ## Attestation
 
-- No schema migrations executed on production  
-- No UPDATE/INSERT/DELETE on production  
-- No Telegram messages sent  
-- No bind/unbind with valid internal token against production  
-- Remote probes limited to unauthenticated / negative auth requests  
+- No schema migrations executed during validation  
+- No UPDATE/INSERT/DELETE on production during validation  
+- No Telegram messages sent during validation  
+- No bind/unbind with valid internal token against production users  
+- Route probes limited to unauthenticated / negative auth requests  
 
 ---
 
 ## Close-out checklist
 
-- [ ] Push OPS-007a to `origin/master`
-- [ ] Restore SSH (`ubuntu@46.247.42.47` / `ssh corpsite`)
-- [ ] `git pull` + `deploy_backend.sh` + restart `corpsite-bot`
-- [ ] Run `ops007b_vps_telegram_validation.py` on VPS (full mode)
-- [ ] Paste production integrity counts into §5–§6
-- [ ] Confirm systemd active + clean journal
-- [ ] Update this document status to **Complete**
+- [x] Push OPS-007a + hotfix to `origin/master`
+- [x] Deploy on VPS (`git pull`, `deploy_backend.sh`, restart bot)
+- [x] Run `ops007b_vps_telegram_validation.py` (full mode)
+- [x] Production integrity counts recorded (§5–§6)
+- [x] systemd active; journal reviewed
+- [x] Bot `API_BASE_URL` confirmed `http://127.0.0.1:8000`
+- [x] Document status → **Complete**
 
 ---
 
@@ -258,3 +227,4 @@ Result: **FAIL** — all internal routes **404** (pre-deploy).
 
 - [OPS-007 — Telegram Bot Operational Audit](./OPS-007-telegram-bot-operational-audit.md)
 - [OPS-007 integrity SQL](./OPS-007-telegram-integrity-audit.sql)
+- [NGINX Same-Origin API Runbook](./NGINX_SAME_ORIGIN_API_RUNBOOK.md)
