@@ -14,7 +14,7 @@ from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
 from telegram.ext import Application
 
-from ..storage.bindings import legacy_json_bindings_enabled
+from .storage.bindings import legacy_json_bindings_enabled
 
 log = logging.getLogger("corpsite-bot.events")
 
