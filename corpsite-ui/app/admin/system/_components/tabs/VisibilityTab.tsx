@@ -23,6 +23,7 @@ import {
   buildBulkDepartmentVisibilityPayloads,
   buildDepartmentUserOptions,
   buildVisibilityTargetReferenceMaps,
+  buildVisibilityAssignmentDuplicateMap,
   canSubmitVisibilityAssignment,
   classifyBulkVisibilityCreateError,
   clearDepartmentTargetSelection,
@@ -36,12 +37,15 @@ import {
   flattenOrgUnitTree,
   formatDepartmentOptionLabel,
   formatUserOptionLabel,
+  isDuplicateVisibilityAssignment,
   parseDepartmentGroupFilterValue,
   pruneDepartmentTargetSelectionByGroup,
   resolveVisibilityTargetDisplay,
   selectAllVisibleDepartmentTargets,
   sortDepartmentGroupOptions,
+  sortVisibilityAssignmentsForDisplay,
   summarizeBulkVisibilityCreateResults,
+  summarizeVisibilityAssignments,
   toggleDepartmentTargetSelection,
   toAccessTargetFromUser,
   VISIBILITY_MODE_OPTIONS,
@@ -95,7 +99,7 @@ function AssignmentTargetCell({
 }
 
 export default function VisibilityTab() {
-  const [items, setItems] = useState<PersonnelVisibilityAssignment[]>([]);
+  const [allItems, setAllItems] = useState<PersonnelVisibilityAssignment[]>([]);
   const [total, setTotal] = useState(0);
   const [showRevoked, setShowRevoked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -203,21 +207,41 @@ export default function VisibilityTab() {
     setError(null);
     try {
       const res = await fetchPersonnelVisibilityAssignments({
-        active_only: !showRevoked,
+        active_only: false,
         limit: 200,
       });
-      setItems(res.items);
+      setAllItems(res.items);
       setTotal(res.total);
     } catch (err) {
       setError(mapAdminSystemApiError(err, "Не удалось загрузить назначения видимости"));
     } finally {
       setLoading(false);
     }
-  }, [showRevoked]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const visibleItems = useMemo(
+    () => (showRevoked ? allItems : allItems.filter((row) => row.is_active)),
+    [allItems, showRevoked],
+  );
+
+  const duplicateCounts = useMemo(
+    () => buildVisibilityAssignmentDuplicateMap(allItems),
+    [allItems],
+  );
+
+  const assignmentSummary = useMemo(
+    () => summarizeVisibilityAssignments(allItems),
+    [allItems],
+  );
+
+  const displayItems = useMemo(
+    () => sortVisibilityAssignmentsForDisplay(visibleItems),
+    [visibleItems],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -446,7 +470,7 @@ export default function VisibilityTab() {
   }
 
   async function handleRevoke(assignmentId: number): Promise<void> {
-    if (!window.confirm("Деактивировать назначение видимости?")) return;
+    if (!window.confirm("Отозвать это назначение видимости?")) return;
     setError(null);
     setSuccess(null);
     try {
@@ -476,7 +500,7 @@ export default function VisibilityTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <InfoBanner message="Видимость персонала (ADR-042 E1) открывает правый сайдбар и справочник без выдачи admin-функций. Роль отвечает за действия; visibility scope — за просмотр." />
 
       {error ? <ErrorBanner message={error} /> : null}
@@ -503,7 +527,7 @@ export default function VisibilityTab() {
           ))}
         </div>
 
-        <form onSubmit={handleCreate} className="grid gap-4 md:grid-cols-2">
+        <form onSubmit={handleCreate} className="grid min-w-0 gap-4 md:grid-cols-2">
           {(departmentPrefilterRequired(mode) || departmentPrefilterOptional(mode)) && (
             <div className="md:col-span-2 space-y-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
               <div className="text-sm font-medium">
@@ -882,9 +906,12 @@ export default function VisibilityTab() {
         </form>
       </section>
 
-      <section className="space-y-3">
+      <section className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Назначения ({total})</h2>
+          <h2 className="text-lg font-semibold">
+            Назначения ({visibleItems.length}
+            {total > visibleItems.length ? ` из ${total}` : ""})
+          </h2>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -895,46 +922,87 @@ export default function VisibilityTab() {
           </label>
         </div>
 
+        {!loading && allItems.length > 0 ? (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
+            <span>Активных: {assignmentSummary.activeCount}</span>
+            <span>Отозванных: {assignmentSummary.revokedCount}</span>
+            <span>USER: {assignmentSummary.userCount}</span>
+            <span>POSITION: {assignmentSummary.positionCount}</span>
+            <span>DEPARTMENT: {assignmentSummary.departmentCount}</span>
+          </div>
+        ) : null}
+
+        {!loading && assignmentSummary.duplicateGroupCount > 0 ? (
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            Обнаружены дублирующиеся назначения: {assignmentSummary.duplicateGroupCount} групп.
+            Строки с одинаковым target, scope и can_view_tasks помечены.
+          </p>
+        ) : null}
+
         {loading ? (
           <p className="text-sm text-zinc-500">Загрузка…</p>
-        ) : items.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <p className="text-sm text-zinc-500">Нет назначений</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+          <div className="-mx-1 overflow-x-auto px-1">
+            <table className="min-w-[42rem] w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left dark:border-zinc-700">
-                  <th className="px-2 py-2">ID</th>
-                  <th className="px-2 py-2">Target</th>
-                  <th className="px-2 py-2">Scope</th>
-                  <th className="px-2 py-2">Tasks RO</th>
-                  <th className="px-2 py-2">Active</th>
-                  <th className="px-2 py-2" />
+                  <th className="whitespace-nowrap px-2 py-2">ID</th>
+                  <th className="min-w-[10rem] px-2 py-2">Кому выдано</th>
+                  <th className="min-w-[8rem] px-2 py-2">Область видимости</th>
+                  <th className="whitespace-nowrap px-2 py-2">Задачи только просмотр</th>
+                  <th className="whitespace-nowrap px-2 py-2">Активно</th>
+                  <th className="whitespace-nowrap px-2 py-2" />
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
-                  <tr key={row.assignment_id} className="border-b border-zinc-100 dark:border-zinc-800">
-                    <td className="px-2 py-2">{row.assignment_id}</td>
-                    <td className="px-2 py-2">
-                      <AssignmentTargetCell row={row} referenceMaps={targetReferenceMaps} />
-                    </td>
-                    <td className="px-2 py-2">{scopeLabel(row)}</td>
-                    <td className="px-2 py-2">{row.can_view_tasks ? "да" : "нет"}</td>
-                    <td className="px-2 py-2">{row.is_active ? "да" : "нет"}</td>
-                    <td className="px-2 py-2">
-                      {row.is_active ? (
-                        <button
-                          type="button"
-                          className="text-red-600 hover:underline dark:text-red-400"
-                          onClick={() => void handleRevoke(row.assignment_id)}
-                        >
-                          Отозвать
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                {displayItems.map((row) => {
+                  const duplicate = isDuplicateVisibilityAssignment(row, duplicateCounts);
+                  return (
+                    <tr
+                      key={row.assignment_id}
+                      className={[
+                        "border-b border-zinc-100 dark:border-zinc-800",
+                        duplicate
+                          ? "bg-amber-50/70 dark:bg-amber-950/20"
+                          : "",
+                      ].join(" ")}
+                    >
+                      <td className="whitespace-nowrap px-2 py-2">
+                        <div className="flex items-center gap-2">
+                          <span>{row.assignment_id}</span>
+                          {duplicate ? (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                              дубль
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <AssignmentTargetCell row={row} referenceMaps={targetReferenceMaps} />
+                      </td>
+                      <td className="px-2 py-2">{scopeLabel(row)}</td>
+                      <td className="whitespace-nowrap px-2 py-2">
+                        {row.can_view_tasks ? "да" : "нет"}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2">
+                        {row.is_active ? "да" : "нет"}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2">
+                        {row.is_active ? (
+                          <button
+                            type="button"
+                            className="text-red-600 hover:underline dark:text-red-400"
+                            onClick={() => void handleRevoke(row.assignment_id)}
+                          >
+                            Отозвать
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

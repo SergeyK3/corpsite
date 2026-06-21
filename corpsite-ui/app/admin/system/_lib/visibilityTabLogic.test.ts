@@ -5,6 +5,7 @@ import type { AdminUser } from "./adminSystemApi.client";
 import {
   buildBulkDepartmentVisibilityPayloads,
   buildDepartmentUserOptions,
+  buildVisibilityAssignmentDuplicateMap,
   buildVisibilityTargetReferenceMaps,
   canSubmitVisibilityAssignment,
   clearDepartmentTargetSelection,
@@ -16,11 +17,15 @@ import {
   filterPositionsByDepartmentContext,
   filterUserOptionsByQuery,
   flattenOrgUnitTree,
+  isDuplicateVisibilityAssignment,
   resolveVisibilityTargetDisplay,
   selectAllVisibleDepartmentTargets,
+  sortVisibilityAssignmentsForDisplay,
+  summarizeVisibilityAssignments,
   targetSelectionRequired,
   toggleDepartmentTargetSelection,
   toAccessTargetFromDepartment,
+  visibilityAssignmentDedupeKey,
 } from "./visibilityTabLogic";
 
 describe("visibilityTabLogic", () => {
@@ -145,6 +150,106 @@ describe("visibilityTabLogic", () => {
     expect(display.primary).toBe("DEPARTMENT #74");
     expect(display.secondary).toBeNull();
     expect(display.resolved).toBe(false);
+  });
+
+  it("visibilityAssignmentDedupeKey matches target, scope and can_view_tasks", () => {
+    const row = {
+      target_type: "DEPARTMENT",
+      target_department_id: 73,
+      scope_type: "ORGANIZATION",
+      can_view_tasks: false,
+    };
+    expect(visibilityAssignmentDedupeKey(row)).toBe("DEPARTMENT|73|ORGANIZATION|-|0");
+    expect(visibilityAssignmentDedupeKey({ ...row, can_view_tasks: true })).not.toBe(
+      visibilityAssignmentDedupeKey(row),
+    );
+  });
+
+  it("isDuplicateVisibilityAssignment marks rows with identical dedupe keys", () => {
+    const items = [
+      {
+        assignment_id: 1,
+        target_type: "DEPARTMENT",
+        target_department_id: 73,
+        scope_type: "ORGANIZATION",
+        can_view_tasks: false,
+        is_active: true,
+      },
+      {
+        assignment_id: 2,
+        target_type: "DEPARTMENT",
+        target_department_id: 73,
+        scope_type: "ORGANIZATION",
+        can_view_tasks: false,
+        is_active: true,
+      },
+      {
+        assignment_id: 3,
+        target_type: "USER",
+        target_user_id: 4,
+        scope_type: "ORGANIZATION",
+        can_view_tasks: false,
+        is_active: true,
+      },
+    ];
+    const duplicateCounts = buildVisibilityAssignmentDuplicateMap(items);
+    expect(isDuplicateVisibilityAssignment(items[0]!, duplicateCounts)).toBe(true);
+    expect(isDuplicateVisibilityAssignment(items[2]!, duplicateCounts)).toBe(false);
+  });
+
+  it("summarizeVisibilityAssignments counts active, revoked and target types", () => {
+    const summary = summarizeVisibilityAssignments([
+      {
+        target_type: "USER",
+        target_user_id: 1,
+        scope_type: "ORGANIZATION",
+        is_active: true,
+      },
+      {
+        target_type: "POSITION",
+        target_position_id: 2,
+        scope_type: "ORGANIZATION",
+        is_active: false,
+      },
+      {
+        target_type: "DEPARTMENT",
+        target_department_id: 3,
+        scope_type: "ORGANIZATION",
+        is_active: true,
+      },
+    ]);
+    expect(summary).toEqual({
+      activeCount: 2,
+      revokedCount: 1,
+      userCount: 1,
+      positionCount: 1,
+      departmentCount: 1,
+      duplicateGroupCount: 0,
+    });
+  });
+
+  it("sortVisibilityAssignmentsForDisplay groups duplicate keys together", () => {
+    const sorted = sortVisibilityAssignmentsForDisplay([
+      {
+        assignment_id: 10,
+        target_type: "USER",
+        target_user_id: 1,
+        scope_type: "ORGANIZATION",
+      },
+      {
+        assignment_id: 5,
+        target_type: "DEPARTMENT",
+        target_department_id: 73,
+        scope_type: "ORGANIZATION",
+      },
+      {
+        assignment_id: 7,
+        target_type: "DEPARTMENT",
+        target_department_id: 73,
+        scope_type: "ORGANIZATION",
+      },
+    ]);
+    expect(sorted.map((row) => row.assignment_id)).toEqual([7, 5, 10]);
   });
 
   it("filterOrgUnitsByGroup limits department list to selected group", () => {

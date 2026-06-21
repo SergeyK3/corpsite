@@ -428,6 +428,108 @@ export type VisibilityAssignmentRowLike = {
   target_department_id?: number | null;
 };
 
+export type VisibilityAssignmentRecordLike = VisibilityAssignmentRowLike & {
+  assignment_id?: number;
+  scope_type: string;
+  scope_department_id?: number | null;
+  scope_department_group_id?: number | null;
+  can_view_tasks?: boolean;
+  is_active?: boolean;
+};
+
+export type VisibilityAssignmentSummary = {
+  activeCount: number;
+  revokedCount: number;
+  userCount: number;
+  positionCount: number;
+  departmentCount: number;
+  duplicateGroupCount: number;
+};
+
+export function visibilityAssignmentDedupeKey(row: VisibilityAssignmentRecordLike): string {
+  const targetType = String(row.target_type ?? "").trim().toUpperCase();
+  let targetId = "?";
+  if (targetType === "USER") targetId = String(row.target_user_id ?? "?");
+  else if (targetType === "POSITION") targetId = String(row.target_position_id ?? "?");
+  else if (targetType === "DEPARTMENT") targetId = String(row.target_department_id ?? "?");
+
+  const scopeType = String(row.scope_type ?? "").trim().toUpperCase();
+  let scopeTarget = "-";
+  if (scopeType === "DEPARTMENT") scopeTarget = String(row.scope_department_id ?? "?");
+  else if (scopeType === "DEPARTMENT_GROUP") {
+    scopeTarget = String(row.scope_department_group_id ?? "?");
+  }
+
+  const tasks = row.can_view_tasks ? "1" : "0";
+  return `${targetType}|${targetId}|${scopeType}|${scopeTarget}|${tasks}`;
+}
+
+export function buildVisibilityAssignmentDuplicateMap(
+  items: VisibilityAssignmentRecordLike[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of items) {
+    const key = visibilityAssignmentDedupeKey(row);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function isDuplicateVisibilityAssignment(
+  row: VisibilityAssignmentRecordLike,
+  duplicateCounts: ReadonlyMap<string, number>,
+): boolean {
+  return (duplicateCounts.get(visibilityAssignmentDedupeKey(row)) ?? 0) > 1;
+}
+
+export function summarizeVisibilityAssignments(
+  items: VisibilityAssignmentRecordLike[],
+): VisibilityAssignmentSummary {
+  let activeCount = 0;
+  let revokedCount = 0;
+  let userCount = 0;
+  let positionCount = 0;
+  let departmentCount = 0;
+
+  for (const row of items) {
+    if (row.is_active) activeCount += 1;
+    else revokedCount += 1;
+
+    const targetType = String(row.target_type ?? "").trim().toUpperCase();
+    if (targetType === "USER") userCount += 1;
+    else if (targetType === "POSITION") positionCount += 1;
+    else if (targetType === "DEPARTMENT") departmentCount += 1;
+  }
+
+  const duplicateCounts = buildVisibilityAssignmentDuplicateMap(items);
+  let duplicateGroupCount = 0;
+  for (const count of duplicateCounts.values()) {
+    if (count > 1) duplicateGroupCount += 1;
+  }
+
+  return {
+    activeCount,
+    revokedCount,
+    userCount,
+    positionCount,
+    departmentCount,
+    duplicateGroupCount,
+  };
+}
+
+export function sortVisibilityAssignmentsForDisplay<T extends VisibilityAssignmentRecordLike>(
+  items: T[],
+): T[] {
+  return [...items].sort((a, b) => {
+    const keyCmp = visibilityAssignmentDedupeKey(a).localeCompare(
+      visibilityAssignmentDedupeKey(b),
+      "ru",
+    );
+    if (keyCmp !== 0) return keyCmp;
+    return Number(b.assignment_id ?? 0) - Number(a.assignment_id ?? 0);
+  });
+}
+
 export type VisibilityTargetReferenceMaps = {
   usersById: ReadonlyMap<number, { fullName: string; login: string | null }>;
   departmentsById: ReadonlyMap<number, { name: string; groupName: string | null }>;
