@@ -45,7 +45,13 @@ export function shouldShowOrgUnitsPanel(
   return pathname.startsWith("/tasks") || pathname.startsWith("/directory");
 }
 
-export const VISIBILITY_DIRECTORY_NAV = [
+export type VisibilityNavItem = {
+  href: string;
+  title: string;
+  matchPrefixes: string[];
+};
+
+export const VISIBILITY_DIRECTORY_NAV: VisibilityNavItem[] = [
   {
     href: "/directory/personnel",
     title: "Персонал",
@@ -61,4 +67,4 @@ export const VISIBILITY_DIRECTORY_NAV = [
     title: "Должности",
     matchPrefixes: ["/directory/positions"],
   },
-] as const;
+];
