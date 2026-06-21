@@ -3,20 +3,46 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { getOrgUnitsTree } from "@/app/directory/org-units/_lib/api.client";
+import { apiFetchJson } from "@/lib/api";
+
 import {
   createPersonnelVisibilityAssignment,
+  fetchAdminUsers,
   fetchEffectivePersonnelVisibility,
   fetchPersonnelVisibilityAssignments,
   mapAdminSystemApiError,
   revokePersonnelVisibilityAssignment,
+  searchAccessTargets,
+  type AccessTargetSearchItem,
   type EffectivePersonnelVisibility,
   type PersonnelVisibilityAssignment,
 } from "../../_lib/adminSystemApi.client";
+import {
+  buildDepartmentUserOptions,
+  canSubmitVisibilityAssignment,
+  countEmployeesWithoutUserAccount,
+  departmentPrefilterOptional,
+  departmentPrefilterRequired,
+  extractPositionIdsFromEmployees,
+  filterOrgUnitsByQuery,
+  filterPositionsByDepartmentContext,
+  filterUserOptionsByQuery,
+  flattenOrgUnitTree,
+  formatDepartmentOptionLabel,
+  formatUserOptionLabel,
+  toAccessTargetFromDepartment,
+  toAccessTargetFromUser,
+  VISIBILITY_MODE_OPTIONS,
+  type OrgUnitOption,
+  type VisibilityAssignmentMode,
+  type EmployeeLike,
+  type VisibilityUserOption,
+} from "../../_lib/visibilityTabLogic";
 import ErrorBanner, { InfoBanner, SuccessBanner } from "../shared/ErrorBanner";
 import TargetSearchField from "../shared/TargetSearchField";
-import type { AccessTargetSearchItem } from "../../_lib/adminSystemApi.client";
 
-const TARGET_TYPES = ["USER", "POSITION", "ORG_UNIT"] as const;
 const SCOPE_TYPES = ["ORGANIZATION", "DEPARTMENT", "DEPARTMENT_GROUP"] as const;
 
 function targetLabel(row: PersonnelVisibilityAssignment): string {
@@ -33,6 +59,10 @@ function scopeLabel(row: PersonnelVisibilityAssignment): string {
   return row.scope_type;
 }
 
+function indentStyle(depth: number): React.CSSProperties {
+  return { paddingLeft: `${Math.min(depth, 6) * 12 + 8}px` };
+}
+
 export default function VisibilityTab() {
   const [items, setItems] = useState<PersonnelVisibilityAssignment[]>([]);
   const [total, setTotal] = useState(0);
@@ -41,8 +71,29 @@ export default function VisibilityTab() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [targetType, setTargetType] = useState<(typeof TARGET_TYPES)[number]>("USER");
-  const [selectedTarget, setSelectedTarget] = useState<AccessTargetSearchItem | null>(null);
+  const [mode, setMode] = useState<VisibilityAssignmentMode>("USER");
+  const [orgUnits, setOrgUnits] = useState<OrgUnitOption[]>([]);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+
+  const [prefilterDepartment, setPrefilterDepartment] = useState<OrgUnitOption | null>(null);
+  const [departmentQuery, setDepartmentQuery] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [departmentTargetQuery, setDepartmentTargetQuery] = useState("");
+
+  const [departmentEmployees, setDepartmentEmployees] = useState<EmployeeLike[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeesWithoutAccount, setEmployeesWithoutAccount] = useState(0);
+  const [adminUsers, setAdminUsers] = useState<Awaited<ReturnType<typeof fetchAdminUsers>>>([]);
+
+  const [selectedUser, setSelectedUser] = useState<VisibilityUserOption | null>(null);
+  const [selectedDepartmentTarget, setSelectedDepartmentTarget] = useState<OrgUnitOption | null>(
+    null,
+  );
+  const [selectedPosition, setSelectedPosition] = useState<AccessTargetSearchItem | null>(null);
+  const [positionResults, setPositionResults] = useState<AccessTargetSearchItem[]>([]);
+  const [positionQuery, setPositionQuery] = useState("");
+  const [positionLoading, setPositionLoading] = useState(false);
+
   const [scopeType, setScopeType] = useState<(typeof SCOPE_TYPES)[number]>("ORGANIZATION");
   const [scopeTarget, setScopeTarget] = useState<AccessTargetSearchItem | null>(null);
   const [scopeGroupId, setScopeGroupId] = useState("");
@@ -51,10 +102,42 @@ export default function VisibilityTab() {
   const [effectiveUserId, setEffectiveUserId] = useState("");
   const [effective, setEffective] = useState<EffectivePersonnelVisibility | null>(null);
 
-  const scopeTargetType = useMemo(() => {
-    if (scopeType === "DEPARTMENT") return "ORG_UNIT";
-    return null;
-  }, [scopeType]);
+  const scopeTargetType = scopeType === "DEPARTMENT" ? "ORG_UNIT" : null;
+
+  const filteredPrefilterDepartments = useMemo(
+    () => filterOrgUnitsByQuery(orgUnits, departmentQuery),
+    [orgUnits, departmentQuery],
+  );
+
+  const filteredDepartmentTargets = useMemo(
+    () => filterOrgUnitsByQuery(orgUnits, departmentTargetQuery),
+    [orgUnits, departmentTargetQuery],
+  );
+
+  const departmentUserOptions = useMemo(() => {
+    if (!prefilterDepartment) return [];
+    return buildDepartmentUserOptions(departmentEmployees, adminUsers, prefilterDepartment);
+  }, [adminUsers, departmentEmployees, prefilterDepartment]);
+
+  const filteredUsers = useMemo(
+    () => filterUserOptionsByQuery(departmentUserOptions, userQuery),
+    [departmentUserOptions, userQuery],
+  );
+
+  const staffedPositionIds = useMemo(
+    () => extractPositionIdsFromEmployees(departmentEmployees),
+    [departmentEmployees],
+  );
+
+  const filteredPositionResults = useMemo(
+    () =>
+      filterPositionsByDepartmentContext(
+        positionResults,
+        staffedPositionIds,
+        Boolean(prefilterDepartment),
+      ),
+    [positionResults, prefilterDepartment, staffedPositionIds],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,12 +160,117 @@ export default function VisibilityTab() {
     void load();
   }, [load]);
 
-  async function handleCreate(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    if (!selectedTarget) {
-      setError("Выберите target");
+  useEffect(() => {
+    void (async () => {
+      setReferenceLoading(true);
+      try {
+        const [tree, groupsBody, users] = await Promise.all([
+          getOrgUnitsTree({ include_inactive: false }),
+          apiFetchJson<{ items?: { group_id: number; group_name?: string }[] }>(
+            "/directory/department-groups",
+          ).catch(() => ({ items: [] })),
+          fetchAdminUsers({ limit: 500 }),
+        ]);
+
+        const groupNames = new Map<number, string>();
+        for (const g of groupsBody.items ?? []) {
+          const gid = Number(g.group_id);
+          if (Number.isFinite(gid) && gid >= 1) {
+            groupNames.set(gid, String(g.group_name || "").trim() || `Группа #${gid}`);
+          }
+        }
+
+        setOrgUnits(flattenOrgUnitTree(tree.items, 0, groupNames));
+        setAdminUsers(users);
+      } catch (err) {
+        setError(mapAdminSystemApiError(err, "Не удалось загрузить справочник отделений"));
+      } finally {
+        setReferenceLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!prefilterDepartment || (mode !== "USER" && mode !== "POSITION")) {
+      setDepartmentEmployees([]);
+      setEmployeesWithoutAccount(0);
       return;
     }
+
+    void (async () => {
+      setEmployeesLoading(true);
+      try {
+        const res = await getEmployees({
+          org_unit_id: prefilterDepartment.unitId,
+          include_children: true,
+          status: "active",
+          limit: 200,
+        });
+        setDepartmentEmployees(res.items);
+        setEmployeesWithoutAccount(countEmployeesWithoutUserAccount(res.items));
+      } catch {
+        setDepartmentEmployees([]);
+        setEmployeesWithoutAccount(0);
+      } finally {
+        setEmployeesLoading(false);
+      }
+    })();
+  }, [mode, prefilterDepartment]);
+
+  useEffect(() => {
+    if (mode !== "POSITION") return;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setPositionLoading(true);
+        try {
+          const res = await searchAccessTargets({
+            target_type: "POSITION",
+            q: positionQuery,
+            limit: 30,
+          });
+          setPositionResults(res.items);
+        } catch {
+          setPositionResults([]);
+        } finally {
+          setPositionLoading(false);
+        }
+      })();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [mode, positionQuery]);
+
+  function resetTargetSelection(): void {
+    setSelectedUser(null);
+    setSelectedDepartmentTarget(null);
+    setSelectedPosition(null);
+    setUserQuery("");
+    setDepartmentTargetQuery("");
+    setPositionQuery("");
+  }
+
+  function handleModeChange(next: VisibilityAssignmentMode): void {
+    setMode(next);
+    setPrefilterDepartment(null);
+    setDepartmentQuery("");
+    resetTargetSelection();
+  }
+
+  async function handleCreate(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+
+    if (
+      !canSubmitVisibilityAssignment({
+        mode,
+        selectedDepartment: prefilterDepartment,
+        selectedUser,
+        selectedDepartmentTarget,
+        selectedPosition,
+      })
+    ) {
+      setError("Заполните обязательные поля назначения");
+      return;
+    }
+
     if (scopeType === "DEPARTMENT" && !scopeTarget) {
       setError("Выберите отделение для scope");
       return;
@@ -95,27 +283,38 @@ export default function VisibilityTab() {
       }
     }
 
+    let target: AccessTargetSearchItem | null = null;
+    if (mode === "USER" && selectedUser) target = toAccessTargetFromUser(selectedUser);
+    if (mode === "DEPARTMENT" && selectedDepartmentTarget) {
+      target = toAccessTargetFromDepartment(selectedDepartmentTarget);
+    }
+    if (mode === "POSITION" && selectedPosition) target = selectedPosition;
+    if (!target) {
+      setError("Выберите target");
+      return;
+    }
+
+    const targetTypeApi =
+      mode === "DEPARTMENT" ? "DEPARTMENT" : (target.target_type as "USER" | "POSITION");
+
     setError(null);
     setSuccess(null);
     try {
-      const targetTypeApi =
-        targetType === "ORG_UNIT" ? "DEPARTMENT" : targetType;
-
       await createPersonnelVisibilityAssignment({
         target_type: targetTypeApi,
-        target_user_id: targetTypeApi === "USER" ? selectedTarget.target_id : null,
-        target_position_id: targetTypeApi === "POSITION" ? selectedTarget.target_id : null,
-        target_department_id: targetTypeApi === "DEPARTMENT" ? selectedTarget.target_id : null,
+        target_user_id: targetTypeApi === "USER" ? target.target_id : null,
+        target_position_id: targetTypeApi === "POSITION" ? target.target_id : null,
+        target_department_id: targetTypeApi === "DEPARTMENT" ? target.target_id : null,
         scope_type: scopeType,
-        scope_department_id:
-          scopeType === "DEPARTMENT" ? scopeTarget?.target_id ?? null : null,
-        scope_department_group_id:
-          scopeType === "DEPARTMENT_GROUP" ? Number(scopeGroupId) : null,
+        scope_department_id: scopeType === "DEPARTMENT" ? scopeTarget?.target_id ?? null : null,
+        scope_department_group_id: scopeType === "DEPARTMENT_GROUP" ? Number(scopeGroupId) : null,
         can_view_personnel: true,
         can_view_tasks: canViewTasks,
       });
       setSuccess("Назначение создано");
-      setSelectedTarget(null);
+      resetTargetSelection();
+      setPrefilterDepartment(null);
+      setDepartmentQuery("");
       setScopeTarget(null);
       await load();
     } catch (err) {
@@ -155,39 +354,276 @@ export default function VisibilityTab() {
 
   return (
     <div className="space-y-6">
-      <InfoBanner
-        message="Видимость персонала (ADR-042 E1) открывает правый сайдбар и справочник без выдачи admin-функций. Роль отвечает за действия; visibility scope — за просмотр."
-      />
+      <InfoBanner message="Видимость персонала (ADR-042 E1) открывает правый сайдбар и справочник без выдачи admin-функций. Роль отвечает за действия; visibility scope — за просмотр." />
+
       {error ? <ErrorBanner message={error} /> : null}
       {success ? <SuccessBanner message={success} /> : null}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Создать назначение</h2>
-        <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-2">
-          <label className="block text-sm">
-            Target type
-            <select
-              className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-              value={targetType}
-              onChange={(e) => {
-                setTargetType(e.target.value as (typeof TARGET_TYPES)[number]);
-                setSelectedTarget(null);
-              }}
-            >
-              {TARGET_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t === "ORG_UNIT" ? "DEPARTMENT (ORG_UNIT)" : t}
-                </option>
-              ))}
-            </select>
-          </label>
 
-          <TargetSearchField
-            label="Target"
-            targetType={targetType}
-            value={selectedTarget}
-            onChange={setSelectedTarget}
-          />
+        <div className="flex flex-wrap gap-2">
+          {VISIBILITY_MODE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => handleModeChange(option.id)}
+              className={[
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+                mode === option.id
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
+              ].join(" ")}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleCreate} className="grid gap-4 md:grid-cols-2">
+          {(departmentPrefilterRequired(mode) || departmentPrefilterOptional(mode)) && (
+            <div className="md:col-span-2 space-y-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+              <div className="text-sm font-medium">
+                {departmentPrefilterRequired(mode)
+                  ? "Отделение (обязательно)"
+                  : "Отделение (опционально — фильтр должностей)"}
+              </div>
+              {prefilterDepartment ? (
+                <div className="flex items-center justify-between rounded border border-green-300 bg-green-50 px-2 py-1 text-sm dark:border-green-800 dark:bg-green-950/30">
+                  <span>{formatDepartmentOptionLabel(prefilterDepartment)}</span>
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={() => {
+                      setPrefilterDepartment(null);
+                      setDepartmentQuery("");
+                      resetTargetSelection();
+                    }}
+                  >
+                    сменить
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="search"
+                    placeholder="Поиск отделения…"
+                    value={departmentQuery}
+                    onChange={(e) => setDepartmentQuery(e.target.value)}
+                    className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                    disabled={referenceLoading}
+                  />
+                  {referenceLoading ? (
+                    <p className="text-xs text-zinc-500">Загрузка отделений…</p>
+                  ) : filteredPrefilterDepartments.length === 0 ? (
+                    <p className="text-xs text-zinc-500">Отделения не найдены</p>
+                  ) : (
+                    <ul className="max-h-44 overflow-auto rounded border dark:border-zinc-700">
+                      {filteredPrefilterDepartments.slice(0, 40).map((dept) => (
+                        <li key={dept.unitId}>
+                          <button
+                            type="button"
+                            className="block w-full px-2 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            style={indentStyle(dept.depth)}
+                            onClick={() => {
+                              setPrefilterDepartment(dept);
+                              setDepartmentQuery("");
+                              resetTargetSelection();
+                            }}
+                          >
+                            {formatDepartmentOptionLabel(dept)}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {mode === "POSITION" && !prefilterDepartment ? (
+                <p className="text-xs text-zinc-500">
+                  Без выбора отделения поиск должностей выполняется по всей организации. Фильтр по
+                  отделению основан на активных сотрудниках отделения и может быть неполным.
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {mode === "USER" ? (
+            <div className="md:col-span-2 space-y-2">
+              <div className="text-sm font-medium">Сотрудник с учётной записью</div>
+              {!prefilterDepartment ? (
+                <p className="rounded border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 dark:border-zinc-600">
+                  Выберите отделение, чтобы увидеть сотрудников с учётной записью.
+                </p>
+              ) : selectedUser ? (
+                <div className="flex items-center justify-between rounded border border-green-300 bg-green-50 px-2 py-1 text-sm dark:border-green-800 dark:bg-green-950/30">
+                  <span>{formatUserOptionLabel(selectedUser)}</span>
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={() => setSelectedUser(null)}
+                  >
+                    сменить
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="search"
+                    placeholder="Поиск по ФИО, login, должности…"
+                    value={userQuery}
+                    onChange={(e) => setUserQuery(e.target.value)}
+                    className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                    disabled={employeesLoading}
+                  />
+                  {employeesLoading ? (
+                    <p className="text-xs text-zinc-500">Загрузка сотрудников…</p>
+                  ) : filteredUsers.length === 0 ? (
+                    <p className="rounded border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 dark:border-zinc-600">
+                      {departmentUserOptions.length === 0
+                        ? "В выбранном отделении нет активных пользователей с учётной записью."
+                        : "Сотрудники не найдены по запросу."}
+                    </p>
+                  ) : (
+                    <ul className="max-h-52 overflow-auto rounded border dark:border-zinc-700">
+                      {filteredUsers.map((user) => (
+                        <li key={user.userId}>
+                          <button
+                            type="button"
+                            className="block w-full px-2 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            onClick={() => setSelectedUser(user)}
+                          >
+                            <div className="font-medium">{user.fullName}</div>
+                            <div className="text-zinc-500">
+                              {[
+                                user.login ? `login: ${user.login}` : null,
+                                user.positionName,
+                                user.departmentName,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!employeesLoading && employeesWithoutAccount > 0 ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      {employeesWithoutAccount} сотрудник(ов) без учётной записи — назначение USER
+                      для них недоступно.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {mode === "DEPARTMENT" ? (
+            <div className="md:col-span-2 space-y-2">
+              <div className="text-sm font-medium">Отделение-получатель visibility</div>
+              {selectedDepartmentTarget ? (
+                <div className="flex items-center justify-between rounded border border-green-300 bg-green-50 px-2 py-1 text-sm dark:border-green-800 dark:bg-green-950/30">
+                  <span>{formatDepartmentOptionLabel(selectedDepartmentTarget)}</span>
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={() => setSelectedDepartmentTarget(null)}
+                  >
+                    сменить
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="search"
+                    placeholder="Поиск отделения…"
+                    value={departmentTargetQuery}
+                    onChange={(e) => setDepartmentTargetQuery(e.target.value)}
+                    className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                    disabled={referenceLoading}
+                  />
+                  {referenceLoading ? (
+                    <p className="text-xs text-zinc-500">Загрузка отделений…</p>
+                  ) : filteredDepartmentTargets.length === 0 ? (
+                    <p className="text-xs text-zinc-500">Отделения не найдены</p>
+                  ) : (
+                    <ul className="max-h-52 overflow-auto rounded border dark:border-zinc-700">
+                      {filteredDepartmentTargets.slice(0, 40).map((dept) => (
+                        <li key={dept.unitId}>
+                          <button
+                            type="button"
+                            className="block w-full px-2 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            style={indentStyle(dept.depth)}
+                            onClick={() => setSelectedDepartmentTarget(dept)}
+                          >
+                            <div className="font-medium">{dept.name}</div>
+                            <div className="text-zinc-500">
+                              {[dept.groupName ? `группа: ${dept.groupName}` : null, dept.code]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {mode === "POSITION" ? (
+            <div className="md:col-span-2 space-y-2">
+              <div className="text-sm font-medium">Должность</div>
+              {selectedPosition ? (
+                <div className="flex items-center justify-between rounded border border-green-300 bg-green-50 px-2 py-1 text-sm dark:border-green-800 dark:bg-green-950/30">
+                  <span>
+                    #{selectedPosition.target_id} — {selectedPosition.label}
+                    {selectedPosition.subtitle ? ` (${selectedPosition.subtitle})` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={() => setSelectedPosition(null)}
+                  >
+                    сменить
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="search"
+                    placeholder="Поиск должности…"
+                    value={positionQuery}
+                    onChange={(e) => setPositionQuery(e.target.value)}
+                    className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                  />
+                  {positionLoading ? <p className="text-xs text-zinc-500">Поиск…</p> : null}
+                  {filteredPositionResults.length > 0 ? (
+                    <ul className="max-h-44 overflow-auto rounded border dark:border-zinc-700">
+                      {filteredPositionResults.map((item) => (
+                        <li key={item.target_id}>
+                          <button
+                            type="button"
+                            className="block w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            onClick={() => setSelectedPosition(item)}
+                          >
+                            <strong>#{item.target_id}</strong> {item.label}
+                            {item.subtitle ? ` — ${item.subtitle}` : ""}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : prefilterDepartment && !positionLoading ? (
+                    <p className="text-xs text-zinc-500">
+                      В выбранном отделении нет должностей по текущему фильтру.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
 
           <label className="block text-sm">
             Scope type
@@ -224,7 +660,7 @@ export default function VisibilityTab() {
               />
             </label>
           ) : (
-            <div className="text-sm text-zinc-500 dark:text-zinc-400 self-end pb-2">
+            <div className="self-end pb-2 text-sm text-zinc-500 dark:text-zinc-400">
               Organization scope — без дополнительного target
             </div>
           )}
