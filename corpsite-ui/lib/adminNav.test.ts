@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canSeeAdminShell,
+  canSeePersonnelIdentityOperationsNav,
   canSeePersonnelLifecycleNav,
   canSeeSysadminCabinetNav,
   isForbiddenAdminRoute,
@@ -31,6 +32,7 @@ describe("adminNav", () => {
     expect(canSeeAdminShell(hrManager)).toBe(false);
     expect(canSeeSysadminCabinetNav(hrManager)).toBe(false);
     expect(canSeePersonnelLifecycleNav(hrManager)).toBe(true);
+    expect(canSeePersonnelIdentityOperationsNav(hrManager)).toBe(true);
   });
 
   it("forbidden routes respect split access", () => {
@@ -38,7 +40,9 @@ describe("adminNav", () => {
     expect(isForbiddenAdminRoute("/admin/sync", privileged)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system", regular)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system/personnel-lifecycle", hrManager)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/system/personnel-identity/operations", hrManager)).toBe(false);
     expect(isForbiddenAdminRoute("/admin/system/personnel-lifecycle", regular)).toBe(true);
+    expect(isForbiddenAdminRoute("/admin/system/personnel-identity/operations", regular)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system", hrManager)).toBe(true);
   });
 });

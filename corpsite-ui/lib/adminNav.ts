@@ -36,12 +36,27 @@ export function isPersonnelLifecycleRoute(pathname: string): boolean {
   return pathname === "/admin/system/personnel-lifecycle" || pathname.startsWith("/admin/system/personnel-lifecycle/");
 }
 
+/** ADR-044 R2.5g — personnel identity operations UI (personnel admin baseline). */
+export function isPersonnelIdentityOperationsRoute(pathname: string): boolean {
+  return (
+    pathname === "/admin/system/personnel-identity/operations" ||
+    pathname.startsWith("/admin/system/personnel-identity/")
+  );
+}
+
+export function canSeePersonnelIdentityOperationsNav(me: MeInfo | null | undefined): boolean {
+  return canSeePersonnelLifecycleNav(me);
+}
+
 export function isForbiddenAdminRoute(
   pathname: string,
   me: MeInfo | null | undefined,
 ): boolean {
   if (isPersonnelLifecycleRoute(pathname)) {
     return !canSeePersonnelLifecycleNav(me);
+  }
+  if (isPersonnelIdentityOperationsRoute(pathname)) {
+    return !canSeePersonnelIdentityOperationsNav(me);
   }
   if (pathname.startsWith("/admin/system")) {
     return !canSeeSysadminCabinetNav(me);

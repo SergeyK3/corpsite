@@ -8,9 +8,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiAuthMe } from "@/lib/api";
 import {
   canSeeAdminShell,
+  canSeePersonnelIdentityOperationsNav,
   canSeePersonnelLifecycleNav,
   canSeeSysadminCabinetNav,
   isForbiddenAdminRoute,
+  isPersonnelIdentityOperationsRoute,
   isPersonnelLifecycleRoute,
 } from "@/lib/adminNav";
 import {
@@ -51,6 +53,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     href: "/admin/system/personnel-lifecycle",
     title: "Personnel Lifecycle",
     matchPrefixes: ["/admin/system/personnel-lifecycle"],
+  },
+  {
+    href: "/admin/system/personnel-identity/operations",
+    title: "Identity Operations",
+    matchPrefixes: ["/admin/system/personnel-identity"],
   },
   {
     href: "/admin/sync",
@@ -115,6 +122,9 @@ function isNavItemActive(pathname: string, item: NavItem): boolean {
       return false;
     }
     if (prefix === "/admin/system" && pathname.startsWith("/admin/system/personnel-lifecycle")) {
+      return false;
+    }
+    if (prefix === "/admin/system" && pathname.startsWith("/admin/system/personnel-identity")) {
       return false;
     }
     return true;
@@ -257,14 +267,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPersonnelVisibility = hasPersonnelVisibility(me) && !isAdmin;
   const showSysadminNav = canSeeSysadminCabinetNav(me);
   const showPersonnelLifecycleNav = canSeePersonnelLifecycleNav(me);
+  const showPersonnelIdentityOperationsNav = canSeePersonnelIdentityOperationsNav(me);
 
   const sidebarNavItems = useMemo(() => {
     return PRIMARY_ADMIN_NAV.filter((item) => {
       if (item.href === "/admin/system/personnel-lifecycle") return showPersonnelLifecycleNav;
+      if (item.href === "/admin/system/personnel-identity/operations") {
+        return showPersonnelIdentityOperationsNav;
+      }
       if (item.href === "/admin/system") return showSysadminNav;
       return isAdmin;
     });
-  }, [isAdmin, showPersonnelLifecycleNav, showSysadminNav]);
+  }, [isAdmin, showPersonnelIdentityOperationsNav, showPersonnelLifecycleNav, showSysadminNav]);
 
   const visibilityNavItems = useMemo(() => {
     const items = [...VISIBILITY_DIRECTORY_NAV];
@@ -282,10 +296,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     !loading && !!me && !canAccessDirectoryRoute(pathname, me) && isForbiddenAdminRoute(pathname, me);
 
   const privilegedSysadminOnly =
-    !isAdmin && showSysadminNav && pathname.startsWith("/admin/system") && !isPersonnelLifecycleRoute(pathname);
+    !isAdmin &&
+    showSysadminNav &&
+    pathname.startsWith("/admin/system") &&
+    !isPersonnelLifecycleRoute(pathname) &&
+    !isPersonnelIdentityOperationsRoute(pathname);
 
-  const personnelLifecycleOnly =
-    !isAdmin && !showSysadminNav && showPersonnelLifecycleNav && isPersonnelLifecycleRoute(pathname);
+  const personnelAdminStandaloneRoute =
+    !isAdmin &&
+    !showSysadminNav &&
+    showPersonnelLifecycleNav &&
+    (isPersonnelLifecycleRoute(pathname) || isPersonnelIdentityOperationsRoute(pathname));
 
   useEffect(() => {
     if (isLogin || loading) return;
@@ -393,7 +414,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </section>
           </div>
-        ) : privilegedSysadminOnly || personnelLifecycleOnly ? (
+        ) : privilegedSysadminOnly || personnelAdminStandaloneRoute ? (
           <section className="min-w-0">{children}</section>
         ) : (
           <div className="grid grid-cols-1 gap-4">
