@@ -8,6 +8,8 @@ import {
   countEmployeesWithoutUserAccount,
   departmentPrefilterRequired,
   extractPositionIdsFromEmployees,
+  filterOrgUnitsByGroup,
+  filterOrgUnitsByGroupAndQuery,
   filterPositionsByDepartmentContext,
   filterUserOptionsByQuery,
   flattenOrgUnitTree,
@@ -16,13 +18,57 @@ import {
 } from "./visibilityTabLogic";
 
 describe("visibilityTabLogic", () => {
-  const dept = {
-    unitId: 10,
-    name: "Терапия",
-    groupId: 2,
-    groupName: "Клинические",
-    depth: 0,
-  };
+  const clinicalGroupId = 1;
+  const adminGroupId = 3;
+
+  const departments = [
+    {
+      unitId: 10,
+      name: "Гинекология",
+      groupId: clinicalGroupId,
+      groupName: "Клинические",
+      depth: 0,
+    },
+    {
+      unitId: 11,
+      name: "Инсультный",
+      groupId: clinicalGroupId,
+      groupName: "Клинические",
+      depth: 0,
+    },
+    {
+      unitId: 20,
+      name: "Бухгалтерия",
+      groupId: adminGroupId,
+      groupName: "Административно-хозяйственные",
+      depth: 0,
+    },
+    {
+      unitId: 21,
+      name: "Отдел кадров",
+      groupId: adminGroupId,
+      groupName: "Административно-хозяйственные",
+      depth: 0,
+    },
+  ];
+
+  const dept = departments[0]!;
+
+  it("filterOrgUnitsByGroup limits department list to selected group", () => {
+    const filtered = filterOrgUnitsByGroup(departments, clinicalGroupId);
+    expect(filtered.map((d) => d.unitId)).toEqual([10, 11]);
+  });
+
+  it('filterOrgUnitsByGroup with "all groups" returns every department', () => {
+    expect(filterOrgUnitsByGroup(departments, null)).toHaveLength(4);
+    expect(filterOrgUnitsByGroup(departments, undefined)).toHaveLength(4);
+  });
+
+  it("filterOrgUnitsByGroupAndQuery combines group filter and text search", () => {
+    const filtered = filterOrgUnitsByGroupAndQuery(departments, adminGroupId, "бух");
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.name).toBe("Бухгалтерия");
+  });
 
   it("flattenOrgUnitTree preserves hierarchy depth and group names", () => {
     const flat = flattenOrgUnitTree(
@@ -69,7 +115,7 @@ describe("visibilityTabLogic", () => {
     expect(users[0]?.positionName).toBe("Медсестра");
   });
 
-  it("filterUserOptionsByQuery filters by department-scoped list", () => {
+  it("filterUserOptionsByQuery filters by department-scoped list in USER mode", () => {
     const all = buildDepartmentUserOptions(
       [
         {
@@ -119,10 +165,10 @@ describe("visibilityTabLogic", () => {
     const target = toAccessTargetFromDepartment(dept);
     expect(target.target_type).toBe("ORG_UNIT");
     expect(target.target_id).toBe(10);
-    expect(target.label).toBe("Терапия");
+    expect(target.label).toBe("Гинекология");
   });
 
-  it("filterPositionsByDepartmentContext limits positions when department selected", () => {
+  it("filterPositionsByDepartmentContext limits positions when department selected in POSITION mode", () => {
     const staffed = extractPositionIdsFromEmployees([
       { position: { id: 7, name: "Заведующий" } },
     ]);
@@ -130,6 +176,20 @@ describe("visibilityTabLogic", () => {
       { target_type: "POSITION", target_id: 7, label: "Заведующий" },
       { target_type: "POSITION", target_id: 8, label: "Другая" },
     ];
+    const filtered = filterPositionsByDepartmentContext(items, staffed, true);
+    expect(filtered.map((i) => i.target_id)).toEqual([7]);
+  });
+
+  it("POSITION mode respects department-group filtering when department filter is used", () => {
+    const clinicalDepartments = filterOrgUnitsByGroup(departments, clinicalGroupId);
+    const staffed = extractPositionIdsFromEmployees([
+      { position: { id: 7, name: "Заведующий" } },
+    ]);
+    const items = [
+      { target_type: "POSITION", target_id: 7, label: "Заведующий" },
+      { target_type: "POSITION", target_id: 8, label: "Другая" },
+    ];
+    expect(clinicalDepartments.some((d) => d.unitId === dept.unitId)).toBe(true);
     const filtered = filterPositionsByDepartmentContext(items, staffed, true);
     expect(filtered.map((i) => i.target_id)).toEqual([7]);
   });

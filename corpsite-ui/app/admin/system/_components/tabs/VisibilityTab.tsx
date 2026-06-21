@@ -26,15 +26,18 @@ import {
   departmentPrefilterOptional,
   departmentPrefilterRequired,
   extractPositionIdsFromEmployees,
-  filterOrgUnitsByQuery,
+  filterOrgUnitsByGroupAndQuery,
   filterPositionsByDepartmentContext,
   filterUserOptionsByQuery,
   flattenOrgUnitTree,
   formatDepartmentOptionLabel,
   formatUserOptionLabel,
+  parseDepartmentGroupFilterValue,
+  sortDepartmentGroupOptions,
   toAccessTargetFromDepartment,
   toAccessTargetFromUser,
   VISIBILITY_MODE_OPTIONS,
+  type DepartmentGroupOption,
   type OrgUnitOption,
   type VisibilityAssignmentMode,
   type EmployeeLike,
@@ -73,8 +76,10 @@ export default function VisibilityTab() {
 
   const [mode, setMode] = useState<VisibilityAssignmentMode>("USER");
   const [orgUnits, setOrgUnits] = useState<OrgUnitOption[]>([]);
+  const [departmentGroups, setDepartmentGroups] = useState<DepartmentGroupOption[]>([]);
   const [referenceLoading, setReferenceLoading] = useState(true);
 
+  const [prefilterGroupId, setPrefilterGroupId] = useState("");
   const [prefilterDepartment, setPrefilterDepartment] = useState<OrgUnitOption | null>(null);
   const [departmentQuery, setDepartmentQuery] = useState("");
   const [userQuery, setUserQuery] = useState("");
@@ -104,14 +109,19 @@ export default function VisibilityTab() {
 
   const scopeTargetType = scopeType === "DEPARTMENT" ? "ORG_UNIT" : null;
 
+  const selectedGroupId = useMemo(
+    () => parseDepartmentGroupFilterValue(prefilterGroupId),
+    [prefilterGroupId],
+  );
+
   const filteredPrefilterDepartments = useMemo(
-    () => filterOrgUnitsByQuery(orgUnits, departmentQuery),
-    [orgUnits, departmentQuery],
+    () => filterOrgUnitsByGroupAndQuery(orgUnits, selectedGroupId, departmentQuery),
+    [orgUnits, selectedGroupId, departmentQuery],
   );
 
   const filteredDepartmentTargets = useMemo(
-    () => filterOrgUnitsByQuery(orgUnits, departmentTargetQuery),
-    [orgUnits, departmentTargetQuery],
+    () => filterOrgUnitsByGroupAndQuery(orgUnits, selectedGroupId, departmentTargetQuery),
+    [orgUnits, selectedGroupId, departmentTargetQuery],
   );
 
   const departmentUserOptions = useMemo(() => {
@@ -173,14 +183,18 @@ export default function VisibilityTab() {
         ]);
 
         const groupNames = new Map<number, string>();
+        const groups: DepartmentGroupOption[] = [];
         for (const g of groupsBody.items ?? []) {
           const gid = Number(g.group_id);
           if (Number.isFinite(gid) && gid >= 1) {
-            groupNames.set(gid, String(g.group_name || "").trim() || `Группа #${gid}`);
+            const groupName = String(g.group_name || "").trim() || `Группа #${gid}`;
+            groupNames.set(gid, groupName);
+            groups.push({ groupId: gid, groupName });
           }
         }
 
         setOrgUnits(flattenOrgUnitTree(tree.items, 0, groupNames));
+        setDepartmentGroups(sortDepartmentGroupOptions(groups));
         setAdminUsers(users);
       } catch (err) {
         setError(mapAdminSystemApiError(err, "Не удалось загрузить справочник отделений"));
@@ -248,8 +262,29 @@ export default function VisibilityTab() {
     setPositionQuery("");
   }
 
+  function handlePrefilterGroupChange(nextGroupId: string): void {
+    setPrefilterGroupId(nextGroupId);
+    const nextSelectedGroupId = parseDepartmentGroupFilterValue(nextGroupId);
+    if (
+      prefilterDepartment &&
+      nextSelectedGroupId != null &&
+      prefilterDepartment.groupId !== nextSelectedGroupId
+    ) {
+      setPrefilterDepartment(null);
+      resetTargetSelection();
+    }
+    if (
+      selectedDepartmentTarget &&
+      nextSelectedGroupId != null &&
+      selectedDepartmentTarget.groupId !== nextSelectedGroupId
+    ) {
+      setSelectedDepartmentTarget(null);
+    }
+  }
+
   function handleModeChange(next: VisibilityAssignmentMode): void {
     setMode(next);
+    setPrefilterGroupId("");
     setPrefilterDepartment(null);
     setDepartmentQuery("");
     resetTargetSelection();
@@ -313,6 +348,7 @@ export default function VisibilityTab() {
       });
       setSuccess("Назначение создано");
       resetTargetSelection();
+      setPrefilterGroupId("");
       setPrefilterDepartment(null);
       setDepartmentQuery("");
       setScopeTarget(null);
@@ -405,14 +441,34 @@ export default function VisibilityTab() {
                 </div>
               ) : (
                 <>
-                  <input
-                    type="search"
-                    placeholder="Поиск отделения…"
-                    value={departmentQuery}
-                    onChange={(e) => setDepartmentQuery(e.target.value)}
-                    className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                    disabled={referenceLoading}
-                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="block shrink-0 sm:w-52">
+                      <span className="mb-1 block text-xs text-zinc-500">Группа отделений</span>
+                      <select
+                        value={prefilterGroupId}
+                        onChange={(e) => handlePrefilterGroupChange(e.target.value)}
+                        disabled={referenceLoading}
+                        className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                      >
+                        <option value="">Все группы</option>
+                        {departmentGroups.map((group) => (
+                          <option key={group.groupId} value={String(group.groupId)}>
+                            {group.groupName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="min-w-0 flex-1">
+                      <input
+                        type="search"
+                        placeholder="Поиск отделения…"
+                        value={departmentQuery}
+                        onChange={(e) => setDepartmentQuery(e.target.value)}
+                        className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        disabled={referenceLoading}
+                      />
+                    </div>
+                  </div>
                   {referenceLoading ? (
                     <p className="text-xs text-zinc-500">Загрузка отделений…</p>
                   ) : filteredPrefilterDepartments.length === 0 ? (
@@ -535,14 +591,34 @@ export default function VisibilityTab() {
                 </div>
               ) : (
                 <>
-                  <input
-                    type="search"
-                    placeholder="Поиск отделения…"
-                    value={departmentTargetQuery}
-                    onChange={(e) => setDepartmentTargetQuery(e.target.value)}
-                    className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                    disabled={referenceLoading}
-                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="block shrink-0 sm:w-52">
+                      <span className="mb-1 block text-xs text-zinc-500">Группа отделений</span>
+                      <select
+                        value={prefilterGroupId}
+                        onChange={(e) => handlePrefilterGroupChange(e.target.value)}
+                        disabled={referenceLoading}
+                        className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                      >
+                        <option value="">Все группы</option>
+                        {departmentGroups.map((group) => (
+                          <option key={group.groupId} value={String(group.groupId)}>
+                            {group.groupName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="min-w-0 flex-1">
+                      <input
+                        type="search"
+                        placeholder="Поиск отделения…"
+                        value={departmentTargetQuery}
+                        onChange={(e) => setDepartmentTargetQuery(e.target.value)}
+                        className="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        disabled={referenceLoading}
+                      />
+                    </div>
+                  </div>
                   {referenceLoading ? (
                     <p className="text-xs text-zinc-500">Загрузка отделений…</p>
                   ) : filteredDepartmentTargets.length === 0 ? (

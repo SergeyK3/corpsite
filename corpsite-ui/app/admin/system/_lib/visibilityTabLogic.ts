@@ -10,6 +10,30 @@ export const VISIBILITY_MODE_OPTIONS: { id: VisibilityAssignmentMode; label: str
   { id: "POSITION", label: "Выдать должности" },
 ];
 
+export type DepartmentGroupOption = {
+  groupId: number;
+  groupName: string;
+};
+
+const DEPARTMENT_GROUP_ORDER = [
+  "Клинические",
+  "Параклинические",
+  "Административно-хозяйственные",
+];
+
+export function sortDepartmentGroupOptions(
+  groups: DepartmentGroupOption[],
+): DepartmentGroupOption[] {
+  return [...groups].sort((a, b) => {
+    const ai = DEPARTMENT_GROUP_ORDER.indexOf(a.groupName);
+    const bi = DEPARTMENT_GROUP_ORDER.indexOf(b.groupName);
+    if (ai !== -1 || bi !== -1) {
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    }
+    return a.groupName.localeCompare(b.groupName, "ru");
+  });
+}
+
 export type OrgUnitOption = {
   unitId: number;
   name: string;
@@ -140,6 +164,21 @@ export function filterUserOptionsByQuery(
   });
 }
 
+export function parseDepartmentGroupFilterValue(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const gid = Number(trimmed);
+  return Number.isFinite(gid) && gid >= 1 ? gid : null;
+}
+
+export function filterOrgUnitsByGroup(
+  options: OrgUnitOption[],
+  groupId: number | null | undefined,
+): OrgUnitOption[] {
+  if (groupId == null || groupId < 1) return options;
+  return options.filter((item) => item.groupId === groupId);
+}
+
 export function filterOrgUnitsByQuery(
   options: OrgUnitOption[],
   query: string,
@@ -153,6 +192,14 @@ export function filterOrgUnitsByQuery(
       .toLowerCase();
     return haystack.includes(q);
   });
+}
+
+export function filterOrgUnitsByGroupAndQuery(
+  options: OrgUnitOption[],
+  groupId: number | null | undefined,
+  query: string,
+): OrgUnitOption[] {
+  return filterOrgUnitsByQuery(filterOrgUnitsByGroup(options, groupId), query);
 }
 
 export function extractPositionIdsFromEmployees(employees: EmployeeLike[]): Set<number> {
