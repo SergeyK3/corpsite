@@ -458,3 +458,77 @@ class UserLinkageExecuteResponse(BaseModel):
     failed: int
     audit_records_created: int
     items: List[UserLinkageExecuteItemResult] = Field(default_factory=list)
+
+
+class UserLinkageOperationsAuditSummary(BaseModel):
+    user_employee_linked: int = 0
+    user_employee_unlinked: int = 0
+    user_employee_link_rolled_back: int = 0
+
+
+class UserLinkageOperationsRunListItem(BaseModel):
+    run_id: int
+    phase: str
+    operation: str
+    status: str
+    dry_run: bool
+    actor_user_id: Optional[int] = None
+    actor_login: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    source_preview_run_id: Optional[int] = None
+    source_item_id: Optional[int] = None
+    item_count: int = 0
+    audit_summary: UserLinkageOperationsAuditSummary = Field(
+        default_factory=UserLinkageOperationsAuditSummary
+    )
+
+
+class UserLinkageOperationsRunListResponse(BaseModel):
+    items: List[UserLinkageOperationsRunListItem] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+
+
+class UserLinkageOperationsItemListItem(BaseModel):
+    item_id: int
+    run_id: int
+    run_operation: Optional[str] = None
+    run_status: Optional[str] = None
+    user_id: int
+    login: Optional[str] = None
+    proposed_employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    action: str
+    status: str
+    reason_codes: List[str] = Field(default_factory=list)
+    created_at: Optional[str] = None
+    source_item_id: Optional[int] = None
+    audit_summary: UserLinkageOperationsAuditSummary = Field(
+        default_factory=UserLinkageOperationsAuditSummary
+    )
+
+
+class UserLinkageOperationsRunDetail(UserLinkageOperationsRunListItem):
+    item_counts_by_status: Dict[str, int] = Field(default_factory=dict)
+    item_counts_by_action: Dict[str, int] = Field(default_factory=dict)
+    recent_items: List[UserLinkageOperationsItemListItem] = Field(default_factory=list)
+
+
+class UserLinkageOperationsItemDetail(UserLinkageOperationsItemListItem):
+    source_decision_id: Optional[int] = None
+    before_user_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    after_user_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    rollback_payload: Dict[str, Any] = Field(default_factory=dict)
+    preview_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    decision_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    run_summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UserLinkageOperationsItemListResponse(BaseModel):
+    items: List[UserLinkageOperationsItemListItem] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int

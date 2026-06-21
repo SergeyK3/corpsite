@@ -17,6 +17,10 @@ from app.api.personnel_admin_schemas import (
     UserLinkageExecutePreviewResponse,
     UserLinkageExecuteRequest,
     UserLinkageExecuteResponse,
+    UserLinkageOperationsItemDetail,
+    UserLinkageOperationsItemListResponse,
+    UserLinkageOperationsRunDetail,
+    UserLinkageOperationsRunListResponse,
     UserLinkageReviewActionRequest,
     UserLinkageReviewAuditResponse,
     UserLinkageReviewDecisionResponse,
@@ -77,6 +81,12 @@ from app.services.user_linkage_execute_service import (
     UserLinkageExecuteError,
     build_user_linkage_execute_preview_report,
     execute_user_linkage_from_preview,
+)
+from app.services.user_linkage_operations_query_service import (
+    get_user_linkage_operations_item,
+    get_user_linkage_operations_run,
+    list_user_linkage_operations_items,
+    list_user_linkage_operations_runs,
 )
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
@@ -646,3 +656,87 @@ def admin_user_linkage_execute(
         )
     except UserLinkageExecuteError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.get(
+    "/identity/user-linkage/operations/runs",
+    response_model=UserLinkageOperationsRunListResponse,
+)
+def admin_list_user_linkage_operations_runs(
+    operation: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    actor_user_id: Optional[int] = Query(default=None, ge=1),
+    created_from: Optional[datetime] = Query(default=None),
+    created_to: Optional[datetime] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.5e — read-only user linkage operations run history."""
+    return list_user_linkage_operations_runs(
+        operation=operation,
+        status=status,
+        actor_user_id=actor_user_id,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/identity/user-linkage/operations/runs/{run_id}",
+    response_model=UserLinkageOperationsRunDetail,
+)
+def admin_get_user_linkage_operations_run(
+    run_id: int,
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.5e — read-only user linkage operations run detail."""
+    try:
+        return get_user_linkage_operations_run(int(run_id))
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
+
+
+@router.get(
+    "/identity/user-linkage/operations/items",
+    response_model=UserLinkageOperationsItemListResponse,
+)
+def admin_list_user_linkage_operations_items(
+    run_id: Optional[int] = Query(default=None, ge=1),
+    action: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    user_id: Optional[int] = Query(default=None, ge=1),
+    employee_id: Optional[int] = Query(default=None, ge=1),
+    source_item_id: Optional[int] = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.5e — read-only user linkage operations item history."""
+    return list_user_linkage_operations_items(
+        run_id=run_id,
+        action=action,
+        status=status,
+        user_id=user_id,
+        employee_id=employee_id,
+        source_item_id=source_item_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/identity/user-linkage/operations/items/{item_id}",
+    response_model=UserLinkageOperationsItemDetail,
+)
+def admin_get_user_linkage_operations_item(
+    item_id: int,
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.5e — read-only user linkage operations item detail."""
+    try:
+        return get_user_linkage_operations_item(int(item_id))
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
