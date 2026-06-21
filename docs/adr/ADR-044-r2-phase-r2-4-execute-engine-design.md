@@ -2,7 +2,7 @@
 
 ## Status
 
-**R2.4 execute engine** — R2.4a schema and R2.4b execute preview service implemented (2026-06-21).
+**R2.4 execute engine** — R2.4a–R2.4d implemented (schema, preview, API, apply) as of 2026-06-21.
 
 | Phase | Scope | Status |
 |-------|-------|--------|
@@ -12,7 +12,8 @@
 | **R2.4** | **Execute engine design** | **Approved** |
 | **R2.4a** | **Execute journal schema (migration)** | **Implemented** |
 | R2.4b | Execute preview service + unit tests | **Implemented** |
-| R2.4c | API + execute confirm flow | **Implemented** |
+| R2.4c | Execute preview API + confirm token | **Implemented** |
+| R2.4d | Execute engine + apply API | **Implemented** |
 | R2.5 | Manual admin link + V3 validation gate | Planned |
 
 ## Related documents
@@ -599,8 +600,9 @@ Localization: [OPS-008](../roadmap/ops-backlog.md).
 | R2.4a | Migration: phase CHECK, `operation`, `user_linkage_execute_items`, `USER_EMPLOYEE_LINKED` | This ADR | **Done** — `e4f5a6b7c8d9` |
 | R2.4b | `user_linkage_execute_service.py` + unit tests | R2.4a | **Done** |
 | R2.4c | API + execute-preview confirm flow | R2.4b | **Done** |
-| R2.4d | Admin UI execute panel | R2.4c | Not started |
-| R2.5 | Manual PATCH link + L1 rollback tool + V3 sign-off | R2.4d | Planned |
+| R2.4d | Execute engine + apply API | R2.4c | **Done** |
+| R2.4e | Admin UI execute panel | R2.4d | Not started |
+| R2.5 | Manual PATCH link + L1 rollback tool + V3 sign-off | R2.4e | Planned |
 | OPS-007 | Telegram audit | R2.5 validation | Blocked |
 
 ### 15.1 R2.4a schema (implemented)
@@ -737,6 +739,45 @@ Empty body evaluates all preview/approved candidates subject to `limit`.
 ```bash
 python -m pytest tests/test_adr044_phase_r2_4c_user_linkage_execute_preview_api.py -v
 python -m pytest tests/test_adr044_phase_r2_4b_user_linkage_execute_preview.py -q
+```
+
+### 15.4 R2.4d Execute Engine
+
+**Endpoint:** `POST /admin/personnel/identity/user-linkage/execute`
+
+**Request:** `{ "run_id": <preview_run_id>, "confirm_token": "<sha256:…>" }`
+
+**Preconditions (reject with 400 if any fail):**
+
+1. Preview run exists with `phase='R2'`, `operation='USER_LINKAGE_EXECUTE_PREVIEW'`, `dry_run=true`, `status='completed'`
+2. `confirm_token` matches digest of preview `LINK`/`PLANNED` items
+3. `planned_link > 0` in preview summary
+4. R2.1-derived blocking gates pass (V3a orphan FK, V3b duplicate user/employee, inactive employee targets)
+5. No concurrent `USER_LINKAGE_EXECUTE` run in `running` status for the same preview run
+
+**Apply model:**
+
+- Creates `identity_reconciliation_runs` with `operation='USER_LINKAGE_EXECUTE'`, `dry_run=false`
+- Processes each preview `LINK`/`PLANNED` item in its own transaction (partial batch — one failure does not roll back siblings)
+- Per item: `SELECT … FOR UPDATE` on user, fresh R2.2 re-validation, then `UPDATE users SET employee_id` only when all guards pass
+- Execute item statuses: `APPLIED`, `SKIPPED`, `FAILED`
+- Successful links emit `USER_EMPLOYEE_LINKED` in `security_audit_log`
+- `rollback_payload` stored on `APPLIED` items (L1 rollback data only — no rollback endpoint yet)
+
+**Idempotency:** Re-executing the same preview run is allowed. First run: `LINK → APPLIED`. Second run: `NOOP_ALREADY_LINKED → SKIPPED`. No duplicate linkage or duplicate audit events.
+
+**Response:** `run_id`, `preview_run_id`, `applied`, `skipped`, `failed`, `audit_records_created`, `items[]`
+
+**Tests:** `tests/test_adr044_phase_r2_4d_user_linkage_execute.py`
+
+**Verify:**
+
+```bash
+python -m pytest tests/test_adr044_phase_r2_4d_user_linkage_execute.py -v
+python -m pytest tests/test_adr044_phase_r2_4c_user_linkage_execute_preview_api.py -q
+python -m pytest tests/test_adr044_phase_r2_4b_user_linkage_execute_preview.py -q
+python -m pytest tests/test_adr044_phase_r2_4a_user_linkage_execute_schema.py -q
+python -m pytest tests/test_adr044_phase_r2_3_user_linkage_review.py -q
 ```
 
 ---

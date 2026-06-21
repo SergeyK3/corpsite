@@ -427,3 +427,34 @@ class UserLinkageExecutePreviewResponse(BaseModel):
     summary: UserLinkageExecutePreviewSummary
     items: List[UserLinkageExecutePreviewItem] = Field(default_factory=list)
     confirm_token: str
+
+
+class UserLinkageExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: int = Field(..., ge=1)
+    confirm_token: str = Field(..., min_length=8, max_length=128)
+
+
+class UserLinkageExecuteItemResult(BaseModel):
+    item_id: int
+    user_id: int
+    action: str
+    status: str
+    applied: bool = False
+    audit_created: bool = False
+
+
+class UserLinkageExecuteResponse(BaseModel):
+    phase: str
+    dry_run: bool
+    generated_at: str
+    preview_run_id: int
+    run_id: int
+    run_status: str
+    operation: str
+    applied: int
+    skipped: int
+    failed: int
+    audit_records_created: int
+    items: List[UserLinkageExecuteItemResult] = Field(default_factory=list)

@@ -55,6 +55,7 @@ _ALLOWED_EVENT_TYPES = frozenset(
         "PERSON_IIN_RECONCILED",
         "VISIBILITY_GRANTED",
         "VISIBILITY_REVOKED",
+        "USER_EMPLOYEE_LINKED",
     }
 )
 

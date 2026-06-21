@@ -1,4 +1,4 @@
-"""ADR-044 R2.4b — User → Employee linkage execute preview (dry-run plan, no writes)."""
+"""ADR-044 R2.4 — User → Employee linkage execute preview and apply engine."""
 from __future__ import annotations
 
 import hashlib
@@ -40,8 +40,11 @@ ACTION_FAIL_ALREADY_LINKED_DIFFERENT = "FAIL_ALREADY_LINKED_DIFFERENT"
 ACTION_FAIL_EMPLOYEE_CONFLICT = "FAIL_EMPLOYEE_CONFLICT"
 
 STATUS_PLANNED = "PLANNED"
+STATUS_APPLIED = "APPLIED"
 STATUS_SKIPPED = "SKIPPED"
 STATUS_FAILED = "FAILED"
+
+OPERATIONAL_EMPLOYEE_STATUSES = frozenset({"draft", "active", "suspended"})
 
 EXECUTABLE_CLASSIFICATIONS = frozenset(
     {CLASSIFICATION_REVIEW_REQUIRED, CLASSIFICATION_AMBIGUOUS}
@@ -312,6 +315,8 @@ def _insert_execute_item(
     preview_snapshot: dict[str, Any],
     decision_snapshot: dict[str, Any],
     before_user_snapshot: dict[str, Any],
+    after_user_snapshot: Optional[dict[str, Any]] = None,
+    rollback_payload: Optional[dict[str, Any]] = None,
 ) -> int:
     row = conn.execute(
         text(
@@ -357,11 +362,562 @@ def _insert_execute_item(
             "preview_snapshot": json.dumps(preview_snapshot),
             "decision_snapshot": json.dumps(decision_snapshot),
             "before_user_snapshot": json.dumps(before_user_snapshot),
-            "after_user_snapshot": json.dumps(None),
-            "rollback_payload": json.dumps(None),
+            "after_user_snapshot": json.dumps(after_user_snapshot),
+            "rollback_payload": json.dumps(rollback_payload),
         },
     ).mappings().one()
     return int(row["item_id"])
+
+
+def _load_user_row_for_update(conn: Connection, user_id: int) -> Optional[dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT user_id, login, full_name, employee_id, is_active, role_id
+            FROM public.users
+            WHERE user_id = :user_id
+            FOR UPDATE
+            """
+        ),
+        {"user_id": int(user_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _load_employee_row(conn: Connection, employee_id: int) -> Optional[dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT employee_id, full_name, operational_status
+            FROM public.employees
+            WHERE employee_id = :employee_id
+            """
+        ),
+        {"employee_id": int(employee_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _load_preview_run(conn: Connection, preview_run_id: int) -> Optional[dict[str, Any]]:
+    row = conn.execute(
+        text(
+            """
+            SELECT run_id, phase, operation, dry_run, actor_user_id, status, summary
+            FROM public.identity_reconciliation_runs
+            WHERE run_id = :run_id
+            """
+        ),
+        {"run_id": int(preview_run_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _load_planned_link_items(conn: Connection, preview_run_id: int) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        text(
+            """
+            SELECT
+                item_id,
+                user_id,
+                proposed_employee_id,
+                source_decision_id,
+                action,
+                status,
+                reason_codes,
+                preview_snapshot,
+                decision_snapshot,
+                before_user_snapshot
+            FROM public.user_linkage_execute_items
+            WHERE run_id = :run_id
+              AND action = :action
+              AND status = :status
+            ORDER BY user_id, item_id
+            """
+        ),
+        {
+            "run_id": int(preview_run_id),
+            "action": ACTION_LINK,
+            "status": STATUS_PLANNED,
+        },
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def _preview_execute_in_progress(conn: Connection, preview_run_id: int) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM public.identity_reconciliation_runs
+            WHERE phase = :phase
+              AND operation = :operation
+              AND status = :status
+              AND summary->>'source_preview_run_id' = :preview_run_id
+            LIMIT 1
+            """
+        ),
+        {
+            "phase": PHASE_R2,
+            "operation": OPERATION_EXECUTE,
+            "status": RUN_STATUS_RUNNING,
+            "preview_run_id": str(int(preview_run_id)),
+        },
+    ).first()
+    return row is not None
+
+
+def _confirm_token_for_planned_items(
+    preview_run_id: int,
+    planned_items: list[dict[str, Any]],
+) -> str:
+    payload = {
+        "run_id": int(preview_run_id),
+        "operation": OPERATION_EXECUTE_PREVIEW,
+        "planned_items": sorted(
+            [
+                {
+                    "user_id": int(item["user_id"]),
+                    "proposed_employee_id": item.get("proposed_employee_id"),
+                    "source_decision_id": item.get("source_decision_id"),
+                }
+                for item in planned_items
+            ],
+            key=lambda row: int(row["user_id"]),
+        ),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"sha256:{digest}"
+
+
+def _blocking_gates_active(blocking_gates: list[dict[str, Any]]) -> bool:
+    return any(
+        gate.get("blocks_execute") and int(gate.get("count") or 0) > 0
+        for gate in blocking_gates
+    )
+
+
+def _validate_execute_request(
+    conn: Connection,
+    *,
+    preview_run_id: int,
+    confirm_token: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    preview_run = _load_preview_run(conn, int(preview_run_id))
+    if preview_run is None:
+        raise UserLinkageExecuteError(f"preview run_id={preview_run_id} not found")
+
+    if str(preview_run.get("phase") or "") != PHASE_R2:
+        raise UserLinkageExecuteError("preview run phase must be R2")
+    if str(preview_run.get("operation") or "") != OPERATION_EXECUTE_PREVIEW:
+        raise UserLinkageExecuteError("preview run operation must be USER_LINKAGE_EXECUTE_PREVIEW")
+    if preview_run.get("dry_run") is not True:
+        raise UserLinkageExecuteError("preview run must be dry_run=true")
+    if str(preview_run.get("status") or "") != RUN_STATUS_COMPLETED:
+        raise UserLinkageExecuteError("preview run must be completed")
+
+    planned_items = _load_planned_link_items(conn, int(preview_run_id))
+    expected_token = _confirm_token_for_planned_items(int(preview_run_id), planned_items)
+    if str(confirm_token or "").strip() != expected_token:
+        raise UserLinkageExecuteError("confirm_token mismatch")
+
+    preview_summary = preview_run.get("summary") or {}
+    if isinstance(preview_summary, str):
+        preview_summary = json.loads(preview_summary)
+    planned_link = int(preview_summary.get("planned_link") or 0)
+    if planned_link <= 0 and not planned_items:
+        raise UserLinkageExecuteError("execute_allowed is false: no planned LINK items")
+    if planned_link <= 0 and planned_items:
+        planned_link = len(planned_items)
+
+    blocking_gates = _check_r2_execute_blocking_gates(conn)
+    if _blocking_gates_active(blocking_gates):
+        gate_ids = [
+            gate["gate_id"]
+            for gate in blocking_gates
+            if gate.get("blocks_execute") and int(gate.get("count") or 0) > 0
+        ]
+        raise UserLinkageExecuteError(
+            "blocking gates present: " + ", ".join(gate_ids)
+        )
+
+    if _preview_execute_in_progress(conn, int(preview_run_id)):
+        raise UserLinkageExecuteError("preview run execute already in progress")
+
+    return preview_run, planned_items
+
+
+def _rollback_payload_for_link(
+    *,
+    user_id: int,
+    previous_employee_id: Optional[int],
+    employee_id: int,
+    decision_id: Optional[int],
+) -> dict[str, Any]:
+    return {
+        "user_id": int(user_id),
+        "previous_employee_id": int(previous_employee_id)
+        if previous_employee_id is not None
+        else None,
+        "employee_id": int(employee_id),
+        "decision_id": int(decision_id) if decision_id is not None else None,
+    }
+
+
+def _apply_planned_link_item(
+    conn: Connection,
+    *,
+    execute_run_id: int,
+    actor_user_id: int,
+    planned_item: dict[str, Any],
+    preview_by_user: dict[int, dict[str, Any]],
+    latest_decisions: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    from app.services.security_audit_service import write_security_event
+
+    user_id = int(planned_item["user_id"])
+    user_row = _load_user_row_for_update(conn, user_id)
+    if user_row is None:
+        item_id = _insert_execute_item(
+            conn,
+            run_id=execute_run_id,
+            user_id=user_id,
+            proposed_employee_id=planned_item.get("proposed_employee_id"),
+            source_decision_id=planned_item.get("source_decision_id"),
+            action=ACTION_FAIL_ALREADY_LINKED_DIFFERENT,
+            status=STATUS_FAILED,
+            reason_codes=[REASON_ALREADY_LINKED_DIFFERENT],
+            preview_snapshot=dict(planned_item.get("preview_snapshot") or {}),
+            decision_snapshot=dict(planned_item.get("decision_snapshot") or {}),
+            before_user_snapshot={},
+        )
+        return {
+            "item_id": item_id,
+            "user_id": user_id,
+            "action": ACTION_FAIL_ALREADY_LINKED_DIFFERENT,
+            "status": STATUS_FAILED,
+            "applied": False,
+            "audit_created": False,
+        }
+
+    decision = latest_decisions.get(user_id)
+    preview = preview_by_user.get(user_id)
+    action, reason_codes, proposed_employee_id = _evaluate_candidate(
+        conn,
+        user_id=user_id,
+        user_row=user_row,
+        decision=decision,
+        preview=preview,
+    )
+    decision_snapshot = _decision_snapshot(decision)
+    before_snapshot = _before_user_snapshot(user_row)
+    preview_snapshot = dict(preview) if preview else dict(planned_item.get("preview_snapshot") or {})
+    source_decision_id = (
+        int(decision["decision_id"]) if decision and decision.get("decision_id") else None
+    )
+
+    if action == ACTION_LINK and proposed_employee_id is not None:
+        employee_row = _load_employee_row(conn, int(proposed_employee_id))
+        if employee_row is None or str(employee_row.get("operational_status") or "") not in (
+            OPERATIONAL_EMPLOYEE_STATUSES
+        ):
+            action = ACTION_SKIP_CLASSIFICATION_REGRESSION
+            reason_codes = [REASON_CLASSIFICATION_REGRESSION]
+            status = STATUS_SKIPPED
+        elif _employee_linked_to_other_user(
+            conn,
+            employee_id=int(proposed_employee_id),
+            exclude_user_id=user_id,
+        ):
+            action = ACTION_FAIL_EMPLOYEE_CONFLICT
+            reason_codes = [REASON_EMPLOYEE_CONFLICT]
+            status = STATUS_FAILED
+        else:
+            previous_employee_id = user_row.get("employee_id")
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.users
+                    SET employee_id = :employee_id
+                    WHERE user_id = :user_id
+                      AND employee_id IS NULL
+                    """
+                ),
+                {
+                    "employee_id": int(proposed_employee_id),
+                    "user_id": user_id,
+                },
+            )
+            after_row = _load_user_row(conn, user_id)
+            after_snapshot = _before_user_snapshot(after_row or user_row)
+            rollback_payload = _rollback_payload_for_link(
+                user_id=user_id,
+                previous_employee_id=previous_employee_id,
+                employee_id=int(proposed_employee_id),
+                decision_id=source_decision_id,
+            )
+            item_id = _insert_execute_item(
+                conn,
+                run_id=execute_run_id,
+                user_id=user_id,
+                proposed_employee_id=int(proposed_employee_id),
+                source_decision_id=source_decision_id,
+                action=ACTION_LINK,
+                status=STATUS_APPLIED,
+                reason_codes=reason_codes,
+                preview_snapshot=preview_snapshot,
+                decision_snapshot=decision_snapshot,
+                before_user_snapshot=before_snapshot,
+                after_user_snapshot=after_snapshot,
+                rollback_payload=rollback_payload,
+            )
+            audit_id = write_security_event(
+                event_type="USER_EMPLOYEE_LINKED",
+                actor_user_id=int(actor_user_id),
+                target_user_id=user_id,
+                target_employee_id=int(proposed_employee_id),
+                metadata={
+                    "user_id": user_id,
+                    "employee_id": int(proposed_employee_id),
+                    "previous_employee_id": rollback_payload["previous_employee_id"],
+                    "decision_id": source_decision_id,
+                    "run_id": int(execute_run_id),
+                    "match_strategy": preview_snapshot.get("match_strategy"),
+                    "classification": preview_snapshot.get("classification"),
+                },
+                conn=conn,
+            )
+            return {
+                "item_id": item_id,
+                "user_id": user_id,
+                "action": ACTION_LINK,
+                "status": STATUS_APPLIED,
+                "applied": True,
+                "audit_created": audit_id is not None,
+            }
+
+    status = _action_to_status(action)
+    if action == ACTION_NOOP_ALREADY_LINKED:
+        status = STATUS_SKIPPED
+    item_id = _insert_execute_item(
+        conn,
+        run_id=execute_run_id,
+        user_id=user_id,
+        proposed_employee_id=proposed_employee_id,
+        source_decision_id=source_decision_id,
+        action=action,
+        status=status,
+        reason_codes=reason_codes,
+        preview_snapshot=preview_snapshot,
+        decision_snapshot=decision_snapshot,
+        before_user_snapshot=before_snapshot,
+    )
+    return {
+        "item_id": item_id,
+        "user_id": user_id,
+        "action": action,
+        "status": status,
+        "applied": False,
+        "audit_created": False,
+    }
+
+
+def run_user_linkage_execute(
+    conn: Connection,
+    *,
+    actor_user_id: int,
+    preview_run_id: int,
+    confirm_token: str,
+) -> dict[str, Any]:
+    """Apply approved user linkage from a completed execute-preview run."""
+    if not execute_items_available(conn):
+        raise UserLinkageExecuteError(
+            "user_linkage_execute_items schema missing — run alembic upgrade head"
+        )
+
+    _preview_run, planned_items = _validate_execute_request(
+        conn,
+        preview_run_id=int(preview_run_id),
+        confirm_token=confirm_token,
+    )
+
+    execute_run_id = _create_execute_run(
+        conn,
+        actor_user_id=int(actor_user_id),
+        operation=OPERATION_EXECUTE,
+        dry_run=False,
+    )
+    conn.execute(
+        text(
+            """
+            UPDATE public.identity_reconciliation_runs
+            SET summary = CAST(:summary AS jsonb)
+            WHERE run_id = :run_id
+            """
+        ),
+        {
+            "run_id": int(execute_run_id),
+            "summary": json.dumps({"source_preview_run_id": int(preview_run_id)}),
+        },
+    )
+
+    return _execute_planned_items(
+        planned_items=planned_items,
+        execute_run_id=int(execute_run_id),
+        actor_user_id=int(actor_user_id),
+        preview_run_id=int(preview_run_id),
+    )
+
+
+def _execute_planned_items(
+    *,
+    planned_items: list[dict[str, Any]],
+    execute_run_id: int,
+    actor_user_id: int,
+    preview_run_id: int,
+) -> dict[str, Any]:
+    from app.db.engine import engine
+
+    with engine.connect() as preview_conn:
+        preview_report = run_user_linkage_preview(preview_conn)
+    preview_by_user = {
+        int(c["user_id"]): dict(c) for c in preview_report.get("candidates") or []
+    }
+    with engine.connect() as decisions_conn:
+        latest_decisions = _load_latest_decisions(decisions_conn)
+
+    item_results: list[dict[str, Any]] = []
+    applied = 0
+    skipped = 0
+    failed = 0
+    audit_records_created = 0
+
+    for planned_item in planned_items:
+        try:
+            with engine.begin() as item_conn:
+                result = _apply_planned_link_item(
+                    item_conn,
+                    execute_run_id=int(execute_run_id),
+                    actor_user_id=int(actor_user_id),
+                    planned_item=planned_item,
+                    preview_by_user=preview_by_user,
+                    latest_decisions=latest_decisions,
+                )
+        except Exception as exc:
+            user_id = int(planned_item["user_id"])
+            with engine.begin() as fail_conn:
+                item_id = _insert_execute_item(
+                    fail_conn,
+                    run_id=int(execute_run_id),
+                    user_id=user_id,
+                    proposed_employee_id=planned_item.get("proposed_employee_id"),
+                    source_decision_id=planned_item.get("source_decision_id"),
+                    action=ACTION_FAIL_ALREADY_LINKED_DIFFERENT,
+                    status=STATUS_FAILED,
+                    reason_codes=[str(exc)],
+                    preview_snapshot=dict(planned_item.get("preview_snapshot") or {}),
+                    decision_snapshot=dict(planned_item.get("decision_snapshot") or {}),
+                    before_user_snapshot=dict(planned_item.get("before_user_snapshot") or {}),
+                )
+            result = {
+                "item_id": item_id,
+                "user_id": user_id,
+                "action": ACTION_FAIL_ALREADY_LINKED_DIFFERENT,
+                "status": STATUS_FAILED,
+                "applied": False,
+                "audit_created": False,
+            }
+
+        item_results.append(result)
+        if result.get("status") == STATUS_APPLIED:
+            applied += 1
+        elif result.get("status") == STATUS_FAILED:
+            failed += 1
+        else:
+            skipped += 1
+        if result.get("audit_created"):
+            audit_records_created += 1
+
+    execute_summary = {
+        "source_preview_run_id": int(preview_run_id),
+        "applied": applied,
+        "skipped": skipped,
+        "failed": failed,
+        "audit_records_created": audit_records_created,
+        "total_planned": len(planned_items),
+    }
+    run_status = RUN_STATUS_FAILED if failed and not applied else RUN_STATUS_COMPLETED
+
+    with engine.begin() as final_conn:
+        _finalize_execute_run(
+            final_conn,
+            run_id=int(execute_run_id),
+            status=run_status,
+            summary=execute_summary,
+        )
+
+    return {
+        "phase": PHASE_R2,
+        "dry_run": False,
+        "preview_run_id": int(preview_run_id),
+        "run_id": int(execute_run_id),
+        "run_status": run_status,
+        "operation": OPERATION_EXECUTE,
+        "applied": applied,
+        "skipped": skipped,
+        "failed": failed,
+        "audit_records_created": audit_records_created,
+        "items": item_results,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def execute_user_linkage_from_preview(
+    *,
+    actor_user_id: int,
+    preview_run_id: int,
+    confirm_token: str,
+) -> dict[str, Any]:
+    """Validate preview run, commit execute journal header, then apply per-item."""
+    from app.db.engine import engine
+
+    with engine.begin() as conn:
+        if not execute_items_available(conn):
+            raise UserLinkageExecuteError(
+                "user_linkage_execute_items schema missing — run alembic upgrade head"
+            )
+        _preview_run, planned_items = _validate_execute_request(
+            conn,
+            preview_run_id=int(preview_run_id),
+            confirm_token=confirm_token,
+        )
+        execute_run_id = _create_execute_run(
+            conn,
+            actor_user_id=int(actor_user_id),
+            operation=OPERATION_EXECUTE,
+            dry_run=False,
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE public.identity_reconciliation_runs
+                SET summary = CAST(:summary AS jsonb)
+                WHERE run_id = :run_id
+                """
+            ),
+            {
+                "run_id": int(execute_run_id),
+                "summary": json.dumps({"source_preview_run_id": int(preview_run_id)}),
+            },
+        )
+
+    return _execute_planned_items(
+        planned_items=planned_items,
+        execute_run_id=int(execute_run_id),
+        actor_user_id=int(actor_user_id),
+        preview_run_id=int(preview_run_id),
+    )
 
 
 def _finalize_execute_run(
@@ -485,26 +1041,10 @@ def _check_r2_execute_blocking_gates(conn: Connection) -> list[dict[str, Any]]:
 
 
 def _build_confirm_token(result: ExecutePreviewResult) -> str:
-    payload = {
-        "run_id": int(result.run_id),
-        "operation": result.operation,
-        "planned_items": sorted(
-            [
-                {
-                    "user_id": int(item["user_id"]),
-                    "proposed_employee_id": item.get("proposed_employee_id"),
-                    "source_decision_id": item.get("source_decision_id"),
-                }
-                for item in result.items
-                if item.get("action") == ACTION_LINK
-            ],
-            key=lambda row: int(row["user_id"]),
-        ),
-    }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    return f"sha256:{digest}"
+    return _confirm_token_for_planned_items(
+        int(result.run_id),
+        [item for item in result.items if item.get("action") == ACTION_LINK],
+    )
 
 
 def _planned_outcome_for_action(action: str) -> tuple[str, Optional[str]]:

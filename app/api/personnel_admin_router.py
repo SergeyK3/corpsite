@@ -15,6 +15,8 @@ from app.api.personnel_admin_schemas import (
     UserLinkagePreviewResponse,
     UserLinkageExecutePreviewRequest,
     UserLinkageExecutePreviewResponse,
+    UserLinkageExecuteRequest,
+    UserLinkageExecuteResponse,
     UserLinkageReviewActionRequest,
     UserLinkageReviewAuditResponse,
     UserLinkageReviewDecisionResponse,
@@ -74,6 +76,7 @@ from app.services.user_linkage_review_service import (
 from app.services.user_linkage_execute_service import (
     UserLinkageExecuteError,
     build_user_linkage_execute_preview_report,
+    execute_user_linkage_from_preview,
 )
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
@@ -622,5 +625,24 @@ def admin_user_linkage_execute_preview(
                 user_id=body.user_id,
                 user_ids=body.user_ids,
             )
+    except UserLinkageExecuteError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.post(
+    "/identity/user-linkage/execute",
+    response_model=UserLinkageExecuteResponse,
+)
+def admin_user_linkage_execute(
+    body: UserLinkageExecuteRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.4d — apply approved user linkage from execute-preview (writes users.employee_id)."""
+    try:
+        return execute_user_linkage_from_preview(
+            actor_user_id=int(admin["user_id"]),
+            preview_run_id=int(body.run_id),
+            confirm_token=body.confirm_token,
+        )
     except UserLinkageExecuteError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
