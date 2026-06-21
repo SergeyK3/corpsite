@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { getEmployees, getPositions } from "@/app/directory/employees/_lib/api.client";
 import { getOrgUnitsTree } from "@/app/directory/org-units/_lib/api.client";
 import { apiFetchJson } from "@/lib/api";
 
@@ -22,6 +22,7 @@ import {
 import {
   buildBulkDepartmentVisibilityPayloads,
   buildDepartmentUserOptions,
+  buildVisibilityTargetReferenceMaps,
   canSubmitVisibilityAssignment,
   classifyBulkVisibilityCreateError,
   clearDepartmentTargetSelection,
@@ -37,6 +38,7 @@ import {
   formatUserOptionLabel,
   parseDepartmentGroupFilterValue,
   pruneDepartmentTargetSelectionByGroup,
+  resolveVisibilityTargetDisplay,
   selectAllVisibleDepartmentTargets,
   sortDepartmentGroupOptions,
   summarizeBulkVisibilityCreateResults,
@@ -47,7 +49,9 @@ import {
   type DepartmentGroupOption,
   type OrgUnitOption,
   type VisibilityAssignmentMode,
+  type VisibilityTargetReferenceMaps,
   type EmployeeLike,
+  type PositionReferenceLike,
   type VisibilityUserOption,
 } from "../../_lib/visibilityTabLogic";
 import ErrorBanner, { InfoBanner, SuccessBanner } from "../shared/ErrorBanner";
@@ -55,11 +59,12 @@ import TargetSearchField from "../shared/TargetSearchField";
 
 const SCOPE_TYPES = ["ORGANIZATION", "DEPARTMENT", "DEPARTMENT_GROUP"] as const;
 
-function targetLabel(row: PersonnelVisibilityAssignment): string {
-  if (row.target_type === "USER") return `USER #${row.target_user_id ?? "?"}`;
-  if (row.target_type === "POSITION") return `POSITION #${row.target_position_id ?? "?"}`;
-  if (row.target_type === "DEPARTMENT") return `DEPARTMENT #${row.target_department_id ?? "?"}`;
-  return row.target_type;
+function extractPositionItems(payload: unknown): PositionReferenceLike[] {
+  if (Array.isArray(payload)) return payload as PositionReferenceLike[];
+  if (payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)) {
+    return (payload as { items: PositionReferenceLike[] }).items;
+  }
+  return [];
 }
 
 function scopeLabel(row: PersonnelVisibilityAssignment): string {
@@ -71,6 +76,22 @@ function scopeLabel(row: PersonnelVisibilityAssignment): string {
 
 function indentStyle(depth: number): React.CSSProperties {
   return { paddingLeft: `${Math.min(depth, 6) * 12 + 8}px` };
+}
+
+function AssignmentTargetCell({
+  row,
+  referenceMaps,
+}: {
+  row: PersonnelVisibilityAssignment;
+  referenceMaps: VisibilityTargetReferenceMaps;
+}) {
+  const display = resolveVisibilityTargetDisplay(row, referenceMaps);
+  return (
+    <div>
+      <div>{display.primary}</div>
+      {display.secondary ? <div className="text-xs text-zinc-500">{display.secondary}</div> : null}
+    </div>
+  );
 }
 
 export default function VisibilityTab() {
@@ -96,6 +117,7 @@ export default function VisibilityTab() {
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [employeesWithoutAccount, setEmployeesWithoutAccount] = useState(0);
   const [adminUsers, setAdminUsers] = useState<Awaited<ReturnType<typeof fetchAdminUsers>>>([]);
+  const [positions, setPositions] = useState<PositionReferenceLike[]>([]);
 
   const [selectedUser, setSelectedUser] = useState<VisibilityUserOption | null>(null);
   const [selectedDepartmentTargetIds, setSelectedDepartmentTargetIds] = useState<Set<number>>(
@@ -134,6 +156,16 @@ export default function VisibilityTab() {
   const orgUnitsById = useMemo(
     () => new Map(orgUnits.map((dept) => [dept.unitId, dept])),
     [orgUnits],
+  );
+
+  const targetReferenceMaps = useMemo(
+    () =>
+      buildVisibilityTargetReferenceMaps({
+        adminUsers,
+        orgUnits,
+        positions,
+      }),
+    [adminUsers, orgUnits, positions],
   );
 
   const displayedDepartmentTargets = useMemo(
@@ -191,12 +223,13 @@ export default function VisibilityTab() {
     void (async () => {
       setReferenceLoading(true);
       try {
-        const [tree, groupsBody, users] = await Promise.all([
+        const [tree, groupsBody, users, positionsBody] = await Promise.all([
           getOrgUnitsTree({ include_inactive: false }),
           apiFetchJson<{ items?: { group_id: number; group_name?: string }[] }>(
             "/directory/department-groups",
           ).catch(() => ({ items: [] })),
           fetchAdminUsers({ limit: 500 }),
+          getPositions({ limit: 1000, offset: 0 }).catch(() => ({ items: [] })),
         ]);
 
         const groupNames = new Map<number, string>();
@@ -213,6 +246,7 @@ export default function VisibilityTab() {
         setOrgUnits(flattenOrgUnitTree(tree.items, 0, groupNames));
         setDepartmentGroups(sortDepartmentGroupOptions(groups));
         setAdminUsers(users);
+        setPositions(extractPositionItems(positionsBody));
       } catch (err) {
         setError(mapAdminSystemApiError(err, "Не удалось загрузить справочник отделений"));
       } finally {
@@ -882,7 +916,9 @@ export default function VisibilityTab() {
                 {items.map((row) => (
                   <tr key={row.assignment_id} className="border-b border-zinc-100 dark:border-zinc-800">
                     <td className="px-2 py-2">{row.assignment_id}</td>
-                    <td className="px-2 py-2">{targetLabel(row)}</td>
+                    <td className="px-2 py-2">
+                      <AssignmentTargetCell row={row} referenceMaps={targetReferenceMaps} />
+                    </td>
                     <td className="px-2 py-2">{scopeLabel(row)}</td>
                     <td className="px-2 py-2">{row.can_view_tasks ? "да" : "нет"}</td>
                     <td className="px-2 py-2">{row.is_active ? "да" : "нет"}</td>

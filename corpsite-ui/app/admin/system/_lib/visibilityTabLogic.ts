@@ -420,3 +420,131 @@ export function toAccessTargetFromDepartment(dept: OrgUnitOption): AccessTargetS
     },
   };
 }
+
+export type VisibilityAssignmentRowLike = {
+  target_type: string;
+  target_user_id?: number | null;
+  target_position_id?: number | null;
+  target_department_id?: number | null;
+};
+
+export type VisibilityTargetReferenceMaps = {
+  usersById: ReadonlyMap<number, { fullName: string; login: string | null }>;
+  departmentsById: ReadonlyMap<number, { name: string; groupName: string | null }>;
+  positionsById: ReadonlyMap<number, { name: string }>;
+};
+
+export type VisibilityTargetDisplay = {
+  primary: string;
+  secondary: string | null;
+  fallback: string;
+  resolved: boolean;
+};
+
+export type PositionReferenceLike = {
+  id?: number | null;
+  position_id?: number | null;
+  name?: string | null;
+};
+
+function positionIdOf(row: PositionReferenceLike): number {
+  return Number(row.position_id ?? row.id ?? 0);
+}
+
+export function buildVisibilityTargetReferenceMaps(args: {
+  adminUsers: AdminUser[];
+  orgUnits: OrgUnitOption[];
+  positions: PositionReferenceLike[];
+}): VisibilityTargetReferenceMaps {
+  const usersById = new Map<number, { fullName: string; login: string | null }>();
+  for (const user of args.adminUsers) {
+    const userId = Number(user.user_id ?? 0);
+    if (!Number.isFinite(userId) || userId < 1) continue;
+    const fullName = String(user.full_name ?? "").trim();
+    const login = String(user.login ?? "").trim() || null;
+    usersById.set(userId, {
+      fullName: fullName || login || `User #${userId}`,
+      login,
+    });
+  }
+
+  const departmentsById = new Map<number, { name: string; groupName: string | null }>();
+  for (const dept of args.orgUnits) {
+    departmentsById.set(dept.unitId, {
+      name: dept.name,
+      groupName: dept.groupName ?? null,
+    });
+  }
+
+  const positionsById = new Map<number, { name: string }>();
+  for (const row of args.positions) {
+    const positionId = positionIdOf(row);
+    if (!Number.isFinite(positionId) || positionId < 1) continue;
+    const name = String(row.name ?? "").trim();
+    if (!name) continue;
+    positionsById.set(positionId, { name });
+  }
+
+  return { usersById, departmentsById, positionsById };
+}
+
+export function resolveVisibilityTargetDisplay(
+  row: VisibilityAssignmentRowLike,
+  refs: VisibilityTargetReferenceMaps,
+): VisibilityTargetDisplay {
+  const targetType = String(row.target_type ?? "").trim().toUpperCase();
+
+  if (targetType === "USER") {
+    const userId = Number(row.target_user_id ?? 0);
+    const fallback = `USER #${Number.isFinite(userId) && userId >= 1 ? userId : "?"}`;
+    const user = Number.isFinite(userId) && userId >= 1 ? refs.usersById.get(userId) : undefined;
+    if (!user) {
+      return { primary: fallback, secondary: null, fallback, resolved: false };
+    }
+    return {
+      primary: user.fullName,
+      secondary: user.login ? `(${user.login})` : null,
+      fallback,
+      resolved: true,
+    };
+  }
+
+  if (targetType === "DEPARTMENT") {
+    const departmentId = Number(row.target_department_id ?? 0);
+    const fallback = `DEPARTMENT #${Number.isFinite(departmentId) && departmentId >= 1 ? departmentId : "?"}`;
+    const dept =
+      Number.isFinite(departmentId) && departmentId >= 1
+        ? refs.departmentsById.get(departmentId)
+        : undefined;
+    if (!dept) {
+      return { primary: fallback, secondary: null, fallback, resolved: false };
+    }
+    return {
+      primary: dept.name,
+      secondary: dept.groupName,
+      fallback,
+      resolved: true,
+    };
+  }
+
+  if (targetType === "POSITION") {
+    const positionId = Number(row.target_position_id ?? 0);
+    const fallback = `POSITION #${Number.isFinite(positionId) && positionId >= 1 ? positionId : "?"}`;
+    const position =
+      Number.isFinite(positionId) && positionId >= 1
+        ? refs.positionsById.get(positionId)
+        : undefined;
+    if (!position) {
+      return { primary: fallback, secondary: null, fallback, resolved: false };
+    }
+    return {
+      primary: position.name,
+      secondary: null,
+      fallback,
+      resolved: true,
+    };
+  }
+
+  const fallback = targetType || "?";
+  return { primary: fallback, secondary: null, fallback, resolved: false };
+}

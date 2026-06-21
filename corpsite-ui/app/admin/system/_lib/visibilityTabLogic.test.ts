@@ -5,6 +5,7 @@ import type { AdminUser } from "./adminSystemApi.client";
 import {
   buildBulkDepartmentVisibilityPayloads,
   buildDepartmentUserOptions,
+  buildVisibilityTargetReferenceMaps,
   canSubmitVisibilityAssignment,
   clearDepartmentTargetSelection,
   countEmployeesWithoutUserAccount,
@@ -15,6 +16,7 @@ import {
   filterPositionsByDepartmentContext,
   filterUserOptionsByQuery,
   flattenOrgUnitTree,
+  resolveVisibilityTargetDisplay,
   selectAllVisibleDepartmentTargets,
   targetSelectionRequired,
   toggleDepartmentTargetSelection,
@@ -57,6 +59,93 @@ describe("visibilityTabLogic", () => {
   ];
 
   const dept = departments[0]!;
+
+  const targetRefs = buildVisibilityTargetReferenceMaps({
+    adminUsers: [
+      {
+        user_id: 4,
+        full_name: "Иванов Иван Иванович",
+        login: "ivanov",
+      } as AdminUser,
+    ],
+    orgUnits: departments,
+    positions: [{ position_id: 12, name: "Главная медицинская сестра" }],
+  });
+
+  it("resolveVisibilityTargetDisplay resolves USER with FIO and login", () => {
+    const display = resolveVisibilityTargetDisplay(
+      { target_type: "USER", target_user_id: 4 },
+      targetRefs,
+    );
+    expect(display.resolved).toBe(true);
+    expect(display.primary).toBe("Иванов Иван Иванович");
+    expect(display.secondary).toBe("(ivanov)");
+  });
+
+  it("resolveVisibilityTargetDisplay resolves DEPARTMENT with optional group line", () => {
+    const display = resolveVisibilityTargetDisplay(
+      { target_type: "DEPARTMENT", target_department_id: 20 },
+      targetRefs,
+    );
+    expect(display.resolved).toBe(true);
+    expect(display.primary).toBe("Бухгалтерия");
+    expect(display.secondary).toBe("Административно-хозяйственные");
+  });
+
+  it("resolveVisibilityTargetDisplay resolves POSITION name", () => {
+    const display = resolveVisibilityTargetDisplay(
+      { target_type: "POSITION", target_position_id: 12 },
+      targetRefs,
+    );
+    expect(display.resolved).toBe(true);
+    expect(display.primary).toBe("Главная медицинская сестра");
+    expect(display.secondary).toBeNull();
+  });
+
+  it("resolveVisibilityTargetDisplay falls back to raw identifier when reference is missing", () => {
+    expect(
+      resolveVisibilityTargetDisplay(
+        { target_type: "USER", target_user_id: 999 },
+        targetRefs,
+      ),
+    ).toMatchObject({
+      primary: "USER #999",
+      resolved: false,
+    });
+    expect(
+      resolveVisibilityTargetDisplay(
+        { target_type: "DEPARTMENT", target_department_id: 73 },
+        targetRefs,
+      ),
+    ).toMatchObject({
+      primary: "DEPARTMENT #73",
+      resolved: false,
+    });
+    expect(
+      resolveVisibilityTargetDisplay(
+        { target_type: "POSITION", target_position_id: 99 },
+        targetRefs,
+      ),
+    ).toMatchObject({
+      primary: "POSITION #99",
+      resolved: false,
+    });
+  });
+
+  it("resolveVisibilityTargetDisplay handles deleted or legacy references gracefully", () => {
+    const emptyRefs = buildVisibilityTargetReferenceMaps({
+      adminUsers: [],
+      orgUnits: [],
+      positions: [],
+    });
+    const display = resolveVisibilityTargetDisplay(
+      { target_type: "DEPARTMENT", target_department_id: 74 },
+      emptyRefs,
+    );
+    expect(display.primary).toBe("DEPARTMENT #74");
+    expect(display.secondary).toBeNull();
+    expect(display.resolved).toBe(false);
+  });
 
   it("filterOrgUnitsByGroup limits department list to selected group", () => {
     const filtered = filterOrgUnitsByGroup(departments, clinicalGroupId);
