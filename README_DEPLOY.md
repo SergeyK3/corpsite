@@ -27,6 +27,10 @@
 - бот также отправляет `X-Internal-Api-Token`
 - backend проверяет internal token перед тем, как доверять user id
 - за основу конфигурации бота бери `corpsite-bot/.env.example`
+- на VPS (bot и backend на одном хосте) задай:
+  - `API_BASE_URL=http://127.0.0.1:8000`
+  - `META_API_BASE_URL=http://127.0.0.1:8000`
+  - не используй `https://mmc.004.kz/api` для бота — это browser/nginx prefix, не прямой uvicorn
 
 ## Database configuration
 
