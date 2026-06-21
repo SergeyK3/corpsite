@@ -21,6 +21,7 @@
 | [ADR-044 R2 Discovery](./ADR-044-r2-user-linkage-discovery.md) | Inventory, policy |
 | [ADR-044 R2.2 Preview](./ADR-044-r2-phase-r2-2-preview.md) | Classification engine |
 | [ADR-044 R2.1 Validation SQL](./ADR-044-phase-r2-validation.sql) | Read-only SQL gates |
+| [ADR-044 R2.4 Execute Design](./ADR-044-r2-phase-r2-4-execute-engine-design.md) | Execute engine architecture (next phase) |
 
 ---
 
