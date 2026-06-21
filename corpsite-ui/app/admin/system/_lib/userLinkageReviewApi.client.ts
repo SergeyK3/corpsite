@@ -157,5 +157,5 @@ export async function deferUserLinkageReview(
 }
 
 export function mapUserLinkageReviewApiError(err: unknown, fallback: string): string {
-  return formatThrownError(err, fallback);
+  return formatThrownError(err, { fallback });
 }
