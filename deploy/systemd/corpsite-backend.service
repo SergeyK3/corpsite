@@ -1,0 +1,40 @@
+# Corpsite Backend FastAPI (production).
+#
+# Install:
+#   sudo cp deploy/systemd/corpsite-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable corpsite-backend
+#
+# Deploy:
+#   sudo ./scripts/deploy_backend.sh
+
+[Unit]
+Description=Corpsite Backend FastAPI
+Documentation=file:/opt/projects/corpsite/app/docs/deploy/VPS_STABILITY.md
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/projects/corpsite/app
+EnvironmentFile=/opt/projects/corpsite/app/.env
+
+ExecStartPre=+/opt/projects/corpsite/app/scripts/ops/ensure_port_free.sh 8000 --service corpsite-backend --orphan-pattern uvicorn --orphan-pattern app.main:app
+ExecStart=/opt/projects/corpsite/app/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=corpsite-backend
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Corpsite VPS health check (frontend + backend)
+Documentation=file:/opt/projects/corpsite/app/docs/deploy/VPS_STABILITY.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/projects/corpsite/app/scripts/ops/corpsite_healthcheck.sh
+# Log file owned by root; script appends when run as root.
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# ADR-INFRA-004 — build Next.js production bundle and restart corpsite-frontend.
+# ADR-INFRA-004/005 — build Next.js production bundle and restart corpsite-frontend.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UI_DIR="${REPO_ROOT}/corpsite-ui"
 SERVICE_NAME="${CORPSITE_FRONTEND_SERVICE:-corpsite-frontend}"
+ENSURE_PORT="${REPO_ROOT}/scripts/ops/ensure_port_free.sh"
 HEALTH_URL="${CORPSITE_FRONTEND_HEALTH_URL:-http://127.0.0.1:3000/}"
+HEALTH_PERSONNEL_URL="${CORPSITE_FRONTEND_PERSONNEL_URL:-http://127.0.0.1:3000/directory/personnel}"
+PUBLIC_PERSONNEL_URL="${CORPSITE_PUBLIC_PERSONNEL_URL:-https://mmc.004.kz/directory/personnel}"
 HEALTH_RETRIES="${CORPSITE_FRONTEND_HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL_SEC="${CORPSITE_FRONTEND_HEALTH_INTERVAL_SEC:-2}"
 
@@ -15,7 +18,43 @@ log() {
 
 fail() {
   echo "[deploy-frontend] ERROR: $*" >&2
+  if command -v systemctl >/dev/null 2>&1; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      journalctl -u "${SERVICE_NAME}" -n 40 --no-pager >&2 || true
+    else
+      sudo journalctl -u "${SERVICE_NAME}" -n 40 --no-pager >&2 || true
+    fi
+  fi
   exit 1
+}
+
+systemctl_cmd() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    systemctl "$@"
+  else
+    sudo systemctl "$@"
+  fi
+}
+
+check_http() {
+  local url="$1"
+  local label="$2"
+  curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "${url}" 2>/dev/null || echo "000"
+}
+
+smoke_url() {
+  local url="$1"
+  local label="$2"
+  local code
+  code="$(check_http "${url}" "${label}")"
+  case "${code}" in
+    200|301|302|303|307|308)
+      log "smoke ${label}: OK (HTTP ${code}) ${url}"
+      ;;
+    *)
+      fail "smoke ${label}: failed (HTTP ${code}) ${url}"
+      ;;
+  esac
 }
 
 if [[ ! -d "${UI_DIR}" ]]; then
@@ -41,13 +80,23 @@ fi
 
 log "Build OK: BUILD_ID=$(tr -d '\n' < .next/BUILD_ID)"
 
-if command -v systemctl >/dev/null 2>&1 && systemctl cat "${SERVICE_NAME}" >/dev/null 2>&1; then
-  log "Restarting ${SERVICE_NAME}"
-  if [[ "$(id -u)" -eq 0 ]]; then
-    systemctl restart "${SERVICE_NAME}" || fail "systemctl restart ${SERVICE_NAME} failed"
+if command -v systemctl >/dev/null 2>&1 && systemctl_cmd cat "${SERVICE_NAME}" >/dev/null 2>&1; then
+  log "reset-failed ${SERVICE_NAME}"
+  systemctl_cmd reset-failed "${SERVICE_NAME}" 2>/dev/null || true
+
+  if [[ -x "${ENSURE_PORT}" ]]; then
+    log "port guard :3000"
+    "${ENSURE_PORT}" 3000 \
+      --service "${SERVICE_NAME}" \
+      --orphan-pattern 'next-server' \
+      --orphan-pattern 'npm run start' \
+      --orphan-pattern 'node'
   else
-    sudo systemctl restart "${SERVICE_NAME}" || fail "systemctl restart ${SERVICE_NAME} failed"
+    fail "missing executable: ${ENSURE_PORT}"
   fi
+
+  log "Restarting ${SERVICE_NAME}"
+  systemctl_cmd restart "${SERVICE_NAME}" || fail "systemctl restart ${SERVICE_NAME} failed"
 else
   log "WARN: systemd unit ${SERVICE_NAME} not installed — skipping restart"
 fi
@@ -60,16 +109,26 @@ fi
 log "Health check ${HEALTH_URL} (up to ${HEALTH_RETRIES} attempts)"
 last_code="000"
 for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
-  last_code="$(curl -sS -o /dev/null -w "%{http_code}" "${HEALTH_URL}" 2>/dev/null || echo "000")"
+  last_code="$(check_http "${HEALTH_URL}" "root")"
   case "${last_code}" in
     200|301|302|303|307|308)
       log "Health check passed (HTTP ${last_code}, attempt ${attempt}/${HEALTH_RETRIES})"
-      exit 0
+      break
       ;;
     *)
       sleep "${HEALTH_INTERVAL_SEC}"
       ;;
   esac
+  if [[ "${attempt}" -eq "${HEALTH_RETRIES}" ]]; then
+    fail "Health check failed after ${HEALTH_RETRIES} attempts (last HTTP ${last_code})"
+  fi
 done
 
-fail "Health check failed after ${HEALTH_RETRIES} attempts (last HTTP ${last_code})"
+smoke_url "${HEALTH_PERSONNEL_URL}" "local personnel"
+if curl -sS --max-time 15 -o /dev/null "https://mmc.004.kz/" 2>/dev/null; then
+  smoke_url "${PUBLIC_PERSONNEL_URL}" "public personnel"
+else
+  log "WARN: skipping public smoke (https://mmc.004.kz unreachable from this host)"
+fi
+
+log "deploy-frontend complete"

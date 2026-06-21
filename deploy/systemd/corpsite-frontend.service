@@ -8,19 +8,15 @@
 # Deploy (always build before start):
 #   git pull && sudo ./scripts/deploy_frontend.sh
 #
-# Adjust User/Group and paths if your install differs.
-# Current VPS (mmc.004.kz): User=ubuntu Group=ubuntu.
-# For a dedicated service account, create it first, e.g.:
-#   sudo useradd --system --home /opt/projects/corpsite --shell /usr/sbin/nologin corpsite
-#   sudo chown -R corpsite:corpsite /opt/projects/corpsite/app
+# ADR-INFRA-005: port guard + KillMode prevent EADDRINUSE orphan loops.
 
 [Unit]
 Description=Corpsite Next.js Frontend
-Documentation=file:/opt/projects/corpsite/app/docs/deploy/frontend.md
+Documentation=file:/opt/projects/corpsite/app/docs/deploy/VPS_STABILITY.md
 After=network-online.target
 Wants=network-online.target
 StartLimitBurst=5
-StartLimitIntervalSec=120
+StartLimitIntervalSec=300
 
 [Service]
 Type=simple
@@ -31,13 +27,15 @@ Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=CORPSITE_UI_DIR=/opt/projects/corpsite/app/corpsite-ui
 
-# Refuse to start without a production build (exit 203 → no restart loop).
 ExecStartPre=/opt/projects/corpsite/app/scripts/check_frontend_build.sh
+ExecStartPre=+/opt/projects/corpsite/app/scripts/ops/ensure_port_free.sh 3000 --service corpsite-frontend --orphan-pattern next-server --orphan-pattern "npm run start" --orphan-pattern node
 ExecStart=/usr/bin/npm run start --silent
 
-Restart=always
+Restart=on-failure
 RestartSec=5
 RestartPreventExitStatus=203
+KillMode=mixed
+TimeoutStopSec=30
 
 StandardOutput=journal
 StandardError=journal

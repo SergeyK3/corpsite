@@ -140,5 +140,6 @@ After changing `NEXT_PUBLIC_*`, run `sudo ./scripts/deploy_frontend.sh` again (r
 ## Related
 
 - `README_DEPLOY.md` — full stack deploy checklist
+- `docs/deploy/VPS_STABILITY.md` — ADR-INFRA-005 port guard, recovery, health timer
 - `docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md` — nginx `/api` + UI routing
 - `scripts/verify_frontend_phase2f3.sh` — optional bundle content verification after build

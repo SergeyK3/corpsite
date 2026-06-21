@@ -57,8 +57,9 @@
 3. Примени миграции БД до запуска новой версии backend.
 4. Обнови backend-зависимости, если они изменились.
 5. Собери или обнови frontend (`sudo ./scripts/deploy_frontend.sh` — см. `docs/deploy/frontend.md`).
-6. Запусти backend и frontend.
-7. Выполни smoke-check ниже.
+6. Перезапусти backend через `sudo ./scripts/deploy_backend.sh` (см. `docs/deploy/VPS_STABILITY.md`).
+7. Запусти backend и frontend (если не использовал deploy-скрипты выше).
+8. Выполни smoke-check ниже.
 
 ## Smoke-check после развёртывания
 
