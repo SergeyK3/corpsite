@@ -131,6 +131,77 @@ def _gc_expired_codes() -> None:
 # - we never compare TEXT to INT
 
 
+def resolve_user_id_by_telegram_id(tg_user_id: int) -> Optional[int]:
+    """Public helper: map Telegram user id → corpsite user_id via users.telegram_id."""
+    return _get_user_id_by_telegram_id(tg_user_id)
+
+
+def unbind_user_telegram(*, user_id: int, actor_user_id: Optional[int] = None) -> dict[str, Any]:
+    """
+    Clear users.telegram_id / telegram_username for user_id.
+    Does not modify employee_id. Idempotent when already unbound.
+    """
+    uid = int(user_id)
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT user_id, employee_id, telegram_id, telegram_username
+                FROM public.users
+                WHERE user_id = :uid
+                LIMIT 1
+                """
+            ),
+            {"uid": uid},
+        ).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="user not found")
+
+        employee_id = row.get("employee_id")
+        existing_tg = row.get("telegram_id")
+        had_binding = existing_tg is not None and bool(str(existing_tg).strip())
+
+        if had_binding:
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.users
+                    SET telegram_id = NULL,
+                        telegram_username = NULL
+                    WHERE user_id = :uid
+                    """
+                ),
+                {"uid": uid},
+            )
+
+    applied = bool(had_binding)
+    if applied:
+        try:
+            from app.services.security_audit_service import write_security_event
+
+            write_security_event(
+                event_type="ACCESS_CHANGED",
+                actor_user_id=int(actor_user_id) if actor_user_id is not None else uid,
+                target_user_id=uid,
+                target_employee_id=int(employee_id) if employee_id is not None else None,
+                success=True,
+                metadata={
+                    "source": "telegram_unbind",
+                    "telegram_id": str(existing_tg).strip() if existing_tg is not None else None,
+                    "employee_id_preserved": int(employee_id) if employee_id is not None else None,
+                },
+            )
+        except Exception:
+            pass
+
+    return {
+        "user_id": uid,
+        "applied": applied,
+        "telegram_bound": False,
+        "employee_id": int(employee_id) if employee_id is not None else None,
+    }
+
+
 def _get_user_id_by_telegram_id(tg_user_id: int) -> Optional[int]:
     sql = "SELECT user_id FROM users WHERE telegram_id = :tg LIMIT 1"
     tg_text = str(int(tg_user_id))  # ALWAYS TEXT

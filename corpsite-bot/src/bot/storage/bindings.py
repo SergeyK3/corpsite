@@ -10,10 +10,16 @@ from typing import Any, Dict, Optional
 
 log = logging.getLogger("corpsite-bot")
 
+# OPS-007a: local JSON bindings deprecated for authorization (see TELEGRAM_LEGACY_JSON_BINDINGS).
 # Невидимые символы, которые ломают int(k)
 _INVISIBLE = ("\u200b", "\ufeff", "\u00a0")  # ZWSP, BOM, NBSP
 
 BINDINGS: Dict[int, int] = {}
+
+
+def legacy_json_bindings_enabled() -> bool:
+    v = (os.getenv("TELEGRAM_LEGACY_JSON_BINDINGS") or "").strip().lower()
+    return v in ("1", "true", "yes", "y", "on")
 
 
 def _clean_str(s: str) -> str:
@@ -110,6 +116,8 @@ def set_binding(tg_user_id: int, user_id: int) -> None:
 
 
 def get_binding(tg_user_id: int) -> Optional[int]:
+    if not legacy_json_bindings_enabled():
+        return None
     load_bindings()
     return BINDINGS.get(int(tg_user_id))
 

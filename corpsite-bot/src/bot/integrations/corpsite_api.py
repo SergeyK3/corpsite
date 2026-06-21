@@ -28,8 +28,8 @@ class CorpsiteAPI:
     """
     Minimal async API client for Corpsite backend.
 
-    - Auth/ACL requests use JWT or X-User-Id + internal API token
-    - Bootstrap flows (self-bind / consume bind-code) use custom headers.
+    User-scoped bot operations use OPS-007a internal bot API:
+      INTERNAL_API_TOKEN + X-Telegram-User-Id → users.telegram_id resolution.
     """
 
     def __init__(
@@ -37,20 +37,13 @@ class CorpsiteAPI:
         base_url: Optional[str] = None,
         timeout_s: float = 10.0,
     ) -> None:
-        # Priority:
-        # 1) base_url argument (from bot.py)
-        # 2) API_BASE_URL (.env)
-        # 3) CORPSITE_API_BASE_URL (legacy fallback)
         env_url = (os.getenv("API_BASE_URL") or os.getenv("CORPSITE_API_BASE_URL") or "").strip()
         self.base_url = (base_url or env_url).strip().rstrip("/")
         if not self.base_url:
             raise RuntimeError("API_BASE_URL (or CORPSITE_API_BASE_URL) is not set")
 
-        # Token for bind-consume (bot -> backend). Required for POST /tg/bind/consume only.
         self._bot_bind_token = (os.getenv("BOT_BIND_TOKEN") or "").strip()
         self._internal_api_token = (os.getenv("INTERNAL_API_TOKEN") or "").strip()
-
-        # Enable detailed HTTP logs only when needed.
         self._trace = _truthy_env("CORPSITE_HTTP_TRACE")
 
         ts = float(timeout_s)
@@ -78,6 +71,30 @@ class CorpsiteAPI:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    def _bot_telegram_headers(self, telegram_user_id: int) -> Dict[str, str]:
+        headers: Dict[str, str] = {"X-Telegram-User-Id": str(int(telegram_user_id))}
+        if self._internal_api_token:
+            headers["X-Internal-Api-Token"] = self._internal_api_token
+        return headers
+
+    async def _request_bot_telegram(
+        self,
+        method: str,
+        path: str,
+        *,
+        telegram_user_id: int,
+        params: Optional[Dict[str, Any]] = None,
+        json_body: Optional[Dict[str, Any]] = None,
+    ) -> APIResponse:
+        headers = self._bot_telegram_headers(int(telegram_user_id))
+        return await self._request_headers(
+            method,
+            path,
+            headers=headers,
+            params=params,
+            json_body=json_body,
+        )
+
     async def _request(
         self,
         method: str,
@@ -87,57 +104,17 @@ class CorpsiteAPI:
         params: Optional[Dict[str, Any]] = None,
         json_body: Optional[Dict[str, Any]] = None,
     ) -> APIResponse:
+        """Service-account internal calls (delivery queue worker)."""
         headers = {"X-User-Id": str(int(user_id))}
         if self._internal_api_token:
             headers["X-Internal-Api-Token"] = self._internal_api_token
-        t0 = time.perf_counter()
-
-        if self._trace:
-            j = None if json_body is None else {k: json_body.get(k) for k in list(json_body.keys())[:20]}
-            log.info(
-                "HTTP -> %s %s user_id=%s params=%s json_keys=%s",
-                method,
-                path,
-                user_id,
-                params,
-                None if j is None else list(j.keys()),
-            )
-
-        try:
-            r = await self._client.request(
-                method=method,
-                url=path,
-                headers=headers,
-                params=params,
-                json=json_body,
-            )
-        except Exception as e:
-            dt = time.perf_counter() - t0
-            log.warning("HTTP !! %s %s user_id=%s failed after %.3fs: %s", method, path, user_id, dt, repr(e))
-            return APIResponse(status_code=0, json=None, text=str(e))
-
-        dt = time.perf_counter() - t0
-
-        parsed: Any = None
-        try:
-            if r.content:
-                parsed = r.json()
-        except Exception:
-            parsed = None
-
-        if self._trace:
-            snippet = (r.text or "")[:300]
-            log.info(
-                "HTTP <- %s %s user_id=%s status=%s %.3fs body=%s",
-                method,
-                path,
-                user_id,
-                r.status_code,
-                dt,
-                snippet,
-            )
-
-        return APIResponse(status_code=r.status_code, json=parsed, text=r.text)
+        return await self._request_headers(
+            method,
+            path,
+            headers=headers,
+            params=params,
+            json_body=json_body,
+        )
 
     async def _request_headers(
         self,
@@ -148,10 +125,6 @@ class CorpsiteAPI:
         params: Optional[Dict[str, Any]] = None,
         json_body: Optional[Dict[str, Any]] = None,
     ) -> APIResponse:
-        """
-        Low-level request with arbitrary headers (no X-User-Id requirement).
-        Use for bootstrap/auth flows such as self-bind / consume bind-code.
-        """
         t0 = time.perf_counter()
 
         if self._trace:
@@ -193,19 +166,15 @@ class CorpsiteAPI:
 
         return APIResponse(status_code=r.status_code, json=parsed, text=r.text)
 
-    # -----------------------
-    # Diagnostics / Meta
-    # -----------------------
-
     async def health(self) -> APIResponse:
         return await self._request_headers("GET", "/health", headers={})
 
-    async def get_task_statuses(self, *, user_id: int) -> APIResponse:
-        return await self._request("GET", "/meta/task-statuses", user_id=user_id)
-
-    # -----------------------
-    # Auth / Bind
-    # -----------------------
+    async def get_task_statuses(self, *, telegram_user_id: int) -> APIResponse:
+        return await self._request_bot_telegram(
+            "GET",
+            "/meta/task-statuses",
+            telegram_user_id=int(telegram_user_id),
+        )
 
     async def self_bind(
         self,
@@ -213,16 +182,31 @@ class CorpsiteAPI:
         telegram_user_id: int,
         telegram_username: Optional[str] = None,
     ) -> APIResponse:
-        """
-        POST /auth/self-bind
-        Headers:
-          X-Telegram-User-Id: <int>
-          X-Telegram-Username: <str> (optional)
-        """
-        headers: Dict[str, str] = {"X-Telegram-User-Id": str(int(telegram_user_id))}
-        if telegram_username:
-            headers["X-Telegram-Username"] = str(telegram_username).strip()
-        return await self._request_headers("POST", "/auth/self-bind", headers=headers)
+        _ = telegram_username
+        return await self._request_bot_telegram(
+            "POST",
+            "/internal/bot/tg/resolve",
+            telegram_user_id=int(telegram_user_id),
+        )
+
+    async def unbind_telegram(self, *, telegram_user_id: int) -> APIResponse:
+        return await self._request_bot_telegram(
+            "POST",
+            "/internal/bot/tg/unbind",
+            telegram_user_id=int(telegram_user_id),
+        )
+
+    async def unbind_telegram_target(
+        self,
+        *,
+        actor_telegram_user_id: int,
+        target_telegram_user_id: int,
+    ) -> APIResponse:
+        return await self._request_bot_telegram(
+            "POST",
+            f"/internal/bot/tg/unbind/{int(target_telegram_user_id)}",
+            telegram_user_id=int(actor_telegram_user_id),
+        )
 
     async def consume_bind_code(
         self,
@@ -230,13 +214,6 @@ class CorpsiteAPI:
         code: str,
         telegram_user_id: int,
     ) -> APIResponse:
-        """
-        POST /tg/bind/consume
-        Headers:
-          X-Bot-Bind-Token: <BOT_BIND_TOKEN from bot .env>
-        JSON:
-          { "code": "...", "tg_user_id": 123 }
-        """
         if not self._bot_bind_token:
             return APIResponse(status_code=0, json=None, text="BOT_BIND_TOKEN is not set in bot environment")
 
@@ -244,14 +221,10 @@ class CorpsiteAPI:
         body = {"code": str(code or "").strip(), "tg_user_id": int(telegram_user_id)}
         return await self._request_headers("POST", "/tg/bind/consume", headers=headers, json_body=body)
 
-    # -----------------------
-    # Tasks
-    # -----------------------
-
     async def list_tasks(
         self,
         *,
-        user_id: int,
+        telegram_user_id: int,
         period_id: Optional[int] = None,
         status_code: Optional[str] = None,
         search: Optional[str] = None,
@@ -271,40 +244,55 @@ class CorpsiteAPI:
         if search:
             params["search"] = str(search)
 
-        return await self._request("GET", "/tasks", user_id=user_id, params=params)
+        return await self._request_bot_telegram(
+            "GET",
+            "/internal/bot/tasks",
+            telegram_user_id=int(telegram_user_id),
+            params=params,
+        )
 
     async def get_task(
         self,
         *,
         task_id: int,
-        user_id: int,
+        telegram_user_id: int,
         include_archived: bool = False,
     ) -> APIResponse:
         params = {"include_archived": bool(include_archived)}
-        return await self._request("GET", f"/tasks/{int(task_id)}", user_id=user_id, params=params)
+        return await self._request_bot_telegram(
+            "GET",
+            f"/internal/bot/tasks/{int(task_id)}",
+            telegram_user_id=int(telegram_user_id),
+            params=params,
+        )
 
     async def patch_task(
         self,
         *,
         task_id: int,
-        user_id: int,
+        telegram_user_id: int,
         payload: Dict[str, Any],
     ) -> APIResponse:
-        return await self._request("PATCH", f"/tasks/{int(task_id)}", user_id=user_id, json_body=payload)
+        return await self._request_bot_telegram(
+            "PATCH",
+            f"/internal/bot/tasks/{int(task_id)}",
+            telegram_user_id=int(telegram_user_id),
+            json_body=payload,
+        )
 
     async def task_action(
         self,
         *,
         task_id: int,
-        user_id: int,
+        telegram_user_id: int,
         action: str,
         payload: Optional[Dict[str, Any]] = None,
     ) -> APIResponse:
         action_norm = str(action).strip().lower()
-        return await self._request(
+        return await self._request_bot_telegram(
             "POST",
-            f"/tasks/{int(task_id)}/actions/{action_norm}",
-            user_id=user_id,
+            f"/internal/bot/tasks/{int(task_id)}/{action_norm}",
+            telegram_user_id=int(telegram_user_id),
             json_body=(payload or {}),
         )
 
@@ -312,7 +300,7 @@ class CorpsiteAPI:
         self,
         *,
         task_id: int,
-        user_id: int,
+        telegram_user_id: int,
         report_link: str,
         current_comment: str = "",
     ) -> APIResponse:
@@ -320,76 +308,67 @@ class CorpsiteAPI:
             "report_link": str(report_link).strip(),
             "current_comment": str(current_comment or "").strip(),
         }
-        return await self.task_action(task_id=task_id, user_id=user_id, action="report", payload=body)
+        return await self.task_action(
+            task_id=task_id,
+            telegram_user_id=telegram_user_id,
+            action="report",
+            payload=body,
+        )
 
     async def approve_report(
         self,
         *,
         task_id: int,
-        user_id: int,
+        telegram_user_id: int,
         approve: bool = True,
         current_comment: str = "",
     ) -> APIResponse:
         comment = str(current_comment or "").strip()
-        if bool(approve):
-            return await self.task_action(
-                task_id=task_id,
-                user_id=user_id,
-                action="approve",
-                payload={"current_comment": comment},
-            )
+        action = "approve" if bool(approve) else "reject"
         return await self.task_action(
             task_id=task_id,
-            user_id=user_id,
-            action="reject",
+            telegram_user_id=telegram_user_id,
+            action=action,
             payload={"current_comment": comment},
         )
-
-    # -----------------------
-    # Events / History
-    # -----------------------
 
     async def get_task_events(
         self,
         *,
         task_id: int,
-        user_id: int,
+        telegram_user_id: int,
         include_archived: bool = False,
-        since_audit_id: Optional[int] = None,
         limit: int = 200,
     ) -> APIResponse:
         params: Dict[str, Any] = {
             "include_archived": bool(include_archived),
             "limit": int(limit),
         }
-        if since_audit_id is not None:
-            params["cursor"] = int(since_audit_id)
-
-        return await self._request("GET", f"/tasks/{int(task_id)}/events", user_id=user_id, params=params)
+        return await self._request_bot_telegram(
+            "GET",
+            f"/internal/bot/tasks/{int(task_id)}/events",
+            telegram_user_id=int(telegram_user_id),
+            params=params,
+        )
 
     async def get_my_events(
         self,
         *,
-        user_id: int,
+        telegram_user_id: int,
         limit: int = 200,
-        offset: int = 0,
         since_audit_id: Optional[int] = None,
         event_type: Optional[str] = None,
     ) -> APIResponse:
-        params: Dict[str, Any] = {
-            "limit": int(limit),
-            "offset": int(offset),
-        }
+        params: Dict[str, Any] = {"limit": int(limit)}
         if since_audit_id is not None:
-            params["cursor"] = int(since_audit_id)
-        if event_type:
-            params["event_type"] = str(event_type).strip()
-
-        return await self._request("GET", "/tasks/me/events", user_id=user_id, params=params)
-
-    # -----------------------
-    # Deliveries (telegram channel ack)
-    # -----------------------
+            params["since_audit_id"] = int(since_audit_id)
+        _ = event_type  # internal feed does not filter by type in v1
+        return await self._request_bot_telegram(
+            "GET",
+            "/internal/bot/tasks/me/events",
+            telegram_user_id=int(telegram_user_id),
+            params=params,
+        )
 
     async def get_pending_deliveries(
         self,
@@ -400,13 +379,6 @@ class CorpsiteAPI:
         cursor_user_id: int = 0,
         limit: int = 200,
     ) -> APIResponse:
-        """
-        GET /tasks/internal/task-event-deliveries/pending?channel=telegram&cursor_from=0&cursor_user_id=0&limit=200
-
-        Возвращает:
-          { "items": [...], "next_cursor": <int>, "next_cursor_audit_id": <int>, "next_cursor_user_id": <int> }
-        items содержат audit_id, user_id, task_id, event_type, payload, created_at, channel, status, telegram_chat_id
-        """
         ch = str(channel).strip() or "telegram"
         params: Dict[str, Any] = {
             "channel": ch,
@@ -432,18 +404,6 @@ class CorpsiteAPI:
         error_code: Optional[str] = None,
         error_text: Optional[str] = None,
     ) -> APIResponse:
-        """
-        POST /tasks/internal/task-event-deliveries/ack
-        JSON:
-          {
-            "audit_id": 44,
-            "user_id": 34,
-            "channel": "telegram",
-            "status": "SENT" | "FAILED",
-            "error_code": "...",
-            "error_text": "..."
-          }
-        """
         body: Dict[str, Any] = {
             "audit_id": int(audit_id),
             "user_id": int(delivery_user_id),

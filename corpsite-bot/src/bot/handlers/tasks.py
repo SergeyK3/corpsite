@@ -385,7 +385,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # /tasks or /tasks list
     if not args or args == ["list"]:
-        raw = await backend.list_tasks(user_id=user_id, limit=_LIST_LIMIT)
+        raw = await backend.list_tasks(telegram_user_id=tg_user_id, limit=_LIST_LIMIT)
 
         # Expect dict {"items":[...]} but be defensive
         if raw.status_code != 200 or raw.json is None:
@@ -417,7 +417,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # /tasks <id> (view)
     if len(args) == 1 and args[0].isdigit():
         tid = int(args[0])
-        raw = await backend.get_task(task_id=tid, user_id=user_id)
+        raw = await backend.get_task(task_id=tid, telegram_user_id=tg_user_id)
         if raw.status_code != 200 or not isinstance(raw.json, dict):
             await msg.reply_text("Задача не найдена или недоступна.")
             return
@@ -435,7 +435,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if action == "history":
         raw = await backend.get_task_events(
             task_id=task_id,
-            user_id=user_id,
+            telegram_user_id=tg_user_id,
             include_archived=False,
         )
         if raw.status_code == 404:
@@ -464,7 +464,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text(e.message)
             return
 
-        resp = await backend.patch_task(task_id=task_id, user_id=user_id, payload=payload)
+        resp = await backend.patch_task(task_id=task_id, telegram_user_id=tg_user_id, payload=payload)
         if int(resp.status_code or 0) < 300:
             await msg.reply_text("Изменения сохранены.")
         else:
@@ -487,7 +487,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if comment:
             payload["current_comment"] = comment
 
-        resp = await backend.task_action(task_id=task_id, user_id=user_id, action="report", payload=payload)
+        resp = await backend.task_action(task_id=task_id, telegram_user_id=tg_user_id, action="report", payload=payload)
         if int(resp.status_code or 0) < 300:
             await msg.reply_text("Отчёт отправлен.")
         else:
@@ -504,7 +504,7 @@ async def cmd_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if comment:
             payload["current_comment"] = comment
 
-        resp = await backend.task_action(task_id=task_id, user_id=user_id, action=action, payload=payload)
+        resp = await backend.task_action(task_id=task_id, telegram_user_id=tg_user_id, action=action, payload=payload)
         if int(resp.status_code or 0) < 300:
             await msg.reply_text("Согласовано." if action == "approve" else "Отклонено.")
         else:

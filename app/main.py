@@ -25,6 +25,7 @@ from app.meta import router as meta_router
 from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
+from app.tg_bot_internal_router import router as tg_bot_internal_router
 from app.directory import router as directory_router
 from app.auth import router as auth_router  # /auth/login, /auth/me
 from app.auth import get_current_user
@@ -102,6 +103,7 @@ app.include_router(auth_router)  # /auth/login, /auth/me
 app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any
 app.include_router(tg_bind_router)
+app.include_router(tg_bot_internal_router)
 app.include_router(directory_router)
 
 # Regular tasks

@@ -14,9 +14,7 @@ from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
 from telegram.ext import Application
 
-from .events_renderer import render_event
-from .integrations.corpsite_api import CorpsiteAPI
-from .storage.cursor_store import CursorStore
+from ..storage.bindings import legacy_json_bindings_enabled
 
 log = logging.getLogger("corpsite-bot.events")
 
@@ -292,13 +290,14 @@ async def _poll_per_user_events(
 
             for user_id, chat_ids in by_user.items():
                 since_val = cursor_store.get(int(user_id), default=0)
+                tg_chat_id = int(chat_ids[0]) if chat_ids else 0
+                if tg_chat_id <= 0:
+                    continue
 
                 resp = await backend.get_my_events(
-                    user_id=int(user_id),
+                    telegram_user_id=int(tg_chat_id),
                     since_audit_id=since_val if since_val > 0 else None,
                     limit=int(per_user_limit),
-                    offset=0,
-                    event_type=None,
                 )
 
                 if resp.status_code != 200:
@@ -638,7 +637,12 @@ async def events_polling_loop(
 ) -> None:
     allowed_types_norm = {t.upper().strip() for t in (allowed_types or set()) if str(t).strip()}
 
-    mode = "delivery-queue" if _use_delivery_queue_mode() else "per-user"
+    if _use_delivery_queue_mode():
+        mode = "delivery-queue"
+    elif legacy_json_bindings_enabled():
+        mode = "per-user"
+    else:
+        mode = "disabled"
 
     log.info(
         "Events polling started. mode=%s interval=%ss limit=%s allowed_types=%s cursor_file=%s",
@@ -648,6 +652,15 @@ async def events_polling_loop(
         sorted(allowed_types_norm) if allowed_types_norm else "ALL",
         str(cursor_store.path),
     )
+
+    if mode == "disabled":
+        while True:
+            log.warning(
+                "OPS-007a: events polling idle — configure delivery queue "
+                "or set TELEGRAM_LEGACY_JSON_BINDINGS=1 for per-user fallback"
+            )
+            await asyncio.sleep(max(60.0, poll_interval_s))
+        return
 
     if mode == "delivery-queue":
         await _poll_delivery_queue(
