@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import type { AdminUser } from "./adminSystemApi.client";
 import {
+  buildBulkDepartmentVisibilityPayloads,
   buildDepartmentUserOptions,
   canSubmitVisibilityAssignment,
+  clearDepartmentTargetSelection,
   countEmployeesWithoutUserAccount,
   departmentPrefilterRequired,
   extractPositionIdsFromEmployees,
@@ -13,7 +15,9 @@ import {
   filterPositionsByDepartmentContext,
   filterUserOptionsByQuery,
   flattenOrgUnitTree,
+  selectAllVisibleDepartmentTargets,
   targetSelectionRequired,
+  toggleDepartmentTargetSelection,
   toAccessTargetFromDepartment,
 } from "./visibilityTabLogic";
 
@@ -146,19 +150,79 @@ describe("visibilityTabLogic", () => {
         mode: "DEPARTMENT",
         selectedDepartment: null,
         selectedUser: null,
-        selectedDepartmentTarget: dept,
+        selectedDepartmentTargetIds: new Set([dept.unitId]),
         selectedPosition: null,
       }),
     ).toBe(true);
     expect(
       canSubmitVisibilityAssignment({
-        mode: "USER",
-        selectedDepartment: dept,
+        mode: "DEPARTMENT",
+        selectedDepartment: null,
         selectedUser: null,
-        selectedDepartmentTarget: null,
+        selectedDepartmentTargetIds: new Set(),
         selectedPosition: null,
       }),
     ).toBe(false);
+    expect(
+      canSubmitVisibilityAssignment({
+        mode: "USER",
+        selectedDepartment: dept,
+        selectedUser: null,
+        selectedDepartmentTargetIds: new Set(),
+        selectedPosition: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("selectAllVisibleDepartmentTargets selects every filtered department", () => {
+    const adminDepartments = filterOrgUnitsByGroup(departments, adminGroupId);
+    const selected = selectAllVisibleDepartmentTargets(new Set(), adminDepartments);
+    expect(Array.from(selected).sort()).toEqual([20, 21]);
+  });
+
+  it("clearDepartmentTargetSelection removes all selected ids", () => {
+    expect(clearDepartmentTargetSelection().size).toBe(0);
+    expect(
+      clearDepartmentTargetSelection().has(20),
+    ).toBe(false);
+  });
+
+  it("selection survives search changes for already selected ids", () => {
+    let selected = selectAllVisibleDepartmentTargets(new Set(), departments);
+    expect(selected.has(20)).toBe(true);
+    expect(selected.has(21)).toBe(true);
+
+    const narrowed = filterOrgUnitsByGroupAndQuery(departments, adminGroupId, "бух");
+    expect(narrowed).toHaveLength(1);
+    expect(selected.has(20)).toBe(true);
+    expect(selected.has(21)).toBe(true);
+
+    selected = toggleDepartmentTargetSelection(selected, narrowed[0]!.unitId);
+    expect(selected.has(20)).toBe(false);
+    expect(selected.has(21)).toBe(true);
+  });
+
+  it("buildBulkDepartmentVisibilityPayloads maps selected department ids", () => {
+    const payloads = buildBulkDepartmentVisibilityPayloads({
+      departmentIds: new Set([21, 20]),
+      scopeType: "ORGANIZATION",
+      scopeDepartmentId: null,
+      scopeDepartmentGroupId: null,
+      canViewTasks: true,
+    });
+
+    expect(payloads.map((item) => item.departmentId)).toEqual([20, 21]);
+    expect(payloads[0]?.payload).toEqual({
+      target_type: "DEPARTMENT",
+      target_user_id: null,
+      target_position_id: null,
+      target_department_id: 20,
+      scope_type: "ORGANIZATION",
+      scope_department_id: null,
+      scope_department_group_id: null,
+      can_view_personnel: true,
+      can_view_tasks: true,
+    });
   });
 
   it("toAccessTargetFromDepartment maps org unit target for backend DEPARTMENT", () => {

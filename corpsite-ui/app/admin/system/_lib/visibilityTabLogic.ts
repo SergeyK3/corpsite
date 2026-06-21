@@ -1,5 +1,5 @@
 // FILE: corpsite-ui/app/admin/system/_lib/visibilityTabLogic.ts
-import type { AdminUser } from "./adminSystemApi.client";
+import type { AdminUser, PersonnelVisibilityCreate } from "./adminSystemApi.client";
 import type { AccessTargetSearchItem } from "./adminSystemApi.client";
 
 export type VisibilityAssignmentMode = "USER" | "DEPARTMENT" | "POSITION";
@@ -251,16 +251,147 @@ export function canSubmitVisibilityAssignment(args: {
   mode: VisibilityAssignmentMode;
   selectedDepartment: OrgUnitOption | null;
   selectedUser: VisibilityUserOption | null;
-  selectedDepartmentTarget: OrgUnitOption | null;
+  selectedDepartmentTargetIds: ReadonlySet<number>;
   selectedPosition: AccessTargetSearchItem | null;
 }): boolean {
   if (args.mode === "USER") {
     return Boolean(args.selectedDepartment && args.selectedUser);
   }
   if (args.mode === "DEPARTMENT") {
-    return Boolean(args.selectedDepartmentTarget);
+    return args.selectedDepartmentTargetIds.size > 0;
   }
   return Boolean(args.selectedPosition);
+}
+
+export function toggleDepartmentTargetSelection(
+  selectedIds: ReadonlySet<number>,
+  unitId: number,
+): Set<number> {
+  const next = new Set(selectedIds);
+  if (next.has(unitId)) next.delete(unitId);
+  else next.add(unitId);
+  return next;
+}
+
+export function selectAllVisibleDepartmentTargets(
+  selectedIds: ReadonlySet<number>,
+  visibleDepartments: OrgUnitOption[],
+): Set<number> {
+  const next = new Set(selectedIds);
+  for (const dept of visibleDepartments) {
+    next.add(dept.unitId);
+  }
+  return next;
+}
+
+export function clearDepartmentTargetSelection(): Set<number> {
+  return new Set();
+}
+
+export function pruneDepartmentTargetSelectionByGroup(
+  selectedIds: ReadonlySet<number>,
+  groupId: number | null | undefined,
+  departmentsById: ReadonlyMap<number, OrgUnitOption>,
+): Set<number> {
+  if (groupId == null || groupId < 1) return new Set(selectedIds);
+  const next = new Set<number>();
+  for (const id of selectedIds) {
+    const dept = departmentsById.get(id);
+    if (dept?.groupId === groupId) next.add(id);
+  }
+  return next;
+}
+
+export type BulkDepartmentVisibilityPayload = {
+  departmentId: number;
+  payload: PersonnelVisibilityCreate;
+};
+
+export function buildBulkDepartmentVisibilityPayloads(args: {
+  departmentIds: Iterable<number>;
+  scopeType: string;
+  scopeDepartmentId: number | null;
+  scopeDepartmentGroupId: number | null;
+  canViewTasks: boolean;
+}): BulkDepartmentVisibilityPayload[] {
+  return Array.from(args.departmentIds)
+    .filter((id) => Number.isFinite(id) && id >= 1)
+    .sort((a, b) => a - b)
+    .map((departmentId) => ({
+      departmentId,
+      payload: {
+        target_type: "DEPARTMENT",
+        target_user_id: null,
+        target_position_id: null,
+        target_department_id: departmentId,
+        scope_type: args.scopeType,
+        scope_department_id: args.scopeDepartmentId,
+        scope_department_group_id: args.scopeDepartmentGroupId,
+        can_view_personnel: true,
+        can_view_tasks: args.canViewTasks,
+      },
+    }));
+}
+
+export type BulkVisibilityCreateOutcome = "success" | "duplicate" | "failed";
+
+export type BulkVisibilityCreateItemResult = {
+  departmentId: number;
+  outcome: BulkVisibilityCreateOutcome;
+  errorMessage?: string;
+};
+
+export type BulkVisibilityCreateSummary = {
+  successCount: number;
+  duplicateCount: number;
+  failedCount: number;
+  message: string;
+};
+
+export function classifyBulkVisibilityCreateError(err: unknown): BulkVisibilityCreateOutcome {
+  const status = Number((err as { status?: number })?.status ?? 0);
+  if (status === 409) return "duplicate";
+
+  const parts: string[] = [];
+  if (err instanceof Error && err.message.trim()) parts.push(err.message.trim());
+  const detail = (err as { detail?: unknown })?.detail;
+  if (typeof detail === "string" && detail.trim()) parts.push(detail.trim());
+  const msg = parts.join(" ").toLowerCase();
+
+  if (
+    msg.includes("already exists") ||
+    msg.includes("уже существует") ||
+    msg.includes("duplicate") ||
+    msg.includes("conflict")
+  ) {
+    return "duplicate";
+  }
+  return "failed";
+}
+
+export function summarizeBulkVisibilityCreateResults(
+  results: BulkVisibilityCreateItemResult[],
+): BulkVisibilityCreateSummary {
+  const successCount = results.filter((r) => r.outcome === "success").length;
+  const duplicateCount = results.filter((r) => r.outcome === "duplicate").length;
+  const failedCount = results.filter((r) => r.outcome === "failed").length;
+
+  const parts: string[] = [];
+  if (successCount > 0) parts.push(`создано: ${successCount}`);
+  if (duplicateCount > 0) parts.push(`уже существует: ${duplicateCount}`);
+  if (failedCount > 0) parts.push(`ошибок: ${failedCount}`);
+
+  const failedSamples = results
+    .filter((r) => r.outcome === "failed" && r.errorMessage)
+    .slice(0, 3)
+    .map((r) => `#${r.departmentId}: ${r.errorMessage}`);
+
+  let message = parts.length > 0 ? parts.join("; ") : "Нет результатов";
+  if (failedSamples.length > 0) {
+    message = `${message}. ${failedSamples.join("; ")}`;
+  }
+
+  return { successCount, duplicateCount, failedCount, message };
 }
 
 export function toAccessTargetFromUser(user: VisibilityUserOption): AccessTargetSearchItem {
