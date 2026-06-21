@@ -262,3 +262,33 @@ class IdentityReconciliationExecuteResponse(IdentityReconciliationReportResponse
     run_id: Optional[int] = None
     execute_summary: Dict[str, Any] = Field(default_factory=dict)
     item_results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class UserLinkageCandidate(BaseModel):
+    user_id: int
+    login: Optional[str] = None
+    proposed_employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    match_strategy: Optional[str] = None
+    classification: str
+    confidence: Optional[str] = None
+    reason_codes: List[str] = Field(default_factory=list)
+    blockers: List[str] = Field(default_factory=list)
+    requires_manual_confirmation: bool = False
+
+
+class UserLinkagePreviewSummary(BaseModel):
+    total_users: int
+    auto_link_safe: int
+    review_required: int
+    ambiguous: int
+    impossible: int
+    excluded: int
+
+
+class UserLinkagePreviewResponse(BaseModel):
+    phase: str
+    dry_run: bool
+    generated_at: str
+    summary: UserLinkagePreviewSummary
+    candidates: List[UserLinkageCandidate]

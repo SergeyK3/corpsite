@@ -12,6 +12,7 @@ from app.api.personnel_admin_schemas import (
     IdentityReconciliationExecuteResponse,
     IdentityReconciliationPreviewRequest,
     IdentityReconciliationReportResponse,
+    UserLinkagePreviewResponse,
     LifecycleRunDetail,
     LifecycleRunListResponse,
     LifecycleRunReportResponse,
@@ -56,6 +57,7 @@ from app.services.identity_reconciliation_service import (
     run_r1a_dry_run,
     run_r1a_execute,
 )
+from app.services.user_linkage_preview_service import run_user_linkage_preview
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
     get_override,
@@ -440,3 +442,15 @@ def admin_execute_identity_reconciliation_r1a(
             )
     except IdentityReconciliationError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.get(
+    "/identity/user-linkage/preview",
+    response_model=UserLinkagePreviewResponse,
+)
+def admin_preview_user_linkage(
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.2 — read-only User → Employee linkage preview (no writes)."""
+    with engine.connect() as conn:
+        return run_user_linkage_preview(conn)
