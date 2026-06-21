@@ -2,7 +2,7 @@
 
 ## Status
 
-**Design only** (2026-06-21) — no code, no migrations, no endpoints in this phase.
+**R2.4 execute engine** — R2.4a schema and R2.4b execute preview service implemented (2026-06-21).
 
 | Phase | Scope | Status |
 |-------|-------|--------|
@@ -11,7 +11,8 @@
 | R2.3 | Review queue + decisions + audit + UI | Complete |
 | **R2.4** | **Execute engine design** | **Approved** |
 | **R2.4a** | **Execute journal schema (migration)** | **Implemented** |
-| R2.4b | Execute service + API + UI | Not started |
+| R2.4b | Execute preview service + unit tests | **Implemented** |
+| R2.4c | API + execute confirm flow | Not started |
 | R2.5 | Manual admin link + V3 validation gate | Planned |
 
 ## Related documents
@@ -596,7 +597,7 @@ Localization: [OPS-008](../roadmap/ops-backlog.md).
 | Step | Deliverable | Depends on | Status |
 |------|-------------|------------|--------|
 | R2.4a | Migration: phase CHECK, `operation`, `user_linkage_execute_items`, `USER_EMPLOYEE_LINKED` | This ADR | **Done** — `e4f5a6b7c8d9` |
-| R2.4b | `user_linkage_execute_service.py` + unit tests | R2.4a | Not started |
+| R2.4b | `user_linkage_execute_service.py` + unit tests | R2.4a | **Done** |
 | R2.4c | API + execute-preview confirm flow | R2.4b | Not started |
 | R2.4d | Admin UI execute panel | R2.4c | Not started |
 | R2.5 | Manual PATCH link + L1 rollback tool + V3 sign-off | R2.4d | Planned |
@@ -625,6 +626,80 @@ Localization: [OPS-008](../roadmap/ops-backlog.md).
 ```bash
 alembic upgrade head
 python -m pytest tests/test_adr044_phase_r2_4a_user_linkage_execute_schema.py -v
+```
+
+### 15.2 R2.4b Execute Preview Service
+
+**Module:** `app/services/user_linkage_execute_service.py`
+
+**Entry point:**
+
+```python
+build_user_linkage_execute_preview(
+    *,
+    actor_user_id: int,
+    limit: int | None = None,
+    user_id: int | None = None,
+) -> ExecutePreviewResult
+```
+
+Tests call `_build_user_linkage_execute_preview(conn, …)` directly inside rolled-back transactions.
+
+#### Implemented behavior
+
+1. Creates an `identity_reconciliation_runs` row with `phase='R2'`, `operation='USER_LINKAGE_EXECUTE_PREVIEW'`, `dry_run=true`, `status='completed'`, `actor_user_id` = operator, and a JSONB `summary`.
+2. Loads latest review decision per user (`DISTINCT ON (user_id) … ORDER BY created_at DESC`).
+3. Re-runs fresh R2.2 preview via `run_user_linkage_preview`.
+4. Evaluates the union of fresh preview candidates and users whose latest decision is `APPROVE` (covers already-linked NOOP/FAIL paths).
+5. Applies optional `user_id` and `limit` filters (stable `user_id` ordering).
+6. Writes one `user_linkage_execute_items` row per evaluated user with snapshots; **does not** update `users.employee_id` or mutate R2.3 review rows.
+
+#### Action / status mapping (preview only)
+
+| Action | Status | When |
+|--------|--------|------|
+| `LINK` | `PLANNED` | Latest `APPROVE`, fresh preview target matches approval, classification executable, user unlinked, employee slot free |
+| `NOOP_ALREADY_LINKED` | `SKIPPED` | `users.employee_id` already equals approved `proposed_employee_id` |
+| `SKIP_NOT_APPROVED` | `SKIPPED` | Latest decision is `REJECT`, `DEFER`, or absent |
+| `SKIP_PREVIEW_DRIFT` | `SKIPPED` | Approved `proposed_employee_id` ≠ fresh preview target |
+| `SKIP_CLASSIFICATION_REGRESSION` | `SKIPPED` | Fresh classification no longer executable (`REVIEW_REQUIRED` / `AMBIGUOUS` only) |
+| `SKIP_EXCLUDED` | `SKIPPED` | Fresh classification is `EXCLUDED_SERVICE_ACCOUNT` or `IMPOSSIBLE` |
+| `FAIL_ALREADY_LINKED_DIFFERENT` | `FAILED` | User linked to a different employee than approved |
+| `FAIL_EMPLOYEE_CONFLICT` | `FAILED` | Proposed employee already linked to another active user (`uq_users_employee_id`) |
+
+Executable classifications: `REVIEW_REQUIRED`, `AMBIGUOUS`.
+
+#### Snapshots per item
+
+| Field | Preview value |
+|-------|---------------|
+| `preview_snapshot` | Fresh R2.2 candidate dict (or `{}` if absent) |
+| `decision_snapshot` | Latest review decision fields |
+| `before_user_snapshot` | Live user row before any apply |
+| `after_user_snapshot` | JSON `null` (no apply in preview) |
+| `rollback_payload` | JSON `null` (populated only on apply in R2.4c+) |
+
+#### Run summary keys
+
+`total_evaluated`, `planned_link`, `noop_already_linked`, `skipped_not_approved`, `skipped_preview_drift`, `skipped_classification_regression`, `skipped_excluded`, `failed_already_linked_different`, `failed_employee_conflict`.
+
+#### Safety guarantees (R2.4b)
+
+- **No `users.employee_id` updates** — preview persists journal rows only.
+- **Review decisions append-only** — execute preview reads decisions; never INSERT/UPDATE/DELETE on `user_linkage_review_decisions`.
+- **Fresh preview gate** — every eligible `APPROVE` is re-validated against live R2.2 classification before a `LINK` plan item is emitted.
+- **Idempotent re-run** — each call creates a new preview run + item rows; user linkage state is unchanged.
+
+#### Tests
+
+`tests/test_adr044_phase_r2_4b_user_linkage_execute_preview.py`
+
+**Verify:**
+
+```bash
+python -m pytest tests/test_adr044_phase_r2_4b_user_linkage_execute_preview.py -v
+python -m pytest tests/test_adr044_phase_r2_4a_user_linkage_execute_schema.py -q
+python -m pytest tests/test_adr044_phase_r2_3_user_linkage_review.py -q
 ```
 
 ---
