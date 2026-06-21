@@ -155,11 +155,9 @@ export default function VisibilityTab() {
 
   return (
     <div className="space-y-6">
-      <InfoBanner>
-        Видимость персонала (ADR-042 E1) открывает правый сайдбар и справочник без выдачи admin-функций.
-        Роль отвечает за действия; visibility scope — за просмотр.
-      </InfoBanner>
-
+      <InfoBanner
+        message="Видимость персонала (ADR-042 E1) открывает правый сайдбар и справочник без выдачи admin-функций. Роль отвечает за действия; visibility scope — за просмотр."
+      />
       {error ? <ErrorBanner message={error} /> : null}
       {success ? <SuccessBanner message={success} /> : null}
 
