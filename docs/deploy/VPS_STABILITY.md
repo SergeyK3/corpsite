@@ -2,6 +2,31 @@
 
 Production stability runbook for mmc.004.kz (46.247.42.47).
 
+## Incident summary
+
+| Field | Detail |
+|-------|--------|
+| **Incident** | 2026-06-20 |
+| **Root cause** | Frontend service failed due to **EADDRINUSE on port 3000** (orphan `next-server` after restart; systemd exhausted `StartLimitBurst`). |
+| **Impact** | **502** on `/directory/personnel` and `/admin/system` (nginx upstream `:3000` down). |
+| **Resolution** | **ADR-INFRA-005** — port guard, deploy scripts, systemd hardening, healthcheck timer. |
+
+Related backend incident (2026-06-16): stale orphan **uvicorn** on `:8000` — same class of failure.
+
+## Запрещено / разрешено
+
+### Запрещено
+
+- **`nohup uvicorn`** (и любой ручной uvicorn вне systemd)
+- **`npm run start` вручную** на VPS (и `next start` вне `corpsite-frontend.service`)
+- `git pull` + `systemctl restart corpsite-frontend` **без** `npm run build`
+- Игнорировать `systemctl status` = **failed** после deploy
+
+### Разрешено
+
+- **`sudo ./scripts/deploy_backend.sh`** — единственный путь restart backend
+- **`sudo ./scripts/deploy_frontend.sh`** — build + port guard + restart + smoke
+
 ## Root causes (confirmed)
 
 ### Frontend — 2026-06-20 06:03–06:04 UTC

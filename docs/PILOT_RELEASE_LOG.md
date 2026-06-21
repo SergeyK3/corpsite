@@ -152,3 +152,56 @@ Use one entry for each deployment during the pilot.
   - UI login smoke для 3 pilot users
   - Day 1: hosp report (`10009`) → amb report (`10010`) → head approve
   - заполнить pilot prep table в `docs/PILOT_QM_ROSTER.md`
+
+---
+
+## Release Entry
+
+- Date: 2026-06-20
+- Version / label: `ADR-INFRA-005-vps-stability-hardening`
+- Environment: VPS pilot (46.247.42.47)
+- Responsible person: Sergey
+- Git HEAD: `b884b30` — `fix(ops): ADR-INFRA-005 VPS stability hardening for services`
+
+### What changed
+
+- **ops:** resolved recurring frontend/backend service failures caused by orphan processes and port conflicts
+- **Added:**
+  - `scripts/ops/ensure_port_free.sh` — port guard (`:3000`, `:8000`)
+  - `scripts/deploy_backend.sh` — backend deploy with port guard + health smoke
+  - `scripts/deploy_frontend.sh` — hardened (reset-failed, port guard, extended smoke)
+  - `scripts/ops/corpsite_healthcheck.sh` + `corpsite-healthcheck.timer` (every 5 min)
+  - systemd hardening: `KillMode=mixed`, `TimeoutStopSec=30`, `ExecStartPre` port guard, `Restart=on-failure`
+  - `docs/deploy/VPS_STABILITY.md` — incident runbook
+- **Incident (2026-06-20):** frontend `EADDRINUSE :3000` → StartLimit → unit `failed` → 502 on UI routes
+- **application code:** no business-logic changes
+
+### Why this release was made
+
+- Eliminate repeat class of outage: deploy/restart → orphan process → `EADDRINUSE` → systemd `failed` → nginx **502** until manual intervention.
+
+### What to verify after deployment
+
+1. `systemctl is-active corpsite-backend corpsite-frontend` → both active
+2. `curl -sf http://127.0.0.1:8000/health` → OK
+3. `curl -I https://mmc.004.kz/directory/personnel` → **200**
+4. `curl -I https://mmc.004.kz/admin/system` → **200** or 302
+5. `ss -lptn 'sport = :3000'` → next-server under systemd
+6. `ss -lptn 'sport = :8000'` → uvicorn on `127.0.0.1` under systemd
+7. No `EADDRINUSE` in `journalctl -u corpsite-frontend -u corpsite-backend` after deploy
+
+### Rollback note
+
+- Restore previous unit files from backup; `systemctl daemon-reload`
+- Use `docs/deploy/VPS_STABILITY.md` recovery section if frontend stuck in `failed`
+
+### Result
+
+- status: **PASS**
+- verified:
+  - frontend **200** (`/directory/personnel`, `/admin/system`)
+  - backend health **OK**
+  - no **EADDRINUSE** failures after ADR-INFRA-005 deploy on VPS
+- follow-up actions:
+  - always use `deploy_backend.sh` / `deploy_frontend.sh` on VPS
+  - monitor `/var/log/corpsite-healthcheck.log`
