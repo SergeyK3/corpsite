@@ -12,6 +12,7 @@ import {
 import {
   operationLabel,
   runStatusClass,
+  runStatusLabel,
   summaryCardClass,
 } from "../../_lib/userLinkageOperationsLabels";
 import { formatActorLabel, formatDateTime } from "../../_lib/adminSystemLabels";
@@ -110,13 +111,13 @@ export default function OperationsDashboard({
 
   const summaryCards = useMemo(
     () => [
-      { label: "Total R2 runs", value: summary.totalRuns, kind: "info" as const },
-      { label: "Execute runs", value: summary.executeRuns, kind: "success" as const },
-      { label: "Manual links", value: summary.manualLinks, kind: "info" as const },
-      { label: "Manual unlinks", value: summary.manualUnlinks, kind: "warn" as const },
-      { label: "Rollbacks", value: summary.rollbacks, kind: "warn" as const },
-      { label: "Repair previews", value: summary.repairPreviews, kind: "muted" as const },
-      { label: "Failed operations", value: summary.failedOperations, kind: "danger" as const },
+      { label: "Всего запусков R2", value: summary.totalRuns, kind: "info" as const },
+      { label: "Запуски выполнения", value: summary.executeRuns, kind: "success" as const },
+      { label: "Ручные привязки", value: summary.manualLinks, kind: "info" as const },
+      { label: "Ручные отвязки", value: summary.manualUnlinks, kind: "warn" as const },
+      { label: "Откаты", value: summary.rollbacks, kind: "warn" as const },
+      { label: "Диагностики привязки", value: summary.repairPreviews, kind: "muted" as const },
+      { label: "Операции с ошибкой", value: summary.failedOperations, kind: "danger" as const },
     ],
     [summary],
   );
@@ -124,9 +125,9 @@ export default function OperationsDashboard({
   return (
     <section className="space-y-6" data-testid="operations-dashboard">
       <div>
-        <h2 className="text-lg font-semibold">Operations Dashboard</h2>
+        <h2 className="text-lg font-semibold">Панель операций</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Read-only visibility into R2 user linkage operations (ADR-044 R2.5g).
+          Обзор операций привязки пользователей R2 (ADR-044 R2.5g).
         </p>
       </div>
 
@@ -151,7 +152,7 @@ export default function OperationsDashboard({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-base font-semibold">Latest operations</h3>
+            <h3 className="text-base font-semibold">Последние операции</h3>
             {latestItems.length === 0 ? (
               <p className="text-sm text-zinc-500" data-testid="operations-dashboard-latest-empty">
                 Операции ещё не выполнялись.
@@ -161,7 +162,7 @@ export default function OperationsDashboard({
                 <table className="min-w-full text-sm" data-testid="operations-dashboard-latest-table">
                   <thead>
                     <tr className="border-b border-zinc-200 text-left dark:border-zinc-700">
-                      {["time", "operation", "actor", "status", "affected user", "affected employee", ""].map(
+                      {["время", "операция", "исполнитель", "статус", "пользователь", "сотрудник", ""].map(
                         (h) => (
                           <th
                             key={h || "actions"}
@@ -189,7 +190,7 @@ export default function OperationsDashboard({
                           <span
                             className={`rounded px-1.5 py-0.5 text-xs ${runStatusClass(row.run_status ?? row.status)}`}
                           >
-                            {row.run_status ?? row.status}
+                            {runStatusLabel(row.run_status ?? row.status)}
                           </span>
                         </td>
                         <td className="px-2 py-2">
@@ -208,7 +209,7 @@ export default function OperationsDashboard({
                                 className="text-blue-600 hover:underline dark:text-blue-400"
                                 onClick={() => onOpenItem(row.item_id)}
                               >
-                                Item
+                                Элемент
                               </button>
                             ) : null}
                             {onOpenRun ? (
@@ -217,7 +218,7 @@ export default function OperationsDashboard({
                                 className="text-blue-600 hover:underline dark:text-blue-400"
                                 onClick={() => onOpenRun(row.run_id)}
                               >
-                                Run
+                                Запуск
                               </button>
                             ) : null}
                           </div>

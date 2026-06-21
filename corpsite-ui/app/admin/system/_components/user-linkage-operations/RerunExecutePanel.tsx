@@ -8,7 +8,7 @@ import {
   postRerunExecute,
   type UserLinkageRerunExecuteResponse,
 } from "../../_lib/userLinkageOperationsApi.client";
-import { runStatusClass } from "../../_lib/userLinkageOperationsLabels";
+import { runStatusClass, runStatusLabel } from "../../_lib/userLinkageOperationsLabels";
 import ErrorBanner from "../shared/ErrorBanner";
 import JsonViewer from "../shared/JsonViewer";
 
@@ -32,17 +32,17 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
 
     const runId = Number(sourcePreviewRunId);
     if (!sourcePreviewRunId || Number.isNaN(runId) || runId < 1) {
-      setError("Укажите корректный source preview run ID");
+      setError("Укажите корректный ID исходного предпросмотра");
       setLoading(false);
       return;
     }
     if (confirmToken.trim().length < 8) {
-      setError("Confirm token должен содержать минимум 8 символов");
+      setError("Токен подтверждения должен содержать минимум 8 символов");
       setLoading(false);
       return;
     }
     if (reason.trim().length < 10) {
-      setError("Reason должен содержать минимум 10 символов");
+      setError("Причина должна содержать минимум 10 символов");
       setLoading(false);
       return;
     }
@@ -56,7 +56,7 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
       setResult(res);
       onComplete?.();
     } catch (err) {
-      setError(mapUserLinkageOperationsApiError(err, "Re-run execute не удался"));
+      setError(mapUserLinkageOperationsApiError(err, "Не удалось выполнить повторный запуск"));
     } finally {
       setLoading(false);
     }
@@ -65,9 +65,9 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
   return (
     <section className="space-y-4" data-testid="rerun-execute-panel">
       <div>
-        <h2 className="text-lg font-semibold">Re-run Execute</h2>
+        <h2 className="text-lg font-semibold">Повторное выполнение</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Controlled re-run of R2.4 execute from an existing preview run. Требует confirm token.
+          Контролируемый повтор выполнения R2.4 из существующего предпросмотра. Требуется токен подтверждения.
         </p>
       </div>
 
@@ -75,12 +75,12 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
         className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
         data-testid="rerun-execute-warning"
       >
-        Это mutating операция. Убедитесь, что preview run завершён и confirm token актуален.
+        Это изменяющая операция. Убедитесь, что предпросмотр завершён и токен подтверждения актуален.
       </div>
 
       <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
         <label className="flex max-w-xs flex-col gap-1 text-sm">
-          <span>Source preview run ID</span>
+          <span>ID исходного предпросмотра</span>
           <input
             type="number"
             min={1}
@@ -92,7 +92,7 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
         </label>
 
         <label className="flex max-w-lg flex-col gap-1 text-sm">
-          <span>Confirm token</span>
+          <span>Токен подтверждения</span>
           <input
             type="text"
             value={confirmToken}
@@ -103,7 +103,7 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
         </label>
 
         <label className="flex max-w-lg flex-col gap-1 text-sm">
-          <span>Reason (min 10 chars)</span>
+          <span>Причина (мин. 10 символов)</span>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -119,7 +119,7 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           data-testid="rerun-submit"
         >
-          {loading ? "Executing…" : "Execute re-run"}
+          {loading ? "Выполнение…" : "Выполнить повторно"}
         </button>
       </form>
 
@@ -134,21 +134,21 @@ export default function RerunExecutePanel({ onComplete }: RerunExecutePanelProps
       {result ? (
         <div className="space-y-4" data-testid="rerun-execute-result">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Rerun run" value={`#${result.rerun_run_id}`} />
-            <Metric label="Execute run" value={`#${result.execute_run_id}`} />
+            <Metric label="Повторный запуск" value={`#${result.rerun_run_id}`} />
+            <Metric label="Запуск выполнения" value={`#${result.execute_run_id}`} />
             <Metric
-              label="Status"
+              label="Статус"
               value={
                 <span className={`rounded px-1.5 py-0.5 text-xs ${runStatusClass(result.run_status)}`}>
-                  {result.run_status}
+                  {runStatusLabel(result.run_status)}
                 </span>
               }
             />
-            <Metric label="Linked" value={String(result.execute.applied)} />
-            <Metric label="Skipped" value={String(result.execute.skipped)} />
-            <Metric label="Failed" value={String(result.execute.failed)} />
+            <Metric label="Привязано" value={String(result.execute.applied)} />
+            <Metric label="Пропущено" value={String(result.execute.skipped)} />
+            <Metric label="Ошибки" value={String(result.execute.failed)} />
           </div>
-          <JsonViewer title="Execute result" value={result.execute} testId="rerun-execute-detail" />
+          <JsonViewer title="Результат выполнения" value={result.execute} testId="rerun-execute-detail" />
         </div>
       ) : null}
     </section>

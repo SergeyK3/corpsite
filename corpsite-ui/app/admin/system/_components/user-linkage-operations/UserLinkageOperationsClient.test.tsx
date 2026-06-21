@@ -63,7 +63,7 @@ describe("UserLinkageOperationsClient", () => {
     render(<UserLinkageOperationsClient />);
 
     expect(screen.getByTestId("user-linkage-operations-client")).toBeInTheDocument();
-    expect(screen.getByText("User Linkage Operations")).toBeInTheDocument();
+    expect(screen.getByText("Операции привязки пользователей")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByTestId("operations-dashboard-summary")).toBeInTheDocument();
@@ -163,6 +163,6 @@ describe("UserLinkageOperationsClient", () => {
     await waitFor(() => {
       expect(screen.getByTestId("repair-preview-result")).toBeInTheDocument();
     });
-    expect(screen.getByText("LINK_OK")).toBeInTheDocument();
+    expect(screen.getByText("Привязка в порядке")).toBeInTheDocument();
   });
 });

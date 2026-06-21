@@ -11,7 +11,11 @@ import {
 import {
   ITEM_ACTION_OPTIONS,
   ITEM_STATUS_OPTIONS,
+  itemActionFilterLabel,
+  itemActionLabel,
   itemStatusClass,
+  itemStatusFilterLabel,
+  itemStatusLabel,
 } from "../../_lib/userLinkageOperationsLabels";
 import { formatDateTime } from "../../_lib/adminSystemLabels";
 import ErrorBanner from "../shared/ErrorBanner";
@@ -76,7 +80,7 @@ export default function OperationsItemsTable({
       setItems(res.items);
       setTotal(res.total);
     } catch (err) {
-      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить items"));
+      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить элементы"));
     } finally {
       setLoading(false);
     }
@@ -92,7 +96,7 @@ export default function OperationsItemsTable({
   return (
     <section className="space-y-4" data-testid="operations-items-table">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Item History</h2>
+        <h2 className="text-lg font-semibold">История элементов</h2>
         <button
           type="button"
           onClick={() => void load()}
@@ -100,14 +104,14 @@ export default function OperationsItemsTable({
           className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-600"
           data-testid="operations-items-refresh"
         >
-          Refresh
+          Обновить
         </button>
       </div>
 
       <div className="flex flex-wrap gap-3">
         <FilterInput
           testId="operations-items-filter-run"
-          label="Run ID"
+          label="ID запуска"
           value={filters.run_id}
           onChange={(v) => {
             setOffset(0);
@@ -116,9 +120,10 @@ export default function OperationsItemsTable({
         />
         <FilterSelect
           testId="operations-items-filter-action"
-          label="Action"
+          label="Действие"
           value={filters.action}
           options={ITEM_ACTION_OPTIONS}
+          formatLabel={itemActionFilterLabel}
           onChange={(v) => {
             setOffset(0);
             setFilters((f) => ({ ...f, action: v }));
@@ -126,9 +131,10 @@ export default function OperationsItemsTable({
         />
         <FilterSelect
           testId="operations-items-filter-status"
-          label="Status"
+          label="Статус"
           value={filters.status}
           options={ITEM_STATUS_OPTIONS}
+          formatLabel={itemStatusFilterLabel}
           onChange={(v) => {
             setOffset(0);
             setFilters((f) => ({ ...f, status: v }));
@@ -136,7 +142,7 @@ export default function OperationsItemsTable({
         />
         <FilterInput
           testId="operations-items-filter-user"
-          label="User ID"
+          label="ID пользователя"
           value={filters.user_id}
           onChange={(v) => {
             setOffset(0);
@@ -145,7 +151,7 @@ export default function OperationsItemsTable({
         />
         <FilterInput
           testId="operations-items-filter-employee"
-          label="Employee ID"
+          label="ID сотрудника"
           value={filters.employee_id}
           onChange={(v) => {
             setOffset(0);
@@ -162,14 +168,14 @@ export default function OperationsItemsTable({
         </p>
       ) : items.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="operations-items-empty">
-          Нет items по выбранным фильтрам.
+          Нет элементов по выбранным фильтрам.
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm" data-testid="operations-items-grid">
             <thead>
               <tr className="border-b border-zinc-200 text-left dark:border-zinc-700">
-                {["item id", "action", "status", "user", "employee", "created", ""].map((h) => (
+                {["ID элемента", "действие", "статус", "пользователь", "сотрудник", "создан", ""].map((h) => (
                   <th key={h || "actions"} className="px-2 py-2 font-medium text-zinc-600 dark:text-zinc-400">
                     {h}
                   </th>
@@ -184,10 +190,10 @@ export default function OperationsItemsTable({
                   data-testid={`operations-item-row-${row.item_id}`}
                 >
                   <td className="px-2 py-2">#{row.item_id}</td>
-                  <td className="px-2 py-2">{row.action}</td>
+                  <td className="px-2 py-2">{itemActionLabel(row.action)}</td>
                   <td className="px-2 py-2">
                     <span className={`rounded px-1.5 py-0.5 text-xs ${itemStatusClass(row.status)}`}>
-                      {row.status}
+                      {itemStatusLabel(row.status)}
                     </span>
                   </td>
                   <td className="px-2 py-2">{row.login ? `${row.login} (#${row.user_id})` : `#${row.user_id}`}</td>
@@ -204,7 +210,7 @@ export default function OperationsItemsTable({
                         className="text-blue-600 hover:underline dark:text-blue-400"
                         onClick={() => onOpenItem(row.item_id)}
                       >
-                        Detail
+                        Подробнее
                       </button>
                     ) : null}
                   </td>
@@ -246,12 +252,14 @@ function FilterSelect({
   label,
   value,
   options,
+  formatLabel,
   onChange,
   testId,
 }: {
   label: string;
   value: string;
   options: readonly string[];
+  formatLabel: (value: string) => string;
   onChange: (v: string) => void;
   testId: string;
 }) {
@@ -266,7 +274,7 @@ function FilterSelect({
       >
         {options.map((opt) => (
           <option key={opt || "all"} value={opt}>
-            {opt || "All"}
+            {formatLabel(opt)}
           </option>
         ))}
       </select>

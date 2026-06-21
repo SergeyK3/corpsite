@@ -11,9 +11,12 @@ import {
 import {
   formatAuditSummary,
   OPERATION_OPTIONS,
+  operationFilterLabel,
   operationLabel,
   RUN_STATUS_OPTIONS,
   runStatusClass,
+  runStatusFilterLabel,
+  runStatusLabel,
 } from "../../_lib/userLinkageOperationsLabels";
 import { formatActorLabel, formatDateTime } from "../../_lib/adminSystemLabels";
 import ErrorBanner from "../shared/ErrorBanner";
@@ -61,7 +64,7 @@ export default function OperationsRunsTable({
       setItems(res.items);
       setTotal(res.total);
     } catch (err) {
-      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить runs"));
+      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить запуски"));
     } finally {
       setLoading(false);
     }
@@ -83,7 +86,7 @@ export default function OperationsRunsTable({
   return (
     <section className="space-y-4" data-testid="operations-runs-table">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">History Runs</h2>
+        <h2 className="text-lg font-semibold">История операций</h2>
         <button
           type="button"
           onClick={() => void load()}
@@ -91,16 +94,17 @@ export default function OperationsRunsTable({
           className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-600"
           data-testid="operations-runs-refresh"
         >
-          Refresh
+          Обновить
         </button>
       </div>
 
       <div className="flex flex-wrap gap-3">
         <FilterSelect
           testId="operations-runs-filter-operation"
-          label="Operation"
+          label="Операция"
           value={filters.operation}
           options={OPERATION_OPTIONS}
+          formatLabel={operationFilterLabel}
           onChange={(v) => {
             setOffset(0);
             setFilters((f) => ({ ...f, operation: v }));
@@ -108,9 +112,10 @@ export default function OperationsRunsTable({
         />
         <FilterSelect
           testId="operations-runs-filter-status"
-          label="Status"
+          label="Статус"
           value={filters.status}
           options={RUN_STATUS_OPTIONS}
+          formatLabel={runStatusFilterLabel}
           onChange={(v) => {
             setOffset(0);
             setFilters((f) => ({ ...f, status: v }));
@@ -118,7 +123,7 @@ export default function OperationsRunsTable({
         />
         <FilterInput
           testId="operations-runs-filter-actor"
-          label="Actor user ID"
+          label="ID пользователя-исполнителя"
           value={filters.actor_user_id}
           onChange={(v) => {
             setOffset(0);
@@ -127,7 +132,7 @@ export default function OperationsRunsTable({
         />
         <FilterInput
           testId="operations-runs-filter-from"
-          label="From"
+          label="С"
           type="datetime-local"
           value={filters.created_from}
           onChange={(v) => {
@@ -137,7 +142,7 @@ export default function OperationsRunsTable({
         />
         <FilterInput
           testId="operations-runs-filter-to"
-          label="To"
+          label="По"
           type="datetime-local"
           value={filters.created_to}
           onChange={(v) => {
@@ -155,14 +160,14 @@ export default function OperationsRunsTable({
         </p>
       ) : items.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="operations-runs-empty">
-          Нет runs по выбранным фильтрам.
+          Нет запусков по выбранным фильтрам.
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm" data-testid="operations-runs-grid">
             <thead>
               <tr className="border-b border-zinc-200 text-left dark:border-zinc-700">
-                {["run id", "operation", "actor", "created", "status", "items", "audit count", ""].map((h) => (
+                {["ID запуска", "операция", "исполнитель", "создан", "статус", "элементы", "аудит", ""].map((h) => (
                   <th key={h || "actions"} className="px-2 py-2 font-medium text-zinc-600 dark:text-zinc-400">
                     {h}
                   </th>
@@ -182,7 +187,7 @@ export default function OperationsRunsTable({
                   <td className="px-2 py-2">{formatDateTime(row.started_at)}</td>
                   <td className="px-2 py-2">
                     <span className={`rounded px-1.5 py-0.5 text-xs ${runStatusClass(row.status)}`}>
-                      {row.status}
+                      {runStatusLabel(row.status)}
                     </span>
                   </td>
                   <td className="px-2 py-2">{row.item_count}</td>
@@ -194,7 +199,7 @@ export default function OperationsRunsTable({
                         className="text-blue-600 hover:underline dark:text-blue-400"
                         onClick={() => onOpenRun(row.run_id)}
                       >
-                        Detail
+                        Подробнее
                       </button>
                     ) : null}
                   </td>
@@ -223,12 +228,14 @@ function FilterSelect({
   label,
   value,
   options,
+  formatLabel,
   onChange,
   testId,
 }: {
   label: string;
   value: string;
   options: readonly string[];
+  formatLabel: (value: string) => string;
   onChange: (v: string) => void;
   testId: string;
 }) {
@@ -243,7 +250,7 @@ function FilterSelect({
       >
         {options.map((opt) => (
           <option key={opt || "all"} value={opt}>
-            {opt || "All"}
+            {formatLabel(opt)}
           </option>
         ))}
       </select>

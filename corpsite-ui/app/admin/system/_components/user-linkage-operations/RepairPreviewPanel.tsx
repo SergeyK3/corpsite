@@ -10,7 +10,11 @@ import {
 } from "../../_lib/userLinkageOperationsApi.client";
 import {
   diagnosisClass,
+  diagnosisLabel,
   diagnosisTone,
+  itemActionLabel,
+  recommendedActionLabel,
+  yesNoLabel,
 } from "../../_lib/userLinkageOperationsLabels";
 import ErrorBanner from "../shared/ErrorBanner";
 import JsonViewer from "../shared/JsonViewer";
@@ -38,7 +42,7 @@ export default function RepairPreviewPanel() {
       return;
     }
     if (reason.trim().length < 10) {
-      setError("Reason должен содержать минимум 10 символов");
+      setError("Причина должна содержать минимум 10 символов");
       setLoading(false);
       return;
     }
@@ -51,7 +55,7 @@ export default function RepairPreviewPanel() {
       const res = await postRepairPreview(body);
       setResult(res);
     } catch (err) {
-      setError(mapUserLinkageOperationsApiError(err, "Repair preview не удался"));
+      setError(mapUserLinkageOperationsApiError(err, "Не удалось выполнить диагностику привязки"));
     } finally {
       setLoading(false);
     }
@@ -62,9 +66,9 @@ export default function RepairPreviewPanel() {
   return (
     <section className="space-y-4" data-testid="repair-preview-panel">
       <div>
-        <h2 className="text-lg font-semibold">Repair Preview Tool</h2>
+        <h2 className="text-lg font-semibold">Диагностика привязки</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Read-only diagnostic. Не изменяет linkage.
+          Только чтение. Не изменяет привязку пользователя к сотруднику.
         </p>
       </div>
 
@@ -78,7 +82,7 @@ export default function RepairPreviewPanel() {
               onChange={() => setMode("user")}
               data-testid="repair-preview-mode-user"
             />
-            Search by user ID
+            Поиск по ID пользователя
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -88,12 +92,12 @@ export default function RepairPreviewPanel() {
               onChange={() => setMode("employee")}
               data-testid="repair-preview-mode-employee"
             />
-            Search by employee ID
+            Поиск по ID сотрудника
           </label>
         </div>
 
         <label className="flex max-w-xs flex-col gap-1 text-sm">
-          <span>{mode === "user" ? "User ID" : "Employee ID"}</span>
+          <span>{mode === "user" ? "ID пользователя" : "ID сотрудника"}</span>
           <input
             type="number"
             min={1}
@@ -105,7 +109,7 @@ export default function RepairPreviewPanel() {
         </label>
 
         <label className="flex max-w-lg flex-col gap-1 text-sm">
-          <span>Reason (min 10 chars)</span>
+          <span>Причина (мин. 10 символов)</span>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -121,7 +125,7 @@ export default function RepairPreviewPanel() {
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           data-testid="repair-preview-submit"
         >
-          {loading ? "Running…" : "Run repair preview"}
+          {loading ? "Выполняется…" : "Запустить диагностику"}
         </button>
       </form>
 
@@ -136,22 +140,23 @@ export default function RepairPreviewPanel() {
       {result && tone ? (
         <div className="space-y-4" data-testid="repair-preview-result">
           <div className={diagnosisClass(tone)} data-testid="repair-preview-diagnosis">
-            <div className="text-xs text-zinc-600 dark:text-zinc-400">Diagnosis code</div>
-            <div className="mt-1 text-lg font-semibold">{result.diagnosis_code}</div>
+            <div className="text-xs text-zinc-600 dark:text-zinc-400">Диагноз</div>
+            <div className="mt-1 text-lg font-semibold">{diagnosisLabel(result.diagnosis_code)}</div>
+            <div className="mt-0.5 text-xs text-zinc-500">{result.diagnosis_code}</div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Metric label="Execute ready" value={result.execute_ready ? "Yes" : "No"} />
-            <Metric label="Recommended action" value={result.recommended_action} />
-            <Metric label="Execute action" value={result.execute_action} />
-            <Metric label="Run ID" value={`#${result.run_id}`} />
-            <Metric label="Item ID" value={`#${result.item_id}`} />
+            <Metric label="Готово к выполнению" value={yesNoLabel(result.execute_ready)} />
+            <Metric label="Рекомендуемое действие" value={recommendedActionLabel(result.recommended_action)} />
+            <Metric label="Действие выполнения" value={itemActionLabel(result.execute_action)} />
+            <Metric label="ID запуска" value={`#${result.run_id}`} />
+            <Metric label="ID элемента" value={`#${result.item_id}`} />
           </div>
 
-          <JsonViewer title="Current linkage" value={result.current_linkage} testId="repair-current-linkage" />
-          <JsonViewer title="Candidate linkage" value={result.candidate_linkage} testId="repair-candidate-linkage" />
-          <JsonViewer title="Current user" value={result.current_user} />
-          <JsonViewer title="Review state" value={result.review} />
+          <JsonViewer title="Текущая привязка" value={result.current_linkage} testId="repair-current-linkage" />
+          <JsonViewer title="Кандидат привязки" value={result.candidate_linkage} testId="repair-candidate-linkage" />
+          <JsonViewer title="Текущий пользователь" value={result.current_user} />
+          <JsonViewer title="Состояние проверки" value={result.review} />
         </div>
       ) : null}
     </section>

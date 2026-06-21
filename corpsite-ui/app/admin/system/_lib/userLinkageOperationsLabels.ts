@@ -41,17 +41,94 @@ export const ITEM_STATUS_OPTIONS = [
   "NOOP_ALREADY_ROLLED_BACK",
 ] as const;
 
+export function filterAllLabel(): string {
+  return "Все";
+}
+
+export function yesNoLabel(value: boolean): string {
+  return value ? "Да" : "Нет";
+}
+
 export function operationLabel(operation: string): string {
   const map: Record<string, string> = {
-    USER_LINKAGE_EXECUTE: "Execute",
-    USER_LINKAGE_EXECUTE_PREVIEW: "Execute Preview",
-    USER_LINKAGE_MANUAL_LINK: "Manual Link",
-    USER_LINKAGE_MANUAL_UNLINK: "Manual Unlink",
-    USER_LINKAGE_ROLLBACK_ITEM: "Rollback",
-    USER_LINKAGE_REPAIR_PREVIEW: "Repair Preview",
-    USER_LINKAGE_RERUN_EXECUTE: "Re-run Execute",
+    USER_LINKAGE_EXECUTE: "Выполнение",
+    USER_LINKAGE_EXECUTE_PREVIEW: "Предпросмотр выполнения",
+    USER_LINKAGE_MANUAL_LINK: "Ручная привязка",
+    USER_LINKAGE_MANUAL_UNLINK: "Ручная отвязка",
+    USER_LINKAGE_ROLLBACK_ITEM: "Откат",
+    USER_LINKAGE_REPAIR_PREVIEW: "Диагностика привязки",
+    USER_LINKAGE_RERUN_EXECUTE: "Повторное выполнение",
   };
   return map[operation] ?? operation;
+}
+
+export function runStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    running: "Выполняется",
+    completed: "Завершён",
+    failed: "Ошибка",
+  };
+  return map[status] ?? status;
+}
+
+export function itemStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    PLANNED: "Запланировано",
+    APPLIED: "Применено",
+    SKIPPED: "Пропущено",
+    FAILED: "Ошибка",
+    NOOP_ALREADY_LINKED: "Уже привязан",
+    NOOP_ALREADY_UNLINKED: "Уже отвязан",
+    NOOP_ALREADY_ROLLED_BACK: "Уже откатан",
+  };
+  return map[status] ?? status;
+}
+
+export function itemActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    LINK: "Привязка",
+    MANUAL_LINK: "Ручная привязка",
+    MANUAL_UNLINK: "Ручная отвязка",
+    ROLLBACK_LINK: "Откат привязки",
+    REPAIR_PREVIEW: "Диагностика",
+    RERUN_EXECUTE: "Повторное выполнение",
+    NOOP_ALREADY_LINKED: "Уже привязан",
+    SKIP_NOT_APPROVED: "Пропуск: не одобрено",
+    SKIP_PREVIEW_DRIFT: "Пропуск: расхождение предпросмотра",
+    SKIP_CLASSIFICATION_REGRESSION: "Пропуск: регресс классификации",
+    SKIP_EXCLUDED: "Пропуск: исключён",
+    FAIL_ALREADY_LINKED_DIFFERENT: "Ошибка: привязан к другому",
+    FAIL_EMPLOYEE_CONFLICT: "Ошибка: конфликт сотрудника",
+  };
+  return map[action] ?? action;
+}
+
+export function diagnosisLabel(code: string): string {
+  const map: Record<string, string> = {
+    LINK_OK: "Привязка в порядке",
+    USER_UNLINKED_EMPLOYEE_MATCH_FOUND: "Пользователь отвязан, найден сотрудник",
+    USER_LINKED_TO_DIFFERENT_EMPLOYEE: "Пользователь привязан к другому сотруднику",
+    EMPLOYEE_LINKED_TO_DIFFERENT_USER: "Сотрудник привязан к другому пользователю",
+    NO_CANDIDATE_FOUND: "Кандидат не найден",
+    USER_NOT_FOUND: "Пользователь не найден",
+    EMPLOYEE_NOT_FOUND: "Сотрудник не найден",
+    SERVICE_ACCOUNT_EXCLUDED: "Служебная учётная запись исключена",
+    INACTIVE_EMPLOYEE_TARGET: "Целевой сотрудник неактивен",
+    REVIEW_REQUIRED: "Требуется проверка",
+    CONFLICT_REQUIRES_MANUAL_DECISION: "Конфликт: требуется ручное решение",
+    MANUAL_DECISION: "Требуется ручное решение",
+  };
+  return map[code] ?? code;
+}
+
+export function recommendedActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    NO_ACTION: "Действий не требуется",
+    RE_EXECUTE: "Повторить выполнение",
+    RE_REVIEW: "Повторить проверку",
+    MANUAL_DECISION: "Ручное решение",
+  };
+  return map[action] ?? action;
 }
 
 export function runStatusClass(status: string): string {
@@ -130,8 +207,24 @@ export function formatAuditSummary(summary: {
   user_employee_link_rolled_back: number;
 }): string {
   const parts: string[] = [];
-  if (summary.user_employee_linked) parts.push(`linked ${summary.user_employee_linked}`);
-  if (summary.user_employee_unlinked) parts.push(`unlinked ${summary.user_employee_unlinked}`);
-  if (summary.user_employee_link_rolled_back) parts.push(`rolled back ${summary.user_employee_link_rolled_back}`);
+  if (summary.user_employee_linked) parts.push(`привязано ${summary.user_employee_linked}`);
+  if (summary.user_employee_unlinked) parts.push(`отвязано ${summary.user_employee_unlinked}`);
+  if (summary.user_employee_link_rolled_back) parts.push(`откатов ${summary.user_employee_link_rolled_back}`);
   return parts.length ? parts.join(", ") : "—";
+}
+
+export function operationFilterLabel(value: string): string {
+  return value ? operationLabel(value) : filterAllLabel();
+}
+
+export function runStatusFilterLabel(value: string): string {
+  return value ? runStatusLabel(value) : filterAllLabel();
+}
+
+export function itemActionFilterLabel(value: string): string {
+  return value ? itemActionLabel(value) : filterAllLabel();
+}
+
+export function itemStatusFilterLabel(value: string): string {
+  return value ? itemStatusLabel(value) : filterAllLabel();
 }

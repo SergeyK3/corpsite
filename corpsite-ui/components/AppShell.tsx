@@ -56,7 +56,7 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   },
   {
     href: "/admin/system/personnel-identity/operations",
-    title: "Identity Operations",
+    title: "Операции привязки пользователей",
     matchPrefixes: ["/admin/system/personnel-identity"],
   },
   {

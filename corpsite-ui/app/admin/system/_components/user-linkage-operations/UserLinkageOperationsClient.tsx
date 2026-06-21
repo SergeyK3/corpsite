@@ -15,11 +15,11 @@ import RerunExecutePanel from "./RerunExecutePanel";
 type MainTab = "overview" | "runs" | "items" | "repair" | "rerun";
 
 const TABS: { id: MainTab; label: string }[] = [
-  { id: "overview", label: "Dashboard" },
-  { id: "runs", label: "History Runs" },
-  { id: "items", label: "Item History" },
-  { id: "repair", label: "Repair Preview" },
-  { id: "rerun", label: "Re-run Execute" },
+  { id: "overview", label: "Панель" },
+  { id: "runs", label: "История операций" },
+  { id: "items", label: "История элементов" },
+  { id: "repair", label: "Диагностика привязки" },
+  { id: "rerun", label: "Повторное выполнение" },
 ];
 
 function tabButtonClass(active: boolean): string {
@@ -59,20 +59,20 @@ export default function UserLinkageOperationsClient() {
       <header>
         <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           <Link href="/admin/system" className="hover:underline">
-            Admin
+            Кабинет системного администратора
           </Link>
           <span>/</span>
           <Link href="/directory/personnel" className="hover:underline">
-            Personnel
+            Кадры
           </Link>
           <span>/</span>
-          <span>Identity</span>
+          <span>Идентификация</span>
           <span>/</span>
-          <span className="text-zinc-900 dark:text-zinc-100">Operations</span>
+          <span className="text-zinc-900 dark:text-zinc-100">Операции</span>
         </div>
-        <h1 className="mt-2 text-2xl font-semibold">User Linkage Operations</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Операции привязки пользователей</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Observability and safe operations for personnel identity linkage (ADR-044 R2.5g).
+          Наблюдаемость и безопасные операции привязки пользователей к сотрудникам (ADR-044 R2.5g).
         </p>
       </header>
 

@@ -1,12 +1,35 @@
 // FILE: corpsite-ui/app/admin/system/_lib/userLinkageOperationsLabels.test.ts
 import { describe, expect, it } from "vitest";
 
-import { diagnosisTone, operationLabel, runStatusClass } from "./userLinkageOperationsLabels";
+import {
+  diagnosisLabel,
+  diagnosisTone,
+  itemActionLabel,
+  itemStatusLabel,
+  operationLabel,
+  recommendedActionLabel,
+  runStatusClass,
+  runStatusLabel,
+} from "./userLinkageOperationsLabels";
 
 describe("userLinkageOperationsLabels", () => {
-  it("maps operation codes to labels", () => {
-    expect(operationLabel("USER_LINKAGE_MANUAL_LINK")).toBe("Manual Link");
+  it("maps operation codes to Russian labels", () => {
+    expect(operationLabel("USER_LINKAGE_MANUAL_LINK")).toBe("Ручная привязка");
+    expect(operationLabel("USER_LINKAGE_REPAIR_PREVIEW")).toBe("Диагностика привязки");
     expect(operationLabel("UNKNOWN_OP")).toBe("UNKNOWN_OP");
+  });
+
+  it("maps run and item statuses to Russian labels", () => {
+    expect(runStatusLabel("completed")).toBe("Завершён");
+    expect(itemStatusLabel("APPLIED")).toBe("Применено");
+    expect(itemStatusLabel("NOOP_ALREADY_LINKED")).toBe("Уже привязан");
+  });
+
+  it("maps actions and diagnosis codes to Russian labels", () => {
+    expect(itemActionLabel("LINK")).toBe("Привязка");
+    expect(diagnosisLabel("LINK_OK")).toBe("Привязка в порядке");
+    expect(diagnosisLabel("CONFLICT_REQUIRES_MANUAL_DECISION")).toBe("Конфликт: требуется ручное решение");
+    expect(recommendedActionLabel("NO_ACTION")).toBe("Действий не требуется");
   });
 
   it("assigns diagnosis tone colors", () => {

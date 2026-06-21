@@ -10,9 +10,13 @@ import {
 } from "../../_lib/userLinkageOperationsApi.client";
 import {
   formatAuditSummary,
+  itemActionLabel,
   itemStatusClass,
+  itemStatusLabel,
   operationLabel,
   runStatusClass,
+  runStatusLabel,
+  yesNoLabel,
 } from "../../_lib/userLinkageOperationsLabels";
 import { formatActorLabel, formatDateTime } from "../../_lib/adminSystemLabels";
 import ErrorBanner from "../shared/ErrorBanner";
@@ -41,7 +45,7 @@ export default function OperationsRunDetailDrawer({
       const row = await fetchOperationsRun(id);
       setDetail(row);
     } catch (err) {
-      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить детали run"));
+      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить детали запуска"));
       setDetail(null);
     } finally {
       setLoading(false);
@@ -60,7 +64,7 @@ export default function OperationsRunDetailDrawer({
   return (
     <OperationsSideDrawer
       open={runId !== null}
-      title={`Run #${runId ?? "…"}`}
+      title={`Детали операции #${runId ?? "…"}`}
       onClose={onClose}
       loading={loading}
       testId="operations-run-detail-drawer"
@@ -69,52 +73,52 @@ export default function OperationsRunDetailDrawer({
       {detail ? (
         <div className="space-y-4 text-sm">
           <div className="grid gap-2 sm:grid-cols-2">
-            <Field label="Operation" value={operationLabel(detail.operation)} />
+            <Field label="Операция" value={operationLabel(detail.operation)} />
             <Field
-              label="Status"
+              label="Статус"
               value={
                 <span className={`rounded px-1.5 py-0.5 text-xs ${runStatusClass(detail.status)}`}>
-                  {detail.status}
+                  {runStatusLabel(detail.status)}
                 </span>
               }
             />
-            <Field label="Actor" value={detail.actor_login ?? formatActorLabel(detail.actor_user_id)} />
-            <Field label="Started" value={formatDateTime(detail.started_at)} />
-            <Field label="Finished" value={formatDateTime(detail.finished_at)} />
-            <Field label="Items" value={String(detail.item_count)} />
-            <Field label="Dry run" value={detail.dry_run ? "yes" : "no"} />
-            <Field label="Audit" value={formatAuditSummary(detail.audit_summary)} />
+            <Field label="Исполнитель" value={detail.actor_login ?? formatActorLabel(detail.actor_user_id)} />
+            <Field label="Начало" value={formatDateTime(detail.started_at)} />
+            <Field label="Завершение" value={formatDateTime(detail.finished_at)} />
+            <Field label="Элементы" value={String(detail.item_count)} />
+            <Field label="Пробный прогон" value={yesNoLabel(detail.dry_run)} />
+            <Field label="Аудит" value={formatAuditSummary(detail.audit_summary)} />
           </div>
 
           {(detail.source_preview_run_id || detail.source_item_id) && (
             <div className="space-y-1">
-              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Source references</div>
+              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Исходные ссылки</div>
               <ul className="list-inside list-disc text-sm">
                 {detail.source_preview_run_id ? (
-                  <li>Preview run #{detail.source_preview_run_id}</li>
+                  <li>Предпросмотр запуска #{detail.source_preview_run_id}</li>
                 ) : null}
-                {detail.source_item_id ? <li>Source item #{detail.source_item_id}</li> : null}
+                {detail.source_item_id ? <li>Исходный элемент #{detail.source_item_id}</li> : null}
               </ul>
             </div>
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <JsonViewer title="Counts by status" value={detail.item_counts_by_status} />
-            <JsonViewer title="Counts by action" value={detail.item_counts_by_action} />
+            <JsonViewer title="По статусам" value={detail.item_counts_by_status} />
+            <JsonViewer title="По действиям" value={detail.item_counts_by_action} />
           </div>
 
-          <JsonViewer title="Summary" value={detail.summary} />
+          <JsonViewer title="Сводка" value={detail.summary} />
 
           <div className="space-y-2">
-            <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Recent items</div>
+            <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Последние элементы</div>
             {detail.recent_items.length === 0 ? (
-              <p className="text-sm text-zinc-500">Нет items.</p>
+              <p className="text-sm text-zinc-500">Нет элементов.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                      {["item", "user", "action", "status", ""].map((h) => (
+                      {["элемент", "пользователь", "действие", "статус", ""].map((h) => (
                         <th key={h || "act"} className="px-2 py-1 text-left font-medium text-zinc-600">
                           {h}
                         </th>
@@ -126,10 +130,10 @@ export default function OperationsRunDetailDrawer({
                       <tr key={item.item_id} className="border-b border-zinc-100 dark:border-zinc-800">
                         <td className="px-2 py-1">#{item.item_id}</td>
                         <td className="px-2 py-1">{item.login ?? `#${item.user_id}`}</td>
-                        <td className="px-2 py-1">{item.action}</td>
+                        <td className="px-2 py-1">{itemActionLabel(item.action)}</td>
                         <td className="px-2 py-1">
                           <span className={`rounded px-1 py-0.5 text-xs ${itemStatusClass(item.status)}`}>
-                            {item.status}
+                            {itemStatusLabel(item.status)}
                           </span>
                         </td>
                         <td className="px-2 py-1">
@@ -139,7 +143,7 @@ export default function OperationsRunDetailDrawer({
                               className="text-blue-600 hover:underline dark:text-blue-400"
                               onClick={() => onOpenItem(item.item_id)}
                             >
-                              Open
+                              Открыть
                             </button>
                           ) : null}
                         </td>

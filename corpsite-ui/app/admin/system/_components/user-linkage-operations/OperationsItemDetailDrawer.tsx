@@ -10,7 +10,9 @@ import {
 } from "../../_lib/userLinkageOperationsApi.client";
 import {
   formatAuditSummary,
+  itemActionLabel,
   itemStatusClass,
+  itemStatusLabel,
   operationLabel,
 } from "../../_lib/userLinkageOperationsLabels";
 import { formatDateTime } from "../../_lib/adminSystemLabels";
@@ -40,7 +42,7 @@ export default function OperationsItemDetailDrawer({
       const row = await fetchOperationsItem(id);
       setDetail(row);
     } catch (err) {
-      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить детали item"));
+      setError(mapUserLinkageOperationsApiError(err, "Не удалось загрузить детали элемента"));
       setDetail(null);
     } finally {
       setLoading(false);
@@ -59,7 +61,7 @@ export default function OperationsItemDetailDrawer({
   return (
     <OperationsSideDrawer
       open={itemId !== null}
-      title={`Item #${itemId ?? "…"}`}
+      title={`Детали элемента #${itemId ?? "…"}`}
       onClose={onClose}
       loading={loading}
       testId="operations-item-detail-drawer"
@@ -68,7 +70,7 @@ export default function OperationsItemDetailDrawer({
       {detail ? (
         <div className="space-y-4 text-sm">
           <div className="grid gap-2 sm:grid-cols-2">
-            <Field label="Run" value={
+            <Field label="Запуск" value={
               onOpenRun ? (
                 <button
                   type="button"
@@ -81,39 +83,39 @@ export default function OperationsItemDetailDrawer({
                 `#${detail.run_id}`
               )
             } />
-            <Field label="Action" value={detail.action} />
+            <Field label="Действие" value={itemActionLabel(detail.action)} />
             <Field
-              label="Status"
+              label="Статус"
               value={
                 <span className={`rounded px-1.5 py-0.5 text-xs ${itemStatusClass(detail.status)}`}>
-                  {detail.status}
+                  {itemStatusLabel(detail.status)}
                 </span>
               }
             />
-            <Field label="User" value={detail.login ? `${detail.login} (#${detail.user_id})` : `#${detail.user_id}`} />
+            <Field label="Пользователь" value={detail.login ? `${detail.login} (#${detail.user_id})` : `#${detail.user_id}`} />
             <Field
-              label="Employee"
+              label="Сотрудник"
               value={
                 detail.proposed_employee_id
                   ? `${detail.employee_name ?? "—"} (#${detail.proposed_employee_id})`
                   : "—"
               }
             />
-            <Field label="Created" value={formatDateTime(detail.created_at)} />
-            <Field label="Audit" value={formatAuditSummary(detail.audit_summary)} />
+            <Field label="Создан" value={formatDateTime(detail.created_at)} />
+            <Field label="Аудит" value={formatAuditSummary(detail.audit_summary)} />
           </div>
 
           {detail.reason_codes.length > 0 ? (
             <div>
-              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Reason codes</div>
+              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Коды причин</div>
               <p className="mt-1">{detail.reason_codes.join(", ")}</p>
             </div>
           ) : null}
 
-          <JsonViewer title="Before snapshot" value={detail.before_user_snapshot} testId="item-before-snapshot" />
-          <JsonViewer title="After snapshot" value={detail.after_user_snapshot} testId="item-after-snapshot" />
-          <JsonViewer title="Rollback payload" value={detail.rollback_payload} testId="item-rollback-payload" />
-          <JsonViewer title="Run summary" value={detail.run_summary} />
+          <JsonViewer title="Снимок до" value={detail.before_user_snapshot} testId="item-before-snapshot" />
+          <JsonViewer title="Снимок после" value={detail.after_user_snapshot} testId="item-after-snapshot" />
+          <JsonViewer title="Данные отката" value={detail.rollback_payload} testId="item-rollback-payload" />
+          <JsonViewer title="Сводка запуска" value={detail.run_summary} />
         </div>
       ) : null}
     </OperationsSideDrawer>
