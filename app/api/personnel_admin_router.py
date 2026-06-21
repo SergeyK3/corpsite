@@ -21,6 +21,10 @@ from app.api.personnel_admin_schemas import (
     UserLinkageOperationsItemListResponse,
     UserLinkageOperationsRunDetail,
     UserLinkageOperationsRunListResponse,
+    UserLinkageRepairPreviewRequest,
+    UserLinkageRepairPreviewResponse,
+    UserLinkageRerunExecuteRequest,
+    UserLinkageRerunExecuteResponse,
     UserLinkageReviewActionRequest,
     UserLinkageReviewAuditResponse,
     UserLinkageReviewDecisionResponse,
@@ -87,6 +91,11 @@ from app.services.user_linkage_operations_query_service import (
     get_user_linkage_operations_run,
     list_user_linkage_operations_items,
     list_user_linkage_operations_runs,
+)
+from app.services.user_linkage_operations_service import (
+    UserLinkageOperationsError,
+    repair_linkage_preview_for_user,
+    rerun_user_linkage_execute,
 )
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
@@ -740,3 +749,45 @@ def admin_get_user_linkage_operations_item(
         return get_user_linkage_operations_item(int(item_id))
     except ValueError as exc:
         raise _value_error_to_http(exc) from exc
+
+
+@router.post(
+    "/identity/user-linkage/operations/repair-preview",
+    response_model=UserLinkageRepairPreviewResponse,
+)
+def admin_user_linkage_repair_preview(
+    body: UserLinkageRepairPreviewRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.5f — targeted read-only linkage repair diagnostic."""
+    try:
+        return repair_linkage_preview_for_user(
+            actor_user_id=int(admin["user_id"]),
+            reason=body.reason,
+            user_id=body.user_id,
+            employee_id=body.employee_id,
+        )
+    except UserLinkageOperationsError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+
+@router.post(
+    "/identity/user-linkage/operations/rerun-execute",
+    response_model=UserLinkageRerunExecuteResponse,
+)
+def admin_user_linkage_rerun_execute(
+    body: UserLinkageRerunExecuteRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.5f — controlled re-run execute from an existing preview run."""
+    try:
+        return rerun_user_linkage_execute(
+            actor_user_id=int(admin["user_id"]),
+            source_preview_run_id=int(body.source_preview_run_id),
+            confirm_token=body.confirm_token,
+            reason=body.reason,
+        )
+    except UserLinkageOperationsError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    except UserLinkageExecuteError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc

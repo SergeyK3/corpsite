@@ -532,3 +532,59 @@ class UserLinkageOperationsItemListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class UserLinkageRepairPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: Optional[int] = Field(default=None, ge=1)
+    employee_id: Optional[int] = Field(default=None, ge=1)
+    reason: str = Field(..., min_length=10, max_length=2000)
+
+
+class UserLinkageRepairPreviewResponse(BaseModel):
+    phase: str
+    operation: str
+    run_id: int
+    item_id: int
+    dry_run: bool
+    target: Dict[str, Any] = Field(default_factory=dict)
+    current_user: Dict[str, Any] = Field(default_factory=dict)
+    current_employee: Optional[Dict[str, Any]] = None
+    current_linkage: Dict[str, Any] = Field(default_factory=dict)
+    candidate_linkage: Optional[Dict[str, Any]] = None
+    diagnosis_code: str
+    recommended_action: str
+    execute_ready: bool
+    execute_action: str
+    preview: Dict[str, Any] = Field(default_factory=dict)
+    review: Dict[str, Any] = Field(default_factory=dict)
+    generated_at: str
+
+
+class UserLinkageRerunExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_preview_run_id: int = Field(..., ge=1)
+    confirm_token: str = Field(..., min_length=8, max_length=128)
+    reason: str = Field(..., min_length=10, max_length=2000)
+
+
+class UserLinkageRerunExecuteItemResult(BaseModel):
+    item_id: int
+    user_id: int
+    action: str
+    status: str
+    applied: bool = False
+
+
+class UserLinkageRerunExecuteResponse(BaseModel):
+    phase: str
+    operation: str
+    rerun_run_id: int
+    source_preview_run_id: int
+    execute_run_id: int
+    run_status: str
+    items: List[UserLinkageRerunExecuteItemResult] = Field(default_factory=list)
+    execute: UserLinkageExecuteResponse
+    generated_at: str
