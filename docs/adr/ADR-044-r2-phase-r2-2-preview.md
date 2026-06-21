@@ -233,7 +233,93 @@ Compare summary counts with [R2.1 validation SQL](./ADR-044-phase-r2-validation.
 
 ---
 
-## 6. Non-goals (R2.2)
+## 6. VPS environment note (R2.2b audit)
+
+**Audit date:** 2026-06-21
+
+### How the deployed backend resolves `DATABASE_URL`
+
+| Layer | Source | Notes |
+|-------|--------|-------|
+| systemd | `EnvironmentFile=/opt/projects/corpsite/app/.env` | `deploy/systemd/corpsite-backend.service` |
+| deploy script | `scripts/deploy_backend.sh` | Restarts `corpsite-backend` only; **does not** override `DATABASE_URL` |
+| application | `app/db/engine.py` | `load_dotenv()` → `os.getenv("DATABASE_URL")` |
+| Alembic | `alembic/env.py` | Same root `.env` as runtime |
+
+Expected VPS topology (per repo `docker-compose.yml` + ops runbooks):
+
+- PostgreSQL container: `corpsite-pg`
+- Backend connects via `127.0.0.1:5432` (not exposed publicly)
+- Database name: `corpsite`
+
+### Observed preview vs R2.1 baseline
+
+| Source | `total_users` | `employees` | DB |
+|--------|--------------:|------------:|-----|
+| R2.1 local audit ([discovery §1.1](./ADR-044-r2-user-linkage-discovery.md)) | **326** | **105** | Local dev Docker `127.0.0.1:5432/corpsite` |
+| VPS preview API (reported, R2.2a) | **8** | *(not yet captured)* | VPS backend `.env` → `corpsite-pg` |
+| Local preview re-check (2026-06-21) | **326** | **105** | Same local DB as R2.1 |
+
+R2.2 preview endpoint is **live on VPS** (`GET https://mmc.004.kz/api/admin/personnel/identity/user-linkage/preview` → `401` without token, not `404`).
+
+### R2.2a conclusion (still valid on VPS)
+
+The gap **326 vs 8** is **not a preview-query bug**. It is **environment mismatch**:
+
+- R2.1 validation SQL and discovery §1.1 were run against the **local dev database** (326 users — likely includes broader HR/import roster).
+- VPS preview reads the **deployed production/pilot database**, which matches a **small operational cohort** (~QM pilot users + admin/service accounts; `total_users ≈ 8` is plausible for that contour).
+
+This is **expected business separation** per [ADR-014](./ADR-014-data-sync-policy.md) (VPS = prod/pilot master; local = dev consumer with divergent reference data). It is **not** the same as a stale/incorrect `DATABASE_URL` unless operator verification below shows a unexpected database name or host.
+
+### Operator verification (read-only, run on VPS via SSH)
+
+Run on the **same host** as `corpsite-backend`, using the **same** `DATABASE_URL` as `.env`:
+
+```bash
+cd /opt/projects/corpsite/app
+grep '^DATABASE_URL=' .env   # redact password in logs
+
+# Parse URL or use docker exec against corpsite-pg
+docker exec -i corpsite-pg psql -U postgres -d corpsite -v ON_ERROR_STOP=1 <<'SQL'
+SELECT current_database(), inet_server_addr(), inet_server_port();
+SELECT COUNT(*) FROM public.users;
+SELECT COUNT(*) FROM public.users WHERE COALESCE(is_active, TRUE);
+SELECT COUNT(*) FROM public.employees;
+SQL
+```
+
+Optional — compare with preview API (privileged JWT):
+
+```bash
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  https://mmc.004.kz/api/admin/personnel/identity/user-linkage/preview \
+  | jq '.summary'
+```
+
+**Expected:** SQL active-user count = `summary.total_users`; employee count aligns with FIO cohort (~operational employees).
+
+### Classification of VPS DB (pending operator SQL)
+
+| Hypothesis | Likelihood | Evidence so far |
+|------------|------------|---------------|
+| **Intended VPS prod/pilot DB** (small user set) | **High** | Preview `total_users=8`; QM bootstrap docs describe ~5–6 QM users + admin |
+| **Local/pilot 326-user DB** | Ruled out for VPS preview | Local-only R2.1 audit; preview on VPS ≠ 326 |
+| **Trimmed / admin-only wrong DB** | Low unless SQL shows unexpected `current_database()` | Needs operator SQL above |
+| **Stale/incorrect `DATABASE_URL`** | Low | systemd + engine use single `.env`; endpoint live on VPS |
+
+### Impact on R2.3
+
+| Item | Blocked? |
+|------|----------|
+| R2.3 **implementation** (journal DDL, execute service, tests) | **No** |
+| R2.3 **execute / HR sign-off on VPS** | **Yes** — until R2.1 validation SQL is run on VPS and VPS baseline replaces local 326/105 figures |
+| OPS-007 Telegram audit | **Still blocked** (unchanged) |
+
+**No writes occur in Phase R2.2b.** SSH to `ubuntu@46.247.42.47` was not available from the audit environment; operator must paste SQL results to close the VPS count row in this table.
+
+---
+
+## 7. Non-goals (R2.2)
 
 - No migrations
 - No `users.employee_id` writes
@@ -244,7 +330,7 @@ Compare summary counts with [R2.1 validation SQL](./ADR-044-phase-r2-validation.
 
 ---
 
-## 7. Next phase (R2.3 preview)
+## 8. Next phase (R2.3 preview)
 
 - Journal DDL (`identity_reconciliation_runs.phase = 'R2'`)
 - `USER_EMPLOYEE_LINKED` audit event

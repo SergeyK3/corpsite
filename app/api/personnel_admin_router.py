@@ -13,6 +13,10 @@ from app.api.personnel_admin_schemas import (
     IdentityReconciliationPreviewRequest,
     IdentityReconciliationReportResponse,
     UserLinkagePreviewResponse,
+    UserLinkageReviewActionRequest,
+    UserLinkageReviewAuditResponse,
+    UserLinkageReviewDecisionResponse,
+    UserLinkageReviewQueueResponse,
     LifecycleRunDetail,
     LifecycleRunListResponse,
     LifecycleRunReportResponse,
@@ -58,6 +62,13 @@ from app.services.identity_reconciliation_service import (
     run_r1a_execute,
 )
 from app.services.user_linkage_preview_service import run_user_linkage_preview
+from app.services.user_linkage_review_service import (
+    UserLinkageReviewError,
+    UserLinkageReviewNotFoundError,
+    list_user_linkage_review_audit,
+    list_user_linkage_review_queue,
+    record_user_linkage_review_decision,
+)
 from app.services.personnel_admin_query_service import (
     get_lifecycle_run,
     get_override,
@@ -454,3 +465,129 @@ def admin_preview_user_linkage(
     """ADR-044 R2.2 — read-only User → Employee linkage preview (no writes)."""
     with engine.connect() as conn:
         return run_user_linkage_preview(conn)
+
+
+def _review_error_to_http(exc: UserLinkageReviewError) -> HTTPException:
+    if isinstance(exc, UserLinkageReviewNotFoundError):
+        return HTTPException(status_code=404, detail=exc.message)
+    return HTTPException(status_code=400, detail=exc.message)
+
+
+@router.get(
+    "/identity/user-linkage/review",
+    response_model=UserLinkageReviewQueueResponse,
+)
+def admin_list_user_linkage_review(
+    classification: Optional[str] = Query(default=None),
+    strategy: Optional[str] = Query(default=None),
+    decision_state: Optional[str] = Query(default=None),
+    search: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.3 — read-only user linkage review queue."""
+    with engine.connect() as conn:
+        return list_user_linkage_review_queue(
+            conn,
+            classification=classification,
+            strategy=strategy,
+            decision_state=decision_state,
+            search=search,
+            limit=limit,
+            offset=offset,
+        )
+
+
+@router.get(
+    "/identity/user-linkage/review/audit",
+    response_model=UserLinkageReviewAuditResponse,
+)
+def admin_list_user_linkage_review_audit(
+    user_id: Optional[int] = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.3 — immutable user linkage review audit trail."""
+    with engine.connect() as conn:
+        return list_user_linkage_review_audit(
+            conn,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+        )
+
+
+def _record_review_decision(
+    *,
+    user_id: int,
+    decision: str,
+    body: UserLinkageReviewActionRequest,
+    admin: Dict[str, Any],
+) -> Dict[str, Any]:
+    try:
+        with engine.begin() as conn:
+            return record_user_linkage_review_decision(
+                conn,
+                actor_user_id=int(admin["user_id"]),
+                user_id=int(user_id),
+                decision=decision,
+                reason=body.reason,
+            )
+    except UserLinkageReviewError as exc:
+        raise _review_error_to_http(exc) from exc
+
+
+@router.post(
+    "/identity/user-linkage/review/{user_id}/approve",
+    response_model=UserLinkageReviewDecisionResponse,
+)
+def admin_approve_user_linkage_review(
+    user_id: int,
+    body: UserLinkageReviewActionRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.3 — record APPROVE decision (no linkage)."""
+    return _record_review_decision(
+        user_id=user_id,
+        decision="APPROVE",
+        body=body,
+        admin=admin,
+    )
+
+
+@router.post(
+    "/identity/user-linkage/review/{user_id}/reject",
+    response_model=UserLinkageReviewDecisionResponse,
+)
+def admin_reject_user_linkage_review(
+    user_id: int,
+    body: UserLinkageReviewActionRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.3 — record REJECT decision (no linkage)."""
+    return _record_review_decision(
+        user_id=user_id,
+        decision="REJECT",
+        body=body,
+        admin=admin,
+    )
+
+
+@router.post(
+    "/identity/user-linkage/review/{user_id}/defer",
+    response_model=UserLinkageReviewDecisionResponse,
+)
+def admin_defer_user_linkage_review(
+    user_id: int,
+    body: UserLinkageReviewActionRequest,
+    admin: Dict[str, Any] = Depends(require_personnel_admin_api),
+) -> Dict[str, Any]:
+    """ADR-044 R2.3 — record DEFER decision (no linkage)."""
+    return _record_review_decision(
+        user_id=user_id,
+        decision="DEFER",
+        body=body,
+        admin=admin,
+    )

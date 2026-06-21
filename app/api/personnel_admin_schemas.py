@@ -292,3 +292,73 @@ class UserLinkagePreviewResponse(BaseModel):
     generated_at: str
     summary: UserLinkagePreviewSummary
     candidates: List[UserLinkageCandidate]
+
+
+class UserLinkageReviewCandidate(UserLinkageCandidate):
+    user_full_name: Optional[str] = None
+    decision_state: str = "PENDING"
+    latest_decision_id: Optional[int] = None
+    latest_decision_at: Optional[str] = None
+    reviewer_user_id: Optional[int] = None
+    reviewer_login: Optional[str] = None
+    decision_reason: Optional[str] = None
+
+
+class UserLinkageReviewSummary(BaseModel):
+    review_required: int
+    ambiguous: int
+    approved: int
+    rejected: int
+    deferred: int
+    pending: int
+
+
+class UserLinkageReviewQueueResponse(BaseModel):
+    phase: str
+    generated_at: str
+    summary: UserLinkageReviewSummary
+    candidates: List[UserLinkageReviewCandidate]
+    total: int
+    limit: int
+    offset: int
+
+
+class UserLinkageReviewActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+class UserLinkageReviewDecisionResponse(BaseModel):
+    decision_id: int
+    reviewer_user_id: int
+    user_id: int
+    proposed_employee_id: Optional[int] = None
+    classification: str
+    match_strategy: Optional[str] = None
+    decision: str
+    reason: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class UserLinkageReviewAuditItem(BaseModel):
+    decision_id: int
+    reviewer_user_id: int
+    reviewer_login: Optional[str] = None
+    user_id: int
+    user_login: Optional[str] = None
+    user_full_name: Optional[str] = None
+    proposed_employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    classification: str
+    match_strategy: Optional[str] = None
+    decision: str
+    reason: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class UserLinkageReviewAuditResponse(BaseModel):
+    items: List[UserLinkageReviewAuditItem]
+    total: int
+    limit: int
+    offset: int

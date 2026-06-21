@@ -8,10 +8,18 @@ import AccessTab from "./tabs/AccessTab";
 import AssignmentsTab from "./tabs/AssignmentsTab";
 import AuditTab from "./tabs/AuditTab";
 import EnrollmentTab from "./tabs/EnrollmentTab";
+import UserLinkageReviewTab from "./tabs/UserLinkageReviewTab";
 import UsersTab from "./tabs/UsersTab";
 import VisibilityTab from "./tabs/VisibilityTab";
 
-type MainTab = "users" | "access" | "enrollment" | "assignments" | "audit" | "visibility";
+type MainTab =
+  | "users"
+  | "access"
+  | "enrollment"
+  | "assignments"
+  | "audit"
+  | "visibility"
+  | "user-linkage-review";
 
 const TABS: { id: MainTab; label: string }[] = [
   { id: "users", label: "Пользователи" },
@@ -19,6 +27,7 @@ const TABS: { id: MainTab; label: string }[] = [
   { id: "visibility", label: "Видимость персонала" },
   { id: "enrollment", label: "Enrollment" },
   { id: "assignments", label: "Назначения" },
+  { id: "user-linkage-review", label: "User Linkage Review" },
   { id: "audit", label: "Аудит безопасности" },
 ];
 
@@ -70,6 +79,7 @@ export default function SystemAdminClient() {
         {activeTab === "visibility" ? <VisibilityTab /> : null}
         {activeTab === "enrollment" ? <EnrollmentTab /> : null}
         {activeTab === "assignments" ? <AssignmentsTab /> : null}
+        {activeTab === "user-linkage-review" ? <UserLinkageReviewTab /> : null}
         {activeTab === "audit" ? <AuditTab /> : null}
       </div>
     </div>
