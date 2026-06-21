@@ -134,11 +134,11 @@ export default function UserLinkageReviewTab() {
 
   const summaryCards = useMemo(
     () => [
-      { label: "Review Required", value: summary.review_required, kind: "info" as const },
-      { label: "Ambiguous", value: summary.ambiguous, kind: "warn" as const },
-      { label: "Approved", value: summary.approved, kind: "success" as const },
-      { label: "Rejected", value: summary.rejected, kind: "danger" as const },
-      { label: "Deferred", value: summary.deferred, kind: "muted" as const },
+      { label: "Требует проверки", value: summary.review_required, kind: "info" as const },
+      { label: "Неоднозначные", value: summary.ambiguous, kind: "warn" as const },
+      { label: "Одобрено", value: summary.approved, kind: "success" as const },
+      { label: "Отклонено", value: summary.rejected, kind: "danger" as const },
+      { label: "Отложено", value: summary.deferred, kind: "muted" as const },
     ],
     [summary],
   );
@@ -172,14 +172,14 @@ export default function UserLinkageReviewTab() {
         className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
         data-testid="user-linkage-review-warning"
       >
-        This phase records review decisions only. No User ↔ Employee linkage is performed.
+        На этом этапе регистрируются только решения review. Привязка User ↔ Employee не выполняется.
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">User Linkage Review</h2>
+          <h2 className="text-lg font-semibold">Проверка привязок пользователей</h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            ADR-044 R2.3 — human review between preview and future execute.
+            ADR-044 R2.3 — ручная проверка между preview и будущим execute.
           </p>
         </div>
         <button
@@ -191,7 +191,7 @@ export default function UserLinkageReviewTab() {
           className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-600"
           data-testid="user-linkage-review-refresh"
         >
-          Refresh
+          Обновить
         </button>
       </div>
 
@@ -225,7 +225,7 @@ export default function UserLinkageReviewTab() {
           >
             {CLASSIFICATION_OPTIONS.map((value) => (
               <option key={value || "all"} value={value}>
-                {value || "all"}
+                {value || "все"}
               </option>
             ))}
           </select>
@@ -243,13 +243,13 @@ export default function UserLinkageReviewTab() {
           >
             {STRATEGY_OPTIONS.map((value) => (
               <option key={value || "all"} value={value}>
-                {value || "all"}
+                {value || "все"}
               </option>
             ))}
           </select>
         </label>
         <label className="text-xs">
-          decision state
+          состояние решения
           <select
             value={filters.decision_state}
             onChange={(e) => {
@@ -261,13 +261,13 @@ export default function UserLinkageReviewTab() {
           >
             {DECISION_OPTIONS.map((value) => (
               <option key={value || "all"} value={value}>
-                {value || "all"}
+                {value || "все"}
               </option>
             ))}
           </select>
         </label>
         <label className="text-xs">
-          search (login / user / employee)
+          поиск (login / user / employee)
           <input
             value={filters.search}
             onChange={(e) => {
@@ -294,14 +294,14 @@ export default function UserLinkageReviewTab() {
             <thead className="bg-zinc-50 text-left text-xs uppercase dark:bg-zinc-900">
               <tr>
                 <th className="px-3 py-2">login</th>
-                <th className="px-3 py-2">user</th>
-                <th className="px-3 py-2">proposed employee</th>
+                <th className="px-3 py-2">пользователь</th>
+                <th className="px-3 py-2">предложенный employee</th>
                 <th className="px-3 py-2">strategy</th>
                 <th className="px-3 py-2">classification</th>
                 <th className="px-3 py-2">confidence</th>
-                <th className="px-3 py-2">reason codes</th>
-                <th className="px-3 py-2">decision</th>
-                <th className="px-3 py-2">actions</th>
+                <th className="px-3 py-2">коды причин</th>
+                <th className="px-3 py-2">решение</th>
+                <th className="px-3 py-2">действия</th>
               </tr>
             </thead>
             <tbody>
@@ -354,7 +354,7 @@ export default function UserLinkageReviewTab() {
                           className="rounded bg-emerald-600 px-2 py-1 text-xs text-white disabled:opacity-40"
                           data-testid={`user-linkage-approve-${row.user_id}`}
                         >
-                          Approve
+                          Одобрить
                         </button>
                         <button
                           type="button"
@@ -363,7 +363,7 @@ export default function UserLinkageReviewTab() {
                           className="rounded bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
                           data-testid={`user-linkage-reject-${row.user_id}`}
                         >
-                          Reject
+                          Отклонить
                         </button>
                         <button
                           type="button"
@@ -372,7 +372,7 @@ export default function UserLinkageReviewTab() {
                           className="rounded bg-amber-600 px-2 py-1 text-xs text-white disabled:opacity-40"
                           data-testid={`user-linkage-defer-${row.user_id}`}
                         >
-                          Defer
+                          Отложить
                         </button>
                       </div>
                     </td>
@@ -392,10 +392,10 @@ export default function UserLinkageReviewTab() {
             onClick={() => setOffset((value) => Math.max(0, value - PAGE_SIZE))}
             className="rounded border px-2 py-1 dark:border-zinc-600"
           >
-            Prev
+            Назад
           </button>
           <span>
-            Page {page} / {totalPages}
+            Стр. {page} / {totalPages}
           </span>
           <button
             type="button"
@@ -403,15 +403,15 @@ export default function UserLinkageReviewTab() {
             onClick={() => setOffset((value) => value + PAGE_SIZE)}
             className="rounded border px-2 py-1 dark:border-zinc-600"
           >
-            Next
+            Далее
           </button>
         </div>
       ) : null}
 
       <section className="space-y-2" data-testid="user-linkage-review-audit">
-        <h3 className="text-base font-semibold">Audit trail</h3>
+        <h3 className="text-base font-semibold">Журнал аудита</h3>
         {auditLoading ? (
-          <p className="text-sm text-zinc-500">Загрузка audit…</p>
+          <p className="text-sm text-zinc-500">Загрузка аудита…</p>
         ) : auditItems.length === 0 ? (
           <p className="text-sm text-zinc-500">Пока нет решений.</p>
         ) : (
@@ -419,12 +419,12 @@ export default function UserLinkageReviewTab() {
             <table className="min-w-full text-sm">
               <thead className="bg-zinc-50 text-left text-xs uppercase dark:bg-zinc-900">
                 <tr>
-                  <th className="px-3 py-2">when</th>
-                  <th className="px-3 py-2">reviewer</th>
-                  <th className="px-3 py-2">user</th>
+                  <th className="px-3 py-2">когда</th>
+                  <th className="px-3 py-2">рецензент</th>
+                  <th className="px-3 py-2">пользователь</th>
                   <th className="px-3 py-2">employee</th>
-                  <th className="px-3 py-2">decision</th>
-                  <th className="px-3 py-2">reason</th>
+                  <th className="px-3 py-2">решение</th>
+                  <th className="px-3 py-2">причина</th>
                 </tr>
               </thead>
               <tbody>

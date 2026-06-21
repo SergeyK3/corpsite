@@ -120,7 +120,7 @@ describe("Personnel Lifecycle UI integration", () => {
     });
     fireEvent.click(screen.getByTestId("lifecycle-run-execute-btn"));
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Execute" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Выполнить" }));
 
     await waitFor(() => {
       expect(mockedExecute).toHaveBeenCalled();

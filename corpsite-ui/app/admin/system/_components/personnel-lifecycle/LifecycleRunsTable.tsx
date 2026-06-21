@@ -75,7 +75,7 @@ export default function LifecycleRunsTable({ refreshToken = 0 }: LifecycleRunsTa
   return (
     <section className="space-y-4" data-testid="lifecycle-runs-table">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Lifecycle Runs</h2>
+        <h2 className="text-lg font-semibold">Запуски цикла</h2>
         <button
           type="button"
           onClick={() => void load()}
@@ -83,7 +83,7 @@ export default function LifecycleRunsTable({ refreshToken = 0 }: LifecycleRunsTa
           className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-600"
           data-testid="lifecycle-runs-refresh"
         >
-          Refresh
+          Обновить
         </button>
       </div>
 
@@ -95,7 +95,7 @@ export default function LifecycleRunsTable({ refreshToken = 0 }: LifecycleRunsTa
         </p>
       ) : items.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="lifecycle-runs-empty">
-          Нет lifecycle runs.
+          Нет запусков цикла.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -154,7 +154,7 @@ export default function LifecycleRunsTable({ refreshToken = 0 }: LifecycleRunsTa
                       className="text-blue-600 hover:underline dark:text-blue-400"
                       onClick={() => void openDetail(row.run_id)}
                     >
-                      Detail
+                      Подробнее
                     </button>
                   </td>
                 </tr>
@@ -198,7 +198,7 @@ export default function LifecycleRunsTable({ refreshToken = 0 }: LifecycleRunsTa
           <div className="h-full w-full max-w-lg overflow-y-auto border-l border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">
-                Run #{detail?.run_id ?? "…"}
+                Запуск #{detail?.run_id ?? "…"}
               </h3>
               <button
                 type="button"
@@ -213,13 +213,13 @@ export default function LifecycleRunsTable({ refreshToken = 0 }: LifecycleRunsTa
             ) : detail ? (
               <div className="space-y-3 text-sm">
                 <p>
-                  Status:{" "}
+                  Статус:{" "}
                   <span className={`rounded px-1.5 py-0.5 text-xs ${lifecycleStatusClass(detail.status)}`}>
                     {detail.status}
                   </span>
                 </p>
-                <p>Started: {formatDateTime(detail.started_at)}</p>
-                <p>Completed: {formatDateTime(detail.completed_at)}</p>
+                <p>Начало: {formatDateTime(detail.started_at)}</p>
+                <p>Завершение: {formatDateTime(detail.completed_at)}</p>
                 <JsonViewer title="summary" value={detail.summary} />
               </div>
             ) : null}

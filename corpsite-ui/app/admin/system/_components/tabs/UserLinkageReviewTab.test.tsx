@@ -74,7 +74,7 @@ describe("UserLinkageReviewTab", () => {
     render(<UserLinkageReviewTab />);
 
     expect(screen.getByTestId("user-linkage-review-warning")).toHaveTextContent(
-      "This phase records review decisions only.",
+      "На этом этапе регистрируются только решения review.",
     );
 
     await waitFor(() => {

@@ -25,9 +25,9 @@ const TABS: { id: MainTab; label: string }[] = [
   { id: "users", label: "Пользователи" },
   { id: "access", label: "Доступы" },
   { id: "visibility", label: "Видимость персонала" },
-  { id: "enrollment", label: "Enrollment" },
+  { id: "enrollment", label: "Зачисление" },
   { id: "assignments", label: "Назначения" },
-  { id: "user-linkage-review", label: "User Linkage Review" },
+  { id: "user-linkage-review", label: "Проверка привязок пользователей" },
   { id: "audit", label: "Аудит безопасности" },
 ];
 
@@ -48,14 +48,14 @@ export default function SystemAdminClient() {
       <header>
         <h1 className="text-2xl font-semibold">Кабинет системного администратора</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Управление пользователями, доступами, enrollment и аудитом (ADR-042 Phase C1).
+          Управление пользователями, доступами, зачислением и аудитом (ADR-042 Phase C1).
         </p>
         <p className="mt-2">
           <Link
             href="/admin/system/personnel-lifecycle"
             className="text-sm text-blue-600 hover:underline dark:text-blue-400"
           >
-            Personnel Lifecycle →
+            Жизненный цикл персонала →
           </Link>
         </p>
       </header>

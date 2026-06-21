@@ -7,28 +7,28 @@ export const VALIDATION_CARD_CODES: Record<
   { title: string; description: string }
 > = {
   duplicate_active_overrides: {
-    title: "Duplicate overrides",
-    description: "Active overrides with duplicate scope_key + field_path",
+    title: "Дублирующиеся исключения",
+    description: "Активные исключения с дублирующимся scope_key + field_path",
   },
   duplicate_active_assignments: {
-    title: "Duplicate assignments",
-    description: "Active assignments with duplicate person + assignment_key",
+    title: "Дублирующиеся назначения",
+    description: "Активные назначения с дублирующимся person + assignment_key",
   },
   active_assignment_without_person: {
-    title: "Orphan assignments",
-    description: "Active assignments without a linked person record",
+    title: "Назначения без персоны",
+    description: "Активные назначения без связанной записи персоны",
   },
   personnel_events_stuck_detected: {
-    title: "Stuck events",
-    description: "Personnel events still in detected status for the snapshot pair",
+    title: "Застрявшие события",
+    description: "События персонала, остающиеся в статусе detected для пары снимков",
   },
   outdated_effective_cache: {
-    title: "Outdated cache",
-    description: "Snapshots where effective cache count lags canonical roster count",
+    title: "Устаревший кэш",
+    description: "Снимки, где число effective cache отстаёт от канонического roster",
   },
   persons_without_active_assignment: {
-    title: "Persons without assignment",
-    description: "Active persons without an active assignment",
+    title: "Персоны без назначения",
+    description: "Активные персоны без активного назначения",
   },
 };
 

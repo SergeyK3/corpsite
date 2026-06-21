@@ -60,12 +60,12 @@ export default function ValidationPanel() {
 
   return (
     <section className="space-y-4" data-testid="validation-panel">
-      <h2 className="text-lg font-semibold">Validation</h2>
+      <h2 className="text-lg font-semibold">Проверка</h2>
       <ErrorBanner message={error} />
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs">
-          previous snapshot
+          предыдущий снимок
           <input
             type="number"
             min={1}
@@ -76,7 +76,7 @@ export default function ValidationPanel() {
           />
         </label>
         <label className="text-xs">
-          current snapshot
+          текущий снимок
           <input
             type="number"
             min={1}
@@ -93,19 +93,19 @@ export default function ValidationPanel() {
           className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-200 dark:text-zinc-900"
           data-testid="validation-run-btn"
         >
-          {loading ? "…" : "Validate"}
+          {loading ? "…" : "Проверить"}
         </button>
       </div>
 
       {!result ? (
         <p className="text-sm text-zinc-500" data-testid="validation-empty">
-          Укажите snapshot pair для post-lifecycle validation.
+          Укажите пару снимков для post-lifecycle validation.
         </p>
       ) : (
         <div className="space-y-4" data-testid="validation-results">
           <div className="flex flex-wrap gap-4 text-sm">
-            <span>warnings: {result.warnings_count}</span>
-            <span>errors: {result.errors_count}</span>
+            <span>предупреждения: {result.warnings_count}</span>
+            <span>ошибки: {result.errors_count}</span>
             {result.validated_at ? <span>validated_at: {result.validated_at}</span> : null}
           </div>
 
@@ -129,10 +129,10 @@ export default function ValidationPanel() {
           </div>
 
           {result.warnings.length > 0 ? (
-            <JsonViewer title="warnings" value={result.warnings} testId="validation-warnings-list" />
+            <JsonViewer title="предупреждения" value={result.warnings} testId="validation-warnings-list" />
           ) : null}
           {result.errors.length > 0 ? (
-            <JsonViewer title="errors" value={result.errors} testId="validation-errors-list" />
+            <JsonViewer title="ошибки" value={result.errors} testId="validation-errors-list" />
           ) : null}
         </div>
       )}

@@ -96,7 +96,7 @@ export default function OverrideDetailDrawer({
       <div className="h-full w-full max-w-xl overflow-y-auto border-l border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold">
-            Override #{detail?.override_id ?? "…"}
+            Исключение #{detail?.override_id ?? "…"}
           </h3>
           <button
             type="button"
@@ -115,7 +115,7 @@ export default function OverrideDetailDrawer({
             Загрузка…
           </p>
         ) : !detail ? (
-          <p className="text-sm text-zinc-500">Override не найден.</p>
+          <p className="text-sm text-zinc-500">Исключение не найдено.</p>
         ) : (
           <div className="space-y-4 text-sm">
             <dl className="grid gap-2 sm:grid-cols-2">
@@ -176,7 +176,7 @@ export default function OverrideDetailDrawer({
                 <div className="flex flex-wrap gap-2">
                   {showApprove ? (
                     <ActionButton
-                      label="Approve"
+                      label="Одобрить"
                       testId="override-approve-btn"
                       disabled={busy}
                       onClick={() => void runAction("approve")}
@@ -184,7 +184,7 @@ export default function OverrideDetailDrawer({
                   ) : null}
                   {showReject ? (
                     <ActionButton
-                      label="Reject"
+                      label="Отклонить"
                       testId="override-reject-btn"
                       disabled={busy}
                       onClick={() => void runAction("reject")}
@@ -192,7 +192,7 @@ export default function OverrideDetailDrawer({
                   ) : null}
                   {showRevoke ? (
                     <ActionButton
-                      label="Revoke"
+                      label="Отозвать"
                       testId="override-revoke-btn"
                       disabled={busy}
                       onClick={() => setConfirmAction("revoke")}
@@ -200,7 +200,7 @@ export default function OverrideDetailDrawer({
                   ) : null}
                   {showReconfirm ? (
                     <ActionButton
-                      label="Reconfirm"
+                      label="Подтвердить"
                       testId="override-reconfirm-btn"
                       disabled={busy}
                       onClick={() => void runAction("reconfirm")}
@@ -215,9 +215,9 @@ export default function OverrideDetailDrawer({
 
       <ConfirmDialog
         open={confirmAction === "revoke"}
-        title="Revoke override?"
-        message="Override будет отозван. Укажите reason не короче 10 символов в поле comment."
-        confirmLabel="Revoke"
+        title="Отозвать исключение?"
+        message="Исключение будет отозвано. Укажите reason не короче 10 символов в поле comment."
+        confirmLabel="Отозвать"
         onConfirm={() => void runAction("revoke")}
         onCancel={() => setConfirmAction(null)}
       />

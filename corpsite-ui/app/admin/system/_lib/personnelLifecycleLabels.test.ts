@@ -65,7 +65,7 @@ describe("personnelLifecycleLabels", () => {
   });
 
   it("VALIDATION_CARD_CODES covers primary diagnostics", () => {
-    expect(VALIDATION_CARD_CODES.duplicate_active_overrides.title).toBe("Duplicate overrides");
-    expect(VALIDATION_CARD_CODES.outdated_effective_cache.title).toBe("Outdated cache");
+    expect(VALIDATION_CARD_CODES.duplicate_active_overrides.title).toBe("Дублирующиеся исключения");
+    expect(VALIDATION_CARD_CODES.outdated_effective_cache.title).toBe("Устаревший кэш");
   });
 });

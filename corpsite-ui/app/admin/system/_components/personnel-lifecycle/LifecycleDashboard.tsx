@@ -43,7 +43,7 @@ export default function LifecycleDashboard({ refreshToken = 0 }: LifecycleDashbo
 
   return (
     <section className="space-y-3" data-testid="lifecycle-dashboard">
-      <h2 className="text-lg font-semibold">Personnel Lifecycle</h2>
+      <h2 className="text-lg font-semibold">Жизненный цикл персонала</h2>
       <ErrorBanner message={error} />
 
       {loading ? (
@@ -56,29 +56,29 @@ export default function LifecycleDashboard({ refreshToken = 0 }: LifecycleDashbo
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard label="Run ID" value={`#${latest.run_id}`} />
+          <MetricCard label="ID запуска" value={`#${latest.run_id}`} />
           <MetricCard
-            label="Status"
+            label="Статус"
             value={
               <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${lifecycleStatusClass(latest.status)}`}>
                 {latest.status}
               </span>
             }
           />
-          <MetricCard label="Started" value={formatDateTime(latest.started_at)} />
-          <MetricCard label="Completed" value={formatDateTime(latest.completed_at)} />
-          <MetricCard label="Duration" value={formatDurationBetween(latest.started_at, latest.completed_at)} />
-          <MetricCard label="Events created" value={String(latest.events_created)} />
-          <MetricCard label="Persons created" value={String(latest.persons_created)} />
-          <MetricCard label="Assignments created" value={String(latest.assignments_created)} />
-          <MetricCard label="Warnings" value={String(latest.warnings_count)} />
-          <MetricCard label="Errors" value={String(latest.errors_count)} />
+          <MetricCard label="Начало" value={formatDateTime(latest.started_at)} />
+          <MetricCard label="Завершение" value={formatDateTime(latest.completed_at)} />
+          <MetricCard label="Длительность" value={formatDurationBetween(latest.started_at, latest.completed_at)} />
+          <MetricCard label="Создано событий" value={String(latest.events_created)} />
+          <MetricCard label="Создано персон" value={String(latest.persons_created)} />
+          <MetricCard label="Создано назначений" value={String(latest.assignments_created)} />
+          <MetricCard label="Предупреждения" value={String(latest.warnings_count)} />
+          <MetricCard label="Ошибки" value={String(latest.errors_count)} />
           <MetricCard
-            label="Snapshots"
+            label="Снимки"
             value={`${latest.previous_snapshot_id} → ${latest.snapshot_id}`}
           />
           <MetricCard
-            label="Actor"
+            label="Исполнитель"
             value={formatActorLabel(latest.actor_user_id)}
           />
         </div>

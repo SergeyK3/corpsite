@@ -44,7 +44,7 @@ export default function EffectivePersonViewer() {
 
   return (
     <section className="space-y-4" data-testid="effective-person-viewer">
-      <h2 className="text-lg font-semibold">Effective Person Viewer</h2>
+      <h2 className="text-lg font-semibold">Просмотр effective person</h2>
       <ErrorBanner message={error} />
 
       <div className="flex flex-wrap items-end gap-3">
@@ -58,7 +58,7 @@ export default function EffectivePersonViewer() {
           />
         </label>
         <label className="text-xs">
-          assignment_key (optional)
+          assignment_key (необязательно)
           <input
             value={assignmentKey}
             onChange={(e) => setAssignmentKey(e.target.value)}
@@ -66,7 +66,7 @@ export default function EffectivePersonViewer() {
           />
         </label>
         <label className="text-xs">
-          snapshot_id (optional)
+          snapshot_id (необязательно)
           <input
             type="number"
             min={1}
@@ -82,7 +82,7 @@ export default function EffectivePersonViewer() {
           className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-200 dark:text-zinc-900"
           data-testid="effective-person-load-btn"
         >
-          {loading ? "…" : "Load"}
+          {loading ? "…" : "Загрузить"}
         </button>
       </div>
 
@@ -96,12 +96,12 @@ export default function EffectivePersonViewer() {
           </div>
           <JsonViewer title="Canonical Payload" value={result.canonical_payload} testId="effective-person-canonical" />
           <JsonViewer title="Effective Payload" value={result.effective_payload} testId="effective-person-effective" />
-          <JsonViewer title="Applied Overrides" value={result.applied_override_ids} testId="effective-person-overrides" />
-          <JsonViewer title="Override IDs" value={result.applied_override_ids} />
+          <JsonViewer title="Применённые исключения" value={result.applied_override_ids} testId="effective-person-overrides" />
+          <JsonViewer title="ID исключений" value={result.applied_override_ids} />
         </div>
       ) : (
         <p className="text-sm text-zinc-500" data-testid="effective-person-empty">
-          Введите person_key и нажмите Load.
+          Введите person_key и нажмите «Загрузить».
         </p>
       )}
     </section>

@@ -97,14 +97,14 @@ export default function OverridesPanel({ hasHrGovernance }: OverridesPanelProps)
   return (
     <section className="space-y-4" data-testid="overrides-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Overrides</h2>
+        <h2 className="text-lg font-semibold">Исключения</h2>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
           className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-600"
         >
-          Refresh
+          Обновить
         </button>
       </div>
 
@@ -146,7 +146,7 @@ export default function OverridesPanel({ hasHrGovernance }: OverridesPanelProps)
         </p>
       ) : filteredItems.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="overrides-empty">
-          Нет overrides.
+          Нет исключений.
         </p>
       ) : (
         <div className="overflow-x-auto">

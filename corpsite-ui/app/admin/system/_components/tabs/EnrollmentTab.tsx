@@ -207,7 +207,7 @@ export default function EnrollmentTab() {
             checked={detectDryRun}
             onChange={(e) => setDetectDryRun(e.target.checked)}
           />
-          detect dry_run
+          режим dry_run detect
         </label>
         <button
           type="button"
@@ -222,7 +222,7 @@ export default function EnrollmentTab() {
           onClick={() => void handleBulkApprove()}
           className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
         >
-          Approve Selected ({selectedIds.size})
+          Одобрить выбранные ({selectedIds.size})
         </button>
         <button
           type="button"
@@ -230,7 +230,7 @@ export default function EnrollmentTab() {
           onClick={() => void handleBulkReject()}
           className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
         >
-          Reject Selected
+          Отклонить выбранные
         </button>
         <button type="button" onClick={() => void load()} className="rounded-lg border px-3 py-2 text-sm">
           Обновить
@@ -256,10 +256,10 @@ export default function EnrollmentTab() {
                     />
                   </th>
                   <th className="px-3 py-2 text-left">ID</th>
-                  <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-left">Reason</th>
-                  <th className="px-3 py-2 text-left">Person / Assignment</th>
-                  <th className="px-3 py-2 text-left">Detected</th>
+                  <th className="px-3 py-2 text-left">Статус</th>
+                  <th className="px-3 py-2 text-left">Причина</th>
+                  <th className="px-3 py-2 text-left">Персона / Назначение</th>
+                  <th className="px-3 py-2 text-left">Обнаружено</th>
                 </tr>
               </thead>
               <tbody>
@@ -297,13 +297,13 @@ export default function EnrollmentTab() {
           <h3 className="font-medium">Карточка кандидата</h3>
           {selected ? (
             <div className="mt-2 space-y-3 text-sm">
-              <div>Queue #{selected.queue_id}</div>
-              <div>Status: {selected.queue_status}</div>
-              <div>Reason: {selected.reason}</div>
+              <div>Очередь #{selected.queue_id}</div>
+              <div>Статус: {selected.queue_status}</div>
+              <div>Причина: {selected.reason}</div>
 
               {explain?.explanation ? (
                 <div className="rounded border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900">
-                  <div className="font-medium">Explain panel</div>
+                  <div className="font-medium">Панель explain</div>
                   <div className="mt-2">
                     <span className="font-medium">Причина:</span>{" "}
                     {explain.explanation.reason_label ?? selected.reason}
@@ -319,7 +319,7 @@ export default function EnrollmentTab() {
                   ) : null}
                   {explain.explanation.person ? (
                     <div className="mt-2">
-                      <div className="font-medium">Person</div>
+                      <div className="font-medium">Персона</div>
                       <div>ФИО: {explain.explanation.person.full_name ?? "—"}</div>
                       <div>ИИН: {explain.explanation.person.iin ?? "—"}</div>
                     </div>
@@ -346,10 +346,10 @@ export default function EnrollmentTab() {
 
               <div className="text-xs text-zinc-500 break-all">{selected.idempotency_key}</div>
               {selected.decision_comment ? (
-                <div className="text-xs">Comment: {selected.decision_comment}</div>
+                <div className="text-xs">Комментарий: {selected.decision_comment}</div>
               ) : null}
               <textarea
-                placeholder="Комментарий approve/reject"
+                placeholder="Комментарий для одобрения/отклонения"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 className="mt-2 w-full rounded border p-2 text-xs dark:border-zinc-600 dark:bg-zinc-900"
@@ -362,7 +362,7 @@ export default function EnrollmentTab() {
                     onClick={() => void handleApprove(selected.queue_id)}
                     className="rounded bg-green-600 px-2 py-1 text-xs text-white"
                   >
-                    Approve
+                    Одобрить
                   </button>
                 ) : null}
                 {selected.queue_status === "PENDING" || selected.queue_status === "APPROVED" ? (
@@ -371,7 +371,7 @@ export default function EnrollmentTab() {
                     onClick={() => void handleReject(selected.queue_id)}
                     className="rounded bg-zinc-600 px-2 py-1 text-xs text-white"
                   >
-                    Reject
+                    Отклонить
                   </button>
                 ) : null}
                 {selected.queue_status === "APPROVED" ? (
@@ -380,11 +380,11 @@ export default function EnrollmentTab() {
                     onClick={() => void handleApply(selected.queue_id)}
                     className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
                   >
-                    Apply
+                    Применить
                   </button>
                 ) : null}
                 {selected.queue_status !== "APPROVED" ? (
-                  <p className="text-xs text-zinc-500">Apply только для APPROVED</p>
+                  <p className="text-xs text-zinc-500">Применить можно только для APPROVED</p>
                 ) : null}
               </div>
             </div>

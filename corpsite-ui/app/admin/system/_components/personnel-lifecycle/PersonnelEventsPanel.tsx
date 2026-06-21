@@ -86,14 +86,14 @@ export default function PersonnelEventsPanel() {
   return (
     <section className="space-y-4" data-testid="personnel-events-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Personnel Events</h2>
+        <h2 className="text-lg font-semibold">События персонала</h2>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
           className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-600"
         >
-          Refresh
+          Обновить
         </button>
       </div>
 
@@ -132,7 +132,7 @@ export default function PersonnelEventsPanel() {
         </p>
       ) : items.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="personnel-events-empty">
-          Нет personnel events.
+          Нет событий персонала.
         </p>
       ) : (
         <div className="overflow-x-auto">

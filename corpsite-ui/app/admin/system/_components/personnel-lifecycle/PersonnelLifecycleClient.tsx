@@ -18,9 +18,9 @@ type MainTab = "overview" | "runs" | "events" | "overrides";
 
 const TABS: { id: MainTab; label: string }[] = [
   { id: "overview", label: "Обзор" },
-  { id: "runs", label: "Lifecycle Runs" },
-  { id: "events", label: "Personnel Events" },
-  { id: "overrides", label: "Overrides" },
+  { id: "runs", label: "Запуски цикла" },
+  { id: "events", label: "События персонала" },
+  { id: "overrides", label: "Исключения" },
 ];
 
 function tabButtonClass(active: boolean): string {
@@ -54,15 +54,15 @@ export default function PersonnelLifecycleClient({ me }: PersonnelLifecycleClien
             Кабинет системного администратора
           </Link>
           <span>/</span>
-          <span className="text-zinc-900 dark:text-zinc-100">Personnel Lifecycle</span>
+          <span className="text-zinc-900 dark:text-zinc-100">Жизненный цикл персонала</span>
         </div>
-        <h1 className="mt-2 text-2xl font-semibold">Personnel Lifecycle</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Жизненный цикл персонала</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          HR lifecycle runs, personnel events, overrides и effective canonical (ADR-043 Phase C4.2).
+          Запуски HR-цикла, события персонала, исключения и effective canonical (ADR-043 Phase C4.2).
         </p>
       </header>
 
-      <nav className="flex flex-wrap gap-2" aria-label="Разделы personnel lifecycle">
+      <nav className="flex flex-wrap gap-2" aria-label="Разделы жизненного цикла персонала">
         {TABS.map((tab) => (
           <button
             key={tab.id}

@@ -87,13 +87,13 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
 
   return (
     <section className="space-y-4" data-testid="lifecycle-run-panel">
-      <h2 className="text-lg font-semibold">Monthly Lifecycle Run</h2>
+      <h2 className="text-lg font-semibold">Ежемесячный запуск цикла</h2>
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
 
       <div className="grid gap-3 rounded-lg border border-zinc-200 p-4 sm:grid-cols-2 lg:grid-cols-3 dark:border-zinc-700">
         <label className="text-xs">
-          previous snapshot
+          предыдущий снимок
           <input
             type="number"
             min={1}
@@ -104,7 +104,7 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
           />
         </label>
         <label className="text-xs">
-          current snapshot
+          текущий снимок
           <input
             type="number"
             min={1}
@@ -121,11 +121,11 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
               checked={refreshCache}
               onChange={(e) => setRefreshCache(e.target.checked)}
             />
-            refresh cache
+            обновить кэш
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={enqueue} onChange={(e) => setEnqueue(e.target.checked)} />
-            enqueue
+            поставить в очередь
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -133,7 +133,7 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
               checked={syncPersons}
               onChange={(e) => setSyncPersons(e.target.checked)}
             />
-            sync persons
+            синхронизировать персон
           </label>
         </div>
       </div>
@@ -146,7 +146,7 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
           className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-200 dark:text-zinc-900"
           data-testid="lifecycle-run-preview-btn"
         >
-          {loading ? "…" : "Preview"}
+          {loading ? "…" : "Предпросмотр"}
         </button>
         <button
           type="button"
@@ -155,7 +155,7 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
           className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           data-testid="lifecycle-run-execute-btn"
         >
-          Execute
+          Выполнить
         </button>
       </div>
 
@@ -163,14 +163,14 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
         <div className="space-y-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-700" data-testid="lifecycle-run-report">
           <div className="flex flex-wrap gap-4 text-sm">
             <span>
-              Status: <strong>{report.run_status}</strong>
+              Статус: <strong>{report.run_status}</strong>
             </span>
             <span>
-              Duration: <strong>{formatDurationMs(report.duration_ms)}</strong>
+              Длительность: <strong>{formatDurationMs(report.duration_ms)}</strong>
             </span>
             {report.run_id != null ? (
               <span>
-                Run ID: <strong>#{report.run_id}</strong>
+                ID запуска: <strong>#{report.run_id}</strong>
               </span>
             ) : null}
           </div>
@@ -179,19 +179,19 @@ export default function LifecycleRunPanel({ onRunComplete }: LifecycleRunPanelPr
           <JsonViewer title="person sync" value={report.person_sync} testId="lifecycle-report-person-sync" />
           <JsonViewer title="validation" value={report.validation} testId="lifecycle-report-validation" />
           {report.warnings.length > 0 ? (
-            <JsonViewer title="warnings" value={report.warnings} testId="lifecycle-report-warnings" />
+            <JsonViewer title="предупреждения" value={report.warnings} testId="lifecycle-report-warnings" />
           ) : null}
           {report.errors.length > 0 ? (
-            <JsonViewer title="errors" value={report.errors} testId="lifecycle-report-errors" />
+            <JsonViewer title="ошибки" value={report.errors} testId="lifecycle-report-errors" />
           ) : null}
         </div>
       ) : null}
 
       <ConfirmDialog
         open={executeConfirm}
-        title="Execute lifecycle run?"
+        title="Выполнить lifecycle run?"
         message="Будет выполнен полный monthly lifecycle run (не preview). Продолжить?"
-        confirmLabel="Execute"
+        confirmLabel="Выполнить"
         onConfirm={() => void handleExecute()}
         onCancel={() => setExecuteConfirm(false)}
       />

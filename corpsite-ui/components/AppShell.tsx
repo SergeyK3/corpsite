@@ -51,7 +51,7 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   },
   {
     href: "/admin/system/personnel-lifecycle",
-    title: "Personnel Lifecycle",
+    title: "Жизненный цикл персонала",
     matchPrefixes: ["/admin/system/personnel-lifecycle"],
   },
   {
