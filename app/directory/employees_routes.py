@@ -28,7 +28,7 @@ from app.services.hr_event_registry import list_registry_for_ui
 from app.services.personnel_events_service import create_personnel_event
 
 from .common import as_http500, call_service
-from .rbac import compute_scope, require_privileged_or_403
+from .rbac import compute_scope, require_privileged_or_403, require_personnel_visibility_or_403
 
 router = APIRouter()
 
@@ -113,6 +113,7 @@ def list_departments(
     try:
         uid = int(user["user_id"])
         scope = compute_scope(uid, user)
+        require_personnel_visibility_or_403(user, scope)
 
         dept_scope_id: Optional[int] = scope["scope_unit_id"]
         dept_scope_ids: Optional[List[int]] = scope["scope_unit_ids"]
@@ -325,6 +326,7 @@ def list_employees(
     try:
         uid = int(user["user_id"])
         scope = compute_scope(uid, user)
+        require_personnel_visibility_or_403(user, scope)
 
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
@@ -660,6 +662,7 @@ def get_employee(
     try:
         uid = int(user["user_id"])
         scope = compute_scope(uid, user)
+        require_personnel_visibility_or_403(user, scope)
 
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]

@@ -1,5 +1,6 @@
 // FILE: corpsite-ui/lib/adminNav.ts
 import type { MeInfo } from "./types";
+import { hasPersonnelVisibility } from "./visibilityNav";
 
 /** Task/directory admin shell — unchanged: system admin role only. */
 export function isSystemAdminRole(me: MeInfo | null | undefined): boolean {
@@ -50,6 +51,9 @@ export function isForbiddenAdminRoute(
     pathname.startsWith("/regular-tasks") ||
     pathname.startsWith("/admin")
   ) {
+    if (pathname.startsWith("/directory") && hasPersonnelVisibility(me)) {
+      return false;
+    }
     return !canSeeAdminShell(me);
   }
   return false;

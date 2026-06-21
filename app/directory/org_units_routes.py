@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.auth import get_current_user
 from .common import as_http500
-from .rbac import compute_scope, require_privileged_or_403, load_ancestor_chain_units, org_units
+from .rbac import compute_scope, require_privileged_or_403, require_personnel_visibility_or_403, load_ancestor_chain_units, org_units
 from app.services.org_units_service import OrgUnit
 
 router = APIRouter()
@@ -48,6 +48,7 @@ def org_units_tree(
         user_ctx = user
 
         scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
+        require_personnel_visibility_or_403(user_ctx, scope)
         scope_unit_id: Optional[int] = scope["scope_unit_id"]
         scope_unit_ids: Optional[List[int]] = scope["scope_unit_ids"]
 
@@ -144,6 +145,7 @@ def list_org_units_flat(
         uid = int(user["user_id"])
         user_ctx = user
         scope = compute_scope(uid, user_ctx, include_inactive=include_inactive)
+        require_personnel_visibility_or_403(user_ctx, scope)
 
         units = org_units.list_org_units(
             scope_unit_ids=scope["scope_unit_ids"],

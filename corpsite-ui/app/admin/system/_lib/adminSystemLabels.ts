@@ -45,6 +45,8 @@ export const AUDIT_EVENT_HIGHLIGHT: Record<string, string> = {
   ENROLLMENT_APPROVED: "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200",
   ENROLLMENT_REJECTED: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200",
   ENROLLMENT_COMPLETED: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
+  VISIBILITY_GRANTED: "bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200",
+  VISIBILITY_REVOKED: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
 };
 
 export function auditEventClass(eventType: string): string {

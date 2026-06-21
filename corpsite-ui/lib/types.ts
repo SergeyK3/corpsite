@@ -19,6 +19,20 @@ export type MeInfo = {
   has_personnel_admin?: boolean;
   /** ADR-043 C4.2 — override approve/reject (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_hr_governance?: boolean;
+  /** ADR-042 E1 — personnel directory / org sidebar visibility. */
+  has_personnel_visibility?: boolean;
+  show_org_sidebar?: boolean;
+  personnel_visibility?: PersonnelVisibilityInfo;
+};
+
+export type PersonnelVisibilityInfo = {
+  organization_wide?: boolean;
+  scope_unit_ids?: number[] | null;
+  can_view_personnel?: boolean;
+  can_view_tasks?: boolean;
+  source?: string;
+  matched_assignment_ids?: number[];
+  implicit_from_access_level?: boolean;
 };
 
 export type TelegramBindCodeResponse = {

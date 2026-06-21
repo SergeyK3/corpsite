@@ -13,6 +13,13 @@ import {
   isForbiddenAdminRoute,
   isPersonnelLifecycleRoute,
 } from "@/lib/adminNav";
+import {
+  canAccessDirectoryRoute,
+  canViewPersonnelTasksReadOnly,
+  hasPersonnelVisibility,
+  shouldShowOrgUnitsPanel,
+  VISIBILITY_DIRECTORY_NAV,
+} from "@/lib/visibilityNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
 
@@ -247,6 +254,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [me]);
 
   const isAdmin = canSeeAdminShell(me);
+  const showPersonnelVisibility = hasPersonnelVisibility(me) && !isAdmin;
   const showSysadminNav = canSeeSysadminCabinetNav(me);
   const showPersonnelLifecycleNav = canSeePersonnelLifecycleNav(me);
 
@@ -258,8 +266,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, [isAdmin, showPersonnelLifecycleNav, showSysadminNav]);
 
+  const visibilityNavItems = useMemo(() => {
+    const items = [...VISIBILITY_DIRECTORY_NAV];
+    if (canViewPersonnelTasksReadOnly(me)) {
+      items.unshift({
+        href: "/tasks",
+        title: "Задачи (просмотр)",
+        matchPrefixes: ["/tasks"],
+      });
+    }
+    return items;
+  }, [me]);
+
   const forbiddenNonAdminRoute =
-    !loading && !!me && isForbiddenAdminRoute(pathname, me);
+    !loading && !!me && !canAccessDirectoryRoute(pathname, me) && isForbiddenAdminRoute(pathname, me);
 
   const privilegedSysadminOnly =
     !isAdmin && showSysadminNav && pathname.startsWith("/admin/system") && !isPersonnelLifecycleRoute(pathname);
@@ -273,19 +293,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/tasks");
   }, [isLogin, loading, forbiddenNonAdminRoute, router]);
 
-  const showOrgUnitsPanel = useMemo(() => {
-    if (!isAdmin) return false;
-
-    if (pathname.startsWith("/directory/department-groups")) return false;
-    if (pathname.startsWith("/directory/org-units")) return false;
-
-    return (
-      pathname.startsWith("/tasks") ||
-      pathname.startsWith("/admin/regular-tasks") ||
-      pathname.startsWith("/regular-tasks") ||
-      pathname.startsWith("/directory")
-    );
-  }, [isAdmin, pathname]);
+  const showOrgUnitsPanel = useMemo(() => shouldShowOrgUnitsPanel(pathname, me), [me, pathname]);
 
   const orgTreeBasePath = useMemo(() => {
     if (pathname.startsWith("/tasks")) return "/tasks";
@@ -362,6 +370,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </aside>
 
             <section className="min-w-0">{children}</section>
+          </div>
+        ) : showPersonnelVisibility ? (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <aside className="space-y-2.5">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
+                <div className="space-y-1">
+                  <SidebarNav pathname={pathname} items={visibilityNavItems} />
+                </div>
+              </div>
+
+              {showOrgUnitsPanel ? <OrgUnitsSidebarPanel basePath={orgTreeBasePath} /> : null}
+            </aside>
+
+            <section className="min-w-0">
+              {forbiddenNonAdminRoute ? (
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 text-sm text-zinc-600 dark:text-zinc-400">
+                  Нет доступа к этому разделу.
+                </div>
+              ) : (
+                children
+              )}
+            </section>
           </div>
         ) : privilegedSysadminOnly || personnelLifecycleOnly ? (
           <section className="min-w-0">{children}</section>

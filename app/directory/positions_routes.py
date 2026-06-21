@@ -14,6 +14,8 @@ from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
 
+from app.directory.rbac import compute_scope, require_personnel_visibility_or_403
+
 router = APIRouter()
 
 ALLOWED_CATEGORIES = {"leaders", "medical", "admin", "technical", "other"}
@@ -113,8 +115,9 @@ def list_positions_crud(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
-        raise HTTPException(status_code=403, detail="Forbidden.")
+    uid = int(user["user_id"])
+    scope = compute_scope(uid, user)
+    require_personnel_visibility_or_403(user, scope)
 
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     where_parts = ["TRUE"]
@@ -204,8 +207,9 @@ def get_position(
     position_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
-        raise HTTPException(status_code=403, detail="Forbidden.")
+    uid = int(user["user_id"])
+    scope = compute_scope(uid, user)
+    require_personnel_visibility_or_403(user, scope)
 
     q_one = text(
         """

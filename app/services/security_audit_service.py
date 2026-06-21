@@ -53,6 +53,8 @@ _ALLOWED_EVENT_TYPES = frozenset(
         "USER_BLOCKED",
         "USER_UNBLOCKED",
         "PERSON_IIN_RECONCILED",
+        "VISIBILITY_GRANTED",
+        "VISIBILITY_REVOKED",
     }
 )
 

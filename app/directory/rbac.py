@@ -22,19 +22,17 @@ def require_privileged_or_403(user_ctx: Dict[str, Any]) -> None:
         raise HTTPException(status_code=403, detail="Forbidden.")
 
 
-def compute_scope(
+def _apply_dept_rbac_scope(
     uid: int,
     user_ctx: Dict[str, Any],
-    include_inactive: bool = False,
+    *,
+    include_inactive: bool,
 ) -> Dict[str, Any]:
-    privileged = _is_privileged(user_ctx)
-
     scope_unit_id: Optional[int] = None
     scope_unit_ids: Optional[List[int]] = None
-
     mode = _rbac_mode()
 
-    if mode == "dept" and not privileged:
+    if mode == "dept":
         scope_unit_id = _require_dept_scope(user_ctx)
         try:
             s = org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
@@ -43,7 +41,7 @@ def compute_scope(
         if s is not None:
             scope_unit_ids = sorted(list(s))
 
-    if mode == "groups" and not privileged:
+    if mode == "groups":
         try:
             s = org_units.compute_user_scope_unit_ids(uid, include_inactive=include_inactive)
         except PermissionError as pe:
@@ -53,10 +51,87 @@ def compute_scope(
         scope_unit_id = None
 
     return {
-        "privileged": bool(privileged),
         "scope_unit_id": scope_unit_id,
         "scope_unit_ids": scope_unit_ids,
     }
+
+
+def compute_scope(
+    uid: int,
+    user_ctx: Dict[str, Any],
+    include_inactive: bool = False,
+) -> Dict[str, Any]:
+    from app.services.personnel_visibility_resolver_service import (
+        resolve_effective_personnel_visibility,
+    )
+
+    privileged = _is_privileged(user_ctx)
+
+    if privileged:
+        return {
+            "privileged": True,
+            "scope_unit_id": None,
+            "scope_unit_ids": None,
+            "has_personnel_visibility": True,
+            "can_view_tasks_readonly": True,
+        }
+
+    visibility = resolve_effective_personnel_visibility(
+        int(uid),
+        user_ctx=user_ctx,
+        include_inactive=include_inactive,
+    )
+
+    if visibility.get("has_visibility"):
+        if visibility.get("organization_wide"):
+            return {
+                "privileged": False,
+                "scope_unit_id": None,
+                "scope_unit_ids": None,
+                "has_personnel_visibility": True,
+                "can_view_tasks_readonly": bool(visibility.get("can_view_tasks")),
+            }
+
+        raw_scope_ids = visibility.get("scope_unit_ids")
+        if visibility.get("implicit_from_access_level") and raw_scope_ids == []:
+            dept_scope = _apply_dept_rbac_scope(uid, user_ctx, include_inactive=include_inactive)
+            return {
+                "privileged": False,
+                "has_personnel_visibility": True,
+                "can_view_tasks_readonly": bool(visibility.get("can_view_tasks")),
+                **dept_scope,
+            }
+
+        scope_unit_ids: Optional[List[int]]
+        if raw_scope_ids is None:
+            scope_unit_ids = []
+        else:
+            scope_unit_ids = sorted(int(x) for x in raw_scope_ids)
+
+        scope_unit_id = scope_unit_ids[0] if len(scope_unit_ids) == 1 else None
+        return {
+            "privileged": False,
+            "scope_unit_id": scope_unit_id,
+            "scope_unit_ids": scope_unit_ids,
+            "has_personnel_visibility": True,
+            "can_view_tasks_readonly": bool(visibility.get("can_view_tasks")),
+        }
+
+    return {
+        "privileged": False,
+        "scope_unit_id": None,
+        "scope_unit_ids": [],
+        "has_personnel_visibility": False,
+        "can_view_tasks_readonly": False,
+    }
+
+
+def require_personnel_visibility_or_403(user_ctx: Dict[str, Any], scope: Dict[str, Any]) -> None:
+    if scope.get("privileged"):
+        return
+    if scope.get("has_personnel_visibility"):
+        return
+    raise HTTPException(status_code=403, detail="Personnel visibility is not granted.")
 
 
 def load_ancestor_chain_units(

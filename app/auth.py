@@ -276,7 +276,12 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     full_admin = evaluate_admin_access(out)
     out["has_personnel_admin"] = full_admin or has_any_personnel_read_permission(uid)
     out["has_hr_governance"] = full_admin or has_hr_governance_permission(uid)
-    return out
+
+    from app.services.personnel_visibility_resolver_service import (
+        enrich_user_with_personnel_visibility,
+    )
+
+    return enrich_user_with_personnel_visibility(out)
 
 
 def _get_user_auth_row_by_login(login: str) -> Optional[Dict[str, Any]]:

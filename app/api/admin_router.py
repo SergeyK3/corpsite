@@ -51,6 +51,21 @@ from app.services.admin_reference_service import (
     list_access_roles,
     search_access_targets,
 )
+from app.api.personnel_visibility_schemas import (
+    EffectivePersonnelVisibilityResponse,
+    PersonnelVisibilityAssignmentCreate,
+    PersonnelVisibilityAssignmentListResponse,
+    PersonnelVisibilityAssignmentResponse,
+    PersonnelVisibilityRevokeRequest,
+)
+from app.services.personnel_visibility_resolver_service import (
+    resolve_effective_personnel_visibility,
+)
+from app.services.personnel_visibility_service import (
+    create_visibility_assignment,
+    list_visibility_assignments,
+    revoke_visibility_assignment,
+)
 from app.services.security_audit_service import list_security_events
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -406,5 +421,76 @@ def admin_force_password_change(
             user_id=int(user_id),
             actor_user_id=int(admin["user_id"]),
         )
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
+
+
+@router.get(
+    "/personnel/visibility/assignments",
+    response_model=PersonnelVisibilityAssignmentListResponse,
+)
+def admin_list_personnel_visibility_assignments(
+    active_only: bool = Query(default=True),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    return list_visibility_assignments(active_only=active_only, limit=limit, offset=offset)
+
+
+@router.post(
+    "/personnel/visibility/assignments",
+    response_model=PersonnelVisibilityAssignmentResponse,
+)
+def admin_create_personnel_visibility_assignment(
+    body: PersonnelVisibilityAssignmentCreate,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    try:
+        return create_visibility_assignment(
+            target_type=body.target_type,
+            target_user_id=body.target_user_id,
+            target_position_id=body.target_position_id,
+            target_department_id=body.target_department_id,
+            scope_type=body.scope_type,
+            scope_department_id=body.scope_department_id,
+            scope_department_group_id=body.scope_department_group_id,
+            can_view_personnel=body.can_view_personnel,
+            can_view_tasks=body.can_view_tasks,
+            created_by_user_id=int(admin["user_id"]),
+        )
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
+
+
+@router.post(
+    "/personnel/visibility/assignments/{assignment_id}/revoke",
+    response_model=PersonnelVisibilityAssignmentResponse,
+)
+def admin_revoke_personnel_visibility_assignment(
+    assignment_id: int,
+    body: PersonnelVisibilityRevokeRequest,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    try:
+        return revoke_visibility_assignment(
+            assignment_id=int(assignment_id),
+            revoked_by_user_id=int(admin["user_id"]),
+            reason=body.reason,
+        )
+    except ValueError as exc:
+        raise _value_error_to_http(exc) from exc
+
+
+@router.get(
+    "/personnel/visibility/effective",
+    response_model=EffectivePersonnelVisibilityResponse,
+)
+def admin_get_effective_personnel_visibility(
+    user_id: int = Query(..., ge=1),
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    try:
+        return resolve_effective_personnel_visibility(int(user_id))
     except ValueError as exc:
         raise _value_error_to_http(exc) from exc

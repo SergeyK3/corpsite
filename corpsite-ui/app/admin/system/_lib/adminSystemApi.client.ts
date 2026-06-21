@@ -426,3 +426,86 @@ export async function fetchSecurityAudit(params?: {
 }): Promise<Paginated<SecurityAuditEvent>> {
   return apiFetchJson<Paginated<SecurityAuditEvent>>("/admin/security-audit", { query: params });
 }
+
+/* ---------- Personnel visibility (ADR-042 E1) ---------- */
+
+export type PersonnelVisibilityAssignment = {
+  assignment_id: number;
+  target_type: string;
+  target_user_id?: number | null;
+  target_position_id?: number | null;
+  target_department_id?: number | null;
+  scope_type: string;
+  scope_department_id?: number | null;
+  scope_department_group_id?: number | null;
+  can_view_personnel: boolean;
+  can_view_tasks: boolean;
+  is_active: boolean;
+  created_at?: string | null;
+  created_by_user_id?: number | null;
+  revoked_at?: string | null;
+  revoked_by_user_id?: number | null;
+  revoke_reason?: string | null;
+};
+
+export type PersonnelVisibilityCreate = {
+  target_type: string;
+  target_user_id?: number | null;
+  target_position_id?: number | null;
+  target_department_id?: number | null;
+  scope_type: string;
+  scope_department_id?: number | null;
+  scope_department_group_id?: number | null;
+  can_view_personnel?: boolean;
+  can_view_tasks?: boolean;
+};
+
+export type EffectivePersonnelVisibility = {
+  has_visibility: boolean;
+  show_org_sidebar: boolean;
+  organization_wide: boolean;
+  scope_unit_ids?: number[] | null;
+  can_view_personnel: boolean;
+  can_view_tasks: boolean;
+  source: string;
+  matched_assignment_ids?: number[];
+  implicit_from_access_level?: boolean;
+};
+
+export async function fetchPersonnelVisibilityAssignments(params?: {
+  active_only?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<Paginated<PersonnelVisibilityAssignment>> {
+  return apiFetchJson<Paginated<PersonnelVisibilityAssignment>>(
+    "/admin/personnel/visibility/assignments",
+    { query: params },
+  );
+}
+
+export async function createPersonnelVisibilityAssignment(
+  body: PersonnelVisibilityCreate,
+): Promise<PersonnelVisibilityAssignment> {
+  return apiFetchJson<PersonnelVisibilityAssignment>("/admin/personnel/visibility/assignments", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function revokePersonnelVisibilityAssignment(
+  assignmentId: number,
+  reason?: string,
+): Promise<PersonnelVisibilityAssignment> {
+  return apiFetchJson<PersonnelVisibilityAssignment>(
+    `/admin/personnel/visibility/assignments/${assignmentId}/revoke`,
+    { method: "POST", body: { reason: reason ?? null } },
+  );
+}
+
+export async function fetchEffectivePersonnelVisibility(
+  userId: number,
+): Promise<EffectivePersonnelVisibility> {
+  return apiFetchJson<EffectivePersonnelVisibility>("/admin/personnel/visibility/effective", {
+    query: { user_id: userId },
+  });
+}

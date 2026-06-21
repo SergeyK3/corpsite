@@ -9,12 +9,14 @@ import AssignmentsTab from "./tabs/AssignmentsTab";
 import AuditTab from "./tabs/AuditTab";
 import EnrollmentTab from "./tabs/EnrollmentTab";
 import UsersTab from "./tabs/UsersTab";
+import VisibilityTab from "./tabs/VisibilityTab";
 
-type MainTab = "users" | "access" | "enrollment" | "assignments" | "audit";
+type MainTab = "users" | "access" | "enrollment" | "assignments" | "audit" | "visibility";
 
 const TABS: { id: MainTab; label: string }[] = [
   { id: "users", label: "Пользователи" },
   { id: "access", label: "Доступы" },
+  { id: "visibility", label: "Видимость персонала" },
   { id: "enrollment", label: "Enrollment" },
   { id: "assignments", label: "Назначения" },
   { id: "audit", label: "Аудит безопасности" },
@@ -65,6 +67,7 @@ export default function SystemAdminClient() {
       <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950">
         {activeTab === "users" ? <UsersTab /> : null}
         {activeTab === "access" ? <AccessTab /> : null}
+        {activeTab === "visibility" ? <VisibilityTab /> : null}
         {activeTab === "enrollment" ? <EnrollmentTab /> : null}
         {activeTab === "assignments" ? <AssignmentsTab /> : null}
         {activeTab === "audit" ? <AuditTab /> : null}
