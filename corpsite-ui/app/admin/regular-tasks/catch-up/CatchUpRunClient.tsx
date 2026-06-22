@@ -4,12 +4,25 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import React from "react";
 
+import CatchUpReviewPanel from "./CatchUpReviewPanel";
+
 import {
   apiCatchUpRegularTasks,
   apiFetchJson,
+  apiGetRegularTaskRunItems,
   type CatchUpPreset,
   type CatchUpRegularTasksParams,
+  type CatchUpRegularTasksResult,
 } from "@/lib/api";
+import {
+  buildCatchUpPayload,
+  pastWeekPresetHint,
+  payloadsEquivalent,
+  resolveDefaultScheduleType,
+  validateCatchUpForm,
+  type CatchUpFormState,
+  type CatchUpScheduleType,
+} from "@/lib/catchUpWorkflow";
 import {
   buildOrgUnitSelectGroups,
   loadOrgUnitSelectOptions,
@@ -17,10 +30,10 @@ import {
 } from "@/lib/orgUnitsSelect";
 import {
   formatThrownError,
-  runTitleLabel,
   scheduleTypeLabel,
   uiFieldLabel,
 } from "@/lib/i18n";
+import type { RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
 
 type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 
@@ -33,12 +46,36 @@ type DeptGroupsResponse = {
   items?: DeptGroupRow[];
 };
 
+type RoleRow = {
+  role_id: number;
+  name?: string | null;
+  code?: string | null;
+};
+
+type RolesResponse = {
+  items?: RoleRow[];
+};
+
 const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string }> = [
   { value: "all", label: "Все группы отделений" },
   { value: "clinical", label: "Клинические" },
   { value: "paraclinical", label: "Параклинические" },
   { value: "admin", label: "Административно-хозяйственные" },
 ];
+
+const SCHEDULE_TYPE_OPTIONS: Array<{ value: CatchUpScheduleType; label: string }> = [
+  { value: "weekly", label: scheduleTypeLabel("weekly") },
+  { value: "monthly", label: scheduleTypeLabel("monthly") },
+  { value: "yearly", label: scheduleTypeLabel("yearly") },
+];
+
+const WORKFLOW_STEPS = [
+  { id: 1, label: "Dry Run" },
+  { id: 2, label: "Review" },
+  { id: 3, label: "Confirm" },
+  { id: 4, label: "Execute" },
+  { id: 5, label: "Journal" },
+] as const;
 
 function readEnvGroupId(name: string, fallback: number): number {
   const raw = String(process.env[name] ?? "").trim();
@@ -72,30 +109,47 @@ function resolveOrgGroupId(filter: OrgGroupFilter, deptGroups: DeptGroupRow[]): 
   return envId;
 }
 
-type CatchUpResult = {
-  run_id: number;
-  dry_run: boolean;
-  resolved?: {
-    preset?: string;
-    run_for_date?: string;
-    schedule_type?: string | null;
-    org_group_id?: number | null;
-    org_unit_id?: number | null;
-    templates_in_scope?: number;
-  };
-  stats?: {
-    templates_total?: number;
-    templates_due?: number;
-    created?: number;
-    deduped?: number;
-    errors?: number;
-  };
-};
-
 function presetLabel(p: CatchUpPreset): string {
   if (p === "past_week") return `Прошлая неделя (${scheduleTypeLabel("weekly")})`;
   if (p === "past_month") return `Прошлый месяц (${scheduleTypeLabel("monthly")})`;
   return "Ручная дата";
+}
+
+function resolveActiveStep(params: {
+  previewResult: CatchUpRegularTasksResult | null;
+  previewItems: RegularTaskRunItemRow[];
+  reviewConfirmed: boolean;
+  liveResult: CatchUpRegularTasksResult | null;
+}): number {
+  if (params.liveResult) return 5;
+  if (params.previewResult && params.reviewConfirmed) return 4;
+  if (params.previewResult && params.previewItems.length >= 0) return 2;
+  return 1;
+}
+
+function WorkflowStepper({ activeStep }: { activeStep: number }) {
+  return (
+    <ol className="flex flex-wrap gap-2" data-testid="catch-up-workflow-steps">
+      {WORKFLOW_STEPS.map((step) => {
+        const done = activeStep > step.id;
+        const current = activeStep === step.id;
+        return (
+          <li
+            key={step.id}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              current
+                ? "bg-blue-600 text-white"
+                : done
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                  : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+            }`}
+          >
+            {step.id}. {step.label}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export default function CatchUpRunClient() {
@@ -104,26 +158,31 @@ export default function CatchUpRunClient() {
 
   const [preset, setPreset] = React.useState<CatchUpPreset>("past_week");
   const [manualDate, setManualDate] = React.useState("");
+  const [scheduleType, setScheduleType] = React.useState<CatchUpScheduleType>("weekly");
   const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
   const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
+  const [executorRoleId, setExecutorRoleId] = React.useState("");
+  const [roleOptions, setRoleOptions] = React.useState<RoleRow[]>([]);
+  const [rolesLoading, setRolesLoading] = React.useState(false);
   const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitSelectOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
   const [ownerUnitLoadError, setOwnerUnitLoadError] = React.useState<string | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
-  const [previewResult, setPreviewResult] = React.useState<CatchUpResult | null>(null);
-  const [liveResult, setLiveResult] = React.useState<CatchUpResult | null>(null);
+  const [previewResult, setPreviewResult] = React.useState<CatchUpRegularTasksResult | null>(null);
+  const [previewItems, setPreviewItems] = React.useState<RegularTaskRunItemRow[]>([]);
+  const [previewItemsError, setPreviewItemsError] = React.useState<string | null>(null);
+  const [lockedPayload, setLockedPayload] = React.useState<CatchUpRegularTasksParams | null>(null);
+  const [reviewConfirmed, setReviewConfirmed] = React.useState(false);
+  const [liveResult, setLiveResult] = React.useState<CatchUpRegularTasksResult | null>(null);
+  const [liveItems, setLiveItems] = React.useState<RegularTaskRunItemRow[]>([]);
 
   const selectedOrgGroupId = React.useMemo(
     () => resolveOrgGroupId(orgGroup, deptGroups),
     [orgGroup, deptGroups],
   );
-
-  const selectedOrgGroupLabel = React.useMemo(() => {
-    return ORG_GROUP_OPTIONS.find((x) => x.value === orgGroup)?.label ?? null;
-  }, [orgGroup]);
 
   const parsedOrgUnitId = React.useMemo(() => {
     const s = (orgUnitId || orgUnitFromUrl).trim();
@@ -132,9 +191,50 @@ export default function CatchUpRunClient() {
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
   }, [orgUnitId, orgUnitFromUrl]);
 
+  const parsedExecutorRoleId = React.useMemo(() => {
+    const s = executorRoleId.trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  }, [executorRoleId]);
+
+  const formState = React.useMemo<CatchUpFormState>(
+    () => ({
+      preset,
+      manualDate,
+      scheduleType,
+      orgGroupId: selectedOrgGroupId,
+      orgUnitId: parsedOrgUnitId,
+      executorRoleId: parsedExecutorRoleId,
+    }),
+    [preset, manualDate, scheduleType, selectedOrgGroupId, parsedOrgUnitId, parsedExecutorRoleId],
+  );
+
+  const activeStep = resolveActiveStep({
+    previewResult,
+    previewItems,
+    reviewConfirmed,
+    liveResult,
+  });
+
+  const payloadDrift =
+    lockedPayload != null &&
+    previewResult != null &&
+    !payloadsEquivalent(lockedPayload, buildCatchUpPayload(formState, true));
+
   React.useEffect(() => {
     setOrgUnitId(orgUnitFromUrl);
   }, [orgUnitFromUrl]);
+
+  const resetWorkflow = React.useCallback(() => {
+    setPreviewResult(null);
+    setPreviewItems([]);
+    setPreviewItemsError(null);
+    setLockedPayload(null);
+    setReviewConfirmed(false);
+    setLiveResult(null);
+    setLiveItems([]);
+  }, []);
 
   const groupLabelById = React.useMemo(() => {
     const map = new Map<number, string>();
@@ -209,6 +309,37 @@ export default function CatchUpRunClient() {
   }, []);
 
   React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setRolesLoading(true);
+      try {
+        const data = await apiFetchJson<RolesResponse>("/directory/roles", {
+          query: { status: "active", limit: 200 },
+        });
+        const rows = Array.isArray(data?.items) ? data.items : [];
+        if (!cancelled) {
+          setRoleOptions(
+            rows
+              .map((r) => ({
+                role_id: Number(r.role_id),
+                name: r.name ?? null,
+                code: r.code ?? null,
+              }))
+              .filter((r) => Number.isFinite(r.role_id) && r.role_id > 0),
+          );
+        }
+      } catch {
+        if (!cancelled) setRoleOptions([]);
+      } finally {
+        if (!cancelled) setRolesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
     if (!orgUnitId.trim()) return;
     const selectedId = Number(orgUnitId);
     if (!Number.isFinite(selectedId) || selectedId <= 0) return;
@@ -217,38 +348,19 @@ export default function CatchUpRunClient() {
     }
   }, [filteredOwnerUnitOptions, orgUnitId]);
 
-  const buildPayload = React.useCallback(
-    (dryRun: boolean): CatchUpRegularTasksParams => {
-      const payload: CatchUpRegularTasksParams = {
-        dry_run: dryRun,
-        preset,
-      };
-      if (preset === "manual") {
-        payload.run_for_date = manualDate.trim();
-      }
-      if (selectedOrgGroupId != null) {
-        payload.org_group_id = selectedOrgGroupId;
-      }
-      if (parsedOrgUnitId != null) {
-        payload.org_unit_id = parsedOrgUnitId;
-      }
-      return payload;
-    },
-    [preset, manualDate, selectedOrgGroupId, parsedOrgUnitId],
-  );
+  function handlePresetChange(next: CatchUpPreset) {
+    setPreset(next);
+    setScheduleType(resolveDefaultScheduleType(next));
+    resetWorkflow();
+  }
 
-  const validateForm = React.useCallback((): string | null => {
-    if (preset === "manual" && !manualDate.trim()) {
-      return "Укажите дату для ручного пресета.";
-    }
-    if (preset === "manual" && Number.isNaN(Date.parse(manualDate.trim()))) {
-      return "Некорректная дата (ожидается YYYY-MM-DD).";
-    }
-    return null;
-  }, [preset, manualDate]);
+  async function loadRunItems(runId: number): Promise<RegularTaskRunItemRow[]> {
+    const data = await apiGetRegularTaskRunItems({ run_id: runId });
+    return data as RegularTaskRunItemRow[];
+  }
 
   async function handlePreview() {
-    const validation = validateForm();
+    const validation = validateCatchUpForm(formState);
     if (validation) {
       setSubmitError(validation);
       return;
@@ -256,11 +368,23 @@ export default function CatchUpRunClient() {
 
     setSubmitting(true);
     setSubmitError(null);
-    setPreviewResult(null);
+    resetWorkflow();
+
+    const payload = buildCatchUpPayload(formState, true);
 
     try {
-      const result = await apiCatchUpRegularTasks(buildPayload(true));
+      const result = await apiCatchUpRegularTasks(payload);
       setPreviewResult(result);
+      setLockedPayload(payload);
+
+      try {
+        const items = await loadRunItems(result.run_id);
+        setPreviewItems(items);
+      } catch (err) {
+        setPreviewItemsError(
+          formatThrownError(err, { fallback: "Пробный прогон выполнен, но items не загрузились." }),
+        );
+      }
     } catch (err) {
       setSubmitError(formatThrownError(err, { fallback: "Не удалось выполнить пробный прогон." }));
     } finally {
@@ -269,27 +393,32 @@ export default function CatchUpRunClient() {
   }
 
   async function handleLiveRun() {
-    const validation = validateForm();
-    if (validation) {
-      setSubmitError(validation);
-      return;
-    }
-    if (!previewResult) {
+    if (!lockedPayload || !previewResult) {
       setSubmitError("Сначала выполните пробный прогон.");
       return;
     }
-
-    const ok = window.confirm(
-      "Боевой догоняющий запуск создаст задачи в базе.\n\nПеред этим на VPS должен быть выполнен backup (scripts/backup_db.sh).\n\nПродолжить?",
-    );
-    if (!ok) return;
+    if (!reviewConfirmed) {
+      setSubmitError("Подтвердите проверку результата пробного прогона.");
+      return;
+    }
+    if (payloadDrift) {
+      setSubmitError("Параметры формы изменились после пробного прогона. Выполните пробный прогон заново.");
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);
 
     try {
-      const result = await apiCatchUpRegularTasks(buildPayload(false));
+      const result = await apiCatchUpRegularTasks({ ...lockedPayload, dry_run: false });
       setLiveResult(result);
+
+      try {
+        const items = await loadRunItems(result.run_id);
+        setLiveItems(items);
+      } catch {
+        setLiveItems([]);
+      }
     } catch (err) {
       setSubmitError(formatThrownError(err, { fallback: "Не удалось выполнить боевой прогон." }));
     } finally {
@@ -297,61 +426,17 @@ export default function CatchUpRunClient() {
     }
   }
 
-  function renderResult(title: string, result: CatchUpResult | null) {
-    if (!result) return null;
-    const resolved = result.resolved ?? {};
-    const stats = result.stats ?? {};
-
-    return (
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-3 text-sm">
-        <div className="font-medium text-zinc-900 dark:text-zinc-50">{title}</div>
-        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-zinc-700 dark:text-zinc-300">
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">{uiFieldLabel("run_id")}:</span> {result.run_id}
-          </div>
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">дата:</span> {resolved.run_for_date ?? "—"}
-          </div>
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">тип:</span>{" "}
-            {scheduleTypeLabel(resolved.schedule_type) || "—"}
-          </div>
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">шаблонов:</span>{" "}
-            {resolved.templates_in_scope ?? stats.templates_total ?? 0}
-          </div>
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">создано:</span> {stats.created ?? 0}
-          </div>
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">дедуп:</span> {stats.deduped ?? 0}
-          </div>
-          <div>
-            <span className="text-zinc-500 dark:text-zinc-400">ошибки:</span> {stats.errors ?? 0}
-          </div>
-        </div>
-        {result.run_id ? (
-          <div className="mt-2">
-            <Link
-              href={`/regular-task-runs?run_id=${result.run_id}`}
-              className="text-blue-600 hover:underline dark:text-blue-400"
-            >
-              Открыть журнал — {runTitleLabel(result.run_id)}
-            </Link>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 md:p-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Догоняющий запуск</h1>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
+      <div className="flex flex-col gap-3">
+        <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Догоняющий запуск
+        </h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Разовый прогон регулярных задач для обучения персонала: один run, фильтр по отделению, все активные
-          шаблоны в scope (без проверки due-check). Сначала пробный прогон, затем боевой — после backup на VPS.
+          Безопасный workflow: пробный прогон → проверка периода и items → подтверждение → боевой запуск →
+          журнал. SSH и curl не требуются.
         </p>
+        <WorkflowStepper activeStep={activeStep} />
         <div className="flex flex-wrap gap-2 text-sm">
           <Link href="/admin/regular-tasks" className="text-blue-600 hover:underline dark:text-blue-400">
             Шаблоны регулярных задач
@@ -364,46 +449,70 @@ export default function CatchUpRunClient() {
       </div>
 
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">1. Параметры и пробный прогон</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">Период</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">Период (preset)</span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={preset}
-              onChange={(e) => setPreset(e.target.value as CatchUpPreset)}
+              onChange={(e) => handlePresetChange(e.target.value as CatchUpPreset)}
             >
               <option value="past_week">{presetLabel("past_week")}</option>
               <option value="past_month">{presetLabel("past_month")}</option>
               <option value="manual">{presetLabel("manual")}</option>
             </select>
+            {preset === "past_week" ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">{pastWeekPresetHint()}</span>
+            ) : null}
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">schedule_type</span>
+            <select
+              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
+              value={scheduleType}
+              onChange={(e) => {
+                setScheduleType(e.target.value as CatchUpScheduleType);
+                resetWorkflow();
+              }}
+            >
+              {SCHEDULE_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </label>
 
           {preset === "manual" ? (
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">Дата (YYYY-MM-DD)</span>
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">run_for_date</span>
               <input
                 type="date"
                 className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
                 value={manualDate}
-                onChange={(e) => setManualDate(e.target.value)}
+                onChange={(e) => {
+                  setManualDate(e.target.value);
+                  resetWorkflow();
+                }}
               />
             </label>
           ) : (
             <div className="flex flex-col justify-end text-sm text-zinc-600 dark:text-zinc-400">
-              Опорная дата вычисляется на backend автоматически.
+              run_for_date вычисляется на backend автоматически.
             </div>
           )}
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">Группа отделений</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">Группа отделений (опционально)</span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={orgGroup}
               onChange={(e) => {
                 setOrgGroup(e.target.value as OrgGroupFilter);
                 setOrgUnitId("");
-                setPreviewResult(null);
-                setLiveResult(null);
+                resetWorkflow();
               }}
             >
               {ORG_GROUP_OPTIONS.map((opt) => (
@@ -415,11 +524,16 @@ export default function CatchUpRunClient() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">{uiFieldLabel("owner_unit_id")}</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">
+              {uiFieldLabel("owner_unit_id")} (опционально)
+            </span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={orgUnitId}
-              onChange={(e) => setOrgUnitId(e.target.value)}
+              onChange={(e) => {
+                setOrgUnitId(e.target.value);
+                resetWorkflow();
+              }}
               disabled={ownerUnitLoading}
             >
               <option value="">Все отделения в группе</option>
@@ -433,45 +547,43 @@ export default function CatchUpRunClient() {
                 </optgroup>
               ))}
             </select>
-            {ownerUnitLoading ? (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">Загрузка отделений...</span>
-            ) : null}
             {ownerUnitLoadError ? (
               <span className="text-xs text-red-600 dark:text-red-400">{ownerUnitLoadError}</span>
             ) : null}
-            {!ownerUnitLoading && !ownerUnitLoadError && filteredOwnerUnitOptions.length === 0 ? (
-              <span className="text-xs text-amber-700 dark:text-amber-300">
-                {ownerUnitOptions.length === 0
-                  ? "Список отделений пуст. Откройте /directory/org-units под admin и проверьте, что API возвращает items."
-                  : selectedOrgGroupId != null
-                    ? `В группе «${selectedOrgGroupLabel}» нет отделений (загружено всего: ${ownerUnitOptions.length}).`
-                    : "Нет отделений для выбора."}
-              </span>
-            ) : null}
-            {!ownerUnitLoading && !ownerUnitLoadError && filteredOwnerUnitOptions.length > 0 ? (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Доступно отделений: {filteredOwnerUnitOptions.length}
-              </span>
-            ) : null}
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">
+              {uiFieldLabel("executor_role_id")} (опционально)
+            </span>
+            <select
+              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
+              value={executorRoleId}
+              onChange={(e) => {
+                setExecutorRoleId(e.target.value);
+                resetWorkflow();
+              }}
+              disabled={rolesLoading}
+            >
+              <option value="">Все роли</option>
+              {roleOptions.map((role) => (
+                <option key={role.role_id} value={String(role.role_id)}>
+                  {(role.name || role.code || `#${role.role_id}`) + ` (#${role.role_id})`}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4">
           <button
             type="button"
             disabled={submitting}
             onClick={handlePreview}
             className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
+            data-testid="catch-up-dry-run"
           >
             {submitting ? "Выполняется..." : "Пробный прогон"}
-          </button>
-          <button
-            type="button"
-            disabled={submitting || !previewResult}
-            onClick={handleLiveRun}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Боевой прогон
           </button>
         </div>
 
@@ -480,10 +592,74 @@ export default function CatchUpRunClient() {
             {submitError}
           </div>
         ) : null}
+
+        {payloadDrift ? (
+          <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-900/55 bg-amber-50 dark:bg-amber-950/35 p-3 text-sm text-amber-800 dark:text-amber-200">
+            Параметры формы изменились после пробного прогона. Повторите пробный прогон перед боевым запуском.
+          </div>
+        ) : null}
       </section>
 
-      {renderResult("Результат пробного прогона", previewResult)}
-      {renderResult("Результат боевого прогона", liveResult)}
+      {previewResult ? (
+        <>
+          <CatchUpReviewPanel
+            title="2. Результат пробного прогона"
+            result={previewResult}
+            items={previewItems}
+            isDryRunPreview
+            showJournalLink={false}
+          />
+          {previewItemsError ? (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-900/55 bg-amber-50 dark:bg-amber-950/35 p-3 text-sm text-amber-800 dark:text-amber-200">
+              {previewItemsError}
+            </div>
+          ) : null}
+
+          <section
+            className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm"
+            data-testid="catch-up-confirm-section"
+          >
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">3. Подтверждение перед боевым запуском</h2>
+            <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+              Рекомендуется выполнить резервную копию БД перед боевым запуском (на VPS:{" "}
+              <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-950/50">scripts/backup_db.sh</code>
+              ).
+            </p>
+            <label className="mt-4 flex items-start gap-2 text-sm text-zinc-800 dark:text-zinc-200">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={reviewConfirmed}
+                onChange={(e) => setReviewConfirmed(e.target.checked)}
+                data-testid="catch-up-review-confirmed"
+              />
+              <span>Я проверил результат пробного прогона (период, шаблоны, due_date).</span>
+            </label>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                disabled={submitting || !reviewConfirmed || payloadDrift}
+                onClick={handleLiveRun}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="catch-up-execute"
+              >
+                {submitting ? "Выполняется..." : "Выполнить боевой запуск"}
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {liveResult ? (
+        <CatchUpReviewPanel
+          title="4–5. Результат боевого прогона"
+          result={liveResult}
+          items={liveItems}
+          isDryRunPreview={false}
+          showJournalLink
+        />
+      ) : null}
     </div>
   );
 }

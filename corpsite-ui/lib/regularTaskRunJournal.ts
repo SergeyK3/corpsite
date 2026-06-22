@@ -61,6 +61,7 @@ export type RunItemMeta = {
   period_start?: string | null;
   period_end?: string | null;
   template_title?: string | null;
+  report_code?: string | null;
   title_final?: string | null;
   task_title?: string | null;
   due_date?: string | null;
