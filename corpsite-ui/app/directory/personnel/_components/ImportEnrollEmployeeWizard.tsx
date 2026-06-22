@@ -29,8 +29,31 @@ type Step = 1 | 2 | 3;
 
 type PositionOptionSource = {
   id?: number | string | null;
+  position_id?: number | string | null;
   name?: string | null;
 };
+
+type PositionOption = {
+  id: number;
+  label: string;
+};
+
+function normalizePositionOptions(raw: unknown): PositionOption[] {
+  const items = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as { items?: unknown[] }).items)
+      ? (raw as { items: unknown[] }).items
+      : [];
+
+  return items
+    .map((p: PositionOptionSource) => {
+      const id = Number(p?.position_id ?? p?.id ?? 0);
+      const label = String(p?.name ?? `#${id}`).trim();
+      return { id, label } as PositionOption;
+    })
+    .filter((p) => Number.isFinite(p.id) && p.id > 0)
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+}
 
 function flattenOrgUnits(nodes: TreeNode[], depth = 0): Array<{ id: number; label: string }> {
   const out: Array<{ id: number; label: string }> = [];
@@ -106,7 +129,9 @@ export default function ImportEnrollEmployeeWizard({
   const [employmentRate, setEmploymentRate] = React.useState("1");
   const [confirmChecked, setConfirmChecked] = React.useState(false);
   const [orgUnitOptions, setOrgUnitOptions] = React.useState<Array<{ id: number; label: string }>>([]);
-  const [positionOptions, setPositionOptions] = React.useState<Array<{ id: number; label: string }>>([]);
+  const [positionOptions, setPositionOptions] = React.useState<PositionOption[]>([]);
+  const [unitPositionsLoading, setUnitPositionsLoading] = React.useState(false);
+  const [positionValidationMessage, setPositionValidationMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setStep(1);
@@ -117,6 +142,8 @@ export default function ImportEnrollEmployeeWizard({
     setFullName(record.full_name || "");
     setOrgUnitId("");
     setPositionId("");
+    setPositionOptions([]);
+    setPositionValidationMessage(null);
     setDateFrom(todayIsoDate());
     setEmploymentRate("1");
     setConfirmChecked(false);
@@ -126,34 +153,65 @@ export default function ImportEnrollEmployeeWizard({
     let cancelled = false;
     void (async () => {
       try {
-        const [tree, positions] = await Promise.all([
-          getOrgUnitsTree({ include_inactive: false }),
-          getPositions({ limit: 500 }),
-        ]);
+        const tree = await getOrgUnitsTree({ include_inactive: false });
         if (cancelled) return;
         setOrgUnitOptions(flattenOrgUnits(tree.items ?? []));
-        const posItems: PositionOptionSource[] = Array.isArray(positions?.items)
-          ? (positions.items as PositionOptionSource[])
-          : Array.isArray(positions)
-            ? (positions as PositionOptionSource[])
-            : [];
-        setPositionOptions(
-          posItems
-            .filter((p: PositionOptionSource) => p.id != null)
-            .map((p: PositionOptionSource) => ({ id: Number(p.id), label: String(p.name ?? `#${p.id}`) }))
-            .sort((a, b) => a.label.localeCompare(b.label, "ru"))
-        );
       } catch {
-        if (!cancelled) {
-          setOrgUnitOptions([]);
-          setPositionOptions([]);
-        }
+        if (!cancelled) setOrgUnitOptions([]);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    const unitId = orgUnitId.trim();
+    if (!unitId) {
+      setPositionOptions([]);
+      setUnitPositionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setUnitPositionsLoading(true);
+
+    void (async () => {
+      try {
+        const raw = await getPositions({ org_unit_id: Number(unitId), limit: 500 });
+        if (cancelled) return;
+        setPositionOptions(normalizePositionOptions(raw));
+      } catch {
+        if (!cancelled) setPositionOptions([]);
+      } finally {
+        if (!cancelled) setUnitPositionsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orgUnitId]);
+
+  function handleOrgUnitChange(nextOrgUnitId: string) {
+    if (positionId) {
+      setPositionValidationMessage("Выбранная должность сброшена — выберите должность для нового отделения");
+    } else {
+      setPositionValidationMessage(null);
+    }
+    setPositionId("");
+    setOrgUnitId(nextOrgUnitId);
+  }
+
+  function positionSelectPlaceholder(): string {
+    if (!orgUnitId.trim()) return "Сначала выберите отделение";
+    if (unitPositionsLoading) return "Загрузка должностей…";
+    if (positionOptions.length === 0) return "Нет доступных должностей для выбранного отделения";
+    return "Выберите должность";
+  }
+
+  const positionSelectDisabled =
+    !orgUnitId.trim() || unitPositionsLoading || positionOptions.length === 0;
 
   React.useEffect(() => {
     const hint = dryRunResult?.preview?.org_unit_hint;
@@ -439,7 +497,7 @@ export default function ImportEnrollEmployeeWizard({
             <span className="text-xs font-medium text-zinc-500">Отделение *</span>
             <select
               value={orgUnitId}
-              onChange={(e) => setOrgUnitId(e.target.value)}
+              onChange={(e) => handleOrgUnitChange(e.target.value)}
               className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             >
               <option value="">Выберите отделение</option>
@@ -459,16 +517,23 @@ export default function ImportEnrollEmployeeWizard({
             <span className="text-xs font-medium text-zinc-500">Должность *</span>
             <select
               value={positionId}
-              onChange={(e) => setPositionId(e.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+              onChange={(e) => {
+                setPositionId(e.target.value);
+                setPositionValidationMessage(null);
+              }}
+              disabled={positionSelectDisabled}
+              className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              <option value="">Выберите должность</option>
+              <option value="">{positionSelectPlaceholder()}</option>
               {positionOptions.map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.label}
                 </option>
               ))}
             </select>
+            {positionValidationMessage ? (
+              <span className="text-xs text-amber-700 dark:text-amber-300">{positionValidationMessage}</span>
+            ) : null}
             {dryRunResult?.preview?.position_hint?.value ? (
               <span className="text-xs text-blue-600 dark:text-blue-400">
                 Из импорта: {dryRunResult.preview.position_hint.value}
