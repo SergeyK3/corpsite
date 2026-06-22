@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
 import ImportProfileCardSections from "./ImportProfileCardSections";
 import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
 import { buildHrChangeEventsHref } from "../_lib/hrChangeEventsApi.client";
@@ -98,7 +99,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
     if (isDirty && !window.confirm("Есть несохранённые изменения. Закрыть карту без сохранения?")) {
       return;
     }
-    router.push("/directory/personnel");
+    router.push(HR_PROCESSES_NAV_HREF);
   }
 
   async function handleSave() {

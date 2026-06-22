@@ -7,7 +7,7 @@ import {
   canSeePersonnelDirectoryNav,
   isHrProcessesRoute,
   isPersonnelDirectoryRoute,
-  PERSONNEL_DIRECTORY_NAV_HREF,
+  PERSONNEL_DIRECTORY_NAV_ITEM,
 } from "./personnelNav";
 
 /** ADR-042 E1 — org sidebar / personnel directory (not full admin shell). */
@@ -63,11 +63,7 @@ export type VisibilityNavItem = {
 };
 
 export const VISIBILITY_DIRECTORY_NAV: VisibilityNavItem[] = [
-  {
-    href: PERSONNEL_DIRECTORY_NAV_HREF,
-    title: "Персонал",
-    matchPrefixes: ["/directory/staff", "/directory/employees"],
-  },
+  PERSONNEL_DIRECTORY_NAV_ITEM,
   {
     href: "/directory/contacts",
     title: "Контакты",

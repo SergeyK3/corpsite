@@ -22,12 +22,14 @@ import {
   shouldShowOrgUnitsPanel,
 } from "@/lib/visibilityNav";
 import {
-  canSeeHrProcessesNav,
-  canSeePersonnelDirectoryNav,
-  HR_PROCESSES_NAV_HREF,
+  buildPersonnelSidebarNavItems,
+  buildVisibilityDirectoryNavItems,
+  HR_PROCESSES_NAV_ITEM,
   isHrProcessesRoute,
   isPersonnelDirectoryRoute,
-  PERSONNEL_DIRECTORY_NAV_HREF,
+  PERSONNEL_DIRECTORY_NAV_ITEM,
+  resolveDirectoryOrgTreeBasePath,
+  shouldShowPrimaryAdminNavItem,
 } from "@/lib/personnelNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
@@ -86,16 +88,8 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     title: "Контакты",
     matchPrefixes: ["/directory/contacts"],
   },
-  {
-    href: PERSONNEL_DIRECTORY_NAV_HREF,
-    title: "Персонал",
-    matchPrefixes: ["/directory/staff", "/directory/employees"],
-  },
-  {
-    href: HR_PROCESSES_NAV_HREF,
-    title: "Кадровые процессы",
-    matchPrefixes: ["/directory/personnel"],
-  },
+  PERSONNEL_DIRECTORY_NAV_ITEM,
+  HR_PROCESSES_NAV_ITEM,
 ];
 
 const SECONDARY_DIRECTORY_NAV: NavItem[] = [
@@ -157,7 +151,7 @@ function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] })
 
         return (
           <Link
-            key={it.href}
+            key={`${it.href}::${it.title}`}
             href={it.href}
             className={[
               "block rounded-lg border px-2.5 py-1 text-sm leading-tight transition",
@@ -288,55 +282,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPersonnelIdentityOperationsNav = canSeePersonnelIdentityOperationsNav(me);
 
   const sidebarNavItems = useMemo(() => {
-    return PRIMARY_ADMIN_NAV.filter((item) => {
-      if (item.href === "/admin/system/personnel-lifecycle") return showPersonnelLifecycleNav;
-      if (item.href === "/admin/system/personnel-identity/operations") {
-        return showPersonnelIdentityOperationsNav;
-      }
-      if (item.href === "/admin/system") return showSysadminNav;
-      if (item.href === PERSONNEL_DIRECTORY_NAV_HREF) return canSeePersonnelDirectoryNav(me);
-      if (item.href === HR_PROCESSES_NAV_HREF) return canSeeHrProcessesNav(me);
-      return isAdmin;
-    });
+    return PRIMARY_ADMIN_NAV.filter((item) =>
+      shouldShowPrimaryAdminNavItem(item, me, {
+        isAdmin,
+        showSysadminNav,
+        showPersonnelLifecycleNav,
+        showPersonnelIdentityOperationsNav,
+      }),
+    );
   }, [isAdmin, me, showPersonnelIdentityOperationsNav, showPersonnelLifecycleNav, showSysadminNav]);
 
   const visibilityNavItems = useMemo(() => {
-    const items: NavItem[] = [];
-    if (canViewPersonnelTasksReadOnly(me)) {
-      items.push({
-        href: "/tasks",
-        title: "Задачи (просмотр)",
-        matchPrefixes: ["/tasks"],
-      });
-    }
-    if (canSeePersonnelDirectoryNav(me)) {
-      items.push({
-        href: PERSONNEL_DIRECTORY_NAV_HREF,
-        title: "Персонал",
-        matchPrefixes: ["/directory/staff", "/directory/employees"],
-      });
-    }
-    if (canSeeHrProcessesNav(me)) {
-      items.push({
-        href: HR_PROCESSES_NAV_HREF,
-        title: "Кадровые процессы",
-        matchPrefixes: ["/directory/personnel"],
-      });
-    }
-    items.push(
-      {
-        href: "/directory/contacts",
-        title: "Контакты",
-        matchPrefixes: ["/directory/contacts"],
-      },
-      {
-        href: "/directory/positions",
-        title: "Должности",
-        matchPrefixes: ["/directory/positions"],
-      },
-    );
-    return items;
+    return buildVisibilityDirectoryNavItems(me, {
+      includeTasksReadOnly: canViewPersonnelTasksReadOnly(me),
+    });
   }, [me]);
+
+  const hrDirectoryNavItems = useMemo(() => buildPersonnelSidebarNavItems(me), [me]);
 
   const forbiddenNonAdminRoute =
     !loading && !!me && !canAccessDirectoryRoute(pathname, me) && isForbiddenAdminRoute(pathname, me);
@@ -357,27 +319,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showHrDirectoryOnly =
     !isAdmin &&
     !showPersonnelVisibility &&
-    (canSeeHrProcessesNav(me) || canSeePersonnelDirectoryNav(me)) &&
+    hrDirectoryNavItems.length > 0 &&
     (isHrProcessesRoute(pathname) || isPersonnelDirectoryRoute(pathname));
-
-  const hrDirectoryNavItems = useMemo((): NavItem[] => {
-    const items: NavItem[] = [];
-    if (canSeePersonnelDirectoryNav(me)) {
-      items.push({
-        href: PERSONNEL_DIRECTORY_NAV_HREF,
-        title: "Персонал",
-        matchPrefixes: ["/directory/staff", "/directory/employees"],
-      });
-    }
-    if (canSeeHrProcessesNav(me)) {
-      items.push({
-        href: HR_PROCESSES_NAV_HREF,
-        title: "Кадровые процессы",
-        matchPrefixes: ["/directory/personnel"],
-      });
-    }
-    return items;
-  }, [me]);
 
   useEffect(() => {
     if (isLogin || loading) return;
@@ -387,25 +330,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const showOrgUnitsPanel = useMemo(() => shouldShowOrgUnitsPanel(pathname, me), [me, pathname]);
 
-  const orgTreeBasePath = useMemo(() => {
-    if (pathname.startsWith("/tasks")) return "/tasks";
-    if (pathname.startsWith("/admin/regular-tasks/catch-up")) return "/admin/regular-tasks/catch-up";
-    if (pathname.startsWith("/admin/regular-tasks")) return "/admin/regular-tasks";
-    if (pathname.startsWith("/regular-tasks")) return "/regular-tasks";
-
-    if (pathname.startsWith("/directory/roles")) return "/directory/roles";
-    if (pathname.startsWith("/directory/positions")) return "/directory/positions";
-    if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
-    if (pathname.startsWith("/directory/staff")) return "/directory/staff";
-    if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
-    if (pathname.startsWith("/directory/working-contacts")) return "/directory/working-contacts";
-    if (pathname.startsWith("/directory/org-units")) return "/directory/org-units";
-    if (pathname.startsWith("/directory/org-unit-types")) return "/directory/org-units";
-    if (pathname.startsWith("/directory/org")) return "/directory/org";
-    if (pathname.startsWith("/directory/employees")) return "/directory/employees";
-
-    return pathname;
-  }, [pathname]);
+  const orgTreeBasePath = useMemo(() => resolveDirectoryOrgTreeBasePath(pathname), [pathname]);
 
   if (isLogin) return <>{children}</>;
 

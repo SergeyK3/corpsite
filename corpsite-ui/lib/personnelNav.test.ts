@@ -2,11 +2,21 @@
 import { describe, expect, it } from "vitest";
 
 import type { MeInfo } from "./types";
+import { canSeeSysadminCabinetNav } from "./adminNav";
 import {
+  buildPersonnelSidebarNavItems,
+  buildVisibilityDirectoryNavItems,
   canSeeHrProcessesNav,
   canSeePersonnelDirectoryNav,
+  HR_PROCESSES_NAV_HREF,
+  HR_PROCESSES_NAV_ITEM,
+  isDirectorySidebarNavItemActive,
   isHrProcessesRoute,
   isPersonnelDirectoryRoute,
+  isPersonnelDirectoryNavItem,
+  PERSONNEL_DIRECTORY_NAV_HREF,
+  PERSONNEL_DIRECTORY_NAV_ITEM,
+  resolveDirectoryOrgTreeBasePath,
   resolvePersonnelRootRedirect,
 } from "./personnelNav";
 
@@ -73,5 +83,65 @@ describe("personnelNav", () => {
       show_org_sidebar: true,
     };
     expect(resolvePersonnelRootRedirect(hrWithVisibility)).toBe("/directory/personnel/journal");
+  });
+
+  describe("ADR-045 sidebar nav contract", () => {
+    function findNav(title: string, items: { title: string; href: string }[]) {
+      return items.find((item) => item.title === title);
+    }
+
+    it("System Administrator sees Персонал → staff and Кадровые процессы → journal", () => {
+      const items = buildPersonnelSidebarNavItems(systemAdmin);
+      expect(findNav("Персонал", items)?.href).toBe("/directory/staff");
+      expect(findNav("Кадровые процессы", items)?.href).toBe("/directory/personnel/journal");
+      expect(items.filter((item) => item.title === "Персонал")).toHaveLength(1);
+      expect(items.some((item) => item.title === "Персонал" && item.href.startsWith("/directory/personnel"))).toBe(
+        false,
+      );
+    });
+
+    it("privileged System Administrator gets the same personnel split items", () => {
+      const items = buildPersonnelSidebarNavItems(privileged);
+      expect(findNav("Персонал", items)?.href).toBe(PERSONNEL_DIRECTORY_NAV_HREF);
+      expect(findNav("Кадровые процессы", items)?.href).toBe(HR_PROCESSES_NAV_HREF);
+    });
+
+    it("HR sees both personnel items but not System Administrator cabinet", () => {
+      const items = buildPersonnelSidebarNavItems(hrManager);
+      expect(findNav("Персонал", items)?.href).toBe("/directory/staff");
+      expect(findNav("Кадровые процессы", items)?.href).toBe("/directory/personnel/journal");
+      expect(canSeeSysadminCabinetNav(hrManager)).toBe(false);
+    });
+
+    it("visibility user sees only read-only Персонал in directory nav", () => {
+      const items = buildVisibilityDirectoryNavItems(headWithVisibility);
+      expect(findNav("Персонал", items)?.href).toBe("/directory/staff");
+      expect(findNav("Кадровые процессы", items)).toBeUndefined();
+      expect(canSeeSysadminCabinetNav(headWithVisibility)).toBe(false);
+    });
+
+    it("nav item constants are not cross-wired", () => {
+      expect(PERSONNEL_DIRECTORY_NAV_ITEM.title).toBe("Персонал");
+      expect(PERSONNEL_DIRECTORY_NAV_ITEM.href).toBe("/directory/staff");
+      expect(HR_PROCESSES_NAV_ITEM.title).toBe("Кадровые процессы");
+      expect(HR_PROCESSES_NAV_ITEM.href).toBe("/directory/personnel/journal");
+      expect(isPersonnelDirectoryNavItem(PERSONNEL_DIRECTORY_NAV_ITEM)).toBe(true);
+      expect(isPersonnelDirectoryNavItem(HR_PROCESSES_NAV_ITEM)).toBe(false);
+    });
+
+    it("org tree base path keeps legacy /directory/employees on staff", () => {
+      expect(resolveDirectoryOrgTreeBasePath("/directory/employees")).toBe("/directory/staff");
+      expect(resolveDirectoryOrgTreeBasePath("/directory/staff")).toBe("/directory/staff");
+      expect(resolveDirectoryOrgTreeBasePath("/directory/personnel/journal")).toBe("/directory/personnel");
+    });
+
+    it("active state does not cross-highlight staff vs HR routes", () => {
+      expect(isDirectorySidebarNavItemActive("/directory/staff", PERSONNEL_DIRECTORY_NAV_ITEM)).toBe(true);
+      expect(isDirectorySidebarNavItemActive("/directory/staff", HR_PROCESSES_NAV_ITEM)).toBe(false);
+      expect(isDirectorySidebarNavItemActive("/directory/personnel/journal", HR_PROCESSES_NAV_ITEM)).toBe(true);
+      expect(isDirectorySidebarNavItemActive("/directory/personnel/journal", PERSONNEL_DIRECTORY_NAV_ITEM)).toBe(
+        false,
+      );
+    });
   });
 });

@@ -4,6 +4,8 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
+import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
+
 import OperationsDashboard from "./OperationsDashboard";
 import OperationsItemDetailDrawer from "./OperationsItemDetailDrawer";
 import OperationsItemsTable from "./OperationsItemsTable";
@@ -62,8 +64,8 @@ export default function UserLinkageOperationsClient() {
             Кабинет системного администратора
           </Link>
           <span>/</span>
-          <Link href="/directory/personnel" className="hover:underline">
-            Кадры
+          <Link href={HR_PROCESSES_NAV_HREF} className="hover:underline">
+            Кадровые процессы
           </Link>
           <span>/</span>
           <span>Идентификация</span>
