@@ -5,10 +5,13 @@ import {
   buildItemOriginView,
   buildRunListEntry,
   buildRunSummary,
+  buildRunTaskListRows,
   fmtDate,
   itemOutcomeLabel,
   parseOriginMetadataText,
   resolveOccurrenceDate,
+  resolveRunTaskListState,
+  runTaskOutcomeLabel,
   type RegularTaskRunItemRow,
   type RegularTaskRunRow,
 } from "./regularTaskRunJournal";
@@ -155,6 +158,49 @@ describe("buildRunSummary", () => {
     expect(resolveOccurrenceDate(run.stats, items)).toBe("2026-06-01");
     const summary = buildRunSummary(run, items);
     expect(summary.occurrence_date).toBe("2026-06-01");
+  });
+});
+
+describe("buildRunTaskListRows", () => {
+  const item: RegularTaskRunItemRow = {
+    item_id: 5,
+    run_id: 1,
+    regular_task_id: 100,
+    status: "ok",
+    started_at: "2026-06-01",
+    executor_role_id: 2,
+    executor_role_name: "Амбулаторный эксперт",
+    is_due: true,
+    created_tasks: 0,
+    meta: {
+      task_title: "Амбулаторный эксперт",
+      due_date: "2026-06-24",
+      deduped: true,
+    },
+  };
+
+  it("builds operator-facing row labels from item meta", () => {
+    const [row] = buildRunTaskListRows([{ ...item, meta: { ...item.meta, task_id: 9001 } }]);
+    expect(row.task_title).toBe("Амбулаторный эксперт");
+    expect(row.executor_label).toBe("Амбулаторный эксперт");
+    expect(row.deadline_label).toBe(fmtDate("2026-06-24"));
+    expect(row.outcome_label).toBe("уже существовала");
+    expect(row.task_id).toBe(9001);
+    expect(row.task_href).toBe("/tasks?task_id=9001");
+    expect(runTaskOutcomeLabel(item)).toBe("уже существовала");
+  });
+
+  it("returns unavailable state for orphan runs without items", () => {
+    const run: RegularTaskRunRow = {
+      run_id: 9,
+      started_at: "2026-06-01",
+      status: "partial",
+      stats: { templates_due: 2, created: 1, deduped: 1, errors: 0 },
+      item_count: 0,
+      journal_warning: "warning",
+    };
+    const summary = buildRunSummary(run, []);
+    expect(resolveRunTaskListState(run, summary, [], false)).toEqual({ kind: "unavailable" });
   });
 });
 

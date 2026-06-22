@@ -56,13 +56,15 @@ const sampleItem: RegularTaskRunItemRow = {
   started_at: "2026-06-11T12:00:01+05:00",
   period_id: 77,
   executor_role_id: 3,
-  executor_role_name: "Медсестра",
+  executor_role_name: "Госпитальный эксперт",
   is_due: true,
   created_tasks: 1,
   meta: {
     occurrence_date: "2026-06-11",
     run_kind: "catch_up",
-    title_final: "Еженедельный отчёт",
+    task_title: "Госпитальный эксперт",
+    title_final: "Госпитальный эксперт",
+    due_date: "2026-06-24",
     title_suffix: "09.06.2026–15.06.2026",
     task_id: 9001,
     origin_metadata_text:
@@ -177,6 +179,48 @@ describe("RegularTaskRunsJournalView", () => {
     expect(screen.getByTestId("regular-task-run-journal-warning")).toHaveTextContent(
       "Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют.",
     );
+    expect(screen.getByTestId("regular-task-run-task-list-unavailable")).toHaveTextContent(
+      "Список задач недоступен: элементы журнала отсутствуют.",
+    );
+  });
+
+  it("renders human-readable task list row from run item meta", () => {
+    renderView({ items: [sampleItem] });
+    const row = screen.getByTestId("regular-task-run-task-row-101");
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("Госпитальный эксперт");
+    expect(cells[1]).toHaveTextContent("Госпитальный эксперт");
+    expect(cells[2]).toHaveTextContent("24.06.2026");
+    expect(cells[3]).toHaveTextContent("создана");
+    const link = screen.getByTestId("regular-task-run-task-open-101");
+    expect(link).toHaveTextContent("Открыть");
+    expect(link).toHaveAttribute("href", "/tasks?task_id=9001");
+  });
+
+  it("does not render open link when task_id is missing", () => {
+    const errorItem: RegularTaskRunItemRow = {
+      ...sampleItem,
+      item_id: 102,
+      status: "error",
+      created_tasks: 0,
+      error: "executor_role_id is required",
+      meta: {
+        task_title: "Ошибочная задача",
+        due_date: "2026-06-24",
+      },
+    };
+    renderView({ items: [errorItem] });
+    expect(screen.queryByTestId("regular-task-run-task-open-102")).not.toBeInTheDocument();
+    expect(screen.getByTestId("regular-task-run-task-open-unavailable-102")).toHaveTextContent("—");
+  });
+
+  it("keeps JSON details below the task list and items sections", () => {
+    renderView({ items: [sampleItem] });
+    const taskList = screen.getByTestId("regular-task-run-task-list");
+    const itemsSection = screen.getByTestId("regular-task-run-items-section");
+    const jsonDetails = screen.getByTestId("regular-task-run-json-details");
+    expect(taskList.compareDocumentPosition(itemsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(itemsSection.compareDocumentPosition(jsonDetails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("selects run from list", () => {

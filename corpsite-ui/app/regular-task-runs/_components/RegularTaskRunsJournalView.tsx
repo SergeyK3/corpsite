@@ -13,6 +13,7 @@ import {
   itemOutcomeTone,
   itemTitleLabel,
   periodLabel,
+  resolveRunTaskListState,
   roleLabel,
   type RegularTaskRunItemRow,
   type RegularTaskRunRow,
@@ -62,6 +63,21 @@ function SummaryField({ label, value }: { label: string; value: string }) {
       <div className="mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">{value}</div>
     </div>
   );
+}
+
+function runTaskOutcomeTone(outcome: string): string {
+  switch (outcome) {
+    case "created":
+      return "text-emerald-800 dark:text-emerald-200";
+    case "dedup":
+      return "text-amber-800 dark:text-amber-200";
+    case "error":
+      return "text-red-700 dark:text-red-300";
+    case "skip":
+      return "text-zinc-600 dark:text-zinc-400";
+    default:
+      return "text-zinc-800 dark:text-zinc-200";
+  }
 }
 
 function OriginCompact({ item }: { item: RegularTaskRunItemRow }) {
@@ -155,6 +171,10 @@ export function RegularTaskRunsJournalView({
   }, [items, onlyIssues, search]);
 
   const itemsEmptyMessage = resolveItemsEmptyMessage(items, filteredItems, onlyIssues, search);
+
+  const taskListState = useMemo(() => {
+    return resolveRunTaskListState(selectedRun, runSummary, items, itemsLoading);
+  }, [selectedRun, runSummary, items, itemsLoading]);
 
   return (
     <div className="space-y-4" data-testid="regular-task-runs-journal">
@@ -305,6 +325,101 @@ export function RegularTaskRunsJournalView({
               </div>
               </div>
             )}
+          </section>
+
+          <section
+            className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+            data-testid="regular-task-run-task-list"
+          >
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Задачи по запуску</h2>
+              <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
+                Созданные, найденные по дедупликации и проблемные задачи
+              </p>
+            </div>
+
+            {taskListState.kind === "select_run" ? (
+              <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+                Выберите запуск слева.
+              </div>
+            ) : null}
+
+            {taskListState.kind === "loading" ? (
+              <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка списка задач…</div>
+            ) : null}
+
+            {taskListState.kind === "unavailable" ? (
+              <div
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                data-testid="regular-task-run-task-list-unavailable"
+              >
+                Список задач недоступен: элементы журнала отсутствуют.
+              </div>
+            ) : null}
+
+            {taskListState.kind === "none_expected" ? (
+              <div
+                className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400"
+                data-testid="regular-task-run-task-list-empty"
+              >
+                По этому запуску задачи не создавались.
+              </div>
+            ) : null}
+
+            {taskListState.kind === "rows" ? (
+              <div
+                className="overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800"
+                data-testid="regular-task-run-task-list-table-wrap"
+              >
+                <table className="min-w-full text-sm" data-testid="regular-task-run-task-list-table">
+                  <thead className="bg-zinc-100 text-left dark:bg-zinc-900">
+                    <tr>
+                      <th className="min-w-[180px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Задача</th>
+                      <th className="min-w-[140px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                        Исполнитель
+                      </th>
+                      <th className="w-[110px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Дедлайн</th>
+                      <th className="w-[130px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Результат</th>
+                      <th className="w-[88px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Открыть</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {taskListState.rows.map((row) => (
+                      <tr
+                        key={row.item_id}
+                        data-testid={`regular-task-run-task-row-${row.item_id}`}
+                        className="border-t border-zinc-200 dark:border-zinc-800"
+                      >
+                        <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">{row.task_title}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.executor_label}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.deadline_label}</td>
+                        <td className={`px-3 py-2 text-xs font-medium ${runTaskOutcomeTone(row.outcome)}`}>
+                          {row.outcome_label}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {row.task_href ? (
+                            <Link
+                              href={row.task_href}
+                              className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+                              data-testid={`regular-task-run-task-open-${row.item_id}`}
+                            >
+                              Открыть
+                            </Link>
+                          ) : (
+                            <span
+                              className="text-zinc-500 dark:text-zinc-400"
+                              data-testid={`regular-task-run-task-open-unavailable-${row.item_id}`}
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </section>
 
           <section

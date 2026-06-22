@@ -10,6 +10,7 @@ import { isAuthed, logout } from "@/lib/auth";
 import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibraries";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
+import { parseTaskIdFromSearchParams } from "@/lib/taskNav";
 import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
@@ -330,6 +331,7 @@ export default function TasksPageClient() {
   const orgScope = readOrgScopeFromSearchParams(sp);
   const orgGroupId = orgScope.org_group_id;
   const orgUnitId = sp.get("org_unit_id") ?? "";
+  const deepLinkTaskId = React.useMemo(() => parseTaskIdFromSearchParams(sp), [sp]);
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
 
@@ -609,6 +611,21 @@ export default function TasksPageClient() {
     if (!ready) return;
     void loadItems();
   }, [ready, loadItems]);
+
+  React.useEffect(() => {
+    if (!ready || deepLinkTaskId == null) return;
+    if (selectedId === deepLinkTaskId && drawerOpen && drawerMode === "view") return;
+
+    setDrawerError(null);
+    setUiNotice("");
+    setReason("");
+    setSelectedId(deepLinkTaskId);
+    setSelectedItem(null);
+    setReportLink("");
+    setDrawerMode("view");
+    setDrawerOpen(true);
+    void loadTaskDetails(deepLinkTaskId);
+  }, [ready, deepLinkTaskId, selectedId, drawerOpen, drawerMode, loadTaskDetails]);
 
   React.useEffect(() => {
     const src = selectedItem;

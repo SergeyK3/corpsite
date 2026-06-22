@@ -8,6 +8,7 @@ import {
   scheduleTypeLabel,
   uiFieldLabel,
 } from "./i18n";
+import { buildTaskPageHref } from "./taskNav";
 
 export type RunStats = {
   templates_total?: number;
@@ -57,7 +58,11 @@ export type RunItemMeta = {
   period_end?: string | null;
   template_title?: string | null;
   title_final?: string | null;
+  task_title?: string | null;
+  due_date?: string | null;
   executor_role_name?: string | null;
+  executor_user_name?: string | null;
+  dedupe_mode?: string | null;
   assignment_scope?: string | null;
   deduped?: boolean;
   task_id?: number | null;
@@ -131,6 +136,24 @@ export type RunListEntry = {
 };
 
 export type ItemOutcome = "created" | "dedup" | "error" | "skip" | "other";
+
+export type RunTaskListRow = {
+  item_id: number;
+  task_id: number | null;
+  task_href: string | null;
+  task_title: string;
+  executor_label: string;
+  deadline_label: string;
+  outcome_label: string;
+  outcome: ItemOutcome;
+};
+
+export type RunTaskListState =
+  | { kind: "select_run" }
+  | { kind: "loading" }
+  | { kind: "unavailable" }
+  | { kind: "none_expected" }
+  | { kind: "rows"; rows: RunTaskListRow[] };
 
 const ORIGIN_LINE_RE =
   /^(Источник|ID запуска|Дата возникновения задачи|Тип запуска|Период):\s*(.+)$/u;
@@ -432,9 +455,94 @@ export function periodLabel(item: RegularTaskRunItemRow): string {
 }
 
 export function itemTitleLabel(item: RegularTaskRunItemRow): string {
-  const title = String(item.meta?.title_final ?? item.meta?.template_title ?? "").trim();
+  const title = String(
+    item.meta?.task_title ?? item.meta?.title_final ?? item.meta?.template_title ?? "",
+  ).trim();
   if (title) return title;
   return `Шаблон №${item.regular_task_id}`;
+}
+
+export function resolveRunTaskDeadlineLabel(item: RegularTaskRunItemRow): string {
+  const raw = String(item.meta?.due_date ?? "").trim();
+  if (!raw) return "—";
+  return fmtDate(raw);
+}
+
+export function resolveRunTaskExecutorLabel(item: RegularTaskRunItemRow): string {
+  const role = roleLabel(item);
+  const userName = String(item.meta?.executor_user_name ?? "").trim();
+  if (role !== "—" && userName) {
+    return `${role} (${userName})`;
+  }
+  if (role !== "—") return role;
+  const metaRole = String(item.meta?.executor_role_name ?? "").trim();
+  if (metaRole) return metaRole;
+  return "—";
+}
+
+export function runTaskOutcomeLabel(item: RegularTaskRunItemRow): string {
+  switch (resolveItemOutcome(item)) {
+    case "created":
+      return "создана";
+    case "dedup":
+      return "уже существовала";
+    case "error":
+      return "ошибка";
+    case "skip":
+      return "пропуск (dry-run)";
+    default:
+      return itemOutcomeLabel(item).toLowerCase();
+  }
+}
+
+export function resolveRunTaskId(item: RegularTaskRunItemRow): number | null {
+  const raw = item.meta?.task_id;
+  const id = Math.trunc(Number(raw));
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return id;
+}
+
+export function buildRunTaskListRows(items: readonly RegularTaskRunItemRow[]): RunTaskListRow[] {
+  return [...items]
+    .sort((a, b) => a.item_id - b.item_id)
+    .map((item) => {
+      const taskId = resolveRunTaskId(item);
+      return {
+        item_id: item.item_id,
+        task_id: taskId,
+        task_href: taskId != null ? buildTaskPageHref(taskId) : null,
+        task_title: itemTitleLabel(item),
+        executor_label: resolveRunTaskExecutorLabel(item),
+        deadline_label: resolveRunTaskDeadlineLabel(item),
+        outcome_label: runTaskOutcomeLabel(item),
+        outcome: resolveItemOutcome(item),
+      };
+    });
+}
+
+export function resolveRunTaskListState(
+  selectedRun: RegularTaskRunRow | null,
+  runSummary: RunSummary | null,
+  items: readonly RegularTaskRunItemRow[],
+  itemsLoading: boolean,
+): RunTaskListState {
+  if (!selectedRun || !runSummary) return { kind: "select_run" };
+  if (itemsLoading) return { kind: "loading" };
+  if (items.length > 0) {
+    return { kind: "rows", rows: buildRunTaskListRows(items) };
+  }
+  if (runSummary.journal_warning) return { kind: "unavailable" };
+  if (
+    runSummary.templates_due === 0 &&
+    runSummary.created === 0 &&
+    runSummary.deduped === 0
+  ) {
+    return { kind: "none_expected" };
+  }
+  if (runSummary.templates_due > 0 || runSummary.created > 0 || runSummary.deduped > 0) {
+    return { kind: "unavailable" };
+  }
+  return { kind: "none_expected" };
 }
 
 export function buildItemOriginView(item: RegularTaskRunItemRow): {
