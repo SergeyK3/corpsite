@@ -21,6 +21,11 @@ export function canSeeAdminShell(me: MeInfo | null | undefined): boolean {
   return isSystemAdminRole(me);
 }
 
+/** Run journal — aligned with GET /regular-task-runs (_require_admin_or_privileged). */
+export function canSeeRegularTaskRunsJournal(me: MeInfo | null | undefined): boolean {
+  return isPrivilegedOperator(me);
+}
+
 /** Sysadmin cabinet nav — aligned with backend require_sysadmin_api legacy path. */
 export function canSeeSysadminCabinetNav(me: MeInfo | null | undefined): boolean {
   return isPrivilegedOperator(me);
@@ -60,6 +65,9 @@ export function isForbiddenAdminRoute(
   }
   if (pathname.startsWith("/admin/system")) {
     return !canSeeSysadminCabinetNav(me);
+  }
+  if (pathname.startsWith("/regular-task-runs")) {
+    return !canSeeRegularTaskRunsJournal(me);
   }
   if (
     pathname.startsWith("/directory") ||

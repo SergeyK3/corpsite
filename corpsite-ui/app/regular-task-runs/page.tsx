@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
+import { canSeeRegularTaskRunsJournal } from "@/lib/adminNav";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { getSessionAccessToken, isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
@@ -33,22 +34,6 @@ function isUnauthorized(e: unknown): boolean {
   return Number((e as APIErrorLike)?.status ?? 0) === 401;
 }
 
-function parseIntSetCsv(raw: string): Set<number> {
-  const out = new Set<number>();
-  const s = String(raw ?? "").trim();
-  if (!s) return out;
-  for (const part of s.split(",")) {
-    const n = Number(String(part).trim());
-    if (Number.isFinite(n) && n > 0) out.add(n);
-  }
-  return out;
-}
-
-function env(name: string, fallback = ""): string {
-  const v = process.env[name];
-  return (v ?? fallback).toString().trim();
-}
-
 type RegularTaskRun = {
   run_id: number;
   started_at: string;
@@ -70,6 +55,11 @@ type RegularTaskRunItem = {
   is_due: boolean;
   created_tasks: number;
   error?: string | null;
+  meta?: {
+    origin_metadata_text?: string;
+    deduped?: boolean;
+    task_id?: number | null;
+  } | null;
 };
 
 async function readJsonSafe(res: Response): Promise<any> {
@@ -155,17 +145,7 @@ export default function RegularTaskRunsPage() {
     return t || "Сотрудник";
   }, [me]);
 
-  // access: runs for support/admin only
-  const SUPPORT_ROLE_IDS = useMemo(() => {
-    const fromEnv = parseIntSetCsv(env("NEXT_PUBLIC_SUPPORT_ROLE_IDS", ""));
-    if (fromEnv.size > 0) return fromEnv;
-    return new Set<number>([1]); // ADMIN
-  }, []);
-
-  const canSeeRuns = useMemo(() => {
-    const rid = Number(me?.role_id ?? 0);
-    return rid > 0 && SUPPORT_ROLE_IDS.has(rid);
-  }, [me, SUPPORT_ROLE_IDS]);
+  const canSeeRuns = useMemo(() => canSeeRegularTaskRunsJournal(me), [me]);
 
   // runs
   const [runs, setRuns] = useState<RegularTaskRun[]>([]);
@@ -496,6 +476,12 @@ export default function RegularTaskRunsPage() {
                           <div className="mt-2 text-xs text-red-800 dark:text-red-200">
                             {issueLabel(err)}
                           </div>
+                        ) : null}
+
+                        {it.meta?.origin_metadata_text ? (
+                          <pre className="mt-2 whitespace-pre-wrap rounded border border-zinc-200 bg-white/70 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-300">
+                            {it.meta.origin_metadata_text}
+                          </pre>
                         ) : null}
                       </div>
                     );

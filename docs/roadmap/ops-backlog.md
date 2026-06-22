@@ -20,6 +20,7 @@
 | [OPS-007a](#ops-007a--internal-bot-api) | Internal Bot API | — | **Complete** |
 | [OPS-007b](#ops-007b--vps-telegram-validation) | VPS Telegram Validation | — | **Complete** |
 | [OPS-008](#ops-008--ui-localization-cleanup) | UI Localization Cleanup (R2.5g Operations) | — | **Complete** |
+| [OPS-009](#ops-009--regular-task-catch-up-acl--origin-metadata) | Regular Task Catch-up ACL + Origin Metadata | High | **Complete** |
 | [OPS-010](#ops-010--telegram-user-acceptance-testing) | Telegram User Acceptance Testing | Medium | **Open** |
 | [OPS-011](#ops-011--telegram-legacy-bindings-removal) | Telegram Legacy Bindings Removal | Low | **Deferred** |
 | [OPS-012](#ops-012--test-suite-stabilization) | Test Suite Stabilization | Low | **Open** |
@@ -143,6 +144,22 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 - `corpsite-ui/app/directory/personnel/_components/ImportNormalizedRecordDrawer.test.tsx` — duplicate `—` match (`getByText("—")` ambiguity)
 
 **Notes:** Not related to ADR-044 or Telegram changes. Observed during OPS-008 `npm test` run (127/128 pass).
+
+---
+
+### OPS-009 — Regular Task Catch-up ACL + Origin Metadata
+
+**Приоритет:** High  
+**Статус:** **Complete** (2026-06-21)
+
+**Problem:** System Administrator could run catch-up but `/regular-task-runs` showed «Доступ к разделу запусков ограничен» because the page defaulted to `NEXT_PUBLIC_SUPPORT_ROLE_IDS` / `role_id=1`, while sysadmin is `role_id=2`.
+
+**Fix:**
+
+- UI ACL aligned with backend `_require_admin_or_privileged` (`canSeeRegularTaskRunsJournal`).
+- Task generator appends structured origin metadata to descriptions (create + dedup); journal items expose `meta.origin_metadata_text`.
+
+**ADR:** [ADR-020](../adr/ADR-020-regular-tasks-contract-v1.md) — metadata block section.
 
 ---
 

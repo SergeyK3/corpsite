@@ -40,6 +40,7 @@ class RegularTaskRunItemOut(BaseModel):
     is_due: bool
     created_tasks: int
     error: Optional[str] = None
+    meta: Any = None
 
 
 def _require_system_admin(user: Dict[str, Any]) -> None:
@@ -180,7 +181,8 @@ def list_regular_task_run_items(
             rol.code AS executor_role_code,
             i.is_due,
             i.created_tasks,
-            i.error
+            i.error,
+            i.meta
         FROM public.regular_task_run_items i
         LEFT JOIN public.roles rol
           ON rol.role_id = i.executor_role_id
@@ -208,6 +210,7 @@ def list_regular_task_run_items(
             is_due=r["is_due"],
             created_tasks=r["created_tasks"],
             error=r["error"],
+            meta=r.get("meta"),
         )
         for r in rows
     ]

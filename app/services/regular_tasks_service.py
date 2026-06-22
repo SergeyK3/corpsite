@@ -731,6 +731,100 @@ def _compose_task_title(*, base_title: str, role_name: str, suffix: str) -> str:
     return f"{bt} → {rn}"
 
 
+_ORIGIN_METADATA_RUN_MARKER = "ID запуска:"
+
+
+def _catch_up_period_label(preset: str) -> Optional[str]:
+    labels = {
+        "past_week": "Прошлая неделя",
+        "past_month": "Прошлый месяц",
+        "manual": "Ручная дата",
+    }
+    return labels.get((preset or "").strip().lower())
+
+
+def _task_occurrence_date(*, today_effective: date) -> date:
+    return today_effective
+
+
+def _compose_task_origin_metadata_block(
+    *,
+    run_id: int,
+    occurrence_date: date,
+    catch_up_meta: Optional[Dict[str, Any]],
+    period_suffix: str,
+) -> str:
+    lines: List[str] = []
+    if catch_up_meta is not None:
+        lines.append("Источник: Догоняющий запуск регулярной задачи")
+        lines.append(f"ID запуска: {run_id}")
+        lines.append(f"Дата возникновения задачи: {occurrence_date.isoformat()}")
+        lines.append("Тип запуска: догоняющий")
+        preset = str(catch_up_meta.get("preset") or "").strip().lower()
+        period_label = _catch_up_period_label(preset)
+        if period_label:
+            lines.append(f"Период: {period_label}")
+        elif period_suffix:
+            lines.append(f"Период: {period_suffix}")
+    else:
+        lines.append("Источник: Автоматический запуск регулярной задачи")
+        lines.append(f"ID запуска: {run_id}")
+        lines.append(f"Дата возникновения задачи: {occurrence_date.isoformat()}")
+        lines.append("Тип запуска: автоматический")
+    return "\n---\n" + "\n".join(lines) + "\n---"
+
+
+def _append_origin_metadata_to_description(
+    existing: Optional[str],
+    metadata_block: str,
+    *,
+    run_id: int,
+) -> str:
+    base = (existing or "").rstrip()
+    marker = f"{_ORIGIN_METADATA_RUN_MARKER} {run_id}"
+    if marker in base:
+        return base
+    if not base:
+        return metadata_block.strip("\n")
+    return f"{base}{metadata_block}"
+
+
+def _append_origin_metadata_to_task(
+    conn: Connection,
+    *,
+    task_id: int,
+    run_id: int,
+    occurrence_date: date,
+    catch_up_meta: Optional[Dict[str, Any]],
+    period_suffix: str,
+) -> bool:
+    row = conn.execute(
+        text("SELECT description FROM public.tasks WHERE task_id = :task_id FOR UPDATE"),
+        {"task_id": int(task_id)},
+    ).mappings().first()
+    if not row:
+        return False
+    block = _compose_task_origin_metadata_block(
+        run_id=run_id,
+        occurrence_date=occurrence_date,
+        catch_up_meta=catch_up_meta,
+        period_suffix=period_suffix,
+    )
+    new_desc = _append_origin_metadata_to_description(
+        row.get("description"),
+        block,
+        run_id=run_id,
+    )
+    current = (row.get("description") or "").rstrip()
+    if new_desc == current:
+        return False
+    conn.execute(
+        text("UPDATE public.tasks SET description = :description WHERE task_id = :task_id"),
+        {"description": new_desc, "task_id": int(task_id)},
+    )
+    return True
+
+
 def _advisory_lock_key(
     *,
     regular_task_id: int,
@@ -1128,6 +1222,20 @@ def run_regular_tasks_generation_tx(
                     }
                 )
 
+                occurrence_date = _task_occurrence_date(today_effective=today_effective)
+                origin_block = _compose_task_origin_metadata_block(
+                    run_id=int(run_id),
+                    occurrence_date=occurrence_date,
+                    catch_up_meta=catch_up_meta,
+                    period_suffix=suffix,
+                )
+                description_with_origin = _append_origin_metadata_to_description(
+                    t.get("description"),
+                    origin_block,
+                    run_id=int(run_id),
+                )
+                base_meta["origin_metadata_text"] = origin_block.strip("\n")
+
                 if dry_run:
                     _log_run_item_safe(
                         conn,
@@ -1153,6 +1261,14 @@ def run_regular_tasks_generation_tx(
                 if same_exec_row and same_exec_row.get("task_id"):
                     active_task_id = int(same_exec_row["task_id"])
                     updated = _update_due_date_if_needed(conn, task_id=active_task_id, due_date_val=due_date_val)
+                    desc_updated = _append_origin_metadata_to_task(
+                        conn,
+                        task_id=active_task_id,
+                        run_id=int(run_id),
+                        occurrence_date=occurrence_date,
+                        catch_up_meta=catch_up_meta,
+                        period_suffix=suffix,
+                    )
                     deduped += 1
                     _log_run_item_safe(
                         conn,
@@ -1170,6 +1286,7 @@ def run_regular_tasks_generation_tx(
                             "deduped": True,
                             "archived_conflicts": 0,
                             "due_date_updated": bool(updated > 0),
+                            "description_metadata_appended": bool(desc_updated),
                             "dedupe_mode": "same_executor_active_exists",
                         },
                     )
@@ -1230,7 +1347,7 @@ def run_regular_tasks_generation_tx(
                         "task_kind": REGULAR_TASK_KIND,
                         "source_kind": REGULAR_TASKS_SOURCE_KIND,
                         "title": title_final,
-                        "description": t.get("description"),
+                        "description": description_with_origin,
                         "initiator_user_id": int(SYSTEM_USER_ID),
                         "executor_role_id": int(executor_role_id),
                         "assignment_scope": assignment_scope,

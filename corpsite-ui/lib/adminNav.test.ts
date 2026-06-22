@@ -5,6 +5,7 @@ import {
   canSeeAdminShell,
   canSeePersonnelIdentityOperationsNav,
   canSeePersonnelLifecycleNav,
+  canSeeRegularTaskRunsJournal,
   canSeeSysadminCabinetNav,
   isForbiddenAdminRoute,
 } from "./adminNav";
@@ -20,12 +21,14 @@ describe("adminNav", () => {
     expect(canSeeAdminShell(systemAdmin)).toBe(true);
     expect(canSeeSysadminCabinetNav(systemAdmin)).toBe(true);
     expect(canSeePersonnelLifecycleNav(systemAdmin)).toBe(true);
+    expect(canSeeRegularTaskRunsJournal(systemAdmin)).toBe(true);
   });
 
-  it("env-privileged operator sees sysadmin nav but not full admin shell", () => {
+  it("env-privileged operator sees sysadmin nav and run journal but not full admin shell", () => {
     expect(canSeeAdminShell(privileged)).toBe(false);
     expect(canSeeSysadminCabinetNav(privileged)).toBe(true);
     expect(canSeePersonnelLifecycleNav(privileged)).toBe(true);
+    expect(canSeeRegularTaskRunsJournal(privileged)).toBe(true);
   });
 
   it("HR enrollment manager sees personnel lifecycle but not sysadmin cabinet", () => {
@@ -33,6 +36,14 @@ describe("adminNav", () => {
     expect(canSeeSysadminCabinetNav(hrManager)).toBe(false);
     expect(canSeePersonnelLifecycleNav(hrManager)).toBe(true);
     expect(canSeePersonnelIdentityOperationsNav(hrManager)).toBe(true);
+    expect(canSeeRegularTaskRunsJournal(hrManager)).toBe(false);
+  });
+
+  it("regular employee cannot access run journal routes", () => {
+    expect(canSeeRegularTaskRunsJournal(regular)).toBe(false);
+    expect(isForbiddenAdminRoute("/regular-task-runs", regular)).toBe(true);
+    expect(isForbiddenAdminRoute("/regular-task-runs", systemAdmin)).toBe(false);
+    expect(isForbiddenAdminRoute("/regular-task-runs", privileged)).toBe(false);
   });
 
   it("forbidden routes respect split access", () => {
