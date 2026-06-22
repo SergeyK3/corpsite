@@ -207,11 +207,61 @@ describe("RegularTaskRunsJournalView", () => {
       runs: [{ ...catchUpRun, item_count: 2, stats: { ...catchUpRun.stats, item_count: 2, deduped: 2, created: 0 } }],
       items: [],
       itemsLoading: false,
+      itemsError: null,
     });
     expect(screen.getByTestId("regular-task-run-task-list-expected-not-loaded")).toHaveTextContent(
       "Элементы журнала ожидаются, но не загружены.",
     );
     expect(screen.queryByTestId("regular-task-run-task-list-unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("regular-task-run-task-list-load-error")).not.toBeInTheDocument();
+  });
+
+  it("shows API load error in task list when itemsError is set", () => {
+    renderView({
+      runs: [{ ...catchUpRun, item_count: 2, stats: { ...catchUpRun.stats, item_count: 2, deduped: 2, created: 0 } }],
+      items: [],
+      itemsLoading: false,
+      itemsError: "Access denied",
+    });
+    expect(screen.getByTestId("regular-task-run-task-list-load-error")).toHaveTextContent(
+      "Не удалось загрузить элементы журнала: Access denied",
+    );
+    expect(screen.queryByTestId("regular-task-run-task-list-expected-not-loaded")).not.toBeInTheDocument();
+  });
+
+  it("does not show previous run task rows after switching runs", () => {
+    const props = {
+      runs: [catchUpRun, automaticRun],
+      runsLoading: false,
+      runsError: null,
+      selectedRunId: 33,
+      onSelectRun: vi.fn(),
+      onRefreshRuns: vi.fn(),
+      items: [sampleItem] as RegularTaskRunItemRow[],
+      itemsLoading: false,
+      itemsError: null,
+      onRefreshItems: vi.fn(),
+      onlyIssues: false,
+      onOnlyIssuesChange: vi.fn(),
+      search: "",
+      onSearchChange: vi.fn(),
+    };
+
+    const { rerender } = render(<RegularTaskRunsJournalView {...props} />);
+    expect(screen.getByTestId("regular-task-run-task-row-101")).toBeInTheDocument();
+
+    rerender(
+      <RegularTaskRunsJournalView
+        {...props}
+        selectedRunId={12}
+        items={[]}
+        itemsLoading={true}
+        itemsError={null}
+      />,
+    );
+
+    expect(screen.queryByTestId("regular-task-run-task-row-101")).not.toBeInTheDocument();
+    expect(screen.getByText("Загрузка списка задач…")).toBeInTheDocument();
   });
 
   it("renders two dedup task rows when item_count=2 and items are loaded", () => {

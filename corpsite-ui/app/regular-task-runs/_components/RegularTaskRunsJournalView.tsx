@@ -197,8 +197,8 @@ export function RegularTaskRunsJournalView({
   const itemsEmptyMessage = resolveItemsEmptyMessage(items, filteredItems, onlyIssues, search);
 
   const taskListState = useMemo(() => {
-    return resolveRunTaskListState(selectedRun, runSummary, items, itemsLoading);
-  }, [selectedRun, runSummary, items, itemsLoading]);
+    return resolveRunTaskListState(selectedRun, runSummary, items, itemsLoading, itemsError);
+  }, [selectedRun, runSummary, items, itemsLoading, itemsError]);
 
   return (
     <div className="space-y-4" data-testid="regular-task-runs-journal">
@@ -388,6 +388,16 @@ export function RegularTaskRunsJournalView({
 
             {taskListState.kind === "loading" ? (
               <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка списка задач…</div>
+            ) : null}
+
+            {taskListState.kind === "load_error" ? (
+              <div
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-300"
+                data-testid="regular-task-run-task-list-load-error"
+                role="alert"
+              >
+                {taskListState.message}
+              </div>
             ) : null}
 
             {taskListState.kind === "unavailable" ? (

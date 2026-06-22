@@ -7,6 +7,7 @@ import {
   buildRunSummary,
   buildRunTaskListRows,
   fmtDate,
+  formatRunTaskListLoadError,
   itemOutcomeLabel,
   parseOriginMetadataText,
   resolveOccurrenceDate,
@@ -214,7 +215,22 @@ describe("buildRunTaskListRows", () => {
       item_count: 2,
     };
     const summary = buildRunSummary(run, []);
-    expect(resolveRunTaskListState(run, summary, [], false)).toEqual({ kind: "expected_not_loaded" });
+    expect(resolveRunTaskListState(run, summary, [], false, null)).toEqual({ kind: "expected_not_loaded" });
+  });
+
+  it("returns load_error when items request failed", () => {
+    const run: RegularTaskRunRow = {
+      run_id: 39,
+      started_at: "2026-06-01",
+      status: "ok",
+      stats: { templates_due: 2, created: 0, deduped: 2, errors: 0, item_count: 2 },
+      item_count: 2,
+    };
+    const summary = buildRunSummary(run, []);
+    expect(resolveRunTaskListState(run, summary, [], false, "Access denied")).toEqual({
+      kind: "load_error",
+      message: formatRunTaskListLoadError("Access denied"),
+    });
   });
 
   it("returns loading while items are still fetching", () => {

@@ -6,10 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { RegularTaskRunsJournalView } from "./_components/RegularTaskRunsJournalView";
 
-import { apiAuthMe } from "@/lib/api";
+import { apiAuthMe, apiGetRegularTaskRunItems, apiGetRegularTaskRuns } from "@/lib/api";
 import { canSeeRegularTaskRunsJournal } from "@/lib/adminNav";
-import { resolveApiUrl } from "@/lib/apiBase";
-import { getSessionAccessToken, isAuthed, logout as authLogout } from "@/lib/auth";
+import { isAuthed, logout as authLogout } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
 import type { RegularTaskRunItemRow, RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
 import type { MeInfo } from "@/lib/types";
@@ -21,50 +20,6 @@ type APIErrorLike = {
 
 function isUnauthorized(e: unknown): boolean {
   return Number((e as APIErrorLike)?.status ?? 0) === 401;
-}
-
-async function readJsonSafe(res: Response): Promise<any> {
-  const text = await res.text().catch(() => "");
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { message: text };
-  }
-}
-
-function normalizeList<T>(body: any): T[] {
-  if (Array.isArray(body)) return body as T[];
-  if (body?.items && Array.isArray(body.items)) return body.items as T[];
-  return [];
-}
-
-async function apiGetRuns(): Promise<RegularTaskRunRow[]> {
-  const tok = getSessionAccessToken();
-  const res = await fetch(resolveApiUrl("/regular-task-runs"), {
-    method: "GET",
-    headers: tok ? { Authorization: `Bearer ${tok}`, Accept: "application/json" } : { Accept: "application/json" },
-    cache: "no-store",
-  });
-  const body = await readJsonSafe(res);
-  if (!res.ok) {
-    throw { status: res.status, message: body?.message ?? body?.detail ?? "Request failed" } satisfies APIErrorLike;
-  }
-  return normalizeList<RegularTaskRunRow>(body);
-}
-
-async function apiGetRunItems(runId: number): Promise<RegularTaskRunItemRow[]> {
-  const tok = getSessionAccessToken();
-  const res = await fetch(resolveApiUrl(`/regular-task-runs/${runId}/items`), {
-    method: "GET",
-    headers: tok ? { Authorization: `Bearer ${tok}`, Accept: "application/json" } : { Accept: "application/json" },
-    cache: "no-store",
-  });
-  const body = await readJsonSafe(res);
-  if (!res.ok) {
-    throw { status: res.status, message: body?.message ?? body?.detail ?? "Request failed" } satisfies APIErrorLike;
-  }
-  return normalizeList<RegularTaskRunItemRow>(body);
 }
 
 export default function RegularTaskRunsPage() {
@@ -102,7 +57,7 @@ export default function RegularTaskRunsPage() {
     setRunsLoading(true);
     setRunsError(null);
     try {
-      const data = await apiGetRuns();
+      const data = (await apiGetRegularTaskRuns()) as RegularTaskRunRow[];
       setRuns(data);
       const keepId = preferredRunId ?? selectedRunId;
       if (keepId && data.some((r) => r.run_id === keepId)) {
@@ -110,8 +65,9 @@ export default function RegularTaskRunsPage() {
       } else if (selectedRunId && !data.some((r) => r.run_id === selectedRunId)) {
         setSelectedRunId(null);
         setItems([]);
+        setItemsError(null);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (isUnauthorized(e)) {
         redirectToLogin();
         return;
@@ -119,6 +75,7 @@ export default function RegularTaskRunsPage() {
       setRuns([]);
       setSelectedRunId(null);
       setItems([]);
+      setItemsError(null);
       setRunsError(formatThrownError(e));
     } finally {
       setRunsLoading(false);
@@ -130,9 +87,9 @@ export default function RegularTaskRunsPage() {
     setItemsLoading(true);
     setItemsError(null);
     try {
-      const data = await apiGetRunItems(runId);
+      const data = (await apiGetRegularTaskRunItems({ run_id: runId })) as RegularTaskRunItemRow[];
       setItems(data);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (isUnauthorized(e)) {
         redirectToLogin();
         return;
@@ -142,6 +99,13 @@ export default function RegularTaskRunsPage() {
     } finally {
       setItemsLoading(false);
     }
+  }
+
+  function handleSelectRun(runId: number) {
+    setItems([]);
+    setItemsError(null);
+    setItemsLoading(true);
+    setSelectedRunId(runId);
   }
 
   useEffect(() => {
@@ -154,7 +118,7 @@ export default function RegularTaskRunsPage() {
       }
       try {
         setMe(await apiAuthMe());
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (isUnauthorized(e)) {
           redirectToLogin();
           return;
@@ -210,7 +174,7 @@ export default function RegularTaskRunsPage() {
       runsLoading={runsLoading}
       runsError={runsError}
       selectedRunId={selectedRunId}
-      onSelectRun={setSelectedRunId}
+      onSelectRun={handleSelectRun}
       onRefreshRuns={() => void loadRuns()}
       items={items}
       itemsLoading={itemsLoading}

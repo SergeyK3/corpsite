@@ -160,6 +160,7 @@ export type RunTaskListRow = {
 export type RunTaskListState =
   | { kind: "select_run" }
   | { kind: "loading" }
+  | { kind: "load_error"; message: string }
   | { kind: "unavailable" }
   | { kind: "expected_not_loaded" }
   | { kind: "none_expected" }
@@ -167,6 +168,13 @@ export type RunTaskListState =
 
 export const RUN_TASK_LIST_EXPECTED_NOT_LOADED_MESSAGE =
   "Элементы журнала ожидаются, но не загружены. Обновите страницу или проверьте API.";
+
+export function formatRunTaskListLoadError(itemsError: string): string {
+  const message = String(itemsError ?? "").trim();
+  return message
+    ? `Не удалось загрузить элементы журнала: ${message}`
+    : "Не удалось загрузить элементы журнала.";
+}
 
 const ORIGIN_LINE_RE =
   /^(Источник|ID запуска|Дата возникновения задачи|Тип запуска|Период):\s*(.+)$/u;
@@ -579,11 +587,17 @@ export function resolveRunTaskListState(
   runSummary: RunSummary | null,
   items: readonly RegularTaskRunItemRow[],
   itemsLoading: boolean,
+  itemsError: string | null = null,
 ): RunTaskListState {
   if (!selectedRun || !runSummary) return { kind: "select_run" };
   if (itemsLoading) return { kind: "loading" };
   if (items.length > 0) {
     return { kind: "rows", rows: buildRunTaskListRows(items) };
+  }
+
+  const loadError = String(itemsError ?? "").trim();
+  if (loadError) {
+    return { kind: "load_error", message: formatRunTaskListLoadError(loadError) };
   }
 
   const itemCount = runSummary.item_count;
