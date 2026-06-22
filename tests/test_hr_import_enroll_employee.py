@@ -91,6 +91,16 @@ def client() -> TestClient:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_phase_3i_migration_allows_enrolled_from_import_event_type():
+    """Guard: production must run alembic revision h7i8j9k0l1m2 before execute enroll."""
+    if not _phase_3i_available():
+        pytest.fail(
+            "chk_employee_events_event_type must include EMPLOYEE_ENROLLED_FROM_IMPORT "
+            "(run: alembic upgrade head, revision h7i8j9k0l1m2)"
+        )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_enroll_dry_run_unlinked_record(seed, tmp_path: Path):
     _require_phase_3g()
     if not _phase_3i_available():
@@ -243,6 +253,18 @@ def test_enroll_execute_creates_employee_and_links(seed, tmp_path: Path):
                 ),
                 {"employee_id": employee_id, "event_type": EVENT_TYPE_ENROLLED_FROM_IMPORT},
             ).scalar_one()
+            enrolled_row = conn.execute(
+                text(
+                    """
+                    SELECT event_type, event_class, lifecycle_status, comment
+                    FROM public.employee_events
+                    WHERE employee_id = :employee_id AND event_type = :event_type
+                    ORDER BY event_id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"employee_id": employee_id, "event_type": EVENT_TYPE_ENROLLED_FROM_IMPORT},
+            ).mappings().first()
 
         assert result.created is True
         assert result.outcome == "created"
@@ -250,6 +272,10 @@ def test_enroll_execute_creates_employee_and_links(seed, tmp_path: Path):
         assert all(rec["employee_id"] == employee_id for rec in records)
         assert int(hire_count) == 0
         assert int(enrolled_count) == 1
+        assert enrolled_row is not None
+        assert enrolled_row["event_type"] == EVENT_TYPE_ENROLLED_FROM_IMPORT
+        assert enrolled_row["event_class"] == "PERSONNEL"
+        assert enrolled_row["lifecycle_status"] == "APPROVED"
     finally:
         with engine.begin() as conn:
             if batch_id:
