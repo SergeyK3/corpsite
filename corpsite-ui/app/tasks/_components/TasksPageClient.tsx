@@ -10,7 +10,7 @@ import { isAuthed, logout } from "@/lib/auth";
 import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibraries";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
-import { parseTaskIdFromSearchParams } from "@/lib/taskNav";
+import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib/taskNav";
 import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
@@ -372,7 +372,8 @@ export default function TasksPageClient() {
   const closeDrawer = React.useCallback(() => {
     if (saving) return;
     resetDrawerState();
-  }, [saving, resetDrawerState]);
+    router.replace(resolveTaskDrawerCloseTarget(new URLSearchParams(sp.toString())));
+  }, [saving, resetDrawerState, router, sp]);
 
   const loadCurrentPeriod = React.useCallback(async (): Promise<number> => {
     try {

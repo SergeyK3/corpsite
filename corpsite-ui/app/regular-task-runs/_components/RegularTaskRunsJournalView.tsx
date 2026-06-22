@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { runTitleLabel, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
+import { buildTaskPageHref } from "@/lib/taskNav";
 import {
   buildItemOriginView,
   buildRunListEntry,
@@ -199,6 +200,9 @@ export function RegularTaskRunsJournalView({
   const taskListState = useMemo(() => {
     return resolveRunTaskListState(selectedRun, runSummary, items, itemsLoading, itemsError);
   }, [selectedRun, runSummary, items, itemsLoading, itemsError]);
+
+  const journalReturnTo =
+    selectedRunId != null ? `/regular-task-runs?run_id=${selectedRunId}` : null;
 
   return (
     <div className="space-y-4" data-testid="regular-task-runs-journal">
@@ -458,9 +462,13 @@ export function RegularTaskRunsJournalView({
                           {row.outcome_label}
                         </td>
                         <td className="px-3 py-2 text-xs">
-                          {row.task_href ? (
+                          {row.task_id != null ? (
                             <Link
-                              href={row.task_href}
+                              href={
+                                buildTaskPageHref(row.task_id, { returnTo: journalReturnTo }) ??
+                                row.task_href ??
+                                "#"
+                              }
                               className="font-medium text-blue-700 hover:underline dark:text-blue-300"
                               data-testid={`regular-task-run-task-open-${row.item_id}`}
                             >

@@ -290,7 +290,10 @@ describe("RegularTaskRunsJournalView", () => {
     expect(screen.getByTestId("regular-task-run-task-row-201")).toBeInTheDocument();
     expect(screen.getByTestId("regular-task-run-task-row-202")).toBeInTheDocument();
     expect(screen.getAllByText("уже существовала")).toHaveLength(2);
-    expect(screen.getByTestId("regular-task-run-task-open-201")).toHaveAttribute("href", "/tasks?task_id=9101");
+    expect(screen.getByTestId("regular-task-run-task-open-201")).toHaveAttribute(
+      "href",
+      "/tasks?task_id=9101&return_to=%2Fregular-task-runs%3Frun_id%3D33",
+    );
   });
 
   it("shows run mode badge when dry_run is available in stats", () => {
@@ -328,7 +331,21 @@ describe("RegularTaskRunsJournalView", () => {
     expect(cells[3]).toHaveTextContent("создана");
     const link = screen.getByTestId("regular-task-run-task-open-101");
     expect(link).toHaveTextContent("Открыть");
-    expect(link).toHaveAttribute("href", "/tasks?task_id=9001");
+    expect(link).toHaveAttribute(
+      "href",
+      "/tasks?task_id=9001&return_to=%2Fregular-task-runs%3Frun_id%3D33",
+    );
+  });
+
+  it("builds open link with return_to for the selected run", () => {
+    renderView({
+      selectedRunId: 33,
+      items: [sampleItem],
+    });
+    expect(screen.getByTestId("regular-task-run-task-open-101")).toHaveAttribute(
+      "href",
+      "/tasks?task_id=9001&return_to=%2Fregular-task-runs%3Frun_id%3D33",
+    );
   });
 
   it("does not render open link when task_id is missing", () => {
