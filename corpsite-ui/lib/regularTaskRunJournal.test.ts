@@ -10,7 +10,9 @@ import {
   itemOutcomeLabel,
   parseOriginMetadataText,
   resolveOccurrenceDate,
+  resolveRunMode,
   resolveRunTaskListState,
+  runModeLabel,
   runTaskOutcomeLabel,
   type RegularTaskRunItemRow,
   type RegularTaskRunRow,
@@ -201,6 +203,111 @@ describe("buildRunTaskListRows", () => {
     };
     const summary = buildRunSummary(run, []);
     expect(resolveRunTaskListState(run, summary, [], false)).toEqual({ kind: "unavailable" });
+  });
+
+  it("returns expected_not_loaded when item_count > 0 but items are empty", () => {
+    const run: RegularTaskRunRow = {
+      run_id: 39,
+      started_at: "2026-06-01",
+      status: "ok",
+      stats: { templates_due: 2, created: 0, deduped: 2, errors: 0, item_count: 2 },
+      item_count: 2,
+    };
+    const summary = buildRunSummary(run, []);
+    expect(resolveRunTaskListState(run, summary, [], false)).toEqual({ kind: "expected_not_loaded" });
+  });
+
+  it("returns loading while items are still fetching", () => {
+    const run: RegularTaskRunRow = {
+      run_id: 39,
+      started_at: "2026-06-01",
+      status: "ok",
+      stats: { templates_due: 2, created: 0, deduped: 2, errors: 0, item_count: 2 },
+      item_count: 2,
+    };
+    const summary = buildRunSummary(run, []);
+    expect(resolveRunTaskListState(run, summary, [], true)).toEqual({ kind: "loading" });
+  });
+
+  it("returns rows for loaded dedup items", () => {
+    const run: RegularTaskRunRow = {
+      run_id: 39,
+      started_at: "2026-06-01",
+      status: "ok",
+      stats: { templates_due: 2, created: 0, deduped: 2, errors: 0, item_count: 2 },
+      item_count: 2,
+    };
+    const items: RegularTaskRunItemRow[] = [
+      {
+        item_id: 1,
+        run_id: 39,
+        regular_task_id: 100,
+        status: "ok",
+        started_at: "2026-06-01",
+        is_due: true,
+        created_tasks: 0,
+        meta: { deduped: true, task_title: "Задача 1", task_id: 9001 },
+      },
+      {
+        item_id: 2,
+        run_id: 39,
+        regular_task_id: 101,
+        status: "ok",
+        started_at: "2026-06-01",
+        is_due: true,
+        created_tasks: 0,
+        meta: { deduped: true, task_title: "Задача 2", task_id: 9002 },
+      },
+    ];
+    const summary = buildRunSummary(run, items);
+    const state = resolveRunTaskListState(run, summary, items, false);
+    expect(state.kind).toBe("rows");
+    if (state.kind === "rows") {
+      expect(state.rows).toHaveLength(2);
+      expect(state.rows[0].outcome_label).toBe("уже существовала");
+      expect(state.rows[0].task_href).toBe("/tasks?task_id=9001");
+    }
+  });
+});
+
+describe("resolveRunMode", () => {
+  it("reads dry_run from run stats when present", () => {
+    expect(resolveRunMode({ dry_run: true }, [])).toBe("dry");
+    expect(runModeLabel("dry")).toBe("Пробный прогон");
+    expect(resolveRunMode({ dry_run: false }, [])).toBe("live");
+    expect(runModeLabel("live")).toBe("Боевой прогон");
+  });
+
+  it("derives dry run from item meta when stats lack the flag", () => {
+    const items: RegularTaskRunItemRow[] = [
+      {
+        item_id: 1,
+        run_id: 1,
+        regular_task_id: 1,
+        status: "skip",
+        started_at: "2026-06-01",
+        is_due: true,
+        created_tasks: 0,
+        meta: { reason: "dry_run", dry_run: true },
+      },
+    ];
+    expect(resolveRunMode({}, items)).toBe("dry");
+  });
+
+  it("derives live run from dedup or created items", () => {
+    const items: RegularTaskRunItemRow[] = [
+      {
+        item_id: 1,
+        run_id: 1,
+        regular_task_id: 1,
+        status: "ok",
+        started_at: "2026-06-01",
+        is_due: true,
+        created_tasks: 0,
+        meta: { deduped: true, task_id: 42 },
+      },
+    ];
+    expect(resolveRunMode({}, items)).toBe("live");
   });
 });
 

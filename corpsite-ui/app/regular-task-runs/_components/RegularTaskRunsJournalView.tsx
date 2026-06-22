@@ -14,6 +14,7 @@ import {
   itemTitleLabel,
   periodLabel,
   resolveRunTaskListState,
+  RUN_TASK_LIST_EXPECTED_NOT_LOADED_MESSAGE,
   roleLabel,
   type RegularTaskRunItemRow,
   type RegularTaskRunRow,
@@ -43,6 +44,13 @@ function runKindBadgeClass(runKind: string): string {
   return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200";
 }
 
+function runModeBadgeClass(runMode: string): string {
+  if (runMode === "dry") {
+    return "border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200";
+  }
+  return "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200";
+}
+
 function statTone(status: string): string {
   const s = String(status || "").toLowerCase();
   if (s === "ok") return "text-emerald-800 dark:text-emerald-200";
@@ -56,9 +64,19 @@ function yesNo(value: boolean): string {
   return value ? "Да" : "Нет";
 }
 
-function SummaryField({ label, value }: { label: string; value: string }) {
+function SummaryField({
+  label,
+  value,
+  ...rest
+}: {
+  label: string;
+  value: string;
+} & React.ComponentPropsWithoutRef<"div">) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-950">
+    <div
+      className="rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-950"
+      {...rest}
+    >
       <div className="text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</div>
       <div className="mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">{value}</div>
     </div>
@@ -137,7 +155,13 @@ export function RegularTaskRunsJournalView({
   search,
   onSearchChange,
 }: RegularTaskRunsJournalViewProps) {
-  const runEntries = useMemo(() => runs.map(buildRunListEntry), [runs]);
+  const runEntries = useMemo(
+    () =>
+      runs.map((run) =>
+        buildRunListEntry(run, run.run_id === selectedRunId ? items : []),
+      ),
+    [runs, selectedRunId, items],
+  );
 
   const selectedRun = useMemo(() => {
     if (selectedRunId == null) return null;
@@ -263,6 +287,17 @@ export function RegularTaskRunsJournalView({
                       >
                         {entry.run_kind_label}
                       </span>
+                      {entry.run_mode_label ? (
+                        <span
+                          className={[
+                            "rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                            runModeBadgeClass(entry.run_mode ?? "live"),
+                          ].join(" ")}
+                          data-testid={`regular-task-run-mode-${entry.run_id}`}
+                        >
+                          {entry.run_mode_label}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="mt-2 space-y-0.5 text-xs text-zinc-600 dark:text-zinc-400">
@@ -308,6 +343,13 @@ export function RegularTaskRunsJournalView({
                 <SummaryField label="Запуск" value={runTitleLabel(runSummary.run_id)} />
                 <SummaryField label="Статус" value={runSummary.status_label} />
                 <SummaryField label={uiFieldLabel("run_kind")} value={runSummary.run_kind_label} />
+                {runSummary.run_mode_label ? (
+                  <SummaryField
+                    label="Режим"
+                    value={runSummary.run_mode_label}
+                    data-testid="regular-task-run-summary-mode"
+                  />
+                ) : null}
                 <SummaryField label="Дата запуска" value={runSummary.started_at_label} />
                 <SummaryField label={uiFieldLabel("occurrence_date")} value={runSummary.occurrence_date_label} />
                 <SummaryField label={uiFieldLabel("period")} value={runSummary.period_label} />
@@ -354,6 +396,15 @@ export function RegularTaskRunsJournalView({
                 data-testid="regular-task-run-task-list-unavailable"
               >
                 Список задач недоступен: элементы журнала отсутствуют.
+              </div>
+            ) : null}
+
+            {taskListState.kind === "expected_not_loaded" ? (
+              <div
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                data-testid="regular-task-run-task-list-expected-not-loaded"
+              >
+                {RUN_TASK_LIST_EXPECTED_NOT_LOADED_MESSAGE}
               </div>
             ) : null}
 

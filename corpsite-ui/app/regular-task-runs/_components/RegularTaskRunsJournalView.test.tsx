@@ -30,12 +30,14 @@ const catchUpRun: RegularTaskRunRow = {
   run_id: 33,
   started_at: "2026-06-11T12:00:00+05:00",
   status: "partial",
+  item_count: 1,
   stats: {
     templates_total: 12,
     templates_due: 10,
     created: 5,
     deduped: 2,
     errors: 1,
+    item_count: 1,
     occurrence_date: "2026-06-11",
     run_kind: "catch_up",
     catch_up: {
@@ -170,6 +172,10 @@ describe("RegularTaskRunsJournalView", () => {
         {
           ...catchUpRun,
           item_count: 0,
+          stats: {
+            ...catchUpRun.stats,
+            item_count: 0,
+          },
           journal_warning:
             "Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют. Возможна неполная запись журнала.",
         },
@@ -182,6 +188,84 @@ describe("RegularTaskRunsJournalView", () => {
     expect(screen.getByTestId("regular-task-run-task-list-unavailable")).toHaveTextContent(
       "Список задач недоступен: элементы журнала отсутствуют.",
     );
+    expect(screen.queryByTestId("regular-task-run-task-list-expected-not-loaded")).not.toBeInTheDocument();
+  });
+
+  it("shows loading state for task list while items are loading", () => {
+    renderView({
+      runs: [{ ...catchUpRun, item_count: 2, stats: { ...catchUpRun.stats, item_count: 2 } }],
+      items: [],
+      itemsLoading: true,
+    });
+    expect(screen.getByText("Загрузка списка задач…")).toBeInTheDocument();
+    expect(screen.queryByTestId("regular-task-run-task-list-unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("regular-task-run-task-list-expected-not-loaded")).not.toBeInTheDocument();
+  });
+
+  it("shows diagnostic message when item_count > 0 but items are empty", () => {
+    renderView({
+      runs: [{ ...catchUpRun, item_count: 2, stats: { ...catchUpRun.stats, item_count: 2, deduped: 2, created: 0 } }],
+      items: [],
+      itemsLoading: false,
+    });
+    expect(screen.getByTestId("regular-task-run-task-list-expected-not-loaded")).toHaveTextContent(
+      "Элементы журнала ожидаются, но не загружены.",
+    );
+    expect(screen.queryByTestId("regular-task-run-task-list-unavailable")).not.toBeInTheDocument();
+  });
+
+  it("renders two dedup task rows when item_count=2 and items are loaded", () => {
+    const dedupItem = (itemId: number, taskId: number): RegularTaskRunItemRow => ({
+      item_id: itemId,
+      run_id: 33,
+      regular_task_id: 200 + itemId,
+      status: "ok",
+      started_at: "2026-06-11T12:00:01+05:00",
+      executor_role_name: "Госпитальный эксперт",
+      is_due: true,
+      created_tasks: 0,
+      meta: {
+        deduped: true,
+        task_title: `Задача ${itemId}`,
+        due_date: "2026-06-24",
+        task_id: taskId,
+      },
+    });
+
+    renderView({
+      runs: [{ ...catchUpRun, item_count: 2, stats: { ...catchUpRun.stats, item_count: 2, deduped: 2, created: 0 } }],
+      items: [dedupItem(201, 9101), dedupItem(202, 9102)],
+    });
+
+    expect(screen.getByTestId("regular-task-run-task-row-201")).toBeInTheDocument();
+    expect(screen.getByTestId("regular-task-run-task-row-202")).toBeInTheDocument();
+    expect(screen.getAllByText("уже существовала")).toHaveLength(2);
+    expect(screen.getByTestId("regular-task-run-task-open-201")).toHaveAttribute("href", "/tasks?task_id=9101");
+  });
+
+  it("shows run mode badge when dry_run is available in stats", () => {
+    renderView({
+      runs: [
+        {
+          ...catchUpRun,
+          stats: { ...catchUpRun.stats, dry_run: true },
+        },
+      ],
+      items: [],
+    });
+    expect(screen.getByTestId("regular-task-run-mode-33")).toHaveTextContent("Пробный прогон");
+    expect(screen.getByTestId("regular-task-run-summary-mode")).toHaveTextContent("Пробный прогон");
+  });
+
+  it("shows live run mode from loaded dedup items", () => {
+    const dedupOnlyItem: RegularTaskRunItemRow = {
+      ...sampleItem,
+      created_tasks: 0,
+      meta: { ...sampleItem.meta, deduped: true, task_id: 9001 },
+    };
+    renderView({ items: [dedupOnlyItem] });
+    expect(screen.getByTestId("regular-task-run-mode-33")).toHaveTextContent("Боевой прогон");
+    expect(screen.getByTestId("regular-task-run-summary-mode")).toHaveTextContent("Боевой прогон");
   });
 
   it("renders human-readable task list row from run item meta", () => {

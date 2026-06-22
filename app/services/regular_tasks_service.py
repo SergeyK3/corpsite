@@ -1539,6 +1539,7 @@ def run_regular_tasks_generation_tx(
         "item_count": int(item_count),
         "occurrence_date": today_effective.isoformat(),
         "run_kind": "catch_up" if catch_up_meta is not None else "automatic",
+        "dry_run": bool(dry_run),
     }
     if catch_up_meta is not None:
         stats_dict["catch_up"] = catch_up_meta

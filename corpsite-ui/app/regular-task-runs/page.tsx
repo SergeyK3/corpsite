@@ -126,6 +126,7 @@ export default function RegularTaskRunsPage() {
   }
 
   async function openRun(runId: number) {
+    setItems([]);
     setItemsLoading(true);
     setItemsError(null);
     try {

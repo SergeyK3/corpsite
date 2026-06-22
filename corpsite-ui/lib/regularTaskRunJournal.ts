@@ -10,6 +10,8 @@ import {
 } from "./i18n";
 import { buildTaskPageHref } from "./taskNav";
 
+export type RunMode = "dry" | "live";
+
 export type RunStats = {
   templates_total?: number;
   templates_due?: number;
@@ -21,6 +23,8 @@ export type RunStats = {
   occurrence_date?: string | null;
   run_kind?: string | null;
   catch_up?: CatchUpMeta | null;
+  dry_run?: boolean;
+  run_mode?: string | null;
 };
 
 export const JOURNAL_ORPHAN_WARNING =
@@ -67,6 +71,7 @@ export type RunItemMeta = {
   deduped?: boolean;
   task_id?: number | null;
   reason?: string | null;
+  dry_run?: boolean;
   origin_metadata_text?: string | null;
 };
 
@@ -99,6 +104,8 @@ export type RunSummary = {
   run_id: number;
   run_kind: string;
   run_kind_label: string;
+  run_mode: RunMode | null;
+  run_mode_label: string | null;
   occurrence_date: string | null;
   occurrence_date_label: string;
   period_label: string;
@@ -127,6 +134,8 @@ export type RunListEntry = {
   status_label: string;
   run_kind: string;
   run_kind_label: string;
+  run_mode: RunMode | null;
+  run_mode_label: string | null;
   started_at_label: string;
   occurrence_date_label: string;
   created: number;
@@ -152,8 +161,12 @@ export type RunTaskListState =
   | { kind: "select_run" }
   | { kind: "loading" }
   | { kind: "unavailable" }
+  | { kind: "expected_not_loaded" }
   | { kind: "none_expected" }
   | { kind: "rows"; rows: RunTaskListRow[] };
+
+export const RUN_TASK_LIST_EXPECTED_NOT_LOADED_MESSAGE =
+  "Элементы журнала ожидаются, но не загружены. Обновите страницу или проверьте API.";
 
 const ORIGIN_LINE_RE =
   /^(Источник|ID запуска|Дата возникновения задачи|Тип запуска|Период):\s*(.+)$/u;
@@ -287,6 +300,38 @@ export function resolvePeriodLabel(
   return "—";
 }
 
+export function resolveRunMode(
+  stats?: RunStats | null,
+  items?: readonly RegularTaskRunItemRow[],
+): RunMode | null {
+  if (stats?.dry_run === true) return "dry";
+  if (stats?.dry_run === false) return "live";
+
+  const runMode = String(stats?.run_mode ?? "").trim().toLowerCase();
+  if (runMode === "dry" || runMode === "dry_run" || runMode === "trial") return "dry";
+  if (runMode === "live" || runMode === "production" || runMode === "execute") return "live";
+
+  if (!items?.length) return null;
+
+  const dryRunItems = items.filter(
+    (item) => item.meta?.reason === "dry_run" || item.meta?.dry_run === true,
+  );
+  const liveOutcomeItems = items.filter(
+    (item) => item.created_tasks > 0 || item.meta?.deduped === true,
+  );
+
+  if (dryRunItems.length > 0 && liveOutcomeItems.length === 0) return "dry";
+  if (liveOutcomeItems.length > 0) return "live";
+  if (dryRunItems.length > 0) return "dry";
+  return null;
+}
+
+export function runModeLabel(mode: RunMode | null): string | null {
+  if (mode === "dry") return "Пробный прогон";
+  if (mode === "live") return "Боевой прогон";
+  return null;
+}
+
 export function resolveOrgScopeLabel(stats?: RunStats | null): string {
   const catchUp = stats?.catch_up;
   if (!catchUp) return "—";
@@ -301,13 +346,17 @@ export function resolveOrgScopeLabel(stats?: RunStats | null): string {
   return parts.length ? parts.join(" · ") : "—";
 }
 
-export function buildRunListEntry(run: RegularTaskRunRow): RunListEntry {
+export function buildRunListEntry(
+  run: RegularTaskRunRow,
+  items: readonly RegularTaskRunItemRow[] = [],
+): RunListEntry {
   const stats = run.stats ?? {};
   const runKind = resolveRunKind(stats);
   const occurrenceDate = resolveOccurrenceDate(stats);
   const created = Number(stats.created ?? 0);
   const deduped = Number(stats.deduped ?? 0);
   const errors = Number(stats.errors ?? 0);
+  const runMode = resolveRunMode(stats, items);
 
   return {
     run_id: run.run_id,
@@ -316,6 +365,8 @@ export function buildRunListEntry(run: RegularTaskRunRow): RunListEntry {
     status_label: runStatusLabel(run.status),
     run_kind: runKind,
     run_kind_label: runKindLabel(runKind),
+    run_mode: runMode,
+    run_mode_label: runModeLabel(runMode),
     started_at_label: fmtDateTime(run.started_at),
     occurrence_date_label: fmtDate(occurrenceDate),
     created,
@@ -354,11 +405,14 @@ export function buildRunSummary(
   const runKind = resolveRunKind(stats, items);
   const occurrenceDate = resolveOccurrenceDate(stats, items);
   const itemCount = Number(run.item_count ?? stats.item_count ?? items.length);
+  const runMode = resolveRunMode(stats, items);
 
   return {
     run_id: run.run_id,
     run_kind: runKind,
     run_kind_label: runKindLabel(runKind),
+    run_mode: runMode,
+    run_mode_label: runModeLabel(runMode),
     occurrence_date: occurrenceDate,
     occurrence_date_label: fmtDate(occurrenceDate),
     period_label: resolvePeriodLabel(stats, items),
@@ -531,7 +585,17 @@ export function resolveRunTaskListState(
   if (items.length > 0) {
     return { kind: "rows", rows: buildRunTaskListRows(items) };
   }
-  if (runSummary.journal_warning) return { kind: "unavailable" };
+
+  const itemCount = runSummary.item_count;
+
+  if (itemCount > 0) {
+    return { kind: "expected_not_loaded" };
+  }
+
+  if (itemCount === 0 && runSummary.journal_warning) {
+    return { kind: "unavailable" };
+  }
+
   if (
     runSummary.templates_due === 0 &&
     runSummary.created === 0 &&
@@ -539,9 +603,7 @@ export function resolveRunTaskListState(
   ) {
     return { kind: "none_expected" };
   }
-  if (runSummary.templates_due > 0 || runSummary.created > 0 || runSummary.deduped > 0) {
-    return { kind: "unavailable" };
-  }
+
   return { kind: "none_expected" };
 }
 

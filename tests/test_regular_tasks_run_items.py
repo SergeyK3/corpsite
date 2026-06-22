@@ -297,6 +297,62 @@ def test_resolve_journal_warning_no_orphan_for_non_due_schedule_errors():
     )
     assert warning is None
 
+
+def _fetch_run_stats(conn, run_id: int) -> dict:
+    row = conn.execute(
+        text("SELECT stats FROM public.regular_task_runs WHERE run_id = :rid"),
+        {"rid": int(run_id)},
+    ).scalar_one()
+    if isinstance(row, dict):
+        return row
+    return json.loads(row)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_run_stats_persist_dry_run_true_for_preview():
+    run_id: int | None = None
+    with engine.begin() as conn:
+        run_id, stats = run_regular_tasks_generation_tx(conn, dry_run=True, force_due=True)
+        assert stats["dry_run"] is True
+        assert _fetch_run_stats(conn, int(run_id))["dry_run"] is True
+
+    with engine.begin() as conn:
+        if run_id:
+            _cleanup_run(conn, int(run_id))
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_run_stats_persist_dry_run_false_for_live_run():
+    run_id: int | None = None
+    with engine.begin() as conn:
+        run_id, stats = run_regular_tasks_generation_tx(conn, dry_run=False, force_due=True)
+        assert stats["dry_run"] is False
+        assert _fetch_run_stats(conn, int(run_id))["dry_run"] is False
+
+    with engine.begin() as conn:
+        if run_id:
+            _cleanup_run(conn, int(run_id))
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_catch_up_run_stats_persist_dry_run_flag():
+    run_id: int | None = None
+    with engine.begin() as conn:
+        run_id, stats, _resolved = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="manual",
+            dry_run=True,
+            run_for_date_manual=date(2026, 3, 5),
+            schedule_type="weekly",
+        )
+        assert stats["dry_run"] is True
+        assert _fetch_run_stats(conn, int(run_id))["dry_run"] is True
+
+    with engine.begin() as conn:
+        if run_id:
+            _cleanup_run(conn, int(run_id))
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_run_now_writes_run_item_for_regular_task(seed):
     run_id: int | None = None
