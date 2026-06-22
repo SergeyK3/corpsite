@@ -2,13 +2,14 @@
 
 Операционные и UX-задачи вне текущих ADR-фаз. Нумерация: `OPS-NNN`.
 
-## Program status (2026-06-21)
+## Program status (2026-06-22)
 
 | Area | Status |
 |------|--------|
 | **ADR-044** (Identity Reconciliation R1–R2.5g) | **Complete** — implementation phases closed; R3 post-R2 validation gate remains planned in ADR, not active OPS work |
 | **Telegram bot (OPS-007 series)** | **Complete** through OPS-007b VPS validation |
 | **Operations UI localization (OPS-008)** | **Complete** — R2.5g Identity Operations panel |
+| **Regular tasks catch-up & run journal (OPS-009 program)** | **Complete** — through OPS-009.22 |
 
 ---
 
@@ -20,10 +21,11 @@
 | [OPS-007a](#ops-007a--internal-bot-api) | Internal Bot API | — | **Complete** |
 | [OPS-007b](#ops-007b--vps-telegram-validation) | VPS Telegram Validation | — | **Complete** |
 | [OPS-008](#ops-008--ui-localization-cleanup) | UI Localization Cleanup (R2.5g Operations) | — | **Complete** |
-| [OPS-009](#ops-009--regular-task-catch-up-acl--origin-metadata) | Regular Task Catch-up ACL + Origin Metadata | High | **Complete** |
+| [OPS-009](#ops-009--regular-tasks-catch-up--run-journal-program) | Regular Tasks — Catch-up & Run Journal Program | High | **Complete** |
 | [OPS-010](#ops-010--telegram-user-acceptance-testing) | Telegram User Acceptance Testing | Medium | **Open** |
 | [OPS-011](#ops-011--telegram-legacy-bindings-removal) | Telegram Legacy Bindings Removal | Low | **Deferred** |
 | [OPS-012](#ops-012--test-suite-stabilization) | Test Suite Stabilization | Low | **Open** |
+| [OPS-013](#ops-013--regular-task-run-journal-cleanup) | Regular Task Run Journal Cleanup | Low | **Backlog** |
 
 ---
 
@@ -93,6 +95,33 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 
 ---
 
+### OPS-009 — Regular Tasks Catch-up & Run Journal Program
+
+**Приоритет:** High  
+**Статус:** **Complete** (program closed 2026-06-22)
+
+**Program scope:** Regular-task catch-up ACL, origin metadata, Safe Catch-Up UI, admin task visibility, run journal outcome observability, production investigations and fixes.
+
+**Base deliverable (2026-06-21):** sysadmin run journal ACL + task origin metadata — commit `7a6f4ed`.
+
+**ADR:** [ADR-020](../adr/ADR-020-regular-tasks-contract-v1.md) — metadata block section.
+
+#### Sub-items
+
+| Sub-ID | Title | Status | Deliverable |
+|--------|-------|--------|-------------|
+| OPS-009.14 | Run #39 factual report | **Complete** | `scripts/ops/ops_009_14_run39_facts.py` |
+| OPS-009.15 | Executor role fix (tasks 10009/10010) | **Complete** | `scripts/ops/ops_009_15_*`, commits `3e531af`, `c5a0b65` |
+| OPS-009.18c | Admin account unlock | **Complete** | `scripts/ops/ops_009_18c_*`, commit `388a8ae` |
+| OPS-009.19 | Weekly period investigation | **Complete** | session 2026-06-22 (no standalone report file) |
+| OPS-009.20 | Admin task visibility + Catch-Up UI RU | **Complete** | `dc9c6dd`, prod run #40/#41 |
+| OPS-009.21 | Run journal outcome observability | **Complete** | `83a3621` |
+| OPS-009.22 | Legacy task #10006 investigation | **Complete** | [OPS-009.22 investigation](../ops/OPS-009.22-task-10006-investigation.md) |
+
+**Program outcome:** Safe Catch-Up verified on prod; ADMIN sees all tasks via `scope=team`; run journal shows task lifecycle outcome counts.
+
+---
+
 ## Open / deferred
 
 ### OPS-010 — Telegram User Acceptance Testing
@@ -147,22 +176,6 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 
 ---
 
-### OPS-009 — Regular Task Catch-up ACL + Origin Metadata
-
-**Приоритет:** High  
-**Статус:** **Complete** (2026-06-21)
-
-**Problem:** System Administrator could run catch-up but `/regular-task-runs` showed «Доступ к разделу запусков ограничен» because the page defaulted to `NEXT_PUBLIC_SUPPORT_ROLE_IDS` / `role_id=1`, while sysadmin is `role_id=2`.
-
-**Fix:**
-
-- UI ACL aligned with backend `_require_admin_or_privileged` (`canSeeRegularTaskRunsJournal`).
-- Task generator appends structured origin metadata to descriptions (create + dedup); journal items expose `meta.origin_metadata_text`.
-
-**ADR:** [ADR-020](../adr/ADR-020-regular-tasks-contract-v1.md) — metadata block section.
-
----
-
 ### OPS-013 — Regular Task Run Journal Cleanup
 
 **Приоритет:** Low  
@@ -191,6 +204,16 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 
 ---
 
+## Investigations Index
+
+| ID | Subject | Verdict | Report |
+|----|---------|---------|--------|
+| OPS-007 | Telegram bot operational audit | Findings remediated in OPS-007a/007b | [OPS-007 audit](../ops/OPS-007-telegram-bot-operational-audit.md) |
+| OPS-009.22 | Task #10006 «Phase3b E2E delivery test» | **C — Test artifact; Soft Archive recommended** | [OPS-009.22 investigation](../ops/OPS-009.22-task-10006-investigation.md) |
+| — | RBAC visibility issue #118 | Closed | [RBAC visibility audit](../RBAC_VISIBILITY_118_AUDIT.md) |
+
+---
+
 ## Tracking
 
 | Event | Date |
@@ -199,3 +222,7 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 | OPS-007a + OPS-007b complete | 2026-06-21 |
 | OPS-008 complete | 2026-06-21 |
 | Backlog refreshed (OPS-010–012 added) | 2026-06-21 |
+| OPS-009.20 Safe Catch-Up + admin scope deployed | 2026-06-22 |
+| OPS-009.21 run journal outcome shipped | 2026-06-22 |
+| OPS-009.22 task #10006 investigation complete | 2026-06-22 |
+| OPS-009 program closed; OPS-009.24 backlog reconciliation | 2026-06-22 |
