@@ -15,10 +15,15 @@ export type RunStats = {
   created?: number;
   deduped?: number;
   errors?: number;
+  item_count?: number;
+  journal_warning?: string | null;
   occurrence_date?: string | null;
   run_kind?: string | null;
   catch_up?: CatchUpMeta | null;
 };
+
+export const JOURNAL_ORPHAN_WARNING =
+  "Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют. Возможна неполная запись журнала.";
 
 export type CatchUpMeta = {
   preset?: string | null;
@@ -37,6 +42,8 @@ export type RegularTaskRunRow = {
   status: string;
   stats?: RunStats | null;
   errors?: unknown;
+  item_count?: number;
+  journal_warning?: string | null;
 };
 
 export type RunItemMeta = {
@@ -97,6 +104,8 @@ export type RunSummary = {
   created: number;
   deduped: number;
   errors: number;
+  item_count: number;
+  journal_warning: string | null;
   org_group_id: number | null;
   org_unit_id: number | null;
   org_scope_label: string;
@@ -293,6 +302,27 @@ export function buildRunListEntry(run: RegularTaskRunRow): RunListEntry {
   };
 }
 
+export function resolveJournalWarning(
+  run: RegularTaskRunRow,
+  items: readonly RegularTaskRunItemRow[] = [],
+): string | null {
+  const fromApi = String(run.journal_warning ?? run.stats?.journal_warning ?? "").trim();
+  if (fromApi) return fromApi;
+
+  const stats = run.stats ?? {};
+  const itemCount = run.item_count ?? stats.item_count ?? items.length;
+  const created = Number(stats.created ?? 0);
+  const deduped = Number(stats.deduped ?? 0);
+  const templatesDue = Number(stats.templates_due ?? 0);
+  if (
+    Number(itemCount) === 0 &&
+    (templatesDue > 0 || created + deduped > 0)
+  ) {
+    return JOURNAL_ORPHAN_WARNING;
+  }
+  return null;
+}
+
 export function buildRunSummary(
   run: RegularTaskRunRow,
   items: readonly RegularTaskRunItemRow[] = [],
@@ -300,6 +330,7 @@ export function buildRunSummary(
   const stats = run.stats ?? {};
   const runKind = resolveRunKind(stats, items);
   const occurrenceDate = resolveOccurrenceDate(stats, items);
+  const itemCount = Number(run.item_count ?? stats.item_count ?? items.length);
 
   return {
     run_id: run.run_id,
@@ -315,6 +346,8 @@ export function buildRunSummary(
     created: Number(stats.created ?? 0),
     deduped: Number(stats.deduped ?? 0),
     errors: Number(stats.errors ?? 0),
+    item_count: itemCount,
+    journal_warning: resolveJournalWarning(run, items),
     org_group_id: stats.catch_up?.org_group_id ?? null,
     org_unit_id: stats.catch_up?.org_unit_id ?? null,
     org_scope_label: resolveOrgScopeLabel(stats),

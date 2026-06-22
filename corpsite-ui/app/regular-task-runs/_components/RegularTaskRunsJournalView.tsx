@@ -274,7 +274,17 @@ export function RegularTaskRunsJournalView({
                 Выберите запуск в списке слева.
               </div>
             ) : (
-              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="mt-3 space-y-3">
+                {runSummary.journal_warning ? (
+                  <div
+                    className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                    data-testid="regular-task-run-journal-warning"
+                    role="alert"
+                  >
+                    {runSummary.journal_warning}
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
                 <SummaryField label="Запуск" value={runTitleLabel(runSummary.run_id)} />
                 <SummaryField label="Статус" value={runSummary.status_label} />
                 <SummaryField label={uiFieldLabel("run_kind")} value={runSummary.run_kind_label} />
@@ -291,6 +301,8 @@ export function RegularTaskRunsJournalView({
                 <SummaryField label={uiFieldLabel("created")} value={String(runSummary.created)} />
                 <SummaryField label="Дедуплицировано" value={String(runSummary.deduped)} />
                 <SummaryField label={uiFieldLabel("errors")} value={String(runSummary.errors)} />
+                <SummaryField label="Элементов журнала" value={String(runSummary.item_count)} />
+              </div>
               </div>
             )}
           </section>

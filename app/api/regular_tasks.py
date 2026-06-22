@@ -11,6 +11,7 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged
 from app.services.regular_tasks_import_xlsx import import_regular_task_templates_xlsx_bytes
+from app.services.regular_tasks_service import _resolve_journal_warning
 from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 
 
@@ -24,6 +25,8 @@ class RegularTaskRunOut(BaseModel):
     status: str
     stats: Any = {}
     errors: Any = None
+    item_count: int = 0
+    journal_warning: Optional[str] = None
 
 
 class RegularTaskRunItemOut(BaseModel):
@@ -114,7 +117,12 @@ def list_regular_task_runs(
             r.finished_at,
             r.status,
             r.stats,
-            r.errors
+            r.errors,
+            (
+                SELECT COUNT(1)
+                FROM public.regular_task_run_items i2
+                WHERE i2.run_id = r.run_id
+            ) AS item_count
         FROM public.regular_task_runs r
         {where_sql}
         ORDER BY r.run_id DESC
@@ -127,14 +135,25 @@ def list_regular_task_runs(
 
     out: List[RegularTaskRunOut] = []
     for r in rows:
+        stats = r.get("stats") or {}
+        if not isinstance(stats, dict):
+            stats = {}
+        item_count = int(r.get("item_count") or stats.get("item_count") or 0)
+        journal_warning = _resolve_journal_warning(
+            stats=stats,
+            item_count=item_count,
+            templates_due=int(stats.get("templates_due") or 0),
+        )
         out.append(
             RegularTaskRunOut(
                 run_id=r["run_id"],
                 started_at=r["started_at"].isoformat(),
                 finished_at=r["finished_at"].isoformat() if r["finished_at"] else None,
                 status=r["status"],
-                stats=r.get("stats"),
+                stats=stats,
                 errors=r.get("errors"),
+                item_count=item_count,
+                journal_warning=journal_warning,
             )
         )
     return out

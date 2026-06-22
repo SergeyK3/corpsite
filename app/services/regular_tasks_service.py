@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -15,6 +16,18 @@ from sqlalchemy.engine import Connection
 
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
+
+
+logger = logging.getLogger(__name__)
+
+JOURNAL_ORPHAN_WARNING = (
+    "Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют. "
+    "Возможна неполная запись журнала."
+)
+JOURNAL_MISMATCH_WARNING = (
+    "Внимание: число элементов журнала не совпадает с числом обработанных due-шаблонов. "
+    "Возможна неполная запись журнала."
+)
 
 
 # ---------------------------
@@ -660,7 +673,37 @@ def _update_due_date_if_needed(conn: Connection, task_id: int, due_date_val: dat
     return int(getattr(r, "rowcount", 0) or 0)
 
 
-def _log_run_item_safe(
+def _dedup_item_meta(
+    *,
+    base_meta: Dict[str, Any],
+    regular_task_id: int,
+    task_id: Optional[int],
+    task_title: str,
+    period_id: int,
+    executor_role_id: int,
+    assignment_scope: str,
+    occurrence_date: date,
+    run_kind: str,
+    dedupe_mode: str,
+    **extra: Any,
+) -> Dict[str, Any]:
+    return {
+        **base_meta,
+        **extra,
+        "regular_task_id": int(regular_task_id),
+        "task_id": int(task_id) if task_id is not None else None,
+        "task_title": str(task_title),
+        "period_id": int(period_id),
+        "executor_role_id": int(executor_role_id),
+        "assignment_scope": str(assignment_scope),
+        "occurrence_date": occurrence_date.isoformat(),
+        "run_kind": str(run_kind),
+        "dedupe_mode": str(dedupe_mode),
+        "deduped": True,
+    }
+
+
+def _log_run_item(
     conn: Connection,
     *,
     run_id: int,
@@ -672,7 +715,8 @@ def _log_run_item_safe(
     status: str,
     error: Optional[str],
     meta: Dict[str, Any],
-) -> None:
+    journal_errors: List[Dict[str, Any]],
+) -> bool:
     try:
         with conn.begin_nested():
             conn.execute(
@@ -714,8 +758,56 @@ def _log_run_item_safe(
                     "meta": json.dumps(meta or {}, ensure_ascii=False),
                 },
             )
-    except Exception:
-        return
+        return True
+    except Exception as exc:
+        logger.exception(
+            "Failed to insert regular_task_run_items row (run_id=%s regular_task_id=%s)",
+            run_id,
+            regular_task_id,
+        )
+        journal_errors.append(
+            {
+                "kind": "journal_insert_failed",
+                "regular_task_id": int(regular_task_id),
+                "error": str(exc),
+            }
+        )
+        return False
+
+
+def _count_run_items(conn: Connection, run_id: int) -> int:
+    return int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(1)
+                FROM public.regular_task_run_items
+                WHERE run_id = :run_id
+                """
+            ),
+            {"run_id": int(run_id)},
+        ).scalar()
+        or 0
+    )
+
+
+def _resolve_journal_warning(
+    *,
+    stats: Dict[str, Any],
+    item_count: int,
+    templates_due: int,
+) -> Optional[str]:
+    existing = str(stats.get("journal_warning") or "").strip()
+    if existing:
+        return existing
+
+    created = int(stats.get("created") or 0)
+    deduped = int(stats.get("deduped") or 0)
+    if item_count == 0 and (templates_due > 0 or (created + deduped) > 0):
+        return JOURNAL_ORPHAN_WARNING
+    if templates_due > 0 and item_count != templates_due:
+        return JOURNAL_MISMATCH_WARNING
+    return None
 
 
 def _compose_task_title(*, base_title: str, role_name: str, suffix: str) -> str:
@@ -1046,6 +1138,7 @@ def run_regular_tasks_generation_tx(
     ).scalar_one()
 
     errors: List[Dict[str, Any]] = []
+    journal_errors: List[Dict[str, Any]] = []
 
     templates = _load_regular_task_templates(conn, template_filters=template_filters)
 
@@ -1073,6 +1166,7 @@ def run_regular_tasks_generation_tx(
             "catch_up": catch_up_meta,
         }
 
+        template_marked_due = False
         try:
             schedule_type = str(t.get("schedule_type") or "").strip().lower()
             schedule_params = t.get("schedule_params") or {}
@@ -1094,18 +1188,6 @@ def run_regular_tasks_generation_tx(
             sched_err = _validate_template_schedule(schedule_type, schedule_params)
             if sched_err:
                 errors.append({"regular_task_id": rid, "error": sched_err})
-                _log_run_item_safe(
-                    conn,
-                    run_id=int(run_id),
-                    regular_task_id=int(rid),
-                    period_id=None,
-                    executor_role_id=_safe_int(t.get("executor_role_id")),
-                    is_due=False,
-                    created_tasks=0,
-                    status="error",
-                    error=sched_err,
-                    meta=base_meta,
-                )
                 continue
 
             if FORCE_DUE_ALL or force_due:
@@ -1124,12 +1206,13 @@ def run_regular_tasks_generation_tx(
                 continue
 
             due += 1
+            template_marked_due = True
 
             executor_role_id = _safe_int(t.get("executor_role_id"))
             if executor_role_id is None:
                 msg = "executor_role_id is required (cannot be NULL) when template is due"
                 errors.append({"regular_task_id": rid, "error": msg})
-                _log_run_item_safe(
+                _log_run_item(
                     conn,
                     run_id=int(run_id),
                     regular_task_id=int(rid),
@@ -1140,6 +1223,7 @@ def run_regular_tasks_generation_tx(
                     status="error",
                     error=msg,
                     meta=base_meta,
+                    journal_errors=journal_errors,
                 )
                 continue
 
@@ -1148,7 +1232,7 @@ def run_regular_tasks_generation_tx(
             except Exception as e:
                 msg = str(e)
                 errors.append({"regular_task_id": rid, "error": msg})
-                _log_run_item_safe(
+                _log_run_item(
                     conn,
                     run_id=int(run_id),
                     regular_task_id=int(rid),
@@ -1159,6 +1243,7 @@ def run_regular_tasks_generation_tx(
                     status="error",
                     error=msg,
                     meta=base_meta,
+                    journal_errors=journal_errors,
                 )
                 continue
 
@@ -1240,7 +1325,7 @@ def run_regular_tasks_generation_tx(
                 base_meta["origin_metadata_text"] = origin_block.strip("\n")
 
                 if dry_run:
-                    _log_run_item_safe(
+                    _log_run_item(
                         conn,
                         run_id=int(run_id),
                         regular_task_id=int(rid),
@@ -1251,6 +1336,7 @@ def run_regular_tasks_generation_tx(
                         status="skip",
                         error=None,
                         meta={**base_meta, "reason": "dry_run"},
+                        journal_errors=journal_errors,
                     )
                     continue
 
@@ -1273,7 +1359,7 @@ def run_regular_tasks_generation_tx(
                         period_suffix=suffix,
                     )
                     deduped += 1
-                    _log_run_item_safe(
+                    _log_run_item(
                         conn,
                         run_id=int(run_id),
                         regular_task_id=int(rid),
@@ -1283,15 +1369,22 @@ def run_regular_tasks_generation_tx(
                         created_tasks=0,
                         status="ok",
                         error=None,
-                        meta={
-                            **base_meta,
-                            "task_id": active_task_id,
-                            "deduped": True,
-                            "archived_conflicts": 0,
-                            "due_date_updated": bool(updated > 0),
-                            "description_metadata_appended": bool(desc_updated),
-                            "dedupe_mode": "same_executor_active_exists",
-                        },
+                        meta=_dedup_item_meta(
+                            base_meta=base_meta,
+                            regular_task_id=int(rid),
+                            task_id=active_task_id,
+                            task_title=title_final,
+                            period_id=int(period_id),
+                            executor_role_id=int(executor_role_id),
+                            assignment_scope=assignment_scope,
+                            occurrence_date=occurrence_date,
+                            run_kind=run_kind,
+                            dedupe_mode="same_executor_active_exists",
+                            archived_conflicts=0,
+                            due_date_updated=bool(updated > 0),
+                            description_metadata_appended=bool(desc_updated),
+                        ),
+                        journal_errors=journal_errors,
                     )
                     continue
 
@@ -1363,7 +1456,7 @@ def run_regular_tasks_generation_tx(
 
                 if row and row.get("task_id"):
                     created += 1
-                    _log_run_item_safe(
+                    _log_run_item(
                         conn,
                         run_id=int(run_id),
                         regular_task_id=int(rid),
@@ -1376,15 +1469,17 @@ def run_regular_tasks_generation_tx(
                         meta={
                             **base_meta,
                             "task_id": int(row["task_id"]),
+                            "task_title": title_final,
                             "deduped": False,
                             "archived_conflicts": int(archived_conflicts),
                             "due_date_set": (row.get("due_date") is not None),
                             "insert_mode": "plain_insert_no_on_conflict",
                         },
+                        journal_errors=journal_errors,
                     )
                 else:
                     deduped += 1
-                    _log_run_item_safe(
+                    _log_run_item(
                         conn,
                         run_id=int(run_id),
                         regular_task_id=int(rid),
@@ -1394,31 +1489,46 @@ def run_regular_tasks_generation_tx(
                         created_tasks=0,
                         status="ok",
                         error=None,
-                        meta={
-                            **base_meta,
-                            "task_id": None,
-                            "deduped": True,
-                            "archived_conflicts": int(archived_conflicts),
-                            "insert_mode": "plain_insert_no_return",
-                        },
+                        meta=_dedup_item_meta(
+                            base_meta=base_meta,
+                            regular_task_id=int(rid),
+                            task_id=None,
+                            task_title=title_final,
+                            period_id=int(period_id),
+                            executor_role_id=int(executor_role_id),
+                            assignment_scope=assignment_scope,
+                            occurrence_date=occurrence_date,
+                            run_kind=run_kind,
+                            dedupe_mode="plain_insert_no_return",
+                            archived_conflicts=int(archived_conflicts),
+                            insert_mode="plain_insert_no_return",
+                        ),
+                        journal_errors=journal_errors,
                     )
 
         except Exception as e:
             err_str = str(e)
             errors.append({"regular_task_id": rid, "error": err_str})
-            _log_run_item_safe(
-                conn,
-                run_id=int(run_id),
-                regular_task_id=int(rid),
-                period_id=None,
-                executor_role_id=_safe_int(t.get("executor_role_id")),
-                is_due=True,
-                created_tasks=0,
-                status="error",
-                error=err_str,
-                meta=base_meta,
-            )
+            if template_marked_due:
+                _log_run_item(
+                    conn,
+                    run_id=int(run_id),
+                    regular_task_id=int(rid),
+                    period_id=None,
+                    executor_role_id=_safe_int(t.get("executor_role_id")),
+                    is_due=True,
+                    created_tasks=0,
+                    status="error",
+                    error=err_str,
+                    meta=base_meta,
+                    journal_errors=journal_errors,
+                )
             continue
+
+    if journal_errors:
+        errors.extend(journal_errors)
+
+    item_count = _count_run_items(conn, int(run_id))
 
     stats_dict: Dict[str, Any] = {
         "templates_total": int(total),
@@ -1426,18 +1536,31 @@ def run_regular_tasks_generation_tx(
         "created": int(created),
         "deduped": int(deduped),
         "errors": int(len(errors)),
+        "item_count": int(item_count),
         "occurrence_date": today_effective.isoformat(),
         "run_kind": "catch_up" if catch_up_meta is not None else "automatic",
     }
     if catch_up_meta is not None:
         stats_dict["catch_up"] = catch_up_meta
 
+    journal_warning = _resolve_journal_warning(
+        stats=stats_dict,
+        item_count=int(item_count),
+        templates_due=int(due),
+    )
+    if journal_warning:
+        stats_dict["journal_warning"] = journal_warning
+
+    run_status = "ok"
+    if len(errors) > 0 or journal_warning:
+        run_status = "partial"
+
     conn.execute(
         text(
             """
             UPDATE public.regular_task_runs
             SET finished_at = now(),
-                status = CASE WHEN :errors_cnt > 0 THEN 'partial' ELSE 'ok' END,
+                status = :status,
                 stats = CAST(:stats AS jsonb),
                 errors = CAST(:errors AS jsonb)
             WHERE run_id = :run_id
@@ -1445,7 +1568,7 @@ def run_regular_tasks_generation_tx(
         ),
         {
             "run_id": int(run_id),
-            "errors_cnt": int(len(errors)),
+            "status": run_status,
             "stats": json.dumps(stats_dict, ensure_ascii=False),
             "errors": json.dumps(errors, ensure_ascii=False),
         },

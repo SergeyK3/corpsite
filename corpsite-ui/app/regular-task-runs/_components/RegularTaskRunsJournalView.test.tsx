@@ -162,6 +162,23 @@ describe("RegularTaskRunsJournalView", () => {
     expect(screen.getByTestId("regular-task-run-items-empty")).toHaveTextContent("Элементы отсутствуют.");
   });
 
+  it("shows journal integrity warning for orphan runs", () => {
+    renderView({
+      runs: [
+        {
+          ...catchUpRun,
+          item_count: 0,
+          journal_warning:
+            "Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют. Возможна неполная запись журнала.",
+        },
+      ],
+      items: [],
+    });
+    expect(screen.getByTestId("regular-task-run-journal-warning")).toHaveTextContent(
+      "Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют.",
+    );
+  });
+
   it("selects run from list", () => {
     const onSelectRun = vi.fn();
     renderView({ selectedRunId: null, items: [], onSelectRun });

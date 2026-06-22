@@ -127,6 +127,18 @@ ID запуска: <run_id>
 
 Доступ к журналу запусков (`GET /regular-task-runs*`) — system admin (`role_id=2`) или privileged operator; UI `/regular-task-runs` использует тот же контракт (не `role_id=1` по умолчанию).
 
+### Журнал элементов запуска и целостность (2026-06-22)
+
+- `regular_task_runs.stats` — **сводка** запуска (`templates_total`, `templates_due`, `created`, `deduped`, `errors`, `item_count`). Не является единственным audit trail.
+- `regular_task_run_items` — **источник истины** для аудита: по одной строке на каждый due-шаблон, обработанный в запуске (создание, дедуп, ошибка, dry-run skip).
+- Для due-шаблонов ожидается `item_count == templates_due`; расхождение фиксируется в `stats.journal_warning`, статус запуска `partial`.
+- Ошибки записи в `regular_task_run_items` **не подавляются**: логируются (`logger.exception`), попадают в `errors` (`kind=journal_insert_failed`), увеличивают счётчик ошибок.
+- Для **существующих** запусков без миграции данных API/UI вычисляют предупреждение, если `created + deduped + errors > 0` и элементов журнала нет:
+
+  > Внимание: статистика запуска содержит результаты, но элементы журнала отсутствуют. Возможна неполная запись журнала.
+
+- При дедупликации `regular_task_run_items.meta` обязательно содержит: `dedupe_mode`, `task_id`, `task_title`, `regular_task_id`, `executor_role_id`, `period_id`, `assignment_scope`, `occurrence_date`, `run_kind`.
+
 ## API / UI (контракт v1)
 UI “Регулярные задачи”:
 - список шаблонов (`GET /regular-tasks`)
