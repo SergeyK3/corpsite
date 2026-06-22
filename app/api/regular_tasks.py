@@ -1,7 +1,8 @@
 # FILE: app/api/regular_tasks.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
@@ -16,6 +17,18 @@ from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 
 
 router = APIRouter(prefix="", tags=["Regular Tasks"])
+
+
+def _isoformat_or_none(value: Union[datetime, date, str, None]) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return trimmed or None
+    iso = getattr(value, "isoformat", None)
+    if callable(iso):
+        return iso()
+    return str(value)
 
 
 class RegularTaskRunOut(BaseModel):
@@ -34,7 +47,7 @@ class RegularTaskRunItemOut(BaseModel):
     run_id: int
     regular_task_id: int
     status: str
-    started_at: str
+    started_at: Optional[str] = None
     finished_at: Optional[str] = None
     period_id: Optional[int] = None
     executor_role_id: Optional[int] = None
@@ -147,8 +160,8 @@ def list_regular_task_runs(
         out.append(
             RegularTaskRunOut(
                 run_id=r["run_id"],
-                started_at=r["started_at"].isoformat(),
-                finished_at=r["finished_at"].isoformat() if r["finished_at"] else None,
+                started_at=_isoformat_or_none(r["started_at"]) or "",
+                finished_at=_isoformat_or_none(r["finished_at"]),
                 status=r["status"],
                 stats=stats,
                 errors=r.get("errors"),
@@ -220,8 +233,8 @@ def list_regular_task_run_items(
             run_id=r["run_id"],
             regular_task_id=r["regular_task_id"],
             status=r["status"],
-            started_at=r["started_at"].isoformat(),
-            finished_at=r["finished_at"].isoformat() if r["finished_at"] else None,
+            started_at=_isoformat_or_none(r["started_at"]),
+            finished_at=_isoformat_or_none(r["finished_at"]),
             period_id=r["period_id"],
             executor_role_id=r["executor_role_id"],
             executor_role_name=r.get("executor_role_name"),
