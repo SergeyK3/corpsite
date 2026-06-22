@@ -27,6 +27,11 @@ type Props = {
 
 type Step = 1 | 2 | 3;
 
+type PositionOptionSource = {
+  id?: number | string | null;
+  name?: string | null;
+};
+
 function flattenOrgUnits(nodes: TreeNode[], depth = 0): Array<{ id: number; label: string }> {
   const out: Array<{ id: number; label: string }> = [];
   for (const node of nodes) {
@@ -127,11 +132,15 @@ export default function ImportEnrollEmployeeWizard({
         ]);
         if (cancelled) return;
         setOrgUnitOptions(flattenOrgUnits(tree.items ?? []));
-        const posItems = Array.isArray(positions?.items) ? positions.items : Array.isArray(positions) ? positions : [];
+        const posItems: PositionOptionSource[] = Array.isArray(positions?.items)
+          ? (positions.items as PositionOptionSource[])
+          : Array.isArray(positions)
+            ? (positions as PositionOptionSource[])
+            : [];
         setPositionOptions(
           posItems
-            .filter((p) => p.id != null)
-            .map((p) => ({ id: Number(p.id), label: String(p.name ?? `#${p.id}`) }))
+            .filter((p: PositionOptionSource) => p.id != null)
+            .map((p: PositionOptionSource) => ({ id: Number(p.id), label: String(p.name ?? `#${p.id}`) }))
             .sort((a, b) => a.label.localeCompare(b.label, "ru"))
         );
       } catch {
