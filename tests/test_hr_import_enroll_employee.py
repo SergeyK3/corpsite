@@ -1,6 +1,7 @@
 """Tests for ADR-039 Phase 3I — enroll employee from normalized import record."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.main import app
 from app.services.hr_import_enroll_employee_service import (
+    ENROLLMENT_SOURCE_HR_IMPORT_NORMALIZED_RECORD,
     EVENT_TYPE_ENROLLED_FROM_IMPORT,
     enroll_employee_from_normalized_record,
     EnrollEmployeeRequest,
@@ -77,6 +79,42 @@ def _first_normalized_record_id(conn, row_id: int) -> int:
     if record_id is None:
         raise AssertionError(f"no normalized records for row_id={row_id}")
     return int(record_id)
+
+
+def _row_metadata(conn, row_id: int) -> dict:
+    raw = conn.execute(
+        text(
+            """
+            SELECT normalized_payload->'metadata'
+            FROM public.hr_import_rows
+            WHERE row_id = :row_id
+            """
+        ),
+        {"row_id": row_id},
+    ).scalar_one()
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        return json.loads(raw)
+    return dict(raw)
+
+
+def _set_row_metadata_marker(conn, row_id: int, *, marker: str) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_import_rows
+            SET normalized_payload = jsonb_set(
+                COALESCE(normalized_payload, '{}'::jsonb),
+                '{metadata,custom_test_marker}',
+                to_jsonb(CAST(:marker AS text)),
+                true
+            )
+            WHERE row_id = :row_id
+            """
+        ),
+        {"row_id": row_id, "marker": marker},
+    )
 
 
 @pytest.fixture
@@ -290,6 +328,205 @@ def test_enroll_execute_creates_employee_and_links(seed, tmp_path: Path):
                     {"id": employee_id},
                 )
                 conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_execute_updates_row_metadata_binding_status(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Enroll Meta Bound {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+    employee_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            pos_id = _create_position(conn, name=f"pytest_enroll_meta_{suffix}")
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(
+                    dry_run=False,
+                    org_unit_id=int(seed["unit_id"]),
+                    position_id=pos_id,
+                ),
+            )
+            employee_id = int(result.employee_id)
+            metadata = _row_metadata(conn, row_id)
+
+        assert result.created is True
+        assert metadata.get("employee_binding_status") == "bound"
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if employee_id:
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_identities WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_execute_writes_enrolled_employee_id_metadata(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Enroll Meta Emp {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+    employee_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            pos_id = _create_position(conn, name=f"pytest_enroll_emp_{suffix}")
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(
+                    dry_run=False,
+                    org_unit_id=int(seed["unit_id"]),
+                    position_id=pos_id,
+                ),
+            )
+            employee_id = int(result.employee_id)
+            metadata = _row_metadata(conn, row_id)
+
+        assert metadata.get("enrolled_employee_id") == employee_id
+        assert metadata.get("enrolled_from_record_id") == record_id
+        assert metadata.get("enrollment_source") == ENROLLMENT_SOURCE_HR_IMPORT_NORMALIZED_RECORD
+        assert metadata.get("enrolled_at")
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if employee_id:
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_identities WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_execute_preserves_existing_row_metadata(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    marker = f"preserve_{suffix}"
+    full_name = f"Enroll Meta Keep {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+    employee_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            pos_id = _create_position(conn, name=f"pytest_enroll_keep_{suffix}")
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            _set_row_metadata_marker(conn, row_id, marker=marker)
+            before = _row_metadata(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(
+                    dry_run=False,
+                    org_unit_id=int(seed["unit_id"]),
+                    position_id=pos_id,
+                ),
+            )
+            employee_id = int(result.employee_id)
+            after = _row_metadata(conn, row_id)
+
+        assert before.get("custom_test_marker") == marker
+        assert after.get("custom_test_marker") == marker
+        assert after.get("employee_binding_status") == "bound"
+        assert after.get("enrolled_employee_id") == employee_id
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if employee_id:
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_identities WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_dry_run_does_not_mutate_row_metadata(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    marker = f"dry_run_{suffix}"
+    full_name = f"Enroll Dry Meta {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            _set_row_metadata_marker(conn, row_id, marker=marker)
+            before = _row_metadata(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(dry_run=True),
+            )
+            after = _row_metadata(conn, row_id)
+
+        assert result.outcome == "ready"
+        assert before == after
+        assert "enrolled_employee_id" not in after
+        assert after.get("employee_binding_status") != "bound"
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

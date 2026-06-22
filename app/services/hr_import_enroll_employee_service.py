@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import text
@@ -416,19 +416,27 @@ def _insert_enrolled_event(
     )
 
 
+ENROLLMENT_SOURCE_HR_IMPORT_NORMALIZED_RECORD = "hr_import_normalized_record"
+
+
 def _persist_row_enroll_metadata(
     conn: Connection,
     *,
     row_id: int,
-    payload: dict[str, Any],
     employee_id: int,
     enrolled_by: int,
     source_normalized_record_id: int,
 ) -> None:
+    """Merge enrollment metadata into the row payload without clobbering binding fields."""
+    import_row = _load_row_payload(conn, row_id)
+    payload = dict(import_row["payload"])
     metadata = dict(payload.get("metadata") or {})
+    metadata["employee_binding_status"] = BINDING_STATUS_BOUND
     metadata["enrolled_employee_id"] = employee_id
-    metadata["enrolled_from_normalized_record_id"] = source_normalized_record_id
+    metadata["enrolled_from_record_id"] = source_normalized_record_id
     metadata["enrolled_by"] = enrolled_by
+    metadata["enrolled_at"] = datetime.now(timezone.utc).isoformat()
+    metadata["enrollment_source"] = ENROLLMENT_SOURCE_HR_IMPORT_NORMALIZED_RECORD
     payload["metadata"] = metadata
     conn.execute(
         text(
@@ -460,8 +468,6 @@ def _link_batch_rows_by_iin(
     )
     linked_record_ids: list[int] = []
     for row_id in target_row_ids:
-        import_row = _load_row_payload(conn, row_id)
-        payload = import_row["payload"]
         binding = EmployeeBindingResult(
             employee_id=employee_id,
             status=BINDING_STATUS_BOUND,
@@ -473,7 +479,6 @@ def _link_batch_rows_by_iin(
         _persist_row_enroll_metadata(
             conn,
             row_id=row_id,
-            payload=payload,
             employee_id=employee_id,
             enrolled_by=bound_by,
             source_normalized_record_id=source_normalized_record_id,
