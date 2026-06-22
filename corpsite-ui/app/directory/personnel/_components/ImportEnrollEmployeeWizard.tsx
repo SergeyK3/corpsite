@@ -70,6 +70,11 @@ function flattenOrgUnits(nodes: TreeNode[], depth = 0): Array<{ id: number; labe
   return out;
 }
 
+type PositionListSource = "none" | "unit" | "catalog";
+
+const CATALOG_FALLBACK_NOTICE =
+  "Для выбранного отделения пока нет используемых должностей. Показан общий справочник должностей.";
+
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -130,6 +135,7 @@ export default function ImportEnrollEmployeeWizard({
   const [confirmChecked, setConfirmChecked] = React.useState(false);
   const [orgUnitOptions, setOrgUnitOptions] = React.useState<Array<{ id: number; label: string }>>([]);
   const [positionOptions, setPositionOptions] = React.useState<PositionOption[]>([]);
+  const [positionListSource, setPositionListSource] = React.useState<PositionListSource>("none");
   const [unitPositionsLoading, setUnitPositionsLoading] = React.useState(false);
   const [positionValidationMessage, setPositionValidationMessage] = React.useState<string | null>(null);
 
@@ -143,6 +149,7 @@ export default function ImportEnrollEmployeeWizard({
     setOrgUnitId("");
     setPositionId("");
     setPositionOptions([]);
+    setPositionListSource("none");
     setPositionValidationMessage(null);
     setDateFrom(todayIsoDate());
     setEmploymentRate("1");
@@ -169,6 +176,7 @@ export default function ImportEnrollEmployeeWizard({
     const unitId = orgUnitId.trim();
     if (!unitId) {
       setPositionOptions([]);
+      setPositionListSource("none");
       setUnitPositionsLoading(false);
       return;
     }
@@ -178,11 +186,25 @@ export default function ImportEnrollEmployeeWizard({
 
     void (async () => {
       try {
-        const raw = await getPositions({ org_unit_id: Number(unitId), limit: 500 });
+        const scopedRaw = await getPositions({ org_unit_id: Number(unitId), limit: 500 });
         if (cancelled) return;
-        setPositionOptions(normalizePositionOptions(raw));
+
+        const scopedOptions = normalizePositionOptions(scopedRaw);
+        if (scopedOptions.length > 0) {
+          setPositionOptions(scopedOptions);
+          setPositionListSource("unit");
+          return;
+        }
+
+        const catalogRaw = await getPositions({ limit: 500 });
+        if (cancelled) return;
+        setPositionOptions(normalizePositionOptions(catalogRaw));
+        setPositionListSource("catalog");
       } catch {
-        if (!cancelled) setPositionOptions([]);
+        if (!cancelled) {
+          setPositionOptions([]);
+          setPositionListSource("none");
+        }
       } finally {
         if (!cancelled) setUnitPositionsLoading(false);
       }
@@ -206,7 +228,7 @@ export default function ImportEnrollEmployeeWizard({
   function positionSelectPlaceholder(): string {
     if (!orgUnitId.trim()) return "Сначала выберите отделение";
     if (unitPositionsLoading) return "Загрузка должностей…";
-    if (positionOptions.length === 0) return "Нет доступных должностей для выбранного отделения";
+    if (positionOptions.length === 0) return "Нет доступных должностей";
     return "Выберите должность";
   }
 
@@ -531,8 +553,21 @@ export default function ImportEnrollEmployeeWizard({
                 </option>
               ))}
             </select>
+            {positionListSource === "catalog" ? (
+              <span className="text-xs text-amber-700 dark:text-amber-300">{CATALOG_FALLBACK_NOTICE}</span>
+            ) : null}
             {positionValidationMessage ? (
               <span className="text-xs text-amber-700 dark:text-amber-300">{positionValidationMessage}</span>
+            ) : null}
+            {orgUnitId.trim() ? (
+              <Link
+                href="/directory/positions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Справочник должностей
+              </Link>
             ) : null}
             {dryRunResult?.preview?.position_hint?.value ? (
               <span className="text-xs text-blue-600 dark:text-blue-400">
