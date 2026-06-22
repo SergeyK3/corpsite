@@ -1,8 +1,14 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import ImportEnrollEmployeeWizard from "./ImportEnrollEmployeeWizard";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
 import type { NormalizedRecord } from "../_lib/importApi.client";
+
+vi.mock("./ImportEnrollEmployeeWizard", () => ({
+  default: ({ canEnroll }: { canEnroll?: boolean }) =>
+    canEnroll ? <div data-testid="enroll-wizard">Добавить в персонал</div> : null,
+}));
 
 const fullIin = "851101300451";
 
@@ -53,11 +59,12 @@ const baseRecord: NormalizedRecord = {
   updated_at: "2026-06-01T10:00:00.000Z",
 };
 
-function renderDrawer(record: NormalizedRecord) {
+function renderDrawer(record: NormalizedRecord, canEnrollEmployee = true) {
   render(
     <ImportNormalizedRecordDrawer
       record={record}
       open
+      canEnrollEmployee={canEnrollEmployee}
       onClose={vi.fn()}
       onReviewed={vi.fn()}
       onToast={vi.fn()}
@@ -66,6 +73,10 @@ function renderDrawer(record: NormalizedRecord) {
 }
 
 describe("ImportNormalizedRecordDrawer", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders full IIN without masking", () => {
     renderDrawer(baseRecord);
 
@@ -93,5 +104,15 @@ describe("ImportNormalizedRecordDrawer", () => {
     renderDrawer(legacyRecord);
 
     expect(screen.queryByText(/8511\*+/)).not.toBeInTheDocument();
+  });
+
+  it("shows enroll wizard for unlinked record when HR can enroll", () => {
+    renderDrawer(baseRecord, true);
+    expect(screen.getByTestId("enroll-wizard")).toBeInTheDocument();
+  });
+
+  it("hides enroll wizard when canEnrollEmployee is false", () => {
+    renderDrawer(baseRecord, false);
+    expect(screen.queryByTestId("enroll-wizard")).not.toBeInTheDocument();
   });
 });

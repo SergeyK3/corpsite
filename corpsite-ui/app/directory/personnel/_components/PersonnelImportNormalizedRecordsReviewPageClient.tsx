@@ -30,6 +30,9 @@ import {
   type RepairBatchEmployeeBindingsResult,
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
+import { apiAuthMe } from "@/lib/api";
+import { canSeeHrProcessesNav } from "@/lib/personnelNav";
+import type { MeInfo } from "@/lib/types";
 
 export const PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE = "3g-employee-binding";
 
@@ -176,6 +179,13 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
   const [toast, setToast] = React.useState<ToastState>(null);
   const [isHelpExpanded, setIsHelpExpanded] = React.useState(true);
   const [helpStorageReady, setHelpStorageReady] = React.useState(false);
+  const [me, setMe] = React.useState<MeInfo | null>(null);
+
+  React.useEffect(() => {
+    void apiAuthMe()
+      .then(setMe)
+      .catch(() => setMe(null));
+  }, []);
 
   React.useEffect(() => {
     try {
@@ -623,6 +633,12 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
       <ImportNormalizedRecordDrawer
         record={selected}
         open={drawerOpen}
+        batchFileName={
+          selected
+            ? batches.find((batch) => batch.batch_id === selected.batch_id)?.file_name
+            : undefined
+        }
+        canEnrollEmployee={canSeeHrProcessesNav(me)}
         onClose={() => setDrawerOpen(false)}
         onReviewed={handleReviewed}
         onToast={showToast}

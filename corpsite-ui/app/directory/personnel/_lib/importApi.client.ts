@@ -1020,6 +1020,111 @@ export async function patchNormalizedRecordEmployeeBinding(
   });
 }
 
+export type EnrollEmployeeConflict = {
+  code: "IIN_ALREADY_EXISTS" | "IIN_MULTIPLE_MATCH";
+  existing_employee_id?: number;
+  existing_employee_name?: string;
+  existing_org_unit_name?: string;
+  existing_position_name?: string;
+  candidate_employee_ids?: number[];
+  candidates?: Array<{
+    employee_id: number;
+    full_name?: string;
+    org_unit_name?: string;
+    position_name?: string;
+  }>;
+  message?: string;
+};
+
+export type EnrollEmployeeResponse = {
+  dry_run: boolean;
+  outcome: "ready" | "created" | "conflict" | "blocked";
+  created: boolean;
+  matched_by: string;
+  employee_id?: number | null;
+  linked_records_count: number;
+  linked_record_ids: number[];
+  linked_row_ids: number[];
+  warnings: string[];
+  preview: {
+    full_name: string;
+    iin: string;
+    org_unit_id?: number | null;
+    org_unit_name?: string;
+    position_id?: number | null;
+    position_name?: string;
+    date_from?: string;
+    employment_rate?: number;
+    org_unit_hint?: {
+      value?: string;
+      org_unit_id?: number | null;
+      org_unit_name?: string;
+      source?: string;
+      confidence?: string;
+    } | null;
+    position_hint?: { value?: string; source?: string } | null;
+    record_kind?: string;
+    source_sheet?: string;
+    source_row_number?: number | null;
+  };
+  provenance: {
+    origin_type?: string;
+    source_batch_id?: number;
+    source_batch_file_name?: string;
+    source_row_id?: number;
+    source_normalized_record_id?: number;
+    trigger_record_kind?: string;
+    source_field?: string;
+    created_by_user_id?: number;
+  };
+  conflict?: EnrollEmployeeConflict | null;
+};
+
+export class EnrollEmployeeConflictError extends Error {
+  payload: EnrollEmployeeResponse;
+
+  constructor(payload: EnrollEmployeeResponse) {
+    super(payload.conflict?.message || "Конфликт при enrollment");
+    this.name = "EnrollEmployeeConflictError";
+    this.payload = payload;
+  }
+}
+
+export type EnrollEmployeeRequestBody = {
+  dry_run?: boolean;
+  full_name?: string;
+  org_unit_id?: number;
+  position_id?: number;
+  date_from?: string;
+  employment_rate?: number;
+  link_same_iin_in_batch?: boolean;
+};
+
+export async function enrollEmployeeFromNormalizedRecord(
+  recordId: number,
+  body: EnrollEmployeeRequestBody = {}
+): Promise<EnrollEmployeeResponse> {
+  const url = resolveApiUrl(
+    `/directory/personnel/import/normalized-records/${recordId}/enroll-employee`
+  );
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (res.status === 409) {
+    const raw = (await res.json().catch(() => ({}))) as { detail?: EnrollEmployeeResponse };
+    const payload = raw.detail ?? (raw as EnrollEmployeeResponse);
+    throw new EnrollEmployeeConflictError(payload);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, text, "Не удалось выполнить enrollment.");
+  }
+  return res.json() as Promise<EnrollEmployeeResponse>;
+}
+
 export type RepairBatchEmployeeBindingsResult = {
   batch_id: number;
   rows_processed: number;

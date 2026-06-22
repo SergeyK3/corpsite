@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import ImportEnrollEmployeeWizard from "./ImportEnrollEmployeeWizard";
 import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import {
   EMPLOYEE_BINDING_METHOD_LABELS,
@@ -24,6 +25,8 @@ import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 type Props = {
   record: NormalizedRecord | null;
   open: boolean;
+  batchFileName?: string;
+  canEnrollEmployee?: boolean;
   onClose: () => void;
   onReviewed: (record: NormalizedRecord) => void;
   onToast: (message: string, kind?: "success" | "error") => void;
@@ -291,7 +294,15 @@ function EditPayloadSection({
   );
 }
 
-export default function ImportNormalizedRecordDrawer({ record, open, onClose, onReviewed, onToast }: Props) {
+export default function ImportNormalizedRecordDrawer({
+  record,
+  open,
+  batchFileName,
+  canEnrollEmployee = true,
+  onClose,
+  onReviewed,
+  onToast,
+}: Props) {
   const [notes, setNotes] = React.useState("");
   const [acting, setActing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -515,6 +526,16 @@ export default function ImportNormalizedRecordDrawer({ record, open, onClose, on
               </div>
             ) : null}
           </section>
+
+          {canBindEmployee && !editing ? (
+            <ImportEnrollEmployeeWizard
+              record={record}
+              batchFileName={batchFileName}
+              canEnroll={canEnrollEmployee}
+              onReviewed={onReviewed}
+              onToast={onToast}
+            />
+          ) : null}
 
           {canBindEmployee && !editing ? (
             <section className="space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">

@@ -35,6 +35,16 @@
 - Корень `/directory/personnel` — role-aware redirect через `resolvePersonnelRootRedirect` (HR → journal, managers → staff, иначе → tasks).
 - Заголовок секции и sub-nav: «Кадровые процессы»; пункт «Сотрудники» убран (перенесён в «Персонал»).
 
+### Phase 3I — точечное добавление сотрудника из import (2026-06-22)
+
+- Endpoint: `POST /directory/personnel/import/normalized-records/{record_id}/enroll-employee` (`dry_run` / execute).
+- Guard: `require_hr_import_admin_or_403` (sysadmin/privileged или `has_personnel_admin`).
+- Обязательны `org_unit_id` и `position_id` при execute; не mass promotion.
+- Audit: `employee_events.event_type = EMPLOYEE_ENROLLED_FROM_IMPORT` (не HIRE) + `security_audit_log`.
+- Link scope: same batch + same IIN only.
+- UI: 3-step wizard в drawer нормализованной записи + checkbox подтверждения операционного контура.
+- **Populate-time auto-bind (Phase 3G, unchanged by 3I):** `populate_normalized_records` вызывает `auto_bind_import_row` для каждой строки без `employee_id`; при совпадении ИИН/ФИО строка связывается ещё на этапе импорта. Повторный `auto_bind_import_row` на уже связанной строке возвращает `method=row_link`.
+
 ## Frontend guards
 
 - `corpsite-ui/lib/personnelNav.ts` — `canSeePersonnelDirectoryNav`, `canSeeHrProcessesNav`, route helpers.

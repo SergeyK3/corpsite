@@ -193,16 +193,31 @@ def test_resolve_employee_binding_by_iin(seed, tmp_path: Path):
 
         with engine.begin() as conn:
             row_id = _first_row_id(conn, batch_id)
+            row_employee_id = conn.execute(
+                text("SELECT employee_id FROM public.hr_import_rows WHERE row_id = :row_id"),
+                {"row_id": row_id},
+            ).scalar_one()
+            # populate_normalized_records auto-binds during import when IIN matches directory.
+            assert int(row_employee_id) == emp_id
+
             conn.execute(
                 text(
                     """
                     UPDATE public.hr_import_rows
-                    SET normalized_payload = jsonb_set(
-                        jsonb_set(normalized_payload, '{iin}', to_jsonb(CAST(:iin AS text)), true),
-                        '{full_name}',
-                        to_jsonb(CAST(:full_name AS text)),
-                        true
-                    )
+                    SET
+                        employee_id = NULL,
+                        match_status = 'NO_MATCH',
+                        normalized_payload = jsonb_set(
+                            jsonb_set(
+                                normalized_payload,
+                                '{iin}',
+                                to_jsonb(CAST(:iin AS text)),
+                                true
+                            ),
+                            '{full_name}',
+                            to_jsonb(CAST(:full_name AS text)),
+                            true
+                        )
                     WHERE row_id = :row_id
                     """
                 ),
@@ -255,6 +270,17 @@ def test_resolve_employee_binding_fallback_by_full_name(seed, tmp_path: Path):
 
         with engine.begin() as conn:
             row_id = _first_row_id(conn, batch_id)
+            # Import populate may auto-bind by full_name when employee exists before import.
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_rows
+                    SET employee_id = NULL, match_status = 'NO_MATCH'
+                    WHERE row_id = :row_id
+                    """
+                ),
+                {"row_id": row_id},
+            )
             binding = auto_bind_import_row(conn, row_id)
 
         assert binding.status == BINDING_STATUS_BOUND
@@ -597,6 +623,8 @@ def test_repair_bindings_api_uses_full_iin(seed, tmp_path: Path, privileged_head
     emp_id = None
 
     try:
+        batch_id = _import_batch(tmp_path, seed, full_name=import_name, iin=iin)
+
         with engine.begin() as conn:
             emp_id = _create_employee_with_iin(
                 conn,
@@ -605,10 +633,6 @@ def test_repair_bindings_api_uses_full_iin(seed, tmp_path: Path, privileged_head
                 org_unit_id=int(seed["unit_id"]),
                 created_by=int(seed["initiator_user_id"]),
             )
-
-        batch_id = _import_batch(tmp_path, seed, full_name=import_name, iin=iin)
-
-        with engine.begin() as conn:
             row_id = _first_row_id(conn, batch_id)
             current_employee_id = conn.execute(
                 text("SELECT employee_id FROM public.hr_import_rows WHERE row_id = :row_id"),

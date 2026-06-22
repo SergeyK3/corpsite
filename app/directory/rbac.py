@@ -12,6 +12,7 @@ from app.security.directory_scope import (
     is_privileged as _is_privileged,
     require_dept_scope as _require_dept_scope,
 )
+from app.security.personnel_admin_guard import evaluate_personnel_admin_access
 from app.services.org_units_service import OrgUnitsService, OrgUnit
 
 org_units = OrgUnitsService(engine)
@@ -20,6 +21,15 @@ org_units = OrgUnitsService(engine)
 def require_privileged_or_403(user_ctx: Dict[str, Any]) -> None:
     if not _is_privileged(user_ctx):
         raise HTTPException(status_code=403, detail="Forbidden.")
+
+
+def require_hr_import_admin_or_403(user_ctx: Dict[str, Any]) -> None:
+    """HR import write actions: sysadmin/privileged operator or personnel admin (ADR-045)."""
+    if _is_privileged(user_ctx):
+        return
+    if evaluate_personnel_admin_access(user_ctx):
+        return
+    raise HTTPException(status_code=403, detail="HR import admin access required.")
 
 
 def _apply_dept_rbac_scope(

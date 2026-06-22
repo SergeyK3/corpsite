@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.directory.rbac import require_privileged_or_403
+from app.directory.rbac import require_hr_import_admin_or_403, require_privileged_or_403
 from app.services.hr_import_analytics_service import (
     BatchNotFoundError,
     age_distribution,
@@ -94,6 +94,12 @@ from app.services.hr_import_normalized_record_service import (
 )
 from app.services.hr_import_promotion_service import PromotionRequestError, promote_normalized_records
 from app.services.hr_import_roster_promotion_service import promote_roster_batch
+from app.services.hr_import_enroll_employee_service import (
+    EnrollEmployeeError,
+    EnrollEmployeeRequest,
+    OUTCOME_CONFLICT,
+    enroll_employee_from_normalized_record,
+)
 from app.services.hr_import_service import import_control_list
 
 from .common import as_http500, call_service
@@ -1101,6 +1107,83 @@ def get_import_normalized_record(
         return _with_conn(get_review_normalized_record, record_id=record_id)
     except NormalizedRecordNotFoundError as e:
         raise _normalized_record_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/normalized-records/{record_id}/enroll-employee")
+def post_import_normalized_record_enroll_employee(
+    record_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """ADR-039 Phase 3I — create operational employee from normalized import record."""
+    require_hr_import_admin_or_403(user)
+    dry_run = bool(body.get("dry_run", True))
+    link_same_iin_in_batch = bool(body.get("link_same_iin_in_batch", True))
+
+    org_unit_id_raw = body.get("org_unit_id")
+    position_id_raw = body.get("position_id")
+    org_unit_id: Optional[int] = None
+    position_id: Optional[int] = None
+    if org_unit_id_raw is not None:
+        try:
+            org_unit_id = int(org_unit_id_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="org_unit_id must be an integer")
+    if position_id_raw is not None:
+        try:
+            position_id = int(position_id_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="position_id must be an integer")
+
+    date_from: Optional[date] = None
+    date_from_raw = body.get("date_from")
+    if date_from_raw:
+        try:
+            date_from = date.fromisoformat(str(date_from_raw)[:10])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="date_from must be YYYY-MM-DD")
+
+    employment_rate: Optional[float] = None
+    rate_raw = body.get("employment_rate")
+    if rate_raw is not None:
+        try:
+            employment_rate = float(rate_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="employment_rate must be a number")
+
+    full_name = body.get("full_name")
+    if full_name is not None and not isinstance(full_name, str):
+        raise HTTPException(status_code=422, detail="full_name must be a string")
+
+    request = EnrollEmployeeRequest(
+        dry_run=dry_run,
+        full_name=str(full_name).strip() if isinstance(full_name, str) and full_name.strip() else None,
+        org_unit_id=org_unit_id,
+        position_id=position_id,
+        date_from=date_from,
+        employment_rate=employment_rate,
+        link_same_iin_in_batch=link_same_iin_in_batch,
+    )
+
+    try:
+        result = _with_conn(
+            enroll_employee_from_normalized_record,
+            record_id=record_id,
+            created_by=int(user["user_id"]),
+            request=request,
+        )
+        payload = result.to_dict()
+        if result.outcome == OUTCOME_CONFLICT:
+            raise HTTPException(status_code=409, detail=payload)
+        return payload
+    except NormalizedRecordNotFoundError as e:
+        raise _normalized_record_not_found(e)
+    except EnrollEmployeeError as e:
+        raise HTTPException(status_code=400, detail={"message": e.message, "code": e.code})
     except HTTPException:
         raise
     except Exception as e:

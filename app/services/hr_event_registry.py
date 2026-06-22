@@ -149,6 +149,14 @@ HR_EVENT_REGISTRY: Dict[str, HREventDef] = {
         required_fields=("comment", "effective_date"),
         optional_fields=("to_org_unit_id", "to_position_id", "to_rate"),
     ),
+    "EMPLOYEE_ENROLLED_FROM_IMPORT": HREventDef(
+        code="EMPLOYEE_ENROLLED_FROM_IMPORT",
+        event_class=EVENT_CLASS_PERSONNEL,
+        label_ru="Добавлен в персонал из HR-импорта",
+        affects_snapshot=False,
+        required_fields=("effective_date",),
+        optional_fields=("metadata", "comment"),
+    ),
 }
 
 
