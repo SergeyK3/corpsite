@@ -31,6 +31,17 @@ export const SCHEDULE_TYPE_LABELS: Readonly<Record<string, string>> = {
   yearly: "Ежегодно",
 };
 
+export const RUN_KIND_LABELS: Readonly<Record<string, string>> = {
+  automatic: "Автоматический",
+  catch_up: "Догоняющий",
+};
+
+export const CATCH_UP_PRESET_LABELS: Readonly<Record<string, string>> = {
+  past_week: "Прошлая неделя",
+  past_month: "Прошлый месяц",
+  manual: "Ручная дата",
+};
+
 export const RUN_STATUS_LABELS: Readonly<Record<string, string>> = {
   ok: "Успешно",
   partial: "Частично",
@@ -53,7 +64,12 @@ export const UI_FIELD_LABELS: Readonly<Record<string, string>> = {
   dry_run: "Пробный запуск",
   templates_due: "Шаблонов к сроку",
   created: "Создано",
+  deduped: "Дедупл.",
   errors: "Ошибки",
+  occurrence_date: "Дата возникновения задачи",
+  run_kind: "Тип запуска",
+  schedule_type: "Тип расписания",
+  org_group: "Группа",
   owner_unit_id: "Отделение",
   owner_unit: "Отделение",
   org_unit_id: "Отделение",
@@ -187,6 +203,20 @@ export function runStatusLabel(
   options?: { fallback?: string },
 ): string {
   return lookupLabel(RUN_STATUS_LABELS, code, options?.fallback);
+}
+
+export function runKindLabel(
+  code: string | null | undefined,
+  options?: { fallback?: string },
+): string {
+  return lookupLabel(RUN_KIND_LABELS, code, options?.fallback);
+}
+
+export function catchUpPresetLabel(
+  code: string | null | undefined,
+  options?: { fallback?: string },
+): string {
+  return lookupLabel(CATCH_UP_PRESET_LABELS, code, options?.fallback);
 }
 
 export function assignmentScopeLabel(

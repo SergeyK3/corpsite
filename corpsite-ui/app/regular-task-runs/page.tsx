@@ -2,65 +2,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
+import { RegularTaskRunsJournalView } from "./_components/RegularTaskRunsJournalView";
 
 import { apiAuthMe } from "@/lib/api";
 import { canSeeRegularTaskRunsJournal } from "@/lib/adminNav";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { getSessionAccessToken, isAuthed, logout as authLogout } from "@/lib/auth";
+import { formatThrownError } from "@/lib/i18n";
+import type { RegularTaskRunItemRow, RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
 import type { MeInfo } from "@/lib/types";
-import {
-  formatThrownError,
-  runStatusLabel,
-  runTitleLabel,
-  templateItemTitleLabel,
-  translateRunIssueMessage,
-  uiFieldLabel,
-} from "@/lib/i18n";
 
 type APIErrorLike = {
   status?: number;
   message?: string;
-  details?: any;
-  body?: any;
 };
-
-function formatUserError(e: unknown): string {
-  return formatThrownError(e);
-}
 
 function isUnauthorized(e: unknown): boolean {
   return Number((e as APIErrorLike)?.status ?? 0) === 401;
 }
-
-type RegularTaskRun = {
-  run_id: number;
-  started_at: string;
-  finished_at?: string | null;
-  status: string;
-  stats?: any;
-  errors?: any;
-};
-
-type RegularTaskRunItem = {
-  item_id: number;
-  run_id: number;
-  regular_task_id: number;
-  status: string;
-  started_at: string;
-  finished_at?: string | null;
-  period_id?: number | null;
-  executor_role_id?: number | null;
-  is_due: boolean;
-  created_tasks: number;
-  error?: string | null;
-  meta?: {
-    origin_metadata_text?: string;
-    deduped?: boolean;
-    task_id?: number | null;
-  } | null;
-};
 
 async function readJsonSafe(res: Response): Promise<any> {
   const text = await res.text().catch(() => "");
@@ -78,88 +39,57 @@ function normalizeList<T>(body: any): T[] {
   return [];
 }
 
-function getBearer(): string {
-  return getSessionAccessToken();
-}
-
-async function apiGetRuns(): Promise<RegularTaskRun[]> {
-  const url = resolveApiUrl("/regular-task-runs");
-
-  const tok = getBearer();
-  const res = await fetch(url, {
+async function apiGetRuns(): Promise<RegularTaskRunRow[]> {
+  const tok = getSessionAccessToken();
+  const res = await fetch(resolveApiUrl("/regular-task-runs"), {
     method: "GET",
     headers: tok ? { Authorization: `Bearer ${tok}`, Accept: "application/json" } : { Accept: "application/json" },
     cache: "no-store",
   });
-
   const body = await readJsonSafe(res);
   if (!res.ok) {
-    const e: APIErrorLike = {
-      status: res.status,
-      message: body?.message ?? body?.detail ?? "Request failed",
-      details: body,
-    };
-    throw e;
+    throw { status: res.status, message: body?.message ?? body?.detail ?? "Request failed" } satisfies APIErrorLike;
   }
-
-  return normalizeList<RegularTaskRun>(body);
+  return normalizeList<RegularTaskRunRow>(body);
 }
 
-async function apiGetRunItems(runId: number): Promise<RegularTaskRunItem[]> {
-  const url = resolveApiUrl(`/regular-task-runs/${runId}/items`);
-
-  const tok = getBearer();
-  const res = await fetch(url, {
+async function apiGetRunItems(runId: number): Promise<RegularTaskRunItemRow[]> {
+  const tok = getSessionAccessToken();
+  const res = await fetch(resolveApiUrl(`/regular-task-runs/${runId}/items`), {
     method: "GET",
     headers: tok ? { Authorization: `Bearer ${tok}`, Accept: "application/json" } : { Accept: "application/json" },
     cache: "no-store",
   });
-
   const body = await readJsonSafe(res);
   if (!res.ok) {
-    const e: APIErrorLike = {
-      status: res.status,
-      message: body?.message ?? body?.detail ?? "Request failed",
-      details: body,
-    };
-    throw e;
+    throw { status: res.status, message: body?.message ?? body?.detail ?? "Request failed" } satisfies APIErrorLike;
   }
-
-  return normalizeList<RegularTaskRunItem>(body);
-}
-
-function issueLabel(s: string): string {
-  return translateRunIssueMessage(s);
+  return normalizeList<RegularTaskRunItemRow>(body);
 }
 
 export default function RegularTaskRunsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialRunId = useMemo(() => {
+    const raw = String(searchParams.get("run_id") ?? "").trim();
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  }, [searchParams]);
 
-  // auth/me
   const [me, setMe] = useState<MeInfo | null>(null);
   const [meLoading, setMeLoading] = useState(true);
   const [meError, setMeError] = useState<string | null>(null);
-
-  const roleTitle = useMemo(() => {
-    const t = String(me?.role_name_ru ?? me?.role_name ?? "").trim();
-    return t || "Сотрудник";
-  }, [me]);
-
   const canSeeRuns = useMemo(() => canSeeRegularTaskRunsJournal(me), [me]);
 
-  // runs
-  const [runs, setRuns] = useState<RegularTaskRun[]>([]);
+  const [runs, setRuns] = useState<RegularTaskRunRow[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [runsError, setRunsError] = useState<string | null>(null);
 
-  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
-
-  // items
-  const [items, setItems] = useState<RegularTaskRunItem[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(initialRunId);
+  const [items, setItems] = useState<RegularTaskRunItemRow[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
 
-  // ui filters
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -168,14 +98,16 @@ export default function RegularTaskRunsPage() {
     router.replace("/login");
   }
 
-  async function loadRuns() {
+  async function loadRuns(preferredRunId?: number | null) {
     setRunsLoading(true);
     setRunsError(null);
     try {
       const data = await apiGetRuns();
       setRuns(data);
-
-      if (selectedRunId && !data.some((r) => r.run_id === selectedRunId)) {
+      const keepId = preferredRunId ?? selectedRunId;
+      if (keepId && data.some((r) => r.run_id === keepId)) {
+        if (selectedRunId !== keepId) setSelectedRunId(keepId);
+      } else if (selectedRunId && !data.some((r) => r.run_id === selectedRunId)) {
         setSelectedRunId(null);
         setItems([]);
       }
@@ -187,18 +119,15 @@ export default function RegularTaskRunsPage() {
       setRuns([]);
       setSelectedRunId(null);
       setItems([]);
-      setRunsError(formatUserError(e));
+      setRunsError(formatThrownError(e));
     } finally {
       setRunsLoading(false);
     }
   }
 
   async function openRun(runId: number) {
-    setSelectedRunId(runId);
-    setItems([]);
     setItemsLoading(true);
     setItemsError(null);
-
     try {
       const data = await apiGetRunItems(runId);
       setItems(data);
@@ -208,32 +137,28 @@ export default function RegularTaskRunsPage() {
         return;
       }
       setItems([]);
-      setItemsError(formatUserError(e));
+      setItemsError(formatThrownError(e));
     } finally {
       setItemsLoading(false);
     }
   }
 
-  // bootstrap auth
   useEffect(() => {
     void (async () => {
       setMeLoading(true);
       setMeError(null);
-
       if (!isAuthed()) {
         router.replace("/login");
         return;
       }
-
       try {
-        const data = await apiAuthMe();
-        setMe(data);
+        setMe(await apiAuthMe());
       } catch (e: any) {
         if (isUnauthorized(e)) {
           redirectToLogin();
           return;
         }
-        setMeError(formatUserError(e));
+        setMeError(formatThrownError(e));
         setMe(null);
       } finally {
         setMeLoading(false);
@@ -242,264 +167,58 @@ export default function RegularTaskRunsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // initial runs load
   useEffect(() => {
-    if (meLoading) return;
-    if (!me || !canSeeRuns) return;
-    void loadRuns();
+    if (meLoading || !me || !canSeeRuns) return;
+    void loadRuns(initialRunId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meLoading, me, canSeeRuns]);
 
-  const selectedRun = useMemo(() => {
-    if (!selectedRunId) return null;
-    return runs.find((r) => r.run_id === selectedRunId) ?? null;
-  }, [runs, selectedRunId]);
+  useEffect(() => {
+    if (meLoading || !me || !canSeeRuns || selectedRunId == null) return;
+    void openRun(selectedRunId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRunId, meLoading, me, canSeeRuns]);
 
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((it) => {
-      if (onlyIssues && !String(it.error ?? "").trim()) return false;
-      if (!q) return true;
-      const hay = [
-        it.item_id,
-        it.regular_task_id,
-        it.status,
-        it.executor_role_id ?? "",
-        it.period_id ?? "",
-        it.error ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [items, onlyIssues, search]);
+  if (meLoading) {
+    return <div className="px-4 py-6 text-sm text-zinc-600 dark:text-zinc-400">Загрузка профиля…</div>;
+  }
 
-  function handleLogout() {
-    authLogout();
-    router.replace("/login");
+  if (meError) {
+    return (
+      <div className="px-4 py-6">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-300">
+          {meError}
+        </div>
+      </div>
+    );
+  }
+
+  if (!me || !canSeeRuns) {
+    return (
+      <div className="px-4 py-6">
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4 text-sm text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+          Доступ к разделу запусков ограничен. Этот раздел предназначен для службы поддержки/администраторов.
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      {/* TITLE */}
-      <div className="mb-6">
-        <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{roleTitle}</div>
-        <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Запуски регулярных задач</div>
-      </div>
-
-      {/* TOP BAR */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm text-zinc-600 dark:text-zinc-400">{meLoading ? "Загрузка профиля…" : meError ? "Ошибка профиля" : null}</div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href="/"
-            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            title="Перейти в кабинет"
-          >
-            Кабинет
-          </Link>
-
-          <Link
-            href="/regular-tasks"
-            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            title="Перейти к шаблонам"
-          >
-            Шаблоны
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            title="Сбросить токен и перейти на страницу входа"
-          >
-            Выйти
-          </button>
-        </div>
-      </div>
-
-      {meError ? (
-        <div className="mb-4 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-3 py-2 text-sm text-red-700 dark:text-red-300">{meError}</div>
-      ) : null}
-
-      {!meLoading && me && !canSeeRuns ? (
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 text-sm text-zinc-800 dark:text-zinc-200">
-          Доступ к разделу запусков ограничен. Этот раздел предназначен для службы поддержки/администраторов.
-        </div>
-      ) : null}
-
-      {!meLoading && me && canSeeRuns ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* RUNS LIST */}
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Запуски</div>
-              <button
-                onClick={() => void loadRuns()}
-                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                disabled={runsLoading}
-              >
-                {runsLoading ? "Обновление…" : "Обновить"}
-              </button>
-            </div>
-
-            {runsError ? <div className="mb-3 text-sm text-red-700 dark:text-red-300">Ошибка: {runsError}</div> : null}
-            {runsLoading ? <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
-
-            {!runsLoading && !runsError && runs.length === 0 ? (
-              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">Запусков нет.</div>
-            ) : null}
-
-            <div className="space-y-2">
-              {runs.map((r) => {
-                const active = selectedRunId === r.run_id;
-                const hasErrors = !!(r.errors && Object.keys(r.errors ?? {}).length > 0);
-                return (
-                  <button
-                    key={r.run_id}
-                    onClick={() => void openRun(r.run_id)}
-                    className={[
-                      "w-full rounded-lg border px-3 py-2 text-left",
-                      active ? "border-zinc-400 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-900" : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-700",
-                    ].join(" ")}
-                    title="Открыть элементы"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="font-medium text-zinc-900 dark:text-zinc-50">{runTitleLabel(r.run_id)}</div>
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{runStatusLabel(r.status)}</div>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                      {r.started_at}
-                      {hasErrors ? " • есть ошибки" : ""}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* RUN ITEMS */}
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                {uiFieldLabel("items")}
-                {selectedRun ? ` · ${runTitleLabel(selectedRun.run_id)}` : ""}
-              </div>
-
-              <button
-                onClick={() => (selectedRunId ? void openRun(selectedRunId) : null)}
-                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                disabled={!selectedRunId || itemsLoading}
-                title={!selectedRunId ? "Сначала выберите запуск" : "Перезагрузить элементы"}
-              >
-                {itemsLoading ? "Обновление…" : "Обновить"}
-              </button>
-            </div>
-
-            {!selectedRunId ? (
-              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
-                Выберите запуск слева.
-              </div>
-            ) : (
-              <>
-                <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <label className="flex items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                    <input
-                      type="checkbox"
-                      checked={onlyIssues}
-                      onChange={(e) => setOnlyIssues(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    Только ошибки
-                  </label>
-
-                  <div className="sm:col-span-2">
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none"
-                      placeholder="Фильтр по id/статусу/ошибке…"
-                    />
-                    <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                      Показано: {filteredItems.length} из {items.length}
-                    </div>
-                  </div>
-                </div>
-
-                {itemsError ? <div className="mb-3 text-sm text-red-700 dark:text-red-300">Ошибка: {itemsError}</div> : null}
-                {itemsLoading ? <div className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div> : null}
-
-                {!itemsLoading && !itemsError && items.length === 0 ? (
-                  <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
-                    Элементы отсутствуют.
-                  </div>
-                ) : null}
-
-                <div className="space-y-2">
-                  {filteredItems.map((it) => {
-                    const err = String(it.error ?? "").trim();
-                    const ok = !err && String(it.status).toLowerCase() === "ok";
-                    return (
-                      <div
-                        key={it.item_id}
-                        className={[
-                          "rounded-lg border px-3 py-2",
-                          err
-                            ? "border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35"
-                            : ok
-                              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30"
-                              : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950",
-                        ].join(" ")}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                            {templateItemTitleLabel(it.regular_task_id, it.item_id)}
-                          </div>
-                          <div className="text-xs text-zinc-700 dark:text-zinc-300">{runStatusLabel(it.status)}</div>
-                        </div>
-
-                        <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                          {uiFieldLabel("is_due")}:{" "}
-                          <span className="text-zinc-800 dark:text-zinc-200">{it.is_due ? "Да" : "Нет"}</span>
-                          {" • "}
-                          {uiFieldLabel("created")}:{" "}
-                          <span className="text-zinc-800 dark:text-zinc-200">{it.created_tasks}</span>
-                          {" • "}
-                          {uiFieldLabel("role")}:{" "}
-                          <span className="text-zinc-800 dark:text-zinc-200">{it.executor_role_id ?? "—"}</span>
-                          {" • "}
-                          {uiFieldLabel("period")}:{" "}
-                          <span className="text-zinc-800 dark:text-zinc-200">{it.period_id ?? "—"}</span>
-                        </div>
-
-                        {err ? (
-                          <div className="mt-2 text-xs text-red-800 dark:text-red-200">
-                            {issueLabel(err)}
-                          </div>
-                        ) : null}
-
-                        {it.meta?.origin_metadata_text ? (
-                          <pre className="mt-2 whitespace-pre-wrap rounded border border-zinc-200 bg-white/70 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-300">
-                            {it.meta.origin_metadata_text}
-                          </pre>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* raw json */}
-                <details className="mt-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                  <summary className="cursor-pointer text-sm text-zinc-700 dark:text-zinc-300">Детали (JSON)</summary>
-                  <pre className="mt-2 overflow-auto text-xs text-zinc-800 dark:text-zinc-200">
-                    {JSON.stringify({ run: selectedRun, items }, null, 2)}
-                  </pre>
-                </details>
-              </>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <RegularTaskRunsJournalView
+      runs={runs}
+      runsLoading={runsLoading}
+      runsError={runsError}
+      selectedRunId={selectedRunId}
+      onSelectRun={setSelectedRunId}
+      onRefreshRuns={() => void loadRuns()}
+      items={items}
+      itemsLoading={itemsLoading}
+      itemsError={itemsError}
+      onRefreshItems={() => (selectedRunId != null ? void openRun(selectedRunId) : undefined)}
+      onlyIssues={onlyIssues}
+      onOnlyIssuesChange={setOnlyIssues}
+      search={search}
+      onSearchChange={setSearch}
+    />
   );
 }

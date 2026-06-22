@@ -166,6 +166,8 @@ def test_automatic_run_writes_origin_metadata_to_task_and_journal(seed):
             )
             run_id, stats = run_regular_tasks_generation_tx(conn, dry_run=False)
             assert stats["created"] >= 1
+            assert stats.get("run_kind") == "automatic"
+            assert stats.get("occurrence_date")
 
             desc = _fetch_task_description(conn, rid)
             assert desc is not None
@@ -176,6 +178,8 @@ def test_automatic_run_writes_origin_metadata_to_task_and_journal(seed):
             meta = _fetch_run_item_meta(conn, run_id, rid)
             assert "origin_metadata_text" in meta
             assert "Автоматический запуск" in str(meta["origin_metadata_text"])
+            assert meta.get("run_kind") == "automatic"
+            assert meta.get("occurrence_date")
     finally:
         if rid is not None:
             with engine.begin() as conn:
@@ -246,6 +250,8 @@ def test_catch_up_run_writes_catch_up_origin_metadata(seed):
             )
             assert resolved["preset"] == "manual"
             assert stats["templates_due"] >= 1
+            assert stats.get("run_kind") == "catch_up"
+            assert stats.get("occurrence_date") == "2026-06-17"
 
             desc = _fetch_task_description(conn, rid)
             assert desc is not None
@@ -257,6 +263,8 @@ def test_catch_up_run_writes_catch_up_origin_metadata(seed):
             meta = _fetch_run_item_meta(conn, run_id, rid)
             assert "origin_metadata_text" in meta
             assert "догоняющий" in str(meta["origin_metadata_text"]).lower()
+            assert meta.get("run_kind") == "catch_up"
+            assert meta.get("occurrence_date") == "2026-06-17"
     finally:
         if rid is not None:
             with engine.begin() as conn:

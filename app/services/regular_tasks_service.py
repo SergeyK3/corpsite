@@ -1060,10 +1060,13 @@ def run_regular_tasks_generation_tx(
             errors.append({"regular_task_id": None, "error": "regular_task_id is not an int"})
             continue
 
+        run_kind = "catch_up" if catch_up_meta is not None else "automatic"
         base_meta: Dict[str, Any] = {
             "dry_run": bool(dry_run),
             "now_local": now_local.isoformat(),
             "today_effective": today_effective.isoformat(),
+            "occurrence_date": today_effective.isoformat(),
+            "run_kind": run_kind,
             "force_due_all": bool(FORCE_DUE_ALL or force_due),
             "force_run_for_date": FORCE_RUN_FOR_DATE.isoformat() if FORCE_RUN_FOR_DATE else None,
             "ignore_time_gate": bool(ignore_time_gate),
@@ -1423,6 +1426,8 @@ def run_regular_tasks_generation_tx(
         "created": int(created),
         "deduped": int(deduped),
         "errors": int(len(errors)),
+        "occurrence_date": today_effective.isoformat(),
+        "run_kind": "catch_up" if catch_up_meta is not None else "automatic",
     }
     if catch_up_meta is not None:
         stats_dict["catch_up"] = catch_up_meta

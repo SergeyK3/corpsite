@@ -163,6 +163,19 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 
 ---
 
+### OPS-013 — Regular Task Run Journal Cleanup
+
+**Приоритет:** Low  
+**Статус:** Backlog
+
+**Goal:** Allow admin to archive/delete obsolete run records safely.
+
+**Reason:** Run journal accumulates dry-runs and obsolete catch-up runs.
+
+**Non-goal (current fix):** No destructive action in UI without backend archive/delete design.
+
+---
+
 ## ADR-044 — backlog alignment
 
 All ADR-044 **implementation** phases through **R2.5g** are **complete**. No ADR-044 build phases remain in active OPS backlog.
