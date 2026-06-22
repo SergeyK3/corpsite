@@ -6,7 +6,7 @@ import {
   RegularTaskRunsJournalView,
   resolveItemsEmptyMessage,
 } from "./RegularTaskRunsJournalView";
-import type { RegularTaskRunItemRow, RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
+import type { RegularTaskRunItemRow, RegularTaskRunOutcome, RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
 
 afterEach(cleanup);
 
@@ -74,6 +74,20 @@ const sampleItem: RegularTaskRunItemRow = {
   },
 };
 
+const runOutcome: RegularTaskRunOutcome = {
+  run_id: 33,
+  period_label: "2026-06-09–2026-06-15",
+  counts: {
+    linked: 2,
+    done: 1,
+    in_progress: 1,
+    overdue: 1,
+    archived: 0,
+    unlinked: 0,
+    other: 0,
+  },
+};
+
 function renderView(overrides: Partial<React.ComponentProps<typeof RegularTaskRunsJournalView>> = {}) {
   const props = {
     runs: [catchUpRun, automaticRun],
@@ -83,6 +97,7 @@ function renderView(overrides: Partial<React.ComponentProps<typeof RegularTaskRu
     onSelectRun: vi.fn(),
     onRefreshRuns: vi.fn(),
     items: [sampleItem],
+    runOutcome: null,
     itemsLoading: false,
     itemsError: null,
     onRefreshItems: vi.fn(),
@@ -238,6 +253,7 @@ describe("RegularTaskRunsJournalView", () => {
       onSelectRun: vi.fn(),
       onRefreshRuns: vi.fn(),
       items: [sampleItem] as RegularTaskRunItemRow[],
+      runOutcome: null,
       itemsLoading: false,
       itemsError: null,
       onRefreshItems: vi.fn(),
@@ -327,14 +343,50 @@ describe("RegularTaskRunsJournalView", () => {
     const cells = within(row).getAllByRole("cell");
     expect(cells[0]).toHaveTextContent("Госпитальный эксперт");
     expect(cells[1]).toHaveTextContent("Госпитальный эксперт");
-    expect(cells[2]).toHaveTextContent("24.06.2026");
-    expect(cells[3]).toHaveTextContent("создана");
+    expect(cells[2]).toHaveTextContent("09.06.2026–15.06.2026");
+    expect(cells[3]).toHaveTextContent("24.06.2026");
+    expect(cells[4]).toHaveTextContent("—");
+    expect(cells[5]).toHaveTextContent("—");
+    expect(cells[6]).toHaveTextContent("создана");
     const link = screen.getByTestId("regular-task-run-task-open-101");
     expect(link).toHaveTextContent("Открыть");
     expect(link).toHaveAttribute(
       "href",
       "/tasks?task_id=9001&return_to=%2Fregular-task-runs%3Frun_id%3D33",
     );
+  });
+
+  it("renders outcome summary block when outcome is provided", () => {
+    renderView({ runOutcome });
+    const block = screen.getByTestId("regular-task-run-outcome-summary");
+    expect(within(block).getByText("Состояние выполнения")).toBeInTheDocument();
+    expect(within(block).getByText(/Период: 09\.06\.2026–15\.06\.2026/)).toBeInTheDocument();
+    expect(within(block).getByText(/Создано: 2 · Выполнено: 1 · В работе: 1 · Просрочено: 1/)).toBeInTheDocument();
+  });
+
+  it("does not render outcome summary when outcome is absent", () => {
+    renderView({ runOutcome: null });
+    expect(screen.queryByTestId("regular-task-run-outcome-summary")).not.toBeInTheDocument();
+  });
+
+  it("shows overdue badge and status for task outcome item", () => {
+    const overdueItem: RegularTaskRunItemRow = {
+      ...sampleItem,
+      item_id: 103,
+      task: {
+        task_id: 9001,
+        resolved: true,
+        status_code: "IN_PROGRESS",
+        status_name_ru: "В работе",
+        due_date: "2026-06-20",
+        is_overdue: true,
+        lifecycle: "overdue",
+      },
+    };
+    renderView({ items: [overdueItem], runOutcome });
+    const row = screen.getByTestId("regular-task-run-task-row-103");
+    expect(within(row).getByText("В работе")).toBeInTheDocument();
+    expect(within(row).getByText("Просрочена")).toBeInTheDocument();
   });
 
   it("builds open link with return_to for the selected run", () => {

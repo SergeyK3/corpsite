@@ -42,6 +42,38 @@ export const CATCH_UP_PRESET_LABELS: Readonly<Record<string, string>> = {
   manual: "Ручная дата",
 };
 
+/** Подписи Safe Catch-Up Workflow (/admin/regular-tasks/catch-up). */
+export const CATCH_UP_UI_LABELS: Readonly<Record<string, string>> = {
+  workflow_dry_run: "Пробный прогон",
+  workflow_review: "Проверка",
+  workflow_confirm: "Подтверждение",
+  workflow_execute: "Боевой запуск",
+  workflow_journal: "Журнал",
+  preset: "Период запуска",
+  run_for_date: "Опорная дата",
+  schedule_type: "Периодичность",
+  executor_role_id: "Роль исполнителя",
+  templates_total: "Всего шаблонов",
+  templates_due: "К запуску",
+  created: "Создано",
+  deduped: "Уже существовали",
+  errors: "Ошибки",
+  due_date: "Срок исполнения",
+  occurrence_date: "Дата возникновения",
+  title_final: "Итоговое название",
+  report_code: "Код отчёта",
+  reason: "Результат",
+  dry_run_reason: "Пробный прогон",
+  create_reason: "Будет создана",
+  dedup_reason: "Уже существует",
+  error_reason: "Ошибка",
+  skip_reason: "Пропуск",
+  no_items: "Нет шаблонов к запуску или элементы ещё не загружены.",
+  run_for_date_auto: "Опорная дата вычисляется на backend автоматически.",
+  past_week_hint:
+    "Будет использована последняя среда в окне [сегодня−7; сегодня−1]. Период отчётности = 7 дней до этой даты.",
+};
+
 export const RUN_STATUS_LABELS: Readonly<Record<string, string>> = {
   ok: "Успешно",
   partial: "Частично",
@@ -73,6 +105,11 @@ export const UI_FIELD_LABELS: Readonly<Record<string, string>> = {
   owner_unit_id: "Отделение",
   owner_unit: "Отделение",
   org_unit_id: "Отделение",
+  executor_role_id: "Роль исполнителя",
+  run_for_date: "Опорная дата",
+  templates_total: "Всего шаблонов",
+  title_final: "Итоговое название",
+  due_date: "Срок исполнения",
   person_id: "ID персоны",
   assignment_scope: "Тип назначения",
   schedule_params: "Параметры расписания",
@@ -217,6 +254,16 @@ export function catchUpPresetLabel(
   options?: { fallback?: string },
 ): string {
   return lookupLabel(CATCH_UP_PRESET_LABELS, code, options?.fallback);
+}
+
+export function catchUpUiLabel(
+  key: string | null | undefined,
+  fallback?: string,
+): string {
+  const raw = String(key ?? "").trim();
+  if (!raw) return fallback ?? "—";
+  const hit = CATCH_UP_UI_LABELS[normalizeLookupKey(raw)] ?? CATCH_UP_UI_LABELS[raw];
+  return hit ?? fallback ?? raw;
 }
 
 export function assignmentScopeLabel(

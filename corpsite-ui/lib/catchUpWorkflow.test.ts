@@ -57,7 +57,7 @@ describe("catchUpWorkflow", () => {
     expect(row.report_code).toBe("QM_WEEKLY");
     expect(row.period_label).toBe("17.06.2026–23.06.2026");
     expect(row.due_date_label).toBe("23.06.2026");
-    expect(row.reason_label).toBe("Пробный прогон (dry_run)");
+    expect(row.reason_label).toBe("Пробный прогон");
     expect(row.title_final).toContain("QM weekly");
   });
 
@@ -69,7 +69,7 @@ describe("catchUpWorkflow", () => {
       meta: { ...sampleItem.meta, reason: undefined },
     };
     const row = buildCatchUpReviewRow(liveItem, { isDryRunPreview: false });
-    expect(row.reason_label).toBe("Создание (create)");
+    expect(row.reason_label).toBe("Будет создана");
   });
 
   it("buildCatchUpPayload includes schedule_type and filters", () => {
@@ -123,6 +123,6 @@ describe("catchUpWorkflow", () => {
 
   it("pastWeekPresetHint mentions Wednesday window", () => {
     expect(pastWeekPresetHint()).toMatch(/среда/i);
-    expect(pastWeekPresetHint()).toMatch(/today−7/);
+    expect(pastWeekPresetHint()).toMatch(/сегодня−7/);
   });
 });

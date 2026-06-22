@@ -91,6 +91,39 @@ export type RegularTaskRunItemRow = {
   created_tasks: number;
   error?: string | null;
   meta?: RunItemMeta | null;
+  task?: RegularTaskRunItemTaskOutcome | null;
+};
+
+export type RegularTaskRunItemTaskOutcome = {
+  task_id: number;
+  resolved: boolean;
+  status_code?: string | null;
+  status_name_ru?: string | null;
+  due_date?: string | null;
+  is_overdue: boolean;
+  lifecycle?: string | null;
+};
+
+export type RegularTaskRunOutcomeCounts = {
+  linked: number;
+  done: number;
+  in_progress: number;
+  overdue: number;
+  archived: number;
+  unlinked: number;
+  other: number;
+};
+
+export type RegularTaskRunOutcome = {
+  run_id: number;
+  period_label?: string | null;
+  counts: RegularTaskRunOutcomeCounts;
+};
+
+export type RegularTaskRunItemsEnvelope = {
+  run_id: number;
+  items: RegularTaskRunItemRow[];
+  outcome: RegularTaskRunOutcome;
 };
 
 export type ParsedOriginMetadata = {
@@ -153,9 +186,13 @@ export type RunTaskListRow = {
   task_href: string | null;
   task_title: string;
   executor_label: string;
+  period_label: string;
   deadline_label: string;
   outcome_label: string;
   outcome: ItemOutcome;
+  task_status_label: string;
+  task_overdue_label: string;
+  task_is_overdue: boolean;
 };
 
 export type RunTaskListState =
@@ -559,10 +596,63 @@ export function runTaskOutcomeLabel(item: RegularTaskRunItemRow): string {
 }
 
 export function resolveRunTaskId(item: RegularTaskRunItemRow): number | null {
-  const raw = item.meta?.task_id;
+  const raw = item.task?.task_id ?? item.meta?.task_id;
   const id = Math.trunc(Number(raw));
   if (!Number.isFinite(id) || id <= 0) return null;
   return id;
+}
+
+export function formatOutcomePeriodLabel(periodLabel?: string | null): string | null {
+  const raw = String(periodLabel ?? "").trim();
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})\s*[–—-]\s*(\d{4}-\d{2}-\d{2})$/);
+  if (match) {
+    return `${fmtDate(match[1])}–${fmtDate(match[2])}`;
+  }
+  return raw;
+}
+
+export function buildRunOutcomeCountsLabel(counts: RegularTaskRunOutcomeCounts): string {
+  const parts = [
+    `Создано: ${counts.linked}`,
+    `Выполнено: ${counts.done}`,
+    `В работе: ${counts.in_progress}`,
+    `Просрочено: ${counts.overdue}`,
+  ];
+  if (counts.archived > 0) {
+    parts.push(`В архиве: ${counts.archived}`);
+  }
+  if (counts.unlinked > 0) {
+    parts.push(`Не найдены: ${counts.unlinked}`);
+  }
+  if (counts.other > 0) {
+    parts.push(`Прочие: ${counts.other}`);
+  }
+  return parts.join(" · ");
+}
+
+export function resolveItemTaskStatusLabel(item: RegularTaskRunItemRow): string {
+  const task = item.task;
+  if (task?.status_name_ru) return String(task.status_name_ru).trim();
+  if (task?.status_code) return String(task.status_code).trim();
+  if (task && task.resolved === false) return "Задача не найдена";
+  return "—";
+}
+
+export function resolveItemTaskOverdueLabel(item: RegularTaskRunItemRow): string {
+  const task = item.task;
+  if (!task) return "—";
+  if (task.lifecycle === "done" || task.status_code === "DONE") return "Нет";
+  if (task.lifecycle === "archived" || task.status_code === "ARCHIVED") return "Нет";
+  if (task.is_overdue || task.lifecycle === "overdue") return "Просрочена";
+  if (task.resolved === false) return "—";
+  return "Нет";
+}
+
+export function isItemTaskOverdue(item: RegularTaskRunItemRow): boolean {
+  const task = item.task;
+  if (!task || task.resolved === false) return false;
+  return Boolean(task.is_overdue || task.lifecycle === "overdue");
 }
 
 export function buildRunTaskListRows(items: readonly RegularTaskRunItemRow[]): RunTaskListRow[] {
@@ -576,9 +666,13 @@ export function buildRunTaskListRows(items: readonly RegularTaskRunItemRow[]): R
         task_href: taskId != null ? buildTaskPageHref(taskId) : null,
         task_title: itemTitleLabel(item),
         executor_label: resolveRunTaskExecutorLabel(item),
+        period_label: periodLabel(item),
         deadline_label: resolveRunTaskDeadlineLabel(item),
         outcome_label: runTaskOutcomeLabel(item),
         outcome: resolveItemOutcome(item),
+        task_status_label: resolveItemTaskStatusLabel(item),
+        task_overdue_label: resolveItemTaskOverdueLabel(item),
+        task_is_overdue: isItemTaskOverdue(item),
       };
     });
 }

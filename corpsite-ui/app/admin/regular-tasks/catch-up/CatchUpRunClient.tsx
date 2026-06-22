@@ -29,6 +29,7 @@ import {
   type OrgUnitSelectOption,
 } from "@/lib/orgUnitsSelect";
 import {
+  catchUpUiLabel,
   formatThrownError,
   scheduleTypeLabel,
   uiFieldLabel,
@@ -70,11 +71,11 @@ const SCHEDULE_TYPE_OPTIONS: Array<{ value: CatchUpScheduleType; label: string }
 ];
 
 const WORKFLOW_STEPS = [
-  { id: 1, label: "Dry Run" },
-  { id: 2, label: "Review" },
-  { id: 3, label: "Confirm" },
-  { id: 4, label: "Execute" },
-  { id: 5, label: "Journal" },
+  { id: 1, labelKey: "workflow_dry_run" },
+  { id: 2, labelKey: "workflow_review" },
+  { id: 3, labelKey: "workflow_confirm" },
+  { id: 4, labelKey: "workflow_execute" },
+  { id: 5, labelKey: "workflow_journal" },
 ] as const;
 
 function readEnvGroupId(name: string, fallback: number): number {
@@ -144,7 +145,7 @@ function WorkflowStepper({ activeStep }: { activeStep: number }) {
                   : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
             }`}
           >
-            {step.id}. {step.label}
+            {step.id}. {catchUpUiLabel(step.labelKey)}
           </li>
         );
       })}
@@ -355,8 +356,8 @@ export default function CatchUpRunClient() {
   }
 
   async function loadRunItems(runId: number): Promise<RegularTaskRunItemRow[]> {
-    const data = await apiGetRegularTaskRunItems({ run_id: runId });
-    return data as RegularTaskRunItemRow[];
+    const { items } = await apiGetRegularTaskRunItems({ run_id: runId });
+    return items as RegularTaskRunItemRow[];
   }
 
   async function handlePreview() {
@@ -433,8 +434,11 @@ export default function CatchUpRunClient() {
           Догоняющий запуск
         </h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Безопасный workflow: пробный прогон → проверка периода и items → подтверждение → боевой запуск →
-          журнал. SSH и curl не требуются.
+          Безопасный сценарий: {catchUpUiLabel("workflow_dry_run").toLowerCase()} →{" "}
+          {catchUpUiLabel("workflow_review").toLowerCase()} →{" "}
+          {catchUpUiLabel("workflow_confirm").toLowerCase()} →{" "}
+          {catchUpUiLabel("workflow_execute").toLowerCase()} →{" "}
+          {catchUpUiLabel("workflow_journal").toLowerCase()}. SSH и curl не требуются.
         </p>
         <WorkflowStepper activeStep={activeStep} />
         <div className="flex flex-wrap gap-2 text-sm">
@@ -452,7 +456,7 @@ export default function CatchUpRunClient() {
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">1. Параметры и пробный прогон</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">Период (preset)</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("preset")}</span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={preset}
@@ -468,7 +472,7 @@ export default function CatchUpRunClient() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">schedule_type</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("schedule_type")}</span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={scheduleType}
@@ -487,7 +491,7 @@ export default function CatchUpRunClient() {
 
           {preset === "manual" ? (
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">run_for_date</span>
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("run_for_date")}</span>
               <input
                 type="date"
                 className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
@@ -500,7 +504,7 @@ export default function CatchUpRunClient() {
             </label>
           ) : (
             <div className="flex flex-col justify-end text-sm text-zinc-600 dark:text-zinc-400">
-              run_for_date вычисляется на backend автоматически.
+              {catchUpUiLabel("run_for_date_auto")}
             </div>
           )}
 
@@ -554,7 +558,7 @@ export default function CatchUpRunClient() {
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-zinc-800 dark:text-zinc-200">
-              {uiFieldLabel("executor_role_id")} (опционально)
+              {catchUpUiLabel("executor_role_id")} (опционально)
             </span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
@@ -583,7 +587,7 @@ export default function CatchUpRunClient() {
             className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
             data-testid="catch-up-dry-run"
           >
-            {submitting ? "Выполняется..." : "Пробный прогон"}
+            {submitting ? "Выполняется..." : catchUpUiLabel("workflow_dry_run")}
           </button>
         </div>
 
@@ -603,7 +607,7 @@ export default function CatchUpRunClient() {
       {previewResult ? (
         <>
           <CatchUpReviewPanel
-            title="2. Результат пробного прогона"
+            title={`2. ${catchUpUiLabel("workflow_review")}`}
             result={previewResult}
             items={previewItems}
             isDryRunPreview
@@ -619,7 +623,9 @@ export default function CatchUpRunClient() {
             className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm"
             data-testid="catch-up-confirm-section"
           >
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">3. Подтверждение перед боевым запуском</h2>
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              3. {catchUpUiLabel("workflow_confirm")} перед боевым запуском
+            </h2>
             <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
               Рекомендуется выполнить резервную копию БД перед боевым запуском (на VPS:{" "}
               <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-950/50">scripts/backup_db.sh</code>
@@ -633,7 +639,10 @@ export default function CatchUpRunClient() {
                 onChange={(e) => setReviewConfirmed(e.target.checked)}
                 data-testid="catch-up-review-confirmed"
               />
-              <span>Я проверил результат пробного прогона (период, шаблоны, due_date).</span>
+              <span>
+                Я проверил результат пробного прогона (период, шаблоны, {catchUpUiLabel("due_date").toLowerCase()}
+                ).
+              </span>
             </label>
 
             <div className="mt-4">
@@ -644,7 +653,7 @@ export default function CatchUpRunClient() {
                 className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="catch-up-execute"
               >
-                {submitting ? "Выполняется..." : "Выполнить боевой запуск"}
+                {submitting ? "Выполняется..." : catchUpUiLabel("workflow_execute")}
               </button>
             </div>
           </section>
@@ -653,7 +662,7 @@ export default function CatchUpRunClient() {
 
       {liveResult ? (
         <CatchUpReviewPanel
-          title="4–5. Результат боевого прогона"
+          title={`4–5. ${catchUpUiLabel("workflow_execute")} и ${catchUpUiLabel("workflow_journal")}`}
           result={liveResult}
           items={liveItems}
           isDryRunPreview={false}

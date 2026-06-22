@@ -1,6 +1,7 @@
 // FILE: corpsite-ui/lib/catchUpWorkflow.ts
 
 import type { CatchUpPreset, CatchUpRegularTasksParams } from "./api";
+import { catchUpUiLabel } from "./i18n";
 import {
   fmtDate,
   itemOutcomeLabel,
@@ -31,7 +32,7 @@ export function resolveDefaultScheduleType(preset: CatchUpPreset): CatchUpSchedu
 }
 
 export function pastWeekPresetHint(): string {
-  return "Будет использована последняя среда в окне [today−7; today−1]. Период отчётности = 7 дней до этой даты.";
+  return catchUpUiLabel("past_week_hint");
 }
 
 export function formatReportingPeriodRange(
@@ -76,18 +77,18 @@ export function catchUpItemReasonLabel(
 ): string {
   const { isDryRunPreview } = options;
   if (isDryRunPreview) {
-    return "Пробный прогон (dry_run)";
+    return catchUpUiLabel("dry_run_reason");
   }
 
   switch (resolveItemOutcome(item)) {
     case "created":
-      return "Создание (create)";
+      return catchUpUiLabel("create_reason");
     case "dedup":
-      return "Дедупликация (dedup)";
+      return catchUpUiLabel("dedup_reason");
     case "error":
-      return "Ошибка";
+      return catchUpUiLabel("error_reason");
     case "skip":
-      return "Пропуск";
+      return catchUpUiLabel("skip_reason");
     default:
       return itemOutcomeLabel(item);
   }

@@ -10,7 +10,7 @@ import { apiAuthMe, apiGetRegularTaskRunItems, apiGetRegularTaskRuns } from "@/l
 import { canSeeRegularTaskRunsJournal } from "@/lib/adminNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
-import type { RegularTaskRunItemRow, RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
+import type { RegularTaskRunItemRow, RegularTaskRunOutcome, RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
 import type { MeInfo } from "@/lib/types";
 
 type APIErrorLike = {
@@ -42,6 +42,7 @@ export default function RegularTaskRunsPage() {
 
   const [selectedRunId, setSelectedRunId] = useState<number | null>(initialRunId);
   const [items, setItems] = useState<RegularTaskRunItemRow[]>([]);
+  const [runOutcome, setRunOutcome] = useState<RegularTaskRunOutcome | null>(null);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
 
@@ -65,6 +66,7 @@ export default function RegularTaskRunsPage() {
       } else if (selectedRunId && !data.some((r) => r.run_id === selectedRunId)) {
         setSelectedRunId(null);
         setItems([]);
+        setRunOutcome(null);
         setItemsError(null);
       }
     } catch (e: unknown) {
@@ -75,6 +77,7 @@ export default function RegularTaskRunsPage() {
       setRuns([]);
       setSelectedRunId(null);
       setItems([]);
+      setRunOutcome(null);
       setItemsError(null);
       setRunsError(formatThrownError(e));
     } finally {
@@ -84,17 +87,23 @@ export default function RegularTaskRunsPage() {
 
   async function openRun(runId: number) {
     setItems([]);
+    setRunOutcome(null);
     setItemsLoading(true);
     setItemsError(null);
     try {
-      const data = (await apiGetRegularTaskRunItems({ run_id: runId })) as RegularTaskRunItemRow[];
-      setItems(data);
+      const { items: data, outcome } = await apiGetRegularTaskRunItems({
+        run_id: runId,
+        include_outcome: true,
+      });
+      setItems(data as RegularTaskRunItemRow[]);
+      setRunOutcome(outcome);
     } catch (e: unknown) {
       if (isUnauthorized(e)) {
         redirectToLogin();
         return;
       }
       setItems([]);
+      setRunOutcome(null);
       setItemsError(formatThrownError(e));
     } finally {
       setItemsLoading(false);
@@ -103,6 +112,7 @@ export default function RegularTaskRunsPage() {
 
   function handleSelectRun(runId: number) {
     setItems([]);
+    setRunOutcome(null);
     setItemsError(null);
     setItemsLoading(true);
     setSelectedRunId(runId);
@@ -177,6 +187,7 @@ export default function RegularTaskRunsPage() {
       onSelectRun={handleSelectRun}
       onRefreshRuns={() => void loadRuns()}
       items={items}
+      runOutcome={runOutcome}
       itemsLoading={itemsLoading}
       itemsError={itemsError}
       onRefreshItems={() => (selectedRunId != null ? void openRun(selectedRunId) : undefined)}

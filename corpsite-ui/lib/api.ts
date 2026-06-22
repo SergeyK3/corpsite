@@ -419,6 +419,11 @@ export type RegularTaskRun = {
   errors?: any;
 };
 
+export async function apiGetRegularTaskRuns(): Promise<RegularTaskRun[]> {
+  const body = await apiFetchJson<any>("/regular-task-runs");
+  return normalizeList<RegularTaskRun>(body);
+}
+
 export type RegularTaskRunItem = {
   item_id: number;
   run_id: number;
@@ -431,14 +436,67 @@ export type RegularTaskRunItem = {
   is_due: boolean;
   created_tasks: number;
   error?: string | null;
+  task?: RegularTaskRunItemTaskOutcome | null;
 };
 
-export async function apiGetRegularTaskRuns(): Promise<RegularTaskRun[]> {
-  const body = await apiFetchJson<any>("/regular-task-runs");
-  return normalizeList<RegularTaskRun>(body);
+export type RegularTaskRunItemTaskOutcome = {
+  task_id: number;
+  resolved: boolean;
+  status_code?: string | null;
+  status_name_ru?: string | null;
+  due_date?: string | null;
+  is_overdue: boolean;
+  lifecycle?: string | null;
+};
+
+export type RegularTaskRunOutcomeCounts = {
+  linked: number;
+  done: number;
+  in_progress: number;
+  overdue: number;
+  archived: number;
+  unlinked: number;
+  other: number;
+};
+
+export type RegularTaskRunOutcome = {
+  run_id: number;
+  period_label?: string | null;
+  counts: RegularTaskRunOutcomeCounts;
+};
+
+export type RegularTaskRunItemsEnvelope = {
+  run_id: number;
+  items: RegularTaskRunItem[];
+  outcome: RegularTaskRunOutcome;
+};
+
+export function normalizeRegularTaskRunItemsList(body: any): RegularTaskRunItem[] {
+  return normalizeList<RegularTaskRunItem>(body);
 }
 
-export async function apiGetRegularTaskRunItems(params: { run_id: number }): Promise<RegularTaskRunItem[]> {
-  const body = await apiFetchJson<any>(`/regular-task-runs/${params.run_id}/items`);
-  return normalizeList<RegularTaskRunItem>(body);
+export function parseRegularTaskRunItemsResponse(body: any): {
+  items: RegularTaskRunItem[];
+  outcome: RegularTaskRunOutcome | null;
+} {
+  if (Array.isArray(body)) {
+    return { items: body as RegularTaskRunItem[], outcome: null };
+  }
+  if (body?.items && Array.isArray(body.items)) {
+    return {
+      items: body.items as RegularTaskRunItem[],
+      outcome: (body.outcome as RegularTaskRunOutcome | undefined) ?? null,
+    };
+  }
+  return { items: [], outcome: null };
+}
+
+export async function apiGetRegularTaskRunItems(params: {
+  run_id: number;
+  include_outcome?: boolean;
+}): Promise<{ items: RegularTaskRunItem[]; outcome: RegularTaskRunOutcome | null }> {
+  const body = await apiFetchJson<any>(`/regular-task-runs/${params.run_id}/items`, {
+    query: params.include_outcome ? { include_outcome: true } : undefined,
+  });
+  return parseRegularTaskRunItemsResponse(body);
 }

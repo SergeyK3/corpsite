@@ -9,15 +9,21 @@ import { buildTaskPageHref } from "@/lib/taskNav";
 import {
   buildItemOriginView,
   buildRunListEntry,
+  buildRunOutcomeCountsLabel,
   buildRunSummary,
+  formatOutcomePeriodLabel,
+  isItemTaskOverdue,
   itemOutcomeLabel,
   itemOutcomeTone,
   itemTitleLabel,
   periodLabel,
+  resolveItemTaskOverdueLabel,
+  resolveItemTaskStatusLabel,
   resolveRunTaskListState,
   RUN_TASK_LIST_EXPECTED_NOT_LOADED_MESSAGE,
   roleLabel,
   type RegularTaskRunItemRow,
+  type RegularTaskRunOutcome,
   type RegularTaskRunRow,
 } from "@/lib/regularTaskRunJournal";
 
@@ -29,6 +35,7 @@ export type RegularTaskRunsJournalViewProps = {
   onSelectRun: (runId: number) => void;
   onRefreshRuns: () => void;
   items: RegularTaskRunItemRow[];
+  runOutcome?: RegularTaskRunOutcome | null;
   itemsLoading: boolean;
   itemsError: string | null;
   onRefreshItems: () => void;
@@ -140,6 +147,13 @@ export function resolveItemsEmptyMessage(
   return "Элементы отсутствуют.";
 }
 
+function taskOverdueBadgeClass(isOverdue: boolean): string {
+  if (!isOverdue) {
+    return "text-zinc-700 dark:text-zinc-300";
+  }
+  return "inline-flex rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200";
+}
+
 export function RegularTaskRunsJournalView({
   runs,
   runsLoading,
@@ -148,6 +162,7 @@ export function RegularTaskRunsJournalView({
   onSelectRun,
   onRefreshRuns,
   items,
+  runOutcome = null,
   itemsLoading,
   itemsError,
   onRefreshItems,
@@ -203,6 +218,9 @@ export function RegularTaskRunsJournalView({
 
   const journalReturnTo =
     selectedRunId != null ? `/regular-task-runs?run_id=${selectedRunId}` : null;
+
+  const outcomePeriodLabel = formatOutcomePeriodLabel(runOutcome?.period_label);
+  const outcomeCountsLabel = runOutcome ? buildRunOutcomeCountsLabel(runOutcome.counts) : null;
 
   return (
     <div className="space-y-4" data-testid="regular-task-runs-journal">
@@ -377,6 +395,21 @@ export function RegularTaskRunsJournalView({
             className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
             data-testid="regular-task-run-task-list"
           >
+            {runOutcome ? (
+              <div
+                className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-950"
+                data-testid="regular-task-run-outcome-summary"
+              >
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Состояние выполнения</div>
+                {outcomePeriodLabel ? (
+                  <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    Период: {outcomePeriodLabel}
+                  </div>
+                ) : null}
+                <div className="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{outcomeCountsLabel}</div>
+              </div>
+            ) : null}
+
             <div className="mb-3">
               <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Задачи по запуску</h2>
               <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
@@ -443,7 +476,14 @@ export function RegularTaskRunsJournalView({
                       <th className="min-w-[140px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
                         Исполнитель
                       </th>
+                      <th className="w-[120px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                        {uiFieldLabel("period")}
+                      </th>
                       <th className="w-[110px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Дедлайн</th>
+                      <th className="w-[130px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                        Текущий статус
+                      </th>
+                      <th className="w-[110px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Просрочена</th>
                       <th className="w-[130px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Результат</th>
                       <th className="w-[88px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Открыть</th>
                     </tr>
@@ -457,7 +497,16 @@ export function RegularTaskRunsJournalView({
                       >
                         <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">{row.task_title}</td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.executor_label}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.period_label}</td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.deadline_label}</td>
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.task_status_label}</td>
+                        <td className="px-3 py-2 text-xs">
+                          {row.task_is_overdue ? (
+                            <span className={taskOverdueBadgeClass(true)}>{row.task_overdue_label}</span>
+                          ) : (
+                            <span className={taskOverdueBadgeClass(false)}>{row.task_overdue_label}</span>
+                          )}
+                        </td>
                         <td className={`px-3 py-2 text-xs font-medium ${runTaskOutcomeTone(row.outcome)}`}>
                           {row.outcome_label}
                         </td>
@@ -576,6 +625,12 @@ export function RegularTaskRunsJournalView({
                           <th className="min-w-[140px] px-2 py-2 font-medium text-zinc-700 dark:text-zinc-300">
                             Роль исполнителя
                           </th>
+                          <th className="w-[120px] px-2 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                            Текущий статус
+                          </th>
+                          <th className="w-[100px] px-2 py-2 font-medium text-zinc-700 dark:text-zinc-300">
+                            Просрочена
+                          </th>
                           <th className="w-[70px] px-2 py-2 font-medium text-zinc-700 dark:text-zinc-300">
                             {uiFieldLabel("due")}
                           </th>
@@ -607,6 +662,20 @@ export function RegularTaskRunsJournalView({
                               </td>
                               <td className="px-2 py-2 text-zinc-700 dark:text-zinc-300">{periodLabel(it)}</td>
                               <td className="px-2 py-2 text-zinc-700 dark:text-zinc-300">{roleLabel(it)}</td>
+                              <td className="px-2 py-2 text-zinc-700 dark:text-zinc-300">
+                                {resolveItemTaskStatusLabel(it)}
+                              </td>
+                              <td className="px-2 py-2 text-xs">
+                                {isItemTaskOverdue(it) ? (
+                                  <span className={taskOverdueBadgeClass(true)}>
+                                    {resolveItemTaskOverdueLabel(it)}
+                                  </span>
+                                ) : (
+                                  <span className={taskOverdueBadgeClass(false)}>
+                                    {resolveItemTaskOverdueLabel(it)}
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-2 py-2 text-zinc-700 dark:text-zinc-300">{yesNo(it.is_due)}</td>
                               <td className="px-2 py-2 text-xs text-red-700 dark:text-red-300">
                                 {err ? translateRunIssueMessage(err) : "—"}
