@@ -43,6 +43,7 @@
 - Audit: `employee_events.event_type = EMPLOYEE_ENROLLED_FROM_IMPORT` (не HIRE) + `security_audit_log`.
 - Link scope: same batch + same IIN only.
 - UI: 3-step wizard в drawer нормализованной записи + checkbox подтверждения операционного контура.
+- **Positions UX (Phase 3I hotfix):** scoped `GET /positions?org_unit_id=` + fallback на global catalog при пустом отделе (`103be25`). Future: [ADR-046](ADR-046-org-unit-allowed-positions.md) — `org_unit_allowed_positions`.
 - **Populate-time auto-bind (Phase 3G, unchanged by 3I):** `populate_normalized_records` вызывает `auto_bind_import_row` для каждой строки без `employee_id`; при совпадении ИИН/ФИО строка связывается ещё на этапе импорта. Повторный `auto_bind_import_row` на уже связанной строке возвращает `method=row_link`.
 
 ## Frontend guards

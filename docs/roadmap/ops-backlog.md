@@ -26,6 +26,7 @@
 | [OPS-011](#ops-011--telegram-legacy-bindings-removal) | Telegram Legacy Bindings Removal | Low | **Deferred** |
 | [OPS-012](#ops-012--test-suite-stabilization) | Test Suite Stabilization | Low | **Open** |
 | [OPS-013](#ops-013--regular-task-run-journal-cleanup) | Regular Task Run Journal Cleanup | Low | **Backlog** |
+| [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md) | Org-unit allowed positions (Future ADR) | Medium | **Proposed** |
 
 ---
 
@@ -189,6 +190,24 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 
 ---
 
+## ADR-046 — Org-unit allowed positions (Future)
+
+**Status:** Proposed — not scheduled  
+**Priority:** Medium  
+**Reference:** [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md)
+
+**Goal:** Разделить три семантики должностей:
+
+- глобальный справочник (`public.positions`);
+- должности, **разрешённые/типичные** для отделения (`org_unit_allowed_positions` — future);
+- должности, **уже используемые** сотрудниками (`employees` + scoped `GET /positions?org_unit_id=`).
+
+**Interim (Phase 3I):** Enrollment Wizard fallback на global catalog при пустом scoped-списке (`103be25`).
+
+**Non-goals now:** миграция, изменение semantics `GET /positions?org_unit_id=`, admin UI для junction table.
+
+---
+
 ## ADR-044 — backlog alignment
 
 All ADR-044 **implementation** phases through **R2.5g** are **complete**. No ADR-044 build phases remain in active OPS backlog.
@@ -226,3 +245,4 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 | OPS-009.21 run journal outcome shipped | 2026-06-22 |
 | OPS-009.22 task #10006 investigation complete | 2026-06-22 |
 | OPS-009 program closed; OPS-009.24 backlog reconciliation | 2026-06-22 |
+| ADR-046 proposed (org-unit allowed positions) | 2026-06-22 |
