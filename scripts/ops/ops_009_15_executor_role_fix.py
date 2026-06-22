@@ -354,22 +354,22 @@ def cmd_fix(args: argparse.Namespace) -> int:
     before = build_snapshot(api_base=args.api_base)
     with engine.connect() as conn:
         roles = _roles_snapshot(conn)
-        fix_plan = prepare_fix_sql(roles)
-        qm_head_id = int(fix_plan["qm_head_role_id"])
-        qm_hosp_id = int(fix_plan["qm_hosp_role_id"])
+    fix_plan = prepare_fix_sql(roles)
+    qm_head_id = int(fix_plan["qm_head_role_id"])
+    qm_hosp_id = int(fix_plan["qm_hosp_role_id"])
 
-        if not args.execute:
-            out = {
-                "mode": "dry_run",
-                "before_diagnosis": before["diagnosis"],
-                "prepared_sql": fix_plan["sql"],
-                "message": "Pass --execute to apply UPDATEs",
-            }
-            print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
-            return 0
+    if not args.execute:
+        out = {
+            "mode": "dry_run",
+            "before_diagnosis": before["diagnosis"],
+            "prepared_sql": fix_plan["sql"],
+            "message": "Pass --execute to apply UPDATEs",
+        }
+        print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
+        return 0
 
-        with conn.begin():
-            rowcounts = apply_fix(conn, qm_head_id=qm_head_id, qm_hosp_id=qm_hosp_id)
+    with engine.begin() as conn:
+        rowcounts = apply_fix(conn, qm_head_id=qm_head_id, qm_hosp_id=qm_hosp_id)
 
     after = build_snapshot(api_base=args.api_base)
     out = {
