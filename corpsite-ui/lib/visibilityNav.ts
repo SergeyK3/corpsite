@@ -2,6 +2,13 @@
 import type { MeInfo } from "./types";
 
 import { canSeeAdminShell } from "./adminNav";
+import {
+  canSeeHrProcessesNav,
+  canSeePersonnelDirectoryNav,
+  isHrProcessesRoute,
+  isPersonnelDirectoryRoute,
+  PERSONNEL_DIRECTORY_NAV_HREF,
+} from "./personnelNav";
 
 /** ADR-042 E1 — org sidebar / personnel directory (not full admin shell). */
 export function hasPersonnelVisibility(me: MeInfo | null | undefined): boolean {
@@ -16,6 +23,10 @@ export function canViewPersonnelTasksReadOnly(me: MeInfo | null | undefined): bo
 
 export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | undefined): boolean {
   if (canSeeAdminShell(me)) return true;
+
+  if (isHrProcessesRoute(pathname)) return canSeeHrProcessesNav(me);
+  if (isPersonnelDirectoryRoute(pathname)) return canSeePersonnelDirectoryNav(me);
+
   if (!hasPersonnelVisibility(me)) return false;
 
   if (pathname.startsWith("/directory")) return true;
@@ -53,9 +64,9 @@ export type VisibilityNavItem = {
 
 export const VISIBILITY_DIRECTORY_NAV: VisibilityNavItem[] = [
   {
-    href: "/directory/personnel",
+    href: PERSONNEL_DIRECTORY_NAV_HREF,
     title: "Персонал",
-    matchPrefixes: ["/directory/personnel", "/directory/employees"],
+    matchPrefixes: ["/directory/staff", "/directory/employees"],
   },
   {
     href: "/directory/contacts",

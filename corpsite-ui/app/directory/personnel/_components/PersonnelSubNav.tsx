@@ -10,7 +10,6 @@ import { listImportBatches } from "../_lib/importApi.client";
 const IMPORT_LIST_HREF = "/directory/personnel/import";
 
 const BASE_ITEMS = [
-  { href: "/directory/personnel", title: "Сотрудники", prefixes: ["/directory/personnel"] },
   {
     href: "/directory/personnel/journal",
     title: "Кадровый журнал",
@@ -98,8 +97,8 @@ const IMPORT_ITEMS: ImportNavItem[] = [
 ];
 
 function isBaseItemActive(pathname: string, prefixes: readonly string[], href: string): boolean {
-  if (href === "/directory/personnel") {
-    return pathname === href || pathname === "/directory/personnel/";
+  if (pathname === "/directory/personnel" || pathname === "/directory/personnel/") {
+    return href === "/directory/personnel/journal";
   }
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

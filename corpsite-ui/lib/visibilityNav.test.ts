@@ -26,13 +26,14 @@ describe("visibilityNav", () => {
   });
 
   it("shouldShowOrgUnitsPanel hides for plain observer", () => {
-    expect(shouldShowOrgUnitsPanel("/directory/personnel", observerPlain)).toBe(false);
-    expect(shouldShowOrgUnitsPanel("/directory/personnel", observerWithAssignment)).toBe(true);
+    expect(shouldShowOrgUnitsPanel("/directory/staff", observerPlain)).toBe(false);
+    expect(shouldShowOrgUnitsPanel("/directory/staff", observerWithAssignment)).toBe(true);
   });
 
-  it("canAccessDirectoryRoute allows directory for visibility users only", () => {
-    expect(canAccessDirectoryRoute("/directory/personnel", observerPlain)).toBe(false);
-    expect(canAccessDirectoryRoute("/directory/personnel", observerWithAssignment)).toBe(true);
+  it("canAccessDirectoryRoute allows staff for visibility users only", () => {
+    expect(canAccessDirectoryRoute("/directory/staff", observerPlain)).toBe(false);
+    expect(canAccessDirectoryRoute("/directory/staff", observerWithAssignment)).toBe(true);
+    expect(canAccessDirectoryRoute("/directory/personnel/journal", observerWithAssignment)).toBe(false);
     expect(canAccessDirectoryRoute("/tasks", observerWithAssignment)).toBe(false);
   });
 });

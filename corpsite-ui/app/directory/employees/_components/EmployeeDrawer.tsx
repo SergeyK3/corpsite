@@ -38,6 +38,8 @@ type Props = {
   refreshToken?: number;
   /** Полный справочник из parent (как в Create); drawer догружает при необходимости. */
   positionCatalogOptions?: PositionOption[];
+  /** Management-facing read-only view — no edit/transfer/account actions. */
+  readOnly?: boolean;
 };
 
 function fmtDate(v: string | null | undefined): string {
@@ -175,6 +177,7 @@ export default function EmployeeDrawer({
   onSaved,
   refreshToken = 0,
   positionCatalogOptions = [],
+  readOnly = false,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<EmployeeDetails | null>(null);
@@ -440,7 +443,7 @@ export default function EmployeeDrawer({
   const dateFrom = fmtDate((details as any)?.date_from ?? (details as any)?.dateFrom);
   const dateTo = fmtDate((details as any)?.date_to ?? (details as any)?.dateTo);
 
-  const canEdit = Boolean(details && isActive(details));
+  const canEdit = !readOnly && Boolean(details && isActive(details));
 
   const editOrgUnitId = employeeOrgUnitId(details);
   const unitPositionCount = unitPositionIds?.size ?? 0;
@@ -695,11 +698,11 @@ export default function EmployeeDrawer({
                 </SectionBlock>
               )}
 
-              {mode === "view" && employeeId ? (
+              {mode === "view" && employeeId && !readOnly ? (
                 <EmployeeProfessionalProfile employeeId={employeeId} />
               ) : null}
 
-              {employeeId ? (
+              {employeeId && !readOnly ? (
                 <EmployeeAccountSections employeeId={employeeId} refreshToken={eventsRefreshToken} />
               ) : null}
             </div>

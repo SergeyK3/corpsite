@@ -56,4 +56,21 @@ describe("adminNav", () => {
     expect(isForbiddenAdminRoute("/admin/system/personnel-identity/operations", regular)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system", hrManager)).toBe(true);
   });
+
+  const headWithVisibility: MeInfo = {
+    user_id: 10,
+    role_id: 3,
+    has_personnel_visibility: true,
+    show_org_sidebar: true,
+  };
+
+  it("personnel vs HR processes route guards", () => {
+    expect(isForbiddenAdminRoute("/directory/staff", headWithVisibility)).toBe(false);
+    expect(isForbiddenAdminRoute("/directory/personnel/journal", headWithVisibility)).toBe(true);
+    expect(isForbiddenAdminRoute("/directory/personnel/import", headWithVisibility)).toBe(true);
+    expect(isForbiddenAdminRoute("/directory/personnel/journal", hrManager)).toBe(false);
+    expect(isForbiddenAdminRoute("/directory/staff", hrManager)).toBe(false);
+    expect(isForbiddenAdminRoute("/directory/personnel/journal", systemAdmin)).toBe(false);
+    expect(isForbiddenAdminRoute("/directory/staff", systemAdmin)).toBe(false);
+  });
 });

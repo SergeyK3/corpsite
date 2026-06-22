@@ -15,6 +15,8 @@ type Props = {
   onOpenEmployee: (employee_id: string) => void;
   onChangePage: (nextOffset: number) => void;
   showCard2Button?: boolean;
+  /** Compact columns: ФИО, должность, отделение, статус, ставки, открыть. */
+  managementView?: boolean;
 };
 
 function formatDate(d: string | null): string {
@@ -50,9 +52,11 @@ export default function EmployeesTable({
   onOpenEmployee,
   onChangePage,
   showCard2Button = false,
+  managementView = false,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
+  const colSpan = managementView ? 6 : 9;
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -60,31 +64,44 @@ export default function EmployeesTable({
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-zinc-100 dark:bg-zinc-900 text-left">
-              <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Таб. №
-              </th>
+              {!managementView ? (
+                <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                  Таб. №
+                </th>
+              ) : null}
               <th className="min-w-[300px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 ФИО
               </th>
+              {!managementView ? null : (
+                <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                  Должность
+                </th>
+              )}
               <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Отдел
+                {managementView ? "Отделение" : "Отдел"}
               </th>
-              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Должность
-              </th>
+              {!managementView ? (
+                <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                  Должность
+                </th>
+              ) : null}
               <th className="w-[100px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Ставка
               </th>
-              <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Дата с
-              </th>
-              <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Дата по
-              </th>
+              {!managementView ? (
+                <>
+                  <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                    Дата с
+                  </th>
+                  <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                    Дата по
+                  </th>
+                </>
+              ) : null}
               <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Статус
               </th>
-              <th className="w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Действия
               </th>
             </tr>
@@ -93,7 +110,7 @@ export default function EmployeesTable({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-2.5 text-[13px] text-zinc-600 dark:text-zinc-400">
+                <td colSpan={colSpan} className="px-3 py-2.5 text-[13px] text-zinc-600 dark:text-zinc-400">
                   {loading ? "Загрузка..." : "Записи не найдены."}
                 </td>
               </tr>
@@ -104,33 +121,46 @@ export default function EmployeesTable({
 
                 return (
                   <tr key={employeeId || fio} className="border-t border-zinc-200 dark:border-zinc-800 align-middle">
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                      {employeeId || "—"}
-                    </td>
+                    {!managementView ? (
+                      <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
+                        {employeeId || "—"}
+                      </td>
+                    ) : null}
 
                     <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
                       {fio}
                     </td>
 
+                    {managementView ? (
+                      <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                        {getPositionName(it)}
+                      </td>
+                    ) : null}
+
                     <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                       {getDepartmentName(it)}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                      {getPositionName(it)}
-                    </td>
+                    {!managementView ? (
+                      <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                        {getPositionName(it)}
+                      </td>
+                    ) : null}
 
                     <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                       {it.employment_rate ?? it.rate ?? "—"}
                     </td>
 
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                      {formatDate(it.date_from ?? it.dateFrom ?? null)}
-                    </td>
-
-                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                      {formatDate(it.date_to ?? it.dateTo ?? null)}
-                    </td>
+                    {!managementView ? (
+                      <>
+                        <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                          {formatDate(it.date_from ?? it.dateFrom ?? null)}
+                        </td>
+                        <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                          {formatDate(it.date_to ?? it.dateTo ?? null)}
+                        </td>
+                      </>
+                    ) : null}
 
                     <td className="px-3 py-1.5 text-[13px] leading-4">
                       <EmployeeStatusBadge item={it} />

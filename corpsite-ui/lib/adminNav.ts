@@ -1,5 +1,11 @@
 // FILE: corpsite-ui/lib/adminNav.ts
 import type { MeInfo } from "./types";
+import {
+  canSeeHrProcessesNav,
+  canSeePersonnelDirectoryNav,
+  isHrProcessesRoute,
+  isPersonnelDirectoryRoute,
+} from "./personnelNav";
 import { hasPersonnelVisibility } from "./visibilityNav";
 
 /** Task/directory admin shell — unchanged: system admin role only. */
@@ -68,6 +74,12 @@ export function isForbiddenAdminRoute(
   }
   if (pathname.startsWith("/regular-task-runs")) {
     return !canSeeRegularTaskRunsJournal(me);
+  }
+  if (isHrProcessesRoute(pathname)) {
+    return !canSeeHrProcessesNav(me);
+  }
+  if (isPersonnelDirectoryRoute(pathname)) {
+    return !canSeePersonnelDirectoryNav(me);
   }
   if (
     pathname.startsWith("/directory") ||

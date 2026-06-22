@@ -32,6 +32,10 @@ type Pos = Position;
 
 type Props = {
   pageTitle?: string;
+  /** Read-only management view: no create/edit/transfer actions. */
+  readOnly?: boolean;
+  /** Simplified table columns for management-facing «Персонал». */
+  managementView?: boolean;
   initialFilters: EmployeesFilters;
   initialDepartments: Dept[];
   initialPositions: Pos[];
@@ -125,12 +129,21 @@ export default function EmployeesPageClient(props: Props) {
   const sp = useSearchParams();
 
   const routeBase = React.useMemo(() => {
+    if (pathname?.startsWith("/directory/staff")) return "/directory/staff";
     if (pathname?.startsWith("/directory/personnel")) return "/directory/personnel";
     return "/directory/employees";
   }, [pathname]);
 
+  const readOnly = props.readOnly === true;
+  const managementView = props.managementView === true;
+
   const pageTitle =
-    props.pageTitle ?? (routeBase === "/directory/personnel" ? "Персонал" : "Сотрудники");
+    props.pageTitle ??
+    (routeBase === "/directory/staff"
+      ? "Персонал"
+      : routeBase === "/directory/personnel"
+        ? "Кадровые процессы"
+        : "Сотрудники");
 
   const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
   const orgGroupId = orgScope.org_group_id;
@@ -405,6 +418,7 @@ export default function EmployeesPageClient(props: Props) {
 
   const departmentFilterValue = orgGroupId != null ? orgUnitId : departmentId;
   const isPersonnelRoute = routeBase === "/directory/personnel";
+  const showHrImportCardLink = isPersonnelRoute && !readOnly;
 
   const pageContent = (
     <>
@@ -498,13 +512,15 @@ export default function EmployeesPageClient(props: Props) {
                 Обновить
               </button>
 
-              <button
-                type="button"
-                onClick={handleOpenCreateDrawer}
-                className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white transition hover:bg-blue-500"
-              >
-                Создать
-              </button>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  onClick={handleOpenCreateDrawer}
+                  className="h-9 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white transition hover:bg-blue-500"
+                >
+                  Создать
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -527,7 +543,8 @@ export default function EmployeesPageClient(props: Props) {
               loading={loading}
               onOpenEmployee={handleOpenEmployee}
               onChangePage={setPageOffset}
-              showCard2Button={isPersonnelRoute}
+              showCard2Button={showHrImportCardLink}
+              managementView={managementView}
             />
           </div>
     </>
@@ -559,21 +576,24 @@ export default function EmployeesPageClient(props: Props) {
           setEmployeeRefreshToken((t) => t + 1);
         }}
         refreshToken={employeeRefreshToken}
+        readOnly={readOnly}
       />
 
-      <EmployeeCreateDrawer
-        open={createDrawerOpen}
-        initialValues={createInitialValues}
-        orgUnitOptions={orgUnitOptions}
-        positionOptions={posList.map((p) => ({
-          id: Number(p.id),
-          label: String(p.name ?? `#${p.id}`),
-        })).filter((p) => Number.isFinite(p.id) && p.id > 0)}
-        saving={createSaving}
-        error={createError}
-        onClose={handleCloseCreateDrawer}
-        onSubmit={handleCreateEmployee}
-      />
+      {!readOnly ? (
+        <EmployeeCreateDrawer
+          open={createDrawerOpen}
+          initialValues={createInitialValues}
+          orgUnitOptions={orgUnitOptions}
+          positionOptions={posList.map((p) => ({
+            id: Number(p.id),
+            label: String(p.name ?? `#${p.id}`),
+          })).filter((p) => Number.isFinite(p.id) && p.id > 0)}
+          saving={createSaving}
+          error={createError}
+          onClose={handleCloseCreateDrawer}
+          onSubmit={handleCreateEmployee}
+        />
+      ) : null}
     </>
   );
 }

@@ -20,8 +20,15 @@ import {
   canViewPersonnelTasksReadOnly,
   hasPersonnelVisibility,
   shouldShowOrgUnitsPanel,
-  VISIBILITY_DIRECTORY_NAV,
 } from "@/lib/visibilityNav";
+import {
+  canSeeHrProcessesNav,
+  canSeePersonnelDirectoryNav,
+  HR_PROCESSES_NAV_HREF,
+  isHrProcessesRoute,
+  isPersonnelDirectoryRoute,
+  PERSONNEL_DIRECTORY_NAV_HREF,
+} from "@/lib/personnelNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
 
@@ -80,9 +87,14 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     matchPrefixes: ["/directory/contacts"],
   },
   {
-    href: "/directory/personnel",
+    href: PERSONNEL_DIRECTORY_NAV_HREF,
     title: "Персонал",
-    matchPrefixes: ["/directory/personnel", "/directory/employees"],
+    matchPrefixes: ["/directory/staff", "/directory/employees"],
+  },
+  {
+    href: HR_PROCESSES_NAV_HREF,
+    title: "Кадровые процессы",
+    matchPrefixes: ["/directory/personnel"],
   },
 ];
 
@@ -125,6 +137,12 @@ function isNavItemActive(pathname: string, item: NavItem): boolean {
       return false;
     }
     if (prefix === "/admin/system" && pathname.startsWith("/admin/system/personnel-identity")) {
+      return false;
+    }
+    if (prefix === "/directory/personnel" && pathname.startsWith("/directory/staff")) {
+      return false;
+    }
+    if (prefix === "/directory/staff" && pathname.startsWith("/directory/personnel")) {
       return false;
     }
     return true;
@@ -276,19 +294,47 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         return showPersonnelIdentityOperationsNav;
       }
       if (item.href === "/admin/system") return showSysadminNav;
+      if (item.href === PERSONNEL_DIRECTORY_NAV_HREF) return canSeePersonnelDirectoryNav(me);
+      if (item.href === HR_PROCESSES_NAV_HREF) return canSeeHrProcessesNav(me);
       return isAdmin;
     });
-  }, [isAdmin, showPersonnelIdentityOperationsNav, showPersonnelLifecycleNav, showSysadminNav]);
+  }, [isAdmin, me, showPersonnelIdentityOperationsNav, showPersonnelLifecycleNav, showSysadminNav]);
 
   const visibilityNavItems = useMemo(() => {
-    const items = [...VISIBILITY_DIRECTORY_NAV];
+    const items: NavItem[] = [];
     if (canViewPersonnelTasksReadOnly(me)) {
-      items.unshift({
+      items.push({
         href: "/tasks",
         title: "Задачи (просмотр)",
         matchPrefixes: ["/tasks"],
       });
     }
+    if (canSeePersonnelDirectoryNav(me)) {
+      items.push({
+        href: PERSONNEL_DIRECTORY_NAV_HREF,
+        title: "Персонал",
+        matchPrefixes: ["/directory/staff", "/directory/employees"],
+      });
+    }
+    if (canSeeHrProcessesNav(me)) {
+      items.push({
+        href: HR_PROCESSES_NAV_HREF,
+        title: "Кадровые процессы",
+        matchPrefixes: ["/directory/personnel"],
+      });
+    }
+    items.push(
+      {
+        href: "/directory/contacts",
+        title: "Контакты",
+        matchPrefixes: ["/directory/contacts"],
+      },
+      {
+        href: "/directory/positions",
+        title: "Должности",
+        matchPrefixes: ["/directory/positions"],
+      },
+    );
     return items;
   }, [me]);
 
@@ -308,6 +354,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     showPersonnelLifecycleNav &&
     (isPersonnelLifecycleRoute(pathname) || isPersonnelIdentityOperationsRoute(pathname));
 
+  const showHrDirectoryOnly =
+    !isAdmin &&
+    !showPersonnelVisibility &&
+    (canSeeHrProcessesNav(me) || canSeePersonnelDirectoryNav(me)) &&
+    (isHrProcessesRoute(pathname) || isPersonnelDirectoryRoute(pathname));
+
+  const hrDirectoryNavItems = useMemo((): NavItem[] => {
+    const items: NavItem[] = [];
+    if (canSeePersonnelDirectoryNav(me)) {
+      items.push({
+        href: PERSONNEL_DIRECTORY_NAV_HREF,
+        title: "Персонал",
+        matchPrefixes: ["/directory/staff", "/directory/employees"],
+      });
+    }
+    if (canSeeHrProcessesNav(me)) {
+      items.push({
+        href: HR_PROCESSES_NAV_HREF,
+        title: "Кадровые процессы",
+        matchPrefixes: ["/directory/personnel"],
+      });
+    }
+    return items;
+  }, [me]);
+
   useEffect(() => {
     if (isLogin || loading) return;
     if (!forbiddenNonAdminRoute) return;
@@ -325,6 +396,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/directory/roles")) return "/directory/roles";
     if (pathname.startsWith("/directory/positions")) return "/directory/positions";
     if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
+    if (pathname.startsWith("/directory/staff")) return "/directory/staff";
     if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
     if (pathname.startsWith("/directory/working-contacts")) return "/directory/working-contacts";
     if (pathname.startsWith("/directory/org-units")) return "/directory/org-units";
@@ -413,6 +485,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 children
               )}
             </section>
+          </div>
+        ) : showHrDirectoryOnly ? (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <aside className="space-y-2.5">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
+                <div className="space-y-1">
+                  <SidebarNav pathname={pathname} items={hrDirectoryNavItems} />
+                </div>
+              </div>
+            </aside>
+
+            <section className="min-w-0">{children}</section>
           </div>
         ) : privilegedSysadminOnly || personnelAdminStandaloneRoute ? (
           <section className="min-w-0">{children}</section>
