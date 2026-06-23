@@ -10,12 +10,6 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 
-# JWT decoder (единый, как в app/auth.py)
-try:
-    from app.auth import decode_and_verify_token  # type: ignore
-except Exception:  # pragma: no cover
-    decode_and_verify_token = None  # type: ignore
-
 
 # ---------------------------
 # Config
@@ -136,12 +130,13 @@ def user_id_from_authorization(authorization: Optional[str]) -> Optional[int]:
     """
     Возвращает user_id из Authorization: Bearer <jwt>.
     """
-    if decode_and_verify_token is None:
-        return None
     token = _token_from_authorization(authorization)
     if not token:
         return None
     try:
+        # Lazy import: app.auth imports directory_scope at module load time.
+        from app.auth import decode_and_verify_token
+
         payload = decode_and_verify_token(token) or {}
         sub = (payload.get("sub") or "").strip()
         if not sub:
