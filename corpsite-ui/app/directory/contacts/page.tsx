@@ -34,7 +34,6 @@ type ContactFormValues = {
   full_name: string;
   person_id: string;
   phone: string;
-  telegram_username: string;
   telegram_numeric_id: string;
 };
 
@@ -119,12 +118,6 @@ function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number |
   );
 }
 
-function formatTelegramUsername(value?: string | null): string {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "—";
-  return raw.startsWith("@") ? raw : `@${raw}`;
-}
-
 function formatDateTime(value?: string | null): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -137,7 +130,6 @@ function toFormValues(item?: ContactItem | null): ContactFormValues {
     full_name: String(item?.full_name ?? "").trim(),
     person_id: item?.person_id != null ? String(item.person_id) : "",
     phone: String(item?.phone ?? "").trim(),
-    telegram_username: String(item?.telegram_username ?? "").trim(),
     telegram_numeric_id: item?.telegram_numeric_id != null ? String(item.telegram_numeric_id) : "",
   };
 }
@@ -259,7 +251,6 @@ function ContactDrawer({
       full_name: values.full_name.trim(),
       person_id: values.person_id.trim(),
       phone: values.phone.trim(),
-      telegram_username: values.telegram_username.trim(),
       telegram_numeric_id: values.telegram_numeric_id.trim(),
     });
   }
@@ -378,48 +369,27 @@ function ContactDrawer({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="telegram_numeric_id" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Telegram ID
-                  </label>
-                  <input
-                    id="telegram_numeric_id"
-                    name="telegram_numeric_id"
-                    type="text"
-                    inputMode="numeric"
-                    value={values.telegram_numeric_id}
-                    onChange={(e) =>
-                      setValues((prev) => ({ ...prev, telegram_numeric_id: e.target.value }))
-                    }
-                    placeholder="Например: 885342581"
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                  />
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Основной технический идентификатор для Telegram-бота.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="telegram_username" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Telegram username <span className="text-zinc-500">(необязательно)</span>
-                  </label>
-                  <input
-                    id="telegram_username"
-                    name="telegram_username"
-                    type="text"
-                    value={values.telegram_username}
-                    onChange={(e) =>
-                      setValues((prev) => ({ ...prev, telegram_username: e.target.value }))
-                    }
-                    placeholder="@username"
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                  />
-                </div>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="telegram_numeric_id" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  Telegram ID
+                </label>
+                <input
+                  id="telegram_numeric_id"
+                  name="telegram_numeric_id"
+                  type="text"
+                  inputMode="numeric"
+                  value={values.telegram_numeric_id}
+                  onChange={(e) =>
+                    setValues((prev) => ({ ...prev, telegram_numeric_id: e.target.value }))
+                  }
+                  placeholder="Например: 885342581"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                />
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Основной технический идентификатор для Telegram-бота.
+                </p>
               </div>
             </div>
           </div>
@@ -602,11 +572,16 @@ export default function ContactsPage() {
         throw new Error("telegram_numeric_id должен быть положительным целым числом.");
       }
 
+      const preservedUsername =
+        drawerMode === "edit" && selectedItem?.telegram_username
+          ? String(selectedItem.telegram_username).trim() || null
+          : null;
+
       const payload = {
         full_name: values.full_name.trim(),
         person_id: personId,
         phone: values.phone.trim() || null,
-        telegram_username: values.telegram_username.trim() || null,
+        telegram_username: preservedUsername,
         telegram_numeric_id: telegramNumericId,
       };
 
@@ -783,9 +758,6 @@ export default function ContactsPage() {
                         Телефон
                       </th>
                       <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                        Telegram
-                      </th>
-                      <th className="min-w-[180px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Telegram ID
                       </th>
                       <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
@@ -797,7 +769,7 @@ export default function ContactsPage() {
                   <tbody>
                     {displayRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={6} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           {loading ? "Загрузка..." : "Записи не найдены."}
                         </td>
                       </tr>
@@ -824,10 +796,6 @@ export default function ContactsPage() {
 
                               <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
                                 {String(item.phone ?? "").trim() || "—"}
-                              </td>
-
-                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
-                                {formatTelegramUsername(item.telegram_username)}
                               </td>
 
                               <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
@@ -879,9 +847,6 @@ export default function ContactsPage() {
                                 {String(item.phone ?? "").trim() || "—"}
                               </td>
                               <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
-                                {formatTelegramUsername(item.telegram_username)}
-                              </td>
-                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
                                 {formatTelegramId(item.telegram_id)}
                               </td>
                               <td className="px-3 py-1 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -901,8 +866,6 @@ export default function ContactsPage() {
                               <div>{row.slot_label}</div>
                               <div className="text-[11px] text-zinc-500 dark:text-zinc-400">контакт не заполнен</div>
                             </td>
-                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
-                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
                             <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
                             <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
                             <td className="px-3 py-1">
