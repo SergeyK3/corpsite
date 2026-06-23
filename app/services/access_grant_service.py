@@ -11,7 +11,9 @@ from sqlalchemy.engine import Connection
 from app.db.engine import engine
 from app.services.security_audit_service import write_security_event
 
-TARGET_TYPES = frozenset({"PERSON", "ASSIGNMENT", "POSITION", "ORG_UNIT", "EMPLOYEE", "USER"})
+TARGET_TYPES = frozenset(
+    {"PERSON", "ASSIGNMENT", "POSITION", "ORG_UNIT", "EMPLOYEE", "USER", "ROLE"}
+)
 SCOPE_TYPES = frozenset({"GLOBAL", "ORG_UNIT", "SELF"})
 
 
@@ -44,6 +46,7 @@ def validate_grant_target(*, target_type: str, target_id: int, conn: Optional[Co
         "ORG_UNIT": ("org_units", "unit_id"),
         "EMPLOYEE": ("employees", "employee_id"),
         "USER": ("users", "user_id"),
+        "ROLE": ("roles", "role_id"),
     }
     table, col = checks[tt]
 

@@ -41,6 +41,7 @@ def _fetch_user_context(conn, user_id: int) -> Optional[Dict[str, Any]]:
             """
             SELECT
                 u.user_id,
+                u.role_id,
                 u.employee_id,
                 e.person_id,
                 e.operational_status
@@ -76,9 +77,11 @@ def _collect_subject_ids(
     user_id: Optional[int],
     employee_id: Optional[int],
     person_id: Optional[int],
+    role_id: Optional[int] = None,
 ) -> Dict[str, Set[int]]:
     subjects: Dict[str, Set[int]] = {
         "USER": set(),
+        "ROLE": set(),
         "EMPLOYEE": set(),
         "PERSON": set(),
         "ASSIGNMENT": set(),
@@ -88,6 +91,8 @@ def _collect_subject_ids(
 
     if user_id is not None:
         subjects["USER"].add(int(user_id))
+    if role_id is not None:
+        subjects["ROLE"].add(int(role_id))
     if employee_id is not None:
         subjects["EMPLOYEE"].add(int(employee_id))
     if person_id is not None:
@@ -129,6 +134,7 @@ def _collect_subject_ids(
                 user_id=user_id,
                 employee_id=employee_id,
                 person_id=int(emp["person_id"]),
+                role_id=role_id,
             )
             for key, values in nested.items():
                 subjects[key].update(values)
@@ -253,12 +259,14 @@ def resolve_effective_access(user_id: int) -> Dict[str, Any]:
 
         employee_id = int(ctx["employee_id"]) if ctx.get("employee_id") is not None else None
         person_id = int(ctx["person_id"]) if ctx.get("person_id") is not None else None
+        role_id = int(ctx["role_id"]) if ctx.get("role_id") is not None else None
 
         subjects = _collect_subject_ids(
             conn,
             user_id=int(user_id),
             employee_id=employee_id,
             person_id=person_id,
+            role_id=role_id,
         )
         grants = _load_active_grants(conn, subjects)
         result = _resolve_from_grants(grants)
@@ -281,12 +289,14 @@ def list_active_access_role_codes(user_id: int) -> List[str]:
 
         employee_id = int(ctx["employee_id"]) if ctx.get("employee_id") is not None else None
         person_id = int(ctx["person_id"]) if ctx.get("person_id") is not None else None
+        role_id = int(ctx["role_id"]) if ctx.get("role_id") is not None else None
 
         subjects = _collect_subject_ids(
             conn,
             user_id=int(user_id),
             employee_id=employee_id,
             person_id=person_id,
+            role_id=role_id,
         )
         grants = _load_active_grants(conn, subjects)
 
