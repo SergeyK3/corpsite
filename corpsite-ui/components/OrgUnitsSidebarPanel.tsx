@@ -4,6 +4,12 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
+import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
+import {
+  buildDefaultExpandedKeys,
+  collectAncestorKeysForUnitId,
+  collectExpandableKeys,
+} from "@/lib/orgUnitsTree";
 
 type ApiOrgUnitNode = {
   id?: string | number;
@@ -195,10 +201,19 @@ function stripVisibleRootIfNeeded(tree: OrgTreeNode[]): OrgTreeNode[] {
   return tree;
 }
 
-async function fetchOrgTree(extraHeaders: Record<string, string>): Promise<OrgTreeNode[]> {
+async function fetchOrgTree(
+  extraHeaders: Record<string, string>,
+  orgGroupId?: number,
+): Promise<OrgTreeNode[]> {
+  const query: Record<string, string | number | undefined> = {};
+  if (orgGroupId != null && orgGroupId > 0) {
+    query.org_group_id = orgGroupId;
+  }
+
   const raw = await apiFetchJson<ApiOrgUnitsTreeResponse>("/directory/org-units/tree", {
     method: "GET",
     headers: extraHeaders,
+    query,
   });
 
   const itemsRaw = Array.isArray(raw?.items) ? raw.items : [];
@@ -234,6 +249,8 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
     return h;
   }, [devUserId]);
 
+  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
+  const orgGroupId = orgScope.org_group_id;
   const selectedId = React.useMemo(() => parseIntOrNull(sp.get("org_unit_id")), [sp]);
 
   const [q, setQ] = React.useState("");
@@ -249,23 +266,12 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
       setLoading(true);
       setErr(null);
       try {
-        const data = await fetchOrgTree(extraHeaders);
+        const data = await fetchOrgTree(extraHeaders, orgGroupId);
         if (cancelled) return;
 
         const nextItems = Array.isArray(data) ? data : [];
         setItems(nextItems);
-
-        setExpanded(() => {
-          const opened = new Set<string>();
-
-          for (const n of nextItems) {
-            if (n.key.startsWith("group-")) {
-              opened.add(n.key);
-            }
-          }
-
-          return opened;
-        });
+        setExpanded(buildDefaultExpandedKeys(nextItems, selectedId));
       } catch (e: any) {
         if (cancelled) return;
         setErr(String(e?.message ?? e ?? "Ошибка загрузки дерева"));
@@ -278,7 +284,20 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
     return () => {
       cancelled = true;
     };
-  }, [extraHeaders]);
+  }, [extraHeaders, orgGroupId, selectedId]);
+
+  React.useEffect(() => {
+    if (selectedId == null || items.length === 0) return;
+
+    const ancestors = collectAncestorKeysForUnitId(items, selectedId);
+    if (ancestors.size === 0) return;
+
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const key of ancestors) next.add(key);
+      return next;
+    });
+  }, [selectedId, items]);
 
   function replaceUrl(next: Partial<Record<string, string | null>>) {
     const p = new URLSearchParams(sp.toString());
@@ -320,6 +339,19 @@ export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string })
   }
 
   const filtered = React.useMemo(() => filterTree(items), [items, q]);
+
+  React.useEffect(() => {
+    if (!normalizeText(q) || filtered.length === 0) return;
+
+    const keys = collectExpandableKeys(filtered);
+    if (keys.length === 0) return;
+
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const key of keys) next.add(key);
+      return next;
+    });
+  }, [q, filtered]);
 
   function renderNode(n: OrgTreeNode, depth: number) {
     const hasChildren = Array.isArray(n.children) && n.children.length > 0;

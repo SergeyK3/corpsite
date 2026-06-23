@@ -13,6 +13,7 @@ export type PositionFormValues = {
 type PositionFormProps = {
   mode: "create" | "edit";
   initialValues: PositionFormValues;
+  orgUnitLabel?: string | null;
   saving?: boolean;
   error?: string | null;
   onSubmit: (values: PositionFormValues) => Promise<void> | void;
@@ -30,6 +31,7 @@ const CATEGORY_OPTIONS: Array<{ value: PositionCategory; label: string }> = [
 export default function PositionForm({
   mode,
   initialValues,
+  orgUnitLabel = null,
   saving = false,
   error = null,
   onSubmit,
@@ -75,6 +77,15 @@ export default function PositionForm({
               {error}
             </div>
           )}
+
+          {orgUnitLabel ? (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
+              <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                Фильтр отделения
+              </div>
+              <div className="mt-1 text-zinc-900 dark:text-zinc-50">{orgUnitLabel}</div>
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-2">
             <label htmlFor="name" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">

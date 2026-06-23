@@ -15,6 +15,7 @@ type PositionDrawerProps = {
   open: boolean;
   mode: "create" | "edit";
   position: PositionRecord | null;
+  orgUnitLabel?: string | null;
   saving?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -39,6 +40,7 @@ export default function PositionDrawer({
   open,
   mode,
   position,
+  orgUnitLabel = null,
   saving = false,
   error = null,
   onClose,
@@ -60,6 +62,7 @@ export default function PositionDrawer({
       <div className="relative ml-auto h-full w-full max-w-[720px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
         <PositionForm
           mode={mode}
+          orgUnitLabel={orgUnitLabel}
           initialValues={{
             name: position?.name ?? "",
             category: normalizeCategory(position?.category),

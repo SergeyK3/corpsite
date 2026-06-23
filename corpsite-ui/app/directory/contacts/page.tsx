@@ -4,6 +4,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
+import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import { apiFetchJson } from "@/lib/api";
 import { formatThrownError, uiFieldLabel } from "@/lib/i18n";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
@@ -37,6 +38,29 @@ type ContactFormValues = {
   telegram_numeric_id: string;
 };
 
+type PositionSlot = {
+  position_id: number;
+  name: string;
+};
+
+type WorkingExpertRow = {
+  user_id: number;
+  full_name?: string | null;
+  role_name?: string | null;
+  role_name_ru?: string | null;
+  phone?: string | null;
+  telegram_username?: string | null;
+  telegram_id?: number | null;
+  unit_name?: string | null;
+};
+
+type ContactDisplayRow =
+  | { kind: "contact"; item: ContactItem }
+  | { kind: "expert"; item: WorkingExpertRow }
+  | { kind: "slot"; position_id: number; slot_label: string };
+
+const POSITIONS_API = "/directory/positions";
+const WORKING_CONTACTS_API = "/directory/working-contacts";
 const API_BASE = "/directory/contacts";
 const PAGE_SIZE = 100;
 const ORG_FILTER_PARAM_KEYS = [
@@ -128,6 +152,70 @@ function buildUrlWithoutOrgFilter(
   }
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;
+}
+
+function normalizeLabel(value?: string | null): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[ё]/g, "е")
+    .trim();
+}
+
+function normalizePositionItems(payload: unknown): PositionSlot[] {
+  const body = payload as { items?: Array<{ position_id?: number; id?: number; name?: string }> };
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return items
+    .map((row) => ({
+      position_id: Number(row.position_id ?? row.id ?? 0),
+      name: String(row.name ?? "").trim(),
+    }))
+    .filter((row) => Number.isFinite(row.position_id) && row.position_id > 0 && row.name);
+}
+
+function normalizeWorkingExperts(payload: unknown): WorkingExpertRow[] {
+  const body = payload as { items?: WorkingExpertRow[] };
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return items.filter((row) => {
+    const role = normalizeLabel(row.role_name_ru ?? row.role_name);
+    return role.includes("эксперт");
+  });
+}
+
+function contactCoversLabel(contacts: ContactItem[], label: string): boolean {
+  const target = normalizeLabel(label);
+  if (!target) return false;
+
+  return contacts.some((contact) => {
+    const fullName = normalizeLabel(contact.full_name);
+    return fullName === target || fullName.includes(target) || target.includes(fullName);
+  });
+}
+
+function buildDisplayRows(
+  contacts: ContactItem[],
+  positions: PositionSlot[],
+  experts: WorkingExpertRow[],
+): ContactDisplayRow[] {
+  const rows: ContactDisplayRow[] = contacts.map((item) => ({ kind: "contact", item }));
+
+  for (const expert of experts) {
+    const roleLabel = String(expert.role_name_ru ?? expert.role_name ?? expert.full_name ?? "").trim();
+    if (!roleLabel || contactCoversLabel(contacts, roleLabel)) continue;
+
+    rows.push({ kind: "expert", item: expert });
+  }
+
+  for (const position of positions) {
+    if (contactCoversLabel(contacts, position.name)) continue;
+    rows.push({ kind: "slot", position_id: position.position_id, slot_label: position.name });
+  }
+
+  return rows;
+}
+
+function formatTelegramId(value?: number | null): string {
+  return value != null && Number.isFinite(value) ? String(value) : "—";
 }
 
 function ContactDrawer({
@@ -292,27 +380,8 @@ function ContactDrawer({
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="telegram_username" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Telegram username
-                  </label>
-                  <input
-                    id="telegram_username"
-                    name="telegram_username"
-                    type="text"
-                    value={values.telegram_username}
-                    onChange={(e) =>
-                      setValues((prev) => ({ ...prev, telegram_username: e.target.value }))
-                    }
-                    placeholder="@username"
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2">
                   <label htmlFor="telegram_numeric_id" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Telegram numeric id
+                    Telegram ID
                   </label>
                   <input
                     id="telegram_numeric_id"
@@ -324,6 +393,28 @@ function ContactDrawer({
                       setValues((prev) => ({ ...prev, telegram_numeric_id: e.target.value }))
                     }
                     placeholder="Например: 885342581"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
+                  />
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Основной технический идентификатор для Telegram-бота.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="telegram_username" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                    Telegram username <span className="text-zinc-500">(необязательно)</span>
+                  </label>
+                  <input
+                    id="telegram_username"
+                    name="telegram_username"
+                    type="text"
+                    value={values.telegram_username}
+                    onChange={(e) =>
+                      setValues((prev) => ({ ...prev, telegram_username: e.target.value }))
+                    }
+                    placeholder="@username"
                     autoComplete="off"
                     spellCheck={false}
                     className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
@@ -371,6 +462,7 @@ export default function ContactsPage() {
   }, [sp]);
 
   const [items, setItems] = React.useState<ContactItem[]>([]);
+  const [displayRows, setDisplayRows] = React.useState<ContactDisplayRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [filterOrgUnitId, setFilterOrgUnitId] = React.useState<number | null>(null);
   const [filterOrgUnitName, setFilterOrgUnitName] = React.useState<string | null>(null);
@@ -389,6 +481,7 @@ export default function ContactsPage() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerMode, setDrawerMode] = React.useState<"create" | "edit">("create");
   const [selectedItem, setSelectedItem] = React.useState<ContactItem | null>(null);
+  const [createPresetName, setCreatePresetName] = React.useState("");
 
   const page = Math.floor(offset / PAGE_SIZE) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / PAGE_SIZE));
@@ -402,18 +495,44 @@ export default function ContactsPage() {
     setPageError(null);
 
     try {
-      const data = await apiFetchJson<ContactsResponse>(API_BASE, {
-        query: {
-          q: appliedSearch || undefined,
-          org_group_id: orgGroupId ?? undefined,
-          org_unit_id: orgUnitId ?? undefined,
-          limit: PAGE_SIZE,
-          offset,
-        },
-      });
+      const scopeQuery = {
+        org_group_id: orgGroupId ?? undefined,
+        org_unit_id: orgUnitId ?? undefined,
+      };
+
+      const [data, positionsPayload, workingPayload] = await Promise.all([
+        apiFetchJson<ContactsResponse>(API_BASE, {
+          query: {
+            q: appliedSearch || undefined,
+            ...scopeQuery,
+            limit: PAGE_SIZE,
+            offset,
+          },
+        }),
+        apiFetchJson(POSITIONS_API, {
+          query: {
+            ...scopeQuery,
+            limit: 200,
+            offset: 0,
+          },
+        }).catch(() => ({ items: [] })),
+        apiFetchJson(WORKING_CONTACTS_API, {
+          query: {
+            ...scopeQuery,
+            active_only: true,
+            limit: 200,
+            offset: 0,
+          },
+        }).catch(() => ({ items: [] })),
+      ]);
 
       const normalized = normalizeItems(data);
+      const positions = normalizePositionItems(positionsPayload);
+      const experts = normalizeWorkingExperts(workingPayload);
+      const rows = buildDisplayRows(normalized, positions, experts);
+
       setItems(normalized);
+      setDisplayRows(rows);
       setTotal(extractTotal(data, normalized));
 
       if (!Array.isArray(data)) {
@@ -432,6 +551,7 @@ export default function ContactsPage() {
     } catch (error) {
       setPageError(extractErrorMessage(error));
       setItems([]);
+      setDisplayRows([]);
       setTotal(0);
       setFilterOrgUnitId(null);
       setFilterOrgUnitName(null);
@@ -444,9 +564,10 @@ export default function ContactsPage() {
     void loadItems();
   }, [loadItems]);
 
-  function openCreate() {
+  function openCreate(presetName = "") {
     setDrawerError(null);
     setSelectedItem(null);
+    setCreatePresetName(String(presetName || "").trim());
     setDrawerMode("create");
     setDrawerOpen(true);
   }
@@ -463,6 +584,7 @@ export default function ContactsPage() {
     setDrawerOpen(false);
     setDrawerError(null);
     setSelectedItem(null);
+    setCreatePresetName("");
   }
 
   async function handleSubmit(values: ContactFormValues) {
@@ -580,7 +702,13 @@ export default function ContactsPage() {
               <OrgScopeFilter
                 basePath="/directory/contacts"
                 className="min-w-[240px]"
-                resetParamsOnChange={[]}
+                resetParamsOnChange={["offset", "org_unit_id", "org_unit_name"]}
+              />
+
+              <OrgUnitScopeFilter
+                basePath="/directory/contacts"
+                className="min-w-[240px]"
+                resetParamsOnChange={["offset"]}
               />
 
               <div className="flex-1">
@@ -609,7 +737,7 @@ export default function ContactsPage() {
 
               <button
                 type="button"
-                onClick={openCreate}
+                onClick={() => openCreate()}
                 className="h-8.5 rounded-lg bg-blue-600 px-3.5 py-1 text-sm font-medium text-white transition hover:bg-blue-500"
               >
                 Создать
@@ -626,7 +754,10 @@ export default function ContactsPage() {
 
             <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
               <div>
-                Всего: {total} · Показано: {items.length}
+                Контактов: {total} · Строк в списке: {displayRows.length}
+                {displayRows.length > items.length ? (
+                  <span className="ml-1">· включая пустые слоты</span>
+                ) : null}
               </div>
               <div>
                 Страница {page} из {pages}
@@ -664,60 +795,128 @@ export default function ContactsPage() {
                   </thead>
 
                   <tbody>
-                    {items.length === 0 ? (
+                    {displayRows.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           {loading ? "Загрузка..." : "Записи не найдены."}
                         </td>
                       </tr>
                     ) : (
-                      items.map((item) => (
-                        <tr key={item.contact_id} className="border-t border-zinc-200 dark:border-zinc-800 align-middle">
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                            {item.contact_id}
-                          </td>
+                      displayRows.map((row) => {
+                        if (row.kind === "contact") {
+                          const item = row.item;
+                          return (
+                            <tr
+                              key={`contact-${item.contact_id}`}
+                              className="border-t border-zinc-200 dark:border-zinc-800 align-middle"
+                            >
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
+                                {item.contact_id}
+                              </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                            {String(item.full_name ?? "").trim() || "—"}
-                          </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
+                                {String(item.full_name ?? "").trim() || "—"}
+                              </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
-                            {item.person_id != null ? item.person_id : "—"}
-                          </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {item.person_id != null ? item.person_id : "—"}
+                              </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
-                            {String(item.phone ?? "").trim() || "—"}
-                          </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {String(item.phone ?? "").trim() || "—"}
+                              </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
-                            {formatTelegramUsername(item.telegram_username)}
-                          </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {formatTelegramUsername(item.telegram_username)}
+                              </td>
 
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
-                            {item.telegram_numeric_id != null ? item.telegram_numeric_id : "—"}
-                          </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {formatTelegramId(item.telegram_numeric_id)}
+                              </td>
 
-                          <td className="px-3 py-1">
-                            <div className="flex items-center gap-1">
+                              <td className="px-3 py-1">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEdit(item)}
+                                    className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[10px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                  >
+                                    Изменить
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDelete(item)}
+                                    className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
+                                  >
+                                    Удалить
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        if (row.kind === "expert") {
+                          const item = row.item;
+                          const roleLabel = String(item.role_name_ru ?? item.role_name ?? "").trim();
+                          return (
+                            <tr
+                              key={`expert-${item.user_id}`}
+                              className="border-t border-zinc-200 dark:border-zinc-800 align-middle bg-blue-50/40 dark:bg-blue-950/15"
+                            >
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                эксперт
+                              </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
+                                <div>{String(item.full_name ?? "").trim() || roleLabel || "—"}</div>
+                                {roleLabel ? (
+                                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{roleLabel}</div>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">—</td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {String(item.phone ?? "").trim() || "—"}
+                              </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {formatTelegramUsername(item.telegram_username)}
+                              </td>
+                              <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                                {formatTelegramId(item.telegram_id)}
+                              </td>
+                              <td className="px-3 py-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                                из рабочих контактов
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <tr
+                            key={`slot-${row.position_id}`}
+                            className="border-t border-zinc-200 dark:border-zinc-800 align-middle bg-zinc-50/70 dark:bg-zinc-900/40"
+                          >
+                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">слот</td>
+                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-700 dark:text-zinc-300">
+                              <div>{row.slot_label}</div>
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">контакт не заполнен</div>
+                            </td>
+                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
+                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
+                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
+                            <td className="px-3 py-1 text-[13px] leading-4 text-zinc-500 dark:text-zinc-400">—</td>
+                            <td className="px-3 py-1">
                               <button
                                 type="button"
-                                onClick={() => openEdit(item)}
+                                onClick={() => openCreate(row.slot_label)}
                                 className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 text-[10px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                               >
-                                Изменить
+                                Заполнить
                               </button>
-
-                              <button
-                                type="button"
-                                onClick={() => void handleDelete(item)}
-                                className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
-                              >
-                                Удалить
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -756,7 +955,10 @@ export default function ContactsPage() {
       <ContactDrawer
         open={drawerOpen}
         mode={drawerMode}
-        initialValues={toFormValues(selectedItem)}
+        initialValues={{
+          ...toFormValues(selectedItem),
+          full_name: drawerMode === "create" && createPresetName ? createPresetName : toFormValues(selectedItem).full_name,
+        }}
         currentItem={selectedItem}
         saving={saving}
         error={drawerError}

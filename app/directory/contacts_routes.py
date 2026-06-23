@@ -166,6 +166,42 @@ def _build_eligible_contacts_cte_sql() -> str:
     return "\nUNION\n".join(parts)
 
 
+def _users_org_scope_match_sql(org_scope_where: str) -> str:
+    if not _relation_exists("users"):
+        return ""
+
+    q_cols = text(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+        """
+    )
+    with engine.begin() as conn:
+        user_cols = {str(r[0]) for r in conn.execute(q_cols).fetchall()}
+
+    match_parts = [
+        "(c.person_id IS NOT NULL AND u.user_id = c.person_id)",
+        "(c.full_name IS NOT NULL AND LOWER(TRIM(u.full_name)) = LOWER(TRIM(c.full_name)))",
+    ]
+    if "telegram_id" in user_cols:
+        match_parts.insert(
+            0,
+            "(c.telegram_numeric_id IS NOT NULL AND u.telegram_id = c.telegram_numeric_id)",
+        )
+
+    match_sql = " OR ".join(match_parts)
+    return f"""
+    EXISTS (
+        SELECT 1
+        FROM public.users u
+        WHERE ({match_sql})
+          AND ({org_scope_where})
+    )
+    """.strip()
+
+
 @router.get("/contacts")
 def list_contacts(
     q: Optional[str] = Query(default=None),
@@ -264,7 +300,24 @@ def list_contacts(
                 """
             )
         else:
-            where_parts.append("FALSE")
+            user_org_scope = apply_org_scope(
+                strategy=OrgScopeStrategy.OWNER_UNIT,
+                params=OrgScopeParams(
+                    org_group_id=int(org_group_id) if org_group_id is not None else None,
+                    org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+                ),
+                regular_task_alias="u",
+                owner_unit_column="unit_id",
+            )
+            params.update(user_org_scope.params)
+            if user_org_scope.cte_sql:
+                with_prefix = f"{user_org_scope.cte_sql}\n"
+
+            users_match = _users_org_scope_match_sql(user_org_scope.where_sql)
+            if users_match:
+                where_parts.append(users_match)
+            else:
+                where_parts.append("FALSE")
 
     where_sql = " AND ".join(where_parts)
 

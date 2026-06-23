@@ -5,6 +5,7 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
+import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import { apiFetchJson } from "../../../../lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
@@ -312,7 +313,13 @@ export default function PositionsPageClient() {
               <OrgScopeFilter
                 basePath="/directory/positions"
                 className="min-w-[240px]"
-                resetParamsOnChange={[]}
+                resetParamsOnChange={["offset", "org_unit_id", "org_unit_name"]}
+              />
+
+              <OrgUnitScopeFilter
+                basePath="/directory/positions"
+                className="min-w-[240px]"
+                resetParamsOnChange={["offset"]}
               />
 
               <div className="flex-1">
@@ -474,6 +481,7 @@ export default function PositionsPageClient() {
         open={drawerOpen}
         mode={drawerMode}
         position={selectedItem}
+        orgUnitLabel={filterCaption}
         saving={saving}
         error={drawerError}
         onClose={closeDrawer}
