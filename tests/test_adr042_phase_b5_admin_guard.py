@@ -139,7 +139,7 @@ def test_enforced_mode_denies_non_admin_without_grant(client: TestClient, seed, 
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_evaluate_admin_access_legacy_matches_is_privileged(seed, monkeypatch):
+def test_evaluate_admin_access_break_glass_user(seed, monkeypatch):
     _require_b2()
     monkeypatch.setenv("ADR042_ADMIN_GUARD_MODE", "legacy")
     with engine.connect() as conn:

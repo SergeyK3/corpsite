@@ -273,9 +273,9 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["is_privileged"] = is_privileged(out)
     out["is_system_admin"] = int(out.get("role_id") or 0) == 2
     uid = int(out.get("user_id") or 0)
-    full_admin = evaluate_admin_access(out)
-    out["has_personnel_admin"] = full_admin or has_any_personnel_read_permission(uid)
-    out["has_hr_governance"] = full_admin or has_hr_governance_permission(uid)
+    out["has_sysadmin_api"] = evaluate_admin_access(out)
+    out["has_personnel_admin"] = out["has_sysadmin_api"] or has_any_personnel_read_permission(uid)
+    out["has_hr_governance"] = out["has_sysadmin_api"] or has_hr_governance_permission(uid)
 
     from app.services.personnel_visibility_resolver_service import (
         enrich_user_with_personnel_visibility,

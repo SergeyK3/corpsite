@@ -12,8 +12,14 @@ import {
 import type { MeInfo } from "./types";
 
 describe("adminNav", () => {
-  const systemAdmin: MeInfo = { user_id: 1, role_id: 2 };
-  const privileged: MeInfo = { user_id: 2, role_id: 3, is_privileged: true };
+  const systemAdmin: MeInfo = { user_id: 1, role_id: 2, has_sysadmin_api: true };
+  const directoryPrivileged: MeInfo = { user_id: 2, role_id: 3, is_privileged: true };
+  const breakGlassSysadmin: MeInfo = {
+    user_id: 5,
+    role_id: 3,
+    is_privileged: true,
+    has_sysadmin_api: true,
+  };
   const hrManager: MeInfo = { user_id: 4, role_id: 3, has_personnel_admin: true };
   const regular: MeInfo = { user_id: 3, role_id: 3 };
 
@@ -24,11 +30,18 @@ describe("adminNav", () => {
     expect(canSeeRegularTaskRunsJournal(systemAdmin)).toBe(true);
   });
 
-  it("env-privileged operator sees sysadmin nav and run journal but not full admin shell", () => {
-    expect(canSeeAdminShell(privileged)).toBe(false);
-    expect(canSeeSysadminCabinetNav(privileged)).toBe(true);
-    expect(canSeePersonnelLifecycleNav(privileged)).toBe(true);
-    expect(canSeeRegularTaskRunsJournal(privileged)).toBe(true);
+  it("directory-privileged role without sysadmin API sees run journal but not sysadmin nav", () => {
+    expect(canSeeAdminShell(directoryPrivileged)).toBe(false);
+    expect(canSeeSysadminCabinetNav(directoryPrivileged)).toBe(false);
+    expect(canSeePersonnelLifecycleNav(directoryPrivileged)).toBe(false);
+    expect(canSeeRegularTaskRunsJournal(directoryPrivileged)).toBe(true);
+  });
+
+  it("break-glass sysadmin user sees sysadmin nav but not full admin shell", () => {
+    expect(canSeeAdminShell(breakGlassSysadmin)).toBe(false);
+    expect(canSeeSysadminCabinetNav(breakGlassSysadmin)).toBe(true);
+    expect(canSeePersonnelLifecycleNav(breakGlassSysadmin)).toBe(true);
+    expect(canSeeRegularTaskRunsJournal(breakGlassSysadmin)).toBe(true);
   });
 
   it("HR enrollment manager sees personnel lifecycle but not sysadmin cabinet", () => {
@@ -43,12 +56,13 @@ describe("adminNav", () => {
     expect(canSeeRegularTaskRunsJournal(regular)).toBe(false);
     expect(isForbiddenAdminRoute("/regular-task-runs", regular)).toBe(true);
     expect(isForbiddenAdminRoute("/regular-task-runs", systemAdmin)).toBe(false);
-    expect(isForbiddenAdminRoute("/regular-task-runs", privileged)).toBe(false);
+    expect(isForbiddenAdminRoute("/regular-task-runs", directoryPrivileged)).toBe(false);
   });
 
   it("forbidden routes respect split access", () => {
-    expect(isForbiddenAdminRoute("/admin/system", privileged)).toBe(false);
-    expect(isForbiddenAdminRoute("/admin/sync", privileged)).toBe(true);
+    expect(isForbiddenAdminRoute("/admin/system", directoryPrivileged)).toBe(true);
+    expect(isForbiddenAdminRoute("/admin/system", breakGlassSysadmin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/sync", directoryPrivileged)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system", regular)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system/personnel-lifecycle", hrManager)).toBe(false);
     expect(isForbiddenAdminRoute("/admin/system/personnel-identity/operations", hrManager)).toBe(false);

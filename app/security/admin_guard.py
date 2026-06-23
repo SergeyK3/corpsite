@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException
 
 from app.auth import get_current_user
 from app.security.admin_permissions import has_any_admin_api_permission
-from app.security.directory_scope import is_privileged
+from app.security.directory_scope import is_privileged, is_system_admin, privileged_user_ids
 from app.services.security_audit_service import write_security_event
 
 AdminGuardMode = Literal["legacy", "access_grants_shadow", "access_grants_enforced"]
@@ -23,13 +23,29 @@ def admin_guard_mode() -> AdminGuardMode:
     return "legacy"
 
 
+def is_sysadmin_emergency_fallback(user_ctx: Dict[str, Any]) -> bool:
+    """Break-glass: system-admin role or explicit user allowlist only (not role allowlist)."""
+    if is_system_admin(user_ctx):
+        return True
+    try:
+        uid = int(user_ctx["user_id"])
+    except (TypeError, ValueError, KeyError):
+        return False
+    return uid in privileged_user_ids()
+
+
 def is_emergency_admin_fallback(user_ctx: Dict[str, Any]) -> bool:
-    """Env allowlist + legacy role_id=2 — always honored in enforced mode."""
-    return is_privileged(user_ctx)
+    """Backward-compatible alias for sysadmin emergency fallback."""
+    return is_sysadmin_emergency_fallback(user_ctx)
 
 
 def _access_grants_allow_admin(user_id: int) -> bool:
     return has_any_admin_api_permission(int(user_id))
+
+
+def _sysadmin_api_allowed(user_ctx: Dict[str, Any]) -> bool:
+    uid = int(user_ctx["user_id"])
+    return is_sysadmin_emergency_fallback(user_ctx) or _access_grants_allow_admin(uid)
 
 
 def _log_shadow_guard_decision(
@@ -50,44 +66,39 @@ def _log_shadow_guard_decision(
             "legacy_allowed": legacy_allowed,
             "grants_allowed": grants_allowed,
             "permissions_checked": ["SYSADMIN_CABINET", "ACCESS_ADMIN"],
+            "note": "legacy_allowed reflects pre-split is_privileged() gate",
         },
     )
 
 
 def evaluate_admin_access(user_ctx: Dict[str, Any]) -> bool:
-    """Core admin access decision for the current guard mode."""
+    """Sysadmin API access: role_id=2, break-glass user allowlist, or admin grants."""
     mode = admin_guard_mode()
-    uid = int(user_ctx["user_id"])
-    legacy_allowed = is_emergency_admin_fallback(user_ctx)
-    grants_allowed = _access_grants_allow_admin(uid)
-
-    if mode == "legacy":
-        return legacy_allowed
+    allowed = _sysadmin_api_allowed(user_ctx)
 
     if mode == "access_grants_shadow":
+        pre_split_directory_privileged = is_privileged(user_ctx)
         _log_shadow_guard_decision(
             user_ctx=user_ctx,
-            legacy_allowed=legacy_allowed,
-            grants_allowed=grants_allowed,
+            legacy_allowed=pre_split_directory_privileged,
+            grants_allowed=allowed,
         )
-        return legacy_allowed
 
-    # access_grants_enforced
-    if legacy_allowed:
-        return True
-    return grants_allowed
+    return allowed
 
 
 def require_sysadmin_api(
     user_ctx: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
-    Restrict /admin/* based on ADR042_ADMIN_GUARD_MODE.
+    Restrict sysadmin /admin/* routes (users, access grants, enrollment admin, …).
 
-    Modes:
-    - legacy (default): is_privileged()
-    - access_grants_shadow: legacy decides; mismatches logged to security_audit_log
-    - access_grants_enforced: SYSADMIN_CABINET/ACCESS_ADMIN grant OR emergency fallback
+    Allowed when:
+    - role_id=2 (system admin), or
+    - user_id in DIRECTORY_PRIVILEGED_USER_IDS (break-glass), or
+    - active SYSADMIN_CABINET / ACCESS_ADMIN access grant
+
+    DIRECTORY_PRIVILEGED_ROLE_IDS does NOT grant sysadmin API access.
     """
     if not evaluate_admin_access(user_ctx):
         raise HTTPException(status_code=403, detail="Admin access required.")

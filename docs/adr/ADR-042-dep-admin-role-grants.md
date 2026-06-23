@@ -33,19 +33,16 @@ DEP_ADMIN (`role_id=13` in production) must receive the HR operational contour a
    - `DIRECTORY_DEPUTY_ROLE_IDS=13` → deputy department scope
    - `DIRECTORY_PRIVILEGED_ROLE_IDS=13` → **legacy only**; see security gap below
 
-## Security gap (documented, not fixed here)
+## Security gap (fixed in admin guard split)
 
-With `ADR042_ADMIN_GUARD_MODE=legacy` (production default):
+Previously, with `ADR042_ADMIN_GUARD_MODE=legacy`:
 
-- `DIRECTORY_PRIVILEGED_ROLE_IDS=13` sets `is_privileged=true` for all DEP_ADMIN users.
-- `evaluate_admin_access()` in legacy mode returns `is_privileged`, which **opens** `/admin/users`, `/admin/access/grants`, and other `/admin/*` routes.
-- UI sysadmin nav remains hidden for non–role_id=2 users, but **API responds 200**.
+- `DIRECTORY_PRIVILEGED_ROLE_IDS=13` set `is_privileged=true` for all DEP_ADMIN users.
+- `evaluate_admin_access()` returned `is_privileged`, opening `/admin/users`, `/admin/access/grants`, and other sysadmin routes.
 
-This is broader than intended: DEP_ADMIN should have HR operational access, not sysadmin API access.
+**Fixed:** [ADR-042 Admin Guard Split](ADR-042-admin-guard-split-followup.md) — sysadmin API requires `role_id=2`, break-glass user allowlist, or `SYSADMIN_CABINET`/`ACCESS_ADMIN` grant. DEP_ADMIN keeps HR access via ROLE grant only.
 
-**Mitigation until guard split:** keep `DIRECTORY_PRIVILEGED_ROLE_IDS` only if legacy admin API access is explicitly accepted; prefer removing `13` from privileged roles once [ADR-042 Admin Guard Split](ADR-042-admin-guard-split-followup.md) ships.
-
-Regression test: `test_directory_privileged_role_opens_admin_api_legacy_mode` in `tests/test_adr042_role_targeted_grants.py`.
+**Production note:** `DIRECTORY_PRIVILEGED_ROLE_IDS=13` may remain for directory scope until ops removes it; it no longer opens sysadmin API after deploy.
 
 ## Rollback
 

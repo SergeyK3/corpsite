@@ -1,74 +1,94 @@
 # ADR-042 / ADR-045 Follow-up — Admin Guard Split
 
-**Status:** Proposed  
+**Status:** Implemented  
 **Date:** 2026-06-23  
 **Related:** [ADR-042 DEP_ADMIN role grants](ADR-042-dep-admin-role-grants.md), [ADR-042 Phase B5](ADR-042-phase-b5-auth-policy.md), [ADR-045](ADR-045-personnel-hr-processes-split.md)
 
-## Problem
+## Problem (resolved)
 
-Directory env flags (`DIRECTORY_PRIVILEGED_ROLE_IDS`, `DIRECTORY_PRIVILEGED_USER_IDS`) and `is_privileged()` are reused as the **legacy admin gate** for `/admin/*`. That conflates:
+Directory env flags (`DIRECTORY_PRIVILEGED_ROLE_IDS`) and `is_privileged()` were reused as the **legacy admin gate** for sysadmin `/admin/*` routes. That conflated directory cross-dept scope with sysadmin API access.
 
-| Concern | Intended gate | Current legacy gate |
-|---------|---------------|---------------------|
-| Directory cross-dept read / deputy scope | `is_privileged`, `is_deputy` | OK |
-| HR operational contour (`/directory/personnel/*`) | `HR_ENROLLMENT_MANAGER` grant / `has_personnel_admin` | Partially OK after ROLE grants |
-| Sysadmin API (`/admin/users`, `/admin/access/*`, …) | `SYSADMIN_CABINET` / `ACCESS_ADMIN` grant or role_id=2 | **Also opened by directory privileged** |
+DEP_ADMIN with `DIRECTORY_PRIVILEGED_ROLE_IDS=13` received sysadmin API access (`/admin/users`, `/admin/access/grants`) even without `SYSADMIN_CABINET` or `ACCESS_ADMIN` grants.
 
-DEP_ADMIN with `DIRECTORY_PRIVILEGED_ROLE_IDS=13` therefore receives sysadmin API access in `ADR042_ADMIN_GUARD_MODE=legacy` even without `SYSADMIN_CABINET`.
+## Decision
 
-## Goal
+**Directory privileged ≠ sysadmin API.** Split implemented in `app/security/admin_guard.py`.
 
-Split guards so directory privilege **never** implies sysadmin API access.
+### Sysadmin API gate (`require_sysadmin_api`)
 
-## Proposed tasks
+Access allowed only via:
 
-### 1. Admin guard policy
+| Path | Mechanism |
+|------|-----------|
+| a | `role_id=2` (system admin) |
+| b | `DIRECTORY_PRIVILEGED_USER_IDS` (break-glass user allowlist) |
+| c | Active `SYSADMIN_CABINET` or `ACCESS_ADMIN` access grant |
 
-- `evaluate_admin_access()` in **all modes** must require `SYSADMIN_CABINET` or `ACCESS_ADMIN` grant (or explicit system-admin role_id=2).
-- Remove `is_privileged()` / `DIRECTORY_PRIVILEGED_*` from admin API path.
-- Keep emergency fallback as **user allowlist only** (`DIRECTORY_PRIVILEGED_USER_IDS`), not role allowlist — or document a separate `SYSADMIN_EMERGENCY_USER_IDS`.
+`DIRECTORY_PRIVILEGED_ROLE_IDS` **does not** open sysadmin APIs. It remains valid for:
 
-### 2. Directory privileged scope
+- `is_privileged()` / directory RBAC scope
+- `require_dept_scope()` bypass
+- `require_privileged_or_403()` on directory write routes
+- `is_deputy()` companion: `DIRECTORY_DEPUTY_ROLE_IDS`
 
-- `DIRECTORY_PRIVILEGED_ROLE_IDS` / `DIRECTORY_DEPUTY_ROLE_IDS` remain for directory RBAC and org scope only.
-- DEP_ADMIN: keep `DIRECTORY_DEPUTY_ROLE_IDS=13`; **drop** `13` from `DIRECTORY_PRIVILEGED_ROLE_IDS` after guard split.
+### `/auth/me` flags
 
-### 3. Personnel admin path (unchanged intent)
+| Flag | DEP_ADMIN (production pattern) |
+|------|-------------------------------|
+| `is_privileged` | `true` (while `13 ∈ DIRECTORY_PRIVILEGED_ROLE_IDS`) |
+| `is_system_admin` | `false` |
+| `has_sysadmin_api` | **`false`** |
+| `has_personnel_admin` | `true` (via `HR_ENROLLMENT_MANAGER` ROLE grant) |
+| `has_hr_governance` | `true` (via same grant) |
 
-- `has_personnel_admin` = full sysadmin **or** active `HR_ENROLLMENT_MANAGER` (USER or ROLE grant).
-- DEP_ADMIN continues to receive HR contour via ROLE grant, not via `is_privileged`.
+### Frontend
 
-### 4. Guard mode rollout
+`canSeeSysadminCabinetNav` uses `role_id=2` or `has_sysadmin_api=true` — not generic `is_privileged`.
 
-| Mode | Admin API | Personnel admin |
-|------|-----------|-----------------|
-| `legacy` (today) | privileged OR grant (bug) | grant OR full admin |
-| `access_grants_shadow` | log mismatch | unchanged |
-| `access_grants_enforced` | grant OR emergency user allowlist | unchanged |
-| **target** | grant OR role_id=2 OR emergency user allowlist | grant OR full admin |
+Personnel lifecycle / HR routes still use `has_personnel_admin`.
 
-### 5. Tests
+### Guard modes
 
-- DEP_ADMIN + ROLE grant → `has_personnel_admin=true`, `/admin/users` → **403**
-- Sysadmin grant → `/admin/users` → 200
-- `DIRECTORY_PRIVILEGED_ROLE_IDS` alone → directory scope widened, **no** admin API
-- Shadow mode logs when legacy privileged would have differed from grant check
+All modes (`legacy`, `access_grants_shadow`, `access_grants_enforced`) use the same sysadmin decision:
 
-### 6. Production cutover checklist
+```
+allowed = sysadmin_emergency_fallback OR admin_api_grants
+```
 
-1. Deploy guard split code.
-2. Set `ADR042_ADMIN_GUARD_MODE=access_grants_shadow`; review audit mismatches.
-3. Confirm DEP_ADMIN has ROLE grant for `HR_ENROLLMENT_MANAGER`.
-4. Remove `13` from `DIRECTORY_PRIVILEGED_ROLE_IDS` in `.env`.
-5. Switch to `access_grants_enforced` when shadow is clean.
+`access_grants_shadow` logs to `security_audit_log` when pre-split `is_privileged()` differed from the new decision.
 
-## Out of scope
+## DEP_ADMIN after split
 
-- UI nav changes (already hide sysadmin for non–role_id=2).
-- Replacing directory deputy/privileged semantics for `/directory/staff` visibility (ADR-042 E1).
+**Keeps:**
+
+- Personnel directory / HR Processes UI
+- `DIRECTORY_DEPUTY_ROLE_IDS=13` deputy scope
+- `/admin/personnel/*` via `HR_ENROLLMENT_MANAGER` ROLE grant
+- `/directory/personnel/*` via `has_personnel_admin`
+
+**Loses:**
+
+- `/admin/users`, user lock/unlock/password admin
+- `/admin/access/grants` and other sysadmin cabinet APIs under `require_sysadmin_api`
+
+## Production cutover checklist
+
+1. Deploy guard split code (this change).
+2. Confirm DEP_ADMIN has `HR_ENROLLMENT_MANAGER` → `target_type=ROLE`, `target_id=13`.
+3. Verify `/auth/me`: `has_personnel_admin=true`, `has_sysadmin_api=false`.
+4. Verify `/admin/users` → 403 for DEP_ADMIN, 200 for system admin.
+5. Optional: set `ADR042_ADMIN_GUARD_MODE=access_grants_shadow`; review audit mismatches.
+6. Optional: remove `13` from `DIRECTORY_PRIVILEGED_ROLE_IDS` if directory cross-dept scope is no longer needed for DEP_ADMIN (deputy scope via `DIRECTORY_DEPUTY_ROLE_IDS=13` remains).
+
+## Tests
+
+- `tests/test_adr042_admin_guard_split.py`
+- `tests/test_adr042_role_targeted_grants.py::test_directory_privileged_role_denied_sysadmin_api_legacy_mode`
+- `corpsite-ui/lib/adminNav.test.ts`
 
 ## Acceptance criteria
 
-- No `/admin/*` route accepts `is_privileged` from directory env alone.
-- DEP_ADMIN retains HR operational API/UI via `HR_ENROLLMENT_MANAGER` ROLE grant.
-- Documented env template distinguishes directory vs sysadmin allowlists.
+- [x] No `/admin/*` sysadmin route accepts `is_privileged` from directory role allowlist alone.
+- [x] DEP_ADMIN retains HR operational API via `HR_ENROLLMENT_MANAGER` ROLE grant.
+- [x] Break-glass user allowlist and admin grants still work.
+- [x] `has_sysadmin_api` exposed on `/auth/me`.

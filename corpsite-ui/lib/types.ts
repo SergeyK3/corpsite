@@ -15,6 +15,8 @@ export type MeInfo = {
   /** From GET /auth/me — backend is_privileged() (role_id=2 or env allowlist). */
   is_privileged?: boolean;
   is_system_admin?: boolean;
+  /** Sysadmin cabinet API (/admin/users, /admin/access/*, …) — not directory privileged roles. */
+  has_sysadmin_api?: boolean;
   /** ADR-043 C4.2 — personnel lifecycle admin (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_personnel_admin?: boolean;
   /** ADR-043 C4.2 — override approve/reject (ADMIN or HR_ENROLLMENT_MANAGER). */

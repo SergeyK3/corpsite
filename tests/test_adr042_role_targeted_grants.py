@@ -374,12 +374,12 @@ def test_revoked_and_inactive_role_grants_ignored(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_directory_privileged_role_opens_admin_api_legacy_mode(
+def test_directory_privileged_role_denied_sysadmin_api_legacy_mode(
     client: TestClient,
     seed,
     monkeypatch,
 ):
-    """Known gap: DIRECTORY_PRIVILEGED_ROLE_IDS bypasses sysadmin grant check in legacy mode."""
+    """DIRECTORY_PRIVILEGED_ROLE_IDS must not open sysadmin API after guard split."""
     _require_b2()
     suffix = uuid4().hex[:8]
     created: dict = {}
@@ -396,10 +396,12 @@ def test_directory_privileged_role_opens_admin_api_legacy_mode(
     try:
         resp = client.get("/auth/me", headers=headers)
         assert resp.status_code == 200
-        assert resp.json().get("is_privileged") is True
+        body = resp.json()
+        assert body.get("is_privileged") is True
+        assert body.get("has_sysadmin_api") is False
 
         admin_resp = client.get("/admin/users", headers=headers, params={"limit": 5})
-        assert admin_resp.status_code == 200
+        assert admin_resp.status_code == 403
     finally:
         _cleanup(created)
         with engine.begin() as conn:

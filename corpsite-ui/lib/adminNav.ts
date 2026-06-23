@@ -32,9 +32,10 @@ export function canSeeRegularTaskRunsJournal(me: MeInfo | null | undefined): boo
   return isPrivilegedOperator(me);
 }
 
-/** Sysadmin cabinet nav — aligned with backend require_sysadmin_api legacy path. */
+/** Sysadmin cabinet nav — role_id=2 or explicit sysadmin API access only. */
 export function canSeeSysadminCabinetNav(me: MeInfo | null | undefined): boolean {
-  return isPrivilegedOperator(me);
+  if (isSystemAdminRole(me)) return true;
+  return me?.has_sysadmin_api === true;
 }
 
 /** ADR-043 C4.2 — personnel lifecycle section (ADMIN or HR_ENROLLMENT_MANAGER). */
