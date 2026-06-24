@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { apiFetchJson } from "../../../lib/api";
-import { runStatusLabel, scheduleTypeLabel, assignmentScopeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
+import { runStatusLabel, scheduleTypeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
@@ -14,6 +14,7 @@ import TemplateForm, {
   type TemplateFormOwnerUnitOption,
   type TemplateFormValues,
 } from "../../regular-tasks/_components/TemplateForm";
+import TemplateViewPanel from "../../regular-tasks/_components/TemplateViewPanel";
 
 type RegularTaskItem = {
   regular_task_id: number;
@@ -219,16 +220,6 @@ function roleLabel(value: {
   if (code) return code;
 
   if (value.executor_role_id != null) return `#${value.executor_role_id}`;
-  return "—";
-}
-
-function ownerUnitLabel(item: { owner_unit_id?: number | null; owner_unit_name?: string | null }): string {
-  const name = String(item.owner_unit_name ?? "").trim();
-  const id = item.owner_unit_id;
-
-  if (name && id != null) return `${name} (#${id})`;
-  if (name) return name;
-  if (id != null) return `#${id}`;
   return "—";
 }
 
@@ -806,9 +797,7 @@ export default function RegularTasksAdminClient() {
       ? "Создание шаблона"
       : drawerMode === "edit"
         ? "Редактирование шаблона"
-        : currentTemplate
-          ? currentTemplate.title
-          : "Карточка шаблона";
+        : "Просмотр шаблона";
 
   const isTemplateFormMode = drawerMode === "create" || drawerMode === "edit";
 
@@ -1268,174 +1257,64 @@ export default function RegularTasksAdminClient() {
         }
       >
         {drawerMode === "view" ? (
-          <div className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              {drawerLoading && !currentTemplate ? (
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">Загрузка...</div>
-              ) : !currentTemplate ? (
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">Шаблон не выбран.</div>
-              ) : (
-                <div className="space-y-4">
-                  {!!drawerError && (
-                    <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
-                      {drawerError}
-                    </div>
-                  )}
-
-                  {currentTemplateHasOwnerDefect ? (
-                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
-                      Диагностика: у шаблона не заполнено отделение.
-                    </div>
+          drawerLoading && !currentTemplate ? (
+            <div className="px-6 py-5 text-sm text-zinc-600 dark:text-zinc-400">Загрузка...</div>
+          ) : !currentTemplate ? (
+            <div className="px-6 py-5 text-sm text-zinc-600 dark:text-zinc-400">Шаблон не выбран.</div>
+          ) : (
+            <TemplateViewPanel
+              template={currentTemplate}
+              error={drawerError}
+              hasOwnerDefect={currentTemplateHasOwnerDefect}
+              roleLabel={roleLabel(currentTemplate)}
+              formatDateTime={fmtDateTime}
+              footer={
+                <>
+                  {canEditTemplate(currentTemplate) ? (
+                    <button
+                      type="button"
+                      onClick={() => setDrawerMode("edit")}
+                      disabled={drawerSaving || drawerLoading}
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
+                    >
+                      Редактировать
+                    </button>
                   ) : null}
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Ид</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.regular_task_id}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Статус</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
-                        {currentTemplate.is_active ? "Активен" : "Неактивен"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Тип расписания</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
-                        {scheduleTypeLabel(currentTemplate.schedule_type) ?? "—"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Исполнитель</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{roleLabel(currentTemplate)}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("owner_unit_id")}</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.owner_unit_id ?? "—"}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Подразделение</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.owner_unit_name ?? "—"}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Диагностика отделения</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
-                        {currentTemplateHasOwnerDefect ? "Дефект" : "Корректно"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Создать за N дней</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.create_offset_days ?? 0}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Срок +N дней</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.due_offset_days ?? 0}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("assignment_scope")}</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
-                        {assignmentScopeLabel(currentTemplate.assignment_scope) || "—"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Создал пользователь</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{currentTemplate.created_by_user_id ?? "—"}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Создан</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.created_at)}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Архивирован</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.archived_at)}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Обновлено</div>
-                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.updated_at)}</div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                    <div className="text-xs text-zinc-600 dark:text-zinc-400">Описание</div>
-                    <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900 dark:text-zinc-50">
-                      {currentTemplate.description ?? "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                    <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("owner_unit")}</div>
-                    <div className="mt-2 text-sm text-zinc-900 dark:text-zinc-50">{ownerUnitLabel(currentTemplate)}</div>
-                  </div>
-
-                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
-                    <div className="text-xs text-zinc-600 dark:text-zinc-400">{uiFieldLabel("schedule_params")}</div>
-                    <pre className="mt-2 overflow-auto text-sm text-zinc-800 dark:text-zinc-200">
-                      {JSON.stringify(currentTemplate.schedule_params ?? {}, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {currentTemplate ? (
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800 px-5 py-3">
-                {canEditTemplate(currentTemplate) ? (
                   <button
                     type="button"
-                    onClick={() => setDrawerMode("edit")}
+                    onClick={() => void copyTemplate(currentTemplate)}
                     disabled={drawerSaving || drawerLoading}
                     className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                   >
-                    Редактировать
+                    Копировать
                   </button>
-                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => void copyTemplate(currentTemplate)}
-                  disabled={drawerSaving || drawerLoading}
-                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                >
-                  Копировать
-                </button>
+                  {canEditTemplate(currentTemplate) ? (
+                    <button
+                      type="button"
+                      onClick={() => void archiveTemplate(currentTemplate)}
+                      disabled={drawerSaving || drawerLoading}
+                      className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-1.5 text-sm text-amber-900 dark:text-amber-200 transition hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-60"
+                    >
+                      Архивировать
+                    </button>
+                  ) : null}
 
-                {canEditTemplate(currentTemplate) ? (
-                  <button
-                    type="button"
-                    onClick={() => void archiveTemplate(currentTemplate)}
-                    disabled={drawerSaving || drawerLoading}
-                    className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-1.5 text-sm text-amber-900 dark:text-amber-200 transition hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-60"
-                  >
-                    Архивировать
-                  </button>
-                ) : null}
-
-                {!canEditTemplate(currentTemplate) ? (
-                  <button
-                    type="button"
-                    onClick={() => void toggleTemplateActive(true)}
-                    disabled={drawerSaving || drawerLoading || currentTemplate.is_active === true}
-                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                  >
-                    Восстановить
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+                  {!canEditTemplate(currentTemplate) ? (
+                    <button
+                      type="button"
+                      onClick={() => void toggleTemplateActive(true)}
+                      disabled={drawerSaving || drawerLoading || currentTemplate.is_active === true}
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
+                    >
+                      Восстановить
+                    </button>
+                  ) : null}
+                </>
+              }
+            />
+          )
         ) : (
           <TemplateForm
             mode={drawerMode}

@@ -3,15 +3,18 @@
 
 import * as React from "react";
 
-import { scheduleTypeLabel, uiFieldLabel } from "@/lib/i18n";
+import { uiFieldLabel } from "@/lib/i18n";
+import {
+  SCHEDULE_TYPE_FORM_OPTIONS,
+  TEMPLATE_FORM_ID,
+  TemplateField,
+  TemplateSection,
+  scheduleTypeFormLabel,
+  templateFieldInputClassName,
+  templateTextareaClassName,
+} from "./templateDetailShared";
 
-export const TEMPLATE_FORM_ID = "regular-task-template-form";
-
-export const SCHEDULE_TYPE_FORM_OPTIONS = [
-  { value: "weekly", label: "Еженедельно" },
-  { value: "monthly", label: "Ежемесячно" },
-  { value: "yearly", label: "Ежегодно" },
-] as const;
+export { TEMPLATE_FORM_ID, SCHEDULE_TYPE_FORM_OPTIONS } from "./templateDetailShared";
 
 export type TemplateFormValues = {
   title: string;
@@ -43,9 +46,7 @@ type TemplateFormProps = {
 };
 
 export default function TemplateForm({
-  mode,
   initialValues,
-  saving = false,
   error = null,
   validate,
   onSubmit,
@@ -58,7 +59,6 @@ export default function TemplateForm({
   React.useEffect(() => {
     setValues(initialValues);
   }, [
-    mode,
     initialValues.title,
     initialValues.description,
     initialValues.executor_role_id,
@@ -77,7 +77,13 @@ export default function TemplateForm({
     onFormValidationChange?.(formError);
   }, [formError, onFormValidationChange]);
 
-  const hasOwnerUnitOptions = ownerUnitOptions.length > 0;
+  const ownerUnitIds = React.useMemo(
+    () => new Set(ownerUnitOptions.map((option) => String(option.unit_id))),
+    [ownerUnitOptions],
+  );
+  const legacyOwnerUnitId =
+    values.owner_unit_id && !ownerUnitIds.has(values.owner_unit_id) ? values.owner_unit_id : null;
+
   const scheduleTypeValues = React.useMemo(
     () => new Set<string>(SCHEDULE_TYPE_FORM_OPTIONS.map((option) => option.value)),
     [],
@@ -114,230 +120,136 @@ export default function TemplateForm({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="flex flex-col gap-5">
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-5">
-                <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Основные данные</h3>
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Название и описание шаблона регулярной задачи.
-                  </p>
-                </div>
+          <TemplateSection
+            title="Основные данные"
+            description="Название и описание шаблона регулярной задачи."
+          >
+            <div className="flex flex-col gap-4">
+              <TemplateField label="Отчёт" htmlFor="template-title" required>
+                <input
+                  id="template-title"
+                  value={values.title}
+                  onChange={(e) => setValues((prev) => ({ ...prev, title: e.target.value }))}
+                  placeholder="Например: Отчёт по приёмному отделению — месячный"
+                  className={templateFieldInputClassName}
+                />
+              </TemplateField>
 
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="template-title" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      Отчёт <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      id="template-title"
-                      value={values.title}
-                      onChange={(e) => setValues((prev) => ({ ...prev, title: e.target.value }))}
-                      placeholder="Например: Отчёт по приёмному отделению — месячный"
-                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="template-description" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      Описание
-                    </label>
-                    <textarea
-                      id="template-description"
-                      value={values.description}
-                      onChange={(e) => setValues((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Краткое описание назначения шаблона"
-                      rows={6}
-                      className="min-h-[144px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-5">
-                <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Расписание</h3>
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Тип расписания и JSON-параметры генерации.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="template-schedule-type" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      Тип расписания
-                    </label>
-                    <select
-                      id="template-schedule-type"
-                      value={values.schedule_type}
-                      onChange={(e) => setValues((prev) => ({ ...prev, schedule_type: e.target.value }))}
-                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
-                    >
-                      <option value="">Выберите тип расписания</option>
-                      {SCHEDULE_TYPE_FORM_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                      {legacyScheduleType ? (
-                        <option value={legacyScheduleType}>
-                          {scheduleTypeLabel(legacyScheduleType) || legacyScheduleType}
-                        </option>
-                      ) : null}
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="template-create-offset" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      Создать за N дней
-                    </label>
-                    <input
-                      id="template-create-offset"
-                      value={values.create_offset_days}
-                      onChange={(e) => setValues((prev) => ({ ...prev, create_offset_days: e.target.value }))}
-                      placeholder="0"
-                      inputMode="numeric"
-                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="template-due-offset" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      Срок +N дней
-                    </label>
-                    <input
-                      id="template-due-offset"
-                      value={values.due_offset_days}
-                      onChange={(e) => setValues((prev) => ({ ...prev, due_offset_days: e.target.value }))}
-                      placeholder="0"
-                      inputMode="numeric"
-                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-2">
-                  <label htmlFor="template-schedule-params" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    {uiFieldLabel("schedule_params")} (JSON)
-                  </label>
-                  <textarea
-                    id="template-schedule-params"
-                    value={values.schedule_params}
-                    onChange={(e) => setValues((prev) => ({ ...prev, schedule_params: e.target.value }))}
-                    placeholder='Например: {"byweekday":["TH"],"time":"10:00"}'
-                    rows={12}
-                    className="min-h-[240px] resize-y rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-3 font-mono text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                  />
-                  <div className={`text-sm ${formError ? "text-red-700 dark:text-red-300" : "text-zinc-600 dark:text-zinc-400"}`}>
-                    {formError ?? "JSON корректен. Форму можно сохранять."}
-                  </div>
-                </div>
-              </div>
+              <TemplateField label="Описание" htmlFor="template-description">
+                <textarea
+                  id="template-description"
+                  value={values.description}
+                  onChange={(e) => setValues((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Краткое описание назначения шаблона"
+                  rows={6}
+                  className={`${templateTextareaClassName} min-h-[144px]`}
+                />
+              </TemplateField>
             </div>
+          </TemplateSection>
 
-            <div className="flex flex-col gap-5">
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-5">
-                <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Исполнитель</h3>
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Укажи ID роли, для которой создаётся задача.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="template-executor-role" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    ID роли исполнителя
-                  </label>
-                  <input
-                    id="template-executor-role"
-                    value={values.executor_role_id}
-                    onChange={(e) => setValues((prev) => ({ ...prev, executor_role_id: e.target.value }))}
-                    placeholder="Например: 60"
-                    inputMode="numeric"
-                    className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-5">
-                <div className="mb-4">
-                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Подразделение-владелец</h3>
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Выберите подразделение-владелец шаблона.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  {hasOwnerUnitOptions ? (
-                    <div className="flex flex-col gap-2">
-                      <label htmlFor="template-owner-unit-select" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                        Подразделение <span className="text-red-400">*</span>
-                      </label>
-                      <select
-                        id="template-owner-unit-select"
-                        value={values.owner_unit_id}
-                        onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
-                        disabled={ownerUnitLoading}
-                        className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:opacity-60"
-                      >
-                        <option value="">Выберите подразделение</option>
-                        {ownerUnitOptions.map((opt) => (
-                          <option key={opt.unit_id} value={String(opt.unit_id)}>
-                            {opt.name} (#{opt.unit_id})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+          <TemplateSection title="Расписание" description="Периодичность и смещения генерации задач.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <TemplateField label="Периодичность" htmlFor="template-schedule-type">
+                <select
+                  id="template-schedule-type"
+                  value={values.schedule_type}
+                  onChange={(e) => setValues((prev) => ({ ...prev, schedule_type: e.target.value }))}
+                  className={templateFieldInputClassName}
+                >
+                  <option value="">Выберите периодичность</option>
+                  {SCHEDULE_TYPE_FORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                  {legacyScheduleType ? (
+                    <option value={legacyScheduleType}>
+                      {scheduleTypeFormLabel(legacyScheduleType)}
+                    </option>
                   ) : null}
+                </select>
+              </TemplateField>
 
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="template-owner-unit" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      {uiFieldLabel("owner_unit_id")} <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      id="template-owner-unit"
-                      value={values.owner_unit_id}
-                      onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
-                      placeholder="Например: 54"
-                      inputMode="numeric"
-                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                    />
-                  </div>
+              <TemplateField label="Создать за N дней" htmlFor="template-create-offset">
+                <input
+                  id="template-create-offset"
+                  value={values.create_offset_days}
+                  onChange={(e) => setValues((prev) => ({ ...prev, create_offset_days: e.target.value }))}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className={templateFieldInputClassName}
+                />
+              </TemplateField>
 
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                    {ownerUnitLoading
-                      ? "Загрузка списка подразделений..."
-                      : hasOwnerUnitOptions
-                        ? "Можно выбрать из списка или ввести ID вручную."
-                        : "Список подразделений недоступен, используй ручной ввод ID."}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-5">
-                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Подсказка</h3>
-                <div className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
-                  <p>
-                    Для еженедельных шаблонов обычно используют{" "}
-                    <span className="text-zinc-800 dark:text-zinc-200">{scheduleTypeLabel("weekly")}</span> (
-                    <span className="font-mono text-zinc-600 dark:text-zinc-400">weekly</span>).
-                  </p>
-                  <p>
-                    Для ежемесячных —{" "}
-                    <span className="text-zinc-800 dark:text-zinc-200">{scheduleTypeLabel("monthly")}</span> (
-                    <span className="font-mono text-zinc-600 dark:text-zinc-400">monthly</span>).
-                  </p>
-                  <p>
-                    Для ежегодных —{" "}
-                    <span className="text-zinc-800 dark:text-zinc-200">{scheduleTypeLabel("yearly")}</span> (
-                    <span className="font-mono text-zinc-600 dark:text-zinc-400">yearly</span>).
-                  </p>
-                  <p>JSON должен быть именно объектом, а не массивом.</p>
-                  <p>{uiFieldLabel("owner_unit_id")} лучше не оставлять пустым, чтобы не создавать новые дефекты.</p>
-                </div>
-              </div>
+              <TemplateField label="Срок +N дней" htmlFor="template-due-offset">
+                <input
+                  id="template-due-offset"
+                  value={values.due_offset_days}
+                  onChange={(e) => setValues((prev) => ({ ...prev, due_offset_days: e.target.value }))}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className={templateFieldInputClassName}
+                />
+              </TemplateField>
             </div>
-          </div>
+          </TemplateSection>
+
+          <TemplateSection title="Параметры расписания" description="JSON-параметры генерации.">
+            <TemplateField label={`${uiFieldLabel("schedule_params")} (JSON)`} htmlFor="template-schedule-params">
+              <textarea
+                id="template-schedule-params"
+                value={values.schedule_params}
+                onChange={(e) => setValues((prev) => ({ ...prev, schedule_params: e.target.value }))}
+                placeholder='Например: {"byweekday":["TH"],"time":"10:00"}'
+                rows={12}
+                className={`${templateTextareaClassName} min-h-[240px] font-mono`}
+              />
+              <div className={`text-sm ${formError ? "text-red-700 dark:text-red-300" : "text-zinc-600 dark:text-zinc-400"}`}>
+                {formError ?? "JSON корректен. Форму можно сохранять."}
+              </div>
+            </TemplateField>
+          </TemplateSection>
+
+          <TemplateSection title="Исполнитель" description="Роль, для которой создаётся задача.">
+            <TemplateField label="ID роли исполнителя" htmlFor="template-executor-role">
+              <input
+                id="template-executor-role"
+                value={values.executor_role_id}
+                onChange={(e) => setValues((prev) => ({ ...prev, executor_role_id: e.target.value }))}
+                placeholder="Например: 60"
+                inputMode="numeric"
+                className={templateFieldInputClassName}
+              />
+            </TemplateField>
+          </TemplateSection>
+
+          <TemplateSection
+            title="Подразделение-владелец"
+            description="Выберите подразделение-владелец шаблона."
+          >
+            <TemplateField label="Подразделение" htmlFor="template-owner-unit-select" required>
+              <select
+                id="template-owner-unit-select"
+                value={values.owner_unit_id}
+                onChange={(e) => setValues((prev) => ({ ...prev, owner_unit_id: e.target.value }))}
+                disabled={ownerUnitLoading}
+                className={`${templateFieldInputClassName} disabled:opacity-60`}
+              >
+                <option value="">
+                  {ownerUnitLoading ? "Загрузка подразделений..." : "Выберите подразделение"}
+                </option>
+                {ownerUnitOptions.map((opt) => (
+                  <option key={opt.unit_id} value={String(opt.unit_id)}>
+                    {opt.name} (#{opt.unit_id})
+                  </option>
+                ))}
+                {legacyOwnerUnitId ? (
+                  <option value={legacyOwnerUnitId}>#{legacyOwnerUnitId} (текущее)</option>
+                ) : null}
+              </select>
+            </TemplateField>
+          </TemplateSection>
         </div>
       </div>
     </form>
