@@ -13,6 +13,7 @@ import { validateTemplateFormValues } from "@/lib/regularTaskTemplateFormValidat
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
   TEMPLATE_FORM_ID,
+  type TemplateFormExecutorRoleOption,
   type TemplateFormOwnerUnitOption,
   type TemplateFormValues,
 } from "../../regular-tasks/_components/TemplateForm";
@@ -97,6 +98,18 @@ type OrgUnitItem = {
 
 type OrgUnitsListResponse = {
   items?: OrgUnitItem[];
+};
+
+type RoleDirectoryItem = {
+  role_id?: number;
+  name?: string | null;
+  role_name?: string | null;
+  code?: string | null;
+  role_code?: string | null;
+};
+
+type RolesListResponse = {
+  items?: RoleDirectoryItem[];
 };
 
 type MainTab = "templates" | "runs";
@@ -229,6 +242,27 @@ function normalizeOrgUnits(data: OrgUnitsListResponse | OrgUnitItem[]): Template
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
+function normalizeExecutorRoles(
+  data: RolesListResponse | RoleDirectoryItem[],
+): TemplateFormExecutorRoleOption[] {
+  const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+
+  return rows
+    .flatMap((row): TemplateFormExecutorRoleOption[] => {
+      const roleId = Number(row.role_id);
+      if (!Number.isFinite(roleId) || roleId <= 0) return [];
+
+      const name = String(row.role_name ?? row.name ?? "").trim() || null;
+      const code = String(row.role_code ?? row.code ?? "").trim() || null;
+      return [{ role_id: roleId, name, code }];
+    })
+    .sort((a, b) => {
+      const left = String(a.name ?? a.code ?? `#${a.role_id}`);
+      const right = String(b.name ?? b.code ?? `#${b.role_id}`);
+      return left.localeCompare(right, "ru");
+    });
+}
+
 export default function RegularTasksAdminClient() {
   const router = useRouter();
   const pathname = usePathname();
@@ -248,6 +282,8 @@ export default function RegularTasksAdminClient() {
 
   const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<TemplateFormOwnerUnitOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
+  const [executorRoleOptions, setExecutorRoleOptions] = React.useState<TemplateFormExecutorRoleOption[]>([]);
+  const [executorRoleLoading, setExecutorRoleLoading] = React.useState(false);
 
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<number | null>(null);
   const [selectedTemplate, setSelectedTemplate] = React.useState<RegularTaskItem | null>(null);
@@ -342,6 +378,21 @@ export default function RegularTasksAdminClient() {
     }
   }, []);
 
+  const loadExecutorRoles = React.useCallback(async () => {
+    setExecutorRoleLoading(true);
+
+    try {
+      const data = await apiFetchJson<RolesListResponse>("/directory/roles", {
+        query: { is_active: true, limit: 200 },
+      });
+      setExecutorRoleOptions(normalizeExecutorRoles(data));
+    } catch {
+      setExecutorRoleOptions([]);
+    } finally {
+      setExecutorRoleLoading(false);
+    }
+  }, []);
+
   const loadTemplateCard = React.useCallback(async (regularTaskId: number) => {
     setDrawerLoading(true);
     setDrawerError(null);
@@ -412,8 +463,8 @@ export default function RegularTasksAdminClient() {
   );
 
   React.useEffect(() => {
-    void Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits()]);
-  }, [loadTemplates, loadRuns, loadOwnerUnits]);
+    void Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits(), loadExecutorRoles()]);
+  }, [loadTemplates, loadRuns, loadOwnerUnits, loadExecutorRoles]);
 
   React.useEffect(() => {
     if (prevOrgUnitRef.current !== orgUnitId) {
@@ -581,7 +632,7 @@ export default function RegularTasksAdminClient() {
       return;
     }
 
-    await Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits()]);
+    await Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits(), loadExecutorRoles()]);
 
     if (selectedRunId != null) {
       await loadRunItems(selectedRunId);
@@ -1322,6 +1373,8 @@ export default function RegularTasksAdminClient() {
             onSubmit={submitTemplate}
             ownerUnitOptions={ownerUnitOptions}
             ownerUnitLoading={ownerUnitLoading}
+            executorRoleOptions={executorRoleOptions}
+            executorRoleLoading={executorRoleLoading}
           />
         )}
       </TemplateDrawer>

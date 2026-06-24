@@ -4,6 +4,7 @@
 import * as React from "react";
 
 import { uiFieldLabel } from "@/lib/i18n";
+import { directoryRoleLabel } from "@/lib/regularTaskRunJournal";
 import { resolveScheduleParamsOnTypeChange } from "@/lib/regularTaskScheduleParams";
 import {
   SCHEDULE_TYPE_FORM_OPTIONS,
@@ -35,6 +36,12 @@ export type TemplateFormOwnerUnitOption = {
   code?: string | null;
 };
 
+export type TemplateFormExecutorRoleOption = {
+  role_id: number;
+  name?: string | null;
+  code?: string | null;
+};
+
 type TemplateFormProps = {
   mode: "create" | "edit";
   initialValues: TemplateFormValues;
@@ -45,6 +52,8 @@ type TemplateFormProps = {
   onFormValidationChange?: (error: string | null) => void;
   ownerUnitOptions?: TemplateFormOwnerUnitOption[];
   ownerUnitLoading?: boolean;
+  executorRoleOptions?: TemplateFormExecutorRoleOption[];
+  executorRoleLoading?: boolean;
 };
 
 export default function TemplateForm({
@@ -55,6 +64,8 @@ export default function TemplateForm({
   onFormValidationChange,
   ownerUnitOptions = [],
   ownerUnitLoading = false,
+  executorRoleOptions = [],
+  executorRoleLoading = false,
 }: TemplateFormProps) {
   const [values, setValues] = React.useState<TemplateFormValues>(initialValues);
 
@@ -85,6 +96,15 @@ export default function TemplateForm({
   );
   const legacyOwnerUnitId =
     values.owner_unit_id && !ownerUnitIds.has(values.owner_unit_id) ? values.owner_unit_id : null;
+
+  const executorRoleIds = React.useMemo(
+    () => new Set(executorRoleOptions.map((option) => String(option.role_id))),
+    [executorRoleOptions],
+  );
+  const legacyExecutorRoleId =
+    values.executor_role_id && !executorRoleIds.has(values.executor_role_id)
+      ? values.executor_role_id
+      : null;
 
   const scheduleTypeValues = React.useMemo(
     () => new Set<string>(SCHEDULE_TYPE_FORM_OPTIONS.map((option) => option.value)),
@@ -229,15 +249,35 @@ export default function TemplateForm({
           </TemplateSection>
 
           <TemplateSection title="Исполнитель" description="Роль, для которой создаётся задача.">
-            <TemplateField label="ID роли исполнителя" htmlFor="template-executor-role">
-              <input
-                id="template-executor-role"
+            <TemplateField
+              label={uiFieldLabel("executor_role_id")}
+              htmlFor="template-executor-role-select"
+            >
+              <select
+                id="template-executor-role-select"
                 value={values.executor_role_id}
-                onChange={(e) => setValues((prev) => ({ ...prev, executor_role_id: e.target.value }))}
-                placeholder="Например: 60"
-                inputMode="numeric"
-                className={templateFieldInputClassName}
-              />
+                onChange={(e) =>
+                  setValues((prev) => ({ ...prev, executor_role_id: e.target.value }))
+                }
+                disabled={executorRoleLoading}
+                className={`${templateFieldInputClassName} disabled:opacity-60`}
+              >
+                <option value="">
+                  {executorRoleLoading ? "Загрузка ролей..." : "Выберите роль исполнителя"}
+                </option>
+                {executorRoleOptions.map((option) => (
+                  <option key={option.role_id} value={String(option.role_id)}>
+                    {directoryRoleLabel({
+                      role_id: option.role_id,
+                      name: option.name,
+                      code: option.code,
+                    })}
+                  </option>
+                ))}
+                {legacyExecutorRoleId ? (
+                  <option value={legacyExecutorRoleId}>ID роли: {legacyExecutorRoleId}</option>
+                ) : null}
+              </select>
             </TemplateField>
           </TemplateSection>
 
