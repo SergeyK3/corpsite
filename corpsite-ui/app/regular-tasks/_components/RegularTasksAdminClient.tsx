@@ -7,6 +7,7 @@ import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { apiFetchJson } from "../../../lib/api";
 import { runStatusLabel, scheduleTypeLabel, assignmentScopeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
+import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
   type TemplateFormOwnerUnitOption,
@@ -30,6 +31,8 @@ type RegularTaskItem = {
   owner_unit_id?: number | null;
   owner_unit_name?: string | null;
   is_active: boolean;
+  created_at?: string | null;
+  archived_at?: string | null;
   created_by_user_id?: number | null;
   updated_at?: string | null;
 };
@@ -282,7 +285,7 @@ export default function RegularTasksAdminClient() {
   const [runItemsError, setRunItemsError] = React.useState<string | null>(null);
 
   const [query, setQuery] = React.useState("");
-  const [activeFilter, setActiveFilter] = React.useState<"all" | "active" | "inactive">("all");
+  const [activeFilter, setActiveFilter] = React.useState<"all" | "active" | "archived">("active");
   const [ownerFilter, setOwnerFilter] = React.useState<OwnerFilter>("all");
   const [scheduleFilter, setScheduleFilter] = React.useState<string>("all");
   const [runAtLocalIso, setRunAtLocalIso] = React.useState("");
@@ -298,7 +301,7 @@ export default function RegularTasksAdminClient() {
     try {
       const data = await apiFetchJson<RegularTasksListResponse>("/regular-tasks", {
         query: {
-          status: "all",
+          status: listStatusFilterToApi(activeFilter),
           limit: 200,
           offset: 0,
           org_group_id: orgGroupId ?? undefined,
@@ -331,7 +334,7 @@ export default function RegularTasksAdminClient() {
     } finally {
       setTemplatesLoading(false);
     }
-  }, [orgGroupId, orgUnitId, selectedTemplateId, drawerOpen, drawerMode]);
+  }, [orgGroupId, orgUnitId, selectedTemplateId, drawerOpen, drawerMode, activeFilter]);
 
   const loadOwnerUnits = React.useCallback(async () => {
     setOwnerUnitLoading(true);
@@ -482,12 +485,10 @@ export default function RegularTasksAdminClient() {
 
   const baseTemplates = React.useMemo(() => {
     return templates.filter((item) => {
-      if (activeFilter === "active" && !item.is_active) return false;
-      if (activeFilter === "inactive" && item.is_active) return false;
       if (scheduleFilter !== "all" && scheduleTypeCodeOf(item) !== scheduleFilter) return false;
       return matchesSearch(item, query);
     });
-  }, [templates, query, activeFilter, scheduleFilter]);
+  }, [templates, query, scheduleFilter]);
 
   const filteredTemplates = React.useMemo(() => {
     return baseTemplates.filter((item) => {
@@ -574,7 +575,7 @@ export default function RegularTasksAdminClient() {
   async function handleRefreshAll() {
     setQuery("");
     setScheduleFilter("all");
-    setActiveFilter("all");
+    setActiveFilter("active");
     setOwnerFilter("all");
     setRunSubmitError(null);
     setLastRunResult(null);
@@ -625,6 +626,7 @@ export default function RegularTasksAdminClient() {
   }
 
   function openEditTemplate(item: RegularTaskItem) {
+    if (!canEditTemplate(item)) return;
     setSelectedTemplateId(item.regular_task_id);
     setSelectedTemplate(item);
     setDrawerMode("edit");
@@ -747,16 +749,16 @@ export default function RegularTasksAdminClient() {
     }
   }
 
-  async function deleteTemplate(item: RegularTaskItem) {
+  async function archiveTemplate(item: RegularTaskItem) {
     const label = item.title || `#${item.regular_task_id}`;
-    const ok = window.confirm(`Удалить шаблон "${label}"?`);
+    const ok = window.confirm(`Архивировать шаблон "${label}"?`);
     if (!ok) return;
 
     setDrawerSaving(true);
     setDrawerError(null);
 
     try {
-      await apiFetchJson(`/regular-tasks/${item.regular_task_id}`, { method: "DELETE" });
+      await apiFetchJson(`/regular-tasks/${item.regular_task_id}/archive`, { method: "POST" });
 
       if (selectedTemplateId === item.regular_task_id) {
         setDrawerOpen(false);
@@ -766,7 +768,32 @@ export default function RegularTasksAdminClient() {
 
       await loadTemplates();
     } catch (err) {
-      setDrawerError(errorText(err, "Не удалось удалить шаблон."));
+      setDrawerError(errorText(err, "Не удалось архивировать шаблон."));
+    } finally {
+      setDrawerSaving(false);
+    }
+  }
+
+  async function copyTemplate(item: RegularTaskItem) {
+    setDrawerSaving(true);
+    setDrawerError(null);
+
+    try {
+      const copied = await apiFetchJson<RegularTaskItem>(`/regular-tasks/${item.regular_task_id}/copy`, {
+        method: "POST",
+      });
+
+      await loadTemplates();
+
+      if (copied?.regular_task_id) {
+        setSelectedTemplateId(copied.regular_task_id);
+        setSelectedTemplate(copied);
+        setDrawerMode("view");
+        setDrawerOpen(true);
+        await loadTemplateCard(copied.regular_task_id);
+      }
+    } catch (err) {
+      setDrawerError(errorText(err, "Не удалось скопировать шаблон."));
     } finally {
       setDrawerSaving(false);
     }
@@ -856,11 +883,11 @@ export default function RegularTasksAdminClient() {
                   <select
                     className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-500"
                     value={activeFilter}
-                    onChange={(e) => setActiveFilter(e.target.value as "all" | "active" | "inactive")}
+                    onChange={(e) => setActiveFilter(e.target.value as "all" | "active" | "archived")}
                   >
+                    <option value="active">Активные</option>
+                    <option value="archived">Архивные</option>
                     <option value="all">Все</option>
-                    <option value="active">Только активные</option>
-                    <option value="inactive">Только неактивные</option>
                   </select>
 
                   <select
@@ -972,7 +999,9 @@ export default function RegularTasksAdminClient() {
                     <th className="w-[150px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Периодичность</th>
                     <th className="w-[190px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Исполнитель</th>
                     <th className="w-[210px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Подразделение</th>
-                    <th className="w-[170px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Действия</th>
+                    <th className="w-[150px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Создан</th>
+                    <th className="w-[150px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Архивирован</th>
+                    <th className="w-[240px] px-3 py-2 font-medium text-zinc-700 dark:text-zinc-300">Действия</th>
                   </tr>
                 </thead>
 
@@ -1018,8 +1047,12 @@ export default function RegularTasksAdminClient() {
                           </div>
                         </td>
 
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{fmtDateTime(item.created_at)}</td>
+
+                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{fmtDateTime(item.archived_at)}</td>
+
                         <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1035,23 +1068,40 @@ export default function RegularTasksAdminClient() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                openEditTemplate(item);
+                                void copyTemplate(item);
                               }}
-                              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              disabled={drawerSaving}
+                              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                             >
-                              Изменить
+                              Копировать
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void deleteTemplate(item);
-                              }}
-                              className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2.5 py-1 text-xs text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
-                            >
-                              Удалить
-                            </button>
+                            {canEditTemplate(item) ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditTemplate(item);
+                                }}
+                                className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              >
+                                Редактировать
+                              </button>
+                            ) : null}
+
+                            {canEditTemplate(item) ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void archiveTemplate(item);
+                                }}
+                                disabled={drawerSaving}
+                                className="rounded-md border border-amber-300 dark:border-amber-800 bg-transparent px-2.5 py-1 text-xs text-amber-900 dark:text-amber-200 transition hover:bg-amber-50 dark:hover:bg-amber-950/35 disabled:opacity-60"
+                              >
+                                Архивировать
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -1060,7 +1110,7 @@ export default function RegularTasksAdminClient() {
 
                   {filteredTemplates.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400">
+                      <td colSpan={8} className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400">
                         Нет данных.
                       </td>
                     </tr>
@@ -1281,6 +1331,16 @@ export default function RegularTasksAdminClient() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Создан</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.created_at)}</div>
+                    </div>
+
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">Архивирован</div>
+                      <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.archived_at)}</div>
+                    </div>
+
+                    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-3">
                       <div className="text-xs text-zinc-600 dark:text-zinc-400">Обновлено</div>
                       <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">{fmtDateTime(currentTemplate.updated_at)}</div>
                     </div>
@@ -1310,41 +1370,47 @@ export default function RegularTasksAdminClient() {
 
             {currentTemplate ? (
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800 px-5 py-3">
+                {canEditTemplate(currentTemplate) ? (
+                  <button
+                    type="button"
+                    onClick={() => setDrawerMode("edit")}
+                    disabled={drawerSaving || drawerLoading}
+                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
+                  >
+                    Редактировать
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
-                  onClick={() => setDrawerMode("edit")}
+                  onClick={() => void copyTemplate(currentTemplate)}
                   disabled={drawerSaving || drawerLoading}
                   className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
                 >
-                  Изменить
+                  Копировать
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => void toggleTemplateActive(true)}
-                  disabled={drawerSaving || drawerLoading || currentTemplate.is_active === true}
-                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                >
-                  Активировать
-                </button>
+                {canEditTemplate(currentTemplate) ? (
+                  <button
+                    type="button"
+                    onClick={() => void archiveTemplate(currentTemplate)}
+                    disabled={drawerSaving || drawerLoading}
+                    className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-1.5 text-sm text-amber-900 dark:text-amber-200 transition hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-60"
+                  >
+                    Архивировать
+                  </button>
+                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => void toggleTemplateActive(false)}
-                  disabled={drawerSaving || drawerLoading || currentTemplate.is_active === false}
-                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-                >
-                  Деактивировать
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void deleteTemplate(currentTemplate)}
-                  disabled={drawerSaving || drawerLoading}
-                  className="rounded-lg border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-1.5 text-sm text-red-800 dark:text-red-200 transition hover:bg-red-50 dark:bg-red-950/35 disabled:opacity-60"
-                >
-                  Удалить
-                </button>
+                {!canEditTemplate(currentTemplate) ? (
+                  <button
+                    type="button"
+                    onClick={() => void toggleTemplateActive(true)}
+                    disabled={drawerSaving || drawerLoading || currentTemplate.is_active === true}
+                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
+                  >
+                    Восстановить
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

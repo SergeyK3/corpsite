@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
@@ -87,8 +88,61 @@ def _row_to_out(r: Any) -> Dict[str, Any]:
         "owner_unit_id": _as_int_or_none(r.get("owner_unit_id")),
         "owner_unit_name": r.get("owner_unit_name"),
         "created_by_user_id": _as_int_or_none(r.get("created_by_user_id")),
+        "created_at": r.get("created_at").isoformat() if r.get("created_at") else None,
+        "archived_at": r.get("archived_at").isoformat() if r.get("archived_at") else None,
         "updated_at": r.get("updated_at").isoformat() if r.get("updated_at") else None,
     }
+
+
+def _select_regular_task_row(conn: Connection, regular_task_id: int) -> Any:
+    sql = text(
+        """
+        SELECT
+          t.regular_task_id,
+          t.code,
+          t.title,
+          t.description,
+          t.is_active,
+          t.periodicity,
+          t.initiator_role_id,
+          t.target_role_id,
+          t.assignment_scope,
+          t.template_link,
+          t.order_link,
+          t.executor_role_id,
+          r.name AS executor_role_name,
+          r.code AS executor_role_code,
+          t.schedule_type,
+          t.schedule_params,
+          t.create_offset_days,
+          t.due_offset_days,
+          t.deadline_offset_days,
+          t.escalation_offset_days,
+          t.owner_unit_id,
+          ou.name AS owner_unit_name,
+          t.created_by_user_id,
+          t.created_at,
+          t.archived_at,
+          t.updated_at
+        FROM public.regular_tasks t
+        LEFT JOIN public.roles r
+          ON r.role_id = t.executor_role_id
+        LEFT JOIN public.org_units ou
+          ON ou.unit_id = t.owner_unit_id
+        WHERE t.regular_task_id = :rid
+        """
+    )
+    return conn.execute(sql, {"rid": int(regular_task_id)}).mappings().first()
+
+
+def _ensure_template_editable(r: Any) -> None:
+    if r and not bool(r.get("is_active")):
+        raise ValueError("archived regular task template cannot be edited")
+
+
+def _generate_copy_code(source_id: int) -> str:
+    suffix = int(time.time() * 1_000_000) % 1_000_000_000
+    return f"rt_copy_{int(source_id)}_{suffix}"
 
 
 def list_regular_tasks_tx(
@@ -193,6 +247,8 @@ def list_regular_tasks_tx(
           t.owner_unit_id,
           ou.name AS owner_unit_name,
           t.created_by_user_id,
+          t.created_at,
+          t.archived_at,
           t.updated_at
         FROM public.regular_tasks t
         LEFT JOIN public.roles r
@@ -215,35 +271,7 @@ def list_regular_tasks_tx(
 
 
 def get_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any]:
-    sql = text(
-        """
-        SELECT
-          t.regular_task_id,
-          t.code,
-          t.title,
-          t.description,
-          t.is_active,
-          t.executor_role_id,
-          r.name AS executor_role_name,
-          r.code AS executor_role_code,
-          t.assignment_scope,
-          t.schedule_type,
-          t.schedule_params,
-          t.create_offset_days,
-          t.due_offset_days,
-          t.owner_unit_id,
-          ou.name AS owner_unit_name,
-          t.created_by_user_id,
-          t.updated_at
-        FROM public.regular_tasks t
-        LEFT JOIN public.roles r
-          ON r.role_id = t.executor_role_id
-        LEFT JOIN public.org_units ou
-          ON ou.unit_id = t.owner_unit_id
-        WHERE t.regular_task_id = :rid
-        """
-    )
-    r = conn.execute(sql, {"rid": int(regular_task_id)}).mappings().first()
+    r = _select_regular_task_row(conn, int(regular_task_id))
     if not r:
         raise KeyError("regular_task not found")
     return _row_to_out(r)
@@ -342,6 +370,11 @@ def patch_regular_task_tx(
 ) -> Dict[str, Any]:
     rid = int(regular_task_id)
 
+    existing = _select_regular_task_row(conn, rid)
+    if not existing:
+        raise KeyError("regular_task not found")
+    _ensure_template_editable(existing)
+
     sets: List[str] = []
     params: Dict[str, Any] = {"rid": rid}
 
@@ -426,17 +459,139 @@ def patch_regular_task_tx(
 
 def set_regular_task_active_tx(conn: Connection, regular_task_id: int, is_active: bool) -> Dict[str, Any]:
     rid = int(regular_task_id)
-    sql = text(
-        """
-        UPDATE public.regular_tasks
-        SET is_active = :is_active, updated_at = now()
-        WHERE regular_task_id = :rid
-        """
-    )
-    res = conn.execute(sql, {"rid": rid, "is_active": bool(is_active)})
+    if is_active:
+        sql = text(
+            """
+            UPDATE public.regular_tasks
+            SET is_active = true, archived_at = NULL, updated_at = now()
+            WHERE regular_task_id = :rid
+            """
+        )
+        params: Dict[str, Any] = {"rid": rid}
+    else:
+        sql = text(
+            """
+            UPDATE public.regular_tasks
+            SET is_active = false, archived_at = COALESCE(archived_at, now()), updated_at = now()
+            WHERE regular_task_id = :rid
+            """
+        )
+        params = {"rid": rid}
+
+    res = conn.execute(sql, params)
     if res.rowcount == 0:
         raise KeyError("regular_task not found")
     return get_regular_task_tx(conn, rid)
+
+
+def archive_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any]:
+    rid = int(regular_task_id)
+    sql = text(
+        """
+        UPDATE public.regular_tasks
+        SET is_active = false, archived_at = now(), updated_at = now()
+        WHERE regular_task_id = :rid
+        """
+    )
+    res = conn.execute(sql, {"rid": rid})
+    if res.rowcount == 0:
+        raise KeyError("regular_task not found")
+    return get_regular_task_tx(conn, rid)
+
+
+def copy_regular_task_tx(
+    conn: Connection,
+    regular_task_id: int,
+    *,
+    created_by_user_id: Optional[int],
+) -> Dict[str, Any]:
+    source = _select_regular_task_row(conn, int(regular_task_id))
+    if not source:
+        raise KeyError("regular_task not found")
+
+    source_title = _as_str_or_none(source.get("title")) or f"Шаблон #{int(regular_task_id)}"
+    copy_title = f"{source_title} — копия"
+    copy_code = _generate_copy_code(int(regular_task_id))
+
+    sql = text(
+        """
+        INSERT INTO public.regular_tasks (
+          code,
+          title,
+          description,
+          periodicity,
+          initiator_role_id,
+          target_role_id,
+          assignment_scope,
+          template_link,
+          order_link,
+          is_active,
+          executor_role_id,
+          owner_unit_id,
+          schedule_type,
+          schedule_params,
+          create_offset_days,
+          due_offset_days,
+          deadline_offset_days,
+          escalation_offset_days,
+          created_by_user_id,
+          archived_at,
+          updated_at
+        ) VALUES (
+          :code,
+          :title,
+          :description,
+          :periodicity,
+          :initiator_role_id,
+          :target_role_id,
+          :assignment_scope,
+          :template_link,
+          :order_link,
+          true,
+          :executor_role_id,
+          :owner_unit_id,
+          :schedule_type,
+          CAST(:schedule_params AS jsonb),
+          :create_offset_days,
+          :due_offset_days,
+          :deadline_offset_days,
+          :escalation_offset_days,
+          :created_by_user_id,
+          NULL,
+          now()
+        )
+        RETURNING regular_task_id
+        """
+    )
+    schedule_params = source.get("schedule_params") or {}
+    if not isinstance(schedule_params, dict):
+        schedule_params = {}
+
+    rid = conn.execute(
+        sql,
+        {
+            "code": copy_code,
+            "title": copy_title,
+            "description": source.get("description"),
+            "periodicity": source.get("periodicity"),
+            "initiator_role_id": _as_int_or_none(source.get("initiator_role_id")),
+            "target_role_id": _as_int_or_none(source.get("target_role_id")),
+            "assignment_scope": source.get("assignment_scope"),
+            "template_link": source.get("template_link"),
+            "order_link": source.get("order_link"),
+            "executor_role_id": _as_int_or_none(source.get("executor_role_id")),
+            "owner_unit_id": _as_int_or_none(source.get("owner_unit_id")),
+            "schedule_type": source.get("schedule_type"),
+            "schedule_params": json.dumps(schedule_params, ensure_ascii=False),
+            "create_offset_days": int(source.get("create_offset_days") or 0),
+            "due_offset_days": int(source.get("due_offset_days") or 0),
+            "deadline_offset_days": int(source.get("deadline_offset_days") or 0),
+            "escalation_offset_days": int(source.get("escalation_offset_days") or 0),
+            "created_by_user_id": int(created_by_user_id) if created_by_user_id is not None else None,
+        },
+    ).scalar()
+
+    return get_regular_task_tx(conn, int(rid))
 
 
 def delete_regular_task_tx(conn: Connection, regular_task_id: int) -> Dict[str, Any]:

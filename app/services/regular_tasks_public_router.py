@@ -9,6 +9,8 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged
 from app.services.regular_tasks_public_service import (
+    archive_regular_task_tx,
+    copy_regular_task_tx,
     create_regular_task_tx,
     delete_regular_task_tx,
     get_regular_task_tx,
@@ -171,3 +173,37 @@ def deactivate_regular_task(
             return set_regular_task_active_tx(conn, regular_task_id, False)
     except KeyError:
         raise HTTPException(status_code=404, detail="regular_task not found")
+
+
+@router.post("/{regular_task_id}/archive")
+def archive_regular_task(
+    regular_task_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    _require_system_admin(current_user)
+
+    try:
+        with engine.begin() as conn:
+            return archive_regular_task_tx(conn, regular_task_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="regular_task not found")
+
+
+@router.post("/{regular_task_id}/copy")
+def copy_regular_task(
+    regular_task_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    _require_system_admin(current_user)
+
+    try:
+        with engine.begin() as conn:
+            return copy_regular_task_tx(
+                conn,
+                regular_task_id,
+                created_by_user_id=int(current_user["user_id"]),
+            )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="regular_task not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
