@@ -11,6 +11,7 @@ import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibra
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
 import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib/taskNav";
+import { resolveTaskReportLink } from "@/lib/taskReportLink";
 import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
@@ -505,7 +506,7 @@ export default function TasksPageClient() {
         if (detailsRequestRef.current !== requestId) return;
 
         setSelectedItem(data);
-        const existingReportLink = String((data as any)?.report_link ?? "").trim();
+        const existingReportLink = resolveTaskReportLink(data);
         setReportLink(existingReportLink);
       } catch (e: any) {
         if (detailsRequestRef.current !== requestId) return;
@@ -663,7 +664,7 @@ export default function TasksPageClient() {
     setReason("");
     setSelectedId(taskId);
     setSelectedItem(task);
-    setReportLink(String(task?.report_link ?? "").trim());
+    setReportLink(resolveTaskReportLink(task));
     setDrawerMode("view");
     setDrawerOpen(true);
     void loadTaskDetails(taskId);
@@ -679,7 +680,7 @@ export default function TasksPageClient() {
     setReason("");
     setSelectedId(taskId);
     setSelectedItem(task);
-    setReportLink(String(task?.report_link ?? "").trim());
+    setReportLink(resolveTaskReportLink(task));
     setDrawerMode("edit");
     setDrawerOpen(true);
     void loadTaskDetails(taskId);
@@ -799,7 +800,7 @@ export default function TasksPageClient() {
           return;
         }
 
-        const existingLink = String(selectedItem?.report_link ?? "").trim();
+        const existingLink = resolveTaskReportLink(selectedItem);
         if (existingLink && existingLink !== link) {
           const ok = window.confirm("Отчёт уже отправлен. Заменить ссылку?");
           if (!ok) return;
