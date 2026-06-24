@@ -79,7 +79,7 @@ function renderDrawerPanel(options: {
   const isSystemAdmin = options.isSystemAdmin ?? false;
   const readOnlyTeamMode = options.taskScope === "team" && !isSystemAdmin;
   const task = options.task ?? WAITING_APPROVAL_TASK;
-  const selectedEditable = isTaskRowEditable(task, { readOnlyTeamMode });
+  const selectedEditable = isTaskRowEditable(task, { readOnlyTeamMode, isSystemAdmin });
 
   render(
     <TaskDetailPanel
@@ -135,10 +135,28 @@ describe("TasksPageClient review UX regression", () => {
   it("team/all-tasks table row hides edit for non-admin even when task is editable by kind", () => {
     expect(
       isTaskRowEditable(
-        { task_kind: "regular", status_code: "WAITING_REPORT" },
+        { task_kind: "regular", status_code: "IN_PROGRESS" },
         { readOnlyTeamMode: true },
       ),
     ).toBe(false);
+  });
+
+  it("mine-tasks hides edit for regular WAITING_REPORT when non-admin", () => {
+    expect(
+      isTaskRowEditable(
+        { task_kind: "regular", status_code: "WAITING_REPORT" },
+        { readOnlyTeamMode: false, isSystemAdmin: false },
+      ),
+    ).toBe(false);
+  });
+
+  it("mine-tasks shows edit for regular WAITING_REPORT when system admin", () => {
+    expect(
+      isTaskRowEditable(
+        { task_kind: "regular", status_code: "WAITING_REPORT" },
+        { readOnlyTeamMode: false, isSystemAdmin: true },
+      ),
+    ).toBe(true);
   });
 
   it("system admin sees collapsed service metadata block", () => {

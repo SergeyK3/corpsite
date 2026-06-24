@@ -28,8 +28,19 @@ describe("taskEditPolicy", () => {
     expect(canEditTask(task)).toBe(false);
   });
 
-  it("allows edit for in-progress regular tasks", () => {
+  it("hides edit for regular WAITING_REPORT when non-admin", () => {
     const task = { task_kind: "regular", status_code: "WAITING_REPORT" };
+    expect(canEditTask(task)).toBe(false);
+    expect(canEditTask(task, { isSystemAdmin: true })).toBe(true);
+  });
+
+  it("allows edit for adhoc WAITING_REPORT when non-admin", () => {
+    const task = { task_kind: "adhoc", status_code: "WAITING_REPORT" };
+    expect(canEditTask(task)).toBe(true);
+  });
+
+  it("allows edit for in-progress regular tasks when non-admin", () => {
+    const task = { task_kind: "regular", status_code: "IN_PROGRESS" };
     expect(canEditTask(task)).toBe(true);
   });
 });
@@ -40,6 +51,11 @@ describe("isTaskRowEditable", () => {
     status_code: "WAITING_APPROVAL",
   };
 
+  const waitingReportRegular = {
+    task_kind: "regular",
+    status_code: "WAITING_REPORT",
+  };
+
   it("hides edit in team/all-tasks mode for non-admin", () => {
     expect(isTaskRowEditable(waitingApprovalTask, { readOnlyTeamMode: true })).toBe(false);
   });
@@ -48,10 +64,23 @@ describe("isTaskRowEditable", () => {
     expect(isTaskRowEditable(waitingApprovalTask, { readOnlyTeamMode: false })).toBe(false);
   });
 
+  it("hides edit in mine-tasks mode for regular WAITING_REPORT when non-admin", () => {
+    expect(isTaskRowEditable(waitingReportRegular, { readOnlyTeamMode: false })).toBe(false);
+  });
+
+  it("shows edit in mine-tasks mode for regular WAITING_REPORT when system admin", () => {
+    expect(
+      isTaskRowEditable(waitingReportRegular, {
+        readOnlyTeamMode: false,
+        isSystemAdmin: true,
+      }),
+    ).toBe(true);
+  });
+
   it("allows edit in mine-tasks mode for in-progress regular task", () => {
     expect(
       isTaskRowEditable(
-        { task_kind: "regular", status_code: "WAITING_REPORT" },
+        { task_kind: "regular", status_code: "IN_PROGRESS" },
         { readOnlyTeamMode: false },
       ),
     ).toBe(true);

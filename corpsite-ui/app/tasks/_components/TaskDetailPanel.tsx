@@ -261,6 +261,10 @@ export default function TaskDetailPanel({
   const [copyHint, setCopyHint] = React.useState("");
 
   const selectedAllowed = React.useMemo(() => allowedActionsOf(selectedItem), [selectedItem]);
+  const showReadOnlyReportSection = React.useMemo(
+    () => shouldShowReportSection(selectedItem) && !selectedAllowed.includes("report"),
+    [selectedItem, selectedAllowed],
+  );
   const selectedStatus = React.useMemo(() => statusTextOf(selectedItem), [selectedItem]);
   const selectedReportUiState = React.useMemo(() => computeReportUiState(selectedItem), [selectedItem]);
   const selectedExecutorRole = React.useMemo(() => executorRoleLabelOf(selectedItem), [selectedItem]);
@@ -418,7 +422,7 @@ export default function TaskDetailPanel({
               </div>
             ) : null}
 
-            {shouldShowReportSection(selectedItem) ? (
+            {showReadOnlyReportSection ? (
               <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
                 <div className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">Отчёт</div>
 

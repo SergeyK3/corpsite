@@ -17,22 +17,45 @@ function isOriginMetadataBlock(text: string): boolean {
   return String(text ?? "").includes(ORIGIN_BLOCK_MARKER);
 }
 
-function splitFromMetadataBlock(
-  humanText: string,
-  metadataBlock: string,
-): SplitTaskDescription {
-  const trimmedBlock = metadataBlock.trim();
-  return {
-    humanText: humanText.trim(),
-    metadataBlock: trimmedBlock,
-    originMetadata: parseOriginMetadataText(trimmedBlock),
-    hasOriginMetadata: true,
-  };
+/** One scheduler block: `---` + lines with `ID запуска:` + closing `---`. */
+const LEADING_ORIGIN_BLOCK_RE = /^---\n([\s\S]*?\n)---(?:\n|$)/;
+const TRAILING_ORIGIN_BLOCK_RE = /\n---\n([\s\S]*?\n)---\s*$/;
+const WHOLE_ORIGIN_BLOCK_RE = /^---\n([\s\S]*?\n)---\s*$/;
+
+function stripOriginMetadataBlocks(text: string): {
+  humanText: string;
+  metadataBlocks: string[];
+} {
+  let current = text.trim();
+  const metadataBlocks: string[] = [];
+
+  for (;;) {
+    const leading = current.match(LEADING_ORIGIN_BLOCK_RE);
+    if (!leading || !isOriginMetadataBlock(leading[1])) break;
+    metadataBlocks.push(leading[1].trim());
+    current = current.slice(leading[0].length).trim();
+  }
+
+  for (;;) {
+    const trailing = current.match(TRAILING_ORIGIN_BLOCK_RE);
+    if (!trailing || !isOriginMetadataBlock(trailing[1])) break;
+    metadataBlocks.push(trailing[1].trim());
+    current = current.slice(0, trailing.index).trim();
+  }
+
+  const whole = current.match(WHOLE_ORIGIN_BLOCK_RE);
+  if (whole && isOriginMetadataBlock(whole[1])) {
+    metadataBlocks.push(whole[1].trim());
+    current = "";
+  }
+
+  return { humanText: current.trim(), metadataBlocks };
 }
 
 /**
  * Splits user-authored task text from scheduler origin metadata appended by regular-tasks runs.
- * Backend format: optional human text, then `\n---\n` + metadata lines + `\n---`.
+ * Backend format: optional human text, then one or more `\n---\n` + metadata lines + `\n---` blocks.
+ * Dedup re-appends a second block when the same task is touched by another run_id.
  */
 export function splitTaskDescription(description?: string | null): SplitTaskDescription {
   const raw = String(description ?? "");
@@ -47,36 +70,27 @@ export function splitTaskDescription(description?: string | null): SplitTaskDesc
     };
   }
 
-  const trailingBlockMatch = trimmed.match(/\n---\n([\s\S]*)\n---\s*$/);
-  if (trailingBlockMatch && isOriginMetadataBlock(trailingBlockMatch[1])) {
-    return splitFromMetadataBlock(
-      trimmed.slice(0, trailingBlockMatch.index),
-      trailingBlockMatch[1],
-    );
+  const { humanText, metadataBlocks } = stripOriginMetadataBlocks(trimmed);
+
+  if (metadataBlocks.length === 0) {
+    return {
+      humanText: trimmed,
+      metadataBlock: null,
+      originMetadata: {},
+      hasOriginMetadata: false,
+    };
   }
 
-  if (trimmed.startsWith("---") && trimmed.endsWith("---") && isOriginMetadataBlock(trimmed)) {
-    const metadataBlock = trimmed.replace(/^---\n?/, "").replace(/\n?---\s*$/, "");
-    return splitFromMetadataBlock("", metadataBlock);
-  }
-
-  const looseTrailingMatch = trimmed.match(/\n---\n([\s\S]*)$/);
-  if (looseTrailingMatch && isOriginMetadataBlock(looseTrailingMatch[1])) {
-    return splitFromMetadataBlock(
-      trimmed.slice(0, looseTrailingMatch.index),
-      looseTrailingMatch[1].replace(/\n---\s*$/, ""),
-    );
-  }
-
+  const lastBlock = metadataBlocks[metadataBlocks.length - 1];
   return {
-    humanText: trimmed,
-    metadataBlock: null,
-    originMetadata: {},
-    hasOriginMetadata: false,
+    humanText,
+    metadataBlock: lastBlock,
+    originMetadata: parseOriginMetadataText(lastBlock),
+    hasOriginMetadata: true,
   };
 }
 
-/** User-facing description without scheduler origin metadata block. */
+/** User-facing description without scheduler origin metadata blocks. */
 export function taskDescriptionForUser(description?: string | null): string {
   return splitTaskDescription(description).humanText;
 }

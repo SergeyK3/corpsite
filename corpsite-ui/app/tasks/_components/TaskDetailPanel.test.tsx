@@ -191,4 +191,117 @@ describe("TaskDetailPanel scheduler metadata visibility", () => {
       "/regular-task-runs?run_id=33",
     );
   });
+
+  it("hides description block for metadata-only double block (task_id=10018-like)", () => {
+    const description = `---
+Источник: Догоняющий запуск регулярной задачи
+ID запуска: 41
+Дата возникновения задачи: 2026-06-24
+Тип запуска: догоняющий
+Период: Ручная дата
+---
+---
+Источник: Догоняющий запуск регулярной задачи
+ID запуска: 43
+Дата возникновения задачи: 2026-06-24
+Тип запуска: догоняющий
+Период: Ручная дата
+---`;
+
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        isSystemAdmin={false}
+        selectedItem={{
+          task_id: 10018,
+          task_kind: "regular",
+          description,
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Описание")).not.toBeInTheDocument();
+    expect(screen.queryByText("ID запуска:")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Догоняющий запуск регулярной задачи/)).not.toBeInTheDocument();
+  });
+});
+
+const TASK_10018_UNC = "\\\\192.168.103.88\\obmen\\Отчеты\\report";
+
+describe("TaskDetailPanel report resubmit UX", () => {
+  it("hides read-only Отчёт block when report action is allowed", () => {
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        reportLink={TASK_10018_UNC}
+        selectedItem={{
+          task_id: 10018,
+          status_code: "WAITING_REPORT",
+          requires_report: true,
+          report_link: TASK_10018_UNC,
+          allowed_actions: ["report"],
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Скопировать путь" })).not.toBeInTheDocument();
+    expect(screen.getByText("Ссылка или путь на отчёт")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отправить отчёт" })).toBeInTheDocument();
+  });
+
+  it("shows read-only Отчёт block when report action is not allowed", () => {
+    renderPanel({
+      task_id: 10018,
+      status_code: "WAITING_REPORT",
+      requires_report: true,
+      report_link: TASK_10018_UNC,
+      allowed_actions: [],
+    });
+
+    expect(screen.getByText(TASK_10018_UNC)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Скопировать путь" })).toBeInTheDocument();
+    expect(screen.queryByText("Ссылка или путь на отчёт")).not.toBeInTheDocument();
+  });
+
+  it("task_id=10018-like expert view hides metadata and edit, keeps resubmit controls", () => {
+    const description = `---
+Источник: Догоняющий запуск регулярной задачи
+ID запуска: 41
+Дата возникновения задачи: 2026-06-24
+Тип запуска: догоняющий
+Период: Ручная дата
+---
+---
+Источник: Догоняющий запуск регулярной задачи
+ID запуска: 43
+Дата возникновения задачи: 2026-06-24
+Тип запуска: догоняющий
+Период: Ручная дата
+---`;
+
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        isSystemAdmin={false}
+        selectedEditable={false}
+        reportLink={TASK_10018_UNC}
+        selectedItem={{
+          task_id: 10018,
+          task_kind: "regular",
+          status_code: "WAITING_REPORT",
+          requires_report: true,
+          description,
+          report_link: TASK_10018_UNC,
+          allowed_actions: ["report"],
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Описание")).not.toBeInTheDocument();
+    expect(screen.queryByText(/ID запуска:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Скопировать путь" })).not.toBeInTheDocument();
+    expect(screen.getByText("Ссылка или путь на отчёт")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отправить отчёт" })).toBeInTheDocument();
+  });
 });

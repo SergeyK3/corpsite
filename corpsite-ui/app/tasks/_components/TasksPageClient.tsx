@@ -653,7 +653,7 @@ export default function TasksPageClient() {
 
   function openEdit(task: any) {
     if (readOnlyTeamMode) return;
-    if (!canEditTask(task)) return;
+    if (!canEditTask(task, { isSystemAdmin })) return;
 
     const taskId = taskIdOf(task);
     setDrawerError(null);
@@ -859,8 +859,8 @@ export default function TasksPageClient() {
 
   const selectedAllowed = React.useMemo(() => allowedActionsOf(selectedItem), [selectedItem]);
   const selectedEditable = React.useMemo(
-    () => isTaskRowEditable(selectedItem, { readOnlyTeamMode }),
-    [selectedItem, readOnlyTeamMode],
+    () => isTaskRowEditable(selectedItem, { readOnlyTeamMode, isSystemAdmin }),
+    [selectedItem, readOnlyTeamMode, isSystemAdmin],
   );
 
   const tableColSpan = showExecutorColumn ? 6 : 5;
@@ -1091,7 +1091,10 @@ export default function TasksPageClient() {
                     ) : (
                       displayItems.map((item) => {
                         const id = taskIdOf(item);
-                        const editable = isTaskRowEditable(item, { readOnlyTeamMode });
+                        const editable = isTaskRowEditable(item, {
+                          readOnlyTeamMode,
+                          isSystemAdmin,
+                        });
 
                         return (
                           <tr

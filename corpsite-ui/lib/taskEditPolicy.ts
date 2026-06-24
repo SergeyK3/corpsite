@@ -14,24 +14,37 @@ export function resolveTaskStatusCode(src: unknown): string {
   return "";
 }
 
-export function canEditTask(src: unknown): boolean {
+export type TaskEditOptions = {
+  isSystemAdmin?: boolean;
+};
+
+export function canEditTask(src: unknown, options?: TaskEditOptions): boolean {
   if (!src || typeof src !== "object") return false;
 
   const task = src as Record<string, unknown>;
   const taskKind = String(task.task_kind ?? "").trim().toLowerCase();
   const statusCode = resolveTaskStatusCode(src);
+  const isSystemAdmin = Boolean(options?.isSystemAdmin);
 
   if (statusCode === "ARCHIVED") return false;
   if (statusCode === "WAITING_APPROVAL") return false;
 
-  return taskKind === "adhoc" || taskKind === "regular";
+  if (taskKind === "regular") {
+    if (isSystemAdmin) return true;
+    if (statusCode === "WAITING_REPORT") return false;
+    return true;
+  }
+
+  return taskKind === "adhoc";
 }
 
 export function isTaskRowEditable(
   src: unknown,
-  options: { readOnlyTeamMode: boolean },
+  options: { readOnlyTeamMode: boolean; isSystemAdmin?: boolean },
 ): boolean {
-  return canEditTask(src) && !options.readOnlyTeamMode;
+  return (
+    canEditTask(src, { isSystemAdmin: options.isSystemAdmin }) && !options.readOnlyTeamMode
+  );
 }
 
 export function editButtonTitle(src: unknown): string {
