@@ -13,6 +13,7 @@ import { taskStatusLabel } from "@/lib/i18n";
 import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib/taskNav";
 import { canEditTask, editButtonTitle, isTaskRowEditable } from "@/lib/taskEditPolicy";
 import { resolveTaskReportLink } from "@/lib/taskReportLink";
+import { canSeeTeamTasks as userCanSeeTeamTasks, isTaskSystemAdmin } from "@/lib/taskScopePolicy";
 import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
@@ -189,40 +190,6 @@ function normalizeManualRoleOptions(body: any): ManualTaskRoleOption[] {
     .filter((x: ManualTaskRoleOption) => Number.isFinite(x.role_id) && x.role_id > 0);
 }
 
-function detectSystemAdmin(me: MeInfo | null): boolean {
-  const roleId = Number(me?.role_id ?? 0);
-  const roleCode = String(me?.role_code ?? "").trim().toUpperCase();
-  const roleName = String(me?.role_name ?? "").trim().toLowerCase();
-  const roleNameRu = String(me?.role_name_ru ?? "").trim().toLowerCase();
-
-  if (roleId === 2) return true;
-  if (roleCode === "ADMIN" || roleCode === "SYSTEM_ADMIN") return true;
-  if (roleName.includes("system administrator")) return true;
-  if (roleNameRu.includes("системный администратор")) return true;
-
-  return false;
-}
-
-function detectCanSeeTeamTasks(me: MeInfo | null): boolean {
-  const roleId = Number(me?.role_id ?? 0);
-  const roleCode = String(me?.role_code ?? "").trim().toUpperCase();
-  const roleName = String(me?.role_name ?? "").trim().toLowerCase();
-  const roleNameRu = String(me?.role_name_ru ?? "").trim().toLowerCase();
-
-  if (roleId === 2) return true;
-  if (roleCode.includes("DIRECTOR")) return true;
-  if (roleCode.includes("DEPUTY")) return true;
-  if (roleCode.endsWith("_HEAD")) return true;
-  if (roleNameRu.includes("руководител")) return true;
-  if (roleNameRu.includes("директор")) return true;
-  if (roleNameRu.includes("заместител")) return true;
-  if (roleName.includes("head")) return true;
-  if (roleName.includes("director")) return true;
-  if (roleName.includes("deputy")) return true;
-
-  return false;
-}
-
 function normalizeTaskKind(value: any): string {
   const s = String(value ?? "").trim().toLowerCase();
   if (s === "adhoc" || s === "regular") return s;
@@ -317,8 +284,8 @@ export default function TasksPageClient() {
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
 
-  const isSystemAdmin = React.useMemo(() => detectSystemAdmin(me), [me]);
-  const canSeeTeamTasks = React.useMemo(() => detectCanSeeTeamTasks(me), [me]);
+  const isSystemAdmin = React.useMemo(() => isTaskSystemAdmin(me), [me]);
+  const canSeeTeamTasks = React.useMemo(() => userCanSeeTeamTasks(me), [me]);
 
   const readOnlyTeamMode = taskScope === "team" && !isSystemAdmin;
   const showExecutorColumn = taskScope === "team";
@@ -542,7 +509,7 @@ export default function TasksPageClient() {
       try {
         const meInfo = await apiAuthMe();
         setMe(meInfo);
-        setTaskScope(detectCanSeeTeamTasks(meInfo) ? "team" : "mine");
+        setTaskScope(userCanSeeTeamTasks(meInfo) ? "team" : "mine");
       } catch (e: any) {
         if (isUnauthorized(e)) {
           redirectToLogin();
