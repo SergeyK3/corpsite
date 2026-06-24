@@ -10,6 +10,7 @@ import {
   scheduleTypeFormLabel,
   templateTextareaClassName,
 } from "./templateDetailShared";
+import TemplateAdvancedPlanningBlock from "./TemplateAdvancedPlanningBlock";
 
 export type TemplateViewItem = {
   regular_task_id: number;
@@ -106,17 +107,17 @@ export default function TemplateViewPanel({
             </div>
           </TemplateSection>
 
-          <TemplateSection title="Расписание" description="Периодичность и смещения генерации задач.">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <TemplateSection title="Расписание" description="Периодичность генерации задач.">
+            <div className="flex flex-col gap-4">
               <TemplateField label="Периодичность">
                 <TemplateReadOnlyValue value={scheduleTypeFormLabel(template.schedule_type)} />
               </TemplateField>
-              <TemplateField label="Создать за N дней">
-                <TemplateReadOnlyValue value={template.create_offset_days ?? 0} />
-              </TemplateField>
-              <TemplateField label="Срок +N дней">
-                <TemplateReadOnlyValue value={template.due_offset_days ?? 0} />
-              </TemplateField>
+
+              <TemplateAdvancedPlanningBlock
+                mode="view"
+                createOffsetDays={template.create_offset_days}
+                dueOffsetDays={template.due_offset_days}
+              />
             </div>
           </TemplateSection>
 

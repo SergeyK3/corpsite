@@ -13,6 +13,7 @@ import {
   templateFieldInputClassName,
   templateTextareaClassName,
 } from "./templateDetailShared";
+import TemplateAdvancedPlanningBlock from "./TemplateAdvancedPlanningBlock";
 
 export { TEMPLATE_FORM_ID, SCHEDULE_TYPE_FORM_OPTIONS } from "./templateDetailShared";
 
@@ -148,8 +149,8 @@ export default function TemplateForm({
             </div>
           </TemplateSection>
 
-          <TemplateSection title="Расписание" description="Периодичность и смещения генерации задач.">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <TemplateSection title="Расписание" description="Периодичность генерации задач.">
+            <div className="flex flex-col gap-4">
               <TemplateField label="Периодичность" htmlFor="template-schedule-type">
                 <select
                   id="template-schedule-type"
@@ -171,27 +172,17 @@ export default function TemplateForm({
                 </select>
               </TemplateField>
 
-              <TemplateField label="Создать за N дней" htmlFor="template-create-offset">
-                <input
-                  id="template-create-offset"
-                  value={values.create_offset_days}
-                  onChange={(e) => setValues((prev) => ({ ...prev, create_offset_days: e.target.value }))}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className={templateFieldInputClassName}
-                />
-              </TemplateField>
-
-              <TemplateField label="Срок +N дней" htmlFor="template-due-offset">
-                <input
-                  id="template-due-offset"
-                  value={values.due_offset_days}
-                  onChange={(e) => setValues((prev) => ({ ...prev, due_offset_days: e.target.value }))}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className={templateFieldInputClassName}
-                />
-              </TemplateField>
+              <TemplateAdvancedPlanningBlock
+                mode="edit"
+                createOffsetDays={values.create_offset_days}
+                dueOffsetDays={values.due_offset_days}
+                onCreateOffsetDaysChange={(value) =>
+                  setValues((prev) => ({ ...prev, create_offset_days: value }))
+                }
+                onDueOffsetDaysChange={(value) =>
+                  setValues((prev) => ({ ...prev, due_offset_days: value }))
+                }
+              />
             </div>
           </TemplateSection>
 

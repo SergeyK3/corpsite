@@ -2,6 +2,11 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import TemplateDrawer from "./TemplateDrawer";
+import TemplateAdvancedPlanningBlock, {
+  ADVANCED_PLANNING_TITLE,
+  CREATE_OFFSET_DAYS_HINT,
+  DUE_OFFSET_DAYS_HINT,
+} from "./TemplateAdvancedPlanningBlock";
 import TemplateForm, { SCHEDULE_TYPE_FORM_OPTIONS } from "./TemplateForm";
 import TemplateViewPanel from "./TemplateViewPanel";
 import { TEMPLATE_FORM_ID } from "./templateDetailShared";
@@ -87,6 +92,102 @@ describe("TemplateForm owner unit field", () => {
     expect(screen.queryByText(/Можно выбрать из списка или ввести ID вручную/i)).toBeNull();
     expect(screen.queryByText("Подсказка")).toBeNull();
     expect(screen.getByLabelText(/^Подразделение/)).toBeTruthy();
+  });
+});
+
+describe("Template advanced planning settings", () => {
+  it("hides offset fields in edit mode until the block is expanded", () => {
+    render(
+      <TemplateForm
+        mode="edit"
+        initialValues={baseValues}
+        onSubmit={vi.fn()}
+        ownerUnitOptions={ownerUnitOptions}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: new RegExp(ADVANCED_PLANNING_TITLE) })).toBeTruthy();
+    expect(screen.queryByLabelText("Создать за N дней")).toBeNull();
+    expect(screen.queryByLabelText("Срок +N дней")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(ADVANCED_PLANNING_TITLE) }));
+
+    expect(screen.getByLabelText("Создать за N дней")).toBeTruthy();
+    expect(screen.getByLabelText("Срок +N дней")).toBeTruthy();
+    expect(screen.getByText(CREATE_OFFSET_DAYS_HINT)).toBeTruthy();
+    expect(screen.getByText(DUE_OFFSET_DAYS_HINT)).toBeTruthy();
+  });
+
+  it("still submits offset values when the block stays collapsed", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <TemplateForm
+        mode="edit"
+        initialValues={{ ...baseValues, create_offset_days: "2", due_offset_days: "3" }}
+        onSubmit={onSubmit}
+        ownerUnitOptions={ownerUnitOptions}
+      />,
+    );
+
+    fireEvent.submit(document.getElementById(TEMPLATE_FORM_ID)!);
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create_offset_days: "2",
+        due_offset_days: "3",
+      }),
+    );
+  });
+
+  it("does not show advanced planning block in view mode when offsets are zero", () => {
+    render(
+      <TemplateViewPanel
+        template={{
+          regular_task_id: 1,
+          title: baseValues.title,
+          description: baseValues.description,
+          is_active: true,
+          schedule_type: "weekly",
+          schedule_params: { byweekday: [3], time: "10:00" },
+          create_offset_days: 0,
+          due_offset_days: 0,
+          executor_role_id: 1,
+          owner_unit_id: 10,
+          owner_unit_name: "Отделение A",
+        }}
+        roleLabel="Роль 1"
+        formatDateTime={() => "—"}
+      />,
+    );
+
+    expect(screen.queryByText(ADVANCED_PLANNING_TITLE)).toBeNull();
+  });
+
+  it("shows advanced planning block in view mode when an offset is non-zero", () => {
+    render(
+      <TemplateViewPanel
+        template={{
+          regular_task_id: 1,
+          title: baseValues.title,
+          description: baseValues.description,
+          is_active: true,
+          schedule_type: "weekly",
+          schedule_params: { byweekday: [3], time: "10:00" },
+          create_offset_days: 2,
+          due_offset_days: 0,
+          executor_role_id: 1,
+          owner_unit_id: 10,
+          owner_unit_name: "Отделение A",
+        }}
+        roleLabel="Роль 1"
+        formatDateTime={() => "—"}
+      />,
+    );
+
+    expect(screen.getByText(ADVANCED_PLANNING_TITLE)).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(screen.getByText(CREATE_OFFSET_DAYS_HINT)).toBeTruthy();
   });
 });
 
