@@ -5,6 +5,14 @@ import * as React from "react";
 
 import { scheduleTypeLabel, uiFieldLabel } from "@/lib/i18n";
 
+export const TEMPLATE_FORM_ID = "regular-task-template-form";
+
+export const SCHEDULE_TYPE_FORM_OPTIONS = [
+  { value: "weekly", label: "Еженедельно" },
+  { value: "monthly", label: "Ежемесячно" },
+  { value: "yearly", label: "Ежегодно" },
+] as const;
+
 export type TemplateFormValues = {
   title: string;
   description: string;
@@ -29,7 +37,7 @@ type TemplateFormProps = {
   error?: string | null;
   validate?: (values: TemplateFormValues) => string | null;
   onSubmit: (values: TemplateFormValues) => Promise<void> | void;
-  onCancel: () => void;
+  onFormValidationChange?: (error: string | null) => void;
   ownerUnitOptions?: TemplateFormOwnerUnitOption[];
   ownerUnitLoading?: boolean;
 };
@@ -41,7 +49,7 @@ export default function TemplateForm({
   error = null,
   validate,
   onSubmit,
-  onCancel,
+  onFormValidationChange,
   ownerUnitOptions = [],
   ownerUnitLoading = false,
 }: TemplateFormProps) {
@@ -65,7 +73,18 @@ export default function TemplateForm({
     return validate ? validate(values) : null;
   }, [validate, values]);
 
+  React.useEffect(() => {
+    onFormValidationChange?.(formError);
+  }, [formError, onFormValidationChange]);
+
   const hasOwnerUnitOptions = ownerUnitOptions.length > 0;
+  const scheduleTypeValues = React.useMemo(
+    () => new Set<string>(SCHEDULE_TYPE_FORM_OPTIONS.map((option) => option.value)),
+    [],
+  );
+  const scheduleTypeTrimmed = String(values.schedule_type ?? "").trim();
+  const legacyScheduleType =
+    scheduleTypeTrimmed && !scheduleTypeValues.has(scheduleTypeTrimmed) ? scheduleTypeTrimmed : null;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -82,7 +101,11 @@ export default function TemplateForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+    <form
+      id={TEMPLATE_FORM_ID}
+      onSubmit={handleSubmit}
+      className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+    >
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
           {!!error && (
@@ -144,20 +167,24 @@ export default function TemplateForm({
                     <label htmlFor="template-schedule-type" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                       Тип расписания
                     </label>
-                    <input
+                    <select
                       id="template-schedule-type"
-                      list="schedule-type-options"
                       value={values.schedule_type}
                       onChange={(e) => setValues((prev) => ({ ...prev, schedule_type: e.target.value }))}
-                      placeholder="еженедельно / ежемесячно / ежегодно"
-                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
-                    />
-                    <datalist id="schedule-type-options">
-                      <option value="daily" />
-                      <option value="weekly" />
-                      <option value="monthly" />
-                      <option value="yearly" />
-                    </datalist>
+                      className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
+                    >
+                      <option value="">Выберите тип расписания</option>
+                      {SCHEDULE_TYPE_FORM_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                      {legacyScheduleType ? (
+                        <option value={legacyScheduleType}>
+                          {scheduleTypeLabel(legacyScheduleType) || legacyScheduleType}
+                        </option>
+                      ) : null}
+                    </select>
                   </div>
 
                   <div className="flex flex-col gap-2">
@@ -236,7 +263,7 @@ export default function TemplateForm({
                 <div className="mb-4">
                   <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Подразделение-владелец</h3>
                   <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Для ЦАХ выбирай значение <span className="text-zinc-800 dark:text-zinc-200">ЦАХ (#54)</span>.
+                    Выберите подразделение-владелец шаблона.
                   </p>
                 </div>
 
@@ -312,25 +339,6 @@ export default function TemplateForm({
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={saving}
-          className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-60"
-        >
-          Закрыть
-        </button>
-
-        <button
-          type="submit"
-          disabled={saving || !!formError}
-          className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {saving ? "Сохранение..." : mode === "create" ? "Создать" : "Сохранить"}
-        </button>
       </div>
     </form>
   );

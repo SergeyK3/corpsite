@@ -10,6 +10,7 @@ import { runStatusLabel, scheduleTypeLabel, assignmentScopeLabel, formatThrownEr
 import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
+  TEMPLATE_FORM_ID,
   type TemplateFormOwnerUnitOption,
   type TemplateFormValues,
 } from "../../regular-tasks/_components/TemplateForm";
@@ -293,6 +294,7 @@ export default function RegularTasksAdminClient() {
   const [runSubmitting, setRunSubmitting] = React.useState(false);
   const [runSubmitError, setRunSubmitError] = React.useState<string | null>(null);
   const [lastRunResult, setLastRunResult] = React.useState<RunResult | null>(null);
+  const [formValidationError, setFormValidationError] = React.useState<string | null>(null);
 
   const loadTemplates = React.useCallback(async () => {
     setTemplatesLoading(true);
@@ -808,6 +810,14 @@ export default function RegularTasksAdminClient() {
           ? currentTemplate.title
           : "Карточка шаблона";
 
+  const isTemplateFormMode = drawerMode === "create" || drawerMode === "edit";
+
+  React.useEffect(() => {
+    if (isTemplateFormMode) {
+      setFormValidationError(null);
+    }
+  }, [isTemplateFormMode, selectedTemplateId, drawerOpen]);
+
   return (
     <div className="notranslate flex flex-col gap-3 text-zinc-900 dark:text-zinc-50" lang="ru" translate="no">
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 shadow-sm">
@@ -1244,6 +1254,18 @@ export default function RegularTasksAdminClient() {
         title={drawerTitle}
         subtitle="Шаблоны регулярных задач"
         onClose={closeDrawer}
+        headerActions={
+          isTemplateFormMode ? (
+            <button
+              type="submit"
+              form={TEMPLATE_FORM_ID}
+              disabled={drawerSaving || !!formValidationError}
+              className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {drawerSaving ? "Сохранение..." : drawerMode === "create" ? "Создать" : "Сохранить"}
+            </button>
+          ) : null
+        }
       >
         {drawerMode === "view" ? (
           <div className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
@@ -1421,7 +1443,7 @@ export default function RegularTasksAdminClient() {
             saving={drawerSaving}
             error={drawerError}
             validate={validateTemplate}
-            onCancel={closeDrawer}
+            onFormValidationChange={setFormValidationError}
             onSubmit={submitTemplate}
             ownerUnitOptions={ownerUnitOptions}
             ownerUnitLoading={ownerUnitLoading}
