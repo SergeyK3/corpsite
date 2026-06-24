@@ -72,6 +72,12 @@ export const CATCH_UP_UI_LABELS: Readonly<Record<string, string>> = {
   run_for_date_auto: "Опорная дата вычисляется на backend автоматически.",
   past_week_hint:
     "Будет использована последняя среда в окне [сегодня−7; сегодня−1]. Период отчётности = 7 дней до этой даты.",
+  nav_to_templates: "К шаблонам",
+  nav_to_journal: "Назад к журналу",
+  dry_run_journal_link: "Пробный прогон",
+  zero_templates_warning:
+    "К запуску 0 шаблонов. Проверьте фильтры и наличие шаблонов нужной периодичности.",
+  exit_without_live: "Выйти без боевого запуска",
 };
 
 export const RUN_STATUS_LABELS: Readonly<Record<string, string>> = {

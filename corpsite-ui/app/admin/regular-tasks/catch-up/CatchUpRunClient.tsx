@@ -128,6 +128,31 @@ function resolveActiveStep(params: {
   return 1;
 }
 
+const NAV_BUTTON_CLASS =
+  "rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700";
+
+function CatchUpNavActions({ dryRunId }: { dryRunId?: number | null }) {
+  return (
+    <div className="flex flex-wrap gap-2" data-testid="catch-up-nav-actions">
+      <Link href="/admin/regular-tasks" className={NAV_BUTTON_CLASS} data-testid="catch-up-nav-templates">
+        {catchUpUiLabel("nav_to_templates")}
+      </Link>
+      <Link href="/regular-task-runs" className={NAV_BUTTON_CLASS} data-testid="catch-up-nav-journal">
+        {catchUpUiLabel("nav_to_journal")}
+      </Link>
+      {dryRunId ? (
+        <Link
+          href={`/regular-task-runs?run_id=${dryRunId}`}
+          className="rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/30 px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 transition hover:bg-blue-100 dark:hover:bg-blue-950/50"
+          data-testid="catch-up-nav-dry-run-journal"
+        >
+          {catchUpUiLabel("dry_run_journal_link")} #{dryRunId}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 function WorkflowStepper({ activeStep }: { activeStep: number }) {
   return (
     <ol className="flex flex-wrap gap-2" data-testid="catch-up-workflow-steps">
@@ -222,6 +247,9 @@ export default function CatchUpRunClient() {
     lockedPayload != null &&
     previewResult != null &&
     !payloadsEquivalent(lockedPayload, buildCatchUpPayload(formState, true));
+
+  const templatesDue = previewResult?.stats?.templates_due ?? 0;
+  const hasTemplatesToRun = templatesDue > 0;
 
   React.useEffect(() => {
     setOrgUnitId(orgUnitFromUrl);
@@ -406,6 +434,10 @@ export default function CatchUpRunClient() {
       setSubmitError("Параметры формы изменились после пробного прогона. Выполните пробный прогон заново.");
       return;
     }
+    if (!hasTemplatesToRun) {
+      setSubmitError(catchUpUiLabel("zero_templates_warning"));
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);
@@ -441,15 +473,7 @@ export default function CatchUpRunClient() {
           {catchUpUiLabel("workflow_journal").toLowerCase()}. SSH и curl не требуются.
         </p>
         <WorkflowStepper activeStep={activeStep} />
-        <div className="flex flex-wrap gap-2 text-sm">
-          <Link href="/admin/regular-tasks" className="text-blue-600 hover:underline dark:text-blue-400">
-            Шаблоны регулярных задач
-          </Link>
-          <span className="text-zinc-400">·</span>
-          <Link href="/regular-task-runs" className="text-blue-600 hover:underline dark:text-blue-400">
-            Журнал запусков
-          </Link>
-        </div>
+        <CatchUpNavActions dryRunId={previewResult?.run_id} />
       </div>
 
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm">
@@ -611,7 +635,7 @@ export default function CatchUpRunClient() {
             result={previewResult}
             items={previewItems}
             isDryRunPreview
-            showJournalLink={false}
+            showJournalLink
           />
           {previewItemsError ? (
             <div className="rounded-xl border border-amber-200 dark:border-amber-900/55 bg-amber-50 dark:bg-amber-950/35 p-3 text-sm text-amber-800 dark:text-amber-200">
@@ -631,6 +655,20 @@ export default function CatchUpRunClient() {
               <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-950/50">scripts/backup_db.sh</code>
               ).
             </p>
+            {!hasTemplatesToRun ? (
+              <div
+                className="mt-4 rounded-xl border border-amber-200 dark:border-amber-900/55 bg-amber-50 dark:bg-amber-950/35 p-3 text-sm text-amber-800 dark:text-amber-200"
+                data-testid="catch-up-zero-templates-warning"
+              >
+                {catchUpUiLabel("zero_templates_warning")}{" "}
+                <Link
+                  href="/admin/regular-tasks"
+                  className="font-medium text-blue-700 underline dark:text-blue-300"
+                >
+                  {catchUpUiLabel("nav_to_templates")}
+                </Link>
+              </div>
+            ) : null}
             <label className="mt-4 flex items-start gap-2 text-sm text-zinc-800 dark:text-zinc-200">
               <input
                 type="checkbox"
@@ -645,16 +683,25 @@ export default function CatchUpRunClient() {
               </span>
             </label>
 
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                disabled={submitting || !reviewConfirmed || payloadDrift}
+                disabled={submitting || !reviewConfirmed || payloadDrift || !hasTemplatesToRun}
                 onClick={handleLiveRun}
                 className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="catch-up-execute"
               >
                 {submitting ? "Выполняется..." : catchUpUiLabel("workflow_execute")}
               </button>
+              {!liveResult ? (
+                <Link
+                  href="/regular-task-runs"
+                  className="text-sm font-medium text-zinc-600 underline transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  data-testid="catch-up-exit-without-live"
+                >
+                  {catchUpUiLabel("exit_without_live")}
+                </Link>
+              ) : null}
             </div>
           </section>
         </>
