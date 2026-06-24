@@ -4,22 +4,41 @@ import {
   DEFAULT_SCHEDULE_PARAMS,
   defaultScheduleParamsJson,
   resolveScheduleParamsOnTypeChange,
+  scheduleParamKeysForType,
   validateScheduleParams,
 } from "./regularTaskScheduleParams";
 
+function parsedKeys(json: string): string[] {
+  return Object.keys(JSON.parse(json)).sort();
+}
+
 describe("resolveScheduleParamsOnTypeChange", () => {
-  it("inserts bymonthday when switching to monthly from weekly default", () => {
-    const weeklyDefault = JSON.stringify(DEFAULT_SCHEDULE_PARAMS.weekly, null, 2);
-    const result = resolveScheduleParamsOnTypeChange("weekly", "monthly", weeklyDefault);
+  it("weekly → monthly resets JSON to bymonthday default", () => {
+    const customWeekly = JSON.stringify({ byweekday: [3], time: "09:30" }, null, 2);
+    const result = resolveScheduleParamsOnTypeChange("weekly", "monthly", customWeekly);
 
     expect(JSON.parse(result)).toEqual(DEFAULT_SCHEDULE_PARAMS.monthly);
+    expect(parsedKeys(result)).toEqual(scheduleParamKeysForType("monthly"));
+    expect(JSON.parse(result)).not.toHaveProperty("byweekday");
   });
 
-  it("inserts bymonth and bymonthday when switching to yearly from monthly default", () => {
+  it("monthly → weekly resets JSON to byweekday default", () => {
+    const customMonthly = JSON.stringify({ bymonthday: [15], time: "08:00" }, null, 2);
+    const result = resolveScheduleParamsOnTypeChange("monthly", "weekly", customMonthly);
+
+    expect(JSON.parse(result)).toEqual(DEFAULT_SCHEDULE_PARAMS.weekly);
+    expect(parsedKeys(result)).toEqual(scheduleParamKeysForType("weekly"));
+    expect(JSON.parse(result)).not.toHaveProperty("bymonthday");
+    expect(JSON.parse(result)).not.toHaveProperty("bymonth");
+  });
+
+  it("monthly → yearly resets JSON to bymonth + bymonthday default", () => {
     const monthlyDefault = JSON.stringify(DEFAULT_SCHEDULE_PARAMS.monthly, null, 2);
     const result = resolveScheduleParamsOnTypeChange("monthly", "yearly", monthlyDefault);
 
     expect(JSON.parse(result)).toEqual(DEFAULT_SCHEDULE_PARAMS.yearly);
+    expect(parsedKeys(result)).toEqual(scheduleParamKeysForType("yearly"));
+    expect(JSON.parse(result)).not.toHaveProperty("byweekday");
   });
 
   it("replaces empty JSON when selecting a schedule type", () => {
@@ -28,11 +47,11 @@ describe("resolveScheduleParamsOnTypeChange", () => {
     expect(JSON.parse(result)).toEqual(DEFAULT_SCHEDULE_PARAMS.monthly);
   });
 
-  it("keeps custom JSON that no longer matches the previous default", () => {
-    const customWeekly = JSON.stringify({ byweekday: [3], time: "09:30" }, null, 2);
-    const result = resolveScheduleParamsOnTypeChange("weekly", "monthly", customWeekly);
+  it("does not replace JSON when schedule_type is unchanged", () => {
+    const customMonthly = JSON.stringify({ bymonthday: [15], time: "08:00" }, null, 2);
+    const result = resolveScheduleParamsOnTypeChange("monthly", "monthly", customMonthly);
 
-    expect(result).toBe(customWeekly);
+    expect(result).toBe(customMonthly);
   });
 });
 

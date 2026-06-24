@@ -37,10 +37,16 @@ export function normalizeScheduleType(value: string | null | undefined): Schedul
   return null;
 }
 
-export function defaultScheduleParamsJson(scheduleType: string): string {
+export function defaultScheduleParamsForType(scheduleType: string): Record<string, unknown> | null {
   const normalized = normalizeScheduleType(scheduleType);
-  if (!normalized) return "{}";
-  return JSON.stringify(DEFAULT_SCHEDULE_PARAMS[normalized], null, 2);
+  if (!normalized) return null;
+  return { ...DEFAULT_SCHEDULE_PARAMS[normalized] };
+}
+
+export function defaultScheduleParamsJson(scheduleType: string): string {
+  const defaults = defaultScheduleParamsForType(scheduleType);
+  if (!defaults) return "{}";
+  return JSON.stringify(defaults, null, 2);
 }
 
 export function parseScheduleParamsText(text: string): {
@@ -59,14 +65,6 @@ export function parseScheduleParamsText(text: string): {
   } catch {
     return { value: null, error: "Параметры расписания содержат некорректный JSON." };
   }
-}
-
-function isEmptyScheduleParams(params: Record<string, unknown>): boolean {
-  return Object.keys(params).length === 0;
-}
-
-function scheduleParamsEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function asIntList(value: unknown): number[] {
@@ -88,9 +86,9 @@ function hasWeekdayValue(value: unknown): boolean {
 }
 
 /**
- * When schedule_type changes, replace schedule_params only if the current JSON is empty
- * or still matches the default template for the previous schedule type.
- * Custom edits are preserved so the user is not surprised by silent data loss.
+ * When schedule_type changes to weekly/monthly/yearly, always replace schedule_params
+ * with the default template for the new type (no cross-type keys).
+ * Manual JSON edits are preserved until the user changes schedule_type again.
  */
 export function resolveScheduleParamsOnTypeChange(
   previousType: string,
@@ -100,21 +98,16 @@ export function resolveScheduleParamsOnTypeChange(
   const nextType = normalizeScheduleType(newType);
   if (!nextType) return currentParamsText;
 
-  const parsed = parseScheduleParamsText(currentParamsText);
-  if (parsed.error || parsed.value == null) return currentParamsText;
-
-  const currentParams = parsed.value;
   const previousNormalized = normalizeScheduleType(previousType);
-  const shouldReplace =
-    isEmptyScheduleParams(currentParams) ||
-    (previousNormalized != null &&
-      scheduleParamsEqual(currentParams, DEFAULT_SCHEDULE_PARAMS[previousNormalized]));
+  if (previousNormalized === nextType) return currentParamsText;
 
-  if (shouldReplace) {
-    return defaultScheduleParamsJson(nextType);
-  }
+  return defaultScheduleParamsJson(nextType);
+}
 
-  return currentParamsText;
+export function scheduleParamKeysForType(scheduleType: string): string[] {
+  const normalized = normalizeScheduleType(scheduleType);
+  if (!normalized) return [];
+  return Object.keys(DEFAULT_SCHEDULE_PARAMS[normalized]).sort();
 }
 
 export function validateScheduleParams(
