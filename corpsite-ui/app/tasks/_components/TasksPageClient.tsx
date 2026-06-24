@@ -11,6 +11,7 @@ import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibra
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
 import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib/taskNav";
+import { canEditTask, editButtonTitle, isTaskRowEditable } from "@/lib/taskEditPolicy";
 import { resolveTaskReportLink } from "@/lib/taskReportLink";
 import type { MeInfo } from "@/lib/types";
 
@@ -220,26 +221,6 @@ function detectCanSeeTeamTasks(me: MeInfo | null): boolean {
   if (roleName.includes("deputy")) return true;
 
   return false;
-}
-
-function canEditTask(src: any): boolean {
-  const taskKind = String(src?.task_kind ?? "").trim().toLowerCase();
-  const statusCode = String(src?.status_code ?? "").trim().toUpperCase();
-
-  if (!src) return false;
-  if (statusCode === "ARCHIVED") return false;
-
-  return taskKind === "adhoc" || taskKind === "regular";
-}
-
-function editButtonTitle(src: any): string {
-  const taskKind = String(src?.task_kind ?? "").trim().toLowerCase();
-  const statusCode = String(src?.status_code ?? "").trim().toUpperCase();
-
-  if (!src) return "Сначала выберите задачу";
-  if (statusCode === "ARCHIVED") return "Архивная задача не редактируется";
-  if (taskKind === "adhoc" || taskKind === "regular") return "Редактировать выбранную задачу";
-  return "Этот тип задачи не поддерживает редактирование";
 }
 
 function normalizeTaskKind(value: any): string {
@@ -878,7 +859,7 @@ export default function TasksPageClient() {
 
   const selectedAllowed = React.useMemo(() => allowedActionsOf(selectedItem), [selectedItem]);
   const selectedEditable = React.useMemo(
-    () => canEditTask(selectedItem) && !readOnlyTeamMode,
+    () => isTaskRowEditable(selectedItem, { readOnlyTeamMode }),
     [selectedItem, readOnlyTeamMode],
   );
 
@@ -1110,7 +1091,7 @@ export default function TasksPageClient() {
                     ) : (
                       displayItems.map((item) => {
                         const id = taskIdOf(item);
-                        const editable = canEditTask(item) && !readOnlyTeamMode;
+                        const editable = isTaskRowEditable(item, { readOnlyTeamMode });
 
                         return (
                           <tr

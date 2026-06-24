@@ -98,3 +98,97 @@ describe("TaskDetailPanel report link", () => {
     });
   });
 });
+
+describe("TaskDetailPanel review UX cleanup", () => {
+  it("hides duplicate available-actions card and footer action text", () => {
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        selectedItem={{
+          task_id: 10019,
+          status_code: "WAITING_APPROVAL",
+          requires_report: true,
+          allowed_actions: ["approve", "reject"],
+          report_link: "https://example.com/report",
+          report_submitted_at: "2026-06-24T03:53:05+05:00",
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Доступные действия")).not.toBeInTheDocument();
+    expect(screen.queryByText("Согласовать / Отклонить")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Согласовать" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отклонить" })).toBeInTheDocument();
+  });
+
+  it("hides edit button when selectedEditable is false", () => {
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        selectedEditable={false}
+        selectedItem={{
+          task_id: 10019,
+          status_code: "WAITING_APPROVAL",
+          allowed_actions: ["approve", "reject"],
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
+  });
+});
+
+const REGULAR_TASK_DESCRIPTION = `Отчёт по амбулаторной экспертизе
+---
+Источник: Догоняющий запуск регулярной задачи
+ID запуска: 33
+Дата возникновения задачи: 2026-06-11
+Тип запуска: догоняющий
+Период: Прошлая неделя
+---`;
+
+describe("TaskDetailPanel scheduler metadata visibility", () => {
+  it("hides origin metadata for non-admin users", () => {
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        isSystemAdmin={false}
+        selectedItem={{
+          task_id: 10019,
+          task_kind: "regular",
+          description: REGULAR_TASK_DESCRIPTION,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Отчёт по амбулаторной экспертизе")).toBeInTheDocument();
+    expect(screen.queryByText(/Догоняющий запуск регулярной задачи/)).not.toBeInTheDocument();
+    expect(screen.queryByText("ID запуска:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Тип запуска:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Служебная информация")).not.toBeInTheDocument();
+  });
+
+  it("shows origin metadata in admin-only service section", () => {
+    render(
+      <TaskDetailPanel
+        {...baseProps}
+        isSystemAdmin={true}
+        selectedItem={{
+          task_id: 10019,
+          task_kind: "regular",
+          description: REGULAR_TASK_DESCRIPTION,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Отчёт по амбулаторной экспертизе")).toBeInTheDocument();
+    expect(screen.getByText("Служебная информация")).toBeInTheDocument();
+    expect(screen.getByText(/Догоняющий запуск регулярной задачи/)).toBeInTheDocument();
+    expect(screen.getByText("33")).toBeInTheDocument();
+    expect(screen.getByText("догоняющий")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Журнал запусков" })).toHaveAttribute(
+      "href",
+      "/regular-task-runs?run_id=33",
+    );
+  });
+});

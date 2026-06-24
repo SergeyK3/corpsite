@@ -2,7 +2,8 @@
 
 import * as React from "react";
 
-import { taskActionLabel, taskActionsLabel, taskSourceLabel, taskStatusLabel } from "@/lib/i18n";
+import { taskActionLabel, taskSourceLabel, taskStatusLabel, uiFieldLabel } from "@/lib/i18n";
+import { splitTaskDescription } from "@/lib/taskDescription";
 import {
   isHttpUrl,
   reportLinkDisplayText,
@@ -52,10 +53,6 @@ function allowedActionsOf(t: any): AllowedAction[] {
   }
 
   return [];
-}
-
-function actionsRu(actions: AllowedAction[] | undefined | null): string {
-  return taskActionsLabel(actions);
 }
 
 function statusTextOf(t: any): string {
@@ -273,6 +270,13 @@ export default function TaskDetailPanel({
     [selectedItem],
   );
   const reportHint = React.useMemo(() => reportLinkHint(resolvedReportLink), [resolvedReportLink]);
+  const descriptionParts = React.useMemo(
+    () => splitTaskDescription(selectedItem?.description),
+    [selectedItem?.description],
+  );
+  const visibleDescription = descriptionParts.humanText;
+  const showDescriptionBlock = Boolean(visibleDescription.trim());
+  const showOriginMetadata = isSystemAdmin && descriptionParts.hasOriginMetadata;
 
   return (
     <div className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
@@ -344,13 +348,65 @@ export default function TaskDetailPanel({
               ) : null}
             </div>
 
-            {String(selectedItem?.description ?? "").trim() ? (
+            {showDescriptionBlock ? (
               <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">Описание</div>
                 <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900 dark:text-zinc-50">
-                  {String(selectedItem?.description ?? "").trim()}
+                  {visibleDescription}
                 </div>
               </div>
+            ) : null}
+
+            {showOriginMetadata ? (
+              <details className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+                <summary className="cursor-pointer text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Служебная информация
+                </summary>
+                <div className="mt-3 space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
+                  {descriptionParts.originMetadata.source ? (
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">Источник:</span>{" "}
+                      {descriptionParts.originMetadata.source}
+                    </div>
+                  ) : null}
+                  {descriptionParts.originMetadata.run_id ? (
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">{uiFieldLabel("run_id")}:</span>{" "}
+                      {descriptionParts.originMetadata.run_id}
+                    </div>
+                  ) : null}
+                  {descriptionParts.originMetadata.occurrence_date ? (
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">
+                        {uiFieldLabel("occurrence_date")}:
+                      </span>{" "}
+                      {descriptionParts.originMetadata.occurrence_date}
+                    </div>
+                  ) : null}
+                  {descriptionParts.originMetadata.run_kind ? (
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">{uiFieldLabel("run_kind")}:</span>{" "}
+                      {descriptionParts.originMetadata.run_kind}
+                    </div>
+                  ) : null}
+                  {descriptionParts.originMetadata.period ? (
+                    <div>
+                      <span className="text-zinc-600 dark:text-zinc-400">{uiFieldLabel("period")}:</span>{" "}
+                      {descriptionParts.originMetadata.period}
+                    </div>
+                  ) : null}
+                  {descriptionParts.originMetadata.run_id ? (
+                    <div className="pt-2">
+                      <a
+                        href={`/regular-task-runs?run_id=${encodeURIComponent(descriptionParts.originMetadata.run_id)}`}
+                        className="text-sm text-blue-600 dark:text-blue-400 underline"
+                      >
+                        Журнал запусков
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              </details>
             ) : null}
 
             {String(selectedItem?.source_note ?? "").trim() ? (
@@ -361,11 +417,6 @@ export default function TaskDetailPanel({
                 </div>
               </div>
             ) : null}
-
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-              <div className="mb-1 text-xs text-zinc-600 dark:text-zinc-400">Доступные действия</div>
-              <div className="text-sm text-zinc-900 dark:text-zinc-50">{actionsRu(selectedAllowed)}</div>
-            </div>
 
             {shouldShowReportSection(selectedItem) ? (
               <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
@@ -500,10 +551,7 @@ export default function TaskDetailPanel({
       </div>
 
       {selectedItem ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">{actionsRu(selectedAllowed)}</div>
-
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
             {selectedEditable ? (
               <button
                 type="button"
@@ -583,7 +631,6 @@ export default function TaskDetailPanel({
                 {taskActionLabel("archive")}
               </button>
             ) : null}
-          </div>
         </div>
       ) : null}
     </div>
