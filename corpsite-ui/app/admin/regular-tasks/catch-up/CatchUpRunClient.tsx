@@ -34,7 +34,7 @@ import {
   scheduleTypeLabel,
   uiFieldLabel,
 } from "@/lib/i18n";
-import type { RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
+import { directoryRoleLabel, type RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
 
 type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
 
@@ -49,12 +49,25 @@ type DeptGroupsResponse = {
 
 type RoleRow = {
   role_id: number;
+  role_name?: string | null;
   name?: string | null;
+  role_code?: string | null;
   code?: string | null;
 };
 
 type RolesResponse = {
   items?: RoleRow[];
+};
+
+type TemplateRow = {
+  regular_task_id: number;
+  title: string;
+  is_active?: boolean;
+  archived_at?: string | null;
+};
+
+type TemplatesResponse = {
+  items?: TemplateRow[];
 };
 
 const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string }> = [
@@ -189,8 +202,11 @@ export default function CatchUpRunClient() {
   const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
   const [executorRoleId, setExecutorRoleId] = React.useState("");
+  const [regularTaskId, setRegularTaskId] = React.useState("");
   const [roleOptions, setRoleOptions] = React.useState<RoleRow[]>([]);
   const [rolesLoading, setRolesLoading] = React.useState(false);
+  const [templateOptions, setTemplateOptions] = React.useState<TemplateRow[]>([]);
+  const [templatesLoading, setTemplatesLoading] = React.useState(false);
   const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitSelectOption[]>([]);
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
   const [ownerUnitLoadError, setOwnerUnitLoadError] = React.useState<string | null>(null);
@@ -224,6 +240,13 @@ export default function CatchUpRunClient() {
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
   }, [executorRoleId]);
 
+  const parsedRegularTaskId = React.useMemo(() => {
+    const s = regularTaskId.trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  }, [regularTaskId]);
+
   const formState = React.useMemo<CatchUpFormState>(
     () => ({
       preset,
@@ -232,8 +255,17 @@ export default function CatchUpRunClient() {
       orgGroupId: selectedOrgGroupId,
       orgUnitId: parsedOrgUnitId,
       executorRoleId: parsedExecutorRoleId,
+      regularTaskId: parsedRegularTaskId,
     }),
-    [preset, manualDate, scheduleType, selectedOrgGroupId, parsedOrgUnitId, parsedExecutorRoleId],
+    [
+      preset,
+      manualDate,
+      scheduleType,
+      selectedOrgGroupId,
+      parsedOrgUnitId,
+      parsedExecutorRoleId,
+      parsedRegularTaskId,
+    ],
   );
 
   const activeStep = resolveActiveStep({
@@ -343,7 +375,7 @@ export default function CatchUpRunClient() {
       setRolesLoading(true);
       try {
         const data = await apiFetchJson<RolesResponse>("/directory/roles", {
-          query: { status: "active", limit: 200 },
+          query: { is_active: true, limit: 200 },
         });
         const rows = Array.isArray(data?.items) ? data.items : [];
         if (!cancelled) {
@@ -351,8 +383,10 @@ export default function CatchUpRunClient() {
             rows
               .map((r) => ({
                 role_id: Number(r.role_id),
-                name: r.name ?? null,
-                code: r.code ?? null,
+                role_name: r.role_name ?? r.name ?? null,
+                name: r.name ?? r.role_name ?? null,
+                role_code: r.role_code ?? r.code ?? null,
+                code: r.code ?? r.role_code ?? null,
               }))
               .filter((r) => Number.isFinite(r.role_id) && r.role_id > 0),
           );
@@ -367,6 +401,60 @@ export default function CatchUpRunClient() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setTemplatesLoading(true);
+      try {
+        const data = await apiFetchJson<TemplatesResponse>("/regular-tasks", {
+          query: {
+            status: "active",
+            schedule_type: scheduleType,
+            executor_role_id: parsedExecutorRoleId ?? undefined,
+            org_group_id: selectedOrgGroupId ?? undefined,
+            org_unit_id: parsedOrgUnitId ?? undefined,
+            limit: 200,
+          },
+        });
+        const rows = Array.isArray(data?.items) ? data.items : [];
+        if (!cancelled) {
+          setTemplateOptions(
+            rows
+              .map((t) => ({
+                regular_task_id: Number(t.regular_task_id),
+                title: String(t.title ?? "").trim() || `Шаблон #${t.regular_task_id}`,
+                is_active: t.is_active,
+                archived_at: t.archived_at ?? null,
+              }))
+              .filter(
+                (t) =>
+                  Number.isFinite(t.regular_task_id) &&
+                  t.regular_task_id > 0 &&
+                  t.is_active !== false &&
+                  !t.archived_at,
+              ),
+          );
+        }
+      } catch {
+        if (!cancelled) setTemplateOptions([]);
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleType, selectedOrgGroupId, parsedOrgUnitId, parsedExecutorRoleId]);
+
+  React.useEffect(() => {
+    if (!regularTaskId.trim()) return;
+    const selectedId = Number(regularTaskId);
+    if (!Number.isFinite(selectedId) || selectedId <= 0) return;
+    if (!templateOptions.some((t) => t.regular_task_id === selectedId)) {
+      setRegularTaskId("");
+    }
+  }, [templateOptions, regularTaskId]);
 
   React.useEffect(() => {
     if (!orgUnitId.trim()) return;
@@ -596,7 +684,30 @@ export default function CatchUpRunClient() {
               <option value="">Все роли</option>
               {roleOptions.map((role) => (
                 <option key={role.role_id} value={String(role.role_id)}>
-                  {(role.name || role.code || `#${role.role_id}`) + ` (#${role.role_id})`}
+                  {directoryRoleLabel(role)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">
+              {catchUpUiLabel("regular_task_id")} (опционально)
+            </span>
+            <select
+              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
+              value={regularTaskId}
+              onChange={(e) => {
+                setRegularTaskId(e.target.value);
+                resetWorkflow();
+              }}
+              disabled={templatesLoading}
+              data-testid="catch-up-template-select"
+            >
+              <option value="">Все шаблоны</option>
+              {templateOptions.map((template) => (
+                <option key={template.regular_task_id} value={String(template.regular_task_id)}>
+                  {`${template.title} (#${template.regular_task_id})`}
                 </option>
               ))}
             </select>

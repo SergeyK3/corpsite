@@ -134,6 +134,20 @@ export function buildCatchUpReviewRows(
     .map((item) => buildCatchUpReviewRow(item, options));
 }
 
+export function resolveCatchUpTemplateFilterLabel(
+  resolved: { regular_task_id?: number | null },
+  items: readonly RegularTaskRunItemRow[],
+): string | null {
+  const id = resolved.regular_task_id;
+  if (id == null || !Number.isFinite(Number(id)) || Number(id) <= 0) return null;
+
+  const rid = Math.trunc(Number(id));
+  const fromItem = items.find((item) => item.regular_task_id === rid);
+  const title = String(fromItem?.meta?.template_title ?? "").trim();
+  if (title) return `${title} (#${rid})`;
+  return `Шаблон #${rid}`;
+}
+
 export type CatchUpFormState = {
   preset: CatchUpPreset;
   manualDate: string;
@@ -141,6 +155,7 @@ export type CatchUpFormState = {
   orgGroupId: number | null;
   orgUnitId: number | null;
   executorRoleId: number | null;
+  regularTaskId: number | null;
 };
 
 export function buildCatchUpPayload(
@@ -164,6 +179,9 @@ export function buildCatchUpPayload(
   }
   if (form.executorRoleId != null) {
     payload.executor_role_id = form.executorRoleId;
+  }
+  if (form.regularTaskId != null) {
+    payload.regular_task_id = form.regularTaskId;
   }
 
   return payload;
@@ -192,6 +210,7 @@ export function payloadsEquivalent(
       org_group_id: p.org_group_id ?? null,
       org_unit_id: p.org_unit_id ?? null,
       executor_role_id: p.executor_role_id ?? null,
+      regular_task_id: p.regular_task_id ?? null,
     });
 
   return normalize(a) === normalize(b);

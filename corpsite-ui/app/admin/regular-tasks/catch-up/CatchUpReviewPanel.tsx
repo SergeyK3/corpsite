@@ -8,6 +8,7 @@ import {
   buildCatchUpReviewRows,
   resolveAggregateOccurrenceDate,
   resolveAggregatePeriodFromItems,
+  resolveCatchUpTemplateFilterLabel,
 } from "@/lib/catchUpWorkflow";
 import { catchUpUiLabel, runTitleLabel, scheduleTypeLabel, uiFieldLabel } from "@/lib/i18n";
 import { fmtDate, type RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
@@ -43,6 +44,7 @@ export default function CatchUpReviewPanel({
   const reviewRows = buildCatchUpReviewRows(items, { isDryRunPreview });
 
   const firstItemDates = reviewRows[0];
+  const templateFilterLabel = resolveCatchUpTemplateFilterLabel(resolved, items);
 
   return (
     <section
@@ -107,6 +109,14 @@ export default function CatchUpReviewPanel({
             </span>{" "}
             {scheduleTypeLabel(resolved.schedule_type) || "—"}
           </span>
+          {templateFilterLabel ? (
+            <span data-testid="catch-up-template-filter-label">
+              <span className="text-amber-700/80 dark:text-amber-400/80">
+                {catchUpUiLabel("regular_task_id")}:
+              </span>{" "}
+              {templateFilterLabel}
+            </span>
+          ) : null}
         </div>
       </div>
 

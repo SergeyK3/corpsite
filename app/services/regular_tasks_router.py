@@ -190,6 +190,7 @@ def catch_up_regular_tasks(
     org_group_id = _parse_optional_int(payload.get("org_group_id"))
     org_unit_id = _parse_optional_int(payload.get("org_unit_id"))
     executor_role_id = _parse_optional_int(payload.get("executor_role_id"))
+    regular_task_id = _parse_optional_int(payload.get("regular_task_id"))
 
     try:
         with engine.begin() as conn:
@@ -202,6 +203,7 @@ def catch_up_regular_tasks(
                 org_group_id=org_group_id,
                 org_unit_id=org_unit_id,
                 executor_role_id=executor_role_id,
+                regular_task_id=regular_task_id,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

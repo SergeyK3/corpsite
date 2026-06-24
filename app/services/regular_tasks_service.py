@@ -953,6 +953,7 @@ class CatchUpTemplateFilters:
     org_group_id: Optional[int] = None
     org_unit_id: Optional[int] = None
     executor_role_id: Optional[int] = None
+    regular_task_id: Optional[int] = None
 
 
 def resolve_catch_up_run_for_date(
@@ -1018,6 +1019,10 @@ def _load_regular_task_templates(
             params["executor_role_id"] = int(template_filters.executor_role_id)
             filters.append("rt.executor_role_id = :executor_role_id")
 
+        if template_filters.regular_task_id is not None:
+            params["regular_task_id"] = int(template_filters.regular_task_id)
+            filters.append("rt.regular_task_id = :regular_task_id")
+
         org_scope = apply_org_scope(
             strategy=OrgScopeStrategy.OWNER_UNIT,
             params=OrgScopeParams(
@@ -1072,6 +1077,7 @@ def run_regular_tasks_catch_up_tx(
     org_group_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     executor_role_id: Optional[int] = None,
+    regular_task_id: Optional[int] = None,
 ) -> Tuple[int, Dict[str, Any], Dict[str, Any]]:
     today = _now_local().date()
     resolved_date = resolve_catch_up_run_for_date(
@@ -1085,6 +1091,7 @@ def run_regular_tasks_catch_up_tx(
         org_group_id=org_group_id,
         org_unit_id=org_unit_id,
         executor_role_id=executor_role_id,
+        regular_task_id=regular_task_id,
     )
     resolved: Dict[str, Any] = {
         "preset": (preset or "").strip().lower(),
@@ -1093,6 +1100,7 @@ def run_regular_tasks_catch_up_tx(
         "org_group_id": int(org_group_id) if org_group_id is not None else None,
         "org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
         "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
+        "regular_task_id": int(regular_task_id) if regular_task_id is not None else None,
     }
     run_at_local = datetime.combine(resolved_date, time(12, 0), tzinfo=_LOCAL_TZ)
     run_id, stats = run_regular_tasks_generation_tx(

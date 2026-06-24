@@ -37,6 +37,7 @@ export type CatchUpMeta = {
   org_group_id?: number | null;
   org_unit_id?: number | null;
   executor_role_id?: number | null;
+  regular_task_id?: number | null;
   templates_in_scope?: number | null;
 };
 
@@ -155,6 +156,7 @@ export type RunSummary = {
   org_group_id: number | null;
   org_unit_id: number | null;
   org_scope_label: string;
+  template_filter_label: string;
   started_at_label: string;
   finished_at_label: string;
   status: string;
@@ -474,6 +476,7 @@ export function buildRunSummary(
     org_group_id: stats.catch_up?.org_group_id ?? null,
     org_unit_id: stats.catch_up?.org_unit_id ?? null,
     org_scope_label: resolveOrgScopeLabel(stats),
+    template_filter_label: resolveCatchUpTemplateFilterLabelFromStats(stats, items),
     started_at_label: fmtDateTime(run.started_at),
     finished_at_label: fmtDateTime(run.finished_at),
     status: run.status,
@@ -545,6 +548,38 @@ export function roleLabel(value: {
 
   if (value.executor_role_id != null) return `#${value.executor_role_id}`;
   return "—";
+}
+
+export function directoryRoleLabel(value: {
+  role_id: number;
+  role_name?: string | null;
+  name?: string | null;
+  role_code?: string | null;
+  code?: string | null;
+}): string {
+  const name = String(value.role_name ?? value.name ?? "").trim();
+  if (name) return `${name} (#${value.role_id})`;
+
+  const code = String(value.role_code ?? value.code ?? "").trim();
+  if (code) return `${code} (#${value.role_id})`;
+
+  return `#${value.role_id}`;
+}
+
+export function resolveCatchUpTemplateFilterLabelFromStats(
+  stats?: RunStats | null,
+  items: readonly RegularTaskRunItemRow[] = [],
+): string {
+  const templateId = stats?.catch_up?.regular_task_id;
+  if (templateId == null || !Number.isFinite(Number(templateId)) || Number(templateId) <= 0) {
+    return "—";
+  }
+
+  const rid = Math.trunc(Number(templateId));
+  const fromItem = items.find((item) => item.regular_task_id === rid);
+  const title = String(fromItem?.meta?.template_title ?? "").trim();
+  if (title) return `${title} (#${rid})`;
+  return `Шаблон #${rid}`;
 }
 
 export function periodLabel(item: RegularTaskRunItemRow): string {

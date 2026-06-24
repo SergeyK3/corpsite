@@ -281,6 +281,54 @@ def test_catch_up_dry_run_scoped_by_org_unit(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_catch_up_dry_run_scoped_by_regular_task_id(seed):
+    suffix = date.today().isoformat()
+    with engine.begin() as conn:
+        group_ids = _find_distinct_group_ids(conn, limit=1)
+        group_id = group_ids[0] if group_ids else 1
+        unit_id = _create_unit_with_group(conn, name=f"pytest_rt_catchup_tpl_{suffix}", group_id=group_id)
+
+        rid_a = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP TPL A {suffix}",
+            schedule_type="weekly",
+            schedule_params={"byweekday": [4], "time": "00:00"},
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+        )
+        rid_b = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP TPL B {suffix}",
+            schedule_type="weekly",
+            schedule_params={"byweekday": [4], "time": "00:00"},
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+        )
+
+        run_id, stats, resolved = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="manual",
+            dry_run=True,
+            run_for_date_manual=date(2026, 3, 5),
+            schedule_type="weekly",
+            org_unit_id=unit_id,
+            regular_task_id=rid_a,
+        )
+
+        assert resolved["regular_task_id"] == rid_a
+        assert stats["templates_total"] == 1
+        assert stats["templates_due"] == 1
+        assert stats["created"] == 0
+
+        conn.execute(
+            text("DELETE FROM public.regular_tasks WHERE regular_task_id IN (:a, :b)"),
+            {"a": rid_a, "b": rid_b},
+        )
+        conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :unit_id"), {"unit_id": unit_id})
+        conn.execute(text("DELETE FROM public.regular_task_runs WHERE run_id = :rid"), {"rid": int(run_id)})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_catch_up_dry_run_stores_empty_errors_array():
     with engine.begin() as conn:
         run_id, stats, _resolved = run_regular_tasks_catch_up_tx(

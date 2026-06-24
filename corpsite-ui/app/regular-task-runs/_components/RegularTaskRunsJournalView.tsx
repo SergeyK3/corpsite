@@ -380,6 +380,13 @@ export function RegularTaskRunsJournalView({
                   label={`${uiFieldLabel("owner_unit")} / ${uiFieldLabel("org_group")}`}
                   value={runSummary.org_scope_label}
                 />
+                {runSummary.template_filter_label !== "—" ? (
+                  <SummaryField
+                    label={uiFieldLabel("template")}
+                    value={runSummary.template_filter_label}
+                    data-testid="regular-task-run-summary-template-filter"
+                  />
+                ) : null}
                 <SummaryField label="Шаблонов всего" value={String(runSummary.templates_total)} />
                 <SummaryField label={uiFieldLabel("templates_due")} value={String(runSummary.templates_due)} />
                 <SummaryField label={uiFieldLabel("created")} value={String(runSummary.created)} />

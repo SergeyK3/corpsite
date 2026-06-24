@@ -374,6 +374,7 @@ export type CatchUpRegularTasksParams = {
   org_group_id?: number;
   org_unit_id?: number;
   executor_role_id?: number;
+  regular_task_id?: number;
 };
 
 export type CatchUpRegularTasksResult = {
@@ -386,6 +387,7 @@ export type CatchUpRegularTasksResult = {
     org_group_id?: number | null;
     org_unit_id?: number | null;
     executor_role_id?: number | null;
+    regular_task_id?: number | null;
     templates_in_scope?: number;
   };
   stats?: {

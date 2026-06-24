@@ -10,6 +10,7 @@ import {
   pastWeekPresetHint,
   payloadsEquivalent,
   resolveAggregatePeriodFromItems,
+  resolveCatchUpTemplateFilterLabel,
   resolveDefaultScheduleType,
   validateCatchUpForm,
 } from "./catchUpWorkflow";
@@ -81,6 +82,7 @@ describe("catchUpWorkflow", () => {
         orgGroupId: null,
         orgUnitId: 44,
         executorRoleId: 3,
+        regularTaskId: 123,
       },
       true,
     );
@@ -91,7 +93,20 @@ describe("catchUpWorkflow", () => {
       schedule_type: "weekly",
       org_unit_id: 44,
       executor_role_id: 3,
+      regular_task_id: 123,
     });
+  });
+
+  it("resolveCatchUpTemplateFilterLabel formats title and id", () => {
+    expect(
+      resolveCatchUpTemplateFilterLabel({ regular_task_id: 123 }, [
+        {
+          ...sampleItem,
+          regular_task_id: 123,
+          meta: { ...sampleItem.meta, template_title: "QM weekly" },
+        },
+      ]),
+    ).toBe("QM weekly (#123)");
   });
 
   it("validateCatchUpForm requires manual date", () => {
@@ -103,6 +118,7 @@ describe("catchUpWorkflow", () => {
         orgGroupId: null,
         orgUnitId: null,
         executorRoleId: null,
+        regularTaskId: null,
       }),
     ).toMatch(/дату/);
   });
@@ -118,6 +134,21 @@ describe("catchUpWorkflow", () => {
     expect(payloadsEquivalent(base, { ...base, dry_run: false })).toBe(true);
     expect(
       payloadsEquivalent(base, { ...base, org_unit_id: 45 }),
+    ).toBe(false);
+  });
+
+  it("payloadsEquivalent compares regular_task_id", () => {
+    const base: CatchUpRegularTasksParams = {
+      dry_run: true,
+      preset: "manual",
+      run_for_date: "2026-06-24",
+      schedule_type: "weekly",
+      org_unit_id: 44,
+      regular_task_id: 123,
+    };
+    expect(payloadsEquivalent(base, { ...base, dry_run: false })).toBe(true);
+    expect(
+      payloadsEquivalent(base, { ...base, regular_task_id: 124 }),
     ).toBe(false);
   });
 
