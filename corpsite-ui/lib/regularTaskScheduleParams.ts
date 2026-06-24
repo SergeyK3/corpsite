@@ -8,6 +8,27 @@ export const DEFAULT_SCHEDULE_PARAMS: Readonly<Record<ScheduleType, Record<strin
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** Matches backend _parse_time_hhmm: HH:MM, optional :SS, or hour-only. */
+export function isValidScheduleTime(value: unknown): boolean {
+  const raw = String(value ?? "").trim();
+  if (!raw) return true;
+
+  if (HHMM_RE.test(raw)) return true;
+
+  const parts = raw.split(":");
+  if (parts.length < 1 || parts.length > 3) return false;
+
+  const hour = Number(parts[0]);
+  const minute = parts.length > 1 ? Number(parts[1]) : 0;
+  const second = parts.length > 2 ? Number(parts[2]) : 0;
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || !Number.isFinite(second)) {
+    return false;
+  }
+
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
+}
+
 export function normalizeScheduleType(value: string | null | undefined): ScheduleType | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "weekly" || normalized === "monthly" || normalized === "yearly") {
@@ -127,7 +148,7 @@ export function validateScheduleParams(
   }
 
   if (params.time != null && String(params.time).trim() !== "") {
-    if (!HHMM_RE.test(String(params.time).trim())) {
+    if (!isValidScheduleTime(params.time)) {
       return "Параметр time должен быть в формате HH:MM (например, 10:00).";
     }
   }

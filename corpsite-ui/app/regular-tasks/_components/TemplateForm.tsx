@@ -122,6 +122,16 @@ export default function TemplateForm({
             </div>
           )}
 
+          {!!formError && (
+            <div
+              id="template-form-validation-error"
+              role="alert"
+              className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200"
+            >
+              {formError}
+            </div>
+          )}
+
           <TemplateSection
             title="Основные данные"
             description="Название и описание шаблона регулярной задачи."
@@ -208,8 +218,12 @@ export default function TemplateForm({
                 rows={12}
                 className={`${templateTextareaClassName} min-h-[240px] font-mono`}
               />
-              <div className={`text-sm ${formError ? "text-red-700 dark:text-red-300" : "text-zinc-600 dark:text-zinc-400"}`}>
-                {formError ?? "JSON корректен. Форму можно сохранять."}
+              <div
+                className={`text-sm ${formError ? "text-red-700 dark:text-red-300" : "text-zinc-600 dark:text-zinc-400"}`}
+              >
+                {formError
+                  ? formError
+                  : "JSON корректен. Проверьте параметры расписания перед сохранением."}
               </div>
             </TemplateField>
           </TemplateSection>

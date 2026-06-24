@@ -8,10 +8,8 @@ import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope
 import { apiFetchJson } from "../../../lib/api";
 import { runStatusLabel, scheduleTypeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
-import {
-  parseScheduleParamsText,
-  validateScheduleParams,
-} from "@/lib/regularTaskScheduleParams";
+import { parseScheduleParamsText } from "@/lib/regularTaskScheduleParams";
+import { validateTemplateFormValues } from "@/lib/regularTaskTemplateFormValidation";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
   TEMPLATE_FORM_ID,
@@ -597,6 +595,7 @@ export default function RegularTasksAdminClient() {
   function openCreateTemplate() {
     setDrawerMode("create");
     setDrawerError(null);
+    setFormValidationError(null);
     setSelectedTemplateId(null);
     setSelectedTemplate(null);
     setDrawerOpen(true);
@@ -617,6 +616,7 @@ export default function RegularTasksAdminClient() {
     setSelectedTemplate(item);
     setDrawerMode("edit");
     setDrawerError(null);
+    setFormValidationError(null);
     setDrawerOpen(true);
     void loadTemplateCard(item.regular_task_id);
   }
@@ -626,6 +626,7 @@ export default function RegularTasksAdminClient() {
     setDrawerOpen(false);
     setDrawerMode("view");
     setDrawerError(null);
+    setFormValidationError(null);
     setDrawerLoading(false);
   }
 
@@ -648,50 +649,24 @@ export default function RegularTasksAdminClient() {
   }
 
   function validateTemplate(values: TemplateFormValues): string | null {
-    const { payload, jsonError } = buildTemplatePayload(values);
-
-    if (!String(payload.title ?? "").trim()) return "Название обязательно.";
-    if (jsonError) return jsonError;
-
-    const ownerUnitId = toNullableInt(values.owner_unit_id);
-    if (ownerUnitId == null || ownerUnitId <= 0) {
-      return "Укажите отделение (положительный числовой ID).";
-    }
-
-    const scheduleError = validateScheduleParams(
-      String(payload.schedule_type ?? ""),
-      payload.schedule_params,
-    );
-    if (scheduleError) return scheduleError;
-
-    return null;
+    return validateTemplateFormValues(values);
   }
 
-  async function submitTemplate(values: TemplateFormValues) {
-    const { payload, jsonError } = buildTemplatePayload(values);
+  const handleFormValidationChange = React.useCallback((error: string | null) => {
+    setFormValidationError(error);
+  }, []);
 
-    if (!String(payload.title ?? "").trim()) {
-      setDrawerError("Название обязательно.");
+  async function submitTemplate(values: TemplateFormValues) {
+    const validationError = validateTemplateFormValues(values);
+    if (validationError) {
+      setDrawerError(validationError);
       return;
     }
+
+    const { payload, jsonError } = buildTemplatePayload(values);
 
     if (jsonError) {
       setDrawerError(jsonError);
-      return;
-    }
-
-    const ownerUnitId = toNullableInt(values.owner_unit_id);
-    if (ownerUnitId == null || ownerUnitId <= 0) {
-      setDrawerError("Укажите отделение (положительный числовой ID).");
-      return;
-    }
-
-    const scheduleError = validateScheduleParams(
-      String(payload.schedule_type ?? ""),
-      payload.schedule_params,
-    );
-    if (scheduleError) {
-      setDrawerError(scheduleError);
       return;
     }
 
@@ -789,7 +764,8 @@ export default function RegularTasksAdminClient() {
       if (copied?.regular_task_id) {
         setSelectedTemplateId(copied.regular_task_id);
         setSelectedTemplate(copied);
-        setDrawerMode("view");
+        setFormValidationError(null);
+        setDrawerMode("edit");
         setDrawerOpen(true);
         await loadTemplateCard(copied.regular_task_id);
       }
@@ -810,10 +786,10 @@ export default function RegularTasksAdminClient() {
   const isTemplateFormMode = drawerMode === "create" || drawerMode === "edit";
 
   React.useEffect(() => {
-    if (isTemplateFormMode) {
+    if (!isTemplateFormMode) {
       setFormValidationError(null);
     }
-  }, [isTemplateFormMode, selectedTemplateId, drawerOpen]);
+  }, [isTemplateFormMode]);
 
   return (
     <div className="notranslate flex flex-col gap-3 text-zinc-900 dark:text-zinc-50" lang="ru" translate="no">
@@ -1253,14 +1229,26 @@ export default function RegularTasksAdminClient() {
         onClose={closeDrawer}
         headerActions={
           isTemplateFormMode ? (
-            <button
-              type="submit"
-              form={TEMPLATE_FORM_ID}
-              disabled={drawerSaving || !!formValidationError}
-              className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {drawerSaving ? "Сохранение..." : drawerMode === "create" ? "Создать" : "Сохранить"}
-            </button>
+            <div className="flex flex-col items-end gap-1.5">
+              {formValidationError ? (
+                <p
+                  className="max-w-sm text-right text-xs leading-snug text-red-700 dark:text-red-300"
+                  role="alert"
+                >
+                  {formValidationError}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                form={TEMPLATE_FORM_ID}
+                disabled={drawerSaving || !!formValidationError}
+                title={formValidationError ?? undefined}
+                aria-describedby={formValidationError ? "template-form-validation-error" : undefined}
+                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {drawerSaving ? "Сохранение..." : drawerMode === "create" ? "Создать" : "Сохранить"}
+              </button>
+            </div>
           ) : null
         }
       >
@@ -1330,7 +1318,7 @@ export default function RegularTasksAdminClient() {
             saving={drawerSaving}
             error={drawerError}
             validate={validateTemplate}
-            onFormValidationChange={setFormValidationError}
+            onFormValidationChange={handleFormValidationChange}
             onSubmit={submitTemplate}
             ownerUnitOptions={ownerUnitOptions}
             ownerUnitLoading={ownerUnitLoading}

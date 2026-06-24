@@ -10,6 +10,7 @@ import TemplateAdvancedPlanningBlock, {
 import TemplateForm, { SCHEDULE_TYPE_FORM_OPTIONS } from "./TemplateForm";
 import TemplateViewPanel from "./TemplateViewPanel";
 import { TEMPLATE_FORM_ID } from "./templateDetailShared";
+import { validateTemplateFormValues } from "@/lib/regularTaskTemplateFormValidation";
 
 afterEach(() => {
   cleanup();
@@ -105,6 +106,75 @@ describe("TemplateForm schedule type select", () => {
       }),
     );
     expect(onSubmit.mock.calls[0][0].schedule_params).toContain('"bymonthday"');
+  });
+});
+
+describe("TemplateForm validation feedback", () => {
+  it("shows a visible validation reason for invalid monthly schedule_params", () => {
+    render(
+      <TemplateForm
+        mode="edit"
+        initialValues={{
+          ...baseValues,
+          schedule_type: "monthly",
+          schedule_params: '{"time":"10:00"}',
+        }}
+        validate={validateTemplateFormValues}
+        onSubmit={vi.fn()}
+        ownerUnitOptions={ownerUnitOptions}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("bymonthday");
+  });
+
+  it("does not show validation alert for valid monthly schedule_params", () => {
+    render(
+      <TemplateForm
+        mode="edit"
+        initialValues={{
+          ...baseValues,
+          schedule_type: "monthly",
+          schedule_params: '{"bymonthday":[1],"time":"10:00"}',
+        }}
+        validate={validateTemplateFormValues}
+        onSubmit={vi.fn()}
+        ownerUnitOptions={ownerUnitOptions}
+      />,
+    );
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps monthly default JSON valid after switching schedule type", () => {
+    const onValidationChange = vi.fn();
+
+    render(
+      <TemplateForm
+        mode="edit"
+        initialValues={{
+          ...baseValues,
+          schedule_params: '{"byweekday":[1],"time":"10:00"}',
+        }}
+        validate={validateTemplateFormValues}
+        onFormValidationChange={onValidationChange}
+        onSubmit={vi.fn()}
+        ownerUnitOptions={ownerUnitOptions}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Периодичность"), { target: { value: "monthly" } });
+
+    const scheduleParamsField = screen.getByLabelText(/Параметры расписания/i) as HTMLTextAreaElement;
+
+    expect(onValidationChange).toHaveBeenLastCalledWith(null);
+    expect(
+      validateTemplateFormValues({
+        ...baseValues,
+        schedule_type: "monthly",
+        schedule_params: scheduleParamsField.value,
+      }),
+    ).toBeNull();
   });
 });
 

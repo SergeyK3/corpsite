@@ -55,6 +55,10 @@ describe("validateScheduleParams", () => {
     );
   });
 
+  it("accepts time values with seconds like backend parser", () => {
+    expect(validateScheduleParams("monthly", { bymonthday: [1], time: "10:00:00" })).toBeNull();
+  });
+
   it("provides default JSON templates", () => {
     expect(JSON.parse(defaultScheduleParamsJson("weekly"))).toEqual(DEFAULT_SCHEDULE_PARAMS.weekly);
     expect(JSON.parse(defaultScheduleParamsJson("monthly"))).toEqual(DEFAULT_SCHEDULE_PARAMS.monthly);
