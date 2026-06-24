@@ -8,6 +8,10 @@ import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope
 import { apiFetchJson } from "../../../lib/api";
 import { runStatusLabel, scheduleTypeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
+import {
+  parseScheduleParamsText,
+  validateScheduleParams,
+} from "@/lib/regularTaskScheduleParams";
 import TemplateDrawer from "../../regular-tasks/_components/TemplateDrawer";
 import TemplateForm, {
   TEMPLATE_FORM_ID,
@@ -145,18 +149,7 @@ function prettyJson(value: unknown): string {
 }
 
 function parseJsonObject(text: string): { value: Record<string, unknown> | null; error: string | null } {
-  const s = String(text ?? "").trim();
-  if (!s) return { value: {}, error: null };
-
-  try {
-    const parsed = JSON.parse(s);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { value: null, error: "Параметры расписания должны быть JSON-объектом." };
-    }
-    return { value: parsed as Record<string, unknown>, error: null };
-  } catch {
-    return { value: null, error: "Параметры расписания содержат некорректный JSON." };
-  }
+  return parseScheduleParamsText(text);
 }
 
 function toNullableInt(text: string): number | null {
@@ -665,6 +658,12 @@ export default function RegularTasksAdminClient() {
       return "Укажите отделение (положительный числовой ID).";
     }
 
+    const scheduleError = validateScheduleParams(
+      String(payload.schedule_type ?? ""),
+      payload.schedule_params,
+    );
+    if (scheduleError) return scheduleError;
+
     return null;
   }
 
@@ -684,6 +683,15 @@ export default function RegularTasksAdminClient() {
     const ownerUnitId = toNullableInt(values.owner_unit_id);
     if (ownerUnitId == null || ownerUnitId <= 0) {
       setDrawerError("Укажите отделение (положительный числовой ID).");
+      return;
+    }
+
+    const scheduleError = validateScheduleParams(
+      String(payload.schedule_type ?? ""),
+      payload.schedule_params,
+    );
+    if (scheduleError) {
+      setDrawerError(scheduleError);
       return;
     }
 

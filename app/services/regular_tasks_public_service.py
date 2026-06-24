@@ -10,6 +10,7 @@ from sqlalchemy.engine import Connection
 
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
+from app.services.regular_tasks_service import _validate_template_schedule
 
 
 def _as_int_or_none(v: Any) -> Optional[int]:
@@ -52,6 +53,24 @@ def _as_dict_or_none(v: Any) -> Optional[Dict[str, Any]]:
     if isinstance(v, dict):
         return v
     return None
+
+
+def _schedule_params_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _validate_regular_task_schedule(
+    schedule_type: Optional[str],
+    schedule_params: Dict[str, Any],
+) -> None:
+    st = _as_str_or_none(schedule_type)
+    if not st:
+        return
+    err = _validate_template_schedule(st, schedule_params)
+    if err:
+        raise ValueError(err)
 
 
 def _ensure_owner_unit_exists(conn: Connection, owner_unit_id: int) -> None:
@@ -302,6 +321,7 @@ def create_regular_task_tx(
 
     schedule_type = _as_str_or_none(payload.get("schedule_type"))
     schedule_params = _as_dict_or_none(payload.get("schedule_params")) or {}
+    _validate_regular_task_schedule(schedule_type, schedule_params)
 
     create_offset_days = _as_int_or_none(payload.get("create_offset_days"))
     if create_offset_days is None:
@@ -440,6 +460,20 @@ def patch_regular_task_tx(
 
     if not sets:
         return get_regular_task_tx(conn, rid)
+
+    effective_schedule_type = (
+        _as_str_or_none(payload.get("schedule_type"))
+        if "schedule_type" in payload
+        else _as_str_or_none(existing.get("schedule_type"))
+    )
+    effective_schedule_params = (
+        _as_dict_or_none(payload.get("schedule_params"))
+        if "schedule_params" in payload
+        else _schedule_params_dict(existing.get("schedule_params"))
+    )
+    if effective_schedule_params is None:
+        effective_schedule_params = {}
+    _validate_regular_task_schedule(effective_schedule_type, effective_schedule_params)
 
     sets.append("updated_at = now()")
 

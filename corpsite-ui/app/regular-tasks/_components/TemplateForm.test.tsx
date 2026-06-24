@@ -53,13 +53,16 @@ describe("TemplateForm schedule type select", () => {
     ]);
   });
 
-  it("submits schedule_type=monthly when monthly is selected", async () => {
+  it("submits schedule_type=monthly with monthly default params when monthly is selected", async () => {
     const onSubmit = vi.fn();
 
     render(
       <TemplateForm
         mode="edit"
-        initialValues={baseValues}
+        initialValues={{
+          ...baseValues,
+          schedule_params: '{"byweekday":[1],"time":"10:00"}',
+        }}
         onSubmit={onSubmit}
         ownerUnitOptions={ownerUnitOptions}
       />,
@@ -71,9 +74,37 @@ describe("TemplateForm schedule type select", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         schedule_type: "monthly",
-        schedule_params: baseValues.schedule_params,
+        schedule_params: expect.stringContaining('"bymonthday"'),
       }),
     );
+  });
+
+  it("submits schedule_type=yearly with yearly default params when yearly is selected", async () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <TemplateForm
+        mode="edit"
+        initialValues={{
+          ...baseValues,
+          schedule_type: "monthly",
+          schedule_params: '{"bymonthday":[1],"time":"10:00"}',
+        }}
+        onSubmit={onSubmit}
+        ownerUnitOptions={ownerUnitOptions}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Периодичность"), { target: { value: "yearly" } });
+    fireEvent.submit(document.getElementById(TEMPLATE_FORM_ID)!);
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schedule_type: "yearly",
+        schedule_params: expect.stringMatching(/"bymonth"/),
+      }),
+    );
+    expect(onSubmit.mock.calls[0][0].schedule_params).toContain('"bymonthday"');
   });
 });
 

@@ -4,6 +4,7 @@
 import * as React from "react";
 
 import { uiFieldLabel } from "@/lib/i18n";
+import { resolveScheduleParamsOnTypeChange } from "@/lib/regularTaskScheduleParams";
 import {
   SCHEDULE_TYPE_FORM_OPTIONS,
   TEMPLATE_FORM_ID,
@@ -155,7 +156,18 @@ export default function TemplateForm({
                 <select
                   id="template-schedule-type"
                   value={values.schedule_type}
-                  onChange={(e) => setValues((prev) => ({ ...prev, schedule_type: e.target.value }))}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    setValues((prev) => ({
+                      ...prev,
+                      schedule_type: nextType,
+                      schedule_params: resolveScheduleParamsOnTypeChange(
+                        prev.schedule_type,
+                        nextType,
+                        prev.schedule_params,
+                      ),
+                    }));
+                  }}
                   className={templateFieldInputClassName}
                 >
                   <option value="">Выберите периодичность</option>
