@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
@@ -947,6 +947,17 @@ def _acquire_task_slot_lock(
     return lock_key
 
 
+class CatchUpResolvedPayload(TypedDict, total=False):
+    preset: str
+    run_for_date: str
+    schedule_type: Optional[str]
+    org_group_id: Optional[int]
+    org_unit_id: Optional[int]
+    executor_role_id: Optional[int]
+    regular_task_id: Optional[int]
+    templates_in_scope: int
+
+
 @dataclass(frozen=True)
 class CatchUpTemplateFilters:
     schedule_type: Optional[str] = None
@@ -954,6 +965,44 @@ class CatchUpTemplateFilters:
     org_unit_id: Optional[int] = None
     executor_role_id: Optional[int] = None
     regular_task_id: Optional[int] = None
+
+
+def build_catch_up_template_filters(
+    *,
+    schedule_type: Optional[str],
+    org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
+    executor_role_id: Optional[int] = None,
+    regular_task_id: Optional[int] = None,
+) -> CatchUpTemplateFilters:
+    return CatchUpTemplateFilters(
+        schedule_type=schedule_type,
+        org_group_id=org_group_id,
+        org_unit_id=org_unit_id,
+        executor_role_id=executor_role_id,
+        regular_task_id=regular_task_id,
+    )
+
+
+def build_catch_up_resolved_payload(
+    *,
+    preset: str,
+    run_for_date: date,
+    schedule_type: Optional[str],
+    org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
+    executor_role_id: Optional[int] = None,
+    regular_task_id: Optional[int] = None,
+) -> CatchUpResolvedPayload:
+    return {
+        "preset": (preset or "").strip().lower(),
+        "run_for_date": run_for_date.isoformat(),
+        "schedule_type": schedule_type,
+        "org_group_id": int(org_group_id) if org_group_id is not None else None,
+        "org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+        "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
+        "regular_task_id": int(regular_task_id) if regular_task_id is not None else None,
+    }
 
 
 def resolve_catch_up_run_for_date(
@@ -1086,22 +1135,24 @@ def run_regular_tasks_catch_up_tx(
         manual_date=run_for_date_manual,
     )
     resolved_schedule = resolve_catch_up_schedule_type(preset, schedule_type)
-    filters = CatchUpTemplateFilters(
+    filters = build_catch_up_template_filters(
         schedule_type=resolved_schedule,
         org_group_id=org_group_id,
         org_unit_id=org_unit_id,
         executor_role_id=executor_role_id,
         regular_task_id=regular_task_id,
     )
-    resolved: Dict[str, Any] = {
-        "preset": (preset or "").strip().lower(),
-        "run_for_date": resolved_date.isoformat(),
-        "schedule_type": resolved_schedule,
-        "org_group_id": int(org_group_id) if org_group_id is not None else None,
-        "org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
-        "executor_role_id": int(executor_role_id) if executor_role_id is not None else None,
-        "regular_task_id": int(regular_task_id) if regular_task_id is not None else None,
-    }
+    resolved: Dict[str, Any] = dict(
+        build_catch_up_resolved_payload(
+            preset=preset,
+            run_for_date=resolved_date,
+            schedule_type=resolved_schedule,
+            org_group_id=org_group_id,
+            org_unit_id=org_unit_id,
+            executor_role_id=executor_role_id,
+            regular_task_id=regular_task_id,
+        )
+    )
     run_at_local = datetime.combine(resolved_date, time(12, 0), tzinfo=_LOCAL_TZ)
     run_id, stats = run_regular_tasks_generation_tx(
         conn,

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,10 +12,15 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.main import app
 from app.services.regular_tasks_service import (
+    CatchUpTemplateFilters,
+    _load_regular_task_templates,
+    build_catch_up_resolved_payload,
+    build_catch_up_template_filters,
     resolve_catch_up_run_for_date,
     resolve_catch_up_schedule_type,
     run_regular_tasks_catch_up_tx,
 )
+from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 
 
 def test_resolve_past_week_last_wednesday_in_window():
@@ -46,6 +52,112 @@ def test_resolve_schedule_type_presets():
     assert resolve_catch_up_schedule_type("past_month", None) == "monthly"
     assert resolve_catch_up_schedule_type("manual", None) is None
     assert resolve_catch_up_schedule_type("past_week", "monthly") == "monthly"
+
+
+def test_build_catch_up_resolved_payload_includes_regular_task_id():
+    payload = build_catch_up_resolved_payload(
+        preset="past_month",
+        run_for_date=date(2026, 2, 1),
+        schedule_type="monthly",
+        regular_task_id=12,
+    )
+    assert payload["regular_task_id"] == 12
+    assert payload["schedule_type"] == "monthly"
+
+
+def test_build_catch_up_template_filters_carries_regular_task_id():
+    filters = build_catch_up_template_filters(
+        schedule_type="monthly",
+        org_unit_id=44,
+        executor_role_id=3,
+        regular_task_id=12,
+    )
+    assert filters.regular_task_id == 12
+    assert filters.org_unit_id == 44
+    assert filters.executor_role_id == 3
+
+
+def test_load_regular_task_templates_applies_regular_task_id_sql_filter():
+    conn = MagicMock()
+    conn.execute.return_value.mappings.return_value.all.return_value = []
+
+    _load_regular_task_templates(
+        conn,
+        template_filters=CatchUpTemplateFilters(
+            schedule_type="monthly",
+            regular_task_id=12,
+        ),
+    )
+
+    sql = str(conn.execute.call_args[0][0])
+    params = conn.execute.call_args[0][1]
+    assert "rt.regular_task_id = :regular_task_id" in sql
+    assert "LOWER(TRIM(COALESCE(rt.schedule_type, ''))) = :schedule_type" in sql
+    assert params["regular_task_id"] == 12
+    assert params["schedule_type"] == "monthly"
+
+
+def test_catch_up_endpoint_forwards_regular_task_id_ops_009_34(monkeypatch):
+    """Regression: Network payload with regular_task_id must reach service and response."""
+    captured: dict = {}
+
+    def fake_catch_up_tx(conn, **kwargs):
+        captured.update(kwargs)
+        resolved = build_catch_up_resolved_payload(
+            preset="past_month",
+            run_for_date=date(2026, 2, 1),
+            schedule_type="monthly",
+            regular_task_id=kwargs.get("regular_task_id"),
+        )
+        stats = {
+            "templates_total": 1,
+            "templates_due": 1,
+            "created": 0,
+            "deduped": 0,
+            "errors": 0,
+            "catch_up": dict(resolved),
+        }
+        resolved["templates_in_scope"] = 1
+        return 99, stats, resolved
+
+    mock_conn = MagicMock()
+    mock_tx = MagicMock()
+    mock_tx.__enter__.return_value = mock_conn
+    mock_tx.__exit__.return_value = False
+
+    monkeypatch.setattr(
+        "app.services.regular_tasks_router.engine.begin",
+        lambda: mock_tx,
+    )
+    monkeypatch.setattr(
+        "app.services.regular_tasks_router.run_regular_tasks_catch_up_tx",
+        fake_catch_up_tx,
+    )
+    monkeypatch.setattr(
+        "app.services.regular_tasks_router._resolve_runner_user",
+        lambda **_: {"user_id": 1, "role_id": int(SYSTEM_ADMIN_ROLE_ID)},
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/internal/regular-tasks/catch-up",
+        json={
+            "dry_run": True,
+            "preset": "past_month",
+            "schedule_type": "monthly",
+            "regular_task_id": 12,
+        },
+        headers={"Authorization": "Bearer pytest-token"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert captured["regular_task_id"] == 12
+    assert body["resolved"]["regular_task_id"] == 12
+    assert body["resolved"]["templates_in_scope"] == 1
+    assert body["stats"]["templates_total"] == 1
+    assert body["stats"]["templates_due"] == 1
+    assert body["stats"]["catch_up"]["regular_task_id"] == 12
 
 
 def _db_available() -> bool:
@@ -323,6 +435,65 @@ def test_catch_up_dry_run_scoped_by_regular_task_id(seed):
         conn.execute(
             text("DELETE FROM public.regular_tasks WHERE regular_task_id IN (:a, :b)"),
             {"a": rid_a, "b": rid_b},
+        )
+        conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :unit_id"), {"unit_id": unit_id})
+        conn.execute(text("DELETE FROM public.regular_task_runs WHERE run_id = :rid"), {"rid": int(run_id)})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_catch_up_past_month_monthly_scoped_by_regular_task_id(seed):
+    """OPS-009.34: past_month + monthly + regular_task_id scopes to one template."""
+    suffix = date.today().isoformat()
+    with engine.begin() as conn:
+        group_ids = _find_distinct_group_ids(conn, limit=1)
+        group_id = group_ids[0] if group_ids else 1
+        unit_id = _create_unit_with_group(conn, name=f"pytest_rt_catchup_monthly_{suffix}", group_id=group_id)
+
+        monthly_params = {"day": 1, "time": "00:00"}
+        rid_a = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP MONTHLY A {suffix}",
+            schedule_type="monthly",
+            schedule_params=monthly_params,
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+        )
+        rid_b = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP MONTHLY B {suffix}",
+            schedule_type="monthly",
+            schedule_params=monthly_params,
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+        )
+        rid_c = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP MONTHLY C {suffix}",
+            schedule_type="monthly",
+            schedule_params=monthly_params,
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+        )
+
+        run_id, stats, resolved = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="past_month",
+            dry_run=True,
+            schedule_type="monthly",
+            regular_task_id=rid_b,
+        )
+
+        assert resolved["regular_task_id"] == rid_b
+        assert resolved["schedule_type"] == "monthly"
+        assert stats["templates_total"] == 1
+        assert stats["templates_due"] == 1
+        assert stats["created"] == 0
+        assert resolved["templates_in_scope"] == 1
+        assert stats["catch_up"]["regular_task_id"] == rid_b
+
+        conn.execute(
+            text("DELETE FROM public.regular_tasks WHERE regular_task_id IN (:a, :b, :c)"),
+            {"a": rid_a, "b": rid_b, "c": rid_c},
         )
         conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :unit_id"), {"unit_id": unit_id})
         conn.execute(text("DELETE FROM public.regular_task_runs WHERE run_id = :rid"), {"rid": int(run_id)})

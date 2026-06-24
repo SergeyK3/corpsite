@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 
@@ -148,7 +148,7 @@ def run_regular_tasks(
 
 @router.post("/catch-up")
 def catch_up_regular_tasks(
-    payload: Optional[Dict[str, Any]] = None,
+    payload: Dict[str, Any] = Body(default_factory=dict),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     x_internal_api_token: Optional[str] = Header(default=None, alias="X-Internal-Api-Token"),
     creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_optional),
@@ -164,7 +164,6 @@ def catch_up_regular_tasks(
     )
     _require_system_admin(user)
 
-    payload = payload or {}
     dry_run = bool(payload.get("dry_run", False))
     preset_raw = str(payload.get("preset") or "").strip().lower()
     if preset_raw not in {"past_week", "past_month", "manual"}:
