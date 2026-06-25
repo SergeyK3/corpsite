@@ -18,6 +18,8 @@ import TemplateForm, {
   type TemplateFormValues,
 } from "../../regular-tasks/_components/TemplateForm";
 import TemplateViewPanel from "../../regular-tasks/_components/TemplateViewPanel";
+import SchedulerStatusPanel from "./SchedulerStatusPanel";
+import type { RegularTaskRunRow } from "@/lib/regularTaskRunJournal";
 
 type RegularTaskItem = {
   regular_task_id: number;
@@ -842,8 +844,12 @@ export default function RegularTasksAdminClient() {
     }
   }, [isTemplateFormMode]);
 
+  const schedulerRuns = runs as RegularTaskRunRow[];
+
   return (
     <div className="notranslate flex flex-col gap-3 text-zinc-900 dark:text-zinc-50" lang="ru" translate="no">
+      <SchedulerStatusPanel runs={schedulerRuns} loading={runsLoading} error={runsError} />
+
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 shadow-sm">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
