@@ -11,6 +11,7 @@ import EnrollmentTab from "./tabs/EnrollmentTab";
 import UserLinkageReviewTab from "./tabs/UserLinkageReviewTab";
 import UsersTab from "./tabs/UsersTab";
 import VisibilityTab from "./tabs/VisibilityTab";
+import TelegramStatusPanel from "./TelegramStatusPanel";
 
 type MainTab =
   | "users"
@@ -59,6 +60,8 @@ export default function SystemAdminClient() {
           </Link>
         </p>
       </header>
+
+      <TelegramStatusPanel />
 
       <nav className="flex flex-wrap gap-2" aria-label="Разделы кабинета">
         {TABS.map((tab) => (

@@ -1,6 +1,7 @@
 // FILE: corpsite-ui/app/admin/system/_lib/adminSystemApi.client.ts
 import { apiFetchJson } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
+import type { TelegramHealthResponse } from "@/lib/telegramHealthStatus";
 
 /* ---------- Users ---------- */
 
@@ -507,5 +508,19 @@ export async function fetchEffectivePersonnelVisibility(
 ): Promise<EffectivePersonnelVisibility> {
   return apiFetchJson<EffectivePersonnelVisibility>("/admin/personnel/visibility/effective", {
     query: { user_id: userId },
+  });
+}
+
+/* ---------- Telegram health (OPS-026.2) ---------- */
+
+export async function fetchTelegramHealth(params?: {
+  channel?: string;
+  window_hours?: number;
+}): Promise<TelegramHealthResponse> {
+  return apiFetchJson<TelegramHealthResponse>("/admin/system/telegram-health", {
+    query: {
+      channel: params?.channel,
+      window_hours: params?.window_hours,
+    },
   });
 }
