@@ -8,17 +8,13 @@ import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import { apiFetchJson } from "@/lib/api";
 import { formatThrownError, uiFieldLabel } from "@/lib/i18n";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
-
-type ContactItem = {
-  contact_id: number;
-  person_id?: number | null;
-  full_name?: string | null;
-  phone?: string | null;
-  telegram_username?: string | null;
-  telegram_numeric_id?: number | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
+import {
+  buildDisplayRows,
+  type ContactDisplayRow,
+  type ContactItem,
+  type PositionSlot,
+  type WorkingExpertRow,
+} from "@/lib/contactsDisplayRows";
 
 type ContactsResponse =
   | ContactItem[]
@@ -36,27 +32,6 @@ type ContactFormValues = {
   phone: string;
   telegram_numeric_id: string;
 };
-
-type PositionSlot = {
-  position_id: number;
-  name: string;
-};
-
-type WorkingExpertRow = {
-  user_id: number;
-  full_name?: string | null;
-  role_name?: string | null;
-  role_name_ru?: string | null;
-  phone?: string | null;
-  telegram_username?: string | null;
-  telegram_id?: number | null;
-  unit_name?: string | null;
-};
-
-type ContactDisplayRow =
-  | { kind: "contact"; item: ContactItem }
-  | { kind: "expert"; item: WorkingExpertRow }
-  | { kind: "slot"; position_id: number; slot_label: string };
 
 const POSITIONS_API = "/directory/positions";
 const WORKING_CONTACTS_API = "/directory/working-contacts";
@@ -146,14 +121,6 @@ function buildUrlWithoutOrgFilter(
   return query ? `${pathname}?${query}` : pathname;
 }
 
-function normalizeLabel(value?: string | null): string {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[ё]/g, "е")
-    .trim();
-}
-
 function normalizePositionItems(payload: unknown): PositionSlot[] {
   const body = payload as { items?: Array<{ position_id?: number; id?: number; name?: string }> };
   const items = Array.isArray(body?.items) ? body.items : [];
@@ -169,41 +136,11 @@ function normalizeWorkingExperts(payload: unknown): WorkingExpertRow[] {
   const body = payload as { items?: WorkingExpertRow[] };
   const items = Array.isArray(body?.items) ? body.items : [];
   return items.filter((row) => {
-    const role = normalizeLabel(row.role_name_ru ?? row.role_name);
+    const role = String(row.role_name_ru ?? row.role_name ?? "")
+      .toLowerCase()
+      .replace(/[ё]/g, "е");
     return role.includes("эксперт");
   });
-}
-
-function contactCoversLabel(contacts: ContactItem[], label: string): boolean {
-  const target = normalizeLabel(label);
-  if (!target) return false;
-
-  return contacts.some((contact) => {
-    const fullName = normalizeLabel(contact.full_name);
-    return fullName === target || fullName.includes(target) || target.includes(fullName);
-  });
-}
-
-function buildDisplayRows(
-  contacts: ContactItem[],
-  positions: PositionSlot[],
-  experts: WorkingExpertRow[],
-): ContactDisplayRow[] {
-  const rows: ContactDisplayRow[] = contacts.map((item) => ({ kind: "contact", item }));
-
-  for (const expert of experts) {
-    const roleLabel = String(expert.role_name_ru ?? expert.role_name ?? expert.full_name ?? "").trim();
-    if (!roleLabel || contactCoversLabel(contacts, roleLabel)) continue;
-
-    rows.push({ kind: "expert", item: expert });
-  }
-
-  for (const position of positions) {
-    if (contactCoversLabel(contacts, position.name)) continue;
-    rows.push({ kind: "slot", position_id: position.position_id, slot_label: position.name });
-  }
-
-  return rows;
 }
 
 function formatTelegramId(value?: number | null): string {
