@@ -22,6 +22,7 @@ from app.api.admin_schemas import (
     GuardModeResponse,
     SecurityAuditEventResponse,
 )
+from app.api.telegram_health_schemas import TelegramHealthResponse
 from app.security.admin_guard import require_sysadmin_api
 from app.services.access_grant_service import grant_access, list_access_grants, revoke_access
 from app.services.access_resolver_service import explain_effective_access, resolve_effective_access
@@ -67,6 +68,7 @@ from app.services.personnel_visibility_service import (
     revoke_visibility_assignment,
 )
 from app.services.security_audit_service import list_security_events
+from app.services.telegram_health_service import get_telegram_health
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -494,3 +496,13 @@ def admin_get_effective_personnel_visibility(
         return resolve_effective_personnel_visibility(int(user_id))
     except ValueError as exc:
         raise _value_error_to_http(exc) from exc
+
+
+@router.get("/system/telegram-health", response_model=TelegramHealthResponse)
+def admin_get_telegram_health(
+    channel: str = Query(default="telegram", min_length=1, max_length=32),
+    window_hours: int = Query(default=24, ge=1, le=168),
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    """Aggregated Telegram delivery diagnostics for sysadmin (OPS-026.2)."""
+    return get_telegram_health(channel=channel, window_hours=window_hours)
