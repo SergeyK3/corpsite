@@ -69,26 +69,79 @@ def _load_candidates(conn) -> list[dict[str, Any]]:
     return candidates
 
 
-def main() -> int:
+def _filter_candidates(
+    candidates: list[dict[str, Any]],
+    *,
+    user_id: int | None,
+    employee_id: int | None,
+) -> list[dict[str, Any]]:
+    filtered = candidates
+    if user_id is not None:
+        filtered = [item for item in filtered if item["user_id"] == user_id]
+    if employee_id is not None:
+        filtered = [item for item in filtered if item["employee_id"] == employee_id]
+    return filtered
+
+
+def _apply_requires_target_filter(*, apply: bool, user_id: int | None, employee_id: int | None) -> bool:
+    """Return True when --apply is used without --user-id or --employee-id."""
+    return apply and user_id is None and employee_id is None
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Backfill missing public.contacts rows for active users with employees.",
     )
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Create missing contacts. Default is dry-run report only.",
+        help="Create missing contacts. Requires --user-id or --employee-id.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--user-id",
+        type=int,
+        default=None,
+        metavar="ID",
+        help="Target only this user_id (dry-run report or apply).",
+    )
+    parser.add_argument(
+        "--employee-id",
+        type=int,
+        default=None,
+        metavar="ID",
+        help="Target only this employee_id (dry-run report or apply).",
+    )
+    args = parser.parse_args(argv)
+
+    if _apply_requires_target_filter(
+        apply=args.apply,
+        user_id=args.user_id,
+        employee_id=args.employee_id,
+    ):
+        print(
+            "ERROR: --apply requires a target filter: --user-id or --employee-id.",
+            file=sys.stderr,
+        )
+        return 2
 
     report: dict[str, Any] = {
         "mode": "apply" if args.apply else "dry_run",
+        "filter": {
+            "user_id": args.user_id,
+            "employee_id": args.employee_id,
+        },
         "candidates": [],
         "created": [],
         "errors": [],
     }
 
     with engine.begin() as conn:
-        candidates = _load_candidates(conn)
+        all_candidates = _load_candidates(conn)
+        candidates = _filter_candidates(
+            all_candidates,
+            user_id=args.user_id,
+            employee_id=args.employee_id,
+        )
         report["candidate_count"] = len(candidates)
         report["candidates"] = candidates
 
