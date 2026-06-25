@@ -32,6 +32,7 @@ from app.services.hr_import_normalized_record_service import (
 )
 from app.services.hr_import_roster_promotion_service import _insert_employee_identity
 from app.services.hr_event_registry import get_event_class
+from app.services.operational_contact_service import ensure_operational_contact_for_employee
 from app.services.security_audit_service import write_security_event
 
 EVENT_TYPE_ENROLLED_FROM_IMPORT = "EMPLOYEE_ENROLLED_FROM_IMPORT"
@@ -70,6 +71,8 @@ class EnrollEmployeeResult:
     created: bool = False
     matched_by: str = "iin"
     employee_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    contact_created: bool = False
     linked_records_count: int = 0
     linked_record_ids: list[int] = field(default_factory=list)
     linked_row_ids: list[int] = field(default_factory=list)
@@ -85,6 +88,8 @@ class EnrollEmployeeResult:
             "created": self.created,
             "matched_by": self.matched_by,
             "employee_id": self.employee_id,
+            "contact_id": self.contact_id,
+            "contact_created": self.contact_created,
             "linked_records_count": self.linked_records_count,
             "linked_record_ids": list(self.linked_record_ids),
             "linked_row_ids": list(self.linked_row_ids),
@@ -691,6 +696,12 @@ def enroll_employee_from_normalized_record(
         row_ids=row_ids_to_link,
     )
 
+    contact_result = ensure_operational_contact_for_employee(
+        conn,
+        employee_id=employee_id,
+        full_name=full_name,
+    )
+
     preview["org_unit_id"] = org_unit_id
     preview["org_unit_name"] = _org_unit_name(conn, org_unit_id)
     preview["position_id"] = position_id
@@ -701,6 +712,8 @@ def enroll_employee_from_normalized_record(
         outcome=OUTCOME_CREATED,
         created=True,
         employee_id=employee_id,
+        contact_id=contact_result.contact_id,
+        contact_created=contact_result.created,
         linked_records_count=len(linked_record_ids),
         linked_record_ids=linked_record_ids,
         linked_row_ids=linked_row_ids,

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user, hash_password
 from app.db.engine import engine
+from app.services.operational_contact_service import ensure_operational_contact_for_employee
 from app.security.directory_scope import is_privileged as _is_privileged
 
 router = APIRouter()
@@ -234,6 +235,11 @@ def create_user(
             raise HTTPException(status_code=500, detail="Unable to create user.")
 
         user_id = int(created["user_id"])
+        ensure_operational_contact_for_employee(
+            conn,
+            employee_id=int(body.employee_id),
+            full_name=full_name,
+        )
 
     row = _fetch_user_by_id(user_id)
     if not row:

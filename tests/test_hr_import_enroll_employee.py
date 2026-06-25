@@ -18,6 +18,7 @@ from app.services.hr_import_enroll_employee_service import (
     enroll_employee_from_normalized_record,
     EnrollEmployeeRequest,
 )
+from app.services.operational_contact_service import ensure_operational_contact_for_employee
 from app.services.hr_import_normalized_record_service import normalized_records_available
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, insert_returning_id, table_exists
@@ -318,6 +319,85 @@ def test_enroll_execute_creates_employee_and_links(seed, tmp_path: Path):
         with engine.begin() as conn:
             if batch_id:
                 _delete_batch(conn, batch_id)
+            if employee_id:
+                conn.execute(
+                    text("DELETE FROM public.contacts WHERE lower(trim(full_name)) = lower(trim(:name))"),
+                    {"name": full_name},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_identities WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_execute_creates_operational_contact_and_is_idempotent(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Enroll Contact {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+    employee_id = None
+    contact_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            if not table_exists(conn, "contacts"):
+                pytest.skip("contacts table missing")
+            pos_id = _create_position(conn, name=f"pytest_enroll_contact_{suffix}")
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(
+                    dry_run=False,
+                    org_unit_id=int(seed["unit_id"]),
+                    position_id=pos_id,
+                ),
+            )
+            employee_id = int(result.employee_id)
+            contact_id = result.contact_id
+            repeat = ensure_operational_contact_for_employee(
+                conn,
+                employee_id=employee_id,
+                full_name=full_name,
+            )
+            contact_count = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM public.contacts
+                    WHERE contact_id = :contact_id
+                      AND COALESCE(is_deleted, false) = false
+                    """
+                ),
+                {"contact_id": contact_id},
+            ).scalar_one()
+
+        assert result.contact_created is True
+        assert contact_id is not None
+        assert repeat.contact_id == contact_id
+        assert repeat.created is False
+        assert int(contact_count) == 1
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if contact_id:
+                conn.execute(text("DELETE FROM public.contacts WHERE contact_id = :id"), {"id": contact_id})
             if employee_id:
                 conn.execute(
                     text("DELETE FROM public.employee_events WHERE employee_id = :id"),

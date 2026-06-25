@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.db.engine import engine
+from app.services.operational_contact_service import ensure_operational_contact_for_employee
 from app.services.security_audit_service import write_security_event
 
 _ACTIVE_QUEUE = ("PENDING", "APPROVED")
@@ -665,6 +666,12 @@ def apply_enrollment(
             conn=conn,
         )
 
+        contact_result = ensure_operational_contact_for_employee(
+            conn,
+            employee_id=int(employee_id),
+            full_name=str(ctx.get("full_name") or "").strip() or None,
+        )
+
     return {
         "queue_id": int(queue_id),
         "queue_status": "ENROLLED",
@@ -673,5 +680,7 @@ def apply_enrollment(
         "employee_id": employee_id,
         "link_id": link_id,
         "created_employee": created_employee,
+        "contact_id": contact_result.contact_id,
+        "contact_created": contact_result.created,
         "audit_id": audit_id,
     }
