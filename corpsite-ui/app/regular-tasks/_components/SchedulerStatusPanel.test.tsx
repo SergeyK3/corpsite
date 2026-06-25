@@ -30,6 +30,9 @@ describe("SchedulerStatusPanel", () => {
     expect(screen.getByTestId("scheduler-status-panel")).toBeInTheDocument();
     expect(screen.getByTestId("scheduler-status-badge")).toHaveTextContent("Работает");
     expect(screen.getByTestId("scheduler-last-result")).toHaveTextContent("Успешно");
+    expect(screen.getByTestId("scheduler-data-source")).toHaveTextContent(
+      "Источник данных: журнал автоматических запусков",
+    );
     expect(screen.getByTestId("scheduler-journal-link")).toHaveAttribute("href", "/regular-task-runs");
 
     vi.useRealTimers();
@@ -37,7 +40,7 @@ describe("SchedulerStatusPanel", () => {
 
   it("shows loading state", () => {
     render(<SchedulerStatusPanel runs={[]} loading />);
-    expect(screen.getByText("Загрузка состояния…")).toBeInTheDocument();
+    expect(screen.getByText("Загрузка…")).toBeInTheDocument();
   });
 
   it("shows error state", () => {

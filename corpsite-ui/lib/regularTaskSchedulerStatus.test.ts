@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildSchedulerStatusView,
   isAutomaticLiveRun,
+  resolveAutomaticRunResultTone,
   SCHEDULER_OBSERVATION_WINDOW_DAYS,
-  type SchedulerHealthStatus,
 } from "./regularTaskSchedulerStatus";
 import type { RegularTaskRunRow } from "./regularTaskRunJournal";
 
@@ -176,6 +176,37 @@ describe("buildSchedulerStatusView", () => {
       { now: NOW },
     );
     expect(view.last_result_label).toBe("Успешно");
+    expect(view.last_result_tone).toBe("success");
     expect(view.last_successful_run_at_label).not.toBe("—");
+  });
+
+  it("prefers a newer global automatic run over an older org-scoped subset", () => {
+    const view = buildSchedulerStatusView(
+      [
+        automaticRun(30, "2026-06-25T10:00:00+05:00", "ok"),
+        automaticRun(20, "2026-06-22T10:00:00+05:00", "ok"),
+      ],
+      { now: NOW },
+    );
+    expect(view.last_run_at_label).toContain("25.06.2026");
+    expect(view.status).toBe("working");
+  });
+});
+
+describe("resolveAutomaticRunResultTone", () => {
+  it("maps run outcomes to badge tones", () => {
+    expect(resolveAutomaticRunResultTone(automaticRun(1, "2026-06-25T10:00:00+05:00", "ok"))).toBe(
+      "success",
+    );
+    expect(
+      resolveAutomaticRunResultTone(
+        automaticRun(2, "2026-06-25T10:00:00+05:00", "partial", { errors: 0 }),
+      ),
+    ).toBe("warning");
+    expect(
+      resolveAutomaticRunResultTone(
+        automaticRun(3, "2026-06-25T10:00:00+05:00", "ok", { errors: 2 }),
+      ),
+    ).toBe("error");
   });
 });

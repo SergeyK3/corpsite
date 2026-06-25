@@ -5,7 +5,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
-import { apiFetchJson } from "../../../lib/api";
+import { apiFetchJson, apiGetRegularTaskRuns } from "../../../lib/api";
 import { runStatusLabel, scheduleTypeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
 import { parseScheduleParamsText } from "@/lib/regularTaskScheduleParams";
@@ -300,6 +300,10 @@ export default function RegularTasksAdminClient() {
   const [runsLoading, setRunsLoading] = React.useState(false);
   const [runsError, setRunsError] = React.useState<string | null>(null);
 
+  const [schedulerRuns, setSchedulerRuns] = React.useState<RegularTaskRunRow[]>([]);
+  const [schedulerRunsLoading, setSchedulerRunsLoading] = React.useState(false);
+  const [schedulerRunsError, setSchedulerRunsError] = React.useState<string | null>(null);
+
   const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
   const [runItems, setRunItems] = React.useState<RunItem[]>([]);
   const [runItemsLoading, setRunItemsLoading] = React.useState(false);
@@ -441,6 +445,21 @@ export default function RegularTasksAdminClient() {
     }
   }, [orgGroupId, orgUnitId, selectedRunId]);
 
+  const loadSchedulerRuns = React.useCallback(async () => {
+    setSchedulerRunsLoading(true);
+    setSchedulerRunsError(null);
+
+    try {
+      const rows = await apiGetRegularTaskRuns();
+      setSchedulerRuns(rows as RegularTaskRunRow[]);
+    } catch (err) {
+      setSchedulerRunsError(errorText(err, "Не удалось загрузить состояние автоматического запуска."));
+      setSchedulerRuns([]);
+    } finally {
+      setSchedulerRunsLoading(false);
+    }
+  }, []);
+
   const loadRunItems = React.useCallback(
     async (runId: number) => {
       setRunItemsLoading(true);
@@ -465,8 +484,14 @@ export default function RegularTasksAdminClient() {
   );
 
   React.useEffect(() => {
-    void Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits(), loadExecutorRoles()]);
-  }, [loadTemplates, loadRuns, loadOwnerUnits, loadExecutorRoles]);
+    void Promise.all([
+      loadTemplates(),
+      loadRuns(),
+      loadSchedulerRuns(),
+      loadOwnerUnits(),
+      loadExecutorRoles(),
+    ]);
+  }, [loadTemplates, loadRuns, loadSchedulerRuns, loadOwnerUnits, loadExecutorRoles]);
 
   React.useEffect(() => {
     if (prevOrgUnitRef.current !== orgUnitId) {
@@ -597,7 +622,7 @@ export default function RegularTasksAdminClient() {
 
       setLastRunResult(result);
       setActiveTab("runs");
-      await loadRuns();
+      await Promise.all([loadRuns(), loadSchedulerRuns()]);
 
       if (result?.run_id) {
         setSelectedRunId(result.run_id);
@@ -634,7 +659,13 @@ export default function RegularTasksAdminClient() {
       return;
     }
 
-    await Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits(), loadExecutorRoles()]);
+    await Promise.all([
+      loadTemplates(),
+      loadRuns(),
+      loadSchedulerRuns(),
+      loadOwnerUnits(),
+      loadExecutorRoles(),
+    ]);
 
     if (selectedRunId != null) {
       await loadRunItems(selectedRunId);
@@ -844,11 +875,13 @@ export default function RegularTasksAdminClient() {
     }
   }, [isTemplateFormMode]);
 
-  const schedulerRuns = runs as RegularTaskRunRow[];
-
   return (
     <div className="notranslate flex flex-col gap-3 text-zinc-900 dark:text-zinc-50" lang="ru" translate="no">
-      <SchedulerStatusPanel runs={schedulerRuns} loading={runsLoading} error={runsError} />
+      <SchedulerStatusPanel
+        runs={schedulerRuns}
+        loading={schedulerRunsLoading}
+        error={schedulerRunsError}
+      />
 
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 shadow-sm">
         <div className="flex flex-col gap-3">

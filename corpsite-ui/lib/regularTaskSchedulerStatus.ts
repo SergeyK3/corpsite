@@ -13,12 +13,15 @@ export const SCHEDULER_OBSERVATION_WINDOW_DAYS = 8;
 
 export type SchedulerHealthStatus = "working" | "needs_attention" | "no_data";
 
+export type SchedulerResultTone = "success" | "warning" | "error" | "neutral";
+
 export type SchedulerStatusView = {
   status: SchedulerHealthStatus;
   status_label: string;
   last_run_at_label: string;
   last_successful_run_at_label: string;
   last_result_label: string;
+  last_result_tone: SchedulerResultTone;
 };
 
 const STATUS_LABELS: Record<SchedulerHealthStatus, string> = {
@@ -55,6 +58,18 @@ export function resolveAutomaticRunResultLabel(run: RegularTaskRunRow): string {
     if (Number(run.stats?.errors ?? 0) > 0) return "С ошибками";
   }
   return runStatusLabel(run.status);
+}
+
+export function resolveAutomaticRunResultTone(run: RegularTaskRunRow): SchedulerResultTone {
+  if (automaticRunHasIssues(run)) {
+    const status = String(run.status ?? "").trim().toLowerCase();
+    if (status === "partial") return "warning";
+    return "error";
+  }
+
+  const status = String(run.status ?? "").trim().toLowerCase();
+  if (status === "ok") return "success";
+  return "neutral";
 }
 
 function compareRunsByStartedAtDesc(a: RegularTaskRunRow, b: RegularTaskRunRow): number {
@@ -96,6 +111,7 @@ export function buildSchedulerStatusView(
       last_run_at_label: "—",
       last_successful_run_at_label: "—",
       last_result_label: "—",
+      last_result_tone: "neutral",
     };
   }
 
@@ -122,5 +138,6 @@ export function buildSchedulerStatusView(
       ? fmtDateTime(lastSuccessfulRun.started_at)
       : "—",
     last_result_label: resolveAutomaticRunResultLabel(lastRun),
+    last_result_tone: resolveAutomaticRunResultTone(lastRun),
   };
 }
