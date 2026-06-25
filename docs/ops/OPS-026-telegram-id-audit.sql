@@ -27,7 +27,10 @@ WHERE lower(u.login) = 'qm_amb@corp.local'
 ORDER BY u.user_id;
 
 -- =============================================================================
--- 2. contacts / key_contacts planes for ambulatory expert person
+-- 2. contacts + optional operational bridge planes
+--    public.contacts is migrated (Alembic f8c2a91b4e10).
+--    public.key_contacts is optional — repo has key_contacts.csv but production
+--    VPS schema may not include the table; expert delivery uses users.telegram_id.
 -- =============================================================================
 SELECT
     'contacts_qm_amb_name' AS section,
@@ -46,12 +49,73 @@ WHERE COALESCE(c.is_deleted, false) = false
 ORDER BY c.contact_id;
 
 SELECT
-    'key_contacts_qm_amb' AS section,
-    kc.*
-FROM public.key_contacts kc
-WHERE kc.role_code = 'QM_AMB'
-   OR lower(kc.full_name) LIKE '%акил%'
-ORDER BY kc.role_code;
+    'operational_bridge_schema' AS section,
+    to_regclass('public.key_contacts')::text AS key_contacts,
+    to_regclass('public.v_key_contacts_auto')::text AS v_key_contacts_auto,
+    to_regclass('public.contacts_working')::text AS contacts_working;
+
+DROP TABLE IF EXISTS _ops026_optional_audit;
+CREATE TEMP TABLE _ops026_optional_audit (
+    section text NOT NULL,
+    row_num int NOT NULL,
+    data jsonb NOT NULL,
+    PRIMARY KEY (section, row_num)
+);
+
+DO $ops026$
+BEGIN
+    IF to_regclass('public.key_contacts') IS NOT NULL THEN
+        EXECUTE $sql$
+            INSERT INTO _ops026_optional_audit (section, row_num, data)
+            SELECT
+                'key_contacts_qm_amb',
+                row_number() OVER (ORDER BY kc.role_code, kc.person_id NULLS LAST),
+                row_to_json(kc)::jsonb
+            FROM public.key_contacts kc
+            WHERE kc.role_code = 'QM_AMB'
+               OR lower(COALESCE(kc.full_name, '')) LIKE '%акил%'
+        $sql$;
+    ELSE
+        INSERT INTO _ops026_optional_audit (section, row_num, data) VALUES (
+            'key_contacts_qm_amb',
+            1,
+            jsonb_build_object(
+                'status', 'table_absent',
+                'message', 'public.key_contacts is not in this database schema',
+                'authoritative_bind', 'public.users.telegram_id (section 1)',
+                'static_reference', 'repo key_contacts.csv (not loaded to production DB)'
+            )
+        );
+    END IF;
+
+    IF to_regclass('public.contacts_working') IS NOT NULL THEN
+        EXECUTE $sql$
+            INSERT INTO _ops026_optional_audit (section, row_num, data)
+            SELECT
+                'contacts_working_qm_amb',
+                row_number() OVER (ORDER BY cw.contact_id),
+                row_to_json(cw)::jsonb || jsonb_build_object(
+                    'contact_full_name', c.full_name,
+                    'contact_telegram_numeric_id', c.telegram_numeric_id
+                )
+            FROM public.contacts_working cw
+            JOIN public.contacts c ON c.contact_id = cw.contact_id
+            WHERE COALESCE(c.is_deleted, false) = false
+              AND (
+                lower(c.full_name) LIKE '%акил%'
+                OR lower(c.full_name) LIKE '%амбул%'
+              )
+        $sql$;
+    END IF;
+END
+$ops026$;
+
+SELECT
+    section,
+    row_num,
+    data
+FROM _ops026_optional_audit
+ORDER BY section, row_num;
 
 -- =============================================================================
 -- 3. Duplicate telegram_id across users (C5)
@@ -129,15 +193,17 @@ LIMIT 20;
 --     LIMIT 1
 -- )
 --   AND trim(COALESCE(telegram_id::text, '')) = '<OLD_TG_FROM_SELECT>';
--- -- Optional: sync contacts plane if numeric id stored separately
+-- -- Optional: sync contacts plane if numeric id stored separately (section 2a match)
 -- UPDATE public.contacts
 -- SET telegram_numeric_id = 7685102887,
 --     updated_at = NOW()
 -- WHERE contact_id IN (
 --     SELECT c.contact_id
 --     FROM public.contacts c
---     JOIN public.key_contacts kc ON kc.person_id = c.person_id
---     WHERE kc.role_code = 'QM_AMB'
+--     WHERE COALESCE(c.is_deleted, false) = false
+--       AND lower(c.full_name) LIKE '%акил%'
 -- )
 --   AND COALESCE(telegram_numeric_id::text, '') = '<OLD_TG_FROM_SELECT>';
+-- -- If public.key_contacts exists (to_regclass check), prefer its person_id bridge
+-- -- instead of name match; production VPS typically has no key_contacts table.
 -- COMMIT;

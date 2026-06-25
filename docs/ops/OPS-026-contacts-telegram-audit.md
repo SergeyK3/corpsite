@@ -13,6 +13,7 @@
 | Frontend | `corpsite-ui/app/directory/contacts/page.tsx` |
 | Expert slots | `GET /directory/working-contacts` (unchanged; merged in UI) |
 | Positions / empty slots | `GET /directory/positions` (unchanged) |
+| Static expert roster (repo) | `key_contacts.csv` at repo root — **not** a production DB table unless separately migrated |
 
 ### Tables involved (before fix)
 
@@ -41,12 +42,16 @@ Search (`q`) unchanged: ID, person_id, FIO, phone, Telegram ID.
 
 ## Problem 2 — Telegram ID audit
 
-Run **before** any UPDATE:
+Run **before** any UPDATE (from repo root, with project venv and `DATABASE_URL` set):
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/ops/OPS-026-telegram-id-audit.sql
-python scripts/ops/ops026_amb_expert_telegram_audit.py
+.venv/bin/python scripts/ops/ops026_amb_expert_telegram_audit.py
 ```
+
+On VPS/production the backend runs inside the project virtualenv — use `.venv/bin/python`, not system `python`.
+
+Section 2 of the SQL script probes optional bridge objects (`key_contacts`, `contacts_working`, `v_key_contacts_auto`) via `to_regclass()`. Production VPS has `public.contacts` and `public.users` but typically **no** `public.key_contacts` table; expert slot reference lives in repo `key_contacts.csv` and authoritative bot bind is `users.telegram_id` (section 1).
 
 ### Known static references (repo, not DB)
 

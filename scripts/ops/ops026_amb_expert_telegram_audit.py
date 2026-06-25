@@ -8,7 +8,8 @@ from typing import Any
 
 from sqlalchemy import text
 
-# Allow running from repo root: python scripts/ops/ops026_amb_expert_telegram_audit.py
+# Allow running from repo root:
+#   .venv/bin/python scripts/ops/ops026_amb_expert_telegram_audit.py
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
