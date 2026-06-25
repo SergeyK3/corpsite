@@ -9,7 +9,7 @@
 | **ADR-044** (Identity Reconciliation R1–R2.5g) | **Complete** — implementation phases closed; R3 post-R2 validation gate remains planned in ADR, not active OPS work |
 | **Telegram bot (OPS-007 series)** | **Complete** through OPS-007b VPS validation |
 | **Operations UI localization (OPS-008)** | **Complete** — R2.5g Identity Operations panel |
-| **Regular tasks catch-up & run journal (OPS-009 program)** | **Complete** — through OPS-009.22 |
+| **Regular tasks catch-up & run journal (OPS-009 program)** | **Complete** — through OPS-009.34 (monthly E2E verified on prod) |
 
 ---
 
@@ -26,6 +26,12 @@
 | [OPS-011](#ops-011--telegram-legacy-bindings-removal) | Telegram Legacy Bindings Removal | Low | **Deferred** |
 | [OPS-012](#ops-012--test-suite-stabilization) | Test Suite Stabilization | Low | **Open** |
 | [OPS-013](#ops-013--regular-task-run-journal-cleanup) | Regular Task Run Journal Cleanup | Low | **Backlog** |
+| [OPS-015](#ops-015--long-task-title-rendering) | Long Task Title Rendering | Low | **Backlog** |
+| [OPS-016](#ops-016--template-view-cleanup) | Template View Cleanup | Low | **Backlog** |
+| [OPS-017](#ops-017--catch-up-backup-warning-ux) | Catch-up Backup Warning UX | Low | **Backlog** |
+| [OPS-018](#ops-018--catch-up-historical-deadline-semantics) | Catch-up Historical Deadline Semantics | Medium | **Discussion** |
+| [OPS-019](#ops-019--catch-up-filter-observability) | Catch-up Filter Observability | Low | **Backlog** |
+| [OPS-021](#ops-021--catch-up-form-ux-periodicity-first-layout) | Catch-up Form UX — Periodicity-first | Medium | **Complete** |
 | [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md) | Org-unit allowed positions (Future ADR) | Medium | **Proposed** |
 
 ---
@@ -99,9 +105,9 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 ### OPS-009 — Regular Tasks Catch-up & Run Journal Program
 
 **Приоритет:** High  
-**Статус:** **Complete** (program closed 2026-06-22)
+**Статус:** **Complete** (program closed 2026-06-25)
 
-**Program scope:** Regular-task catch-up ACL, origin metadata, Safe Catch-Up UI, admin task visibility, run journal outcome observability, production investigations and fixes.
+**Program scope:** Regular-task catch-up ACL, origin metadata, Safe Catch-Up UI, admin task visibility, run journal outcome observability, monthly template lifecycle, catch-up template filter, production investigations and fixes.
 
 **Base deliverable (2026-06-21):** sysadmin run journal ACL + task origin metadata — commit `7a6f4ed`.
 
@@ -118,8 +124,24 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 | OPS-009.20 | Admin task visibility + Catch-Up UI RU | **Complete** | `dc9c6dd`, prod run #40/#41 |
 | OPS-009.21 | Run journal outcome observability | **Complete** | `83a3621` |
 | OPS-009.22 | Legacy task #10006 investigation | **Complete** | [OPS-009.22 investigation](../ops/OPS-009.22-task-10006-investigation.md) |
+| OPS-009.30–009.32 | Monthly template E2E (create/edit/save/catch-up/tasks) | **Complete** | prod verification 2026-06-25 |
+| OPS-009.33 | Catch-up template filter verification | **Complete** | Network trace + root-cause analysis |
+| OPS-009.34 | Catch-up template filter runtime fix | **Complete** | router → filters → SQL; regression tests |
 
-**Program outcome:** Safe Catch-Up verified on prod; ADMIN sees all tasks via `scope=team`; run journal shows task lifecycle outcome counts.
+**Program outcome:** Safe Catch-Up verified on prod; ADMIN sees all tasks via `scope=team`; run journal shows task lifecycle outcome counts. Monthly workflow E2E on prod: Template → Preview → Live Run → Task Creation → Task View. Template filter (`regular_task_id`) confirmed: `templates_total=1`, single task created.
+
+#### POST-OPS review (2026-06-25)
+
+**Confirmed working on production:**
+
+- Monthly templates: create, edit, save, catch-up preview/live, task creation.
+- Template filter (OPS-009.34): selecting template #12 → `templates_total=1`, `templates_due=1`, one task created.
+- Executor role selector: human-readable dropdown in production.
+- Schedule type switching: weekly/monthly/yearly rebuilds `schedule_params` JSON correctly.
+
+**No critical defects** in the monthly contour after OPS-009.34.
+
+**Backlog candidates** from review → [OPS-015](#ops-015--long-task-title-rendering) … [OPS-019](#ops-019--catch-up-filter-observability).
 
 ---
 
@@ -190,6 +212,111 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 
 ---
 
+### OPS-015 — Long Task Title Rendering
+
+**Приоритет:** Low  
+**Статус:** **Backlog**
+
+**Problem:** Long task titles truncate in the task card header (e.g. «Подготовить Ежемесячный отчет по протоколам МДГ → Ам…»).
+
+**Scope to analyze:**
+
+- Drawer header
+- Table rendering
+- Mobile layout
+
+**Options:** multi-line wrap, tooltip, adaptive title block.
+
+**Non-urgent:** cosmetic UX; does not block monthly workflow.
+
+---
+
+### OPS-016 — Template View Cleanup
+
+**Приоритет:** Low  
+**Статус:** **Backlog**
+
+**Problem:** In template **view** mode, executor role appears twice: numeric «ID роли исполнителя» block and separate «Исполнитель» label. Edit mode already uses human-readable role dropdown.
+
+**Proposal:** Show human-readable role in view mode; keep `role_id` only in technical/service info if needed at all.
+
+**Reference:** `TemplateViewPanel.tsx`, `RegularTasksAdminClient.tsx`.
+
+---
+
+### OPS-017 — Catch-up Backup Warning UX
+
+**Приоритет:** Low  
+**Статус:** **Backlog**
+
+**Problem:** Catch-up confirm step shows: «Рекомендуется выполнить резервную копию БД… (на VPS: `scripts/backup_db.sh`)» — opaque for non-ops users.
+
+**Options:**
+
+- User-facing Russian copy without shell paths
+- Move `scripts/backup_db.sh` to tooltip or admin-only hint
+- Show warning only to System Administrator role
+
+**Reference:** `CatchUpRunClient.tsx` confirm section.
+
+---
+
+### OPS-018 — Catch-up Historical Deadline Semantics
+
+**Приоритет:** Medium  
+**Статус:** **Discussion** (no code change until business rule agreed)
+
+**Observed case (prod):**
+
+| Field | Value |
+|-------|-------|
+| Reporting period | 01.04.2026–30.04.2026 |
+| Task created | 25.06.2026 |
+| Due date | 30.04.2026 |
+
+**Current behavior:** catch-up preserves historical period deadline — logically correct for reporting period, but executor receives a newly created task already overdue.
+
+**Options (pick one after stakeholder review):**
+
+1. Keep historical deadline (status quo).
+2. Store original deadline + actual creation date + catch-up flag.
+3. Special display mode: «Создано догоняющим запуском».
+
+**Explicit non-goal now:** do not change deadline logic without ADR/ops sign-off.
+
+---
+
+### OPS-019 — Catch-up Filter Observability
+
+**Приоритет:** Low  
+**Статус:** **Backlog**
+
+**Origin:** OPS-009.34 — frontend sent `regular_task_id`, backend dropped it; diagnosis required Network + `resolved` inspection.
+
+**Improvement:** Always surface applied catch-up filters in API response and run journal:
+
+- `resolved.regular_task_id`
+- `resolved.org_unit_id`
+- `resolved.executor_role_id`
+- `resolved.org_group_id`
+
+**Goal:** Faster ops investigations without guessing which filters were applied at runtime.
+
+**Reference:** `CatchUpReviewPanel`, run journal `stats.catch_up`, catch-up API `resolved` payload.
+
+---
+
+### OPS-021 — Catch-up Form UX: Periodicity-first layout
+
+**Приоритет:** Medium  
+**Статус:** **Complete** (2026-06-25)
+
+**Delivered:** Periodicity-first form layout; dynamic period selector per schedule type (weekly/monthly/yearly); executor label «Исполнитель»; payload mapping via `preset` + `manual`/`run_for_date` without backend changes.
+
+**Modules:** `CatchUpRunClient.tsx`, `catchUpPeriodOptions.ts`, `i18n.ts`.
+
+---
+
 ## ADR-046 — Org-unit allowed positions (Future)
 
 **Status:** Proposed — not scheduled  
@@ -246,3 +373,6 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 | OPS-009.22 task #10006 investigation complete | 2026-06-22 |
 | OPS-009 program closed; OPS-009.24 backlog reconciliation | 2026-06-22 |
 | ADR-046 proposed (org-unit allowed positions) | 2026-06-22 |
+| OPS-009.30–009.34 monthly E2E + template filter fix verified on prod | 2026-06-25 |
+| POST-OPS review; OPS-015–019 added to backlog | 2026-06-25 |
+| OPS-021 catch-up form periodicity-first layout | 2026-06-25 |

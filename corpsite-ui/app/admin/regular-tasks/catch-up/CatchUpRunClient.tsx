@@ -10,15 +10,18 @@ import {
   apiCatchUpRegularTasks,
   apiFetchJson,
   apiGetRegularTaskRunItems,
-  type CatchUpPreset,
   type CatchUpRegularTasksParams,
   type CatchUpRegularTasksResult,
 } from "@/lib/api";
 import {
+  buildCatchUpPeriodOptions,
+  findCatchUpPeriodOption,
+  resolveDefaultPeriodKey,
+  type CatchUpPeriodOption,
+} from "@/lib/catchUpPeriodOptions";
+import {
   buildCatchUpPayload,
-  pastWeekPresetHint,
   payloadsEquivalent,
-  resolveDefaultScheduleType,
   validateCatchUpForm,
   type CatchUpFormState,
   type CatchUpScheduleType,
@@ -123,12 +126,6 @@ function resolveOrgGroupId(filter: OrgGroupFilter, deptGroups: DeptGroupRow[]): 
   return envId;
 }
 
-function presetLabel(p: CatchUpPreset): string {
-  if (p === "past_week") return `Прошлая неделя (${scheduleTypeLabel("weekly")})`;
-  if (p === "past_month") return `Прошлый месяц (${scheduleTypeLabel("monthly")})`;
-  return "Ручная дата";
-}
-
 function resolveActiveStep(params: {
   previewResult: CatchUpRegularTasksResult | null;
   previewItems: RegularTaskRunItemRow[];
@@ -195,9 +192,8 @@ export default function CatchUpRunClient() {
   const sp = useSearchParams();
   const orgUnitFromUrl = sp.get("org_unit_id") ?? "";
 
-  const [preset, setPreset] = React.useState<CatchUpPreset>("past_week");
-  const [manualDate, setManualDate] = React.useState("");
   const [scheduleType, setScheduleType] = React.useState<CatchUpScheduleType>("weekly");
+  const [periodKey, setPeriodKey] = React.useState(() => resolveDefaultPeriodKey("weekly"));
   const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
   const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
   const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
@@ -247,10 +243,20 @@ export default function CatchUpRunClient() {
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
   }, [regularTaskId]);
 
+  const periodOptions = React.useMemo(
+    () => buildCatchUpPeriodOptions(scheduleType),
+    [scheduleType],
+  );
+
+  const selectedPeriod = React.useMemo<CatchUpPeriodOption | null>(
+    () => findCatchUpPeriodOption(scheduleType, periodKey),
+    [scheduleType, periodKey],
+  );
+
   const formState = React.useMemo<CatchUpFormState>(
     () => ({
-      preset,
-      manualDate,
+      preset: selectedPeriod?.preset ?? "past_week",
+      manualDate: selectedPeriod?.manualDate ?? "",
       scheduleType,
       orgGroupId: selectedOrgGroupId,
       orgUnitId: parsedOrgUnitId,
@@ -258,8 +264,7 @@ export default function CatchUpRunClient() {
       regularTaskId: parsedRegularTaskId,
     }),
     [
-      preset,
-      manualDate,
+      selectedPeriod,
       scheduleType,
       selectedOrgGroupId,
       parsedOrgUnitId,
@@ -282,6 +287,12 @@ export default function CatchUpRunClient() {
 
   const templatesDue = previewResult?.stats?.templates_due ?? 0;
   const hasTemplatesToRun = templatesDue > 0;
+
+  React.useEffect(() => {
+    if (!periodOptions.some((opt) => opt.key === periodKey)) {
+      setPeriodKey(periodOptions[0]?.key ?? "");
+    }
+  }, [periodOptions, periodKey]);
 
   React.useEffect(() => {
     setOrgUnitId(orgUnitFromUrl);
@@ -465,9 +476,9 @@ export default function CatchUpRunClient() {
     }
   }, [filteredOwnerUnitOptions, orgUnitId]);
 
-  function handlePresetChange(next: CatchUpPreset) {
-    setPreset(next);
-    setScheduleType(resolveDefaultScheduleType(next));
+  function handleScheduleTypeChange(next: CatchUpScheduleType) {
+    setScheduleType(next);
+    setPeriodKey(resolveDefaultPeriodKey(next));
     resetWorkflow();
   }
 
@@ -566,32 +577,14 @@ export default function CatchUpRunClient() {
 
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">1. Параметры и пробный прогон</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("preset")}</span>
-            <select
-              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
-              value={preset}
-              onChange={(e) => handlePresetChange(e.target.value as CatchUpPreset)}
-            >
-              <option value="past_week">{presetLabel("past_week")}</option>
-              <option value="past_month">{presetLabel("past_month")}</option>
-              <option value="manual">{presetLabel("manual")}</option>
-            </select>
-            {preset === "past_week" ? (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">{pastWeekPresetHint()}</span>
-            ) : null}
-          </label>
-
+        <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="catch-up-form-grid">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("schedule_type")}</span>
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={scheduleType}
-              onChange={(e) => {
-                setScheduleType(e.target.value as CatchUpScheduleType);
-                resetWorkflow();
-              }}
+              onChange={(e) => handleScheduleTypeChange(e.target.value as CatchUpScheduleType)}
+              data-testid="catch-up-schedule-type"
             >
               {SCHEDULE_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -601,24 +594,24 @@ export default function CatchUpRunClient() {
             </select>
           </label>
 
-          {preset === "manual" ? (
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("run_for_date")}</span>
-              <input
-                type="date"
-                className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
-                value={manualDate}
-                onChange={(e) => {
-                  setManualDate(e.target.value);
-                  resetWorkflow();
-                }}
-              />
-            </label>
-          ) : (
-            <div className="flex flex-col justify-end text-sm text-zinc-600 dark:text-zinc-400">
-              {catchUpUiLabel("run_for_date_auto")}
-            </div>
-          )}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("preset")}</span>
+            <select
+              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
+              value={periodKey}
+              onChange={(e) => {
+                setPeriodKey(e.target.value);
+                resetWorkflow();
+              }}
+              data-testid="catch-up-period-select"
+            >
+              {periodOptions.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-zinc-800 dark:text-zinc-200">Группа отделений (опционально)</span>
@@ -630,6 +623,7 @@ export default function CatchUpRunClient() {
                 setOrgUnitId("");
                 resetWorkflow();
               }}
+              data-testid="catch-up-org-group"
             >
               {ORG_GROUP_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -651,6 +645,7 @@ export default function CatchUpRunClient() {
                 resetWorkflow();
               }}
               disabled={ownerUnitLoading}
+              data-testid="catch-up-org-unit"
             >
               <option value="">Все отделения в группе</option>
               {unitSelectGroups.map((group) => (
@@ -680,6 +675,7 @@ export default function CatchUpRunClient() {
                 resetWorkflow();
               }}
               disabled={rolesLoading}
+              data-testid="catch-up-executor"
             >
               <option value="">Все роли</option>
               {roleOptions.map((role) => (

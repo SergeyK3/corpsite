@@ -52,7 +52,7 @@ export const CATCH_UP_UI_LABELS: Readonly<Record<string, string>> = {
   preset: "Период запуска",
   run_for_date: "Опорная дата",
   schedule_type: "Периодичность",
-  executor_role_id: "Роль исполнителя",
+  executor_role_id: "Исполнитель",
   regular_task_id: "Шаблон задачи",
   templates_total: "Всего шаблонов",
   templates_due: "К запуску",
