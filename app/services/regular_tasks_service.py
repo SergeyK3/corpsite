@@ -810,17 +810,16 @@ def _resolve_journal_warning(
     return None
 
 
-def _compose_task_title(*, base_title: str, role_name: str, suffix: str) -> str:
+def _compose_task_title(*, base_title: str, suffix: str) -> str:
     bt = (base_title or "").strip() or "Без названия"
-    rn = (role_name or "").strip() or "Без роли"
     suf = (suffix or "").strip()
 
     if suf and re.search(rf"\(\s*{re.escape(suf)}\s*\)\s*$", bt):
         bt = re.sub(rf"\(\s*{re.escape(suf)}\s*\)\s*$", "", bt).strip()
 
     if suf:
-        return f"{bt} → {rn} ({suf})"
-    return f"{bt} → {rn}"
+        return f"{bt} ({suf})"
+    return bt
 
 
 _ORIGIN_METADATA_RUN_MARKER = "ID запуска:"
@@ -1337,7 +1336,6 @@ def run_regular_tasks_generation_tx(
 
                 title_final = _compose_task_title(
                     base_title=base_title,
-                    role_name=role_name,
                     suffix=suffix,
                 )
 

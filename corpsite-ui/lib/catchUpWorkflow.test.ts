@@ -33,7 +33,7 @@ const sampleItem: RegularTaskRunItemRow = {
     period_end: "2026-06-23",
     due_date: "2026-06-23",
     occurrence_date: "2026-06-24",
-    title_final: "QM weekly → Госпитальный эксперт (17.06.2026–23.06.2026)",
+    title_final: "Подготовить QM weekly (17.06.2026–23.06.2026)",
     reason: "dry_run",
   },
 };
