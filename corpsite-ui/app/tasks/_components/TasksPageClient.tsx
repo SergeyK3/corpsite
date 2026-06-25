@@ -12,6 +12,7 @@ import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
 import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib/taskNav";
 import { canEditTask, editButtonTitle, isTaskRowEditable } from "@/lib/taskEditPolicy";
+import { taskPeriodicityLabel } from "@/lib/taskPeriodicity";
 import { resolveTaskReportLink } from "@/lib/taskReportLink";
 import { canSeeTeamTasks as userCanSeeTeamTasks, isTaskSystemAdmin } from "@/lib/taskScopePolicy";
 import type { MeInfo } from "@/lib/types";
@@ -830,7 +831,7 @@ export default function TasksPageClient() {
     [selectedItem, readOnlyTeamMode, isSystemAdmin],
   );
 
-  const tableColSpan = showExecutorColumn ? 6 : 5;
+  const tableColSpan = showExecutorColumn ? 7 : 6;
 
   const departmentDiLibraryUrl = React.useMemo(
     () => getDepartmentDiLibraryUrl(me?.unit_id),
@@ -1008,7 +1009,8 @@ export default function TasksPageClient() {
                 <table className="w-full table-fixed border-collapse">
                   <colgroup>
                     <col className="w-[48px]" />
-                    <col className="w-[300px]" />
+                    <col className="w-[280px]" />
+                    <col className="w-[108px]" />
                     {showExecutorColumn ? <col className="w-[200px]" /> : null}
                     <col className="w-[92px]" />
                     <col className="w-[92px]" />
@@ -1022,6 +1024,10 @@ export default function TasksPageClient() {
                       </th>
                       <th className="px-1.5 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Название
+                      </th>
+
+                      <th className="px-2 py-3 text-xs font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                        Периодичность
                       </th>
 
                       {showExecutorColumn ? (
@@ -1073,6 +1079,13 @@ export default function TasksPageClient() {
 
                             <td className="px-2 py-2 text-sm leading-5 text-zinc-900 dark:text-zinc-50">
                               <div className="max-w-full whitespace-normal break-words">{taskTitleOf(item)}</div>
+                            </td>
+
+                            <td
+                              className="px-2 py-2 text-sm leading-5 text-zinc-600 dark:text-zinc-400"
+                              data-testid={`task-periodicity-${id}`}
+                            >
+                              <span className="whitespace-nowrap">{taskPeriodicityLabel(item)}</span>
                             </td>
 
                             {showExecutorColumn ? (

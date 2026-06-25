@@ -75,6 +75,7 @@ export type TaskListItem = {
   status_name_ru?: string;
 
   task_kind?: string | null;
+  schedule_type?: string | null;
   requires_report?: boolean;
   requires_approval?: boolean;
   source_kind?: string | null;
@@ -122,6 +123,7 @@ export type TaskDetails = {
   status_name_ru?: string;
 
   task_kind?: string | null;
+  schedule_type?: string | null;
   requires_report?: boolean;
   requires_approval?: boolean;
   source_kind?: string | null;

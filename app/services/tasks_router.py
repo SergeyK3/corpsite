@@ -398,6 +398,7 @@ def list_tasks(
                 t.source_kind,
                 t.source_note,
                 t.due_date,
+                rt.schedule_type AS schedule_type,
                 ts.code AS status_code,
                 ts.name_ru AS status_name_ru,
                 {effective_org_unit_sql} AS org_unit_id,

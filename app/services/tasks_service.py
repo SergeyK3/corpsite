@@ -607,6 +607,7 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
                 t.source_kind,
                 t.source_note,
                 t.due_date,
+                rt.schedule_type AS schedule_type,
                 ts.code AS status_code,
                 ts.name_ru AS status_name_ru,
 
@@ -625,6 +626,7 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
             FROM public.tasks t
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
             LEFT JOIN public.roles er ON er.role_id = t.executor_role_id
+            LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
             LEFT JOIN LATERAL (
                 SELECT
                     ue.user_id AS executor_user_id,
