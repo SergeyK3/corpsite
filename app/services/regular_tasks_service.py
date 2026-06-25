@@ -100,13 +100,13 @@ def _compute_base_title_from_template(*, report_code: str, template_title: str) 
     """
     tt = (template_title or "").strip()
     if tt:
-        return f"Подготовить {tt}"
+        return tt
 
     code = (report_code or "").strip()
     if code:
-        return f"Подготовить {code}"
+        return code
 
-    return "Подготовить отчёт"
+    return "Отчёт"
 
 
 @dataclass(frozen=True)
