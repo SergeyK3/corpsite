@@ -382,7 +382,7 @@ function ContactDrawer({
                   onChange={(e) =>
                     setValues((prev) => ({ ...prev, telegram_numeric_id: e.target.value }))
                   }
-                  placeholder="Например: 885342581"
+                  placeholder="Например: 7685102887"
                   autoComplete="off"
                   spellCheck={false}
                   className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
@@ -770,7 +770,23 @@ export default function ContactsPage() {
                     {displayRows.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
-                          {loading ? "Загрузка..." : "Записи не найдены."}
+                          {loading ? (
+                            "Загрузка..."
+                          ) : appliedSearch ? (
+                            <span>
+                              Записи не найдены в операционном контуре задач. Если человек есть только в
+                              кадровом импорте, откройте{" "}
+                              <a
+                                href="/directory/personnel/import/normalized-records"
+                                className="text-blue-600 underline underline-offset-2 hover:text-blue-500 dark:text-blue-400"
+                              >
+                                «Кадровые процессы → Импорт»
+                              </a>{" "}
+                              и выполните enrollment («Добавить в персонал» / зачисление в operational).
+                            </span>
+                          ) : (
+                            "Записи не найдены."
+                          )}
                         </td>
                       </tr>
                     ) : (

@@ -118,6 +118,88 @@ def _get_org_unit_caption(org_unit_id: int) -> str:
     return str(row.get("unit_name") or f"unit #{int(org_unit_id)}").strip()
 
 
+def _build_task_contour_predicate_sql() -> str:
+    """Return SQL predicate: contact belongs to operational/task contour only.
+
+    Personnel/canonical import may populate ``contacts`` with ``person_id`` for HR
+    roster rows. Those must not appear on the Contacts page unless they are also
+    linked to the operational bridge (contacts_working, key_contacts, active users).
+    Manually created contacts without ``person_id`` remain visible.
+    """
+    parts: List[str] = ["c.person_id IS NULL"]
+
+    if _relation_exists("contacts_working"):
+        parts.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM public.contacts_working cw
+                WHERE cw.contact_id = c.contact_id
+            )
+            """.strip()
+        )
+
+    if _relation_exists("key_contacts"):
+        parts.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM public.key_contacts kc
+                WHERE c.person_id IS NOT NULL
+                  AND kc.person_id = c.person_id
+            )
+            """.strip()
+        )
+
+    if _relation_exists("v_key_contacts_auto"):
+        parts.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM public.v_key_contacts_auto ka
+                WHERE c.person_id IS NOT NULL
+                  AND ka.person_id = c.person_id
+            )
+            """.strip()
+        )
+
+    if _relation_exists("users"):
+        employee_person_match = ""
+        if _relation_exists("employees"):
+            employee_person_match = """
+                OR (
+                    c.person_id IS NOT NULL
+                    AND e.person_id = c.person_id
+                )
+            """.strip()
+
+        parts.append(
+            f"""
+            EXISTS (
+                SELECT 1
+                FROM public.users u
+                LEFT JOIN public.employees e
+                  ON e.employee_id = u.employee_id
+                WHERE COALESCE(u.is_active, false) = true
+                  AND (
+                    (
+                        c.telegram_numeric_id IS NOT NULL
+                        AND u.telegram_id IS NOT NULL
+                        AND trim(u.telegram_id::text) = trim(c.telegram_numeric_id::text)
+                    )
+                    OR (
+                        c.full_name IS NOT NULL
+                        AND LOWER(TRIM(u.full_name)) = LOWER(TRIM(c.full_name))
+                    )
+                    {employee_person_match}
+                  )
+            )
+            """.strip()
+        )
+
+    return "(" + "\n    OR ".join(parts) + ")"
+
+
 def _build_eligible_contacts_cte_sql() -> str:
     parts: List[str] = []
 
@@ -182,13 +264,34 @@ def _users_org_scope_match_sql(org_scope_where: str) -> str:
         user_cols = {str(r[0]) for r in conn.execute(q_cols).fetchall()}
 
     match_parts = [
-        "(c.person_id IS NOT NULL AND u.user_id = c.person_id)",
         "(c.full_name IS NOT NULL AND LOWER(TRIM(u.full_name)) = LOWER(TRIM(c.full_name)))",
     ]
     if "telegram_id" in user_cols:
         match_parts.insert(
             0,
-            "(c.telegram_numeric_id IS NOT NULL AND u.telegram_id = c.telegram_numeric_id)",
+            """
+            (
+                c.telegram_numeric_id IS NOT NULL
+                AND u.telegram_id IS NOT NULL
+                AND trim(u.telegram_id::text) = trim(c.telegram_numeric_id::text)
+            )
+            """.strip(),
+        )
+    if _relation_exists("employees"):
+        match_parts.insert(
+            1 if "telegram_id" in user_cols else 0,
+            """
+            (
+                c.person_id IS NOT NULL
+                AND u.employee_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM public.employees e
+                    WHERE e.employee_id = u.employee_id
+                      AND e.person_id = c.person_id
+                )
+            )
+            """.strip(),
         )
 
     match_sql = " OR ".join(match_parts)
@@ -219,7 +322,10 @@ def list_contacts(
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     params: Dict[str, Any] = {"limit": int(limit), "offset": int(offset)}
-    where_parts = ["COALESCE(c.is_deleted, false) = false"]
+    where_parts = [
+        "COALESCE(c.is_deleted, false) = false",
+        _build_task_contour_predicate_sql(),
+    ]
     with_prefix = ""
     filter_org_unit_name: Optional[str] = None
 
