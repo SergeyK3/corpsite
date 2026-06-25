@@ -61,15 +61,25 @@ export type TelegramHealthResponse = {
 export type TelegramStatusView = {
   status: TelegramHealthStatus;
   status_label: string;
+  service_status: TelegramHealthStatus;
+  service_status_label: string;
   checked_at_label: string;
   oldest_pending_age_label: string;
+  coverage_label: string;
   show_coverage_warning: boolean;
+  operational_reasons: string[];
   unavailable_metric_ids: string[];
 };
 
 const STATUS_LABELS: Record<TelegramHealthStatus, string> = {
   GREEN: "Работает",
   YELLOW: "Требует внимания",
+  RED: "Не работает",
+};
+
+const SERVICE_STATUS_LABELS: Record<TelegramHealthStatus, string> = {
+  GREEN: "Работает",
+  YELLOW: "Есть предупреждения",
   RED: "Не работает",
 };
 
@@ -85,6 +95,60 @@ export const TELEGRAM_UNAVAILABLE_METRIC_IDS = [
 
 export function telegramHealthStatusLabel(status: TelegramHealthStatus): string {
   return STATUS_LABELS[status] ?? status;
+}
+
+export function telegramServiceStatusLabel(status: TelegramHealthStatus): string {
+  return SERVICE_STATUS_LABELS[status] ?? status;
+}
+
+export function isCoverageStatusReason(reason: string): boolean {
+  return /Telegram binding coverage is/i.test(reason);
+}
+
+export function formatCoveragePercent(percent: number): string {
+  return `${percent.toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%`;
+}
+
+export function formatBindingsCoverageLabel(bindings: TelegramHealthBindings): string {
+  return `${bindings.users_with_telegram} из ${bindings.active_users} пользователей (${formatCoveragePercent(bindings.coverage_percent)})`;
+}
+
+export function deriveTelegramServiceStatus(data: TelegramHealthResponse): {
+  status: TelegramHealthStatus;
+  status_label: string;
+  operational_reasons: string[];
+} {
+  const operationalReasons = (data.status_reasons ?? []).filter((reason) => !isCoverageStatusReason(reason));
+
+  if (data.status === "RED") {
+    return {
+      status: "RED",
+      status_label: SERVICE_STATUS_LABELS.RED,
+      operational_reasons: operationalReasons,
+    };
+  }
+
+  if (data.status === "GREEN") {
+    return {
+      status: "GREEN",
+      status_label: SERVICE_STATUS_LABELS.GREEN,
+      operational_reasons: [],
+    };
+  }
+
+  if (operationalReasons.length === 0) {
+    return {
+      status: "GREEN",
+      status_label: SERVICE_STATUS_LABELS.GREEN,
+      operational_reasons: [],
+    };
+  }
+
+  return {
+    status: "YELLOW",
+    status_label: SERVICE_STATUS_LABELS.YELLOW,
+    operational_reasons: operationalReasons,
+  };
 }
 
 export function formatConfiguredLabel(present: boolean): string {
@@ -106,13 +170,18 @@ export function formatDurationSeconds(seconds?: number | null): string {
 export function buildTelegramStatusView(data: TelegramHealthResponse): TelegramStatusView {
   const activeUsers = Number(data.bindings?.active_users ?? 0);
   const coverage = Number(data.bindings?.coverage_percent ?? 0);
+  const service = deriveTelegramServiceStatus(data);
 
   return {
     status: data.status,
     status_label: telegramHealthStatusLabel(data.status),
+    service_status: service.status,
+    service_status_label: service.status_label,
     checked_at_label: fmtDateTime(data.checked_at),
     oldest_pending_age_label: formatDurationSeconds(data.queue?.oldest_pending_age_sec),
+    coverage_label: formatBindingsCoverageLabel(data.bindings),
     show_coverage_warning: activeUsers > 0 && coverage < 100,
+    operational_reasons: service.operational_reasons,
     unavailable_metric_ids: (data.unavailable_metrics ?? []).map((item) => item.metric),
   };
 }

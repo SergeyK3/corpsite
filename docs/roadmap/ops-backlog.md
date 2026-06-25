@@ -32,6 +32,7 @@
 | [OPS-018](#ops-018--catch-up-historical-deadline-semantics) | Catch-up Historical Deadline Semantics | Medium | **Discussion** |
 | [OPS-019](#ops-019--catch-up-filter-observability) | Catch-up Filter Observability | Low | **Backlog** |
 | [OPS-021](#ops-021--catch-up-form-ux-periodicity-first-layout) | Catch-up Form UX — Periodicity-first | Medium | **Complete** |
+| [OPS-026.5](#ops-0265--unified-system-health-dashboard) | Unified System Health Dashboard | Medium | **Backlog** |
 | [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md) | Org-unit allowed positions (Future ADR) | Medium | **Proposed** |
 
 ---
@@ -317,6 +318,44 @@ Read-only architecture, DB, permission, and command inventory. Production integr
 
 ---
 
+### OPS-026.5 — Unified System Health Dashboard
+
+**Приоритет:** Medium  
+**Статус:** **Backlog**
+
+**Summary:** После реализации отдельных operational panels (Scheduler Status, Telegram Status) возникла необходимость объединить состояние основных подсистем в единую страницу здоровья системы.
+
+**Goal:** Создать единый Dashboard состояния системы, позволяющий системному администратору за несколько секунд оценить состояние всех ключевых сервисов.
+
+**Предварительный состав модулей:**
+
+- Backend API
+- Scheduler
+- Telegram Bot
+- Database
+- Storage
+- AI / OCR (по мере появления)
+- Email notifications (если появятся)
+- Google Drive / внешние интеграции
+- Background workers / future services
+
+**Для каждого модуля предусмотреть:**
+
+- статус GREEN / YELLOW / RED;
+- краткое описание причины;
+- время последней успешной проверки;
+- переход к детальной панели (например Telegram Status Panel).
+
+**Принципы:**
+
+- Использовать существующие backend health API.
+- Не обращаться напрямую из frontend к systemd, journalctl, docker, SSH.
+- Health Dashboard должен быть агрегатором, а не источником диагностики.
+
+**Start gate:** Не начинать разработку сейчас. Начинать только после стабилизации следующих operational panels или появления не менее 3–4 health modules.
+
+---
+
 ## ADR-046 — Org-unit allowed positions (Future)
 
 **Status:** Proposed — not scheduled  
@@ -376,3 +415,4 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 | OPS-009.30–009.34 monthly E2E + template filter fix verified on prod | 2026-06-25 |
 | POST-OPS review; OPS-015–019 added to backlog | 2026-06-25 |
 | OPS-021 catch-up form periodicity-first layout | 2026-06-25 |
+| OPS-026.5 Unified System Health Dashboard added to backlog | 2026-06-25 |

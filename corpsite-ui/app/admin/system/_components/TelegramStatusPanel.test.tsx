@@ -1,6 +1,6 @@
 // FILE: corpsite-ui/app/admin/system/_components/TelegramStatusPanel.test.tsx
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import TelegramStatusPanel, { TelegramStatusPanelBodyForTests } from "./TelegramStatusPanel";
 import { fetchTelegramHealth } from "../_lib/adminSystemApi.client";
@@ -23,18 +23,24 @@ afterEach(() => {
 });
 
 describe("TelegramStatusPanelBodyForTests", () => {
-  it("renders production-like YELLOW state with coverage warning and reasons", () => {
-    render(<TelegramStatusPanelBodyForTests data={productionYellowSmokeFixture()} />);
+  it("renders production-like YELLOW state with service GREEN and separate coverage warning", () => {
+    render(<TelegramStatusPanelBodyForTests data={productionYellowSmokeFixture()} refreshIntervalMs={45_000} />);
 
-    expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Требует внимания");
+    expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Работает");
+    expect(screen.queryByTestId("telegram-status-reasons")).not.toBeInTheDocument();
+    expect(screen.getByTestId("telegram-last-sent")).toHaveTextContent("Последняя успешная отправка");
     expect(screen.getByTestId("telegram-chip-pending")).toHaveTextContent("Pending: 0");
     expect(screen.getByTestId("telegram-chip-sent")).toHaveTextContent("Sent 24h: 16");
     expect(screen.getByTestId("telegram-chip-failed")).toHaveTextContent("Failed 24h: 0");
-    expect(screen.getByTestId("telegram-coverage-warning")).toHaveTextContent(
-      "Не у всех активных пользователей привязан Telegram",
+    expect(screen.getByTestId("telegram-bindings-coverage")).toHaveTextContent(
+      "6 из 9 пользователей (66,7%)",
     );
-    expect(screen.getByTestId("telegram-status-reasons")).toHaveTextContent("66.67%");
-    expect(screen.getByTestId("telegram-config-bot-token")).toHaveTextContent("настроен");
+    expect(screen.getByTestId("telegram-coverage-warning")).toHaveTextContent(
+      "Не у всех активных пользователей привязан Telegram.",
+    );
+    expect(screen.getByTestId("telegram-all-status-reasons")).toHaveTextContent("66.67%");
+    expect(screen.getByTestId("telegram-config-bot-token")).toHaveTextContent("✓ BOT_TOKEN");
+    expect(screen.getByTestId("telegram-auto-refresh")).toHaveTextContent("Автообновление: 45 сек");
     expect(screen.queryByTestId("telegram-chip-oldest-pending")).not.toBeInTheDocument();
   });
 
@@ -48,8 +54,9 @@ describe("TelegramStatusPanelBodyForTests", () => {
         bot_token_present: false,
       },
     };
-    render(<TelegramStatusPanelBodyForTests data={data} />);
+    render(<TelegramStatusPanelBodyForTests data={data} refreshIntervalMs={45_000} />);
     expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Не работает");
+    expect(screen.getByTestId("telegram-config-bot-token")).toHaveTextContent("✗ BOT_TOKEN");
   });
 
   it("renders GREEN state", () => {
@@ -63,13 +70,30 @@ describe("TelegramStatusPanelBodyForTests", () => {
         coverage_percent: 100,
       },
     };
-    render(<TelegramStatusPanelBodyForTests data={data} />);
+    render(<TelegramStatusPanelBodyForTests data={data} refreshIntervalMs={45_000} />);
     expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Работает");
     expect(screen.queryByTestId("telegram-coverage-warning")).not.toBeInTheDocument();
   });
 
+  it("renders operational YELLOW service status when queue has pending rows", () => {
+    const data = {
+      ...productionYellowSmokeFixture(),
+      status: "YELLOW" as const,
+      status_reasons: ["3 pending telegram delivery row(s)", "Telegram binding coverage is 66.67%"],
+      queue: {
+        ...productionYellowSmokeFixture().queue,
+        pending_count: 3,
+        oldest_pending_age_sec: 120,
+        oldest_pending_at: "2026-06-25T10:00:00+00:00",
+      },
+    };
+    render(<TelegramStatusPanelBodyForTests data={data} refreshIntervalMs={45_000} />);
+    expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Есть предупреждения");
+    expect(screen.getByTestId("telegram-status-reasons")).toHaveTextContent("3 pending telegram delivery row(s)");
+  });
+
   it("does not render secret token values", () => {
-    render(<TelegramStatusPanelBodyForTests data={productionYellowSmokeFixture()} />);
+    render(<TelegramStatusPanelBodyForTests data={productionYellowSmokeFixture()} refreshIntervalMs={45_000} />);
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/8123456789:/);
     expect(text).not.toContain("AAHabcdefghijklmnopqrstuvwxyz");
@@ -87,8 +111,9 @@ describe("TelegramStatusPanel", () => {
     expect(screen.getByTestId("telegram-loading")).toHaveTextContent("Загрузка статуса Telegram…");
 
     await waitFor(() => {
-      expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Требует внимания");
+      expect(screen.getByTestId("telegram-status-badge")).toHaveTextContent("Работает");
     });
+    expect(screen.getByTestId("telegram-auto-refresh")).toHaveTextContent("Автообновление: 60 сек");
   });
 
   it("shows 403 error state", async () => {

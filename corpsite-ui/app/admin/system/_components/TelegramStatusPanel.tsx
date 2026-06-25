@@ -9,7 +9,6 @@ import {
 } from "../_lib/adminSystemApi.client";
 import {
   buildTelegramStatusView,
-  formatConfiguredLabel,
   TELEGRAM_HEALTH_REFRESH_MS,
   TELEGRAM_UNAVAILABLE_METRIC_IDS,
   type TelegramHealthResponse,
@@ -83,7 +82,39 @@ function MetricChip({
   );
 }
 
-function PanelBody({ data }: { data: TelegramHealthResponse }) {
+function ConfigToken({
+  name,
+  present,
+  testId,
+}: {
+  name: string;
+  present: boolean;
+  testId?: string;
+}) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center gap-0.5 text-[11px] font-medium",
+        present ? "text-emerald-800 dark:text-emerald-200" : "text-red-700 dark:text-red-300",
+      ].join(" ")}
+      data-testid={testId}
+    >
+      {present ? "✓" : "✗"} {name}
+    </span>
+  );
+}
+
+function formatAutoRefreshLabel(refreshIntervalMs: number): string {
+  return `Автообновление: ${Math.round(refreshIntervalMs / 1000)} сек`;
+}
+
+function PanelBody({
+  data,
+  refreshIntervalMs,
+}: {
+  data: TelegramHealthResponse;
+  refreshIntervalMs: number;
+}) {
   const view = React.useMemo(() => buildTelegramStatusView(data), [data]);
   const cfg = data.bot_configuration;
   const unavailableDetails = (data.unavailable_metrics ?? [])
@@ -92,136 +123,174 @@ function PanelBody({ data }: { data: TelegramHealthResponse }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         <p
-          className={["text-sm font-medium", statusTone(view.status)].join(" ")}
+          className={["text-sm font-medium", statusTone(view.service_status)].join(" ")}
           data-testid="telegram-status-badge"
         >
-          {statusIndicator(view.status)} {view.status_label}
+          {statusIndicator(view.service_status)} {view.service_status_label}
         </p>
         <span className="text-xs text-zinc-600 dark:text-zinc-400" data-testid="telegram-checked-at">
           Проверено: {view.checked_at_label}
         </span>
+        <span className="text-xs text-zinc-500 dark:text-zinc-500" data-testid="telegram-auto-refresh">
+          {formatAutoRefreshLabel(refreshIntervalMs)}
+        </span>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-2" data-testid="telegram-queue-chips">
-        <MetricChip
-          label="Pending"
-          value={data.queue.pending_count}
-          tone={queueChipTone("pending", data.queue.pending_count)}
-          testId="telegram-chip-pending"
-        />
-        <MetricChip
-          label="Sent 24h"
-          value={data.queue.sent_24h}
-          tone={queueChipTone("sent", data.queue.sent_24h)}
-          testId="telegram-chip-sent"
-        />
-        <MetricChip
-          label="Failed 24h"
-          value={data.queue.failed_24h}
-          tone={queueChipTone("failed", data.queue.failed_24h)}
-          testId="telegram-chip-failed"
-        />
-        {data.queue.oldest_pending_age_sec != null ? (
-          <MetricChip
-            label="Oldest pending"
-            value={view.oldest_pending_age_label}
-            tone={data.queue.pending_count > 0 ? "warn" : "neutral"}
-            testId="telegram-chip-oldest-pending"
-          />
-        ) : null}
-      </div>
-
-      <dl className="mt-2 grid gap-1 text-xs text-zinc-800 dark:text-zinc-200 sm:grid-cols-2">
-        <div>
-          <dt className="text-zinc-600 dark:text-zinc-400">Последняя успешная отправка</dt>
-          <dd data-testid="telegram-last-sent">{fmtDateTime(data.delivery.last_sent_at)}</dd>
-        </div>
-        {data.delivery.last_failed_at ? (
-          <div>
-            <dt className="text-zinc-600 dark:text-zinc-400">Последняя ошибка</dt>
-            <dd data-testid="telegram-last-failed">{fmtDateTime(data.delivery.last_failed_at)}</dd>
+      <div className="mt-2 grid items-start gap-x-4 gap-y-2 sm:grid-cols-2">
+        <div className="space-y-2">
+          <div
+            className={[
+              "inline-flex flex-col rounded-lg border px-2.5 py-1.5",
+              chipClass("success"),
+            ].join(" ")}
+            data-testid="telegram-last-sent"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Последняя успешная отправка</span>
+            <span className="text-sm font-semibold">{fmtDateTime(data.delivery.last_sent_at)}</span>
           </div>
-        ) : null}
-        {data.delivery.last_error_code || data.delivery.last_error_text ? (
-          <div className="sm:col-span-2">
-            <dt className="text-zinc-600 dark:text-zinc-400">Код / текст ошибки</dt>
-            <dd data-testid="telegram-last-error">
-              {[data.delivery.last_error_code, data.delivery.last_error_text].filter(Boolean).join(" — ")}
+
+          <div className="flex flex-wrap gap-2" data-testid="telegram-queue-chips">
+            <MetricChip
+              label="Pending"
+              value={data.queue.pending_count}
+              tone={queueChipTone("pending", data.queue.pending_count)}
+              testId="telegram-chip-pending"
+            />
+            <MetricChip
+              label="Sent 24h"
+              value={data.queue.sent_24h}
+              tone={queueChipTone("sent", data.queue.sent_24h)}
+              testId="telegram-chip-sent"
+            />
+            <MetricChip
+              label="Failed 24h"
+              value={data.queue.failed_24h}
+              tone={queueChipTone("failed", data.queue.failed_24h)}
+              testId="telegram-chip-failed"
+            />
+            {data.queue.oldest_pending_age_sec != null ? (
+              <MetricChip
+                label="Oldest pending"
+                value={view.oldest_pending_age_label}
+                tone={data.queue.pending_count > 0 ? "warn" : "neutral"}
+                testId="telegram-chip-oldest-pending"
+              />
+            ) : null}
+          </div>
+
+          {data.delivery.last_failed_at ||
+          data.delivery.last_error_code ||
+          data.delivery.last_error_text ? (
+            <dl className="grid gap-1 text-xs text-zinc-800 dark:text-zinc-200">
+              {data.delivery.last_failed_at ? (
+                <div>
+                  <dt className="text-zinc-600 dark:text-zinc-400">Последняя ошибка</dt>
+                  <dd data-testid="telegram-last-failed">{fmtDateTime(data.delivery.last_failed_at)}</dd>
+                </div>
+              ) : null}
+              {data.delivery.last_error_code || data.delivery.last_error_text ? (
+                <div>
+                  <dt className="text-zinc-600 dark:text-zinc-400">Код / текст ошибки</dt>
+                  <dd data-testid="telegram-last-error">
+                    {[data.delivery.last_error_code, data.delivery.last_error_text].filter(Boolean).join(" — ")}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+
+          {view.operational_reasons.length > 0 ? (
+            <ul
+              className="list-disc space-y-0.5 pl-4 text-xs text-amber-900 dark:text-amber-200"
+              data-testid="telegram-status-reasons"
+            >
+              {view.operational_reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs text-zinc-800 dark:text-zinc-200">
+            <span className="text-zinc-600 dark:text-zinc-400">Telegram привязан: </span>
+            <span data-testid="telegram-bindings-coverage">{view.coverage_label}</span>
+          </div>
+
+          {view.show_coverage_warning ? (
+            <p
+              className="text-xs text-zinc-600 dark:text-zinc-400"
+              data-testid="telegram-coverage-warning"
+            >
+              ⚠ Не у всех активных пользователей привязан Telegram.
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap gap-x-3 gap-y-1" data-testid="telegram-config-tokens">
+            <ConfigToken name="BOT_TOKEN" present={cfg.bot_token_present} testId="telegram-config-bot-token" />
+            <ConfigToken
+              name="BOT_BIND_TOKEN"
+              present={cfg.bot_bind_token_present}
+              testId="telegram-config-bind-token"
+            />
+            <ConfigToken
+              name="INTERNAL_API_TOKEN"
+              present={cfg.internal_api_token_present}
+              testId="telegram-config-internal-token"
+            />
+          </div>
+        </div>
+      </div>
+
+      <details className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+        <summary className="cursor-pointer select-none text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
+          Техническая информация
+        </summary>
+        <dl className="mt-1.5 grid gap-1 sm:grid-cols-2">
+          <div>
+            <dt className="text-zinc-500 dark:text-zinc-500">API_BASE_URL</dt>
+            <dd data-testid="telegram-config-api-base">{cfg.api_base_url ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500 dark:text-zinc-500">EVENTS_DELIVERY_CHANNEL</dt>
+            <dd data-testid="telegram-config-channel">{cfg.events_delivery_channel}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500 dark:text-zinc-500">Allow-list</dt>
+            <dd data-testid="telegram-config-allowlist">
+              {cfg.telegram_delivery_allowlist_configured ? "да" : "нет"}
             </dd>
           </div>
+        </dl>
+
+        {data.status_reasons && data.status_reasons.length > 0 ? (
+          <ul
+            className="mt-1.5 list-disc space-y-0.5 pl-4 text-zinc-700 dark:text-zinc-300"
+            data-testid="telegram-all-status-reasons"
+          >
+            {data.status_reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
         ) : null}
-        <div>
-          <dt className="text-zinc-600 dark:text-zinc-400">Привязки Telegram</dt>
-          <dd data-testid="telegram-bindings">
-            {data.bindings.users_with_telegram} / {data.bindings.active_users} ({data.bindings.coverage_percent}%)
-          </dd>
-        </div>
-      </dl>
 
-      {view.show_coverage_warning ? (
         <p
-          className="mt-2 text-xs text-amber-900 dark:text-amber-200"
-          data-testid="telegram-coverage-warning"
+          className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500"
+          title={
+            unavailableDetails ||
+            TELEGRAM_UNAVAILABLE_METRIC_IDS.map((metric) => `${metric}: backend-only API`).join("\n")
+          }
+          data-testid="telegram-unavailable-metrics"
         >
-          Не у всех активных пользователей привязан Telegram
+          Часть метрик недоступна из backend-only API
         </p>
-      ) : null}
 
-      <dl className="mt-2 grid gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 sm:grid-cols-2">
-        <div>
-          <dt className="text-zinc-500 dark:text-zinc-500">BOT_TOKEN</dt>
-          <dd data-testid="telegram-config-bot-token">{formatConfiguredLabel(cfg.bot_token_present)}</dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500 dark:text-zinc-500">INTERNAL_API_TOKEN</dt>
-          <dd data-testid="telegram-config-internal-token">
-            {formatConfiguredLabel(cfg.internal_api_token_present)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500 dark:text-zinc-500">BOT_BIND_TOKEN</dt>
-          <dd data-testid="telegram-config-bind-token">{formatConfiguredLabel(cfg.bot_bind_token_present)}</dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500 dark:text-zinc-500">API_BASE_URL</dt>
-          <dd data-testid="telegram-config-api-base">{cfg.api_base_url ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500 dark:text-zinc-500">EVENTS_DELIVERY_CHANNEL</dt>
-          <dd data-testid="telegram-config-channel">{cfg.events_delivery_channel}</dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500 dark:text-zinc-500">Allow-list</dt>
-          <dd data-testid="telegram-config-allowlist">
-            {cfg.telegram_delivery_allowlist_configured ? "да" : "нет"}
-          </dd>
-        </div>
-      </dl>
-
-      {data.status_reasons && data.status_reasons.length > 0 ? (
-        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-zinc-800 dark:text-zinc-200" data-testid="telegram-status-reasons">
-          {data.status_reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      <p
-        className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-500"
-        title={
-          unavailableDetails ||
-          TELEGRAM_UNAVAILABLE_METRIC_IDS.map((metric) => `${metric}: backend-only API`).join("\n")
-        }
-        data-testid="telegram-unavailable-metrics"
-      >
-        Часть метрик недоступна из backend-only API
-      </p>
-
-      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-500" data-testid="telegram-data-source">
-        Источник данных: GET /admin/system/telegram-health
-      </p>
+        <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-600" data-testid="telegram-data-source">
+          Источник данных: GET /admin/system/telegram-health
+        </p>
+      </details>
     </>
   );
 }
@@ -289,7 +358,9 @@ export default function TelegramStatusPanel({
             ) : null}
           </div>
 
-          {!loading && !error && data ? <PanelBody data={data} /> : null}
+          {!loading && !error && data ? (
+            <PanelBody data={data} refreshIntervalMs={refreshIntervalMs} />
+          ) : null}
         </div>
 
         <button
