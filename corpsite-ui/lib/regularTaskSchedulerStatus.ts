@@ -3,8 +3,7 @@
 import { runStatusLabel } from "./i18n";
 import {
   fmtDateTime,
-  resolveRunKind,
-  resolveRunMode,
+  resolveTriggerSource,
   type RegularTaskRunRow,
 } from "./regularTaskRunJournal";
 
@@ -31,12 +30,7 @@ const STATUS_LABELS: Record<SchedulerHealthStatus, string> = {
 };
 
 export function isAutomaticLiveRun(run: RegularTaskRunRow): boolean {
-  const stats = run.stats ?? {};
-  const runKind = resolveRunKind(stats);
-  if (runKind === "catch_up" || runKind === "preview") return false;
-  if (stats.catch_up) return false;
-  if (resolveRunMode(stats) === "dry") return false;
-  return true;
+  return resolveTriggerSource(run.stats) === "automatic";
 }
 
 export function isSuccessfulAutomaticRun(run: RegularTaskRunRow): boolean {

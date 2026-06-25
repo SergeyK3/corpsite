@@ -125,12 +125,12 @@ describe("RegularTaskRunsJournalView", () => {
     renderView({ selectedRunId: null, items: [] });
     const catchUpCard = screen.getByTestId("regular-task-run-card-33");
     expect(within(catchUpCard).getByText("Запуск №33")).toBeInTheDocument();
-    expect(within(catchUpCard).getByText("Догоняющий")).toBeInTheDocument();
+    expect(within(catchUpCard).getByTestId("regular-task-run-source-33")).toHaveTextContent("Догоняющий");
     expect(within(catchUpCard).getByText(/Создано: 5 · Дедуп: 2 · Ошибки: 1/)).toBeInTheDocument();
     expect(within(catchUpCard).getByText(/Дата возникновения задачи:/)).toBeInTheDocument();
 
     const autoCard = screen.getByTestId("regular-task-run-card-12");
-    expect(within(autoCard).getByText("Автоматический")).toBeInTheDocument();
+    expect(within(autoCard).getByTestId("regular-task-run-source-12")).toHaveTextContent("Автоматический");
     expect(within(autoCard).getByText(/Создано: 30 · Дедуп: 8 · Ошибки: 0/)).toBeInTheDocument();
   });
 
@@ -312,7 +312,21 @@ describe("RegularTaskRunsJournalView", () => {
     );
   });
 
-  it("shows run mode badge when dry_run is available in stats", () => {
+  it("shows trigger source badge from explicit trigger_source in stats", () => {
+    renderView({
+      runs: [
+        {
+          ...catchUpRun,
+          stats: { ...catchUpRun.stats, trigger_source: "test", dry_run: true },
+        },
+      ],
+      items: [],
+    });
+    expect(screen.getByTestId("regular-task-run-source-33")).toHaveTextContent("Пробный");
+    expect(screen.getByTestId("regular-task-run-summary-source")).toHaveTextContent("Пробный");
+  });
+
+  it("derives trigger source from legacy dry_run stats", () => {
     renderView({
       runs: [
         {
@@ -322,19 +336,19 @@ describe("RegularTaskRunsJournalView", () => {
       ],
       items: [],
     });
-    expect(screen.getByTestId("regular-task-run-mode-33")).toHaveTextContent("Пробный прогон");
-    expect(screen.getByTestId("regular-task-run-summary-mode")).toHaveTextContent("Пробный прогон");
+    expect(screen.getByTestId("regular-task-run-source-33")).toHaveTextContent("Пробный");
+    expect(screen.getByTestId("regular-task-run-summary-source")).toHaveTextContent("Пробный");
   });
 
-  it("shows live run mode from loaded dedup items", () => {
+  it("derives live catch-up trigger source from legacy stats", () => {
     const dedupOnlyItem: RegularTaskRunItemRow = {
       ...sampleItem,
       created_tasks: 0,
       meta: { ...sampleItem.meta, deduped: true, task_id: 9001 },
     };
     renderView({ items: [dedupOnlyItem] });
-    expect(screen.getByTestId("regular-task-run-mode-33")).toHaveTextContent("Боевой прогон");
-    expect(screen.getByTestId("regular-task-run-summary-mode")).toHaveTextContent("Боевой прогон");
+    expect(screen.getByTestId("regular-task-run-source-33")).toHaveTextContent("Догоняющий");
+    expect(screen.getByTestId("regular-task-run-summary-source")).toHaveTextContent("Догоняющий");
   });
 
   it("renders human-readable task list row from run item meta", () => {

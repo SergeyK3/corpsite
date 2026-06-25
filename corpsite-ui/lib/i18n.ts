@@ -36,6 +36,13 @@ export const RUN_KIND_LABELS: Readonly<Record<string, string>> = {
   catch_up: "Догоняющий",
 };
 
+export const TRIGGER_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  automatic: "Автоматический",
+  catch_up: "Догоняющий",
+  manual: "Ручной",
+  test: "Пробный",
+};
+
 export const CATCH_UP_PRESET_LABELS: Readonly<Record<string, string>> = {
   past_week: "Прошлая неделя",
   past_month: "Прошлый месяц",
@@ -254,6 +261,13 @@ export function runKindLabel(
   options?: { fallback?: string },
 ): string {
   return lookupLabel(RUN_KIND_LABELS, code, options?.fallback);
+}
+
+export function triggerSourceLabel(
+  code: string | null | undefined,
+  options?: { fallback?: string },
+): string {
+  return lookupLabel(TRIGGER_SOURCE_LABELS, code, options?.fallback);
 }
 
 export function catchUpPresetLabel(

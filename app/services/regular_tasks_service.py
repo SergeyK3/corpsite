@@ -29,6 +29,36 @@ JOURNAL_MISMATCH_WARNING = (
     "Возможна неполная запись журнала."
 )
 
+TRIGGER_SOURCE_AUTOMATIC = "automatic"
+TRIGGER_SOURCE_CATCH_UP = "catch_up"
+TRIGGER_SOURCE_MANUAL = "manual"
+TRIGGER_SOURCE_TEST = "test"
+
+TRIGGER_SOURCE_VALUES = frozenset(
+    {
+        TRIGGER_SOURCE_AUTOMATIC,
+        TRIGGER_SOURCE_CATCH_UP,
+        TRIGGER_SOURCE_MANUAL,
+        TRIGGER_SOURCE_TEST,
+    }
+)
+
+
+def resolve_trigger_source(
+    *,
+    dry_run: bool,
+    catch_up_meta: Optional[Dict[str, Any]] = None,
+    trigger_source_hint: Optional[str] = None,
+) -> str:
+    if dry_run:
+        return TRIGGER_SOURCE_TEST
+    if catch_up_meta is not None:
+        return TRIGGER_SOURCE_CATCH_UP
+    hint = str(trigger_source_hint or "").strip().lower()
+    if hint in {TRIGGER_SOURCE_AUTOMATIC, TRIGGER_SOURCE_MANUAL}:
+        return hint
+    return TRIGGER_SOURCE_AUTOMATIC
+
 
 # ---------------------------
 # ENV helpers
@@ -1175,6 +1205,7 @@ def run_regular_tasks_generation_tx(
     force_due: bool = False,
     template_filters: Optional[CatchUpTemplateFilters] = None,
     catch_up_meta: Optional[Dict[str, Any]] = None,
+    trigger_source_hint: Optional[str] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     if run_for_date is not None:
         now_local = run_at_local or datetime.combine(run_for_date, time(12, 0), tzinfo=_LOCAL_TZ)
@@ -1587,6 +1618,12 @@ def run_regular_tasks_generation_tx(
 
     item_count = _count_run_items(conn, int(run_id))
 
+    trigger_source = resolve_trigger_source(
+        dry_run=dry_run,
+        catch_up_meta=catch_up_meta,
+        trigger_source_hint=trigger_source_hint,
+    )
+
     stats_dict: Dict[str, Any] = {
         "templates_total": int(total),
         "templates_due": int(due),
@@ -1597,6 +1634,7 @@ def run_regular_tasks_generation_tx(
         "occurrence_date": today_effective.isoformat(),
         "run_kind": "catch_up" if catch_up_meta is not None else "automatic",
         "dry_run": bool(dry_run),
+        "trigger_source": trigger_source,
     }
     if catch_up_meta is not None:
         stats_dict["catch_up"] = catch_up_meta

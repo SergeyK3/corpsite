@@ -6,11 +6,14 @@ import {
   runStatusLabel,
   runTitleLabel,
   scheduleTypeLabel,
+  triggerSourceLabel,
   uiFieldLabel,
 } from "./i18n";
 import { buildTaskPageHref } from "./taskNav";
 
 export type RunMode = "dry" | "live";
+
+export type TriggerSource = "automatic" | "catch_up" | "manual" | "test";
 
 export type RunStats = {
   templates_total?: number;
@@ -24,6 +27,7 @@ export type RunStats = {
   run_kind?: string | null;
   catch_up?: CatchUpMeta | null;
   dry_run?: boolean;
+  trigger_source?: string | null;
   run_mode?: string | null;
 };
 
@@ -161,6 +165,8 @@ export type RunSummary = {
   finished_at_label: string;
   status: string;
   status_label: string;
+  trigger_source: TriggerSource;
+  trigger_source_label: string;
 };
 
 export type RunListEntry = {
@@ -172,6 +178,8 @@ export type RunListEntry = {
   run_kind_label: string;
   run_mode: RunMode | null;
   run_mode_label: string | null;
+  trigger_source: TriggerSource;
+  trigger_source_label: string;
   started_at_label: string;
   occurrence_date_label: string;
   created: number;
@@ -308,6 +316,33 @@ export function resolveRunKind(stats?: RunStats | null, items?: readonly Regular
   return "automatic";
 }
 
+export function resolveTriggerSource(
+  stats?: RunStats | null,
+  items?: readonly RegularTaskRunItemRow[],
+): TriggerSource {
+  const explicit = String(stats?.trigger_source ?? "").trim().toLowerCase();
+  if (
+    explicit === "automatic" ||
+    explicit === "catch_up" ||
+    explicit === "manual" ||
+    explicit === "test"
+  ) {
+    return explicit;
+  }
+
+  if (stats?.dry_run === true || resolveRunMode(stats, items) === "dry") {
+    return "test";
+  }
+  const runKind = resolveRunKind(stats, items);
+  if (runKind === "preview") {
+    return "test";
+  }
+  if (stats?.catch_up || runKind === "catch_up") {
+    return "catch_up";
+  }
+  return "automatic";
+}
+
 export function resolveScheduleType(
   stats?: RunStats | null,
   items?: readonly RegularTaskRunItemRow[],
@@ -400,6 +435,7 @@ export function buildRunListEntry(
 ): RunListEntry {
   const stats = run.stats ?? {};
   const runKind = resolveRunKind(stats);
+  const triggerSource = resolveTriggerSource(stats, items);
   const occurrenceDate = resolveOccurrenceDate(stats);
   const created = Number(stats.created ?? 0);
   const deduped = Number(stats.deduped ?? 0);
@@ -415,6 +451,8 @@ export function buildRunListEntry(
     run_kind_label: runKindLabel(runKind),
     run_mode: runMode,
     run_mode_label: runModeLabel(runMode),
+    trigger_source: triggerSource,
+    trigger_source_label: triggerSourceLabel(triggerSource),
     started_at_label: fmtDateTime(run.started_at),
     occurrence_date_label: fmtDate(occurrenceDate),
     created,
@@ -451,6 +489,7 @@ export function buildRunSummary(
 ): RunSummary {
   const stats = run.stats ?? {};
   const runKind = resolveRunKind(stats, items);
+  const triggerSource = resolveTriggerSource(stats, items);
   const occurrenceDate = resolveOccurrenceDate(stats, items);
   const itemCount = Number(run.item_count ?? stats.item_count ?? items.length);
   const runMode = resolveRunMode(stats, items);
@@ -461,6 +500,8 @@ export function buildRunSummary(
     run_kind_label: runKindLabel(runKind),
     run_mode: runMode,
     run_mode_label: runModeLabel(runMode),
+    trigger_source: triggerSource,
+    trigger_source_label: triggerSourceLabel(triggerSource),
     occurrence_date: occurrenceDate,
     occurrence_date_label: fmtDate(occurrenceDate),
     period_label: resolvePeriodLabel(stats, items),

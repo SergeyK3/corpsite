@@ -33,6 +33,26 @@ function automaticRun(
 describe("isAutomaticLiveRun", () => {
   it("includes automatic live runs", () => {
     expect(isAutomaticLiveRun(automaticRun(1, "2026-06-25T10:00:00+05:00", "ok"))).toBe(true);
+    expect(
+      isAutomaticLiveRun(
+        automaticRun(1, "2026-06-25T10:00:00+05:00", "ok", {
+          trigger_source: "automatic",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("excludes non-automatic trigger_source values", () => {
+    expect(
+      isAutomaticLiveRun(
+        automaticRun(2, "2026-06-25T10:00:00+05:00", "ok", { trigger_source: "manual" }),
+      ),
+    ).toBe(false);
+    expect(
+      isAutomaticLiveRun(
+        automaticRun(3, "2026-06-25T10:00:00+05:00", "ok", { trigger_source: "test" }),
+      ),
+    ).toBe(false);
   });
 
   it("excludes catch_up runs", () => {

@@ -18,6 +18,7 @@ import {
   resolveOccurrenceDate,
   resolveRunMode,
   resolveRunTaskListState,
+  resolveTriggerSource,
   runModeLabel,
   runTaskOutcomeLabel,
   type RegularTaskRunItemRow,
@@ -46,6 +47,34 @@ ID запуска: 10
   });
 });
 
+describe("resolveTriggerSource", () => {
+  it("uses explicit trigger_source when present", () => {
+    expect(resolveTriggerSource({ trigger_source: "manual", dry_run: false })).toBe("manual");
+  });
+
+  it("falls back to test for legacy dry_run stats", () => {
+    expect(resolveTriggerSource({ run_kind: "automatic", dry_run: true })).toBe("test");
+  });
+
+  it("falls back to catch_up for legacy catch-up stats", () => {
+    expect(
+      resolveTriggerSource({
+        run_kind: "catch_up",
+        catch_up: { preset: "past_week" },
+        dry_run: false,
+      }),
+    ).toBe("catch_up");
+  });
+
+  it("falls back to test for legacy preview run_kind", () => {
+    expect(resolveTriggerSource({ run_kind: "preview", dry_run: false })).toBe("test");
+  });
+
+  it("falls back to automatic for legacy automatic live stats", () => {
+    expect(resolveTriggerSource({ run_kind: "automatic", dry_run: false })).toBe("automatic");
+  });
+});
+
 describe("buildRunListEntry", () => {
   it("builds compact card labels from run stats", () => {
     const run: RegularTaskRunRow = {
@@ -63,6 +92,7 @@ describe("buildRunListEntry", () => {
     };
     const entry = buildRunListEntry(run);
     expect(entry.run_kind_label).toBe("Догоняющий");
+    expect(entry.trigger_source_label).toBe("Догоняющий");
     expect(entry.counts_label).toBe("Создано: 5 · Дедуп: 2 · Ошибки: 1");
     expect(entry.occurrence_date_label).toBe(fmtDate("2026-06-11"));
   });

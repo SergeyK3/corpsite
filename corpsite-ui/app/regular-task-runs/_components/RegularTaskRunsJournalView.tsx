@@ -45,18 +45,17 @@ export type RegularTaskRunsJournalViewProps = {
   onSearchChange: (value: string) => void;
 };
 
-function runKindBadgeClass(runKind: string): string {
-  if (runKind === "catch_up") {
-    return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200";
+function triggerSourceBadgeClass(source: string): string {
+  switch (source) {
+    case "catch_up":
+      return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200";
+    case "manual":
+      return "border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200";
+    case "test":
+      return "border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200";
+    default:
+      return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200";
   }
-  return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200";
-}
-
-function runModeBadgeClass(runMode: string): string {
-  if (runMode === "dry") {
-    return "border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200";
-  }
-  return "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200";
 }
 
 function statTone(status: string): string {
@@ -304,22 +303,12 @@ export function RegularTaskRunsJournalView({
                       <span
                         className={[
                           "rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                          runKindBadgeClass(entry.run_kind),
+                          triggerSourceBadgeClass(entry.trigger_source),
                         ].join(" ")}
+                        data-testid={`regular-task-run-source-${entry.run_id}`}
                       >
-                        {entry.run_kind_label}
+                        {entry.trigger_source_label}
                       </span>
-                      {entry.run_mode_label ? (
-                        <span
-                          className={[
-                            "rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                            runModeBadgeClass(entry.run_mode ?? "live"),
-                          ].join(" ")}
-                          data-testid={`regular-task-run-mode-${entry.run_id}`}
-                        >
-                          {entry.run_mode_label}
-                        </span>
-                      ) : null}
                     </div>
 
                     <div className="mt-2 space-y-0.5 text-xs text-zinc-600 dark:text-zinc-400">
@@ -364,14 +353,11 @@ export function RegularTaskRunsJournalView({
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
                 <SummaryField label="Запуск" value={runTitleLabel(runSummary.run_id)} />
                 <SummaryField label="Статус" value={runSummary.status_label} />
-                <SummaryField label={uiFieldLabel("run_kind")} value={runSummary.run_kind_label} />
-                {runSummary.run_mode_label ? (
-                  <SummaryField
-                    label="Режим"
-                    value={runSummary.run_mode_label}
-                    data-testid="regular-task-run-summary-mode"
-                  />
-                ) : null}
+                <SummaryField
+                  label="Источник"
+                  value={runSummary.trigger_source_label}
+                  data-testid="regular-task-run-summary-source"
+                />
                 <SummaryField label="Дата запуска" value={runSummary.started_at_label} />
                 <SummaryField label={uiFieldLabel("occurrence_date")} value={runSummary.occurrence_date_label} />
                 <SummaryField label={uiFieldLabel("period")} value={runSummary.period_label} />

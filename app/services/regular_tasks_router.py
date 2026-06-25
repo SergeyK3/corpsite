@@ -141,6 +141,11 @@ def run_regular_tasks(
             conn,
             run_at_local=run_at_local,
             dry_run=dry_run,
+            trigger_source_hint=(
+                "automatic"
+                if has_valid_internal_api_token(x_internal_api_token)
+                else "manual"
+            ),
         )
 
     return {"run_id": int(run_id), "dry_run": dry_run, "stats": stats}
