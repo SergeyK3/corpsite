@@ -34,7 +34,7 @@ function statusIndicator(status: string): string {
     case "working":
       return "🟢";
     case "needs_attention":
-      return "🟡";
+      return "⚠";
     default:
       return "🔴";
   }
@@ -66,43 +66,136 @@ function formatCheckedAt(value?: string | null): string {
   return fmtDateTime(value);
 }
 
-function PeriodDiagnosticRow({ row }: { row: SchedulerPeriodDiagnostic }) {
-  const periodLabel = row.period_display || row.label;
-  const statusLabel = row.creation_status_label || (row.has_tasks ? "создан" : "не создан");
+function formatOverdueDays(days: number): string {
+  const mod10 = days % 10;
+  const mod100 = days % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${days} день`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${days} дня`;
+  return `${days} дней`;
+}
+
+function formatCreationStatus(row: SchedulerPeriodDiagnostic): { icon: string; label: string } {
+  if (row.has_tasks) {
+    return { icon: "✓", label: "Создан" };
+  }
+  const raw = (row.creation_status_label || "не создан").trim();
+  const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+  return { icon: "✖", label };
+}
+
+function resolvePeriodReason(row: SchedulerPeriodDiagnostic): { label: string; text: string } | null {
+  if (row.has_tasks) return null;
+
   const reason = row.primary_reason || row.likely_reasons?.[0];
+  if (!reason) return null;
+
+  return {
+    label: row.primary_reason ? "Причина" : "Вероятная причина",
+    text: reason,
+  };
+}
+
+function summarizeMissedPeriods(rows: SchedulerPeriodDiagnostic[]): SchedulerPeriodDiagnostic[] {
+  return rows.filter((row) => !row.has_tasks);
+}
+
+function periodTypeLabel(row: SchedulerPeriodDiagnostic): string {
+  return row.title || row.schedule_type;
+}
+
+function periodRangeLabel(row: SchedulerPeriodDiagnostic): string {
+  return row.period_display || row.label;
+}
+
+function PeriodDiagnosticsSummary({ rows }: { rows: SchedulerPeriodDiagnostic[] }) {
+  const missed = summarizeMissedPeriods(rows);
+
+  if (missed.length === 0) {
+    return (
+      <p
+        className="text-xs font-medium text-emerald-800 dark:text-emerald-200"
+        data-testid="scheduler-period-summary"
+      >
+        ✓ Пропущенных периодов не обнаружено
+      </p>
+    );
+  }
 
   return (
     <div
-      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/50 px-3 py-2"
+      className="rounded-lg border border-amber-200/80 bg-amber-50/50 px-2.5 py-2 dark:border-amber-900/40 dark:bg-amber-950/20"
+      data-testid="scheduler-period-summary"
+    >
+      <p className="text-xs font-semibold text-amber-950 dark:text-amber-100">
+        Пропущено периодов: {missed.length}
+      </p>
+      <ul className="mt-1 space-y-0.5 text-xs text-zinc-800 dark:text-zinc-200">
+        {missed.map((row) => (
+          <li key={row.key} data-testid={`scheduler-period-summary-item-${row.key}`}>
+            • {periodTypeLabel(row)} — {periodRangeLabel(row)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function FactRow({
+  label,
+  children,
+  testId,
+  highlight = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  testId?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3 gap-y-0.5 text-xs">
+      <dt className="text-zinc-600 dark:text-zinc-400">{label}</dt>
+      <dd
+        className={highlight ? "font-semibold text-amber-950 dark:text-amber-100" : "text-zinc-900 dark:text-zinc-100"}
+        data-testid={testId}
+      >
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+function PeriodDiagnosticRow({ row }: { row: SchedulerPeriodDiagnostic }) {
+  const periodLabel = row.period_display || row.label;
+  const creation = formatCreationStatus(row);
+  const reason = resolvePeriodReason(row);
+
+  return (
+    <div
+      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/50 px-3 py-2"
       data-testid={`scheduler-period-${row.key}`}
     >
       <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{row.title || row.schedule_type}</p>
-      <dl className="mt-1 space-y-0.5 text-xs text-zinc-800 dark:text-zinc-200">
-        <div className="flex flex-wrap gap-x-1.5">
-          <dt className="text-zinc-600 dark:text-zinc-400">Период:</dt>
-          <dd>{periodLabel}</dd>
-        </div>
-        <div className="flex flex-wrap gap-x-1.5">
-          <dt className="text-zinc-600 dark:text-zinc-400">Статус:</dt>
-          <dd
+      <dl className="mt-1.5 space-y-1 text-xs">
+        <FactRow label="Период:">{periodLabel}</FactRow>
+        <FactRow label="Статус:" testId={`scheduler-period-status-${row.key}`}>
+          <span
             className={
               row.has_tasks
                 ? "text-emerald-800 dark:text-emerald-200"
-                : "text-amber-900 dark:text-amber-200"
+                : "font-medium text-amber-900 dark:text-amber-200"
             }
           >
-            {statusLabel}
-          </dd>
-        </div>
-        {!row.has_tasks && reason ? (
-          <div className="flex flex-col gap-0.5">
-            <dt className="text-zinc-600 dark:text-zinc-400">Вероятная причина:</dt>
-            <dd data-testid={`scheduler-period-reason-${row.key}`}>{reason}</dd>
-          </div>
+            {creation.icon} {creation.label}
+          </span>
+        </FactRow>
+        {reason ? (
+          <FactRow label={`${reason.label}:`} testId={`scheduler-period-reason-${row.key}`}>
+            {reason.text}
+          </FactRow>
         ) : null}
       </dl>
       {row.last_run_item?.run_id ? (
-        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-500">
+        <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
           <Link
             href={`/regular-task-runs?run_id=${row.last_run_item.run_id}`}
             className="text-blue-700 hover:text-blue-600 dark:text-blue-300"
@@ -142,6 +235,8 @@ export default function SchedulerStatusPanel({ variant = "full" }: SchedulerStat
   const showPeriodDiagnostics = variant === "full";
   const action = status?.recommended_action;
   const showAction = action && action.kind !== "none" && action.href;
+  const overdueDays = status?.cron_overdue_days ?? 0;
+  const showOverdue = Boolean(status?.is_cron_overdue && overdueDays > 0);
 
   return (
     <section
@@ -150,7 +245,7 @@ export default function SchedulerStatusPanel({ variant = "full" }: SchedulerStat
       aria-label="Состояние автоматического запуска"
     >
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
               Автоматический запуск
@@ -162,7 +257,7 @@ export default function SchedulerStatusPanel({ variant = "full" }: SchedulerStat
               <span className="text-xs text-red-700 dark:text-red-300">{error}</span>
             ) : status ? (
               <p
-                className={["text-sm font-medium", statusTone(status.status)].join(" ")}
+                className={["text-sm font-semibold", statusTone(status.status)].join(" ")}
                 data-testid="scheduler-status-badge"
               >
                 {statusIndicator(status.status)} {status.status_label}
@@ -170,106 +265,113 @@ export default function SchedulerStatusPanel({ variant = "full" }: SchedulerStat
             ) : null}
           </div>
 
-          {!loading && !error && status?.status_explanation ? (
-            <p
-              className="mt-1 text-xs text-zinc-700 dark:text-zinc-300"
-              data-testid="scheduler-status-explanation"
-            >
-              {status.status_explanation}
-            </p>
-          ) : null}
-
           {!loading && !error && status ? (
-            <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-zinc-800 dark:text-zinc-200">
-              <div className="flex flex-wrap items-center gap-x-1.5">
-                <dt className="text-zinc-600 dark:text-zinc-400">Последний запуск:</dt>
-                <dd data-testid="scheduler-last-run">
-                  {status.last_run_at ? fmtDateTime(status.last_run_at) : "—"}
-                </dd>
+            <>
+              <div data-testid="scheduler-summary-block">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+                  Причина
+                </p>
+                <dl className="mt-1 space-y-1">
+                  <FactRow label="Последний автоматический запуск:" testId="scheduler-last-run">
+                    {status.last_run_at ? fmtDateTime(status.last_run_at) : "—"}
+                  </FactRow>
+                  {showOverdue ? (
+                    <FactRow label="Просрочка:" testId="scheduler-overdue" highlight>
+                      <span
+                        className="inline-flex items-center rounded-md border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-950 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-100"
+                        data-testid="scheduler-overdue-badge"
+                      >
+                        {formatOverdueDays(overdueDays)}
+                      </span>
+                    </FactRow>
+                  ) : null}
+                  <FactRow label="Последний успешный запуск:" testId="scheduler-last-success">
+                    {status.last_successful_run_at ? fmtDateTime(status.last_successful_run_at) : "—"}
+                  </FactRow>
+                  {status.expected_next_run_label ? (
+                    <FactRow
+                      label={status.is_cron_overdue ? "Ожидался:" : "Следующий ожидаемый автоматический запуск:"}
+                      testId="scheduler-next-run"
+                    >
+                      {status.expected_next_run_label}
+                    </FactRow>
+                  ) : null}
+                  <FactRow label="Последний результат:">
+                    <span
+                      className={[
+                        "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                        resultBadgeClass(resultTone),
+                      ].join(" ")}
+                      data-testid="scheduler-last-result"
+                    >
+                      {status.last_result_label}
+                    </span>
+                  </FactRow>
+                </dl>
               </div>
-              <div className="flex flex-wrap items-center gap-x-1.5">
-                <dt className="text-zinc-600 dark:text-zinc-400">Последний успешный:</dt>
-                <dd data-testid="scheduler-last-success">
-                  {status.last_successful_run_at ? fmtDateTime(status.last_successful_run_at) : "—"}
-                </dd>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-1.5">
-                <dt className="text-zinc-600 dark:text-zinc-400">Последний результат:</dt>
-                <dd>
-                  <span
-                    className={[
-                      "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
-                      resultBadgeClass(resultTone),
-                    ].join(" ")}
-                    data-testid="scheduler-last-result"
+
+              {status.status_explanation ? (
+                <p
+                  className="rounded-lg border border-zinc-200/80 bg-zinc-50/80 px-2.5 py-2 text-xs leading-relaxed text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-300"
+                  data-testid="scheduler-status-explanation"
+                >
+                  {status.status_explanation}
+                </p>
+              ) : null}
+
+              {showAction ? (
+                <div
+                  className="rounded-lg border border-blue-200/80 bg-blue-50/50 px-2.5 py-2 dark:border-blue-900/40 dark:bg-blue-950/20"
+                  data-testid="scheduler-recommended-action"
+                >
+                  <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Следующее действие</p>
+                  <Link
+                    href={action.href!}
+                    className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-600 dark:text-blue-300"
                   >
-                    {status.last_result_label}
-                  </span>
-                </dd>
-              </div>
-              {status.expected_next_run_label ? (
-                <div className="flex flex-wrap items-center gap-x-1.5">
-                  <dt className="text-zinc-600 dark:text-zinc-400">
-                    {status.is_cron_overdue ? "Ожидался:" : "Следующий ожидаемый автоматический запуск:"}
-                  </dt>
-                  <dd data-testid="scheduler-next-run">{status.expected_next_run_label}</dd>
+                    → {action.label}
+                  </Link>
                 </div>
               ) : null}
-              {status.is_cron_overdue && (status.cron_overdue_days ?? 0) > 0 ? (
-                <div className="flex flex-wrap items-center gap-x-1.5">
-                  <dt className="text-zinc-600 dark:text-zinc-400">Просрочка:</dt>
-                  <dd className="font-medium text-amber-900 dark:text-amber-200" data-testid="scheduler-overdue">
-                    {status.cron_overdue_days} дн.
-                  </dd>
+
+              {showPeriodDiagnostics ? (
+                <div className="space-y-2" data-testid="scheduler-period-diagnostics">
+                  <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                    Диагностика пропущенных периодов
+                  </p>
+                  <PeriodDiagnosticsSummary rows={status.period_diagnostics ?? []} />
+                  {(status.period_diagnostics ?? []).map((row) => (
+                    <PeriodDiagnosticRow key={row.key} row={row} />
+                  ))}
                 </div>
               ) : null}
-            </dl>
-          ) : null}
 
-          {!loading && !error && status?.last_error ? (
-            <p
-              className="mt-1 text-xs text-red-700 dark:text-red-300"
-              data-testid="scheduler-last-error"
-            >
-              Последняя ошибка: {status.last_error}
-            </p>
-          ) : null}
-
-          {!loading && !error && status ? (
-            <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-500" data-testid="scheduler-hint">
-              {status.hint}
-            </p>
-          ) : null}
-
-          {!loading && !error && showAction ? (
-            <div className="mt-2" data-testid="scheduler-recommended-action">
-              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Следующее действие:</p>
-              <Link
-                href={action.href!}
-                className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-600 dark:text-blue-300"
+              <div
+                className="space-y-1 border-t border-zinc-200/80 pt-2 dark:border-zinc-800"
+                data-testid="scheduler-technical-details"
               >
-                → {action.label}
-              </Link>
-            </div>
-          ) : null}
-
-          <p
-            className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-500"
-            data-testid="scheduler-data-source"
-          >
-            Источник данных: GET /regular-tasks/scheduler-status
-            {status?.checked_at ? ` · обновлено ${formatCheckedAt(status.checked_at)}` : ""}
-          </p>
-
-          {showPeriodDiagnostics && !loading && !error && status?.period_diagnostics?.length ? (
-            <div className="mt-2 space-y-2" data-testid="scheduler-period-diagnostics">
-              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Диагностика пропущенных периодов
-              </p>
-              {status.period_diagnostics.map((row) => (
-                <PeriodDiagnosticRow key={row.key} row={row} />
-              ))}
-            </div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
+                  Технические сведения
+                </p>
+                {status.last_error ? (
+                  <p className="text-xs text-red-700 dark:text-red-300" data-testid="scheduler-last-error">
+                    Последняя ошибка: {status.last_error}
+                  </p>
+                ) : null}
+                <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-500" data-testid="scheduler-hint">
+                  {status.hint}
+                </p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-500" data-testid="scheduler-manual-run-note">
+                  Ручной запуск генерации (`POST /internal/regular-tasks/run`) на странице шаблонов вызывает тот же
+                  механизм, что и cron, но с `trigger_source=manual` и только для шаблонов, due на сегодня. Он не
+                  восполняет пропущенные отчётные периоды — для этого используйте догоняющий запуск.
+                </p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-500" data-testid="scheduler-data-source">
+                  Источник данных: GET /regular-tasks/scheduler-status
+                  {status.checked_at ? ` · обновлено ${formatCheckedAt(status.checked_at)}` : ""}
+                </p>
+              </div>
+            </>
           ) : null}
         </div>
 

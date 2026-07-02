@@ -75,39 +75,28 @@ const STALE_STATUS: api.RegularTaskSchedulerStatus = {
 };
 
 describe("SchedulerStatusPanel", () => {
-  it("renders status explanation and overdue cron expectation", async () => {
+  it("shows summary facts before detailed explanation and highlights overdue", async () => {
     vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue(STALE_STATUS);
 
     render(<SchedulerStatusPanel variant="full" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("scheduler-status-explanation")).toHaveTextContent("успешным");
+      expect(screen.getByTestId("scheduler-summary-block")).toBeInTheDocument();
     });
 
     expect(screen.getByTestId("scheduler-status-badge")).toHaveTextContent("Требует внимания");
-    expect(screen.getByTestId("scheduler-last-result")).toHaveTextContent("Успешно");
+    expect(screen.getByTestId("scheduler-last-run")).toHaveTextContent("22.06.2026");
+    expect(screen.getByTestId("scheduler-last-success")).toHaveTextContent("22.06.2026");
     expect(screen.getByTestId("scheduler-next-run")).toHaveTextContent("23.06.2026 07:41");
-    expect(screen.getByTestId("scheduler-overdue")).toHaveTextContent("10 дн.");
+    expect(screen.getByTestId("scheduler-overdue-badge")).toHaveTextContent("10 дней");
+    expect(screen.getByTestId("scheduler-last-result")).toHaveTextContent("Успешно");
+
+    const summary = screen.getByTestId("scheduler-summary-block");
+    const explanation = screen.getByTestId("scheduler-status-explanation");
+    expect(summary.compareDocumentPosition(explanation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows period diagnostics with primary reasons", async () => {
-    vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue(STALE_STATUS);
-
-    render(<SchedulerStatusPanel variant="full" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("scheduler-period-past_week")).toBeInTheDocument();
-    });
-
-    expect(screen.getByTestId("scheduler-period-reason-past_week")).toHaveTextContent(
-      "После 22.06.2026",
-    );
-    expect(screen.getByTestId("scheduler-period-reason-monthly_reporting")).toHaveTextContent(
-      "01.07.2026",
-    );
-  });
-
-  it("shows recommended catch-up action", async () => {
+  it("shows recommended action before period diagnostics", async () => {
     vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue(STALE_STATUS);
 
     render(<SchedulerStatusPanel variant="full" />);
@@ -116,7 +105,106 @@ describe("SchedulerStatusPanel", () => {
       expect(screen.getByTestId("scheduler-recommended-action")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("scheduler-recommended-action")).toHaveTextContent("догonяющий запуск");
+    const action = screen.getByTestId("scheduler-recommended-action");
+    const diagnostics = screen.getByTestId("scheduler-period-diagnostics");
+    expect(action.compareDocumentPosition(diagnostics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(action).toHaveTextContent("догonяющий запуск");
+  });
+
+  it("shows aggregated missed-period summary before diagnostic cards", async () => {
+    vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue(STALE_STATUS);
+
+    render(<SchedulerStatusPanel variant="full" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("scheduler-period-summary")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("scheduler-period-summary")).toHaveTextContent("Пропущено периодов: 2");
+    expect(screen.getByTestId("scheduler-period-summary-item-past_week")).toHaveTextContent(
+      "Weekly — 24.06.2026–30.06.2026",
+    );
+    expect(screen.getByTestId("scheduler-period-summary-item-monthly_reporting")).toHaveTextContent(
+      "Monthly — 06.2026",
+    );
+
+    const summary = screen.getByTestId("scheduler-period-summary");
+    const firstCard = screen.getByTestId("scheduler-period-past_week");
+    expect(summary.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows all-clear summary when every period has tasks", async () => {
+    vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue({
+      ...STALE_STATUS,
+      period_diagnostics: STALE_STATUS.period_diagnostics!.map((row) => ({
+        ...row,
+        has_tasks: true,
+        creation_status_label: "создан",
+      })),
+    });
+
+    render(<SchedulerStatusPanel variant="full" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("scheduler-period-summary")).toHaveTextContent(
+        "✓ Пропущенных периодов не обнаружено",
+      );
+    });
+
+    expect(screen.getByTestId("scheduler-period-past_week")).toBeInTheDocument();
+    expect(screen.getByTestId("scheduler-period-monthly_reporting")).toBeInTheDocument();
+  });
+
+  it("shows all-clear summary when period diagnostics array is empty", async () => {
+    vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue({
+      ...STALE_STATUS,
+      period_diagnostics: [],
+    });
+
+    render(<SchedulerStatusPanel variant="full" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("scheduler-period-summary")).toHaveTextContent(
+        "✓ Пропущенных периодов не обнаружено",
+      );
+    });
+
+    expect(screen.queryByTestId("scheduler-period-past_week")).not.toBeInTheDocument();
+  });
+
+  it("shows compact period diagnostics with factual reason labels", async () => {
+    vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue(STALE_STATUS);
+
+    render(<SchedulerStatusPanel variant="full" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("scheduler-period-past_week")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("scheduler-period-status-past_week")).toHaveTextContent("✖ Не создан");
+    expect(screen.getByTestId("scheduler-period-reason-past_week")).toHaveTextContent(
+      "После 22.06.2026",
+    );
+    expect(screen.getByTestId("scheduler-period-status-monthly_reporting")).toHaveTextContent("✖ Не создан");
+    expect(screen.getByTestId("scheduler-period-reason-monthly_reporting")).toHaveTextContent(
+      "01.07.2026",
+    );
+    expect(screen.queryByText("Вероятная причина:")).not.toBeInTheDocument();
+  });
+
+  it("documents why manual scheduler run is not offered in this panel", async () => {
+    vi.spyOn(api, "apiGetRegularTaskSchedulerStatus").mockResolvedValue(STALE_STATUS);
+
+    render(<SchedulerStatusPanel variant="full" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("scheduler-manual-run-note")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("scheduler-manual-run-note")).toHaveTextContent(
+      "POST /internal/regular-tasks/run",
+    );
+    expect(screen.getByTestId("scheduler-manual-run-note")).toHaveTextContent("пропущенные отчётные периоды");
   });
 
   it("refreshes status on button click", async () => {
