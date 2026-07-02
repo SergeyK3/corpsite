@@ -7,6 +7,10 @@ import { useMemo } from "react";
 import { runTitleLabel, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import { buildTaskPageHref } from "@/lib/taskNav";
 import {
+  taskDisplayColorDeadlineClass,
+  taskDisplayColorTitleClass,
+} from "@/lib/taskDisplayColor";
+import {
   buildItemOriginView,
   buildRunListEntry,
   buildRunOutcomeCountsLabel,
@@ -19,6 +23,7 @@ import {
   periodLabel,
   resolveItemTaskOverdueLabel,
   resolveItemTaskStatusLabel,
+  resolveRunItemTaskDisplayColor,
   resolveRunTaskListState,
   RUN_TASK_LIST_EXPECTED_NOT_LOADED_MESSAGE,
   roleLabel,
@@ -488,10 +493,14 @@ export function RegularTaskRunsJournalView({
                         data-testid={`regular-task-run-task-row-${row.item_id}`}
                         className="border-t border-zinc-200 dark:border-zinc-800"
                       >
-                        <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">{row.task_title}</td>
+                        <td className={`px-3 py-2 font-medium ${taskDisplayColorTitleClass(row.task_display_color)}`}>
+                          {row.task_title}
+                        </td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.executor_label}</td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.period_label}</td>
-                        <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.deadline_label}</td>
+                        <td className={`px-3 py-2 ${taskDisplayColorDeadlineClass(row.task_display_color)}`}>
+                          {row.deadline_label}
+                        </td>
                         <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">{row.task_status_label}</td>
                         <td className="px-3 py-2 text-xs">
                           {row.task_is_overdue ? (
@@ -636,6 +645,7 @@ export function RegularTaskRunsJournalView({
                       <tbody>
                         {filteredItems.map((it, index) => {
                           const err = String(it.error ?? "").trim();
+                          const displayColor = resolveRunItemTaskDisplayColor(it);
                           return (
                             <tr
                               key={it.item_id}
@@ -644,7 +654,9 @@ export function RegularTaskRunsJournalView({
                             >
                               <td className="px-2 py-2 text-zinc-600 dark:text-zinc-400">{index + 1}</td>
                               <td className="px-2 py-2">
-                                <div className="font-medium text-zinc-900 dark:text-zinc-50">{itemTitleLabel(it)}</div>
+                                <div className={`font-medium ${taskDisplayColorTitleClass(displayColor)}`}>
+                                  {itemTitleLabel(it)}
+                                </div>
                                 <div className="text-[11px] text-zinc-500">шаблон #{it.regular_task_id}</div>
                               </td>
                               <td className={`px-2 py-2 text-xs font-medium ${itemOutcomeTone(it)}`}>

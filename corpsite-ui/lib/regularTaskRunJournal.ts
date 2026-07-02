@@ -10,6 +10,11 @@ import {
   uiFieldLabel,
 } from "./i18n";
 import { buildTaskPageHref } from "./taskNav";
+import {
+  getTaskDisplayColor,
+  type TaskDisplayColor,
+  type TaskDisplayColorSource,
+} from "./taskDisplayColor";
 
 export type RunMode = "dry" | "live";
 
@@ -203,6 +208,7 @@ export type RunTaskListRow = {
   task_status_label: string;
   task_overdue_label: string;
   task_is_overdue: boolean;
+  task_display_color: TaskDisplayColor;
 };
 
 export type RunTaskListState =
@@ -731,6 +737,21 @@ export function isItemTaskOverdue(item: RegularTaskRunItemRow): boolean {
   return Boolean(task.is_overdue || task.lifecycle === "overdue");
 }
 
+export function taskDisplayColorSourceFromRunItem(item: RegularTaskRunItemRow): TaskDisplayColorSource {
+  return {
+    due_date: item.task?.due_date ?? item.meta?.due_date ?? null,
+    report_approved_at: null,
+    status_code: item.task?.status_code ?? null,
+  };
+}
+
+export function resolveRunItemTaskDisplayColor(
+  item: RegularTaskRunItemRow,
+  today?: Date,
+): TaskDisplayColor {
+  return getTaskDisplayColor(taskDisplayColorSourceFromRunItem(item), today);
+}
+
 export function buildRunTaskListRows(items: readonly RegularTaskRunItemRow[]): RunTaskListRow[] {
   return [...items]
     .sort((a, b) => a.item_id - b.item_id)
@@ -749,6 +770,7 @@ export function buildRunTaskListRows(items: readonly RegularTaskRunItemRow[]): R
         task_status_label: resolveItemTaskStatusLabel(item),
         task_overdue_label: resolveItemTaskOverdueLabel(item),
         task_is_overdue: isItemTaskOverdue(item),
+        task_display_color: resolveRunItemTaskDisplayColor(item),
       };
     });
 }

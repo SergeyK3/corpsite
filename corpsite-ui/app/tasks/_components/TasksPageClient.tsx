@@ -15,6 +15,11 @@ import { canEditTask, editButtonTitle, isTaskRowEditable } from "@/lib/taskEditP
 import { taskPeriodicityLabel } from "@/lib/taskPeriodicity";
 import { resolveTaskReportLink } from "@/lib/taskReportLink";
 import {
+  getTaskDisplayColor,
+  taskDisplayColorDeadlineClass,
+  taskDisplayColorTitleClass,
+} from "@/lib/taskDisplayColor";
+import {
   canSeeTeamTasks as userCanSeeTeamTasks,
   defaultTaskScope,
   isTaskSystemAdmin,
@@ -1072,6 +1077,7 @@ export default function TasksPageClient() {
                           readOnlyTeamMode,
                           isSystemAdmin,
                         });
+                        const displayColor = getTaskDisplayColor(item);
 
                         return (
                           <tr
@@ -1081,7 +1087,7 @@ export default function TasksPageClient() {
                           >
                             <td className="px-1.5 py-2 text-sm leading-5 text-zinc-900 dark:text-zinc-50">{id}</td>
 
-                            <td className="px-2 py-2 text-sm leading-5 text-zinc-900 dark:text-zinc-50">
+                            <td className={`px-2 py-2 text-sm leading-5 ${taskDisplayColorTitleClass(displayColor)}`}>
                               <div className="max-w-full whitespace-normal break-words">{taskTitleOf(item)}</div>
                             </td>
 
@@ -1104,7 +1110,7 @@ export default function TasksPageClient() {
                               {statusTextOf(item)}
                             </td>
 
-                            <td className="px-2 py-2 text-sm leading-5 text-zinc-600 dark:text-zinc-400">
+                            <td className={`px-2 py-2 text-sm leading-5 ${taskDisplayColorDeadlineClass(displayColor)}`}>
                               {formatDeadline(item)}
                             </td>
 

@@ -1,6 +1,10 @@
 "use client";
 
 import { TaskListItem } from "@/lib/types";
+import {
+  getTaskDisplayColor,
+  taskDisplayColorTitleClass,
+} from "@/lib/taskDisplayColor";
 
 type Props = {
   items: TaskListItem[];
@@ -17,6 +21,7 @@ export default function TaskList({ items, selectedTaskId, onSelect }: Props) {
         items.map((t) => {
           const active = selectedTaskId === t.task_id;
           const deadline = t.deadline ? String(t.deadline) : "";
+          const displayColor = getTaskDisplayColor(t);
           return (
             <button
               key={t.task_id}
@@ -24,7 +29,7 @@ export default function TaskList({ items, selectedTaskId, onSelect }: Props) {
               onClick={() => onSelect(t.task_id)}
             >
               <div className="list__top">
-                <div className="list__title">
+                <div className={`list__title ${taskDisplayColorTitleClass(displayColor)}`}>
                   <span className="mono">#{t.task_id}</span> {t.title}
                 </div>
                 <div className="badge">{t.status}</div>
