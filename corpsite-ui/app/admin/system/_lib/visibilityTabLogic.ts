@@ -15,21 +15,13 @@ export type DepartmentGroupOption = {
   groupName: string;
 };
 
-const DEPARTMENT_GROUP_ORDER = [
-  "Клинические",
-  "Параклинические",
-  "Административно-хозяйственные",
-];
-
 export function sortDepartmentGroupOptions(
   groups: DepartmentGroupOption[],
 ): DepartmentGroupOption[] {
   return [...groups].sort((a, b) => {
-    const ai = DEPARTMENT_GROUP_ORDER.indexOf(a.groupName);
-    const bi = DEPARTMENT_GROUP_ORDER.indexOf(b.groupName);
-    if (ai !== -1 || bi !== -1) {
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    }
+    const rank = (id: number) => (id >= 1 && id <= 3 ? id : 1000 + id);
+    const cmp = rank(a.groupId) - rank(b.groupId);
+    if (cmp !== 0) return cmp;
     return a.groupName.localeCompare(b.groupName, "ru");
   });
 }

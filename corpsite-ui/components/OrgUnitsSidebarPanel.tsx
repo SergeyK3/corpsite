@@ -4,7 +4,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "@/lib/api";
-import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
+import { loadDepartmentGroupLabelMap, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import {
   buildDefaultExpandedKeys,
   collectAncestorKeysForUnitId,
@@ -129,21 +129,18 @@ function buildTreeFromFlat(itemsRaw: ApiOrgUnitNode[]): OrgTreeNode[] {
   return roots;
 }
 
-const GROUP_NAMES: Record<number, string> = {
-  1: "Клинические",
-  2: "Параклинические",
-  3: "Адмхоз",
-};
-
 const HIDDEN_VISIBLE_ROOT_NAME = "Многопрофильный медицинский центр";
 
-function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
+function groupChildrenByGroupId(
+  children: OrgTreeNode[],
+  groupLabelById: Map<number, string>,
+): OrgTreeNode[] {
   const buckets = new Map<number, OrgTreeNode[]>();
   const rest: OrgTreeNode[] = [];
 
   for (const ch of children) {
     const gid = ch.group_id;
-    if (gid && GROUP_NAMES[gid]) {
+    if (gid && groupLabelById.has(gid)) {
       if (!buckets.has(gid)) buckets.set(gid, []);
       buckets.get(gid)!.push(ch);
     } else {
@@ -156,7 +153,7 @@ function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
     .map((gid) => ({
       key: `group-${gid}`,
       unit_id: null,
-      name: GROUP_NAMES[gid] ?? `Группа ${gid}`,
+      name: groupLabelById.get(gid) ?? `Группа ${gid}`,
       group_id: gid,
       children: (buckets.get(gid) ?? []).sort((a, b) =>
         normalizeText(a.name).localeCompare(normalizeText(b.name), "ru")
@@ -170,16 +167,16 @@ function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
   return [...grouped, ...restSorted];
 }
 
-function injectGroupsIfPossible(tree: OrgTreeNode[]): OrgTreeNode[] {
+function injectGroupsIfPossible(tree: OrgTreeNode[], groupLabelById: Map<number, string>): OrgTreeNode[] {
   if (!Array.isArray(tree) || tree.length === 0) return tree;
 
   if (tree.length === 1 && Array.isArray(tree[0].children) && tree[0].children.length > 0) {
     const root = tree[0];
-    const hasGroupIds = root.children.some((c) => !!c.group_id && !!GROUP_NAMES[c.group_id]);
+    const hasGroupIds = root.children.some((c) => !!c.group_id && groupLabelById.has(c.group_id));
     const alreadyGrouped = root.children.some((c) => c.key.startsWith("group-"));
 
     if (hasGroupIds && !alreadyGrouped) {
-      const nextChildren = groupChildrenByGroupId(root.children);
+      const nextChildren = groupChildrenByGroupId(root.children, groupLabelById);
       return [{ ...root, children: nextChildren }];
     }
   }
@@ -205,6 +202,7 @@ async function fetchOrgTree(
   extraHeaders: Record<string, string>,
   orgGroupId?: number,
 ): Promise<OrgTreeNode[]> {
+  const groupLabelById = await loadDepartmentGroupLabelMap();
   const query: Record<string, string | number | undefined> = {};
   if (orgGroupId != null && orgGroupId > 0) {
     query.org_group_id = orgGroupId;
@@ -220,17 +218,17 @@ async function fetchOrgTree(
 
   const looksTree = itemsRaw.some((x) => Array.isArray(x?.children) && (x.children?.length ?? 0) > 0);
   if (looksTree) {
-    return stripVisibleRootIfNeeded(injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree)));
+    return stripVisibleRootIfNeeded(injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree), groupLabelById));
   }
 
   const flatHasParents = itemsRaw.some(
     (x) => x?.parentId != null || x?.parent_id != null || x?.parent_unit_id != null || x?.parentUnitId != null
   );
   if (flatHasParents) {
-    return stripVisibleRootIfNeeded(injectGroupsIfPossible(buildTreeFromFlat(itemsRaw)));
+    return stripVisibleRootIfNeeded(injectGroupsIfPossible(buildTreeFromFlat(itemsRaw), groupLabelById));
   }
 
-  return stripVisibleRootIfNeeded(injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree)));
+  return stripVisibleRootIfNeeded(injectGroupsIfPossible(itemsRaw.map(normalizeOrgUnitNodeTree), groupLabelById));
 }
 
 export default function OrgUnitsSidebarPanel({ basePath }: { basePath: string }) {

@@ -4,6 +4,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetchJson } from "../../../../lib/api";
+import { loadDepartmentGroupLabelMap } from "../../../../lib/orgScope";
 
 type ApiOrgUnitNode = {
   id?: string | number;
@@ -210,11 +211,9 @@ function filterOrgTree(nodes: OrgTreeNode[], termRaw: string): OrgTreeNode[] {
   return out;
 }
 
-function groupLabel(groupId: number | null): string {
-  if (groupId === 1) return "Клинические";
-  if (groupId === 2) return "Параклинические";
-  if (groupId === 3) return "Адмхоз";
-  return "Другое";
+function groupLabel(groupId: number | null, groupLabelById: Map<number, string>): string {
+  if (groupId == null) return "Другое";
+  return groupLabelById.get(groupId) ?? "Другое";
 }
 
 function groupRank(groupId: number | null): number {
@@ -288,6 +287,7 @@ export default function OrgUnitsTree() {
   const [orgError, setOrgError] = React.useState<string | null>(null);
   const [orgItems, setOrgItems] = React.useState<OrgTreeNode[]>([]);
   const [filterText, setFilterText] = React.useState("");
+  const [groupLabelById, setGroupLabelById] = React.useState<Map<number, string>>(() => new Map());
 
   const [expandedSet, setExpandedSet] = React.useState<Set<string>>(new Set<string>());
   const [groupsOpenSet, setGroupsOpenSet] = React.useState<Set<string>>(new Set<string>());
@@ -312,6 +312,20 @@ export default function OrgUnitsTree() {
     });
     router.replace(`/directory/org?${p.toString()}`);
   }
+
+  React.useEffect(() => {
+    let cancelled = false;
+    loadDepartmentGroupLabelMap()
+      .then((map) => {
+        if (!cancelled) setGroupLabelById(map);
+      })
+      .catch(() => {
+        if (!cancelled) setGroupLabelById(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -439,7 +453,7 @@ export default function OrgUnitsTree() {
 
       return ranks.map((r) => {
         const chunk = sortByName(buckets.get(r)!);
-        const label = groupLabel(chunk[0]?.group_id ?? null);
+        const label = groupLabel(chunk[0]?.group_id ?? null, groupLabelById);
 
         const gk = groupKeyByRank(r);
         const open = isGroupOpen(gk);
