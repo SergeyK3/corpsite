@@ -321,6 +321,18 @@ export async function createUser(body: UserCreatePayload): Promise<UserDTO> {
 }
 
 /**
+ * Изменение Role Corpsite у существующего Platform User (без пересоздания аккаунта).
+ * Backend: PATCH /directory/users/{user_id}/role
+ */
+export async function updateUserRole(userId: number | string, roleId: number | string): Promise<UserDTO> {
+  const uid = Number(userId);
+  const rid = Number(roleId);
+  if (!Number.isFinite(uid) || uid < 1) throw new Error("user_id is required");
+  if (!Number.isFinite(rid) || rid < 1) throw new Error("role_id is required");
+  return apiPatchJson<UserDTO>(`/directory/users/${uid}/role`, { role_id: rid });
+}
+
+/**
  * Роли (для select при создании пользователя)
  */
 export async function getRoles(args?: { limit?: number; offset?: number }): Promise<any> {
