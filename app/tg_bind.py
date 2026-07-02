@@ -108,12 +108,11 @@ def _require_request_user_id(
         raise_error(ErrorCode.TGBIND_FORBIDDEN_NOT_AUTH)
 
 
-def _has_active_code_for_user(user_id: int) -> bool:
-    now = _now_utc()
-    for rec in _CODES.values():
-        if rec.user_id == int(user_id) and rec.used_at is None and rec.expires_at > now:
-            return True
-    return False
+
+def _invalidate_active_codes_for_user(user_id: int) -> None:
+    for code_hash, rec in list(_CODES.items()):
+        if rec.user_id == int(user_id) and rec.used_at is None:
+            _CODES.pop(code_hash, None)
 
 
 def _gc_expired_codes() -> None:
@@ -343,9 +342,7 @@ def create_bind_code(
         x_internal_api_token=x_internal_api_token,
     )
 
-    # if active code exists — 409 (contract)
-    if _has_active_code_for_user(user_id):
-        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_EXISTS, extra={"user_id": int(user_id)})
+    _invalidate_active_codes_for_user(user_id)
 
     code = _gen_code()
     code_hash = _hash_code(code)

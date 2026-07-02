@@ -207,9 +207,17 @@ export default function TelegramBindPanel({ me, loading = false, onRefresh }: Pr
             </button>
             <button
               type="button"
+              onClick={() => void onCreateCode()}
+              disabled={creating}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-60"
+            >
+              {creating ? "Создание…" : "Создать новый код"}
+            </button>
+            <button
+              type="button"
               onClick={() => void onRefreshClick()}
               disabled={refreshing}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-60"
+              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-60"
             >
               {refreshing ? "Обновление…" : "Обновить статус"}
             </button>

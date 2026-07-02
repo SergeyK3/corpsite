@@ -100,6 +100,66 @@ def test_tg_bind_code_legacy_x_user_id_blocked_when_disabled(
     assert resp.json().get("code") == "TGBIND_FORBIDDEN_NOT_AUTH"
 
 
+def _response_error_code(body: dict[str, Any]) -> str | None:
+    code = body.get("code")
+    if isinstance(code, str) and code.strip():
+        return code.strip()
+    detail = body.get("detail")
+    if isinstance(detail, dict):
+        nested = detail.get("code")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    return None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_tg_bind_code_regenerate_invalidates_previous_code(
+    client: TestClient,
+    seed: Dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BOT_BIND_TOKEN", "test-bot-bind-token")
+
+    user_id = int(seed["executor_user_id"])
+    headers = auth_headers(user_id)
+    tg_user_id = 9_000_000_001
+
+    resp1 = client.post("/me/tg-bind-code", headers=headers)
+    assert resp1.status_code == 200, resp1.text
+    code1 = str(resp1.json().get("code") or "").strip()
+    assert code1
+
+    resp2 = client.post("/me/tg-bind-code", headers=headers)
+    assert resp2.status_code == 200, resp2.text
+    code2 = str(resp2.json().get("code") or "").strip()
+    assert code2
+    assert code2 != code1
+
+    consume_headers = {"X-Bot-Bind-Token": "test-bot-bind-token"}
+
+    stale = client.post(
+        "/tg/bind/consume",
+        headers=consume_headers,
+        json={"code": code1, "tg_user_id": tg_user_id},
+    )
+    assert stale.status_code == 409, stale.text
+    assert _response_error_code(stale.json()) == "TGBIND_CONFLICT_CODE_INVALID"
+
+    fresh = client.post(
+        "/tg/bind/consume",
+        headers=consume_headers,
+        json={"code": code2, "tg_user_id": tg_user_id},
+    )
+    assert fresh.status_code == 200, fresh.text
+    assert int(fresh.json().get("user_id") or 0) == user_id
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE public.users SET telegram_id = NULL WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_tg_bind_code_non_privileged_role_does_not_need_allowlist(
     client: TestClient,

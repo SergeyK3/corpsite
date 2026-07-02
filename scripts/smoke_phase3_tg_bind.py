@@ -197,16 +197,28 @@ def run_smoke(*, cleanup: bool) -> None:
         _ok("4 POST /me/tg-bind-code", f"code={code}")
 
         bind2 = client.post("/me/tg-bind-code", headers=_auth_headers(token))
-        if bind2.status_code != 409:
-            _fail("5 duplicate bind code", f"expected HTTP 409, got {bind2.status_code}: {bind2.text}")
-        bind2_body = _read_json(bind2)
-        dup_code = _error_code(bind2_body)
-        if dup_code != "TGBIND_CONFLICT_CODE_EXISTS":
+        if bind2.status_code != 200:
+            _fail("5 regenerate bind code", f"expected HTTP 200, got {bind2.status_code}: {bind2.text}")
+        bind2_body = bind2.json()
+        code2 = str(bind2_body.get("code") or "").strip()
+        if not code2 or code2 == code:
             _fail(
-                "5 duplicate bind code",
-                f"expected TGBIND_CONFLICT_CODE_EXISTS, got {dup_code!r}: {json.dumps(bind2_body, ensure_ascii=False)}",
+                "5 regenerate bind code",
+                f"expected new code, got {json.dumps(bind2_body, ensure_ascii=False)}",
             )
-        _ok("5 duplicate bind code", "409 TGBIND_CONFLICT_CODE_EXISTS")
+        stale_consume = client.post(
+            "/tg/bind/consume",
+            headers={"X-Bot-Bind-Token": bot_bind_token},
+            json={"code": code, "tg_user_id": tg_user_id},
+        )
+        if stale_consume.status_code != 409:
+            _fail(
+                "5 regenerate bind code",
+                f"stale code must be rejected with 409, got {stale_consume.status_code}: {stale_consume.text}",
+            )
+        code = code2
+        state["bind_code"] = code
+        _ok("5 regenerate bind code", f"new code={code}")
 
         consume_headers = {"X-Bot-Bind-Token": bot_bind_token}
         consume = client.post(
