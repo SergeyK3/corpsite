@@ -426,6 +426,72 @@ export async function apiGetRegularTaskRuns(): Promise<RegularTaskRun[]> {
   return normalizeList<RegularTaskRun>(body);
 }
 
+export type SchedulerPeriodDiagnostic = {
+  key: string;
+  preset: string;
+  schedule_type: string;
+  title?: string;
+  label: string;
+  period_display?: string;
+  run_for_date: string;
+  expected_run_date?: string;
+  period_id: number;
+  period_start: string;
+  period_end: string;
+  active_templates_count: number;
+  tasks_count: number;
+  has_tasks: boolean;
+  creation_status?: string;
+  creation_status_label?: string;
+  primary_reason?: string | null;
+  last_run_item?: {
+    run_id: number;
+    status?: string | null;
+    is_due?: boolean;
+    created_tasks?: number;
+    error?: string | null;
+    started_at?: string | null;
+  } | null;
+  likely_reasons?: string[];
+};
+
+export type SchedulerRecommendedAction = {
+  label: string;
+  href?: string | null;
+  kind?: string;
+};
+
+export type RegularTaskSchedulerStatus = {
+  automatic_enabled: boolean;
+  status: "working" | "needs_attention" | "no_data" | string;
+  status_label: string;
+  status_explanation?: string;
+  observation_window_days: number;
+  last_run_at?: string | null;
+  last_run_status?: string | null;
+  last_successful_run_at?: string | null;
+  last_result_label: string;
+  last_error?: string | null;
+  expected_next_run_at?: string | null;
+  expected_next_run_label?: string | null;
+  is_cron_overdue?: boolean;
+  cron_overdue_days?: number;
+  cron_interval_days?: number;
+  next_template_due_at?: string | null;
+  next_expected_run_at?: string | null;
+  next_expected_run_label?: string | null;
+  hint: string;
+  recommended_action?: SchedulerRecommendedAction;
+  config?: Record<string, unknown>;
+  period_diagnostics?: SchedulerPeriodDiagnostic[];
+  checked_at: string;
+  automatic_runs_in_journal?: number;
+};
+
+export async function apiGetRegularTaskSchedulerStatus(): Promise<RegularTaskSchedulerStatus> {
+  return apiFetchJson<RegularTaskSchedulerStatus>("/regular-tasks/scheduler-status");
+}
+
 export type RegularTaskRunItem = {
   item_id: number;
   run_id: number;

@@ -15,6 +15,7 @@ from app.services.regular_task_run_outcome import (
     build_item_task_payload,
     load_regular_task_run_items_with_outcome,
 )
+from app.services.regular_task_scheduler_status import build_regular_task_scheduler_status
 from app.services.regular_tasks_import_xlsx import import_regular_task_templates_xlsx_bytes
 from app.services.regular_tasks_service import _resolve_journal_warning
 from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
@@ -99,6 +100,61 @@ class RegularTaskRunItemsResponseOut(BaseModel):
     outcome: RegularTaskRunOutcomeOut
 
 
+class SchedulerPeriodDiagnosticOut(BaseModel):
+    key: str
+    preset: str
+    schedule_type: str
+    title: str = ""
+    label: str
+    period_display: str = ""
+    run_for_date: str
+    expected_run_date: str = ""
+    period_id: int
+    period_start: str
+    period_end: str
+    active_templates_count: int
+    tasks_count: int
+    has_tasks: bool
+    creation_status: str = "missing"
+    creation_status_label: str = ""
+    primary_reason: Optional[str] = None
+    last_run_item: Optional[Dict[str, Any]] = None
+    likely_reasons: List[str] = Field(default_factory=list)
+
+
+class SchedulerRecommendedActionOut(BaseModel):
+    label: str
+    href: Optional[str] = None
+    kind: str = "none"
+
+
+class RegularTaskSchedulerStatusOut(BaseModel):
+    automatic_enabled: bool
+    status: str
+    status_label: str
+    status_explanation: str = ""
+    observation_window_days: int
+    last_run_at: Optional[str] = None
+    last_run_status: Optional[str] = None
+    last_successful_run_at: Optional[str] = None
+    last_result_label: str
+    last_error: Optional[str] = None
+    expected_next_run_at: Optional[str] = None
+    expected_next_run_label: Optional[str] = None
+    is_cron_overdue: bool = False
+    cron_overdue_days: int = 0
+    cron_interval_days: int = 1
+    next_template_due_at: Optional[str] = None
+    next_expected_run_at: Optional[str] = None
+    next_expected_run_label: Optional[str] = None
+    hint: str
+    recommended_action: SchedulerRecommendedActionOut
+    config: Dict[str, Any] = Field(default_factory=dict)
+    period_diagnostics: List[SchedulerPeriodDiagnosticOut] = Field(default_factory=list)
+    checked_at: str
+    automatic_runs_in_journal: int = 0
+
+
 def _require_system_admin(user: Dict[str, Any]) -> None:
     role_id = user.get("role_id")
     try:
@@ -133,6 +189,19 @@ def import_regular_tasks_xlsx(
 ) -> Dict[str, Any]:
     _require_system_admin(current_user)
     return import_regular_task_templates_xlsx_bytes(raw=raw)
+
+
+@router.get("/regular-tasks/scheduler-status", response_model=RegularTaskSchedulerStatusOut)
+def get_regular_task_scheduler_status(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> RegularTaskSchedulerStatusOut:
+    """Operational status of automatic regular-task generation (cron journal + config)."""
+    _require_admin_or_privileged(current_user)
+
+    with engine.begin() as conn:
+        payload = build_regular_task_scheduler_status(conn)
+
+    return RegularTaskSchedulerStatusOut(**payload)
 
 
 @router.get("/regular-task-runs", response_model=List[RegularTaskRunOut])

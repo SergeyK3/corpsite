@@ -6,6 +6,7 @@ import React from "react";
 
 import CatchUpReviewPanel from "./CatchUpReviewPanel";
 
+import SchedulerStatusPanel from "@/app/regular-tasks/_components/SchedulerStatusPanel";
 import {
   apiCatchUpRegularTasks,
   apiFetchJson,
@@ -39,15 +40,20 @@ import {
 } from "@/lib/i18n";
 import { directoryRoleLabel, type RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
 
-type OrgGroupFilter = "all" | "clinical" | "paraclinical" | "admin";
+type OrgGroupFilter = "all" | string;
 
 type DeptGroupRow = {
   group_id: number;
   group_name: string;
+  effective_log_group?: string | null;
 };
 
 type DeptGroupsResponse = {
-  items?: DeptGroupRow[];
+  items?: Array<{
+    group_id: number;
+    group_name?: string;
+    effective_log_group?: string | null;
+  }>;
 };
 
 type RoleRow = {
@@ -73,13 +79,6 @@ type TemplatesResponse = {
   items?: TemplateRow[];
 };
 
-const ORG_GROUP_OPTIONS: Array<{ value: OrgGroupFilter; label: string }> = [
-  { value: "all", label: "Все группы отделений" },
-  { value: "clinical", label: "Клинические" },
-  { value: "paraclinical", label: "Параклинические" },
-  { value: "admin", label: "Административно-хозяйственные" },
-];
-
 const SCHEDULE_TYPE_OPTIONS: Array<{ value: CatchUpScheduleType; label: string }> = [
   { value: "weekly", label: scheduleTypeLabel("weekly") },
   { value: "monthly", label: scheduleTypeLabel("monthly") },
@@ -102,28 +101,22 @@ function readEnvGroupId(name: string, fallback: number): number {
   return n;
 }
 
-const ENV_ORG_GROUP_IDS: Record<Exclude<OrgGroupFilter, "all">, number> = {
+const ENV_ORG_GROUP_IDS: Record<string, number> = {
   clinical: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_CLINICAL", 1),
   paraclinical: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_PARACLINICAL", 2),
-  admin: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3),
-};
-
-const ORG_GROUP_NAME_PATTERNS: Record<Exclude<OrgGroupFilter, "all">, RegExp> = {
-  clinical: /клинич/i,
-  paraclinical: /параклинич/i,
-  admin: /адм|хоз/i,
+  admin_household: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3),
 };
 
 function resolveOrgGroupId(filter: OrgGroupFilter, deptGroups: DeptGroupRow[]): number | null {
   if (filter === "all") return null;
 
+  const bySlug = deptGroups.find((g) => g.effective_log_group === filter);
+  if (bySlug) return bySlug.group_id;
+
   const envId = ENV_ORG_GROUP_IDS[filter];
-  if (deptGroups.some((g) => g.group_id === envId)) return envId;
+  if (envId != null && deptGroups.some((g) => g.group_id === envId)) return envId;
 
-  const byName = deptGroups.find((g) => ORG_GROUP_NAME_PATTERNS[filter].test(g.group_name));
-  if (byName) return byName.group_id;
-
-  return envId;
+  return envId ?? null;
 }
 
 function resolveActiveStep(params: {
@@ -308,17 +301,19 @@ export default function CatchUpRunClient() {
     setLiveItems([]);
   }, []);
 
-  const groupLabelById = React.useMemo(() => {
-    const map = new Map<number, string>();
-    for (const opt of ORG_GROUP_OPTIONS) {
-      if (opt.value === "all") continue;
-      const gid = resolveOrgGroupId(opt.value, deptGroups);
-      if (gid != null) map.set(gid, opt.label);
-    }
+  const orgGroupOptions = React.useMemo(() => {
+    const opts: Array<{ value: OrgGroupFilter; label: string }> = [
+      { value: "all", label: "Все группы отделений" },
+    ];
     for (const g of deptGroups) {
-      if (!map.has(g.group_id)) map.set(g.group_id, g.group_name);
+      const slug = g.effective_log_group || String(g.group_id);
+      opts.push({ value: slug, label: g.group_name });
     }
-    return map;
+    return opts;
+  }, [deptGroups]);
+
+  const groupLabelById = React.useMemo(() => {
+    return new Map(deptGroups.map((g) => [g.group_id, g.group_name]));
   }, [deptGroups]);
 
   const filteredOwnerUnitOptions = React.useMemo(() => {
@@ -345,6 +340,7 @@ export default function CatchUpRunClient() {
               .map((g) => ({
                 group_id: Number(g.group_id),
                 group_name: String(g.group_name ?? "").trim() || `#${g.group_id}`,
+                effective_log_group: g.effective_log_group ?? null,
               }))
               .filter((g) => Number.isFinite(g.group_id) && g.group_id > 0),
           );
@@ -575,6 +571,8 @@ export default function CatchUpRunClient() {
         <CatchUpNavActions dryRunId={previewResult?.run_id} />
       </div>
 
+      <SchedulerStatusPanel variant="compact" />
+
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">1. Параметры и пробный прогон</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="catch-up-form-grid">
@@ -625,7 +623,7 @@ export default function CatchUpRunClient() {
               }}
               data-testid="catch-up-org-group"
             >
-              {ORG_GROUP_OPTIONS.map((opt) => (
+              {orgGroupOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
