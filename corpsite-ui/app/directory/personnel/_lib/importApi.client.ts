@@ -175,6 +175,8 @@ export type StagingRow = {
   org_unit_name?: string;
   org_group_id?: number | null;
   department_group?: string;
+  effective_log_group?: string | null;
+  effective_log_group_name?: string | null;
   position_raw: string;
   training_raw: string;
   certification_raw: string;
@@ -199,7 +201,13 @@ export type StagingRow = {
 };
 
 export type DepartmentRecodingOptions = {
-  groups: { value: string; label: string }[];
+  groups: {
+    value: string;
+    label: string;
+    group_id?: number;
+    effective_log_group?: string;
+    effective_log_group_name?: string;
+  }[];
   departments: {
     org_unit_id: number | null;
     org_unit_name: string;
@@ -265,7 +273,10 @@ export type EducationProfileSummary = {
   department_source: string;
   org_unit_id: number | null;
   org_unit_name: string;
+  org_group_id?: number | null;
   department_group: string;
+  effective_log_group?: string | null;
+  effective_log_group_name?: string | null;
   position_raw: string;
   education_count: number;
   training_count: number;
@@ -722,6 +733,30 @@ export async function archiveEducationProfile(
   profileId: number
 ): Promise<EducationProfileDetail> {
   return apiPostJson(`/directory/personnel/import/batches/${batchId}/education-profiles/${profileId}/archive`);
+}
+
+/** Parse org group filter: slug (effective_log_group) or legacy numeric org_group_id. */
+export function parseGroupFilterValue(value: string): {
+  effective_log_group?: string;
+  org_group_id?: number;
+} {
+  const v = value.trim();
+  if (!v) return {};
+  const id = Number(v);
+  if (Number.isFinite(id) && id > 0 && /^\d+$/.test(v)) return { org_group_id: id };
+  return { effective_log_group: v };
+}
+
+export function resolveGroupIdFromOptions(
+  options: DepartmentRecodingOptions | null,
+  selectedValue: string,
+): number | undefined {
+  const v = selectedValue.trim();
+  if (!v) return undefined;
+  const matched = options?.groups.find((g) => g.value === v);
+  if (matched?.group_id != null && matched.group_id > 0) return matched.group_id;
+  const id = Number(v);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
 }
 
 /** Parse department filter value from dropdown (id or name: prefix). */

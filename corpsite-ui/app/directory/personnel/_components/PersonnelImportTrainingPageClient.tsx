@@ -10,6 +10,8 @@ import {
   listEducationProfiles,
   mapImportApiError,
   parseDepartmentFilterValue,
+  parseGroupFilterValue,
+  resolveGroupIdFromOptions,
   type DepartmentRecodingOptions,
   type EducationProfileDetail,
   type EducationProfileSummary,
@@ -39,16 +41,18 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
 
   const filteredDepartments = React.useMemo(() => {
     const all = options?.departments ?? [];
-    if (!orgGroupId) return all;
-    return all.filter((d) => String(d.org_group_id) === orgGroupId);
+    const groupId = resolveGroupIdFromOptions(options, orgGroupId);
+    if (!groupId) return all;
+    return all.filter((d) => d.org_group_id === groupId);
   }, [options, orgGroupId]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
       const dept = parseDepartmentFilterValue(departmentFilter);
+      const group = parseGroupFilterValue(orgGroupId);
       const data = await listEducationProfiles(batchId, {
-        org_group_id: orgGroupId ? Number(orgGroupId) : undefined,
+        ...group,
         ...dept,
         q_name: nameQuery || undefined,
         limit,

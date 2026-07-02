@@ -15,6 +15,8 @@ import {
   listStagingRows,
   mapImportApiError,
   parseDepartmentFilterValue,
+  parseGroupFilterValue,
+  resolveGroupIdFromOptions,
   type DepartmentRecodingOptions,
   type StagingRow,
 } from "../_lib/importApi.client";
@@ -61,9 +63,10 @@ function ReviewFilters({
   onChange: (key: string, value: string) => void;
 }) {
   const departments =
-    options?.departments.filter(
-      (d) => !values.org_group_id || String(d.org_group_id) === values.org_group_id
-    ) ?? [];
+    options?.departments.filter((d) => {
+      const groupId = resolveGroupIdFromOptions(options, values.org_group_id);
+      return !groupId || d.org_group_id === groupId;
+    }) ?? [];
 
   return (
     <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3 lg:grid-cols-4">
@@ -201,7 +204,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
     setLoading(true);
     const params: Record<string, string | number | boolean | null | undefined> = {
       roster_scope: mode,
-      org_group_id: filters.org_group_id ? Number(filters.org_group_id) : undefined,
+      ...parseGroupFilterValue(filters.org_group_id),
       ...parseDepartmentFilterValue(filters.org_unit_id),
       certification_category: filters.certification_category || undefined,
       part_time: filters.part_time || undefined,
@@ -247,7 +250,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   }
 
   const exportUrl = getDeclarationsExportUrl(batchId, {
-    org_group_id: filters.org_group_id ? Number(filters.org_group_id) : undefined,
+    ...parseGroupFilterValue(filters.org_group_id),
     ...parseDepartmentFilterValue(filters.org_unit_id),
     staff_type: filters.staff_type || undefined,
     q_name: filters.q_name || undefined,
