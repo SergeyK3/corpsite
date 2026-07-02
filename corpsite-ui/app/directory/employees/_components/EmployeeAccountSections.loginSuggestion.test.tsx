@@ -1,13 +1,53 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeAccountSections from "./EmployeeAccountSections";
-import { getEmployee, getRoles } from "../_lib/api.client";
+import { getEmployee } from "../_lib/api.client";
 
 vi.mock("../_lib/api.client", () => ({
   createUser: vi.fn(),
   getEmployee: vi.fn(),
-  getRoles: vi.fn(),
+}));
+
+vi.mock("@/lib/userCreateOrgScope", () => ({
+  employeeOrgUnitId: vi.fn(() => 44),
+  resolveEmployeeOrgScopePrefill: vi
+    .fn()
+    .mockResolvedValue({ org_group_id: 1, org_unit_id: 44 }),
+}));
+
+vi.mock("@/components/OrgScopeFilter", () => ({
+  default: ({ label, value }: { label: string; value?: number | null }) => (
+    <div data-testid="org-group-filter" data-value={value ?? ""}>
+      {label}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/OrgUnitScopeFilter", () => ({
+  default: ({
+    label,
+    orgGroupId,
+    value,
+  }: {
+    label: string;
+    orgGroupId?: number | null;
+    value?: number | null;
+  }) => (
+    <div
+      data-testid="org-unit-filter"
+      data-group-id={orgGroupId ?? ""}
+      data-value={value ?? ""}
+    >
+      {label}
+    </div>
+  ),
+}));
+
+vi.mock("@/lib/platformRoleCatalog", () => ({
+  listPlatformRoleCatalog: vi.fn().mockResolvedValue([
+    { id: 5, label: "QM Head", code: "QM_HEAD" },
+  ]),
 }));
 
 vi.mock("./EmployeeEventsTimeline", () => ({
@@ -15,12 +55,6 @@ vi.mock("./EmployeeEventsTimeline", () => ({
 }));
 
 describe("EmployeeAccountSections login suggestion", () => {
-  beforeEach(() => {
-    vi.mocked(getRoles).mockResolvedValue({
-      items: [{ role_id: 5, role_name: "QM role" }],
-    });
-  });
-
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -45,7 +79,10 @@ describe("EmployeeAccountSections login suggestion", () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/Логин/i)).toHaveValue("kozgambaeva.lt");
     });
-    expect(screen.getByLabelText(/Логин/i)).not.toHaveValue("talaspaevnak");
+    await waitFor(() => {
+      expect(screen.getByTestId("org-group-filter")).toHaveAttribute("data-value", "1");
+    });
+    expect(screen.getByTestId("org-unit-filter")).toHaveAttribute("data-value", "44");
   });
 
   it("prefills kozgambaeva.lt on auto-open after enrollment", async () => {

@@ -18,6 +18,9 @@ type OrgScopeFilterProps = {
   label?: string;
   disabled?: boolean;
   resetParamsOnChange?: string[];
+  /** Controlled mode: local state instead of URL (e.g. drawer forms). */
+  value?: number | null;
+  onChange?: (groupId: number | null) => void;
 };
 
 export default function OrgScopeFilter({
@@ -26,18 +29,23 @@ export default function OrgScopeFilter({
   label = "Группа отделений",
   disabled = false,
   resetParamsOnChange = ["offset"],
+  value,
+  onChange,
 }: OrgScopeFilterProps) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+
+  const isControlled = onChange != null;
 
   const [groups, setGroups] = React.useState<DepartmentGroupRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const selectedGroupId = React.useMemo(() => {
+    if (isControlled) return value ?? null;
     return readOrgScopeFromSearchParams(sp).org_group_id ?? null;
-  }, [sp]);
+  }, [isControlled, sp, value]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -64,6 +72,15 @@ export default function OrgScopeFilter({
   }, []);
 
   function handleChange(nextValue: string) {
+    const parsed = nextValue ? Number(nextValue) : null;
+    const groupId =
+      parsed != null && Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null;
+
+    if (isControlled) {
+      onChange?.(groupId);
+      return;
+    }
+
     const targetPath = (pathname || "").trim() || basePath;
     const params = new URLSearchParams(sp.toString());
 

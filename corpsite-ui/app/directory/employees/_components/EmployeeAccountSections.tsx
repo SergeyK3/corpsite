@@ -5,10 +5,14 @@ import * as React from "react";
 import {
   createUser,
   getEmployee,
-  getRoles,
   mapApiErrorToMessage,
 } from "../_lib/api.client";
 import { suggestPlatformUserLogin } from "@/lib/platformUserLoginSuggestion";
+import {
+  employeeOrgUnitId,
+  resolveEmployeeOrgScopePrefill,
+  type EmployeeOrgScopePrefill,
+} from "@/lib/userCreateOrgScope";
 import type { EmployeeDetails } from "../_lib/types";
 import EmployeeEventsTimeline from "./EmployeeEventsTimeline";
 import UserCreateDrawer from "./UserCreateDrawer";
@@ -69,16 +73,9 @@ function buildDefaultUserCreateValues(loginSeed = ""): UserCreateFormValues {
     login: loginSeed,
     password: "",
     role_id: "",
+    org_unit_id: "",
     is_active: true,
   };
-}
-
-function normalizeItems<T>(v: unknown): T[] {
-  if (Array.isArray(v)) return v as T[];
-  if (v && typeof v === "object" && Array.isArray((v as { items?: unknown[] }).items)) {
-    return (v as { items: T[] }).items;
-  }
-  return [];
 }
 
 type Props = {
@@ -107,7 +104,10 @@ export default function EmployeeAccountSections({
   const [userCreateInitialValues, setUserCreateInitialValues] = React.useState<UserCreateFormValues>(
     buildDefaultUserCreateValues(),
   );
-  const [roleOptions, setRoleOptions] = React.useState<Array<{ id: number; label: string }>>([]);
+  const [userCreateOrgScope, setUserCreateOrgScope] = React.useState<EmployeeOrgScopePrefill>({
+    org_group_id: null,
+    org_unit_id: null,
+  });
 
   const loadDetails = React.useCallback(async () => {
     if (!employeeId) {
@@ -144,24 +144,18 @@ export default function EmployeeAccountSections({
   function handleOpenUserCreateDrawer() {
     if (!details) return;
     const fio = getEmployeeName(details);
+    const unitId = employeeOrgUnitId(details as Record<string, unknown>);
     setUserCreateError(null);
     setUserCreateInitialValues(buildDefaultUserCreateValues(suggestPlatformUserLogin(fio)));
+    setUserCreateOrgScope({ org_group_id: null, org_unit_id: unitId });
     setUserCreateDrawerOpen(true);
 
     void (async () => {
       try {
-        const rolesObj = await getRoles({ limit: 200, offset: 0 });
-        const items = normalizeItems<any>(rolesObj);
-        setRoleOptions(
-          items
-            .map((r) => ({
-              id: Number(r.role_id ?? r.id),
-              label: String(r.role_name ?? r.name ?? `#${r.role_id ?? r.id}`),
-            }))
-            .filter((r) => Number.isFinite(r.id) && r.id > 0),
-        );
+        const scope = await resolveEmployeeOrgScopePrefill(unitId);
+        setUserCreateOrgScope(scope);
       } catch {
-        setRoleOptions([]);
+        setUserCreateOrgScope({ org_group_id: null, org_unit_id: unitId });
       }
     })();
   }
@@ -192,12 +186,13 @@ export default function EmployeeAccountSections({
     setUserCreateSaving(true);
     setUserCreateError(null);
     try {
+      const unitId = Number(values.org_unit_id);
       await createUser({
         employee_id: employeeNumericId,
         role_id: Number(values.role_id),
         login: values.login.trim(),
         password: values.password,
-        unit_id: (details as any)?.org_unit?.unit_id ?? undefined,
+        unit_id: Number.isFinite(unitId) && unitId > 0 ? unitId : employeeOrgUnitId(details as Record<string, unknown>) ?? undefined,
         is_active: values.is_active,
       });
       setUserCreateDrawerOpen(false);
@@ -211,11 +206,6 @@ export default function EmployeeAccountSections({
   }
 
   const telegramLabel = resolveTelegramLabel(linkedUser as Record<string, unknown> | null);
-  const orgUnitLabel =
-    (details as any)?.org_unit?.name ??
-    (details as any)?.orgUnit?.name ??
-    (details as any)?.org_unit_name ??
-    "—";
 
   const userCreateDrawer =
     userCreateDrawerOpen && details ? (
@@ -223,9 +213,9 @@ export default function EmployeeAccountSections({
         key={`user-create-${employeeId}`}
         open={userCreateDrawerOpen}
         fullName={getEmployeeName(details)}
-        orgUnitLabel={orgUnitLabel}
+        initialOrgGroupId={userCreateOrgScope.org_group_id}
+        initialOrgUnitId={userCreateOrgScope.org_unit_id}
         initialValues={userCreateInitialValues}
-        roleOptions={roleOptions}
         saving={userCreateSaving}
         error={userCreateError}
         onClose={handleCloseUserCreateDrawer}

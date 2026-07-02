@@ -3,6 +3,9 @@
 
 import * as React from "react";
 
+import OrgScopeFilter from "@/components/OrgScopeFilter";
+import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
+import { listPlatformRoleCatalog, type PlatformRoleOption } from "@/lib/platformRoleCatalog";
 import { suggestPlatformUserLogin } from "@/lib/platformUserLoginSuggestion";
 
 export type RoleOption = {
@@ -14,19 +17,22 @@ export type UserCreateFormValues = {
   login: string;
   password: string;
   role_id: string;
+  org_unit_id: string;
   is_active: boolean;
 };
 
 type UserCreateFormProps = {
   fullName: string;
-  orgUnitLabel: string;
+  initialOrgGroupId?: number | null;
+  initialOrgUnitId?: number | null;
   initialValues: UserCreateFormValues;
-  roleOptions: RoleOption[];
   saving?: boolean;
   error?: string | null;
   onSubmit: (values: UserCreateFormValues) => Promise<void> | void;
   onCancel: () => void;
 };
+
+const USER_CREATE_FORM_BASE_PATH = "/directory/staff";
 
 function generatePassword(length = 12): string {
   const chars = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%";
@@ -52,11 +58,14 @@ export function resolvePolicyLogin(fullName: string, currentLogin = ""): string 
 function buildInitialFormValues(
   fullName: string,
   initialValues: UserCreateFormValues,
+  orgUnitId: number | null,
+  currentLogin = "",
 ): UserCreateFormValues {
   return {
-    login: isValidFullNameForLogin(fullName) ? suggestPlatformUserLogin(fullName) : "",
+    login: resolvePolicyLogin(fullName, currentLogin),
     password: initialValues.password,
     role_id: initialValues.role_id,
+    org_unit_id: orgUnitId != null ? String(orgUnitId) : initialValues.org_unit_id,
     is_active: initialValues.is_active,
   };
 }
@@ -70,28 +79,86 @@ function mergeSyncedFormValues(
     login: resolvePolicyLogin(fullName, previous.login),
     password: initialValues.password,
     role_id: initialValues.role_id,
+    org_unit_id: previous.org_unit_id,
     is_active: initialValues.is_active,
   };
 }
 
+function mapPlatformRoles(rows: PlatformRoleOption[]): RoleOption[] {
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.code ? `${row.label} (${row.code})` : row.label,
+  }));
+}
+
 export default function UserCreateForm({
   fullName,
-  orgUnitLabel,
+  initialOrgGroupId = null,
+  initialOrgUnitId = null,
   initialValues,
-  roleOptions,
   saving = false,
   error = null,
   onSubmit,
   onCancel,
 }: UserCreateFormProps) {
+  const [orgGroupId, setOrgGroupId] = React.useState<number | null>(initialOrgGroupId);
+  const [orgUnitId, setOrgUnitId] = React.useState<number | null>(initialOrgUnitId);
+  const [roleOptions, setRoleOptions] = React.useState<RoleOption[]>([]);
+  const [rolesLoading, setRolesLoading] = React.useState(true);
+  const [rolesError, setRolesError] = React.useState<string | null>(null);
+
   const [values, setValues] = React.useState<UserCreateFormValues>(() =>
-    buildInitialFormValues(fullName, initialValues),
+    buildInitialFormValues(fullName, initialValues, initialOrgUnitId, initialValues.login),
   );
   const [showPassword, setShowPassword] = React.useState(false);
 
   React.useEffect(() => {
+    setOrgGroupId(initialOrgGroupId);
+    setOrgUnitId(initialOrgUnitId);
+    setValues((previous) =>
+      buildInitialFormValues(fullName, initialValues, initialOrgUnitId ?? null, previous.login),
+    );
+  }, [fullName, initialOrgGroupId, initialOrgUnitId, initialValues.password, initialValues.role_id, initialValues.is_active]);
+
+  React.useEffect(() => {
     setValues((previous) => mergeSyncedFormValues(fullName, initialValues, previous));
   }, [fullName, initialValues.password, initialValues.role_id, initialValues.is_active]);
+
+  React.useEffect(() => {
+    setValues((previous) => ({
+      ...previous,
+      org_unit_id: orgUnitId != null ? String(orgUnitId) : "",
+    }));
+  }, [orgUnitId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setRolesLoading(true);
+    setRolesError(null);
+
+    void (async () => {
+      try {
+        const rows = await listPlatformRoleCatalog();
+        if (cancelled) return;
+        setRoleOptions(mapPlatformRoles(rows));
+      } catch (e: unknown) {
+        if (cancelled) return;
+        setRoleOptions([]);
+        setRolesError(e instanceof Error ? e.message : "Не удалось загрузить справочник ролей.");
+      } finally {
+        if (!cancelled) setRolesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleOrgGroupChange(nextGroupId: number | null) {
+    setOrgGroupId(nextGroupId);
+    setOrgUnitId(null);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -99,13 +166,19 @@ export default function UserCreateForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+    <form
+      onSubmit={handleSubmit}
+      className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+    >
       <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
         <div>
           <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
             Создание пользователя
           </h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Аккаунт для сотрудника</p>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Аккаунт для:{" "}
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{fullName}</span>
+          </p>
         </div>
 
         <button
@@ -125,24 +198,56 @@ export default function UserCreateForm({
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-zinc-800 dark:text-zinc-200">ФИО</label>
-            <input
-              type="text"
-              value={fullName}
-              readOnly
-              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 outline-none"
-            />
-          </div>
+          <OrgScopeFilter
+            basePath={USER_CREATE_FORM_BASE_PATH}
+            label="Группа отделений"
+            value={orgGroupId}
+            onChange={handleOrgGroupChange}
+          />
+
+          <OrgUnitScopeFilter
+            basePath={USER_CREATE_FORM_BASE_PATH}
+            label="Отделение"
+            allLabel="Выберите отделение"
+            orgGroupId={orgGroupId}
+            value={orgUnitId}
+            onChange={setOrgUnitId}
+          />
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Отделение</label>
-            <input
-              type="text"
-              value={orgUnitLabel}
-              readOnly
-              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 outline-none"
-            />
+            <label htmlFor="user-role" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              Роль Corpsite <span className="text-red-400">*</span>
+            </label>
+            <select
+              id="user-role"
+              name="role_id"
+              value={values.role_id}
+              onChange={(e) => setValues((prev) => ({ ...prev, role_id: e.target.value }))}
+              disabled={rolesLoading}
+              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400 disabled:opacity-60"
+              required
+            >
+              <option value="" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+                {rolesLoading ? "Загрузка ролей…" : "Выберите роль"}
+              </option>
+              {roleOptions.map((opt) => (
+                <option
+                  key={opt.id}
+                  value={String(opt.id)}
+                  className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            {rolesError ? (
+              <p className="text-xs text-red-600 dark:text-red-400">{rolesError}</p>
+            ) : (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Справочник Platform Role (public.roles). Организационный scope — только для
+                навигации и prefill, не ограничивает список ролей.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -195,33 +300,6 @@ export default function UserCreateForm({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label htmlFor="user-role" className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              Роль <span className="text-red-400">*</span>
-            </label>
-            <select
-              id="user-role"
-              name="role_id"
-              value={values.role_id}
-              onChange={(e) => setValues((prev) => ({ ...prev, role_id: e.target.value }))}
-              className="h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
-              required
-            >
-              <option value="" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
-                Выберите роль
-              </option>
-              {roleOptions.map((opt) => (
-                <option
-                  key={opt.id}
-                  value={String(opt.id)}
-                  className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
-                >
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <label className="flex items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
             <input
               type="checkbox"
@@ -246,7 +324,7 @@ export default function UserCreateForm({
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || rolesLoading}
           className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saving ? "Сохранение..." : "Создать"}

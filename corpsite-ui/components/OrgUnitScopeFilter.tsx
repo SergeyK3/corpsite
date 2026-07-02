@@ -18,6 +18,10 @@ type OrgUnitScopeFilterProps = {
   allLabel?: string;
   disabled?: boolean;
   resetParamsOnChange?: string[];
+  /** Controlled mode: org group driving the unit list (instead of URL). */
+  orgGroupId?: number | null;
+  value?: number | null;
+  onChange?: (unitId: number | null) => void;
 };
 
 export default function OrgUnitScopeFilter({
@@ -27,14 +31,19 @@ export default function OrgUnitScopeFilter({
   allLabel = "Все отделения",
   disabled = false,
   resetParamsOnChange = ["offset"],
+  orgGroupId: controlledOrgGroupId,
+  value,
+  onChange,
 }: OrgUnitScopeFilterProps) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
 
+  const isControlled = onChange != null;
+
   const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
-  const orgGroupId = orgScope.org_group_id;
-  const selectedOrgUnitId = orgScope.org_unit_id;
+  const orgGroupId = isControlled ? (controlledOrgGroupId ?? null) : orgScope.org_group_id;
+  const selectedOrgUnitId = isControlled ? (value ?? null) : orgScope.org_unit_id;
 
   const [options, setOptions] = React.useState<Array<{ id: number; label: string }>>([]);
   const [loading, setLoading] = React.useState(true);
@@ -76,6 +85,15 @@ export default function OrgUnitScopeFilter({
   }, [orgGroupId]);
 
   function handleChange(nextValue: string) {
+    const parsed = nextValue ? Number(nextValue) : null;
+    const unitId =
+      parsed != null && Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null;
+
+    if (isControlled) {
+      onChange?.(unitId);
+      return;
+    }
+
     const targetPath = (pathname || "").trim() || basePath;
     const params = new URLSearchParams(sp.toString());
 
