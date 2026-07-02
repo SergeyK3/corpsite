@@ -8,6 +8,7 @@ import {
   getRoles,
   mapApiErrorToMessage,
 } from "../_lib/api.client";
+import { suggestPlatformUserLogin } from "@/lib/platformUserLoginSuggestion";
 import type { EmployeeDetails } from "../_lib/types";
 import EmployeeEventsTimeline from "./EmployeeEventsTimeline";
 import UserCreateDrawer from "./UserCreateDrawer";
@@ -70,25 +71,6 @@ function buildDefaultUserCreateValues(loginSeed = ""): UserCreateFormValues {
     role_id: "",
     is_active: true,
   };
-}
-
-function translitLoginSeed(name: string): string {
-  const map: Record<string, string> = {
-    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i",
-    й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t",
-    у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "",
-    э: "e", ю: "yu", я: "ya",
-  };
-  const parts = String(name || "")
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return "";
-  const last = parts[parts.length - 1] ?? "";
-  const firstInitial = (parts[0] ?? "").slice(0, 1);
-  const raw = `${last}${firstInitial}`.split("").map((ch) => map[ch] ?? ch).join("");
-  return raw.replace(/[^a-z0-9._-]+/g, "").slice(0, 64);
 }
 
 function normalizeItems<T>(v: unknown): T[] {
@@ -163,7 +145,7 @@ export default function EmployeeAccountSections({
     if (!details) return;
     const fio = getEmployeeName(details);
     setUserCreateError(null);
-    setUserCreateInitialValues(buildDefaultUserCreateValues(translitLoginSeed(fio)));
+    setUserCreateInitialValues(buildDefaultUserCreateValues(suggestPlatformUserLogin(fio)));
     setUserCreateDrawerOpen(true);
 
     void (async () => {
