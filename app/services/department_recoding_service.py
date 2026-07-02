@@ -300,19 +300,12 @@ def load_org_unit_group_ids(conn: Connection) -> dict[int, int]:
 
 
 def list_recoding_options(conn: Connection) -> dict[str, Any]:
-    """Groups from deps_group; departments from org_units (filter pairing by group_id)."""
-    if not _deps_group_table_exists(conn) or not _org_units_table_exists(conn):
-        return {"groups": [], "departments": []}
+    """Groups from medical_org_groups registry; departments from org_units."""
+    from app.medical_org_groups import list_filter_group_options
 
-    group_rows = conn.execute(
-        text(
-            """
-            SELECT group_id, group_name
-            FROM public.deps_group
-            ORDER BY group_id
-            """
-        )
-    ).mappings().all()
+    if not _org_units_table_exists(conn):
+        return {"groups": list_filter_group_options(), "departments": []}
+
     unit_rows = conn.execute(
         text(
             """
@@ -325,14 +318,7 @@ def list_recoding_options(conn: Connection) -> dict[str, Any]:
         )
     ).mappings().all()
 
-    groups = [
-        {
-            "value": str(int(row["group_id"])),
-            "label": str(row["group_name"] or "").strip() or f"Группа {row['group_id']}",
-        }
-        for row in group_rows
-        if row.get("group_id") is not None
-    ]
+    groups = list_filter_group_options()
     departments = [
         {
             "org_unit_id": int(row["unit_id"]),

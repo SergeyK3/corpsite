@@ -261,12 +261,13 @@ def export_declarations_excel(
 
     effective_org_group_id = org_group_id
     if effective_org_group_id is None and department_group:
-        try:
-            parsed = int(str(department_group).strip())
-            if parsed >= 1:
-                effective_org_group_id = parsed
-        except ValueError:
-            pass
+        from app.medical_org_groups import resolve_group_id_from_filter
+
+        effective_org_group_id = resolve_group_id_from_filter(
+            org_group_id=org_group_id,
+            effective_log_group=department_group,
+            department_group=department_group,
+        )
 
     filtered: list[dict[str, Any]] = []
     for row in rows:

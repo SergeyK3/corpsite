@@ -110,6 +110,14 @@ def test_recoding_options_all_canonical_departments(staged_batch):
     assert len(options["departments"]) == db_count
     assert len(options["groups"]) >= 1
     assert all("org_group_id" in d for d in options["departments"])
+    group_slugs = {g["value"] for g in options["groups"]}
+    assert "clinical" in group_slugs
+    assert "paraclinical" in group_slugs
+    assert "admin_household" in group_slugs
+    for g in options["groups"]:
+        assert g["value"] == g.get("effective_log_group")
+        assert g["label"] == g.get("effective_log_group_name")
+        assert g["label"] not in group_slugs
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

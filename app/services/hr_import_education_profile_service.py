@@ -347,6 +347,8 @@ def _find_aggregate(conn: Connection, batch_id: int, profile_id: int) -> dict[st
 
 
 def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[str, Any]:
+    from app.medical_org_groups import enrich_effective_log_group_fields
+
     primary = group["primary"]
     payload = primary["payload"]
     recoding = primary["recoding"]
@@ -354,7 +356,7 @@ def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[
     totals = profile.get("portfolio_totals") or {}
     iin = str(payload.get("iin", "") or "").strip()
     review_status = group["review_status"]
-    return {
+    summary = {
         "profile_id": group["primary_row_id"],
         "aggregate_key": group["identity_key"],
         "batch_id": batch_id,
@@ -378,6 +380,7 @@ def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[
         "review_status": review_status,
         "review_status_label": REVIEW_STATUS_LABELS.get(review_status, review_status),
     }
+    return enrich_effective_log_group_fields(summary)
 
 
 def _serialize_profile_detail(group: dict[str, Any], *, batch_id: int) -> dict[str, Any]:
@@ -420,6 +423,7 @@ def list_education_profiles(
     *,
     department_group: Optional[str] = None,
     org_group_id: Optional[int] = None,
+    effective_log_group: Optional[str] = None,
     org_unit_id: Optional[int] = None,
     org_unit_name: Optional[str] = None,
     q_name: Optional[str] = None,
@@ -444,14 +448,13 @@ def list_education_profiles(
         }
         rows = [r for r in rows if r["row_id"] not in archived_ids]
 
-    effective_org_group_id = org_group_id
-    if effective_org_group_id is None and department_group:
-        try:
-            parsed = int(str(department_group).strip())
-            if parsed >= 1:
-                effective_org_group_id = parsed
-        except ValueError:
-            pass
+    from app.medical_org_groups import enrich_effective_log_group_fields, resolve_group_id_from_filter
+
+    effective_org_group_id = resolve_group_id_from_filter(
+        org_group_id=org_group_id,
+        effective_log_group=effective_log_group or department_group,
+        department_group=department_group,
+    )
 
     if effective_org_group_id is not None:
         rows = [r for r in rows if r.get("org_group_id") == effective_org_group_id]

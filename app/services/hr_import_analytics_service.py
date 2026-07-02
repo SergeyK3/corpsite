@@ -485,6 +485,9 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
         item["org_unit_name"] = rec["org_unit_name"] if rec else ""
         item["department_group"] = rec["department_group"] if rec else ""
         item["org_group_id"] = org_unit_group_ids.get(org_unit_id) if org_unit_id else None
+        from app.medical_org_groups import enrich_effective_log_group_fields
+
+        enrich_effective_log_group_fields(item)
     return items
 
 
@@ -915,6 +918,7 @@ def list_batch_rows(
     q_position: Optional[str] = None,
     department_group: Optional[str] = None,
     org_group_id: Optional[int] = None,
+    effective_log_group: Optional[str] = None,
     org_unit_id: Optional[int] = None,
     org_unit_name: Optional[str] = None,
     certification_category: Optional[str] = None,
@@ -925,19 +929,18 @@ def list_batch_rows(
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
+    from app.medical_org_groups import resolve_group_id_from_filter
+
     rows = _load_staging_rows(conn, batch_id)
     employee_rows = [r for r in rows if is_real_employee_row(r)]
     iin_counts = Counter(r["iin"] for r in employee_rows if r["iin"])
     duplicate_iins = {iin for iin, count in iin_counts.items() if count > 1}
 
-    effective_org_group_id = org_group_id
-    if effective_org_group_id is None and department_group:
-        try:
-            parsed = int(str(department_group).strip())
-            if parsed >= 1:
-                effective_org_group_id = parsed
-        except ValueError:
-            pass
+    effective_org_group_id = resolve_group_id_from_filter(
+        org_group_id=org_group_id,
+        effective_log_group=effective_log_group or department_group,
+        department_group=department_group,
+    )
 
     filtered = rows
     if roster_scope:

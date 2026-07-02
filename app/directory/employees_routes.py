@@ -95,13 +95,12 @@ class PersonnelEventCreateIn(BaseModel):
 
 
 def _map_department_group_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "group_id": int(row["group_id"]),
-        "code": None,
-        "group_name": str(row["group_name"]) if row.get("group_name") is not None else "",
-        "description": None,
-        "is_active": True,
-    }
+    from app.medical_org_groups import department_group_api_row
+
+    return department_group_api_row(
+        int(row["group_id"]),
+        db_group_name=str(row["group_name"]) if row.get("group_name") is not None else None,
+    )
 
 
 @router.get("/departments")
