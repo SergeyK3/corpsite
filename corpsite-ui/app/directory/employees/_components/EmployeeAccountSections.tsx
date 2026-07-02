@@ -217,16 +217,47 @@ export default function EmployeeAccountSections({
     (details as any)?.org_unit_name ??
     "—";
 
-  if (loading) {
-    return <div className="py-6 text-sm text-zinc-500">Загрузка данных сотрудника…</div>;
+  const userCreateDrawer =
+    userCreateDrawerOpen && details ? (
+      <UserCreateDrawer
+        key={`user-create-${employeeId}`}
+        open={userCreateDrawerOpen}
+        fullName={getEmployeeName(details)}
+        orgUnitLabel={orgUnitLabel}
+        initialValues={userCreateInitialValues}
+        roleOptions={roleOptions}
+        saving={userCreateSaving}
+        error={userCreateError}
+        onClose={handleCloseUserCreateDrawer}
+        onSubmit={handleCreateUser}
+      />
+    ) : null;
+
+  if (loading && !details) {
+    return (
+      <>
+        <div className="py-6 text-sm text-zinc-500">Загрузка данных сотрудника…</div>
+        {userCreateDrawer}
+      </>
+    );
   }
 
-  if (error) {
-    return <div className="py-6 text-sm text-red-600">{error}</div>;
+  if (error && !details) {
+    return (
+      <>
+        <div className="py-6 text-sm text-red-600">{error}</div>
+        {userCreateDrawer}
+      </>
+    );
   }
 
   if (!details) {
-    return <div className="py-6 text-sm text-zinc-500">Данные сотрудника недоступны.</div>;
+    return (
+      <>
+        <div className="py-6 text-sm text-zinc-500">Данные сотрудника недоступны.</div>
+        {userCreateDrawer}
+      </>
+    );
   }
 
   return (
@@ -290,17 +321,7 @@ export default function EmployeeAccountSections({
         ) : null}
       </div>
 
-      <UserCreateDrawer
-        open={userCreateDrawerOpen}
-        fullName={getEmployeeName(details)}
-        orgUnitLabel={orgUnitLabel}
-        initialValues={userCreateInitialValues}
-        roleOptions={roleOptions}
-        saving={userCreateSaving}
-        error={userCreateError}
-        onClose={handleCloseUserCreateDrawer}
-        onSubmit={handleCreateUser}
-      />
+      {userCreateDrawer}
     </>
   );
 }

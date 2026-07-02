@@ -3,6 +3,8 @@
 
 import * as React from "react";
 
+import { suggestPlatformUserLogin } from "@/lib/platformUserLoginSuggestion";
+
 export type RoleOption = {
   id: number;
   label: string;
@@ -33,6 +35,45 @@ function generatePassword(length = 12): string {
   return Array.from(bytes, (b) => chars[b % chars.length]).join("");
 }
 
+/** Full name suitable for OPS-028 login suggestion (not empty / placeholder). */
+export function isValidFullNameForLogin(fullName: string): boolean {
+  const trimmed = String(fullName || "").trim();
+  return trimmed.length > 0 && trimmed !== "—";
+}
+
+/** Policy login from FIO; preserves currentLogin when FIO is temporarily invalid. */
+export function resolvePolicyLogin(fullName: string, currentLogin = ""): string {
+  if (!isValidFullNameForLogin(fullName)) {
+    return currentLogin;
+  }
+  return suggestPlatformUserLogin(fullName);
+}
+
+function buildInitialFormValues(
+  fullName: string,
+  initialValues: UserCreateFormValues,
+): UserCreateFormValues {
+  return {
+    login: isValidFullNameForLogin(fullName) ? suggestPlatformUserLogin(fullName) : "",
+    password: initialValues.password,
+    role_id: initialValues.role_id,
+    is_active: initialValues.is_active,
+  };
+}
+
+function mergeSyncedFormValues(
+  fullName: string,
+  initialValues: UserCreateFormValues,
+  previous: UserCreateFormValues,
+): UserCreateFormValues {
+  return {
+    login: resolvePolicyLogin(fullName, previous.login),
+    password: initialValues.password,
+    role_id: initialValues.role_id,
+    is_active: initialValues.is_active,
+  };
+}
+
 export default function UserCreateForm({
   fullName,
   orgUnitLabel,
@@ -43,12 +84,14 @@ export default function UserCreateForm({
   onSubmit,
   onCancel,
 }: UserCreateFormProps) {
-  const [values, setValues] = React.useState<UserCreateFormValues>(initialValues);
+  const [values, setValues] = React.useState<UserCreateFormValues>(() =>
+    buildInitialFormValues(fullName, initialValues),
+  );
   const [showPassword, setShowPassword] = React.useState(false);
 
   React.useEffect(() => {
-    setValues(initialValues);
-  }, [initialValues]);
+    setValues((previous) => mergeSyncedFormValues(fullName, initialValues, previous));
+  }, [fullName, initialValues.password, initialValues.role_id, initialValues.is_active]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
