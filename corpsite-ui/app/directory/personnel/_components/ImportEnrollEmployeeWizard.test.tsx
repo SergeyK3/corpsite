@@ -75,6 +75,19 @@ const baseRecord: NormalizedRecord = {
   updated_at: "2026-06-01T10:00:00.000Z",
 };
 
+const globalCatalog = {
+  items: [
+    { position_id: 10, name: "Директор" },
+    { position_id: 11, name: "Заместитель директора" },
+    { position_id: 20, name: "Бухгалтер" },
+    {
+      position_id: 77,
+      name: "Заместитель директора по менеджменту качества медицинской помощи",
+    },
+    { position_id: 99, name: "Заместитель директора по административным вопросам" },
+  ],
+};
+
 const dryRunReady: EnrollEmployeeResponse = {
   dry_run: true,
   outcome: "ready",
@@ -95,7 +108,11 @@ const dryRunReady: EnrollEmployeeResponse = {
   provenance: {},
 };
 
-function renderWizard() {
+const IMPORT_POSITION_NOT_IN_CATALOG_WARNING =
+  "Должность из импорта не найдена в справочнике должностей. Создайте должность в справочнике или выберите корректную существующую должность вручную.";
+
+function renderWizard(dryRun: EnrollEmployeeResponse = dryRunReady) {
+  vi.mocked(enrollEmployeeFromNormalizedRecord).mockResolvedValue(dryRun);
   render(
     <ImportEnrollEmployeeWizard
       record={baseRecord}
@@ -126,7 +143,6 @@ function positionSelect(): HTMLSelectElement {
 
 describe("ImportEnrollEmployeeWizard position filtering", () => {
   beforeEach(() => {
-    vi.mocked(enrollEmployeeFromNormalizedRecord).mockResolvedValue(dryRunReady);
     vi.mocked(getOrgUnitsTree).mockResolvedValue({
       items: [
         { unit_id: 1, name: "Администрация", children: [] },
@@ -136,24 +152,13 @@ describe("ImportEnrollEmployeeWizard position filtering", () => {
     vi.mocked(getPositions).mockImplementation(async (args) => {
       if (args?.org_unit_id === 1) {
         return {
-          items: [
-            { position_id: 10, name: "Директор" },
-            { position_id: 11, name: "Заместитель директора" },
-          ],
+          items: [{ position_id: 99, name: "Заместитель директора по административным вопросам" }],
         };
       }
       if (args?.org_unit_id === 2) {
         return { items: [{ position_id: 20, name: "Бухгалтер" }] };
       }
-      if (!args?.org_unit_id) {
-        return {
-          items: [
-            { position_id: 99, name: "Заместитель директора по административным вопросам" },
-            { position_id: 20, name: "Бухгалтер" },
-          ],
-        };
-      }
-      return { items: [] };
+      return globalCatalog;
     });
   });
 
@@ -171,32 +176,99 @@ describe("ImportEnrollEmployeeWizard position filtering", () => {
     expect(screen.getByRole("option", { name: "Сначала выберите отделение" })).toBeInTheDocument();
   });
 
-  it("loads org-unit-scoped positions and keeps import hint without auto-select", async () => {
+  it("loads global catalog even when scoped positions contain only one unrelated position", async () => {
     renderWizard();
     await openStepTwo();
 
     fireEvent.change(orgUnitSelect(), { target: { value: "1" } });
 
     await waitFor(() => {
+      expect(getPositions).toHaveBeenCalledWith({ limit: 500 });
       expect(getPositions).toHaveBeenCalledWith({ org_unit_id: 1, limit: 500 });
     });
-    expect(getPositions).toHaveBeenCalledTimes(1);
 
     await waitFor(() => {
       expect(positionSelect()).not.toBeDisabled();
     });
 
     expect(screen.getByRole("option", { name: "Директор" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Заместитель директора" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Бухгалтер" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Бухгалтер" })).toBeInTheDocument();
     expect(
-      screen.queryByText(
-        "Для выбранного отделения пока нет используемых должностей. Показан общий справочник должностей."
+      screen.getByRole("option", {
+        name: "Заместитель директора по менеджменту качества медицинской помощи",
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Заместитель директора по административным вопросам" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Используются в отделении: Заместитель директора по административным вопросам"
       )
-    ).not.toBeInTheDocument();
-    expect(positionSelect().value).toBe("");
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Из импорта: Заместитель директора по экономическим вопросам 04.05.2010г.")
+    ).toBeInTheDocument();
+    expect(positionSelect().value).toBe("");
+    expect(screen.getByText(IMPORT_POSITION_NOT_IN_CATALOG_WARNING)).toBeInTheDocument();
+  });
+
+  it("does not auto-select unrelated scoped position", async () => {
+    renderWizard();
+    await openStepTwo();
+
+    fireEvent.change(orgUnitSelect(), { target: { value: "1" } });
+
+    await waitFor(() => {
+      expect(positionSelect()).not.toBeDisabled();
+    });
+
+    expect(positionSelect().value).toBe("");
+    expect(positionSelect().value).not.toBe("99");
+  });
+
+  it("shows warning when import position is missing from catalog", async () => {
+    renderWizard();
+    await openStepTwo();
+
+    fireEvent.change(orgUnitSelect(), { target: { value: "1" } });
+
+    await waitFor(() => {
+      expect(screen.getByText(IMPORT_POSITION_NOT_IN_CATALOG_WARNING)).toBeInTheDocument();
+    });
+  });
+
+  it("prefills exact import match and hides missing-catalog warning", async () => {
+    const matchingDryRun: EnrollEmployeeResponse = {
+      ...dryRunReady,
+      preview: {
+        ...dryRunReady.preview,
+        position_hint: {
+          value: "Заместитель директора по менеджменту качества медицинской помощи",
+          source: "import",
+        },
+      },
+    };
+
+    renderWizard(matchingDryRun);
+    await openStepTwo();
+
+    fireEvent.change(orgUnitSelect(), { target: { value: "1" } });
+
+    await waitFor(() => {
+      expect(positionSelect().value).toBe("77");
+    });
+
+    expect(
+      screen.getByText(
+        "Совпадение с импортом: Заместитель директора по менеджменту качества медицинской помощи"
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(IMPORT_POSITION_NOT_IN_CATALOG_WARNING)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Из импорта: Заместитель директора по менеджменту качества медицинской помощи"
+      )
     ).toBeInTheDocument();
   });
 
@@ -220,52 +292,11 @@ describe("ImportEnrollEmployeeWizard position filtering", () => {
     expect(
       screen.getByText("Выбранная должность сброшена — выберите должность для нового отделения")
     ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Директор" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Бухгалтер" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Директор" })).not.toBeInTheDocument();
   });
 
-  it("falls back to global catalog when org unit has no used positions", async () => {
-    vi.mocked(getPositions).mockImplementation(async (args) => {
-      if (args?.org_unit_id) return { items: [] };
-      return {
-        items: [{ position_id: 99, name: "Заместитель директора по административным вопросам" }],
-      };
-    });
-
-    renderWizard();
-    await openStepTwo();
-
-    fireEvent.change(orgUnitSelect(), { target: { value: "1" } });
-
-    await waitFor(() => {
-      expect(getPositions).toHaveBeenCalledWith({ org_unit_id: 1, limit: 500 });
-      expect(getPositions).toHaveBeenCalledWith({ limit: 500 });
-    });
-
-    await waitFor(() => {
-      expect(positionSelect()).not.toBeDisabled();
-    });
-
-    expect(
-      screen.getByText(
-        "Для выбранного отделения пока нет используемых должностей. Показан общий справочник должностей."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Заместитель директора по административным вопросам" })
-    ).toBeInTheDocument();
-    expect(positionSelect().value).toBe("");
-    expect(screen.getByRole("link", { name: "Справочник должностей" })).toHaveAttribute(
-      "href",
-      "/directory/positions"
-    );
-    expect(screen.getByRole("link", { name: "Справочник должностей" })).toHaveAttribute(
-      "target",
-      "_blank"
-    );
-  });
-
-  it("shows blocked placeholder only when both scoped and global catalogs are empty", async () => {
+  it("shows blocked placeholder when global catalog is empty", async () => {
     vi.mocked(getPositions).mockResolvedValue({ items: [] });
 
     renderWizard();
@@ -274,8 +305,8 @@ describe("ImportEnrollEmployeeWizard position filtering", () => {
     fireEvent.change(orgUnitSelect(), { target: { value: "1" } });
 
     await waitFor(() => {
-      expect(getPositions).toHaveBeenCalledWith({ org_unit_id: 1, limit: 500 });
       expect(getPositions).toHaveBeenCalledWith({ limit: 500 });
+      expect(getPositions).toHaveBeenCalledWith({ org_unit_id: 1, limit: 500 });
     });
     await waitFor(() => {
       expect(screen.getByRole("option", { name: "Нет доступных должностей" })).toBeInTheDocument();

@@ -70,10 +70,21 @@ function flattenOrgUnits(nodes: TreeNode[], depth = 0): Array<{ id: number; labe
   return out;
 }
 
-type PositionListSource = "none" | "unit" | "catalog";
+const IMPORT_POSITION_NOT_IN_CATALOG_WARNING =
+  "Должность из импорта не найдена в справочнике должностей. Создайте должность в справочнике или выберите корректную существующую должность вручную.";
 
-const CATALOG_FALLBACK_NOTICE =
-  "Для выбранного отделения пока нет используемых должностей. Показан общий справочник должностей.";
+function normalizePositionName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function findPositionByImportHint(
+  hint: string,
+  options: readonly PositionOption[]
+): PositionOption | undefined {
+  const normalized = normalizePositionName(hint);
+  if (!normalized) return undefined;
+  return options.find((p) => normalizePositionName(p.label) === normalized);
+}
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -135,7 +146,7 @@ export default function ImportEnrollEmployeeWizard({
   const [confirmChecked, setConfirmChecked] = React.useState(false);
   const [orgUnitOptions, setOrgUnitOptions] = React.useState<Array<{ id: number; label: string }>>([]);
   const [positionOptions, setPositionOptions] = React.useState<PositionOption[]>([]);
-  const [positionListSource, setPositionListSource] = React.useState<PositionListSource>("none");
+  const [unitPositionLabels, setUnitPositionLabels] = React.useState<string[]>([]);
   const [unitPositionsLoading, setUnitPositionsLoading] = React.useState(false);
   const [positionValidationMessage, setPositionValidationMessage] = React.useState<string | null>(null);
 
@@ -149,7 +160,7 @@ export default function ImportEnrollEmployeeWizard({
     setOrgUnitId("");
     setPositionId("");
     setPositionOptions([]);
-    setPositionListSource("none");
+    setUnitPositionLabels([]);
     setPositionValidationMessage(null);
     setDateFrom(todayIsoDate());
     setEmploymentRate("1");
@@ -176,7 +187,7 @@ export default function ImportEnrollEmployeeWizard({
     const unitId = orgUnitId.trim();
     if (!unitId) {
       setPositionOptions([]);
-      setPositionListSource("none");
+      setUnitPositionLabels([]);
       setUnitPositionsLoading(false);
       return;
     }
@@ -186,24 +197,18 @@ export default function ImportEnrollEmployeeWizard({
 
     void (async () => {
       try {
-        const scopedRaw = await getPositions({ org_unit_id: Number(unitId), limit: 500 });
+        const [catalogRaw, scopedRaw] = await Promise.all([
+          getPositions({ limit: 500 }),
+          getPositions({ org_unit_id: Number(unitId), limit: 500 }),
+        ]);
         if (cancelled) return;
 
-        const scopedOptions = normalizePositionOptions(scopedRaw);
-        if (scopedOptions.length > 0) {
-          setPositionOptions(scopedOptions);
-          setPositionListSource("unit");
-          return;
-        }
-
-        const catalogRaw = await getPositions({ limit: 500 });
-        if (cancelled) return;
         setPositionOptions(normalizePositionOptions(catalogRaw));
-        setPositionListSource("catalog");
+        setUnitPositionLabels(normalizePositionOptions(scopedRaw).map((p) => p.label));
       } catch {
         if (!cancelled) {
           setPositionOptions([]);
-          setPositionListSource("none");
+          setUnitPositionLabels([]);
         }
       } finally {
         if (!cancelled) setUnitPositionsLoading(false);
@@ -214,6 +219,22 @@ export default function ImportEnrollEmployeeWizard({
       cancelled = true;
     };
   }, [orgUnitId]);
+
+  const importPositionHint = dryRunResult?.preview?.position_hint?.value?.trim() ?? "";
+  const importPositionMatch = React.useMemo(() => {
+    if (!importPositionHint || positionOptions.length === 0) return undefined;
+    return findPositionByImportHint(importPositionHint, positionOptions);
+  }, [importPositionHint, positionOptions]);
+  const showImportPositionNotFoundWarning =
+    Boolean(importPositionHint) && positionOptions.length > 0 && !importPositionMatch;
+
+  React.useEffect(() => {
+    if (!importPositionHint || positionOptions.length === 0 || positionId) return;
+    const match = findPositionByImportHint(importPositionHint, positionOptions);
+    if (match) {
+      setPositionId(String(match.id));
+    }
+  }, [importPositionHint, positionOptions, positionId]);
 
   function handleOrgUnitChange(nextOrgUnitId: string) {
     if (positionId) {
@@ -553,8 +574,20 @@ export default function ImportEnrollEmployeeWizard({
                 </option>
               ))}
             </select>
-            {positionListSource === "catalog" ? (
-              <span className="text-xs text-amber-700 dark:text-amber-300">{CATALOG_FALLBACK_NOTICE}</span>
+            {unitPositionLabels.length > 0 ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Используются в отделении: {unitPositionLabels.join(", ")}
+              </span>
+            ) : null}
+            {showImportPositionNotFoundWarning ? (
+              <span className="text-xs text-amber-700 dark:text-amber-300">
+                {IMPORT_POSITION_NOT_IN_CATALOG_WARNING}
+              </span>
+            ) : null}
+            {importPositionMatch && positionId === String(importPositionMatch.id) ? (
+              <span className="text-xs text-green-700 dark:text-green-300">
+                Совпадение с импортом: {importPositionMatch.label}
+              </span>
             ) : null}
             {positionValidationMessage ? (
               <span className="text-xs text-amber-700 dark:text-amber-300">{positionValidationMessage}</span>
