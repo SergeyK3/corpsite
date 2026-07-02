@@ -31,6 +31,7 @@ import {
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 import { apiAuthMe } from "@/lib/api";
+import { isPrivilegedOperator } from "@/lib/adminNav";
 import { canSeeHrProcessesNav } from "@/lib/personnelNav";
 import type { MeInfo } from "@/lib/types";
 
@@ -639,6 +640,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
             : undefined
         }
         canEnrollEmployee={canSeeHrProcessesNav(me)}
+        canProvisionAccount={isPrivilegedOperator(me)}
         onClose={() => setDrawerOpen(false)}
         onReviewed={handleReviewed}
         onToast={showToast}

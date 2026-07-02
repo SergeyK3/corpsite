@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import BoundRecordProvisioningCta from "./BoundRecordProvisioningCta";
 import ImportEnrollEmployeeWizard from "./ImportEnrollEmployeeWizard";
 import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import {
@@ -27,6 +28,7 @@ type Props = {
   open: boolean;
   batchFileName?: string;
   canEnrollEmployee?: boolean;
+  canProvisionAccount?: boolean;
   onClose: () => void;
   onReviewed: (record: NormalizedRecord) => void;
   onToast: (message: string, kind?: "success" | "error") => void;
@@ -299,6 +301,7 @@ export default function ImportNormalizedRecordDrawer({
   open,
   batchFileName,
   canEnrollEmployee = true,
+  canProvisionAccount = true,
   onClose,
   onReviewed,
   onToast,
@@ -420,6 +423,13 @@ export default function ImportNormalizedRecordDrawer({
   const binding = record.employee_binding;
   const bindingStatus = binding?.status ?? (record.employee_id ? "bound" : "unbound");
   const canBindEmployee = !locked && bindingStatus !== "bound";
+  const boundEmployeeId = Number(record.employee_id ?? binding?.employee_id ?? 0);
+  const showBoundProvisioningCta =
+    canProvisionAccount &&
+    !editing &&
+    bindingStatus === "bound" &&
+    Number.isInteger(boundEmployeeId) &&
+    boundEmployeeId > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -535,6 +545,10 @@ export default function ImportNormalizedRecordDrawer({
               onReviewed={onReviewed}
               onToast={onToast}
             />
+          ) : null}
+
+          {showBoundProvisioningCta ? (
+            <BoundRecordProvisioningCta employeeId={boundEmployeeId} />
           ) : null}
 
           {canBindEmployee && !editing ? (
