@@ -8,6 +8,11 @@ import { apiAuthMe } from "@/lib/api";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
 import type { MeInfo } from "@/lib/types";
+import {
+  resolveCabinetTitle,
+  resolveEmployeePositionTitle,
+  resolvePlatformRoleLabel,
+} from "@/lib/userCabinetTitle";
 
 function isUnauthorized(err: unknown): boolean {
   return Number((err as { status?: number })?.status ?? 0) === 401;
@@ -59,7 +64,9 @@ export default function ProfilePageClient() {
     };
   }, [loadMe, router]);
 
-  const roleTitle = String(me?.role_name_ru ?? me?.role_name ?? "").trim() || "Сотрудник";
+  const cabinetTitle = resolveCabinetTitle(me);
+  const employeePosition = resolveEmployeePositionTitle(me);
+  const platformRole = resolvePlatformRoleLabel(me);
   const login = String(me?.login ?? "").trim();
 
   return (
@@ -80,7 +87,13 @@ export default function ProfilePageClient() {
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-5 space-y-2">
         <div className="text-xs text-zinc-600 dark:text-zinc-400">Аккаунт</div>
         <div className="text-sm text-zinc-900 dark:text-zinc-50">{login || "—"}</div>
-        <div className="text-sm text-zinc-600 dark:text-zinc-400">{roleTitle}</div>
+        <div className="text-sm text-zinc-600 dark:text-zinc-400">{cabinetTitle}</div>
+        {employeePosition && platformRole ? (
+          <div className="text-sm text-zinc-600 dark:text-zinc-400">
+            <span className="text-zinc-500 dark:text-zinc-500">Роль Corpsite: </span>
+            {platformRole}
+          </div>
+        ) : null}
       </div>
 
       <TelegramBindPanel

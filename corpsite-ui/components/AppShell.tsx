@@ -33,6 +33,7 @@ import {
 } from "@/lib/personnelNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
+import { resolveCabinetTitle } from "@/lib/userCabinetTitle";
 
 import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
 
@@ -270,10 +271,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     })();
   }, [isLogin, router]);
 
-  const roleTitle = useMemo(() => {
-    const t = String(me?.role_name_ru ?? me?.role_name ?? "").trim();
-    return t || "Сотрудник";
-  }, [me]);
+  const cabinetTitle = useMemo(() => resolveCabinetTitle(me), [me]);
 
   const isAdmin = canSeeAdminShell(me);
   const showPersonnelVisibility = hasPersonnelVisibility(me) && !isAdmin;
@@ -339,7 +337,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="w-full px-3 py-2 xl:px-4 xl:py-3">
         <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-2xl font-semibold">{roleTitle}</div>
+            <div className="text-2xl font-semibold">{cabinetTitle}</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

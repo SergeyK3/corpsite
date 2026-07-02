@@ -6,6 +6,9 @@ export type MeInfo = {
   role_code?: string;
   role_name_ru?: string;
   role_name?: string;
+  /** Linked employee HR position (`public.positions.name`), read-only display. */
+  position_id?: number;
+  position_name?: string;
   full_name?: string;
   login?: string;
   is_active?: boolean;

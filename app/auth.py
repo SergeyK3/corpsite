@@ -232,10 +232,16 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                     u.is_active,
                     u.login,
                     u.telegram_id,
-                    u.telegram_username
+                    u.telegram_username,
+                    p.position_id,
+                    p.name AS position_name
                 FROM public.users u
                 LEFT JOIN public.roles r
                     ON r.role_id = u.role_id
+                LEFT JOIN public.employees e
+                    ON e.employee_id = u.employee_id
+                LEFT JOIN public.positions p
+                    ON p.position_id = e.position_id
                 WHERE u.user_id = :uid
                 """
             ),
@@ -254,6 +260,10 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         "login": str(row["login"]) if row["login"] is not None else None,
         "telegram_bound": _telegram_bound_from_id(row.get("telegram_id")),
         "telegram_username": _normalize_telegram_username(row.get("telegram_username")),
+        "position_id": int(row["position_id"]) if row.get("position_id") is not None else None,
+        "position_name": str(row["position_name"]).strip()
+        if row.get("position_name") is not None and str(row["position_name"]).strip()
+        else None,
         "must_change_password": bool(policy_row.get("must_change_password") or False),
         "token_version": int(policy_row.get("token_version") or 1),
         "locked_at": policy_row.get("locked_at"),
