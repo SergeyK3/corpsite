@@ -152,6 +152,8 @@ type Props = {
   showReviewStatus?: boolean;
   reviewStatus?: string;
   onReviewStatusChange?: (value: string) => void;
+  /** When editing portfolio with read-only basic block, visually split snapshot vs editable sections. */
+  showEditModeSnapshotSplit?: boolean;
   onProfileChange: (profile: ImportProfile) => void;
 };
 
@@ -163,6 +165,7 @@ export default function ImportProfileCardSections({
   showReviewStatus = false,
   reviewStatus = "pending",
   onReviewStatusChange,
+  showEditModeSnapshotSplit = false,
   onProfileChange,
 }: Props) {
   const basic = profile.basic ?? {
@@ -194,6 +197,12 @@ export default function ImportProfileCardSections({
   const portfolioEditable = mode === "edit";
   const educationEditable = portfolioEditable;
   const basicReadOnly = !basicEditable;
+  const snapshotSplitActive = showEditModeSnapshotSplit && portfolioEditable && basicReadOnly;
+
+  const snapshotFrameClass =
+    "rounded-xl border border-zinc-200 bg-zinc-50/90 p-4 dark:border-zinc-800 dark:bg-zinc-900/60";
+  const portfolioFrameClass =
+    "rounded-xl border border-blue-200 bg-blue-50/30 p-4 dark:border-blue-900/50 dark:bg-blue-950/20";
 
   function updateProfile(next: ImportProfile) {
     onProfileChange(next);
@@ -320,10 +329,14 @@ export default function ImportProfileCardSections({
     });
   }
 
-  return (
-    <div className="space-y-8">
+  const basicSection = (
       <section>
         <h3 className="mb-3 text-base font-semibold text-zinc-800 dark:text-zinc-200">Базовая информация</h3>
+        {snapshotSplitActive ? (
+          <p className="mb-3 text-xs text-zinc-500">
+            Кадровый snapshot из HR-импорта — только просмотр. Организационное назначение изменяется в разделе «Назначение».
+          </p>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="ФИО" value={basic.full_name} readOnly={basicReadOnly} onChange={(v) => updateBasic("full_name", v)} />
           <Field label="ИИН" value={basic.iin} readOnly={basicReadOnly} onChange={(v) => updateBasic("iin", v)} />
@@ -359,7 +372,10 @@ export default function ImportProfileCardSections({
           ) : null}
         </div>
       </section>
+  );
 
+  const portfolioSections = (
+    <>
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -830,6 +846,27 @@ export default function ImportProfileCardSections({
         <p className="mb-2 text-xs text-zinc-500">декрет, инвалид, пенсионер, прочие комментарии</p>
         <Field label="" value={profile.notes_raw || ""} onChange={updateNotes} multiline readOnly={!portfolioEditable} />
       </section>
+    </>
+  );
+
+  if (snapshotSplitActive) {
+    return (
+      <div className="space-y-6">
+        <div className={snapshotFrameClass}>{basicSection}</div>
+        <div className={portfolioFrameClass}>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wide text-blue-800 dark:text-blue-200">
+            Редактируемые разделы портфолио
+          </p>
+          <div className="space-y-8">{portfolioSections}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {basicSection}
+      {portfolioSections}
     </div>
   );
 }
