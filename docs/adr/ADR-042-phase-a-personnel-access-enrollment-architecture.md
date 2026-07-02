@@ -19,6 +19,7 @@
 | [ADR-023 — RBAC v2 Lean Scope](./ADR-023-rbac-v2-lean-scope-and-approvals.md) | task visibility; **не** заменяет Access Registry |
 | [ADR-032 — Employee Transfer Architecture](./ADR-032-employee-transfer-architecture.md) | `employee_events`, snapshot vs history |
 | [ADR-013 — JWT Migration](./ADR-013-jwt-migration.md) | текущая auth-модель |
+| [ADR-048 — Person Ownership and Identity Creation Policy](./ADR-048-person-ownership-identity-creation-policy.md) | ownership Person; Create-or-Link; Person Shell (append-only note §Cross-reference) |
 
 ---
 
@@ -992,3 +993,9 @@ employees.employment_rate→  person_assignments.rate
 employees.date_from/to   →  person_assignments.start_date/end_date
 employee_identities      →  persons.primary_iin (via person link)
 ```
+
+---
+
+## Cross-reference (append-only, ADR-048)
+
+Ownership Person, правила **CREATE** Canonical Person Shell и **LINK** `employees.person_id`, а также трактовка ADR-042 D3 (explicit enroll vs bulk import) — в [ADR-048](./ADR-048-person-ownership-identity-creation-policy.md). Phase A intent («Person at enrollment», Employee as operational shell) **сохранён**; ADR-048 normative для runtime creation authority.

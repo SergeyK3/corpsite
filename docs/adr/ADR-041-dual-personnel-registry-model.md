@@ -15,6 +15,7 @@
 - [ADR-039 Phase 3B — Training Normalization Schema](./ADR-039-Phase-3B-schema.md) — `hr_import_normalized_records`, optional `employee_id`
 - [ADR-040 — Canonical HR Snapshot & Monthly Diff](./ADR-040-canonical-hr-snapshot-monthly-diff.md) — эталон кадровой выгрузки, monthly diff
 - [Runbook — Dual Personnel Registry](../runbooks/hr-dual-personnel-registry.md) — операторское пояснение для HR и админов
+- [ADR-048 — Person Ownership and Identity Creation Policy](./ADR-048-person-ownership-identity-creation-policy.md) — ownership Person и правила CREATE/LINK (append-only note §Cross-reference)
 
 ---
 
@@ -168,3 +169,9 @@ flowchart TB
 2. ADR-040 и ADR-038/039 ссылаются на dual registry model.
 3. Regression tests monthly diff покрывают repeat-import и cross-month сценарии без реальных PII.
 4. В UI/review «Не привязана» трактуется как допустимое состояние для HR analytics.
+
+---
+
+## Cross-reference (append-only, ADR-048)
+
+Политика **ownership Person**, **Create-or-Link** при explicit enrollment и границы dual registry vs operational identity bridge определены в [ADR-048 — Person Ownership and Identity Creation Policy](./ADR-048-person-ownership-identity-creation-policy.md). ADR-041 (optional binding, explicit HR decisions) **не изменяется**; ADR-048 уточняет materialization `persons` на operational path.

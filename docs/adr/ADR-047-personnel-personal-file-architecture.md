@@ -2,7 +2,7 @@
 
 **Status:** Proposed / Investigation  
 **Date:** 2026-06-23  
-**Related:** ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043, ADR-044, ADR-045, ADR-046, ADR-036, ADR-037
+**Related:** ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043, ADR-044, ADR-045, ADR-046, ADR-036, ADR-037, [ADR-048](./ADR-048-person-ownership-identity-creation-policy.md)
 
 ### Investigation artifacts (appendices)
 
@@ -536,3 +536,10 @@ flowchart TB
 |------|--------|
 | 2026-06-23 | Initial audit draft — Proposed / Investigation |
 | 2026-06-23 | Cross-links, Service Record projection (D6), PDF export (D7), dual export (D2), hr_orders gap (D8), timeline SQL |
+| 2026-06-25 | Cross-reference [ADR-048](./ADR-048-person-ownership-identity-creation-policy.md) — Person ownership; Shell bootstrap enables `person_id` anchor for PF (append-only) |
+
+---
+
+## Cross-reference (append-only, ADR-048)
+
+Personal File anchored on `person_id` (D1). Политика ownership Person, Golden Rule (no DELETE) и enrollment Person Shell — [ADR-048](./ADR-048-person-ownership-identity-creation-policy.md). ADR-047 target model **не изменяется**; ADR-048 закрывает operational gap materialization Person до PF bootstrap.

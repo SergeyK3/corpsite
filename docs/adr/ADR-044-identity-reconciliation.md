@@ -19,6 +19,7 @@ Ratification основана на [Impact Analysis — match_key](./ADR-044-imp
 | [ADR-043 Phase P1 Pilot Checklist](./ADR-043-phase-p1-pilot-checklist.md) | June Pilot acceptance criteria |
 | [ADR-044 Impact Analysis](./ADR-044-impact-analysis-match-key.md) | Usage map; namespace gap; R1b strategy |
 | June Pilot Identity Chain Audit (2026-06-20) | Trigger: persons.iin NULL, users.employee_id NULL |
+| [ADR-048 — Person Ownership and Identity Creation Policy](./ADR-048-person-ownership-identity-creation-policy.md) | ownership Person; enrollment CREATE excluded from reconciliation scope (append-only note §Cross-reference) |
 
 ---
 
@@ -395,3 +396,9 @@ users.employee_id  →  employees.employee_id  →  employees.person_id  →  pe
 | ADR-043 | Personnel lifecycle orchestration |
 | **ADR-044** | Identity reconciliation & materialization |
 | ADR-044 Impact Analysis | match_key usage map; supports ratification |
+
+---
+
+## Cross-reference (append-only, ADR-048)
+
+Reconciliation (**NEVER INSERT persons**) и merge policy **не изменяются**. Explicit enrollment Person Shell CREATE — вне scope R1a; см. [ADR-048](./ADR-048-person-ownership-identity-creation-policy.md) (Authority 2 Create-or-Link, INV-6, INV-14 bootstrap vs canonical SoT).

@@ -11,6 +11,7 @@
 | [ADR-043 Phase C1](./ADR-043-phase-c1-effective-monthly-diff.md) | Materializes `hr_personnel_change_events` |
 | [ADR-042 Phase B1](./ADR-042-phase-b1-schema-design.md) | `persons`, `person_assignments`, `employee_assignment_links` |
 | [ADR-041](./ADR-041-dual-personnel-registry-model.md) | Dual registry — HR canonical vs operational employees |
+| [ADR-048 — Person Ownership and Identity Creation Policy](./ADR-048-person-ownership-identity-creation-policy.md) | ownership Person; enrollment Create-or-Link; C2 vs enrollment boundary (append-only note §Cross-reference) |
 
 ---
 
@@ -231,3 +232,9 @@ run_effective_monthly_diff(dry_run=False, enqueue=True)
 ```
 
 C2 does not invoke C1 automatically; callers orchestrate the sequence.
+
+---
+
+## Cross-reference (append-only, ADR-048)
+
+C2 остаётся **canonical CREATE authority** для Person + assignments. Operational **Create-or-Link** Person Shell и установка `employees.person_id` — отдельный домен enrollment ([ADR-048](./ADR-048-person-ownership-identity-creation-policy.md)). C2 **не** устанавливает `employees.person_id`; ограничения C2 (§Limitations) **не изменяются**.
