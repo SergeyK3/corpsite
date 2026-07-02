@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { MeInfo } from "./types";
-import { canSeeTeamTasks, isTaskSystemAdmin } from "./taskScopePolicy";
+import { canSeeTeamTasks, defaultTaskScope, isTaskSystemAdmin } from "./taskScopePolicy";
 
 describe("canSeeTeamTasks", () => {
   it("returns false for null me", () => {
@@ -9,53 +9,58 @@ describe("canSeeTeamTasks", () => {
     expect(canSeeTeamTasks(undefined)).toBe(false);
   });
 
-  it("returns true for system admin role_id=2", () => {
-    expect(canSeeTeamTasks({ user_id: 1, role_id: 2 })).toBe(true);
+  it("returns false when can_view_all_tasks is absent or false", () => {
+    expect(canSeeTeamTasks({ user_id: 1, role_id: 11 })).toBe(false);
+    expect(canSeeTeamTasks({ user_id: 1, role_id: 11, can_view_all_tasks: false })).toBe(false);
   });
 
-  it('returns true for role_name_ru "Руководитель ОВЭиПД"', () => {
-    const me: MeInfo = { user_id: 1, role_id: 10, role_name_ru: "Руководитель ОВЭиПД" };
-    expect(canSeeTeamTasks(me)).toBe(true);
-  });
-
-  it('returns false for role_name_ru "Госпитальный эксперт ОВЭиПД" without visibility', () => {
-    const me: MeInfo = {
-      user_id: 1,
-      role_id: 11,
-      role_name_ru: "Госпитальный эксперт ОВЭиПД",
-    };
-    expect(canSeeTeamTasks(me)).toBe(false);
-  });
-
-  it("returns true for role_code QM_HEAD", () => {
-    const me: MeInfo = { user_id: 1, role_id: 10, role_code: "QM_HEAD" };
-    expect(canSeeTeamTasks(me)).toBe(true);
-  });
-
-  it("returns true when personnel_visibility.can_view_tasks is true", () => {
+  it('returns false for госпитальный эксперт without can_view_all_tasks even with can_view_tasks visibility', () => {
     const me: MeInfo = {
       user_id: 1,
       role_id: 11,
       role_name_ru: "Госпитальный эксперт ОВЭиПД",
       personnel_visibility: { can_view_tasks: true },
+      can_view_all_tasks: false,
     };
-    expect(canSeeTeamTasks(me)).toBe(true);
+    expect(canSeeTeamTasks(me)).toBe(false);
   });
 
-  it("returns true for director role_name_ru", () => {
-    expect(canSeeTeamTasks({ user_id: 1, role_id: 3, role_name_ru: "Директор" })).toBe(true);
-  });
-
-  it("returns true for deputy role_name_ru via зам substring", () => {
+  it("returns true only when backend sets can_view_all_tasks", () => {
+    expect(canSeeTeamTasks({ user_id: 1, role_id: 2, can_view_all_tasks: true })).toBe(true);
     expect(
-      canSeeTeamTasks({ user_id: 1, role_id: 4, role_name_ru: "Зам по лечебной работе" }),
+      canSeeTeamTasks({
+        user_id: 1,
+        role_id: 10,
+        role_name_ru: "Руководитель ОВЭиПД",
+        can_view_all_tasks: true,
+      }),
     ).toBe(true);
   });
 
-  it("returns false for plain executor without manager signals", () => {
+  it("ignores frontend role heuristics when can_view_all_tasks is false", () => {
     expect(
-      canSeeTeamTasks({ user_id: 1, role_id: 99, role_name_ru: "Амбулаторный эксперт ОВЭиПД" }),
+      canSeeTeamTasks({
+        user_id: 1,
+        role_id: 3,
+        role_name_ru: "Директор",
+        role_code: "DIRECTOR",
+        can_view_all_tasks: false,
+      }),
     ).toBe(false);
+  });
+});
+
+describe("defaultTaskScope", () => {
+  it("defaults to mine for plain executor", () => {
+    expect(defaultTaskScope({ user_id: 1, role_id: 99, can_view_all_tasks: false })).toBe("mine");
+  });
+
+  it("defaults to team when can_view_all_tasks is true", () => {
+    expect(defaultTaskScope({ user_id: 1, role_id: 2, can_view_all_tasks: true })).toBe("team");
+  });
+
+  it("defaults to mine before auth/me (no me)", () => {
+    expect(defaultTaskScope(null)).toBe("mine");
   });
 });
 

@@ -14,7 +14,11 @@ import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib
 import { canEditTask, editButtonTitle, isTaskRowEditable } from "@/lib/taskEditPolicy";
 import { taskPeriodicityLabel } from "@/lib/taskPeriodicity";
 import { resolveTaskReportLink } from "@/lib/taskReportLink";
-import { canSeeTeamTasks as userCanSeeTeamTasks, isTaskSystemAdmin } from "@/lib/taskScopePolicy";
+import {
+  canSeeTeamTasks as userCanSeeTeamTasks,
+  defaultTaskScope,
+  isTaskSystemAdmin,
+} from "@/lib/taskScopePolicy";
 import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
@@ -478,7 +482,7 @@ export default function TasksPageClient() {
   );
 
   const handleRefresh = React.useCallback(() => {
-    const defaultScope: TaskScope = canSeeTeamTasks ? "team" : "mine";
+    const defaultScope: TaskScope = defaultTaskScope(me);
 
     resetDrawerState();
     setPageError(null);
@@ -498,7 +502,7 @@ export default function TasksPageClient() {
       search: "",
       taskKind: "all",
     });
-  }, [canSeeTeamTasks, resetDrawerState, router, loadItems]);
+  }, [me, resetDrawerState, router, loadItems]);
 
   React.useEffect(() => {
     void (async () => {
@@ -510,7 +514,7 @@ export default function TasksPageClient() {
       try {
         const meInfo = await apiAuthMe();
         setMe(meInfo);
-        setTaskScope(userCanSeeTeamTasks(meInfo) ? "team" : "mine");
+        setTaskScope(defaultTaskScope(meInfo));
       } catch (e: any) {
         if (isUnauthorized(e)) {
           redirectToLogin();

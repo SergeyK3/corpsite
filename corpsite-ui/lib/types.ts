@@ -25,6 +25,8 @@ export type MeInfo = {
   has_personnel_visibility?: boolean;
   show_org_sidebar?: boolean;
   personnel_visibility?: PersonnelVisibilityInfo;
+  /** GET /auth/me — backend can_view_team_tasks(); controls «Все задачи» tab visibility. */
+  can_view_all_tasks?: boolean;
 };
 
 export type PersonnelVisibilityInfo = {

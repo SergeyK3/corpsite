@@ -280,8 +280,24 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     from app.services.personnel_visibility_resolver_service import (
         enrich_user_with_personnel_visibility,
     )
+    from app.services.tasks_service import can_view_team_tasks
 
-    return enrich_user_with_personnel_visibility(out)
+    out = enrich_user_with_personnel_visibility(out)
+
+    can_view_all_tasks = False
+    role_id = int(out.get("role_id") or 0)
+    if uid > 0 and role_id > 0:
+        with engine.connect() as conn:
+            can_view_all_tasks = bool(
+                can_view_team_tasks(
+                    conn,
+                    current_user_id=uid,
+                    current_role_id=role_id,
+                )
+            )
+    out["can_view_all_tasks"] = can_view_all_tasks
+
+    return out
 
 
 def _get_user_auth_row_by_login(login: str) -> Optional[Dict[str, Any]]:
