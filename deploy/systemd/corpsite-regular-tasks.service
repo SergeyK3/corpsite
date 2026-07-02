@@ -1,0 +1,18 @@
+[Unit]
+Description=Corpsite regular tasks automatic generation (cron equivalent)
+Documentation=file:/opt/projects/corpsite/app/docs/ops/REGULAR_TASK_SCHEDULER_RUNBOOK.md
+After=network-online.target corpsite-backend.service
+Wants=corpsite-backend.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/projects/corpsite/app
+ExecStart=/opt/projects/corpsite/app/scripts/ops/run_regular_tasks_cron.sh
+User=root
+Group=root
+# Log success/failure in journal; response body is printed on success.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -77,12 +77,19 @@ sudo cp deploy/systemd/corpsite-backend.service /etc/systemd/system/
 sudo cp deploy/systemd/corpsite-frontend.service /etc/systemd/system/
 sudo cp deploy/systemd/corpsite-healthcheck.service /etc/systemd/system/
 sudo cp deploy/systemd/corpsite-healthcheck.timer /etc/systemd/system/
+sudo cp deploy/systemd/corpsite-regular-tasks.service /etc/systemd/system/
+sudo cp deploy/systemd/corpsite-regular-tasks.timer /etc/systemd/system/
+sudo chmod +x scripts/ops/run_regular_tasks_cron.sh
 sudo touch /var/log/corpsite-healthcheck.log
 sudo chmod 644 /var/log/corpsite-healthcheck.log
 sudo systemctl daemon-reload
 sudo systemctl enable corpsite-healthcheck.timer
 sudo systemctl start corpsite-healthcheck.timer
+sudo systemctl enable corpsite-regular-tasks.timer
+sudo systemctl start corpsite-regular-tasks.timer
 ```
+
+Regular tasks scheduler runbook: `docs/ops/REGULAR_TASK_SCHEDULER_RUNBOOK.md`.
 
 Ensure ops scripts are executable:
 
@@ -90,6 +97,7 @@ Ensure ops scripts are executable:
 chmod +x scripts/check_frontend_build.sh
 chmod +x scripts/deploy_frontend.sh scripts/deploy_backend.sh
 chmod +x scripts/ops/ensure_port_free.sh scripts/ops/corpsite_healthcheck.sh
+chmod +x scripts/ops/run_regular_tasks_cron.sh
 ```
 
 ## Port guard
