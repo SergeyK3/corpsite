@@ -257,11 +257,18 @@ Do **not** expect scheduler to backfill after downtime — always catch-up for m
 
 ## Post-deploy smoke
 
+Automatic (recommended): `sudo ./scripts/deploy_backend.sh` invokes `scripts/ops/scheduler_post_deploy_smoke.sh` after `/health` succeeds.
+
+Manual equivalent:
+
 ```bash
-curl -sS http://127.0.0.1:8000/health
-systemctl is-active corpsite-regular-tasks.timer || echo "WARN: scheduler timer not active"
-.venv/bin/python scripts/ops/ops_regular_tasks_scheduler_audit.py
+set -a && source .env && set +a
+sudo ./scripts/ops/scheduler_post_deploy_smoke.sh
+# or audit only (on VPS with systemd already verified):
+.venv/bin/python scripts/ops/ops_regular_tasks_scheduler_audit.py --post-deploy-smoke
 ```
+
+Safe mode: `dry_run=true` on `/internal/regular-tasks/run` only — no tasks, no catch-up.
 
 After frontend deploy: scheduler panel on `/regular-tasks`.
 
@@ -287,4 +294,5 @@ Scheduler restore **does not backfill** (RTS-3).
 | `app/services/regular_task_scheduler_status.py` | scheduler-status API |
 | `scripts/ops/run_regular_tasks_cron.sh` | production invoke |
 | `scripts/ops/ops_regular_tasks_scheduler_audit.py` | read-only audit |
+| `scripts/ops/scheduler_post_deploy_smoke.sh` | post-deploy smoke (systemd + audit) |
 | `corpsite-ui/.../SchedulerStatusPanel.tsx` | admin diagnostics UI |

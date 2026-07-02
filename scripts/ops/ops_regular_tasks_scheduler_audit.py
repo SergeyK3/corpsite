@@ -10,9 +10,13 @@ Optional endpoint probe (uses INTERNAL_API_TOKEN from .env, dry_run=true):
 
   .venv/bin/python scripts/ops/ops_regular_tasks_scheduler_audit.py --probe-endpoint
 
-Optional JSON output:
+Optional post-deploy smoke (safe: dry_run probe + routing check, no task creation):
 
-  .venv/bin/python scripts/ops/ops_regular_tasks_scheduler_audit.py --json
+  .venv/bin/python scripts/ops/ops_regular_tasks_scheduler_audit.py --post-deploy-smoke
+
+Or via deploy pipeline (automatic after backend health check):
+
+  sudo ./scripts/ops/scheduler_post_deploy_smoke.sh
 """
 from __future__ import annotations
 
@@ -68,6 +72,32 @@ class AuditReport:
         return any(c.status == "fail" for c in self.checks)
 
 
+SCHEDULER_STATUS_REQUIRED_KEYS = (
+    "automatic_enabled",
+    "status",
+    "status_label",
+    "status_explanation",
+    "observation_window_days",
+    "last_result_label",
+    "hint",
+    "checked_at",
+)
+
+
+def validate_scheduler_status_payload(payload: Dict[str, Any]) -> Optional[str]:
+    """Return error message when payload does not match scheduler-status contract."""
+    if not isinstance(payload, dict):
+        return "response is not a JSON object"
+    missing = [key for key in SCHEDULER_STATUS_REQUIRED_KEYS if key not in payload]
+    if missing:
+        return f"missing keys: {', '.join(missing)}"
+    if not isinstance(payload.get("status"), str) or not payload["status"].strip():
+        return "status must be a non-empty string"
+    if not isinstance(payload.get("checked_at"), str) or not payload["checked_at"].strip():
+        return "checked_at must be a non-empty string"
+    return None
+
+
 def _run(cmd: list[str], *, timeout: int = 20) -> tuple[int, str]:
     proc = subprocess.run(
         cmd,
@@ -79,6 +109,44 @@ def _run(cmd: list[str], *, timeout: int = 20) -> tuple[int, str]:
     )
     out = ((proc.stdout or "") + (proc.stderr or "")).strip()
     return proc.returncode, out
+
+
+def _http_request(
+    method: str,
+    url: str,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    body: Optional[str] = None,
+    timeout: int = 30,
+) -> tuple[int, str]:
+    if not shutil.which("curl"):
+        return 0, "curl not available"
+
+    cmd = [
+        "curl",
+        "-sS",
+        "-o",
+        "-",
+        "-w",
+        "\n__HTTP_CODE__:%{http_code}",
+        "-X",
+        method.upper(),
+        url,
+    ]
+    for key, val in (headers or {}).items():
+        cmd.extend(["-H", f"{key}: {val}"])
+    if body is not None:
+        cmd.extend(["-d", body])
+
+    _, out = _run(cmd, timeout=timeout)
+    if "__HTTP_CODE__:" not in out:
+        return 0, out[:500]
+
+    body_text, _, tail = out.rpartition("\n__HTTP_CODE__:")
+    try:
+        return int(tail.strip()), body_text
+    except ValueError:
+        return 0, out[:500]
 
 
 def _mask(value: Optional[str]) -> str:
@@ -101,7 +169,7 @@ def _collect_env_snapshot() -> Dict[str, Any]:
     }
 
 
-def _collect_infrastructure(report: AuditReport) -> None:
+def _collect_infrastructure(report: AuditReport, *, post_deploy: bool = False) -> None:
     infra: Dict[str, Any] = {}
 
     if shutil.which("systemctl"):
@@ -151,11 +219,17 @@ def _collect_infrastructure(report: AuditReport) -> None:
 
     if infra.get("corpsite-regular-tasks.timer_enabled") == "enabled":
         report.add("scheduler_timer_installed", "pass", "corpsite-regular-tasks.timer is enabled")
-    elif infra.get("crontab_hits"):
+    elif infra.get("crontab_hits") and not post_deploy:
         report.add(
             "scheduler_timer_installed",
             "warn",
             f"no systemd timer, but crontab entries found: {len(infra['crontab_hits'])}",
+        )
+    elif infra.get("crontab_hits") and post_deploy:
+        report.add(
+            "scheduler_timer_installed",
+            "fail",
+            "post-deploy smoke requires corpsite-regular-tasks.timer (crontab-only is not enough)",
         )
     else:
         report.add(
@@ -164,8 +238,18 @@ def _collect_infrastructure(report: AuditReport) -> None:
             "no corpsite-regular-tasks.timer and no crontab entry for regular tasks",
         )
 
+    timer_active = (infra.get("corpsite-regular-tasks.timer_active") or "").strip()
+    if post_deploy and timer_active and timer_active != "active":
+        report.add(
+            "scheduler_timer_active",
+            "fail",
+            f"corpsite-regular-tasks.timer is-active={timer_active!r} (expected active/waiting)",
+        )
+    elif post_deploy and timer_active == "active":
+        report.add("scheduler_timer_active", "pass", "corpsite-regular-tasks.timer is active (waiting)")
 
-def _collect_journal(report: AuditReport) -> None:
+
+def _collect_journal(report: AuditReport, *, post_deploy: bool = False) -> None:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -203,8 +287,11 @@ def _collect_journal(report: AuditReport) -> None:
 
             status_payload = build_regular_task_scheduler_status(conn)
     except Exception as exc:
-        report.add("journal_automatic_runs_present", "skip", f"database unavailable: {exc}")
-        report.add("cron_overdue", "skip", "scheduler-status unavailable without database")
+        db_status = "fail" if post_deploy else "skip"
+        report.add("journal_automatic_runs_present", db_status, f"database unavailable: {exc}")
+        report.add("cron_overdue", db_status, "scheduler-status unavailable without database")
+        if post_deploy:
+            report.add("scheduler_status_contract", "fail", f"database unavailable: {exc}")
         return
 
     report.scheduler_status = status_payload
@@ -214,11 +301,27 @@ def _collect_journal(report: AuditReport) -> None:
         "automatic_runs_in_journal": int(status_payload.get("automatic_runs_in_journal") or 0),
     }
 
+    contract_err = validate_scheduler_status_payload(status_payload)
+    if contract_err:
+        report.add("scheduler_status_contract", "fail", contract_err)
+    else:
+        report.add(
+            "scheduler_status_contract",
+            "pass",
+            f"status={status_payload.get('status')} (computed via DB)",
+        )
+
     if automatic:
         report.add(
             "journal_automatic_runs_present",
             "pass",
             f"last automatic run_id={automatic[0]['run_id']} started_at={automatic[0]['started_at']}",
+        )
+    elif post_deploy:
+        report.add(
+            "journal_automatic_runs_present",
+            "warn",
+            "no automatic live runs in regular_task_runs (historical gap — timer restore does not backfill)",
         )
     else:
         report.add("journal_automatic_runs_present", "fail", "no automatic live runs in regular_task_runs")
@@ -302,37 +405,17 @@ def _probe_endpoint(report: AuditReport, *, dry_run: bool) -> None:
         return
 
     payload = json.dumps({"dry_run": dry_run})
-    code, out = _run(
-        [
-            "curl",
-            "-sS",
-            "-o",
-            "-",
-            "-w",
-            "\n__HTTP_CODE__:%{http_code}",
-            "-X",
-            "POST",
-            f"{backend}/internal/regular-tasks/run",
-            "-H",
-            "Content-Type: application/json",
-            "-H",
-            f"X-Internal-Api-Token: {token}",
-            "-H",
-            f"X-User-Id: {cron_user}",
-            "-d",
-            payload,
-        ],
+    http_code, body = _http_request(
+        "POST",
+        f"{backend}/internal/regular-tasks/run",
+        headers={
+            "Content-Type": "application/json",
+            "X-Internal-Api-Token": token,
+            "X-User-Id": cron_user,
+        },
+        body=payload,
         timeout=60,
     )
-
-    http_code = 0
-    body = out
-    if "__HTTP_CODE__:" in out:
-        body, _, tail = out.rpartition("\n__HTTP_CODE__:")
-        try:
-            http_code = int(tail.strip())
-        except ValueError:
-            http_code = 0
 
     if http_code == 200:
         report.add(
@@ -343,6 +426,110 @@ def _probe_endpoint(report: AuditReport, *, dry_run: bool) -> None:
         return
 
     report.add("endpoint_probe", "fail", f"HTTP {http_code}; body={body[:240]!r}")
+
+
+def _probe_scheduler_status_route(report: AuditReport) -> None:
+    backend = (os.getenv("BACKEND_URL") or "http://127.0.0.1:8000").rstrip("/")
+    url = f"{backend}/regular-tasks/scheduler-status"
+
+    if not shutil.which("curl"):
+        report.add("scheduler_status_routing", "skip", "curl not available")
+        return
+
+    http_code, body = _http_request("GET", url)
+    if http_code == 422 and ("int_parsing" in body or "regular_task_id" in body):
+        report.add(
+            "scheduler_status_routing",
+            "fail",
+            f"HTTP 422 — route shadowed by /regular-tasks/{{id}}: {body[:240]!r}",
+        )
+        return
+
+    if http_code == 401:
+        report.add(
+            "scheduler_status_routing",
+            "pass",
+            "HTTP 401 (auth required; path resolves, not 422)",
+        )
+        return
+
+    if http_code == 200:
+        contract_err = None
+        try:
+            contract_err = validate_scheduler_status_payload(json.loads(body))
+        except json.JSONDecodeError:
+            contract_err = "response is not valid JSON"
+        if contract_err:
+            report.add("scheduler_status_routing", "fail", f"HTTP 200 but invalid payload: {contract_err}")
+        else:
+            report.add("scheduler_status_routing", "pass", "HTTP 200 with valid scheduler-status JSON")
+        return
+
+    report.add("scheduler_status_routing", "fail", f"HTTP {http_code}; body={body[:240]!r}")
+
+
+def _probe_scheduler_status_http_contract(report: AuditReport) -> None:
+    login = (os.getenv("CORPSITE_SMOKE_ADMIN_LOGIN") or "").strip()
+    password = (os.getenv("CORPSITE_SMOKE_ADMIN_PASSWORD") or "").strip()
+    if not login or not password:
+        report.add(
+            "scheduler_status_http_contract",
+            "skip",
+            "set CORPSITE_SMOKE_ADMIN_LOGIN and CORPSITE_SMOKE_ADMIN_PASSWORD for authenticated HTTP check",
+        )
+        return
+
+    if not shutil.which("curl"):
+        report.add("scheduler_status_http_contract", "skip", "curl not available")
+        return
+
+    backend = (os.getenv("BACKEND_URL") or "http://127.0.0.1:8000").rstrip("/")
+    url = f"{backend}/regular-tasks/scheduler-status"
+
+    login_code, login_body = _http_request(
+        "POST",
+        f"{backend}/auth/login",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps({"login": login, "password": password}),
+    )
+    if login_code != 200:
+        report.add("scheduler_status_http_contract", "fail", f"smoke admin login HTTP {login_code}")
+        return
+
+    try:
+        token = json.loads(login_body).get("access_token")
+    except json.JSONDecodeError:
+        report.add("scheduler_status_http_contract", "fail", "smoke admin login returned invalid JSON")
+        return
+
+    if not token:
+        report.add("scheduler_status_http_contract", "fail", "smoke admin login returned no access_token")
+        return
+
+    http_code, body = _http_request(
+        "GET",
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if http_code != 200:
+        report.add("scheduler_status_http_contract", "fail", f"authenticated GET HTTP {http_code}")
+        return
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        report.add("scheduler_status_http_contract", "fail", "authenticated response is not valid JSON")
+        return
+
+    contract_err = validate_scheduler_status_payload(payload)
+    if contract_err:
+        report.add("scheduler_status_http_contract", "fail", contract_err)
+    else:
+        report.add(
+            "scheduler_status_http_contract",
+            "pass",
+            f"status={payload.get('status')} (authenticated HTTP)",
+        )
 
 
 def _print_human(report: AuditReport) -> None:
@@ -396,8 +583,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Audit regular-tasks automatic scheduler")
     parser.add_argument("--probe-endpoint", action="store_true", help="POST dry_run to /internal/regular-tasks/run")
     parser.add_argument("--probe-live", action="store_true", help="POST live run (use with care on production)")
+    parser.add_argument(
+        "--post-deploy-smoke",
+        action="store_true",
+        help="Post-deploy safe mode: dry_run probe + scheduler-status routing (no task creation)",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON report")
     args = parser.parse_args()
+
+    post_deploy = bool(args.post_deploy_smoke)
+    if post_deploy and args.probe_live:
+        print("ERROR: --post-deploy-smoke cannot be combined with --probe-live", file=sys.stderr)
+        return 2
 
     report = AuditReport(generated_at=datetime.now(timezone.utc).isoformat())
     report.environment = _collect_env_snapshot()
@@ -407,11 +604,15 @@ def main() -> int:
     else:
         report.add("internal_api_token", "pass", report.environment["INTERNAL_API_TOKEN"])
 
-    _collect_infrastructure(report)
+    _collect_infrastructure(report, post_deploy=post_deploy)
     _validate_cron_user(report)
-    _collect_journal(report)
+    _collect_journal(report, post_deploy=post_deploy)
 
-    if args.probe_endpoint or args.probe_live:
+    if post_deploy:
+        _probe_endpoint(report, dry_run=True)
+        _probe_scheduler_status_route(report)
+        _probe_scheduler_status_http_contract(report)
+    elif args.probe_endpoint or args.probe_live:
         _probe_endpoint(report, dry_run=not args.probe_live)
 
     if args.json:

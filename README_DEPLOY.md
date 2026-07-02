@@ -62,8 +62,23 @@
 4. Обнови backend-зависимости, если они изменились.
 5. Собери или обнови frontend (`sudo ./scripts/deploy_frontend.sh` — см. `docs/deploy/frontend.md`).
 6. Перезапусти backend через `sudo ./scripts/deploy_backend.sh` (см. `docs/deploy/VPS_STABILITY.md`).
+   Скрипт автоматически выполняет health-check и **scheduler post-deploy smoke** после успешного `/health`.
 7. Запусти backend и frontend (если не использовал deploy-скрипты выше).
 8. Выполни smoke-check ниже.
+
+### Post-deploy Scheduler Smoke
+
+После каждого backend deploy `scripts/deploy_backend.sh` автоматически проверяет инфраструктуру regular-tasks scheduler (только диагностика, без создания задач):
+
+1. `corpsite-regular-tasks.timer` установлен, enabled, active (waiting).
+2. `systemctl list-timers` показывает следующий trigger.
+3. `corpsite-regular-tasks.service` существует.
+4. `scripts/ops/ops_regular_tasks_scheduler_audit.py --post-deploy-smoke` — exit 0 (`dry_run` probe + `GET /regular-tasks/scheduler-status`).
+5. Deploy завершается с ошибкой, если smoke не прошёл.
+
+Отключить только в аварийном случае: `CORPSITE_SKIP_SCHEDULER_SMOKE=1`.
+
+Детали и ожидаемые результаты: `docs/deploy/VPS_STABILITY.md` § Post-deploy Scheduler Smoke, `docs/ops/REGULAR_TASK_SCHEDULER_RUNBOOK.md`.
 
 ## Smoke-check после развёртывания
 

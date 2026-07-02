@@ -97,7 +97,7 @@ Ensure ops scripts are executable:
 chmod +x scripts/check_frontend_build.sh
 chmod +x scripts/deploy_frontend.sh scripts/deploy_backend.sh
 chmod +x scripts/ops/ensure_port_free.sh scripts/ops/corpsite_healthcheck.sh
-chmod +x scripts/ops/run_regular_tasks_cron.sh
+chmod +x scripts/ops/run_regular_tasks_cron.sh scripts/ops/scheduler_post_deploy_smoke.sh
 ```
 
 ## Port guard
@@ -172,6 +172,44 @@ systemctl list-timers corpsite-healthcheck.timer
 - [ ] `curl -I http://127.0.0.1:3000/directory/personnel` → 200
 - [ ] `curl -I https://mmc.004.kz/directory/personnel` → 200
 - [ ] `curl -I https://mmc.004.kz/admin/system` → 200 or 302 (auth)
+
+### Post-deploy Scheduler Smoke (automatic)
+
+`sudo ./scripts/deploy_backend.sh` runs **scheduler post-deploy smoke** after a successful `/health` check (unless `CORPSITE_SKIP_SCHEDULER_SMOKE=1`).
+
+Pipeline:
+
+```
+Backend restart → Healthcheck → Scheduler smoke → Deploy OK
+```
+
+Manual run (same checks):
+
+```bash
+cd /opt/projects/corpsite/app
+set -a && source .env && set +a
+sudo ./scripts/ops/scheduler_post_deploy_smoke.sh
+```
+
+Expected results (all must pass for deploy to succeed):
+
+| Check | Expected |
+|-------|----------|
+| `corpsite-regular-tasks.timer` exists | `systemctl cat` succeeds |
+| Timer enabled | `is-enabled` → `enabled` |
+| Timer active | `is-active` → `active` (waiting) |
+| Next trigger | `systemctl list-timers corpsite-regular-tasks.timer` shows a future LEFT time |
+| `corpsite-regular-tasks.service` exists | `systemctl cat` succeeds |
+| Audit script | `ops_regular_tasks_scheduler_audit.py --post-deploy-smoke` exit 0 |
+| Internal endpoint probe | `POST /internal/regular-tasks/run` with `dry_run=true` → HTTP 200 |
+| Scheduler-status routing | `GET /regular-tasks/scheduler-status` → HTTP 401 (not 422) |
+| Scheduler-status contract | JSON from DB matches contract (`status`, `checked_at`, …) |
+
+Safe mode guarantees: **no task creation**, **no catch-up**, **no live `/run`**.
+
+Optional: set `CORPSITE_SMOKE_ADMIN_LOGIN` / `CORPSITE_SMOKE_ADMIN_PASSWORD` in `.env` for an additional authenticated HTTP contract check.
+
+Runbook: `docs/ops/REGULAR_TASK_SCHEDULER_RUNBOOK.md`.
 
 ## Related
 
