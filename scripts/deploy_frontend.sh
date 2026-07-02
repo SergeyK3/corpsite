@@ -8,7 +8,9 @@ SERVICE_NAME="${CORPSITE_FRONTEND_SERVICE:-corpsite-frontend}"
 ENSURE_PORT="${REPO_ROOT}/scripts/ops/ensure_port_free.sh"
 HEALTH_URL="${CORPSITE_FRONTEND_HEALTH_URL:-http://127.0.0.1:3000/}"
 HEALTH_PERSONNEL_URL="${CORPSITE_FRONTEND_PERSONNEL_URL:-http://127.0.0.1:3000/directory/personnel}"
+HEALTH_STAFF_URL="${CORPSITE_FRONTEND_STAFF_URL:-http://127.0.0.1:3000/directory/staff}"
 PUBLIC_PERSONNEL_URL="${CORPSITE_PUBLIC_PERSONNEL_URL:-https://mmc.004.kz/directory/personnel}"
+PUBLIC_STAFF_URL="${CORPSITE_PUBLIC_STAFF_URL:-https://mmc.004.kz/directory/staff}"
 HEALTH_RETRIES="${CORPSITE_FRONTEND_HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL_SEC="${CORPSITE_FRONTEND_HEALTH_INTERVAL_SEC:-2}"
 
@@ -125,8 +127,10 @@ for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
 done
 
 smoke_url "${HEALTH_PERSONNEL_URL}" "local personnel"
+smoke_url "${HEALTH_STAFF_URL}" "local staff"
 if curl -sS --max-time 15 -o /dev/null "https://mmc.004.kz/" 2>/dev/null; then
   smoke_url "${PUBLIC_PERSONNEL_URL}" "public personnel"
+  smoke_url "${PUBLIC_STAFF_URL}" "public staff"
 else
   log "WARN: skipping public smoke (https://mmc.004.kz unreachable from this host)"
 fi

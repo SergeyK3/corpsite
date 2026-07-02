@@ -2,12 +2,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeAccountSections from "./EmployeeAccountSections";
-import { createUser, getEmployee, getRoles } from "../_lib/api.client";
+import { createUser, getEmployee } from "../_lib/api.client";
 
 vi.mock("../_lib/api.client", () => ({
   createUser: vi.fn(),
   getEmployee: vi.fn(),
-  getRoles: vi.fn(),
+}));
+
+vi.mock("@/lib/userCreateOrgScope", () => ({
+  employeeOrgUnitId: vi.fn(() => null),
+  resolveEmployeeOrgScopePrefill: vi.fn().mockResolvedValue({ org_group_id: null, org_unit_id: null }),
 }));
 
 vi.mock("./EmployeeEventsTimeline", () => ({
@@ -20,12 +24,6 @@ vi.mock("./UserCreateDrawer", () => ({
 }));
 
 describe("EmployeeAccountSections provisioning UX", () => {
-  beforeEach(() => {
-    vi.mocked(getRoles).mockResolvedValue({
-      items: [{ role_id: 5, name: "QM role" }],
-    });
-  });
-
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();

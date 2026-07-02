@@ -3,17 +3,14 @@
 
 import * as React from "react";
 
-import UserCreateForm, {
-  type RoleOption,
-  type UserCreateFormValues,
-} from "./UserCreateForm";
+import UserCreateForm, { type UserCreateFormValues } from "./UserCreateForm";
 
 type UserCreateDrawerProps = {
   open: boolean;
   fullName: string;
-  orgUnitLabel: string;
+  initialOrgGroupId?: number | null;
+  initialOrgUnitId?: number | null;
   initialValues: UserCreateFormValues;
-  roleOptions: RoleOption[];
   saving?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -23,9 +20,9 @@ type UserCreateDrawerProps = {
 export default function UserCreateDrawer({
   open,
   fullName,
-  orgUnitLabel,
+  initialOrgGroupId = null,
+  initialOrgUnitId = null,
   initialValues,
-  roleOptions,
   saving = false,
   error = null,
   onClose,
@@ -47,9 +44,9 @@ export default function UserCreateDrawer({
       <div className="relative ml-auto h-full w-full max-w-[720px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">
         <UserCreateForm
           fullName={fullName}
-          orgUnitLabel={orgUnitLabel}
+          initialOrgGroupId={initialOrgGroupId}
+          initialOrgUnitId={initialOrgUnitId}
           initialValues={initialValues}
-          roleOptions={roleOptions}
           saving={saving}
           error={error}
           onCancel={onClose}
