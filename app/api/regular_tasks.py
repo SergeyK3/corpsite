@@ -15,7 +15,6 @@ from app.services.regular_task_run_outcome import (
     build_item_task_payload,
     load_regular_task_run_items_with_outcome,
 )
-from app.services.regular_task_scheduler_status import build_regular_task_scheduler_status
 from app.services.regular_tasks_import_xlsx import import_regular_task_templates_xlsx_bytes
 from app.services.regular_tasks_service import _resolve_journal_warning
 from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
@@ -189,19 +188,6 @@ def import_regular_tasks_xlsx(
 ) -> Dict[str, Any]:
     _require_system_admin(current_user)
     return import_regular_task_templates_xlsx_bytes(raw=raw)
-
-
-@router.get("/regular-tasks/scheduler-status", response_model=RegularTaskSchedulerStatusOut)
-def get_regular_task_scheduler_status(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> RegularTaskSchedulerStatusOut:
-    """Operational status of automatic regular-task generation (cron journal + config)."""
-    _require_admin_or_privileged(current_user)
-
-    with engine.begin() as conn:
-        payload = build_regular_task_scheduler_status(conn)
-
-    return RegularTaskSchedulerStatusOut(**payload)
 
 
 @router.get("/regular-task-runs", response_model=List[RegularTaskRunOut])

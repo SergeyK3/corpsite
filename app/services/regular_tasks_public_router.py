@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged
+from app.services.regular_task_scheduler_status import build_regular_task_scheduler_status
 from app.services.regular_tasks_public_service import (
     archive_regular_task_tx,
     copy_regular_task_tx,
@@ -96,6 +97,21 @@ def create_regular_task(
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/scheduler-status")
+def get_regular_task_scheduler_status(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Must be registered before /{regular_task_id} to avoid path shadowing."""
+    from app.api.regular_tasks import RegularTaskSchedulerStatusOut
+
+    _require_admin_or_privileged(current_user)
+
+    with engine.begin() as conn:
+        payload = build_regular_task_scheduler_status(conn)
+
+    return RegularTaskSchedulerStatusOut(**payload)
 
 
 @router.get("/{regular_task_id}")

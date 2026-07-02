@@ -106,9 +106,10 @@ app.include_router(tg_bind_router)
 app.include_router(tg_bot_internal_router)
 app.include_router(directory_router)
 
-# Regular tasks
-app.include_router(regular_tasks_public_router)  # /regular-tasks
-app.include_router(regular_tasks_router)         # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
+# Regular tasks — /regular-tasks/scheduler-status lives in regular_tasks_public_router
+# and must stay registered before /regular-tasks/{regular_task_id} in that router.
+app.include_router(regular_tasks_public_router)
+app.include_router(regular_tasks_router)  # /regular-task-runs, /import-xlsx
 
 # ADR-042 Phase B4 — sysadmin API (privileged guard, no enforcement)
 app.include_router(admin_router)
