@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
 import ImportProfileCardSections from "./ImportProfileCardSections";
@@ -35,6 +35,8 @@ function profileSignature(profile: ImportProfile | null): string {
 
 export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const provisionAccount = searchParams.get("provisionAccount") === "1";
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [archiving, setArchiving] = React.useState(false);
@@ -285,7 +287,10 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
 
         {!loading && employeeId ? (
           <div className="mt-8 border-t border-zinc-200 pt-8 dark:border-zinc-800">
-            <EmployeeAccountSections employeeId={employeeId} />
+            <EmployeeAccountSections
+              employeeId={employeeId}
+              initialUserCreateOpen={provisionAccount}
+            />
           </div>
         ) : null}
       </div>

@@ -103,12 +103,16 @@ type Props = {
   employeeId: string;
   refreshToken?: number;
   showEvents?: boolean;
+  showTelegram?: boolean;
+  initialUserCreateOpen?: boolean;
 };
 
 export default function EmployeeAccountSections({
   employeeId,
   refreshToken = 0,
   showEvents = true,
+  showTelegram = true,
+  initialUserCreateOpen = false,
 }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [details, setDetails] = React.useState<EmployeeDetails | null>(null);
@@ -148,6 +152,13 @@ export default function EmployeeAccountSections({
     void loadDetails();
   }, [loadDetails, refreshToken]);
 
+  const linkedUser = (details as any)?.user ?? null;
+  const autoOpenAttemptedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    autoOpenAttemptedRef.current = false;
+  }, [employeeId, refreshToken]);
+
   function handleOpenUserCreateDrawer() {
     if (!details) return;
     const fio = getEmployeeName(details);
@@ -172,6 +183,16 @@ export default function EmployeeAccountSections({
       }
     })();
   }
+
+  React.useEffect(() => {
+    if (!initialUserCreateOpen || autoOpenAttemptedRef.current || loading || !details || linkedUser) {
+      return;
+    }
+    autoOpenAttemptedRef.current = true;
+    handleOpenUserCreateDrawer();
+    // handleOpenUserCreateDrawer is stable enough for one-shot auto-open after load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUserCreateOpen, loading, details, linkedUser]);
 
   function handleCloseUserCreateDrawer() {
     if (userCreateSaving) return;
@@ -207,7 +228,6 @@ export default function EmployeeAccountSections({
     }
   }
 
-  const linkedUser = (details as any)?.user ?? null;
   const telegramLabel = resolveTelegramLabel(linkedUser as Record<string, unknown> | null);
   const orgUnitLabel =
     (details as any)?.org_unit?.name ??
@@ -234,6 +254,9 @@ export default function EmployeeAccountSections({
           <div className={readOnlyCardClass}>
             {linkedUser ? (
               <div className="space-y-1 text-sm text-zinc-900 dark:text-zinc-50">
+                <div className="font-medium text-green-800 dark:text-green-300">
+                  ✓ Учётная запись Corpsite существует
+                </div>
                 <div>
                   <span className="text-zinc-600 dark:text-zinc-400">Логин: </span>
                   {linkedUser.login ?? "—"}
@@ -250,6 +273,9 @@ export default function EmployeeAccountSections({
             ) : (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
+                  <div className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                    □ Учётная запись Corpsite ещё не создана
+                  </div>
                   <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
                     Доступ к Corpsite не создан
                   </div>
@@ -269,11 +295,13 @@ export default function EmployeeAccountSections({
           </div>
         </SectionBlock>
 
-        <SectionBlock title="Telegram">
-          <div className={readOnlyCardClass}>
-            <div className="text-sm text-zinc-900 dark:text-zinc-50">{telegramLabel}</div>
-          </div>
-        </SectionBlock>
+        {showTelegram ? (
+          <SectionBlock title="Telegram">
+            <div className={readOnlyCardClass}>
+              <div className="text-sm text-zinc-900 dark:text-zinc-50">{telegramLabel}</div>
+            </div>
+          </SectionBlock>
+        ) : null}
 
         {showEvents && employeeId ? (
           <EmployeeEventsTimeline employeeId={employeeId} refreshToken={eventsRefreshToken} />

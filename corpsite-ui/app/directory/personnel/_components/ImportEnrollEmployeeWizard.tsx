@@ -16,6 +16,7 @@ import {
   type NormalizedRecord,
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
+import EnrollmentCompletionPanel from "./EnrollmentCompletionPanel";
 
 type Props = {
   record: NormalizedRecord;
@@ -138,6 +139,7 @@ export default function ImportEnrollEmployeeWizard({
   const [dryRunResult, setDryRunResult] = React.useState<EnrollEmployeeResponse | null>(null);
   const [conflictResult, setConflictResult] = React.useState<EnrollEmployeeResponse | null>(null);
   const [successEmployeeId, setSuccessEmployeeId] = React.useState<number | null>(null);
+  const [successEnrollResult, setSuccessEnrollResult] = React.useState<EnrollEmployeeResponse | null>(null);
   const [fullName, setFullName] = React.useState(record.full_name || "");
   const [orgUnitId, setOrgUnitId] = React.useState("");
   const [positionId, setPositionId] = React.useState("");
@@ -156,6 +158,7 @@ export default function ImportEnrollEmployeeWizard({
     setDryRunResult(null);
     setConflictResult(null);
     setSuccessEmployeeId(null);
+    setSuccessEnrollResult(null);
     setFullName(record.full_name || "");
     setOrgUnitId("");
     setPositionId("");
@@ -319,6 +322,7 @@ export default function ImportEnrollEmployeeWizard({
         link_same_iin_in_batch: true,
       });
       setSuccessEmployeeId(result.employee_id ?? null);
+      setSuccessEnrollResult(result);
       const updated = await getNormalizedRecord(record.record_id);
       onReviewed(updated);
       onToast("Сотрудник создан и записи привязаны", "success");
@@ -363,27 +367,14 @@ export default function ImportEnrollEmployeeWizard({
 
   if (!showWizard && !successEmployeeId) return null;
 
-  if (successEmployeeId) {
+  if (successEmployeeId && successEnrollResult) {
     return (
-      <section className="space-y-3 rounded-lg border border-green-200 bg-green-50/60 p-4 dark:border-green-900 dark:bg-green-950/30">
-        <h3 className="text-sm font-semibold text-green-900 dark:text-green-100">
-          Сотрудник создан · Employee ID {successEmployeeId}
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/directory/staff?employeeId=${successEmployeeId}`}
-            className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-800"
-          >
-            Открыть в «Персонал»
-          </Link>
-        </div>
-        <ProvenanceChain
-          record={record}
-          batchFileName={batchFileName}
-          employeeId={successEmployeeId}
-          linkedRecordIds={dryRunResult?.linked_record_ids}
-        />
-      </section>
+      <EnrollmentCompletionPanel
+        employeeId={successEmployeeId}
+        enrollResult={successEnrollResult}
+        record={record}
+        batchFileName={batchFileName}
+      />
     );
   }
 
