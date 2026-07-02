@@ -4,7 +4,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import OrgScopeFilter from "@/components/OrgScopeFilter";
+import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
 import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibraries";
@@ -24,6 +24,10 @@ import {
   defaultTaskScope,
   isTaskSystemAdmin,
 } from "@/lib/taskScopePolicy";
+import {
+  readTaskOrgFiltersFromSearchParams,
+  shouldShowTaskOrgFilters,
+} from "@/lib/taskOrgFilters";
 import type { MeInfo } from "@/lib/types";
 
 import CreateManualTaskModal, { type ManualTaskRoleOption } from "./CreateManualTaskModal";
@@ -59,6 +63,7 @@ type LoadItemsOptions = {
   taskScope?: TaskScope;
   orgGroupId?: number;
   orgUnitId?: string;
+  positionId?: number;
   search?: string;
   taskKind?: TaskKindFilter;
 };
@@ -288,8 +293,10 @@ export default function TasksPageClient() {
   const [manualRolesLoading, setManualRolesLoading] = React.useState(false);
 
   const orgScope = readOrgScopeFromSearchParams(sp);
+  const taskOrgFilters = React.useMemo(() => readTaskOrgFiltersFromSearchParams(sp), [sp]);
   const orgGroupId = orgScope.org_group_id;
   const orgUnitId = sp.get("org_unit_id") ?? "";
+  const positionId = taskOrgFilters.position_id;
   const deepLinkTaskId = React.useMemo(() => parseTaskIdFromSearchParams(sp), [sp]);
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
@@ -298,6 +305,10 @@ export default function TasksPageClient() {
   const canSeeTeamTasks = React.useMemo(() => userCanSeeTeamTasks(me), [me]);
 
   const readOnlyTeamMode = taskScope === "team" && !isSystemAdmin;
+  const showTaskOrgFilters = shouldShowTaskOrgFilters({
+    isSystemAdmin,
+    taskScope,
+  });
   const showExecutorColumn = taskScope === "team";
   const showDeleteButtons = isSystemAdmin;
   const actionsColWidth = showDeleteButtons ? "w-[170px]" : "w-[138px]";
@@ -398,6 +409,7 @@ export default function TasksPageClient() {
         const qStatusTab = options?.statusTab ?? tab;
         const qOrgGroupId = typeof options?.orgGroupId === "number" ? options.orgGroupId : orgGroupId;
         const qOrgUnitId = typeof options?.orgUnitId === "string" ? options.orgUnitId : orgUnitId;
+        const qPositionId = typeof options?.positionId === "number" ? options.positionId : positionId;
         const qSearch = typeof options?.search === "string" ? options.search : searchQuery;
         const qTaskKind = options?.taskKind ?? taskKind;
         const backendTaskKind =
@@ -409,8 +421,13 @@ export default function TasksPageClient() {
             limit: LIST_LIMIT,
             offset: qOffset,
             status_filter: qStatusTab,
-            org_group_id: qOrgGroupId ?? undefined,
-            org_unit_id: qOrgUnitId || undefined,
+            ...(requestedScope === "team" && isSystemAdmin
+              ? {
+                  org_group_id: qOrgGroupId ?? undefined,
+                  org_unit_id: qOrgUnitId || undefined,
+                  position_id: qPositionId ?? undefined,
+                }
+              : {}),
             search: qSearch || undefined,
             task_kind: backendTaskKind,
           } as any,
@@ -449,7 +466,7 @@ export default function TasksPageClient() {
         }
       }
     },
-    [offset, tab, taskScope, searchQuery, taskKind, selectedId, drawerMode, redirectToLogin, orgGroupId, orgUnitId, resetDrawerState],
+    [offset, tab, taskScope, searchQuery, taskKind, selectedId, drawerMode, redirectToLogin, orgGroupId, orgUnitId, positionId, isSystemAdmin, resetDrawerState],
   );
 
   const loadTaskDetails = React.useCallback(
@@ -863,9 +880,13 @@ export default function TasksPageClient() {
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
-            <div className="mb-3 flex flex-wrap items-end gap-3">
-              <OrgScopeFilter basePath="/tasks" className="min-w-[220px]" />
+            {showTaskOrgFilters ? (
+              <div className="mb-3">
+                <TaskOrgFiltersBar basePath="/tasks" visible />
+              </div>
+            ) : null}
 
+            <div className="mb-3 flex flex-wrap items-end gap-3">
               {departmentDiLibraryUrl ? (
                 <a
                   href={departmentDiLibraryUrl}

@@ -13,6 +13,8 @@ export type OrgScopeQuery = {
 export type DepartmentGroupRow = {
   group_id: number;
   group_name: string;
+  effective_log_group?: string | null;
+  effective_log_group_name?: string | null;
 };
 
 export type DepartmentGroupsResponse = {
@@ -79,9 +81,16 @@ export async function fetchDepartmentGroups(): Promise<DepartmentGroupRow[]> {
   return items
     .map((row) => ({
       group_id: Number(row.group_id),
-      group_name: String(row.group_name ?? "").trim(),
+      group_name: String(row.group_name ?? row.effective_log_group_name ?? "").trim(),
+      effective_log_group: row.effective_log_group ?? null,
+      effective_log_group_name: row.effective_log_group_name ?? row.group_name ?? null,
     }))
     .filter((row) => Number.isFinite(row.group_id) && row.group_id > 0);
+}
+
+export async function loadDepartmentGroupLabelMap(): Promise<Map<number, string>> {
+  const rows = await fetchDepartmentGroups();
+  return new Map(rows.map((row) => [row.group_id, row.group_name]));
 }
 
 export function orgGroupLabel(

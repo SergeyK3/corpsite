@@ -184,6 +184,11 @@ def list_tasks(
         ge=1,
         description="Filter by top-level org group of effective owner unit.",
     ),
+    position_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="Filter by executor employee position.",
+    ),
     assignment_scope: Optional[str] = Query(
         None,
         description="Filter by assignment scope: admin|functional|all. If omitted or 'all' -> no filtering.",
@@ -289,25 +294,42 @@ def list_tasks(
                 )
         # System admin + scope=team: no visibility filter — true "all tasks" list.
 
-        if executor_role_id is not None:
+        if scope == "team" and executor_role_id is not None:
             erid = int(executor_role_id)
             where.append("t.executor_role_id = :executor_role_id")
             params["executor_role_id"] = erid
 
-        org_scope = apply_org_scope(
-            strategy=OrgScopeStrategy.TASK_OWNER_UNIT,
-            params=OrgScopeParams(
-                org_group_id=int(org_group_id) if org_group_id is not None else None,
-                org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
-            ),
-            task_alias="t",
-            regular_task_alias="rt",
-        )
-        params.update(org_scope.params)
-        if org_scope.where_sql != "TRUE":
-            where.append(f"({org_scope.where_sql})")
+        if scope == "team" and position_id is not None:
+            where.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM public.users ux
+                    INNER JOIN public.employees e ON e.employee_id = ux.employee_id
+                    WHERE ux.role_id = t.executor_role_id
+                      AND COALESCE(ux.is_active, TRUE) = TRUE
+                      AND COALESCE(e.is_active, TRUE) = TRUE
+                      AND e.position_id = :position_id
+                )
+                """.strip()
+            )
+            params["position_id"] = int(position_id)
 
-        scope_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
+        scope_prefix = ""
+        if scope == "team":
+            org_scope = apply_org_scope(
+                strategy=OrgScopeStrategy.TASK_OWNER_UNIT,
+                params=OrgScopeParams(
+                    org_group_id=int(org_group_id) if org_group_id is not None else None,
+                    org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+                ),
+                task_alias="t",
+                regular_task_alias="rt",
+            )
+            params.update(org_scope.params)
+            if org_scope.where_sql != "TRUE":
+                where.append(f"({org_scope.where_sql})")
+            scope_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
 
         if period_id is not None:
             where.append("t.period_id = :period_id")

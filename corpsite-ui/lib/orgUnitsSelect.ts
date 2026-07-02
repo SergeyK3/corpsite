@@ -1,4 +1,5 @@
 import { apiFetchJson } from "@/lib/api";
+import { loadDepartmentGroupLabelMap } from "@/lib/orgScope";
 
 export type OrgUnitSelectOption = {
   unit_id: number;
@@ -32,12 +33,6 @@ type OrgTreeNode = {
 
 type OrgUnitsListResponse = {
   items?: OrgUnitRow[];
-};
-
-const GROUP_NAMES: Record<number, string> = {
-  1: "Клинические",
-  2: "Параклинические",
-  3: "Административно-хозяйственные",
 };
 
 const HIDDEN_VISIBLE_ROOT_NAME = "Многопрофильный медицинский центр";
@@ -133,13 +128,16 @@ function buildTreeFromFlat(itemsRaw: OrgUnitRow[]): OrgTreeNode[] {
   return roots;
 }
 
-function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
+function groupChildrenByGroupId(
+  children: OrgTreeNode[],
+  groupLabelById: Map<number, string>,
+): OrgTreeNode[] {
   const buckets = new Map<number, OrgTreeNode[]>();
   const rest: OrgTreeNode[] = [];
 
   for (const ch of children) {
     const gid = ch.group_id;
-    if (gid && GROUP_NAMES[gid]) {
+    if (gid && groupLabelById.has(gid)) {
       if (!buckets.has(gid)) buckets.set(gid, []);
       buckets.get(gid)!.push(ch);
     } else {
@@ -152,7 +150,7 @@ function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
     .map((gid) => ({
       key: `group-${gid}`,
       unit_id: null,
-      name: GROUP_NAMES[gid] ?? `Группа ${gid}`,
+      name: groupLabelById.get(gid) ?? `Группа ${gid}`,
       group_id: gid,
       children: (buckets.get(gid) ?? []).sort((a, b) =>
         normalizeText(a.name).localeCompare(normalizeText(b.name), "ru"),
@@ -163,16 +161,16 @@ function groupChildrenByGroupId(children: OrgTreeNode[]): OrgTreeNode[] {
   return [...grouped, ...restSorted];
 }
 
-function injectGroupsIfPossible(tree: OrgTreeNode[]): OrgTreeNode[] {
+function injectGroupsIfPossible(tree: OrgTreeNode[], groupLabelById: Map<number, string>): OrgTreeNode[] {
   if (!Array.isArray(tree) || tree.length === 0) return tree;
 
   if (tree.length === 1 && Array.isArray(tree[0].children) && tree[0].children.length > 0) {
     const root = tree[0];
-    const hasGroupIds = root.children.some((c) => !!c.group_id && !!GROUP_NAMES[c.group_id]);
+    const hasGroupIds = root.children.some((c) => !!c.group_id && groupLabelById.has(c.group_id));
     const alreadyGrouped = root.children.some((c) => c.key.startsWith("group-"));
 
     if (hasGroupIds && !alreadyGrouped) {
-      return [{ ...root, children: groupChildrenByGroupId(root.children) }];
+      return [{ ...root, children: groupChildrenByGroupId(root.children, groupLabelById) }];
     }
   }
 
@@ -193,7 +191,7 @@ function stripVisibleRootIfNeeded(tree: OrgTreeNode[]): OrgTreeNode[] {
   return tree;
 }
 
-function prepareOrgTree(itemsRaw: OrgUnitRow[]): OrgTreeNode[] {
+function prepareOrgTree(itemsRaw: OrgUnitRow[], groupLabelById: Map<number, string>): OrgTreeNode[] {
   const looksTree = itemsRaw.some((x) => Array.isArray(x.children) && (x.children?.length ?? 0) > 0);
   let tree: OrgTreeNode[];
   if (looksTree) {
@@ -205,7 +203,7 @@ function prepareOrgTree(itemsRaw: OrgUnitRow[]): OrgTreeNode[] {
     tree = flatHasParents ? buildTreeFromFlat(itemsRaw) : itemsRaw.map(normalizeOrgUnitNodeTree);
   }
 
-  return stripVisibleRootIfNeeded(injectGroupsIfPossible(tree));
+  return stripVisibleRootIfNeeded(injectGroupsIfPossible(tree, groupLabelById));
 }
 
 function flattenOrgUnitTree(nodes: OrgTreeNode[], inheritedGroupId: number | null = null): OrgUnitSelectOption[] {
@@ -271,6 +269,7 @@ function mergeOrgUnitOptions(...lists: OrgUnitSelectOption[][]): OrgUnitSelectOp
 }
 
 export async function loadOrgUnitSelectOptions(): Promise<OrgUnitSelectOption[]> {
+  const groupLabelById = await loadDepartmentGroupLabelMap();
   const collected: OrgUnitSelectOption[][] = [];
 
   try {
@@ -279,7 +278,7 @@ export async function loadOrgUnitSelectOptions(): Promise<OrgUnitSelectOption[]>
     });
     const itemsRaw = Array.isArray(tree?.items) ? tree.items : [];
     if (itemsRaw.length > 0) {
-      collected.push(flattenOrgUnitTree(prepareOrgTree(itemsRaw)));
+      collected.push(flattenOrgUnitTree(prepareOrgTree(itemsRaw, groupLabelById)));
     }
   } catch {
     // try flat fallback below
@@ -311,8 +310,6 @@ export type OrgUnitSelectGroup = {
   items: OrgUnitSelectOption[];
 };
 
-const GROUP_ORDER_LABELS = ["Клинические", "Параклинические", "Административно-хозяйственные"];
-
 function groupLabelForId(groupId: number | null, groupLabelById: Map<number, string>): string {
   if (groupId == null) return "Без группы";
   if (groupLabelById.has(groupId)) return groupLabelById.get(groupId)!;
@@ -340,11 +337,13 @@ export function buildOrgUnitSelectGroups(
   }));
 
   return groups.sort((a, b) => {
-    const ai = GROUP_ORDER_LABELS.indexOf(a.label);
-    const bi = GROUP_ORDER_LABELS.indexOf(b.label);
-    if (ai !== -1 || bi !== -1) {
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    }
+    const rank = (key: string) => {
+      if (key === "g-none") return 9999;
+      const match = /^g-(\d+)$/.exec(key);
+      return match ? Number(match[1]) : 9998;
+    };
+    const cmp = rank(a.key) - rank(b.key);
+    if (cmp !== 0) return cmp;
     return a.label.localeCompare(b.label, "ru");
   });
 }

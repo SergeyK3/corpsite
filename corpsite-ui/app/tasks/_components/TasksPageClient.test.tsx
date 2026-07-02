@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import TaskDetailPanel from "./TaskDetailPanel";
 import { isTaskRowEditable } from "@/lib/taskEditPolicy";
+import { shouldShowTaskOrgFilters } from "@/lib/taskOrgFilters";
+import { canSeeTeamTasks, isTaskSystemAdmin } from "@/lib/taskScopePolicy";
 import { taskActionsLabel } from "@/lib/i18n";
 import {
   parseTaskIdFromSearchParams,
@@ -14,6 +16,43 @@ import {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+describe("TasksPageClient org filters visibility", () => {
+  it("shows org filters only for system admin in team scope", () => {
+    expect(
+      shouldShowTaskOrgFilters({ isSystemAdmin: true, taskScope: "team" }),
+    ).toBe(true);
+    expect(
+      shouldShowTaskOrgFilters({ isSystemAdmin: false, taskScope: "team" }),
+    ).toBe(false);
+    expect(
+      shouldShowTaskOrgFilters({ isSystemAdmin: false, taskScope: "mine" }),
+    ).toBe(false);
+  });
+
+  it("allows team tab for managers without org filter panel", () => {
+    expect(
+      canSeeTeamTasks({
+        can_view_all_tasks: true,
+        role_id: 99,
+      } as any),
+    ).toBe(true);
+    expect(isTaskSystemAdmin({ role_id: 99 } as any)).toBe(false);
+    expect(
+      shouldShowTaskOrgFilters({ isSystemAdmin: false, taskScope: "team" }),
+    ).toBe(false);
+  });
+
+  it("does not treat regular executor as system admin or team viewer", () => {
+    expect(
+      canSeeTeamTasks({
+        can_view_all_tasks: false,
+        role_id: 99,
+      } as any),
+    ).toBe(false);
+    expect(isTaskSystemAdmin({ role_id: 99 } as any)).toBe(false);
+  });
 });
 
 describe("TasksPageClient drawer close navigation", () => {
