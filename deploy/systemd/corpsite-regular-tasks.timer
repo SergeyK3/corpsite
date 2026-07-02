@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Corpsite regular tasks automatic generation
+Documentation=file:/opt/projects/corpsite/app/docs/ops/REGULAR_TASK_SCHEDULER_RUNBOOK.md
+
+[Timer]
+# 03:30 UTC = 08:30 Asia/Almaty (UTC+5). See ADR-020 scheduler operations addendum (RTS-1).
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

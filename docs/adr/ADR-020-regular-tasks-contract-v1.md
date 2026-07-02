@@ -170,3 +170,10 @@ Backend-интерфейс генератора:
 2) Генератор: сервис `regular_tasks_service` + internal endpoint `/internal/regular-tasks/run`.
 3) Журнал: `regular_task_runs`.
 4) Один сквозной тест: “наступление периода → созданы задачи → повторный запуск → дублей нет”.
+
+## Addendum — эксплуатация scheduler (2026-07-02)
+
+Правила RTS-1…RTS-4 (время daily invoke 08:30 +05, Infrastructure → Business, scheduler ≠ catch-up):
+[ADR-020-scheduler-operations-addendum.md](./ADR-020-scheduler-operations-addendum.md)
+
+Runbook: [REGULAR_TASK_SCHEDULER_RUNBOOK.md](../ops/REGULAR_TASK_SCHEDULER_RUNBOOK.md).
