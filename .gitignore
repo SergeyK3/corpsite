@@ -59,6 +59,8 @@ docs/
 docs/*
 !docs/adr/
 !docs/adr/**
+!docs/architecture/
+!docs/architecture/**
 !docs/PILOT_*.md
 !docs/RBAC_VISIBILITY_118_AUDIT.md
 !docs/ops/
