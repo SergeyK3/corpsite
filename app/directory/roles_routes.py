@@ -13,6 +13,7 @@ from app.db.engine import engine
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
+from app.services.platform_roles_catalog import pytest_role_exclusion_sql
 
 router = APIRouter()
 
@@ -227,6 +228,10 @@ def list_roles(
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    include_test_roles: bool = Query(
+        default=False,
+        description="Include pytest_* test roles (debug only; excluded from catalog UI by default).",
+    ),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     if not _is_privileged(user):
@@ -236,6 +241,8 @@ def list_roles(
     base_sql = _build_select_sql(meta)
 
     filters: List[str] = []
+    if not include_test_roles:
+        filters.append(pytest_role_exclusion_sql(code_expr="role_code", name_expr="role_name"))
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     with_prefix = ""
 

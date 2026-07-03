@@ -439,7 +439,8 @@ def create_role(conn, name: str) -> int:
         raise RuntimeError("Table public.roles does not exist")
 
     cols = get_columns(conn, "roles")
-    if "code" in cols:
+    # Never reuse stale pytest_* roles left from interrupted test runs.
+    if "code" in cols and not str(name).lower().startswith("pytest_"):
         existing = conn.execute(
             text("SELECT role_id FROM public.roles WHERE code = :code LIMIT 1"),
             {"code": name},
@@ -753,6 +754,41 @@ def seed() -> Iterator[Dict[str, Any]]:
             # roles
             if table_exists(conn, "roles"):
                 safe_delete_many(conn, "roles", "role_id", created_role_ids)
+                role_cols = get_columns(conn, "roles")
+                code_col = "code" if "code" in role_cols else None
+                name_col = "name" if "name" in role_cols else None
+                suffix_patterns = [
+                    f"pytest_executor_{suffix}",
+                    f"pytest_initiator_{suffix}",
+                    f"pytest_unit_{suffix}",
+                ]
+                for pattern in suffix_patterns:
+                    if code_col:
+                        conn.execute(
+                            text(
+                                f"""
+                                DELETE FROM public.roles r
+                                WHERE lower(r.{code_col}) = lower(:pattern)
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM public.users u WHERE u.role_id = r.role_id
+                                  )
+                                """
+                            ),
+                            {"pattern": pattern},
+                        )
+                    elif name_col:
+                        conn.execute(
+                            text(
+                                f"""
+                                DELETE FROM public.roles r
+                                WHERE lower(r.{name_col}) = lower(:pattern)
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM public.users u WHERE u.role_id = r.role_id
+                                  )
+                                """
+                            ),
+                            {"pattern": pattern},
+                        )
 
             # membership (user<->role)
             mrt = _detect_user_role_table(conn)

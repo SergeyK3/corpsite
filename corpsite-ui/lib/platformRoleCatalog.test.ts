@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { listPlatformRoleCatalog } from "./platformRoleCatalog";
+import { isPytestTestRole, listPlatformRoleCatalog } from "./platformRoleCatalog";
 import { apiFetchJson } from "./api";
 
 vi.mock("./api", () => ({
@@ -12,11 +12,17 @@ describe("listPlatformRoleCatalog", () => {
     vi.mocked(apiFetchJson).mockReset();
   });
 
+  it("filters pytest_* roles from operator catalog", () => {
+    expect(isPytestTestRole("pytest_executor", "Executor")).toBe(true);
+    expect(isPytestTestRole("QM_HEAD", "QM Head")).toBe(false);
+  });
+
   it("loads full public.roles catalog without org scope filters", async () => {
     vi.mocked(apiFetchJson).mockResolvedValue({
       items: [
         { role_id: 1, role_code: "QM_HEAD", role_name: "QM Head", is_active: true },
         { role_id: 99, role_code: "UNUSED_ROLE", role_name: "Unused Role", is_active: true },
+        { role_id: 100, role_code: "pytest_executor", role_name: "Pytest Executor", is_active: true },
       ],
     });
 
@@ -30,6 +36,7 @@ describe("listPlatformRoleCatalog", () => {
       },
     });
     expect(rows.map((r) => r.code)).toEqual(expect.arrayContaining(["QM_HEAD", "UNUSED_ROLE"]));
+    expect(rows.map((r) => r.code)).not.toContain("pytest_executor");
     expect(rows).toHaveLength(2);
   });
 

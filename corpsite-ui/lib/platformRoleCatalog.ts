@@ -6,6 +6,17 @@ export type PlatformRoleOption = {
   code: string;
 };
 
+const PYTEST_ROLE_PATTERN = /^pytest_/i;
+
+/** Test roles from pytest fixtures — must not appear in operator-facing catalogs. */
+export function isPytestTestRole(code?: string | null, name?: string | null): boolean {
+  for (const raw of [code, name]) {
+    const s = String(raw ?? "").trim();
+    if (s && PYTEST_ROLE_PATTERN.test(s)) return true;
+  }
+  return false;
+}
+
 type RoleRow = {
   role_id?: number | null;
   id?: number | null;
@@ -58,5 +69,6 @@ export async function listPlatformRoleCatalog(args?: {
       return { id, label, code };
     })
     .filter((row) => Number.isFinite(row.id) && row.id > 0)
+    .filter((row) => !isPytestTestRole(row.code, row.label))
     .sort((a, b) => a.label.localeCompare(b.label, "ru"));
 }
