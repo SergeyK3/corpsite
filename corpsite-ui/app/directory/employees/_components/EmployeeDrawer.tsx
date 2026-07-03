@@ -2,6 +2,10 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+
+import { apiAuthMe } from "@/lib/api";
+import { isPrivilegedOperator } from "@/lib/adminNav";
+import { EmployeeImportCardSection } from "../../personnel/_components/EmployeeImportCardSection";
 import type { EmployeeDetails } from "../_lib/types";
 import {
   getEmployee,
@@ -200,6 +204,7 @@ export default function EmployeeDrawer({
   const [transferSaving, setTransferSaving] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [eventsRefreshToken, setEventsRefreshToken] = useState(0);
+  const [privilegedOperator, setPrivilegedOperator] = useState(false);
 
   const loadDetails = useCallback(async () => {
     if (!employeeId) {
@@ -221,6 +226,28 @@ export default function EmployeeDrawer({
       setLoading(false);
     }
   }, [employeeId]);
+
+  useEffect(() => {
+    if (!open) {
+      setPrivilegedOperator(false);
+      return;
+    }
+
+    let cancelled = false;
+    void apiAuthMe()
+      .then((me) => {
+        if (!cancelled) setPrivilegedOperator(isPrivilegedOperator(me));
+      })
+      .catch(() => {
+        if (!cancelled) setPrivilegedOperator(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const accountAllowRoleEdit = readOnly ? privilegedOperator : true;
 
   useEffect(() => {
     if (!open || !employeeId) {
@@ -702,8 +729,21 @@ export default function EmployeeDrawer({
                 <EmployeeProfessionalProfile employeeId={employeeId} />
               ) : null}
 
-              {employeeId && !readOnly ? (
-                <EmployeeAccountSections employeeId={employeeId} refreshToken={eventsRefreshToken} />
+              {mode === "view" && employeeId ? (
+                <EmployeeImportCardSection
+                  id="access"
+                  title="Доступ"
+                  description="Учётная запись Corpsite и каналы уведомлений. Управление доступом — отдельно от кадрового контура."
+                >
+                  <EmployeeAccountSections
+                    employeeId={employeeId}
+                    refreshToken={eventsRefreshToken}
+                    readOnly={readOnly}
+                    allowRoleEdit={accountAllowRoleEdit}
+                    embedded
+                    showEvents={false}
+                  />
+                </EmployeeImportCardSection>
               ) : null}
             </div>
           ) : loading ? (

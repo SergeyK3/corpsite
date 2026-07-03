@@ -97,6 +97,8 @@ type Props = {
   initialUserCreateOpen?: boolean;
   /** Hide create-user CTA (e.g. read-only /directory/staff) but allow role edit. */
   readOnly?: boolean;
+  /** Role edit for privileged operators on read-only staff drawer; defaults to !readOnly. */
+  allowRoleEdit?: boolean;
   /** Embedded in employee import card «Доступ» section — compact sub-layout. */
   embedded?: boolean;
 };
@@ -108,8 +110,10 @@ export default function EmployeeAccountSections({
   showTelegram = true,
   initialUserCreateOpen = false,
   readOnly = false,
+  allowRoleEdit,
   embedded = false,
 }: Props) {
+  const canEditRole = allowRoleEdit ?? !readOnly;
   const [loading, setLoading] = React.useState(true);
   const [details, setDetails] = React.useState<EmployeeDetails | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -226,7 +230,7 @@ export default function EmployeeAccountSections({
   }
 
   function handleOpenRoleEditDrawer() {
-    if (!linkedUser || readOnly) return;
+    if (!linkedUser || !canEditRole) return;
     setRoleEditError(null);
     setRoleEditDrawerOpen(true);
   }
@@ -368,7 +372,7 @@ export default function EmployeeAccountSections({
                     <span className="text-zinc-600 dark:text-zinc-400">Роль Corpsite: </span>
                     {linkedRoleLabel}
                   </div>
-                  {!readOnly ? (
+                  {canEditRole ? (
                     <button
                       type="button"
                       onClick={handleOpenRoleEditDrawer}

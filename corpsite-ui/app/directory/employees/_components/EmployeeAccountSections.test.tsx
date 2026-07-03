@@ -168,4 +168,67 @@ describe("EmployeeAccountSections provisioning UX", () => {
     });
     expect(createUser).not.toHaveBeenCalled();
   });
+
+  it("shows account summary in readOnly but allows role edit when allowRoleEdit is true", async () => {
+    vi.mocked(getEmployee).mockResolvedValue({
+      employee_id: 100,
+      fio: "Макибаева",
+      user: {
+        user_id: 361,
+        login: "makibaeva.as",
+        role_id: 5,
+        role_name: "Руководитель ОВЭиПД",
+        is_active: true,
+      },
+    } as Awaited<ReturnType<typeof getEmployee>>);
+
+    render(
+      <EmployeeAccountSections
+        employeeId="100"
+        showEvents={false}
+        showTelegram={false}
+        readOnly
+        allowRoleEdit
+        embedded
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("makibaeva.as")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Руководитель ОВЭиПД")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Изменить роль Corpsite" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать доступ к Corpsite" })).not.toBeInTheDocument();
+  });
+
+  it("hides role edit in readOnly when allowRoleEdit is false", async () => {
+    vi.mocked(getEmployee).mockResolvedValue({
+      employee_id: 100,
+      fio: "Макибаева",
+      user: {
+        user_id: 361,
+        login: "makibaeva.as",
+        role_id: 5,
+        role_name: "Руководитель ОВЭиПД",
+        is_active: true,
+      },
+    } as Awaited<ReturnType<typeof getEmployee>>);
+
+    render(
+      <EmployeeAccountSections
+        employeeId="100"
+        showEvents={false}
+        showTelegram={false}
+        readOnly
+        allowRoleEdit={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("makibaeva.as")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: "Изменить роль Corpsite" })).not.toBeInTheDocument();
+  });
 });
