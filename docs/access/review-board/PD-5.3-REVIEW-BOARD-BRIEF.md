@@ -245,6 +245,8 @@ Factual assessment only — **does not recommend** Ratified / Deferred / Policy 
 
 **Approval status:** **Not ratified** — briefing only. Board selects outcome in §14.
 
+**Board decision (recorded):** **Ratified with Policy Debt** — 2026-07-04; see [WP-B1 package §6](../WP-B1-PERMISSION-DOMAIN-RATIFICATION-PACKAGE.md#6-ratification-outcome) and [PERMISSION-DOMAIN-REGISTRY §5](../PERMISSION-DOMAIN-REGISTRY.md#5-ratification-status). Policy debt **DEBT-B1-004**.
+
 ---
 
 ## 12. Risks
@@ -293,3 +295,4 @@ Board selects **one** option per domain. Brief does not presuppose outcome.
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial Session 3 brief from template |
+| 2026-07-04 | 0.2 | Board decision **Ratified with Policy Debt** recorded in WP-B1 package §6 and PERMISSION-DOMAIN-REGISTRY §5 |

@@ -82,7 +82,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | **Related contours** | `(1, 73, 86)` — Руководитель отдела кадров — **pending**; likely this domain; not approved until class + code ratified (ACCESS-001 §7) |
 | **Related access_roles** | `HR_ENROLLMENT_MANAGER` — **transitional code (candidate only)**; **if and only if** approved for a specific HR-service Cabinet contour |
 | **ACCESS-001 stance** | HR head contour pending class confirmation — likely §5.2, not approved yet |
-| **Current status** | **Defined (Reviewed)** — pending organizational ratification under WP-B1; Phase 2.6b MVP candidate after ratification + §7 row approval |
+| **Current status** | **Ratified** — 2026-07-04 (WP-B1). `HR_ENROLLMENT_MANAGER` candidate only; contour `(1, 73, 86)` **pending** — binding deferred to **WP-B4** / **WP-B7**. **No runtime effect.** |
 
 ---
 
@@ -100,7 +100,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | **Related contours** | `(1, 78, 77)` — Зам по адм вопросам — **pending**; likely this domain, not `HR_ENROLLMENT_MANAGER` by default (ACCESS-001 §7) |
 | **Related access_roles** | **None defined** in Reviewed ACCESS-001. No dedicated `access_roles.code` in transitional catalog; ADR-045 / access baseline when approved — runtime mechanism only, not policy owner |
 | **ACCESS-001 stance** | Deputy admin contour pending class confirmation — likely §5.3; management remit for deputy → ACCESS-002 |
-| **Current status** | **Defined (Reviewed)** — pending organizational ratification under WP-B1; no approved `access_roles` baseline in Reviewed policy |
+| **Current status** | **Ratified with Policy Debt** — 2026-07-04 (WP-B1). No dedicated transitional `access_roles.code`; debt **DEBT-B1-004** → **WP-B4** / **WP-B8**. Contour `(1, 78, 77)` mapping deferred. **No runtime effect.** |
 
 ---
 
@@ -118,7 +118,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | **Related contours** | Twelve **rejected** line-head contours in ACCESS-001 §7 citing §5.4: `(1, 42, 74)`, `(1, 43, 75)`, `(1, 44, 64)`, `(1, 45, 71)`, `(1, 46, 72)`, `(1, 47, 68)`, `(1, 48, 73)`, `(1, 49, 69)`, `(1, 50, 66)`, `(1, 53, 70)`, `(1, 54, 67)`, `(1, 55, 65)` — all `HR_ENROLLMENT_MANAGER` **rejected**. *(Not PD-5.4 inventory: `(1, 55, 9)` and `(1, 56, 88)` are rejected §7 rows for other reasons.)* |
 | **Related access_roles** | **None approved.** No approved `access_roles` baseline for §5.4 in Reviewed ACCESS-001 — negative boundary only (what **not** to bind). `HR_ENROLLMENT_MANAGER` explicitly **rejected** for line heads |
 | **ACCESS-001 stance** | Informational domain is boundary policy, not an approved code assignment |
-| **Current status** | **Defined (Reviewed)** — pending organizational ratification under WP-B1; contour rows already **rejected** for HR processing codes per §7 |
+| **Current status** | **Ratified** — 2026-07-04 (WP-B1). Boundary-only; no positive baseline code. Twelve §7 line-head rows **rejected** for `HR_ENROLLMENT_MANAGER`. Downstream **WP-B5** / **WP-B7** as applicable. **No runtime effect.** |
 
 ---
 
@@ -127,9 +127,9 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | Domain ID | Name | Related access_roles (Reviewed) | §7 contours explicitly linked | Current status |
 |-----------|------|--------------------------------|--------------------------------|----------------|
 | `PD-5.1` | Кадровое решение | None defined | 1 (Director — rejected pending class) | **Ratified with Policy Debt** (WP-B3 debt) |
-| `PD-5.2` | Кадровое оформление | `HR_ENROLLMENT_MANAGER` (candidate) | 1 (HR head — pending) | Defined — not ratified |
-| `PD-5.3` | Кадровый контроль / наблюдение | None defined | 1 (Deputy admin — pending) | Defined — not ratified |
-| `PD-5.4` | Линейное информирование | None (negative boundary) | 12 (line heads — rejected) | Defined — not ratified |
+| `PD-5.2` | Кадровое оформление | `HR_ENROLLMENT_MANAGER` (candidate) | 1 (HR head — pending) | **Ratified** (WP-B4 / WP-B7) |
+| `PD-5.3` | Кадровый контроль / наблюдение | None defined | 1 (Deputy admin — pending) | **Ratified with Policy Debt** (WP-B4 / WP-B8) |
+| `PD-5.4` | Линейное информирование | None (negative boundary) | 12 (line heads — rejected) | **Ratified** (WP-B5 / WP-B7) |
 
 **Contours without §5 domain assignment:** ACCESS-001 §7 pending/rejected rows for statistics, QM, finance, pharmacy, generic deputies, test contour, and non-admin titles are **not** assigned to a §5 domain in Reviewed policy. They remain in the contour matrix only — outside this domain registry until ACCESS-001 defines additional domains.
 
@@ -186,11 +186,11 @@ Governance approval table for WP-B1.
 | Domain ID | Domain | Policy status | Approved by | Approval date | Notes |
 |-----------|--------|---------------|-------------|---------------|-------|
 | `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | No transitional `access_roles.code` defined. Debt **DEBT-B1-001** → resolution **WP-B3**. No runtime effect. |
-| `PD-5.2` | Кадровое оформление | **Pending ratification** | — | — | `HR_ENROLLMENT_MANAGER` candidate for `(1, 73, 86)` only after domain + row approved |
-| `PD-5.3` | Кадровый контроль / наблюдение | **Pending ratification** | — | — | No dedicated code in Reviewed policy; `(1, 78, 77)` pending |
-| `PD-5.4` | Линейное информирование | **Pending ratification** | — | — | Negative boundary; 12 line-head §7 rows citing §5.4 already rejected for `HR_ENROLLMENT_MANAGER` |
+| `PD-5.2` | Кадровое оформление | **Ratified** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | `HR_ENROLLMENT_MANAGER` candidate only. Contour `(1, 73, 86)` **pending** — **WP-B4** / **WP-B7**. No runtime effect. |
+| `PD-5.3` | Кадровый контроль / наблюдение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Debt **DEBT-B1-004** → **WP-B4** / **WP-B8**. Contour `(1, 78, 77)` mapping deferred. No runtime effect. |
+| `PD-5.4` | Линейное информирование | **Ratified** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Boundary-only domain. Twelve §7 line-head rows **rejected** for `HR_ENROLLMENT_MANAGER`. **WP-B5** / **WP-B7** as applicable. No runtime effect. |
 
-**WP-B1 status:** **Open** — 1/4 domains recorded (PD-5.1). Remaining: PD-5.2, PD-5.3, PD-5.4.
+**WP-B1 status:** **Open** — 4/4 domains recorded; attestation signatures pending per [WP-B1 package](./WP-B1-PERMISSION-DOMAIN-RATIFICATION-PACKAGE.md) §5 item 4.
 
 **WP-B1 completion signal:** all four rows reach **Ratified** or **Ratified with Policy Debt** with approver signatures recorded; then ACCESS-001 document-level **Approved** remains separate (WP-X2).
 
@@ -214,4 +214,6 @@ Governance approval table for WP-B1.
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial registry — four domains derived from ACCESS-001 §5; WP-B1 approval artifact |
+| 2026-07-04 | 0.2 | PD-5.1 → Ratified with Policy Debt; DEBT-B1-001 deferred to WP-B3; PD-5.2–PD-5.4 pending |
 | 2026-07-04 | 0.3 | PD-5.4 §7 inventory: 12 rows citing §5.4 (aligned to ACCESS-001 §7; corrects erroneous count of 13) |
+| 2026-07-04 | 0.4 | PD-5.2 Ratified; PD-5.3 Ratified with Policy Debt (DEBT-B1-004); PD-5.4 Ratified — WP-B1 Sessions 2–4 |

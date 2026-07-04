@@ -226,6 +226,8 @@ Factual: binding attaches to Cabinet Template via approved contour rule; resolve
 
 **Approval status:** **Not ratified** — briefing only. Board selects outcome in §14.
 
+**Board decision (recorded):** **Ratified** — 2026-07-04; see [WP-B1 package §6](../WP-B1-PERMISSION-DOMAIN-RATIFICATION-PACKAGE.md#6-ratification-outcome) and [PERMISSION-DOMAIN-REGISTRY §5](../PERMISSION-DOMAIN-REGISTRY.md#5-ratification-status).
+
 ---
 
 ## 12. Risks
@@ -273,3 +275,4 @@ Contour `pending` after taxonomy ratification may be normal per §5.5 — not au
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial Session 2 brief |
 | 2026-07-04 | 0.2 | Aligned to neutral [REVIEW-BOARD-BRIEF-TEMPLATE](./REVIEW-BOARD-BRIEF-TEMPLATE.md) |
+| 2026-07-04 | 0.3 | Board decision **Ratified** recorded in WP-B1 package §6 and PERMISSION-DOMAIN-REGISTRY §5 |
