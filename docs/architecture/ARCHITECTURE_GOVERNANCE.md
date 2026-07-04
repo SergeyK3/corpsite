@@ -11,7 +11,8 @@
 | [ARCH-001 — Position Cabinet Architecture](./ARCH-001-position-permission-model.md) | Источник baseline-принципов (Draft → Accepted) |
 | [ADR-050 — Organization Position & Position Cabinet](../adr/ADR-050-organization-position-cabinet-model.md) | Implementation contract: Position + Cabinet (**Accepted**) |
 | [ADR-051 — Cabinet Access Resolution](../adr/ADR-051-cabinet-access-resolution.md) | Implementation contract: access resolver (**Accepted**) |
-| [docs/adr/](../adr/) | Каталог принятых ADR |
+| [ADR-053 — Permission Template Binding Model](../adr/ADR-053-permission-template-binding-model.md) | Implementation contract: Template binding semantics and permission namespace (**Accepted**) |
+| [docs/adr/](../adr/) | Каталог ADR |
 
 ---
 
@@ -50,3 +51,5 @@
 | Дата | Изменение |
 |------|-----------|
 | 2026-07-03 | Первоначальная версия: Architecture Baseline на основе ARCH-001 v0.5 |
+| 2026-07-04 | Добавлена ссылка на ADR-053 (Proposed) — Permission Template binding model |
+| 2026-07-04 | ADR-053 статус Proposed → Accepted |

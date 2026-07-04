@@ -10,7 +10,7 @@ Operational access-resolution contract derived from [ARCH-001 v0.5](../architect
 |-------|-------|
 | Depends on | [ADR-050](./ADR-050-organization-position-cabinet-model.md) (**Accepted**) — org-unique Position, Position Cabinet, Permission Template location |
 | Enables | RBAC enforcement cutover, `/auth/me` cabinet contract (ADR-042 B5), task cabinet routing (ADR-049), visibility migration (ADR-042 E1) |
-| Related | [ADR-036](./ADR-036-hr-events-unified-model.md) (ACTING overlay), [ADR-042 Phase A/B](./ADR-042-phase-a-personnel-access-enrollment-architecture.md), [ADR-023](./ADR-023-rbac-v2-lean-scope-and-approvals.md), [OPS-028](../ops/OPS-028-platform-user-login-policy.md), [access-rbac assessment](../architecture/ARCH-001-access-rbac-assessment.md) |
+| Related | [ADR-036](./ADR-036-hr-events-unified-model.md) (ACTING overlay), [ADR-042 Phase A/B](./ADR-042-phase-a-personnel-access-enrollment-architecture.md), [ADR-023](./ADR-023-rbac-v2-lean-scope-and-approvals.md), [ADR-053](./ADR-053-permission-template-binding-model.md) (**Accepted**) — Permission Template binding semantics and namespace, [OPS-028](../ops/OPS-028-platform-user-login-policy.md), [access-rbac assessment](../architecture/ARCH-001-access-rbac-assessment.md) |
 
 ### Explicitly out of scope
 
@@ -18,7 +18,8 @@ Operational access-resolution contract derived from [ARCH-001 v0.5](../architect
 |-------|-------|
 | Position model, org-unique Position identity, Cabinet 1:1 lifecycle | **ADR-050** |
 | Authentication, credential policy, JWT transport | ADR-042 B5, ADR-013, OPS-028 |
-| SQL schema, table names, indexes, migrations | Implementation program |
+| Permission Template binding semantics, catalog namespace, transitional expansion rules | **ADR-053** |
+| SQL schema, table names, indexes, migrations | Implementation program (ADR-053 for Template binding columns) |
 | API endpoints, request/response shapes, session storage | ADR-042 B5 and consumer ADRs |
 | Task/report/notification rebinding | ADR-049 and consumer ADRs |
 | Process policy at vacancy (regular tasks, escalations) | Business Policy (ARCH-001 §4.7.2) |
@@ -539,6 +540,7 @@ Architectural phases only — **no** SQL, **no** code, **no** API specifications
 | Position identity | Defines | Consumes |
 | Cabinet 1:1 lifecycle | Defines | Consumes (excludes liquidated) |
 | Permission Template location | Inside Cabinet | Evaluates Template contents |
+| Permission Template binding / namespace | **ADR-053** | Consumes binding; load → expand → union |
 | Employment FK target | Org-unique Position | Reads active Employments |
 | Vacancy definition | HR state on Position | Zero access via primary Employment |
 | Access calculation | Deferred | **Defines** |
@@ -558,9 +560,25 @@ Architectural phases only — **no** SQL, **no** code, **no** API specifications
 
 ---
 
+## Appendix C — Permission Template binding (ADR-053)
+
+Permission Template **binding semantics and permission namespace** are defined by [ADR-053 — Permission Template Binding Model](./ADR-053-permission-template-binding-model.md) (**Accepted**).
+
+ADR-051 defines resolver **mechanics** only: load Template from each accessible Cabinet → expand to permission codes → union into the Effective Permission Set (§5.1–§5.2). ADR-053 defines **what** is stored on the Template (transitional catalog binding, code vocabulary, backfill rules) without changing union, vacancy, acting, or exception-overlay semantics in this ADR.
+
+| Concern | ADR-053 | ADR-051 (this ADR) |
+|---------|---------|-------------------|
+| Template binding storage / namespace | **Defines** | Consumes |
+| Template load + expand + union | — | **Defines** |
+| Shadow parity vocabulary (transitional) | **Defines** | Shadow phase timing (§10 Phase 2) |
+
+---
+
 ## Document history
 
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-03 | 0.1 | Initial proposed ADR — Cabinet Access Resolver operational contract |
 | 2026-07-04 | 1.0 | Status Proposed → Accepted — Phase 2 implementation gate |
+| 2026-07-04 | 1.1 | Cross-reference ADR-053 (Proposed); Appendix C — Template binding boundary |
+| 2026-07-04 | 1.2 | ADR-053 cross-reference status Proposed → Accepted |
