@@ -286,10 +286,11 @@ A work package is **ratified** when all **mandatory** authorities for that packa
 
 | Field | Value |
 |-------|-------|
+| **Status** | **Open** — Ratified with Policy Debt recorded 2026-07-04; attestation signatures pending (ops lead + architecture lead). Record: [WP-B2-BINDING-PRINCIPLES-REVIEW §11](./WP-B2-BINDING-PRINCIPLES-REVIEW.md#11-ratification-outcome) |
 | **Inputs** | ACCESS-001 §4 P1–P12 |
 | **Approval authority** | Ops lead + architecture lead |
-| **Approval output** | Principles ratified — including P4/P5/P7 (Director ≠ sysadmin; ≠ HR_ENROLLMENT_MANAGER) |
-| **Implementation readiness** | OPS-030 forbidden from grant-copy or title-inference binding |
+| **Approval output** | Principles ratified — including P4/P5/P7 (Director ≠ sysadmin; ≠ HR_ENROLLMENT_MANAGER). Policy debt **DEBT-B2-001** → **WP-B3** (P7 positive class; cross-ref **DEBT-B1-001**) |
+| **Implementation readiness** | OPS-030 forbidden from grant-copy or title-inference binding — **unchanged**; Phase 2.6b remains **Blocked** |
 
 #### WP-B3 — Кадровое решение model
 
@@ -505,3 +506,4 @@ The register is a **governance artefact**, not a runtime configuration source.
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial planning document — Policy Ratification program for ACCESS-001 / ACCESS-002 |
+| 2026-07-04 | 0.2 | WP-B2 Session 1 — Ratified with Policy Debt recorded; DEBT-B2-001 → WP-B3; WP-B2 open pending attestation |

@@ -282,7 +282,7 @@ Governance decisions recorded during WP-B1 ratification sessions.
 
 | Debt ID | Domain | Item | Resolution WP | Owner | Recorded | Runtime effect |
 |---------|--------|------|---------------|-------|----------|----------------|
-| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined in Reviewed ACCESS-001 | **WP-B3** | Pending assignment (HR policy owner + ops lead) | 2026-07-04 | **None** |
+| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined in Reviewed ACCESS-001 | **WP-B3** | Pending assignment (HR policy owner + ops lead) | 2026-07-04 | **None** — see also **DEBT-B2-001** ([WP-B2 review §11.1](./WP-B2-BINDING-PRINCIPLES-REVIEW.md#111-policy-debt-register-wp-b2)) |
 | **DEBT-B1-004** | `PD-5.3` | No dedicated transitional `access_roles.code` for HR oversight visibility; contour `(1, 78, 77)` class/code mapping deferred; transitional catalog sufficiency for missing code deferred | **WP-B4** / **WP-B8** | Pending assignment (HR policy owner + ops lead) | 2026-07-04 | **None** |
 
 ---
