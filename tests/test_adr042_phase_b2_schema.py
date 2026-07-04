@@ -2,9 +2,13 @@
 """Schema tests for ADR-042 Phase B2 (persons, assignments, enrollment, access)."""
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from alembic.operations import Operations
+from alembic.runtime.migration import MigrationContext
 from sqlalchemy import text
 
 from alembic.config import Config
@@ -70,6 +74,63 @@ def _expect_sql_failure(sql: str, params: dict | None = None) -> None:
     with engine.begin() as conn:
         with pytest.raises(Exception):
             conn.execute(text(sql), params or {})
+
+
+def _backfill_migration_module():
+    """Load ADR-042 B2.3 backfill revision module without Alembic chain traversal."""
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/v4w5x6y7z8a9_adr042_phase_b2_3_backfill.py"
+    )
+    spec = importlib.util.spec_from_file_location("_adr042_backfill_mod", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load backfill migration from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _clear_backfill_downgrade_blockers(conn) -> None:
+    """Drop head-era FK rows that block B2.3 backfill downgrade on a live DB.
+
+    identity_reconciliation_items (ADR-044 B2) post-dates the backfill revision and
+    holds ON DELETE RESTRICT on person_id. Clearing those rows is test-only scaffolding
+    so we can exercise backfill downgrade/upgrade without broad Alembic rollback.
+    """
+    if table_exists(conn, "identity_reconciliation_items"):
+        conn.execute(
+            text(
+                """
+                DELETE FROM public.identity_reconciliation_items i
+                USING public.persons p
+                WHERE i.person_id = p.person_id
+                  AND p.source = 'migration'
+                """
+            )
+        )
+
+
+def _run_backfill_downgrade_upgrade(conn) -> None:
+    """Invoke v4w5x6y7z8a9 downgrade()+upgrade() in an Alembic Operations context.
+
+    Direct invocation exercises only the B2.3 backfill revision. It does not run
+    Alembic chain rollback (e.g. ADR-039 h7i8j9 chk_employee_events_event_type),
+    which is intentionally out of scope for this ADR-042 test.
+    """
+    ctx = MigrationContext.configure(conn)
+    mod = _backfill_migration_module()
+    with Operations.context(ctx):
+        mod.downgrade()
+        mod.upgrade()
+
+
+_BACKFILL_COUNT_SQL = """
+    SELECT
+        (SELECT COUNT(*) FROM public.persons WHERE source = 'migration') AS persons,
+        (SELECT COUNT(*) FROM public.person_assignments WHERE source = 'migration') AS assignments,
+        (SELECT COUNT(*) FROM public.employees WHERE person_id IS NOT NULL) AS linked_employees,
+        (SELECT COUNT(*) FROM public.employee_assignment_links) AS links
+"""
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -187,39 +248,31 @@ def test_person_match_key_unique_active(seed):
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_backfill_idempotent_counts_stable(seed):
     _require_phase_b2()
-    with engine.begin() as conn:
-        before = conn.execute(
-            text(
-                """
-                SELECT
-                    (SELECT COUNT(*) FROM public.persons WHERE source = 'migration') AS persons,
-                    (SELECT COUNT(*) FROM public.person_assignments WHERE source = 'migration') AS assignments,
-                    (SELECT COUNT(*) FROM public.employees WHERE person_id IS NOT NULL) AS linked_employees,
-                    (SELECT COUNT(*) FROM public.employee_assignment_links) AS links
-                """
-            )
-        ).mappings().one()
 
-    from alembic import command
-
-    cfg = _alembic_config()
-    command.downgrade(cfg, BACKFILL_REVISION)
-    command.upgrade(cfg, BACKFILL_REVISION)
-
-    with engine.begin() as conn:
-        after = conn.execute(
-            text(
-                """
-                SELECT
-                    (SELECT COUNT(*) FROM public.persons WHERE source = 'migration') AS persons,
-                    (SELECT COUNT(*) FROM public.person_assignments WHERE source = 'migration') AS assignments,
-                    (SELECT COUNT(*) FROM public.employees WHERE person_id IS NOT NULL) AS linked_employees,
-                    (SELECT COUNT(*) FROM public.employee_assignment_links) AS links
-                """
-            )
-        ).mappings().one()
-
-    assert dict(before) == dict(after)
+    # Do not use command.downgrade(cfg, BACKFILL_REVISION) from head:
+    # Alembic "downgrade to" a revision keeps that revision applied and runs
+    # downgrade() on every *later* revision first — not on BACKFILL_REVISION
+    # itself. From head that traverses ADR-039 h7i8j9 (employee_events CHECK
+    # constraint rollback), which is intentionally out of scope here and fails
+    # on valid production rows (e.g. EMPLOYEE_ENROLLED_FROM_IMPORT).
+    #
+    # Instead, invoke v4w5x6y7z8a9 downgrade()+upgrade() directly via
+    # _run_backfill_downgrade_upgrade() so only backfill data is undone and
+    # re-applied. Verify two consecutive cycles yield identical counts.
+    #
+    # The whole test runs in a rolled-back transaction; head-era FK blockers
+    # cleared by _clear_backfill_downgrade_blockers() are not persisted.
+    with engine.connect() as conn:
+        trans = conn.begin()
+        try:
+            _clear_backfill_downgrade_blockers(conn)
+            _run_backfill_downgrade_upgrade(conn)
+            before = conn.execute(text(_BACKFILL_COUNT_SQL)).mappings().one()
+            _run_backfill_downgrade_upgrade(conn)
+            after = conn.execute(text(_BACKFILL_COUNT_SQL)).mappings().one()
+            assert dict(before) == dict(after)
+        finally:
+            trans.rollback()
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

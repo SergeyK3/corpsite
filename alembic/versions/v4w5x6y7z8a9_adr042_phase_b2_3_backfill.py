@@ -50,6 +50,9 @@ def upgrade() -> None:
 
             -- ---------------------------------------------------------------
             -- 1) Materialize persons (dedup: active IIN, then match_key)
+            -- Inner DISTINCT ON (raw.match_key): one person row per match_key
+            -- per INSERT batch. Prevents uq_persons_match_key_active violations
+            -- when several unlinked employees share the same computed match_key.
             -- ---------------------------------------------------------------
             INSERT INTO public.persons (
                 iin,
@@ -65,33 +68,42 @@ def upgrade() -> None:
                 CASE WHEN src.is_active THEN 'active' ELSE 'inactive' END,
                 'migration'
             FROM (
-                SELECT DISTINCT ON (e.employee_id)
-                    e.employee_id,
-                    trim(e.full_name) AS full_name,
-                    CASE
-                        WHEN iin.iin IS NOT NULL THEN iin.iin
-                        ELSE NULL
-                    END AS iin,
-                    CASE
-                        WHEN iin.iin IS NOT NULL THEN 'iin:' || iin.iin
-                        ELSE 'name:' || lower(
-                            regexp_replace(trim(e.full_name), '\\s+', ' ', 'g')
-                        )
-                    END AS match_key,
-                    e.is_active
-                FROM public.employees e
-                LEFT JOIN LATERAL (
-                    SELECT regexp_replace(ei.identity_value, '[^0-9]', '', 'g') AS iin
-                    FROM public.employee_identities ei
-                    WHERE ei.employee_id = e.employee_id
-                      AND ei.identity_type = 'IIN'
-                      AND ei.valid_to IS NULL
-                      AND length(regexp_replace(ei.identity_value, '[^0-9]', '', 'g')) = 12
-                    ORDER BY ei.is_primary DESC NULLS LAST, ei.identity_id
-                    LIMIT 1
-                ) iin ON TRUE
-                WHERE e.person_id IS NULL
-                ORDER BY e.employee_id
+                SELECT DISTINCT ON (raw.match_key)
+                    raw.employee_id,
+                    raw.full_name,
+                    raw.iin,
+                    raw.match_key,
+                    raw.is_active
+                FROM (
+                    SELECT DISTINCT ON (e.employee_id)
+                        e.employee_id,
+                        trim(e.full_name) AS full_name,
+                        CASE
+                            WHEN iin.iin IS NOT NULL THEN iin.iin
+                            ELSE NULL
+                        END AS iin,
+                        CASE
+                            WHEN iin.iin IS NOT NULL THEN 'iin:' || iin.iin
+                            ELSE 'name:' || lower(
+                                regexp_replace(trim(e.full_name), '\\s+', ' ', 'g')
+                            )
+                        END AS match_key,
+                        e.is_active
+                    FROM public.employees e
+                    LEFT JOIN LATERAL (
+                        SELECT regexp_replace(ei.identity_value, '[^0-9]', '', 'g') AS iin
+                        FROM public.employee_identities ei
+                        WHERE ei.employee_id = e.employee_id
+                          AND ei.identity_type = 'IIN'
+                          AND ei.valid_to IS NULL
+                          AND length(regexp_replace(ei.identity_value, '[^0-9]', '', 'g')) = 12
+                        ORDER BY ei.is_primary DESC NULLS LAST, ei.identity_id
+                        LIMIT 1
+                    ) iin ON TRUE
+                    WHERE e.person_id IS NULL
+                    ORDER BY e.employee_id
+                ) raw
+                ORDER BY raw.match_key, raw.employee_id
             ) src
             WHERE NOT EXISTS (
                 SELECT 1
@@ -141,6 +153,9 @@ def upgrade() -> None:
               AND e.person_id IS NULL
               AND src.iin IS NOT NULL;
 
+            -- Match-key link: one employee per match_key (DISTINCT ON) and skip
+            -- when an active employee already holds person_id (NOT EXISTS).
+            -- Prevents uq_employees_person_active violations on re-backfill.
             UPDATE public.employees e
             SET
                 person_id = p.person_id,
@@ -152,32 +167,44 @@ def upgrade() -> None:
                 enrolled_at = COALESCE(e.enrolled_at, now()),
                 updated_at = now()
             FROM (
-                SELECT
-                    e2.employee_id,
-                    CASE
-                        WHEN iin.iin IS NOT NULL THEN 'iin:' || iin.iin
-                        ELSE 'name:' || lower(
-                            regexp_replace(trim(e2.full_name), '\\s+', ' ', 'g')
-                        )
-                    END AS match_key
-                FROM public.employees e2
-                LEFT JOIN LATERAL (
-                    SELECT regexp_replace(ei.identity_value, '[^0-9]', '', 'g') AS iin
-                    FROM public.employee_identities ei
-                    WHERE ei.employee_id = e2.employee_id
-                      AND ei.identity_type = 'IIN'
-                      AND ei.valid_to IS NULL
-                      AND length(regexp_replace(ei.identity_value, '[^0-9]', '', 'g')) = 12
-                    ORDER BY ei.is_primary DESC NULLS LAST, ei.identity_id
-                    LIMIT 1
-                ) iin ON TRUE
-                WHERE e2.person_id IS NULL
+                SELECT DISTINCT ON (src.match_key)
+                    src.employee_id,
+                    src.match_key
+                FROM (
+                    SELECT
+                        e2.employee_id,
+                        CASE
+                            WHEN iin.iin IS NOT NULL THEN 'iin:' || iin.iin
+                            ELSE 'name:' || lower(
+                                regexp_replace(trim(e2.full_name), '\\s+', ' ', 'g')
+                            )
+                        END AS match_key
+                    FROM public.employees e2
+                    LEFT JOIN LATERAL (
+                        SELECT regexp_replace(ei.identity_value, '[^0-9]', '', 'g') AS iin
+                        FROM public.employee_identities ei
+                        WHERE ei.employee_id = e2.employee_id
+                          AND ei.identity_type = 'IIN'
+                          AND ei.valid_to IS NULL
+                          AND length(regexp_replace(ei.identity_value, '[^0-9]', '', 'g')) = 12
+                        ORDER BY ei.is_primary DESC NULLS LAST, ei.identity_id
+                        LIMIT 1
+                    ) iin ON TRUE
+                    WHERE e2.person_id IS NULL
+                ) src
+                ORDER BY src.match_key, src.employee_id
             ) src
             JOIN public.persons p
               ON p.match_key = src.match_key
              AND p.person_status IN ('active', 'inactive')
             WHERE e.employee_id = src.employee_id
-              AND e.person_id IS NULL;
+              AND e.person_id IS NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.employees e2
+                  WHERE e2.person_id = p.person_id
+                    AND e2.operational_status IN ('draft', 'active', 'suspended')
+              );
 
             -- ---------------------------------------------------------------
             -- 3) Primary assignments from legacy employee snapshot
