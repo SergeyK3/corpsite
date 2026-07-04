@@ -9,8 +9,8 @@
 | Связанный документ | Роль |
 |--------------------|------|
 | [ARCH-001 — Position Cabinet Architecture](./ARCH-001-position-permission-model.md) | Источник baseline-принципов (Draft → Accepted) |
-| [ADR-050 — Organization Position & Position Cabinet](../adr/ADR-050-organization-position-cabinet-model.md) | Implementation contract: Position + Cabinet (**Proposed**) |
-| [ADR-051 — Cabinet Access Resolution](../adr/ADR-051-cabinet-access-resolution.md) | Implementation contract: access resolver (**Proposed**) |
+| [ADR-050 — Organization Position & Position Cabinet](../adr/ADR-050-organization-position-cabinet-model.md) | Implementation contract: Position + Cabinet (**Accepted**) |
+| [ADR-051 — Cabinet Access Resolution](../adr/ADR-051-cabinet-access-resolution.md) | Implementation contract: access resolver (**Accepted**) |
 | [docs/adr/](../adr/) | Каталог принятых ADR |
 
 ---

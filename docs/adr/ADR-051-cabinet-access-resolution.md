@@ -2,13 +2,13 @@
 
 ## Status
 
-**Proposed** — 2026-07-03
+**Accepted** — 2026-07-04
 
-Operational access-resolution contract derived from [ARCH-001 v0.5](../architecture/ARCH-001-position-permission-model.md), [Architecture Governance](../architecture/ARCHITECTURE_GOVERNANCE.md), [ARCH-001 Foundation Summary](../architecture/ARCH-001-foundation-summary.md), and [ADR-050](./ADR-050-organization-position-cabinet-model.md). This ADR **defines how effective permissions are calculated** under Position Cabinet Architecture. It **does not** amend ARCH-001, **does not** redefine Position or Cabinet lifecycle (ADR-050), and **does not** specify authentication, JWT, schema, or API implementation.
+Operational access-resolution contract derived from [ARCH-001 v0.5](../architecture/ARCH-001-position-permission-model.md), [Architecture Governance](../architecture/ARCHITECTURE_GOVERNANCE.md), [ARCH-001 Foundation Summary](../architecture/ARCH-001-foundation-summary.md), and [ADR-050](./ADR-050-organization-position-cabinet-model.md) (**Accepted**). This ADR **defines how effective permissions are calculated** under Position Cabinet Architecture. It **does not** amend ARCH-001, **does not** redefine Position or Cabinet lifecycle (ADR-050), and **does not** specify authentication, JWT, schema, or API implementation.
 
 | Field | Value |
 |-------|-------|
-| Depends on | [ADR-050](./ADR-050-organization-position-cabinet-model.md) — org-unique Position, Position Cabinet, Permission Template location |
+| Depends on | [ADR-050](./ADR-050-organization-position-cabinet-model.md) (**Accepted**) — org-unique Position, Position Cabinet, Permission Template location |
 | Enables | RBAC enforcement cutover, `/auth/me` cabinet contract (ADR-042 B5), task cabinet routing (ADR-049), visibility migration (ADR-042 E1) |
 | Related | [ADR-036](./ADR-036-hr-events-unified-model.md) (ACTING overlay), [ADR-042 Phase A/B](./ADR-042-phase-a-personnel-access-enrollment-architecture.md), [ADR-023](./ADR-023-rbac-v2-lean-scope-and-approvals.md), [OPS-028](../ops/OPS-028-platform-user-login-policy.md), [access-rbac assessment](../architecture/ARCH-001-access-rbac-assessment.md) |
 
@@ -528,6 +528,7 @@ Architectural phases only — **no** SQL, **no** code, **no** API specifications
 | 2026-07-03 | **No Platform Role / user role entity** — transitional as-is only; Permission Template inside Cabinet is sole baseline definition. |
 | 2026-07-03 | **No Slot entity** — confirmed per ARCH-001 §15.0 and ADR-050. |
 | 2026-07-03 | **Exception grants** — overlay only; do not replace Cabinet baseline (ARCH-001 §15.0). |
+| 2026-07-04 | **Accepted ADR-051** — ratified as implementation baseline for Cabinet Access Resolver; depends on Accepted ADR-050. |
 
 ---
 
@@ -562,3 +563,4 @@ Architectural phases only — **no** SQL, **no** code, **no** API specifications
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-03 | 0.1 | Initial proposed ADR — Cabinet Access Resolver operational contract |
+| 2026-07-04 | 1.0 | Status Proposed → Accepted — Phase 2 implementation gate |

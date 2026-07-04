@@ -10,7 +10,7 @@
 | Program | [ARCH-001-assessment-program.md](./ARCH-001-assessment-program.md) |
 | Purpose | Consolidated conclusions from completed foundation assessments — not a new assessment |
 | Source assessments | [tasks](./ARCH-001-task-subsystem-assessment.md), [positions-org-structure](./ARCH-001-positions-org-structure-assessment.md), [personnel-employment](./ARCH-001-personnel-employment-assessment.md), [access-rbac](./ARCH-001-access-rbac-assessment.md), [platform-user-identity](./ARCH-001-platform-user-identity-assessment.md) |
-| Implementation contracts | [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md), [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) (**Proposed**) |
+| Implementation contracts | [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md), [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) (**Accepted**) |
 | Consolidation review | [ARCH-001-foundation-consolidation-review.md](./ARCH-001-foundation-consolidation-review.md) |
 
 **Constraints applied:** this document consolidates existing assessment findings only. It does not modify ARCH-001, ADRs, assessment conclusions, or the assessment queue.
@@ -31,10 +31,10 @@ The gap across every foundation area is **not conceptual** — it is **implement
 |-----------|--------|
 | Baseline adequacy | **Confirmed** — ARCH-001 need not be revised for foundation scope |
 | As-is compatibility | **Not compatible** without foundational migration |
-| Critical path ADRs | [**ADR-050**](../adr/ADR-050-organization-position-cabinet-model.md) (org-unique Position + Position Cabinet), [**ADR-051**](../adr/ADR-051-cabinet-access-resolution.md) (Cabinet Access Resolver) — both **Proposed** |
+| Critical path ADRs | [**ADR-050**](../adr/ADR-050-organization-position-cabinet-model.md) (org-unique Position + Position Cabinet), [**ADR-051**](../adr/ADR-051-cabinet-access-resolution.md) (Cabinet Access Resolver) — both **Accepted** |
 | Consumer assessments | **Unblocked to proceed** — they inherit foundation conclusions; they do not redefine the baseline |
 
-Implementation contracts [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) and [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) are **authored (Proposed)**. **Implementation planning** may proceed against those drafts; **production implementation and enforcement cutover** must not start until ADR-050 and ADR-051 are **approved** by architecture session, and phased migration plans exist (ADR-049 and sibling amendments per subsystem). Do not bind to catalog FKs, `users.role_id`, or role-centric routing before approval.
+Implementation contracts [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) and [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) are **Accepted** (2026-07-04). **Phase 2 schema work** may proceed per [IMPLEMENTATION_PLAN](./IMPLEMENTATION_PLAN.md); **enforcement cutover** remains phased per roadmap. Do not bind to catalog FKs, `users.role_id`, or role-centric routing for new operational logic.
 
 ---
 
@@ -258,23 +258,23 @@ Tier-1 **foundation assessments are complete**. Remaining queue items (Tiers 2�
 
 | Criterion | Ready? | Notes |
 |-----------|--------|-------|
-| ADR-050 (Position + Cabinet schema) | **Proposed** — not approved | Authored; approval required before schema work |
-| ADR-051 (Cabinet Access Resolver) | **Proposed** — not approved | Authored; approval required before RBAC/`/auth/me` cutover |
+| ADR-050 (Position + Cabinet schema) | **Accepted** | Ratified 2026-07-04; schema implementation per Phase 2 |
+| ADR-051 (Cabinet Access Resolver) | **Accepted** | Ratified 2026-07-04; resolver implementation per Phase 4 |
 | Schema exists for org-unique Position / Cabinet | **No** | positions-org-structure finding |
 | Resolver implemented or shadowed | **No** | access-rbac finding |
 | Person universal on operational users | **No** | personnel-employment P2 |
 | Task ADR coexistence (ADR-049) | **No** | tasks assessment |
 | Consumer subsystems assessed | **No** | Eight assessments remain — inform migration sequencing, not baseline |
 
-**Implementation readiness: NO** — ADR-050 and ADR-051 are Proposed only; do not begin cabinet binding, resolver enforcement, or role demotion in production paths until they are **approved** and phased plans exist (ADR-049 for tasks, ADR-042 B5/E1 for auth/me and visibility).
+**Implementation readiness: PARTIAL** — ADR-050 and ADR-051 are **Accepted**; Phase 2 schema work may begin. Cabinet binding, resolver enforcement, and role demotion in production paths remain phased per roadmap (ADR-049 for tasks, ADR-042 B5/E1 for auth/me and visibility).
 
 ### Distinction
 
 | | Architecture readiness | Implementation readiness |
 |---|------------------------|---------------------------|
 | **Question** | Is the target model right and complete? | Can we safely build and cut over? |
-| **Foundation phase answer** | **Yes** — ARCH-001 sufficient, no new entities | **No** — blocked on ADR-050/051 and Person materialization |
-| **Next step** | Continue Tier 2 consumer assessments; architecture session to **approve** ADR-050/051 | After approval: phased migration programs per subsystem |
+| **Foundation phase answer** | **Yes** — ARCH-001 sufficient, no new entities | **Partial** — ADR contracts Accepted; schema/resolver/cutover remain |
+| **Next step** | Continue Tier 2 consumer assessments | Phase 2 Position/Cabinet schema per IMPLEMENTATION_PLAN |
 
 ---
 
@@ -283,7 +283,7 @@ Tier-1 **foundation assessments are complete**. Remaining queue items (Tiers 2�
 | Document | Role |
 |----------|------|
 | [ARCH-001-position-permission-model.md](./ARCH-001-position-permission-model.md) | Baseline (unchanged) |
-| [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md), [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) | Implementation contracts (**Proposed**) |
+| [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md), [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) | Implementation contracts (**Accepted**) |
 | [ARCH-001-assessment-program.md](./ARCH-001-assessment-program.md) | Queue and rules (unchanged by this summary) |
 | [ARCH-001-implementation-roadmap.md](./ARCH-001-implementation-roadmap.md) | Post-approval implementation sequencing (Phases 0–8) |
 | [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) | Engineering work packages per roadmap phase |
@@ -297,3 +297,4 @@ Tier-1 **foundation assessments are complete**. Remaining queue items (Tiers 2�
 |------|---------|--------|
 | 2026-07-03 | 1.0 | Initial foundation consolidation after Tier-0 + Tier-1 assessments complete |
 | 2026-07-03 | 1.1 | Link ADR-050/051 (Proposed); clarify implementation planning vs approval gate |
+| 2026-07-04 | 1.2 | ADR-050/051 status → Accepted; implementation readiness partial |

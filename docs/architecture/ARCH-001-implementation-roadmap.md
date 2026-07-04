@@ -8,7 +8,7 @@
 | Type | Architecture implementation sequencing (not an ADR, not an assessment) |
 | Baseline | [ARCH-001 v0.5 — Position Cabinet Architecture](./ARCH-001-position-permission-model.md) |
 | Governance | [ARCHITECTURE_GOVERNANCE.md](./ARCHITECTURE_GOVERNANCE.md) |
-| Implementation contracts | [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md), [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) (**Proposed**) |
+| Implementation contracts | [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md), [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) (**Accepted**) |
 | Foundation inputs | [Foundation summary](./ARCH-001-foundation-summary.md), [Consolidation review](./ARCH-001-foundation-consolidation-review.md), [Assessment program](./ARCH-001-assessment-program.md) |
 
 **Scope:** recommended **sequence** for implementing the Position Cabinet architecture already defined in authoritative documents. This roadmap **does not** change architectural decisions, approve Proposed ADRs, or specify SQL, API, or UI implementation.
@@ -17,18 +17,18 @@
 
 ## 1. Executive Summary
 
-The **architecture foundation phase is complete**. ARCH-001, five foundation assessments, the foundation summary, and consolidation review confirm that the baseline is sufficient and coherent. Implementation contracts [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) (org-unique Position + Position Cabinet) and [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) (Cabinet Access Resolver) are **authored (Proposed)**.
+The **architecture foundation phase is complete**. ARCH-001, five foundation assessments, the foundation summary, and consolidation review confirm that the baseline is sufficient and coherent. Implementation contracts [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) (org-unique Position + Position Cabinet) and [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) (Cabinet Access Resolver) are **Accepted** (2026-07-04).
 
-**Production implementation is gated** by architecture session **approval** of ADR-050 and ADR-051. Until that gate closes, engineering must not treat Proposed ADRs as approved build authority, bind operational logic to catalog `(org_unit_id, position_id)` composites, or cut over authorization from `users.role_id`.
+**Phase 1 approval gate is closed.** Engineering may treat ADR-050 and ADR-051 as build authority for phased implementation per this roadmap. Do not cut over authorization from `users.role_id` until Phases 4–6 per subsystem plan.
 
-This roadmap closes the architecture phase as a **sequencing bridge**: it tells engineering and Tier 2 consumer assessments **in what order** to proceed after approval, without redefining the model.
+This roadmap closes the architecture phase as a **sequencing bridge**: it tells engineering and Tier 2 consumer assessments **in what order** to proceed, without redefining the model.
 
 | Dimension | Status |
 |-----------|--------|
 | Architecture foundation | **Complete** (Phase 0) |
-| Implementation contracts | **Proposed** — approval required (Phase 1) |
-| Tier 2 consumer assessments | **May proceed** in parallel with Phase 1; use this roadmap as sequencing context |
-| Production cutover | **Blocked** until Phases 1–4 complete |
+| Implementation contracts | **Accepted** (Phase 1 complete — 2026-07-04) |
+| Tier 2 consumer assessments | **May proceed**; use this roadmap as sequencing context |
+| Production cutover | **Blocked** until Phases 4–6 complete per subsystem |
 
 ---
 
@@ -38,8 +38,8 @@ Implementation work under this roadmap **must not start** until all precondition
 
 | # | Precondition | Rationale |
 |---|--------------|-----------|
-| P1 | **[ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) approved** (Proposed → Accepted) | Position/Cabinet entity and lifecycle contract is build authority |
-| P2 | **[ADR-051](../adr/ADR-051-cabinet-access-resolution.md) approved** (Proposed → Accepted) | Access resolver and effective-permission contract is build authority |
+| P1 | **[ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) approved** (Proposed → Accepted) | Position/Cabinet entity and lifecycle contract is build authority — **met** (2026-07-04) |
+| P2 | **[ADR-051](../adr/ADR-051-cabinet-access-resolution.md) approved** (Proposed → Accepted) | Access resolver and effective-permission contract is build authority — **met** (2026-07-04) |
 | P3 | **[ARCH-001](./ARCH-001-position-permission-model.md) remains baseline** | No implementation may amend or contradict the domain model |
 | P4 | **[ARCHITECTURE_GOVERNANCE](./ARCHITECTURE_GOVERNANCE.md) respected** | Person ≠ permissions; User = auth only; permissions follow Employment |
 | P5 | **Consumer migrations do not redefine foundation** | Tier 2 assessments and subsystem ADRs consume Position, Employment, Cabinet, resolver — they do not invent alternate semantics |
@@ -68,8 +68,8 @@ Implementation work under this roadmap **must not start** until all precondition
 | [Assessment program](./ARCH-001-assessment-program.md) | Queue and rules |
 | Tier 0 + Tier 1 assessments (Tasks, positions-org, personnel-employment, access-rbac, platform-user-identity) | Fit/gap analysis |
 | [Foundation summary](./ARCH-001-foundation-summary.md) | Consolidated conclusions |
-| [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) | Position + Cabinet implementation contract (**Proposed**) |
-| [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) | Access resolver contract (**Proposed**) |
+| [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) | Position + Cabinet implementation contract (**Accepted**) |
+| [ADR-051](../adr/ADR-051-cabinet-access-resolution.md) | Access resolver contract (**Accepted**) |
 | [Consolidation review](./ARCH-001-foundation-consolidation-review.md) | Corpus consistency verified |
 
 **Exit criteria:** foundation assessments complete; no baseline revision required; ADR-050/051 authored.
@@ -80,8 +80,8 @@ Implementation work under this roadmap **must not start** until all precondition
 
 | | |
 |---|---|
-| **Status** | **Pending** |
-| **Goal** | Move ADR-050 and ADR-051 from **Proposed** to **approved** status before implementation |
+| **Status** | **Done** (2026-07-04) |
+| **Goal** | Move ADR-050 and ADR-051 from **Proposed** to **Accepted** status before implementation |
 
 **Activities (architecture session — not engineering):**
 
@@ -95,9 +95,9 @@ Implementation work under this roadmap **must not start** until all precondition
 - Tier 2 consumer-subsystem **assessments** (`events-telegram`, `working-contacts`, …).
 - Implementation **planning** and spike design **against Proposed ADRs** — clearly labeled draft until P1 closes.
 
-**Exit criteria:** ADR-050 and ADR-051 **Approved/Accepted**; architecture session minutes recorded.
+**Exit criteria:** ADR-050 and ADR-051 **Accepted** — recorded in ADR decision logs (2026-07-04).
 
-**Hard stop:** no Phase 2+ production schema binding, resolver enforcement, or consumer cutover until exit criteria met.
+**Hard stop lifted for Phase 2:** org-unique Position + Cabinet schema may proceed per ADR-050. Resolver enforcement and consumer cutover remain gated on Phases 3–6.
 
 ---
 
@@ -105,7 +105,7 @@ Implementation work under this roadmap **must not start** until all precondition
 
 | | |
 |---|---|
-| **Status** | **Not started** (blocked on Phase 1) |
+| **Status** | **Not started** (Phase 1 complete; ready to begin) |
 | **Goal** | Introduce org-unique **Position** and 1:1 **Position Cabinet** per [ADR-050](../adr/ADR-050-organization-position-cabinet-model.md) |
 
 **Architectural outcomes (conceptual — detail in ADR-050 and engineering program):**
@@ -415,3 +415,4 @@ This roadmap is **complete** when:
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-03 | 1.0 | Initial implementation roadmap — foundation phase close, sequencing bridge to engineering |
+| 2026-07-04 | 1.1 | Phase 1 complete — ADR-050/051 Accepted; Phase 2 unblocked |

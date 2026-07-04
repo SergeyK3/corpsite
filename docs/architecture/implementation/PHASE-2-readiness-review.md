@@ -24,18 +24,23 @@
 |-----------|------------|
 | Architecture baseline | **Ready** — ARCH-001, foundation assessments, ADR-050/051, and IMPLEMENTATION_PLAN define a coherent Phase 2 target. |
 | Codebase clarity | **Ready** — as-is coupling points are well mapped; no hidden Cabinet/Position entities exist. |
-| Phase 1 gate | **Not met** — ADR-050 and ADR-051 remain **Proposed**; IMPLEMENTATION_PLAN M1 and Phase 1 exit criteria require **Accepted** status before production schema work. |
+| Phase 1 gate | **Met** (2026-07-04) — ADR-050 and ADR-051 **Accepted**; recorded in ADR decision logs. |
 | Schema foundation | **Absent (expected)** — org-unique Position and Position Cabinet tables do not exist; legacy `public.positions` catalog remains staffing proxy. |
 
-Phase 2 engineering **may proceed** once preconditions below are satisfied. Until then, only preparation (schema design review, draft migrations on branches, mapping inventory queries) is safe — not merged production migrations or consumer changes.
+Phase 2 engineering **may proceed** per IMPLEMENTATION_PLAN. Remaining operational preconditions (engineering kickoff, staging backup policy) apply before first production migration merge.
 
 ### Preconditions (must pass before first Phase 2 implementation merge)
 
-1. **ADR-050 Accepted** — recorded in ADR decision log (architecture session).
-2. **ADR-051 Accepted** — recorded in ADR decision log (recommended before Phase 2 schema merge per IMPLEMENTATION_PLAN § Phase 2 preconditions).
-3. **Engineering kickoff scheduled** with approved table/column naming pack from ADR-050 session.
-4. **Staging DB backup policy** confirmed for first Alembic revision.
-5. **No production work** under Proposed-only ADR authority (IMPLEMENTATION_PLAN E1, IR1).
+**Satisfied (2026-07-04):**
+
+1. **ADR-050 Accepted** — recorded in ADR decision log.
+2. **ADR-051 Accepted** — recorded in ADR decision log.
+3. **No production work** under Proposed-only ADR authority (IMPLEMENTATION_PLAN E1, IR1).
+
+**Remaining:**
+
+4. **Engineering kickoff scheduled** with approved table/column naming pack from ADR-050 session.
+5. **Staging DB backup policy** confirmed for first Alembic revision.
 
 ---
 
@@ -165,7 +170,7 @@ Phase 2 engineering **may proceed** once preconditions below are satisfied. Unti
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| B1 | **ADR-050/051 still Proposed** — IMPLEMENTATION_PLAN forbids M2 production work | Complete Phase 1 architecture session; record Accepted status before merge |
+| B1 | ~~ADR-050/051 Proposed~~ — **Resolved** (Accepted 2026-07-04) | — |
 | B2 | **No org-unique Position entity** — cannot create Cabinet 1:1 | Phase 2 additive schema per ADR-050 §8 Phase 1 |
 | B3 | **Catalog `position_id` shared across org units** — one title id, many staffing slots | Phase 2 mapping must split `(org_unit_id, catalog position_id)` → N Position rows (ADR-050 §8 Phase 2) |
 | B4 | **Global `lower(name)` uniqueness on `public.positions`** — blocks multi-slot same title | New org-unique table must not inherit global name constraint (assessment §9 P1) |
@@ -394,3 +399,4 @@ alembic upgrade head
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-03 | 1.0 | Initial Phase 2 readiness review — Sprint 1 kickoff gate |
+| 2026-07-04 | 1.1 | Phase 1 gate met — ADR-050/051 Accepted; preconditions and risks updated |

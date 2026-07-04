@@ -2,14 +2,14 @@
 
 ## Status
 
-**Proposed** — 2026-07-03
+**Accepted** — 2026-07-04
 
 Implementation contract derived from [ARCH-001 v0.5](../architecture/ARCH-001-position-permission-model.md), [Architecture Governance](../architecture/ARCHITECTURE_GOVERNANCE.md), and completed foundation assessments. This ADR **formalizes** decisions already implied by the accepted baseline; it **does not** amend ARCH-001 or redefine terminology.
 
 | Field | Value |
 |-------|-------|
 | Supersedes (conceptually) | As-is semantics of `public.positions` as Position |
-| Enables | [**ADR-051**](./ADR-051-cabinet-access-resolution.md) (Cabinet Access Resolver — **Proposed**) |
+| Enables | [**ADR-051**](./ADR-051-cabinet-access-resolution.md) (Cabinet Access Resolver — **Accepted**) |
 | Related | [ADR-031](./ADR-031-directory-personnel-contacts-contract.md), [ADR-046](./ADR-046-org-unit-allowed-positions.md), [ADR-042 Phase A/B](./ADR-042-phase-a-personnel-access-enrollment-architecture.md), [ADR-032](./ADR-032-employee-transfer-architecture.md), [ADR-036](./ADR-036-hr-events-unified-model.md) |
 
 ### Explicitly out of scope (ADR-051 and others)
@@ -448,6 +448,7 @@ Architectural direction only — **no** concrete SQL, **no** ordered migration s
 | 2026-07-03 | **Person transfer** closes/opens Employment; **does not** move Cabinet ownership. |
 | 2026-07-03 | **Liquidation** is terminal for Position and Cabinet; **termination of last employee** is vacancy, not liquidation. |
 | 2026-07-03 | **Platform User** excluded from Position/Cabinet ownership — auth only. |
+| 2026-07-04 | **Accepted ADR-050** — ratified as Phase 2 implementation baseline (org-unique Position + Position Cabinet); architecture session gate closed. |
 
 ---
 
@@ -480,3 +481,4 @@ Architectural direction only — **no** concrete SQL, **no** ordered migration s
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-03 | 0.1 | Initial proposed ADR — implementation contract from ARCH-001 foundation phase |
+| 2026-07-04 | 1.0 | Status Proposed → Accepted — Phase 2 implementation gate |
