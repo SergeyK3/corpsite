@@ -33,6 +33,7 @@
 | [OPS-019](#ops-019--catch-up-filter-observability) | Catch-up Filter Observability | Low | **Backlog** |
 | [OPS-021](#ops-021--catch-up-form-ux-periodicity-first-layout) | Catch-up Form UX — Periodicity-first | Medium | **Complete** |
 | [OPS-026.5](#ops-0265--unified-system-health-dashboard) | Unified System Health Dashboard | Medium | **Backlog** |
+| [OPS-030](../ops/OPS-030-permission-template-contour-binding.md) | Permission Template Contour Binding (Phase 2.6b) | High | **Blocked (AC3 Pending)** |
 | [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md) | Org-unit allowed positions (Future ADR) | Medium | **Proposed** |
 
 ---
@@ -386,6 +387,26 @@ All ADR-044 **implementation** phases through **R2.5g** are **complete**. No ADR
 | R3 post-R2 validation gate | Planned (ADR track; not OPS-scheduled) |
 
 Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations-architecture.md).
+
+---
+
+### OPS-030 — Permission Template Contour Binding (Phase 2.6b)
+
+**Статус:** **Blocked (ADR-053 AC3 Pending)** — 2026-07-04
+
+**Scope:** Ops data publication only. Phase 2.6a engineering (schema, resolver read-path, backfill mechanism) is accepted separately; **production binding is not complete** until OPS-030 executes.
+
+**Deliverables (TODO):**
+
+- Approved `(org_unit_id, catalog_position_id) → access_role_id` mapping annex
+- Insert rows into `permission_template_contour_rule`
+- Re-apply backfill migration / UPDATE
+- Run `sql/validation/adr053_phase2_6_permission_template_binding_validation.sql`
+- Observe shadow parity with `CABINET_ACCESS_SHADOW_MODE=true`
+
+**Runbook placeholder:** [OPS-030](../ops/OPS-030-permission-template-contour-binding.md)
+
+**Gate:** [ADR-053 AC3](../adr/ADR-053-permission-template-binding-model.md#11-acceptance-criteria-ratified) — ops mapping published and approved before production data backfill.
 
 ---
 

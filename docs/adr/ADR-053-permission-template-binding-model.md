@@ -204,16 +204,19 @@ Accepting ADR-053 does **not** pre-commit the end-state catalog design.
 
 ## 6. Expected implementation artifacts (Phase 2.6 — not this ADR's code)
 
-| Artifact | Purpose |
-|----------|---------|
-| Additive migration: `permission_template.access_role_id` | Primary binding column |
-| Idempotent backfill migration | Position-level binding population |
-| `cabinet_access_resolver_service` update | §3.2 expansion precedence |
-| `sql/validation/adr050_phase2_6_permission_template_binding_validation.sql` | Ops verification |
-| Tests: resolver + shadow parity fixtures | Prevent regression |
-| Ops runbook appendix | Exception mappings, rollback |
+Implementation is split into **Phase 2.6a** (engineering support) and **Phase 2.6b** (ops data publication). Full Phase 2.6 program completion requires both; **production binding is not complete after 2.6a alone**.
 
-**No** changes to guards, `/auth/me`, JWT, frontend, or grant tables in Phase 2.6.
+| Phase | Artifact | Purpose | Status |
+|-------|----------|---------|--------|
+| **2.6a** | Additive migration: `permission_template.access_role_id` | Primary binding column | Engineering |
+| **2.6a** | `permission_template_contour_rule` table (no seed rows) | Ops contour catalog schema | Engineering |
+| **2.6a** | Idempotent backfill migration | Mechanism to apply contour rules when present | Engineering |
+| **2.6a** | `cabinet_access_resolver_service` update | §3.2 expansion precedence | Engineering |
+| **2.6a** | `sql/validation/adr053_phase2_6_permission_template_binding_validation.sql` | Ops verification queries | Engineering |
+| **2.6a** | Tests: resolver + shadow parity fixtures | Prevent regression | Engineering |
+| **2.6b** | [OPS-030](../ops/OPS-030-permission-template-contour-binding.md) — approved contour mapping + runbook | Exception mappings, insert/backfill procedure, shadow observation | **Blocked on AC3** |
+
+**No** changes to guards, `/auth/me`, JWT, frontend, or grant tables in Phase 2.6a or 2.6b.
 
 ---
 
@@ -223,12 +226,13 @@ Accepting ADR-053 does **not** pre-commit the end-state catalog design.
 |-------|--------------|----------------------|
 | 2.1–2.2 | Template row exists; binding empty | Legacy |
 | 2.3–2.4 | Read resolver; shadow hook | Legacy |
-| **2.6** | **ADR-053 binding + backfill + emission alignment** | **Legacy** |
+| **2.6a** | **ADR-053 schema + resolver read-path + backfill mechanism** (no production bind) | **Legacy** |
+| **2.6b** | **Ops contour rules → template `access_role_id` population + shadow parity observation** | **Legacy** |
 | 3 | Employment FK retarget | Legacy |
 | 4–5 | Atomic expansion; subsystem shadow | Legacy per subsystem |
 | 6+ | Cutover | Cabinet baseline + exception grants |
 
-### 7.1. Rollback (Phase 2.6)
+### 7.1. Rollback (Phase 2.6a / 2.6b)
 
 | Step | Action |
 |------|--------|
@@ -298,9 +302,9 @@ ADR-053 was **Accepted** on 2026-07-04 following architecture review (edits E1�
 |---|-----------|---------------|
 | AC1 | [ADR-051 Appendix C](./ADR-051-cabinet-access-resolution.md#appendix-c--permission-template-binding-adr-053) boundary confirmed — resolver mechanics unchanged; binding semantics owned by ADR-053 | **Met** |
 | AC2 | Phase 2.6 scope remains **read-path / shadow only** — no enforcement cutover, no guard, JWT, `/auth/me`, or frontend changes | **Met** (contract); implementation gated separately |
-| AC3 | **Ops mapping annex or runbook reference** (position / staffing contour → `access_role_id`) published and approved **before Phase 2.6 production data backfill** | **Pending** — gate for backfill, not for ADR ratification |
+| AC3 | **Ops mapping annex or runbook reference** (position / staffing contour → `access_role_id`) published and approved **before Phase 2.6b production data backfill** | **Pending** — gate for 2.6b backfill, not for ADR ratification or 2.6a engineering acceptance |
 
-Acceptance of ADR-053 authorizes the binding **contract** only. Phase 2.6 implementation and production backfill remain gated by AC2 (implementation discipline) and AC3 (ops mapping) plus engineering validation (R12).
+Acceptance of ADR-053 authorizes the binding **contract** only. **Phase 2.6a** (engineering: schema, resolver read-path, shadow taxonomy, backfill mechanism, validation SQL) may be accepted without contour rules; templates remain unmapped until **Phase 2.6b**. Production backfill and shadow parity improvement remain gated by AC3 (ops mapping) plus engineering validation (R12).
 
 ---
 
@@ -316,6 +320,7 @@ Acceptance of ADR-053 authorizes the binding **contract** only. Phase 2.6 implem
 | 2026-07-04 | **Grants untouched** in Phase 2.6 — baseline vs overlay separation preserved |
 | 2026-07-04 | **Architecture review edits** — §3.7 transitional clause; §11 acceptance criteria; §10 Appendix C factual fix; dual-FK precedence clarified |
 | 2026-07-04 | **Accepted ADR-053** — architecture review complete; binding contract ratified for Phase 2.6 |
+| 2026-07-04 | **Phase 2.6a accepted (engineering)** — schema, resolver read-path, shadow taxonomy, backfill mechanism, validation SQL; production binding incomplete until Phase 2.6b (AC3 Pending) |
 
 ---
 
@@ -358,3 +363,4 @@ permission_template
 | 2026-07-04 | 0.1 | Initial proposed ADR — Permission Template binding model |
 | 2026-07-04 | 0.2 | Architecture review edits (E1–E5): §3.7, §10–§12, dual-FK precedence |
 | 2026-07-04 | 1.0 | Status Proposed → Accepted — architecture review ratification |
+| 2026-07-04 | 1.1 | Phase 2.6 split into 2.6a (engineering) / 2.6b (ops bind); OPS-030 placeholder; AC3 remains Pending |

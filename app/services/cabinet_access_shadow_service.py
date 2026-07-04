@@ -56,12 +56,32 @@ def compare_legacy_and_cabinet_access(
     elif legacy_codes == cabinet_codes:
         outcome = "match"
         mismatch_type = None
-    elif not legacy_codes and not cabinet_codes:
-        outcome = "neutral"
-        mismatch_type = "both_empty"
+    elif not cabinet_codes:
+        template = cabinet_result.get("permission_template") or {}
+        if (
+            cabinet_result.get("resolved")
+            and template
+            and not template.get("access_role_id")
+            and not template.get("role_id")
+        ):
+            outcome = "mismatch"
+            mismatch_type = "permission_template_unmapped"
+        elif not legacy_codes:
+            outcome = "neutral"
+            mismatch_type = "both_empty"
+        else:
+            outcome = "mismatch"
+            mismatch_type = "permission_code_set_mismatch"
     else:
         outcome = "mismatch"
         mismatch_type = "permission_code_set_mismatch"
+        template = cabinet_result.get("permission_template") or {}
+        if (
+            template.get("role_id")
+            and not template.get("access_role_id")
+            and legacy_codes != cabinet_codes
+        ):
+            mismatch_type = "namespace_mismatch"
 
     return {
         "outcome": outcome,

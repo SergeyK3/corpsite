@@ -9,7 +9,7 @@ Architecture (read path):
         → org_unique_position
         → position_cabinet
         → permission_template
-        → effective_permissions (transitional: role_id → roles.code)
+        → effective_permissions (ADR-053: access_role_id → access_roles.code; else role_id → roles.code)
 
 Non-goals in Phase 2.3:
     - No JWT, /auth/me, login, or frontend changes
@@ -153,6 +153,8 @@ def _serialize_permission_template(row: Optional[Dict[str, Any]]) -> Optional[Di
     return {
         "permission_template_id": int(row["permission_template_id"]),
         "position_cabinet_id": int(row["position_cabinet_id"]),
+        "access_role_id": int(row["access_role_id"]) if row.get("access_role_id") is not None else None,
+        "access_role_code": str(row["access_role_code"]) if row.get("access_role_code") is not None else None,
         "role_id": int(row["role_id"]) if row.get("role_id") is not None else None,
         "role_code": str(row["role_code"]) if row.get("role_code") is not None else None,
         "is_active": bool(row["is_active"]),
@@ -162,16 +164,28 @@ def _serialize_permission_template(row: Optional[Dict[str, Any]]) -> Optional[Di
 def _expand_effective_permissions(template: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not template or not template.get("is_active"):
         return []
+
+    access_role_code = template.get("access_role_code")
+    if access_role_code:
+        return [
+            {
+                "permission_code": str(access_role_code),
+                "source": "permission_template_access_role",
+                "access_role_id": template.get("access_role_id"),
+            }
+        ]
+
     role_code = template.get("role_code")
-    if not role_code:
-        return []
-    return [
-        {
-            "permission_code": str(role_code),
-            "source": "permission_template_role",
-            "role_id": template.get("role_id"),
-        }
-    ]
+    if role_code:
+        return [
+            {
+                "permission_code": str(role_code),
+                "source": "permission_template_role",
+                "role_id": template.get("role_id"),
+            }
+        ]
+
+    return []
 
 
 def _load_legacy_staffing_row(
@@ -220,10 +234,15 @@ def _load_permission_template_row(conn: Connection, *, position_cabinet_id: int)
             SELECT
                 pt.permission_template_id,
                 pt.position_cabinet_id,
+                pt.access_role_id,
                 pt.role_id,
                 pt.is_active,
+                ar.code AS access_role_code,
                 r.code AS role_code
             FROM public.permission_template pt
+            LEFT JOIN public.access_roles ar
+              ON ar.access_role_id = pt.access_role_id
+             AND ar.is_active IS TRUE
             LEFT JOIN public.roles r
               ON r.role_id = pt.role_id
             WHERE pt.position_cabinet_id = :position_cabinet_id

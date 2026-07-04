@@ -287,7 +287,8 @@ ADR-051 receives a **cross-reference only** (Related documents + Appendix C poin
 |-------|--------------|-------------|
 | 2.1–2.2 | Schema + empty templates | None |
 | 2.3–2.4 | Read resolver + shadow | Legacy only |
-| **2.6** | **ADR-053 binding + backfill + resolver emission** | **Legacy only; shadow parity** |
+| **2.6a** | **ADR-053 schema + resolver read-path + backfill mechanism** (no production bind) | Legacy only |
+| **2.6b** | **Ops contour rules → template binding + shadow parity observation** (AC3 Pending) | Legacy only; shadow parity |
 | 3 | Employment FK retarget | Legacy only |
 | 4–5 | Atomic expansion; subsystem shadow | Legacy authoritative |
 | 6+ | Cutover per subsystem | Cabinet baseline |
@@ -325,3 +326,4 @@ ADR-051 receives a **cross-reference only** (Related documents + Appendix C poin
 | 2026-07-04 | 0.1 | Initial investigation — Phase 2.6 / ADR-053 input |
 | 2026-07-04 | 0.2 | §6 priority 2 aligned with ADR-053 §3.4 — grant inventory informative only |
 | 2026-07-04 | 0.3 | ADR-053 ratified Accepted — investigation output reference updated |
+| 2026-07-04 | 0.4 | Phase alignment §9: split 2.6 into 2.6a (engineering) / 2.6b (ops bind; AC3 Pending) |
