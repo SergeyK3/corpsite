@@ -65,6 +65,8 @@ docs/*
 !docs/RBAC_VISIBILITY_118_AUDIT.md
 !docs/ops/
 !docs/ops/**
+!docs/access/
+!docs/access/**
 !docs/roadmap/
 !docs/roadmap/**
 !docs/deploy/
