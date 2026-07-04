@@ -313,7 +313,7 @@ A work package is **ratified** when all **mandatory** authorities for that packa
 
 | Field | Value |
 |-------|-------|
-| **Inputs** | ACCESS-001 §5.4; 13 rejected line-head rows; ACCESS-002 §3.1 personnel responsibility (WP-X1) |
+| **Inputs** | ACCESS-001 §5.4; 12 rejected line-head §7 rows citing §5.4 (see ACCESS-001 §7 inventory); ACCESS-002 §3.1 personnel responsibility (WP-X1) |
 | **Approval authority** | Ops lead + line management representative + HR policy owner |
 | **Approval output** | Confirmed: line heads **rejected** for `HR_ENROLLMENT_MANAGER`; informational domain is negative boundary only |
 | **Implementation readiness** | Prevents erroneous OPS-030 inserts for clinical/lab heads |

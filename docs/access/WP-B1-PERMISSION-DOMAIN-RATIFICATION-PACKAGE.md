@@ -192,7 +192,7 @@ Exactly **four** Permission Domains — no additional domains.
 
 **No architectural inconsistencies identified.**
 
-**Note for reviewers (not inconsistencies):** PD-5.1 and PD-5.3 lack transitional `access_roles.code` in Reviewed ACCESS-001. This is **documented policy debt** (WP-B3, WP-B8), not a conflict between domains. WP-B1 ratifies **taxonomy**; code mapping is downstream.
+**Note for reviewers (not inconsistencies):** PD-5.1 and PD-5.3 lack transitional `access_roles.code` in Reviewed ACCESS-001. This is **documented policy debt** — PD-5.1 → **WP-B3**; PD-5.3 → **WP-B4** / **WP-B8** — not a conflict between domains. WP-B1 ratifies **taxonomy**; code mapping is downstream.
 
 ---
 

@@ -115,7 +115,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | **Source (ACCESS-001)** | [§5.4](./ACCESS-001-organizational-permission-matrix.md#54-линейное-информирование-informational-permission-domain); principles P9; §3 visibility boundary |
 | **Typical holders** | Heads of clinical, laboratory, and other line departments (permission-boundary purposes only) |
 | **Not the same as** | HR processing (`HR_ENROLLMENT_MANAGER`); executive decision (§5.1); ACCESS-002 management responsibilities. Management visibility scope → ACCESS-002 exclusively |
-| **Related contours** | Thirteen **rejected** line-head contours in ACCESS-001 §7 (units 42–56 clinical/lab heads, excluding non-line rows) — e.g. `(1, 42, 74)`, `(1, 43, 75)`, … `(1, 55, 65)` — all cite §5.4 domain boundary; `HR_ENROLLMENT_MANAGER` **rejected** |
+| **Related contours** | Twelve **rejected** line-head contours in ACCESS-001 §7 citing §5.4: `(1, 42, 74)`, `(1, 43, 75)`, `(1, 44, 64)`, `(1, 45, 71)`, `(1, 46, 72)`, `(1, 47, 68)`, `(1, 48, 73)`, `(1, 49, 69)`, `(1, 50, 66)`, `(1, 53, 70)`, `(1, 54, 67)`, `(1, 55, 65)` — all `HR_ENROLLMENT_MANAGER` **rejected**. *(Not PD-5.4 inventory: `(1, 55, 9)` and `(1, 56, 88)` are rejected §7 rows for other reasons.)* |
 | **Related access_roles** | **None approved.** No approved `access_roles` baseline for §5.4 in Reviewed ACCESS-001 — negative boundary only (what **not** to bind). `HR_ENROLLMENT_MANAGER` explicitly **rejected** for line heads |
 | **ACCESS-001 stance** | Informational domain is boundary policy, not an approved code assignment |
 | **Current status** | **Defined (Reviewed)** — pending organizational ratification under WP-B1; contour rows already **rejected** for HR processing codes per §7 |
@@ -129,7 +129,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | `PD-5.1` | Кадровое решение | None defined | 1 (Director — rejected pending class) | **Ratified with Policy Debt** (WP-B3 debt) |
 | `PD-5.2` | Кадровое оформление | `HR_ENROLLMENT_MANAGER` (candidate) | 1 (HR head — pending) | Defined — not ratified |
 | `PD-5.3` | Кадровый контроль / наблюдение | None defined | 1 (Deputy admin — pending) | Defined — not ratified |
-| `PD-5.4` | Линейное информирование | None (negative boundary) | 13 (line heads — rejected) | Defined — not ratified |
+| `PD-5.4` | Линейное информирование | None (negative boundary) | 12 (line heads — rejected) | Defined — not ratified |
 
 **Contours without §5 domain assignment:** ACCESS-001 §7 pending/rejected rows for statistics, QM, finance, pharmacy, generic deputies, test contour, and non-admin titles are **not** assigned to a §5 domain in Reviewed policy. They remain in the contour matrix only — outside this domain registry until ACCESS-001 defines additional domains.
 
@@ -188,7 +188,7 @@ Governance approval table for WP-B1.
 | `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | No transitional `access_roles.code` defined. Debt **DEBT-B1-001** → resolution **WP-B3**. No runtime effect. |
 | `PD-5.2` | Кадровое оформление | **Pending ratification** | — | — | `HR_ENROLLMENT_MANAGER` candidate for `(1, 73, 86)` only after domain + row approved |
 | `PD-5.3` | Кадровый контроль / наблюдение | **Pending ratification** | — | — | No dedicated code in Reviewed policy; `(1, 78, 77)` pending |
-| `PD-5.4` | Линейное информирование | **Pending ratification** | — | — | Negative boundary; 13 line-head contours already rejected for `HR_ENROLLMENT_MANAGER` in §7 |
+| `PD-5.4` | Линейное информирование | **Pending ratification** | — | — | Negative boundary; 12 line-head §7 rows citing §5.4 already rejected for `HR_ENROLLMENT_MANAGER` |
 
 **WP-B1 status:** **Open** — 1/4 domains recorded (PD-5.1). Remaining: PD-5.2, PD-5.3, PD-5.4.
 
@@ -214,4 +214,4 @@ Governance approval table for WP-B1.
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial registry — four domains derived from ACCESS-001 §5; WP-B1 approval artifact |
-| 2026-07-04 | 0.2 | PD-5.1 → Ratified with Policy Debt; DEBT-B1-001 deferred to WP-B3; PD-5.2–PD-5.4 pending |
+| 2026-07-04 | 0.3 | PD-5.4 §7 inventory: 12 rows citing §5.4 (aligned to ACCESS-001 §7; corrects erroneous count of 13) |
