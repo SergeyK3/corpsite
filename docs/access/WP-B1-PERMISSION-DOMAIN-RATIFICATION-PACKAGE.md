@@ -192,7 +192,7 @@ Exactly **four** Permission Domains — no additional domains.
 
 **No architectural inconsistencies identified.**
 
-**Note for reviewers (not inconsistencies):** PD-5.1 and PD-5.3 lack transitional `access_roles.code` in Reviewed ACCESS-001. This is **documented policy debt** — PD-5.1 → **WP-B3**; PD-5.3 → **WP-B4** / **WP-B8** — not a conflict between domains. WP-B1 ratifies **taxonomy**; code mapping is downstream.
+**Note for reviewers (not inconsistencies):** PD-5.1 and PD-5.3 lack transitional `access_roles.code` in Reviewed ACCESS-001. This is **documented policy debt** — PD-5.1 positive class ratified **WP-B3** Session 1 (2026-07-04); transitional code debt **DEBT-B1-001** → **WP-B8**; PD-5.3 → **WP-B4** / **WP-B8** — not a conflict between domains. WP-B1 ratifies **taxonomy**; code mapping is downstream.
 
 ---
 
@@ -269,7 +269,7 @@ Governance decisions recorded during WP-B1 ratification sessions.
 
 | Domain ID | Domain | Decision | Approved by | Date | Comments |
 |-----------|--------|----------|-------------|------|----------|
-| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Transitional `access_roles.code` for кадровое решение / executive HR decision authority **not defined**. Debt resolution deferred to **WP-B3**. Director contour `(1, 78, 62)` remains without approved baseline binding. **No runtime effect.** |
+| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Positive class ratified **WP-B3** Session 1 (2026-07-04). Transitional `access_roles.code` **not defined** — **DEBT-B1-001** continues → **WP-B8**. Director contour `(1, 78, 62)` remains without approved baseline binding. **No runtime effect.** |
 | `PD-5.2` | Кадровое оформление | **Ratified** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Domain taxonomy accepted per ACCESS-001 §5.2. `HR_ENROLLMENT_MANAGER` acknowledged as **candidate** transitional code only. Contour `(1, 73, 86)` **not approved** — deferred to **WP-B4** / **WP-B7**. **No runtime effect.** |
 | `PD-5.3` | Кадровый контроль / наблюдение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Domain taxonomy accepted per ACCESS-001 §5.3. No dedicated transitional `access_roles.code`. Debt **DEBT-B1-004** → **WP-B4** / **WP-B8**. Contour `(1, 78, 77)` mapping deferred. **No runtime effect.** |
 | `PD-5.4` | Линейное информирование | **Ratified** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Boundary-only informational permission domain accepted. Twelve §7 line-head contours remain **rejected** for `HR_ENROLLMENT_MANAGER`. No positive baseline code approved. Downstream **WP-B5** / **WP-B7** as applicable. **No runtime effect.** |
@@ -282,7 +282,7 @@ Governance decisions recorded during WP-B1 ratification sessions.
 
 | Debt ID | Domain | Item | Resolution WP | Owner | Recorded | Runtime effect |
 |---------|--------|------|---------------|-------|----------|----------------|
-| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined in Reviewed ACCESS-001 | **WP-B3** | Pending assignment (HR policy owner + ops lead) | 2026-07-04 | **None** — see also **DEBT-B2-001** ([WP-B2 review §11.1](./WP-B2-BINDING-PRINCIPLES-REVIEW.md#111-policy-debt-register-wp-b2)) |
+| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined in Reviewed ACCESS-001 | **WP-B8** | Pending assignment (HR policy owner + ops lead + architecture lead) | 2026-07-04 | **Open** — disposition recorded WP-B3 Session 1, 2026-07-04 (positive class ratified; code deferred). **None** — see **DEBT-B2-001** closed ([WP-B2 review §11.1](./WP-B2-BINDING-PRINCIPLES-REVIEW.md#111-policy-debt-register-wp-b2); [WP-B3 Session 1 record](./review-board/WP-B3-SESSION-1-REVIEW-BOARD-RECORD.md)) |
 | **DEBT-B1-004** | `PD-5.3` | No dedicated transitional `access_roles.code` for HR oversight visibility; contour `(1, 78, 77)` class/code mapping deferred; transitional catalog sufficiency for missing code deferred | **WP-B4** / **WP-B8** | Pending assignment (HR policy owner + ops lead) | 2026-07-04 | **None** |
 
 ---
@@ -306,3 +306,4 @@ Governance decisions recorded during WP-B1 ratification sessions.
 | 2026-07-04 | 0.1 | Initial WP-B1 ratification package — four review sheets, consistency review, checklists, outcome template |
 | 2026-07-04 | 0.2 | PD-5.1 recorded — Ratified with Policy Debt; DEBT-B1-001 → WP-B3; PD-5.2–PD-5.4 pending; WP-B1 open |
 | 2026-07-04 | 0.3 | PD-5.2 Ratified; PD-5.3 Ratified with Policy Debt (DEBT-B1-004 → WP-B4/WP-B8); PD-5.4 Ratified; all domain checklists complete; WP-B1 open pending attestation |
+| 2026-07-04 | 0.4 | Traceability sync — DEBT-B1-001 resolution WP → WP-B8 per WP-B3 Session 1 disposition; §6 PD-5.1 comments updated |

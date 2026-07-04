@@ -53,7 +53,7 @@ All four organizational permission domains defined in ACCESS-001 §5 have comple
 
 | Domain ID | Domain | Decision | Date | Downstream (not executed by WP-B1) |
 |-----------|--------|----------|------|-------------------------------------|
-| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | 2026-07-04 | **WP-B3** |
+| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | 2026-07-04 | Positive class **WP-B3** Session 1; **DEBT-B1-001** (code) → **WP-B8** |
 | `PD-5.2` | Кадровое оформление | **Ratified** | 2026-07-04 | **WP-B4** / **WP-B7** — contour `(1, 73, 86)` remains **pending** |
 | `PD-5.3` | Кадровый контроль / наблюдение | **Ratified with Policy Debt** | 2026-07-04 | **WP-B4** / **WP-B8** — contour `(1, 78, 77)` mapping deferred |
 | `PD-5.4` | Линейное информирование | **Ratified** | 2026-07-04 | **WP-B5** / **WP-B7** — boundary-only; 12 §7 rows **rejected** for `HR_ENROLLMENT_MANAGER` |
@@ -70,7 +70,7 @@ Recorded in WP-B1 package §6.1. Open items only — no implementation authorize
 
 | Debt ID | Domain | Item | Resolution WP | Recorded |
 |---------|--------|------|---------------|----------|
-| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined | **WP-B3** | 2026-07-04 |
+| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined | **WP-B8** | 2026-07-04 (disposition WP-B3 Session 1, 2026-07-04) |
 | **DEBT-B1-004** | `PD-5.3` | No dedicated transitional `access_roles.code` for HR oversight visibility; contour `(1, 78, 77)` class/code mapping deferred; transitional catalog sufficiency deferred | **WP-B4** / **WP-B8** | 2026-07-04 |
 
 Domains ratified **without** policy debt: `PD-5.2`, `PD-5.4`.
@@ -140,3 +140,4 @@ Until all three signatures are recorded, WP-B1 **remains open** regardless of co
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial closure report — prepared, WP-B1 not closed |
+| 2026-07-04 | 0.2 | Traceability sync — DEBT-B1-001 resolution WP → WP-B8 per WP-B3 Session 1 disposition |

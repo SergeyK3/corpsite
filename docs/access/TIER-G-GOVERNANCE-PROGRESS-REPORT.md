@@ -127,7 +127,7 @@ Substantive governance work is complete for two Track B packages. Both remain **
 
 | Domain ID | Domain | Decision | Downstream (not executed by WP-B1) |
 |-----------|--------|----------|-------------------------------------|
-| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | **WP-B3** |
+| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | **WP-B8** (DEBT-B1-001 code); class ratified **WP-B3** |
 | `PD-5.2` | Кадровое оформление | **Ratified** | **WP-B4** / **WP-B7** — contour `(1, 73, 86)` remains **pending** |
 | `PD-5.3` | Кадровый контроль / наблюдение | **Ratified with Policy Debt** | **WP-B4** / **WP-B8** — contour `(1, 78, 77)` mapping deferred |
 | `PD-5.4` | Линейное информирование | **Ratified** | **WP-B5** / **WP-B7** — boundary-only; 12 §7 rows **rejected** for `HR_ENROLLMENT_MANAGER` |
@@ -138,7 +138,7 @@ Substantive governance work is complete for two Track B packages. Both remain **
 
 | Debt ID | Item | Resolution WP |
 |---------|------|---------------|
-| **DEBT-B1-001** | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined | **WP-B3** |
+| **DEBT-B1-001** | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not ratified | **WP-B8** |
 | **DEBT-B1-004** | No dedicated transitional `access_roles.code` for HR oversight visibility; contour `(1, 78, 77)` class/code mapping deferred; transitional catalog sufficiency deferred | **WP-B4** / **WP-B8** |
 
 Domains ratified **without** policy debt: `PD-5.2`, `PD-5.4`.
@@ -200,7 +200,7 @@ Signed attestation that the four-domain taxonomy is accepted as organizational v
 
 | Debt ID | Item | Resolution WP |
 |---------|------|---------------|
-| **DEBT-B2-001** | Positive **кадровое решение** permission class not defined at principles ratification; P7 **negative** prohibition (no `HR_ENROLLMENT_MANAGER` / `SYSADMIN_CABINET` substitute) ratified | **WP-B3** (cross-ref **DEBT-B1-001**) |
+| **DEBT-B2-001** | Positive **кадровое решение** permission class ratified WP-B3 Session 1, 2026-07-04 | **Closed** (was WP-B3; cross-ref **DEBT-B1-001**) |
 
 No other WP-B2 policy debt recorded.
 
@@ -221,11 +221,11 @@ Consolidated register of open policy debts recorded across WP-B1 and WP-B2. No n
 
 | Debt | Source | Resolution WP | Status |
 |------|--------|---------------|--------|
-| **DEBT-B1-001** | WP-B1 — `PD-5.1` (Кадровое решение) | **WP-B3** | **Open** — transitional `access_roles.code` for executive HR decision authority not defined |
+| **DEBT-B1-001** | WP-B1 — `PD-5.1` (Кадровое решение) | **WP-B8** | **Open** — transitional `access_roles.code` not ratified; disposition WP-B3 Session 1, 2026-07-04 |
 | **DEBT-B1-004** | WP-B1 — `PD-5.3` (Кадровый контроль / наблюдение) | **WP-B4** / **WP-B8** | **Open** — no dedicated transitional code; contour `(1, 78, 77)` class/code mapping deferred |
-| **DEBT-B2-001** | WP-B2 — P7 (principles layer) | **WP-B3** | **Open** — positive кадровое решение class deferred; negative prohibition ratified (see DEBT-B1-001) |
+| **DEBT-B2-001** | WP-B2 — P7 (principles layer) | — | **Closed** — positive кадровое решение class ratified WP-B3 Session 1, 2026-07-04 (cross-ref **DEBT-B1-001**) |
 
-**Note:** DEBT-B2-001 and DEBT-B1-001 describe the same organizational gap from different governance layers (principles vs domain taxonomy). Both resolve in **WP-B3**.
+**Note:** DEBT-B2-001 and DEBT-B1-001 described one organizational gap at two governance layers. WP-B3 Session 1 closed DEBT-B2-001 (positive class) and continued DEBT-B1-001 (transitional code) → **WP-B8**.
 
 ---
 
@@ -413,7 +413,7 @@ Both packages recorded policy debts where positive class definitions were intent
 | **Track B governance** | WP-B3, WP-B4, WP-B5, WP-B6 (conditional), WP-B7, WP-B8 |
 | **Cross-track** | WP-X1 (shared contours), WP-X2 (ACCESS-001 **Approved**), WP-X3 (AC3) |
 | **Track A** | WP-A1 through WP-A8 (ACCESS-002 — parallel; does not block OPS-030) |
-| **Open policy debts** | DEBT-B1-001, DEBT-B1-004, DEBT-B2-001 — all with assigned resolution work packages |
+| **Open policy debts** | DEBT-B1-001 → **WP-B8**; DEBT-B1-004 → **WP-B4** / **WP-B8** (DEBT-B2-001 **closed** WP-B3 Session 1) |
 
 ### Why is implementation still blocked?
 
@@ -452,3 +452,4 @@ Until superseded by a newer Tier G report, this document shall be considered the
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial Tier G governance progress report — program management checkpoint after WP-B1 and WP-B2 substantive completion |
 | 2026-07-04 | 0.2 | Added §11 Governance Baseline (Current) — authoritative program snapshot declaration |
+| 2026-07-04 | 0.3 | Traceability sync — §4 policy debt register: DEBT-B2-001 closed; DEBT-B1-001 → WP-B8 per WP-B3 Session 1 disposition |

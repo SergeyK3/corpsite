@@ -63,8 +63,8 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | **Not the same as** | HR document preparation; enrollment execution; `HR_ENROLLMENT_MANAGER`; `SYSADMIN_CABINET`; management visibility (ACCESS-002); line informational domain (§5.4) |
 | **Related contours** | `(1, 78, 62)` — Директор — **rejected** for `SYSADMIN_CABINET`; requires this domain if executive baseline is ever approved (ACCESS-001 §7) |
 | **Related access_roles** | **None defined.** Separate decision/approval permission class **not modeled** in Reviewed ACCESS-001. `HR_ENROLLMENT_MANAGER` **must not** represent this class. `SYSADMIN_CABINET` **rejected** for Director per P4/P5/P7 |
-| **ACCESS-001 stance** | Policy debt — domain defined; transitional `access_roles.code` **not** assigned |
-| **Current status** | **Ratified with Policy Debt** — 2026-07-04 (WP-B1). No transitional `access_roles.code` defined; debt resolution → **WP-B3**. No approved contour binding. **No runtime effect.** |
+| **ACCESS-001 stance** | Positive organizational permission class ratified **WP-B3** Session 1 (2026-07-04); transitional `access_roles.code` **not** assigned — **DEBT-B1-001** → **WP-B8** |
+| **Current status** | **Ratified with Policy Debt** — domain taxonomy WP-B1 (2026-07-04); positive class **WP-B3** Session 1 (2026-07-04). No transitional `access_roles.code`; **DEBT-B1-001** → **WP-B8**. Director contour `(1, 78, 62)` **rejected** pending code mapping. **No runtime effect.** |
 
 ---
 
@@ -126,7 +126,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 
 | Domain ID | Name | Related access_roles (Reviewed) | §7 contours explicitly linked | Current status |
 |-----------|------|--------------------------------|--------------------------------|----------------|
-| `PD-5.1` | Кадровое решение | None defined | 1 (Director — rejected pending class) | **Ratified with Policy Debt** (WP-B3 debt) |
+| `PD-5.1` | Кадровое решение | None defined | 1 (Director — rejected pending code mapping) | **Ratified with Policy Debt** (class WP-B3; code → WP-B8) |
 | `PD-5.2` | Кадровое оформление | `HR_ENROLLMENT_MANAGER` (candidate) | 1 (HR head — pending) | **Ratified** (WP-B4 / WP-B7) |
 | `PD-5.3` | Кадровый контроль / наблюдение | None defined | 1 (Deputy admin — pending) | **Ratified with Policy Debt** (WP-B4 / WP-B8) |
 | `PD-5.4` | Линейное информирование | None (negative boundary) | 12 (line heads — rejected) | **Ratified** (WP-B5 / WP-B7) |
@@ -185,7 +185,7 @@ Governance approval table for WP-B1.
 
 | Domain ID | Domain | Policy status | Approved by | Approval date | Notes |
 |-----------|--------|---------------|-------------|---------------|-------|
-| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | No transitional `access_roles.code` defined. Debt **DEBT-B1-001** → resolution **WP-B3**. No runtime effect. |
+| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Positive class ratified **WP-B3** Session 1 (2026-07-04). No transitional `access_roles.code`. **DEBT-B1-001** → **WP-B8**. No runtime effect. |
 | `PD-5.2` | Кадровое оформление | **Ratified** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | `HR_ENROLLMENT_MANAGER` candidate only. Contour `(1, 73, 86)` **pending** — **WP-B4** / **WP-B7**. No runtime effect. |
 | `PD-5.3` | Кадровый контроль / наблюдение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Debt **DEBT-B1-004** → **WP-B4** / **WP-B8**. Contour `(1, 78, 77)` mapping deferred. No runtime effect. |
 | `PD-5.4` | Линейное информирование | **Ratified** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Boundary-only domain. Twelve §7 line-head rows **rejected** for `HR_ENROLLMENT_MANAGER`. **WP-B5** / **WP-B7** as applicable. No runtime effect. |
@@ -217,3 +217,4 @@ Governance approval table for WP-B1.
 | 2026-07-04 | 0.2 | PD-5.1 → Ratified with Policy Debt; DEBT-B1-001 deferred to WP-B3; PD-5.2–PD-5.4 pending |
 | 2026-07-04 | 0.3 | PD-5.4 §7 inventory: 12 rows citing §5.4 (aligned to ACCESS-001 §7; corrects erroneous count of 13) |
 | 2026-07-04 | 0.4 | PD-5.2 Ratified; PD-5.3 Ratified with Policy Debt (DEBT-B1-004); PD-5.4 Ratified — WP-B1 Sessions 2–4 |
+| 2026-07-04 | 0.5 | Traceability sync — PD-5.1 positive class WP-B3 Session 1; DEBT-B1-001 → WP-B8 |
