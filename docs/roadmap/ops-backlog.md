@@ -401,11 +401,13 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 
 **Deliverables (TODO):**
 
-- Complete §4 matrix review (Draft → Reviewed → Approved)
-- Approve initial 2.6b candidates (`HR_ENROLLMENT_MANAGER` on HR head and DEP-admin deputy contours) or reject/adjust
+- Ratify §3 **permission classes** (кадровое решение / оформление / контроль / линейное информирование) and map to `access_roles` or future codes
+- Complete §5 matrix review (Draft → Reviewed → Approved)
+- Resolve pending class for HR head `(73, 86)` and deputy admin `(78, 77)` — **no `approved` rows until class + code agreed**
+- Define separate **кадровое решение** model for Director (not `HR_ENROLLMENT_MANAGER`, not `SYSADMIN_CABINET`)
 - Satisfy ADR-053 AC3 ops mapping annex when document reaches **Approved**
 
-**Blocks:** [OPS-030](#ops-030--permission-template-contour-binding-phase-26b) — execution forbidden until ACCESS-001 is **Approved** and rows have `policy_status=approved`.
+**Blocks:** [OPS-030](#ops-030--permission-template-contour-binding-phase-26b) — execution forbidden until ACCESS-001 defines permission classes, reaches **Approved**, and rows have `policy_status=approved`.
 
 ---
 
@@ -427,7 +429,7 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 
 **Gates:**
 
-1. [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) — document **Approved**; only `policy_status=approved` rows may be inserted.
+1. [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) — §3 permission classes defined; document **Approved**; only `policy_status=approved` rows may be inserted.
 2. [ADR-053 AC3](../adr/ADR-053-permission-template-binding-model.md#11-acceptance-criteria-ratified) — ops mapping published and approved before production data backfill.
 
 ---
