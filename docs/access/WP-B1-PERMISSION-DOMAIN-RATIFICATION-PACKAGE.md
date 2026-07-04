@@ -2,9 +2,9 @@
 
 ## Status
 
-**Prepared (governance)** — 2026-07-04
+**In progress (governance)** — 2026-07-04
 
-Preparatory package for **WP-B1 — Permission Domain Taxonomy** under [ACCESS-RATIFICATION-PROGRAM](./ACCESS-RATIFICATION-PROGRAM.md) (Tier G, Phase G1). **No approvals recorded.** **No runtime effect.**
+Package for **WP-B1 — Permission Domain Taxonomy** under [ACCESS-RATIFICATION-PROGRAM](./ACCESS-RATIFICATION-PROGRAM.md) (Tier G, Phase G1). **PD-5.1 recorded** — Ratified with Policy Debt (2026-07-04). PD-5.2–PD-5.4 pending. **WP-B1 not closed.** **No runtime effect.**
 
 | Field | Value |
 |-------|-------|
@@ -198,18 +198,20 @@ Exactly **four** Permission Domains — no additional domains.
 
 ## 5. Ratification checklist
 
-Complete one checklist per domain during governance session. **All items unchecked.**
+Complete one checklist per domain during governance session.
 
 ### PD-5.1 — Кадровое решение
 
+**Recorded:** 2026-07-04 — **Ratified with Policy Debt** (see §6, §6.1).
+
 | # | Item | Decision |
 |---|------|----------|
-| 1 | Organizational purpose accepted | ☐ |
-| 2 | Boundary accepted (exclusions list) | ☐ |
-| 3 | Relationship with ACCESS-002 accepted | ☐ |
-| 4 | Related contours accepted `(1, 78, 62)` stance | ☐ |
-| 5 | Related access_roles accepted (none defined; rejections affirmed) | ☐ |
-| 6 | Ready for Approved | ☐ |
+| 1 | Organizational purpose accepted | ☑ |
+| 2 | Boundary accepted (exclusions list) | ☑ |
+| 3 | Relationship with ACCESS-002 accepted | ☑ |
+| 4 | Related contours accepted `(1, 78, 62)` stance | ☑ |
+| 5 | Related access_roles accepted (none defined; rejections affirmed) | ☑ |
+| 6 | Ready for Approved | ☑ |
 
 ### PD-5.2 — Кадровое оформление
 
@@ -248,27 +250,33 @@ Complete one checklist per domain during governance session. **All items uncheck
 
 | # | Item | Decision |
 |---|------|----------|
-| 1 | All four domain checklists complete | ☐ |
-| 2 | Cross-domain consistency review accepted (§4) | ☐ |
-| 3 | Ratification outcome recorded (§6) | ☐ |
+| 1 | All four domain checklists complete | ☐ (1/4 — PD-5.1 only) |
+| 2 | Cross-domain consistency review accepted (§4) | ☑ |
+| 3 | Ratification outcome recorded (§6) | ☐ (1/4 — PD-5.1 only) |
 | 4 | WP-B1 closed — attestation signed by HR policy owner + ops lead + architecture lead | ☐ |
 
 ---
 
-## 6. Ratification outcome template
+## 6. Ratification outcome
 
-Record governance decisions in this table during the ratification session. **Do not pre-fill.**
+Governance decisions recorded during WP-B1 ratification sessions.
 
 | Domain ID | Domain | Decision | Approved by | Date | Comments |
 |-----------|--------|----------|-------------|------|----------|
-| `PD-5.1` | Кадровое решение | | | | |
-| `PD-5.2` | Кадровое оформление | | | | |
-| `PD-5.3` | Кадровый контроль / наблюдение | | | | |
-| `PD-5.4` | Линейное информирование | | | | |
+| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | Transitional `access_roles.code` for кадровое решение / executive HR decision authority **not defined**. Debt resolution deferred to **WP-B3**. Director contour `(1, 78, 62)` remains without approved baseline binding. **No runtime effect.** |
+| `PD-5.2` | Кадровое оформление | Pending | — | — | |
+| `PD-5.3` | Кадровый контроль / наблюдение | Pending | — | — | |
+| `PD-5.4` | Линейное информирование | Pending | — | — | |
 
-**Decision values (suggested):** `Ratified` / `Ratified with debt` / `Deferred` / `Rejected`
+**Decision values (suggested):** `Ratified` / `Ratified with Policy Debt` / `Deferred` / `Rejected`
 
-**WP-B1 closure rule:** all four domains reach `Ratified` or `Ratified with debt` (debt recorded in comments, owner assigned) — per [ACCESS-RATIFICATION-PROGRAM](./ACCESS-RATIFICATION-PROGRAM.md) WP-B1 approval output.
+**WP-B1 closure rule:** all four domains reach `Ratified` or `Ratified with Policy Debt` (debt recorded in §6.1) — per [ACCESS-RATIFICATION-PROGRAM](./ACCESS-RATIFICATION-PROGRAM.md) WP-B1 approval output. **WP-B1 remains open** (3/4 domains pending).
+
+### 6.1 Policy debt register (WP-B1)
+
+| Debt ID | Domain | Item | Resolution WP | Owner | Recorded | Runtime effect |
+|---------|--------|------|---------------|-------|----------|----------------|
+| **DEBT-B1-001** | `PD-5.1` | Transitional `access_roles.code` for кадровое решение / executive HR decision authority not defined in Reviewed ACCESS-001 | **WP-B3** | Pending assignment (HR policy owner + ops lead) | 2026-07-04 | **None** |
 
 ---
 
@@ -289,3 +297,4 @@ Record governance decisions in this table during the ratification session. **Do 
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial WP-B1 ratification package — four review sheets, consistency review, checklists, outcome template |
+| 2026-07-04 | 0.2 | PD-5.1 recorded — Ratified with Policy Debt; DEBT-B1-001 → WP-B3; PD-5.2–PD-5.4 pending; WP-B1 open |

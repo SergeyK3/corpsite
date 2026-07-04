@@ -64,7 +64,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 | **Related contours** | `(1, 78, 62)` — Директор — **rejected** for `SYSADMIN_CABINET`; requires this domain if executive baseline is ever approved (ACCESS-001 §7) |
 | **Related access_roles** | **None defined.** Separate decision/approval permission class **not modeled** in Reviewed ACCESS-001. `HR_ENROLLMENT_MANAGER` **must not** represent this class. `SYSADMIN_CABINET` **rejected** for Director per P4/P5/P7 |
 | **ACCESS-001 stance** | Policy debt — domain defined; transitional `access_roles.code` **not** assigned |
-| **Current status** | **Defined (Reviewed)** — pending organizational ratification under WP-B1; no approved contour binding |
+| **Current status** | **Ratified with Policy Debt** — 2026-07-04 (WP-B1). No transitional `access_roles.code` defined; debt resolution → **WP-B3**. No approved contour binding. **No runtime effect.** |
 
 ---
 
@@ -126,7 +126,7 @@ Four domains are defined in ACCESS-001 §5. §5.5 describes mapping procedure on
 
 | Domain ID | Name | Related access_roles (Reviewed) | §7 contours explicitly linked | Current status |
 |-----------|------|--------------------------------|--------------------------------|----------------|
-| `PD-5.1` | Кадровое решение | None defined | 1 (Director — rejected pending class) | Defined — not ratified |
+| `PD-5.1` | Кадровое решение | None defined | 1 (Director — rejected pending class) | **Ratified with Policy Debt** (WP-B3 debt) |
 | `PD-5.2` | Кадровое оформление | `HR_ENROLLMENT_MANAGER` (candidate) | 1 (HR head — pending) | Defined — not ratified |
 | `PD-5.3` | Кадровый контроль / наблюдение | None defined | 1 (Deputy admin — pending) | Defined — not ratified |
 | `PD-5.4` | Линейное информирование | None (negative boundary) | 13 (line heads — rejected) | Defined — not ratified |
@@ -181,16 +181,18 @@ ACCESS-002          ACCESS-001 §5 + this registry          ADR-053
 
 ## 5. Ratification status
 
-Governance approval table for WP-B1. **Approval fields empty** until organizational ratification session.
+Governance approval table for WP-B1.
 
 | Domain ID | Domain | Policy status | Approved by | Approval date | Notes |
 |-----------|--------|---------------|-------------|---------------|-------|
-| `PD-5.1` | Кадровое решение | **Pending ratification** | — | — | No transitional `access_roles.code` in Reviewed ACCESS-001; WP-B3 tracks decision-class policy debt |
+| `PD-5.1` | Кадровое решение | **Ratified with Policy Debt** | Pending signature (HR policy owner + ops lead + architecture lead) | 2026-07-04 | No transitional `access_roles.code` defined. Debt **DEBT-B1-001** → resolution **WP-B3**. No runtime effect. |
 | `PD-5.2` | Кадровое оформление | **Pending ratification** | — | — | `HR_ENROLLMENT_MANAGER` candidate for `(1, 73, 86)` only after domain + row approved |
 | `PD-5.3` | Кадровый контроль / наблюдение | **Pending ratification** | — | — | No dedicated code in Reviewed policy; `(1, 78, 77)` pending |
 | `PD-5.4` | Линейное информирование | **Pending ratification** | — | — | Negative boundary; 13 line-head contours already rejected for `HR_ENROLLMENT_MANAGER` in §7 |
 
-**WP-B1 completion signal:** all four rows reach **Ratified** with approver signatures recorded; policy status may then read **Ratified** (registry) pending ACCESS-001 document-level **Approved** (WP-X2).
+**WP-B1 status:** **Open** — 1/4 domains recorded (PD-5.1). Remaining: PD-5.2, PD-5.3, PD-5.4.
+
+**WP-B1 completion signal:** all four rows reach **Ratified** or **Ratified with Policy Debt** with approver signatures recorded; then ACCESS-001 document-level **Approved** remains separate (WP-X2).
 
 ---
 
@@ -212,3 +214,4 @@ Governance approval table for WP-B1. **Approval fields empty** until organizatio
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-07-04 | 0.1 | Initial registry — four domains derived from ACCESS-001 §5; WP-B1 approval artifact |
+| 2026-07-04 | 0.2 | PD-5.1 → Ratified with Policy Debt; DEBT-B1-001 deferred to WP-B3; PD-5.2–PD-5.4 pending |
