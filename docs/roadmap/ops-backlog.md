@@ -10,6 +10,8 @@
 | **Telegram bot (OPS-007 series)** | **Complete** through OPS-007b VPS validation |
 | **Operations UI localization (OPS-008)** | **Complete** — R2.5g Identity Operations panel |
 | **Regular tasks catch-up & run journal (OPS-009 program)** | **Complete** — through OPS-009.34 (monthly E2E verified on prod) |
+| **Organizational Policy Layer (ACCESS-001 / ACCESS-002)** | **Architecture design complete** — both **Reviewed**; active phase: [Policy Ratification](../access/ACCESS-RATIFICATION-PROGRAM.md); runtime blocked until **Approved** |
+| **Phase 2.6b / OPS-030** | **Blocked** — ACCESS-001 **Approved** + ADR-053 AC3; Phase 2.6a complete |
 
 ---
 
@@ -33,8 +35,10 @@
 | [OPS-019](#ops-019--catch-up-filter-observability) | Catch-up Filter Observability | Low | **Backlog** |
 | [OPS-021](#ops-021--catch-up-form-ux-periodicity-first-layout) | Catch-up Form UX — Periodicity-first | Medium | **Complete** |
 | [OPS-026.5](#ops-0265--unified-system-health-dashboard) | Unified System Health Dashboard | Medium | **Backlog** |
-| [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) | Organizational Permission Matrix (Phase 2.6b policy) | High | **Draft** |
-| [OPS-030](../ops/OPS-030-permission-template-contour-binding.md) | Permission Template Contour Binding (Phase 2.6b) | High | **Blocked (ACCESS-001 + AC3)** |
+| [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md) | Policy Ratification Program (ACCESS-001 / ACCESS-002) | High | **Active (planning)** |
+| [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) | Organizational Permission Matrix (Phase 2.6b policy) | High | **Reviewed** |
+| [ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md) | Organizational Management Authority Model (future scope policy) | Medium | **Reviewed** |
+| [OPS-030](../ops/OPS-030-permission-template-contour-binding.md) | Permission Template Contour Binding (Phase 2.6b) | High | **Blocked (ACCESS-001 Approved + AC3)** |
 | [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md) | Org-unit allowed positions (Future ADR) | Medium | **Proposed** |
 
 ---
@@ -391,29 +395,90 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 
 ---
 
+## Architecture milestones
+
+### Position Cabinet — Organizational Policy Layer (2026-07-04)
+
+**Milestone:** Position Cabinet architectural baseline complete; Organizational Policy Layer architecture review complete.
+
+**Active governance phase:** [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md) — Reviewed → Approved for ACCESS-001 and ACCESS-002.
+
+| Document | Status | Role |
+|----------|--------|------|
+| [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md) | **Active (planning)** | Ratification work packages, approval sequence, completion criteria |
+| [ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md) | **Reviewed** | Management responsibilities; hierarchy; subtree; derived authorities |
+| [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) | **Reviewed** | Organizational permission domains; HR operational classes; `access_roles` binding policy |
+
+**Outcome:**
+
+- Accepted architecture (ARCH-001, ADR-050 / ADR-051 / ADR-053) unchanged; **Architecture Freeze** remains in effect.
+- **Architecture Design** phase for the Organizational Policy Layer is **closed**.
+- **Policy Ratification** is the next active governance phase — see [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md).
+- **Runtime implementation remains blocked** until policy reaches **Approved** (ACCESS-001 **Approved** required for Phase 2.6b / [OPS-030](../ops/OPS-030-permission-template-contour-binding.md)).
+- [ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md) feeds a **separate** future management-authority program; **Approved** ACCESS-002 does **not** unblock Phase 2.6b or OPS-030.
+- Phase 2.6a complete; Phase 2.6b and OPS-030 **remain blocked** (ACCESS-001 **Approved** + [ADR-053 AC3](../adr/ADR-053-permission-template-binding-model.md#11-acceptance-criteria-ratified)).
+
+---
+
 ### ACCESS-001 — Organizational Permission Matrix (Phase 2.6b policy)
 
-**Статус:** **Draft** — 2026-07-04
+**Статус:** **Reviewed** — 2026-07-04
 
-**Scope:** Architecture / organizational policy only. Defines which Position Cabinet contours may receive baseline `access_roles` via `permission_template_contour_rule`. **No runtime effect by itself.**
+**Scope:** Architecture / organizational policy only. Defines organizational permission domains, HR operational permission classes, and approved `access_roles` baseline binding policy. **No runtime effect by itself.** **Reviewed** does not unblock OPS-030 or Phase 2.6b.
 
 **Document:** [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md)
 
-**Deliverables (TODO):**
+**Program:** [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md) — Track B work packages (WP-B1–B8, WP-X1–X3).
 
-- Ratify §3 **permission classes** (кадровое решение / оформление / контроль / линейное информирование) and map to `access_roles` or future codes
-- Complete §5 matrix review (Draft → Reviewed → Approved)
-- Resolve pending class for HR head `(73, 86)` and deputy admin `(78, 77)` — **no `approved` rows until class + code agreed**
+**Deliverables (TODO — Policy Ratification):**
+
+- Stakeholder review of §5 **permission domains** and §7 matrix (Reviewed → Approved)
+- Ratify permission domains (кадровое решение / оформление / контроль / informational boundary) and map to `access_roles` or future codes
+- Resolve pending rows for HR head `(73, 86)` and deputy admin `(78, 77)` — **no `approved` rows until class + code agreed**
 - Define separate **кадровое решение** model for Director (not `HR_ENROLLMENT_MANAGER`, not `SYSADMIN_CABINET`)
 - Satisfy ADR-053 AC3 ops mapping annex when document reaches **Approved**
 
-**Blocks:** [OPS-030](#ops-030--permission-template-contour-binding-phase-26b) — execution forbidden until ACCESS-001 defines permission classes, reaches **Approved**, and rows have `policy_status=approved`.
+**Blocks:** [OPS-030](#ops-030--permission-template-contour-binding-phase-26b) — execution forbidden until ACCESS-001 reaches **Approved** and rows have `policy_status=approved`.
+
+**Does not block:** [ACCESS-002](#access-002--organizational-management-authority-model) or future management-authority implementation — orthogonal policy track.
+
+---
+
+### ACCESS-002 — Organizational Management Authority Model
+
+**Статус:** **Reviewed** — 2026-07-04
+
+**Scope:** Architecture / organizational policy only. Defines **management authority classes** (visibility, task management, execution control, analytics, delegation), **hierarchy model**, and **subtree management principle** for Position Cabinets. **No runtime effect by itself.**
+
+**Document:** [ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md)
+
+**Program:** [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md) — Track A work packages (WP-A1–A8); prerequisite for future management-authority implementation only; **does not** unblock Phase 2.6b or OPS-030.
+
+**Deliverables (TODO — Policy Ratification):**
+
+- Stakeholder review toward **Approved** (Reviewed → Approved)
+- Ratify §3 **management responsibilities** and §6 **subtree rules**
+- Build future contour → responsibility → subtree matrix (mirror ACCESS-001 §7 — not started)
+- Define delegation policy (§3.5) and executive vs line-head class combinations (§3.6)
+- Align with ADR-010 reporting vertical and ADR-042 E1 visibility migration path
+
+**Prerequisite for:** Future management-authority implementation (Management Scope Resolver, legacy `org_unit_managers` / `users.unit_id` retirement, Cabinet-scoped task and analytics boundaries). **No OPS runbook yet.**
+
+**Does not block:** [ACCESS-001](#access-001--organizational-permission-matrix-phase-26b-policy) or [OPS-030](#ops-030--permission-template-contour-binding-phase-26b) — baseline `access_roles` binding and Phase 2.6b contour execution remain on the ACCESS-001 track only.
+
+**Related (orthogonal):**
+
+| Track | Document | Concern |
+|-------|----------|---------|
+| Baseline access permissions | [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) | `access_roles` → Template contour binding |
+| Phase 2.6b data execution | [OPS-030](../ops/OPS-030-permission-template-contour-binding.md) | Insert approved ACCESS-001 rows only |
+| Management scope policy | **ACCESS-002** (this item) | Subtree governance classes — future implementation |
 
 ---
 
 ### OPS-030 — Permission Template Contour Binding (Phase 2.6b)
 
-**Статус:** **Blocked (ACCESS-001 Draft + ADR-053 AC3 Pending)** — 2026-07-04
+**Статус:** **Blocked (ACCESS-001 Reviewed — Approved required + ADR-053 AC3 Pending)** — 2026-07-04
 
 **Scope:** Ops data publication only. Phase 2.6a engineering (schema, resolver read-path, backfill mechanism) is accepted separately; **production binding is not complete** until OPS-030 executes.
 
@@ -427,10 +492,12 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 
 **Runbook placeholder:** [OPS-030](../ops/OPS-030-permission-template-contour-binding.md)
 
-**Gates:**
+**Gates:** Governed by [ACCESS-RATIFICATION-PROGRAM](../access/ACCESS-RATIFICATION-PROGRAM.md) (WP-X3). Runtime remains blocked until all gates close.
 
-1. [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) — §3 permission classes defined; document **Approved**; only `policy_status=approved` rows may be inserted.
+1. [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) — §5 permission domains defined; document **Approved**; only `policy_status=approved` rows may be inserted. **Reviewed** alone does not satisfy this gate.
 2. [ADR-053 AC3](../adr/ADR-053-permission-template-binding-model.md#11-acceptance-criteria-ratified) — ops mapping published and approved before production data backfill.
+
+[ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md) **Approved** is **not** a gate for OPS-030 or Phase 2.6b.
 
 ---
 
@@ -461,3 +528,6 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 | POST-OPS review; OPS-015–019 added to backlog | 2026-06-25 |
 | OPS-021 catch-up form periodicity-first layout | 2026-06-25 |
 | OPS-026.5 Unified System Health Dashboard added to backlog | 2026-06-25 |
+| ACCESS-002 Organizational Management Authority Model advanced to Reviewed | 2026-07-04 |
+| ACCESS-001 Organizational Permission Matrix advanced to Reviewed | 2026-07-04 |
+| Position Cabinet Organizational Policy Layer — architecture review complete | 2026-07-04 |
