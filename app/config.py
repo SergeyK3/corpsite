@@ -27,6 +27,11 @@ def is_prod_env() -> bool:
     return env("APP_ENV", "dev").lower() in {"prod", "production"}
 
 
+def cabinet_access_shadow_mode_enabled() -> bool:
+    """ADR-051 Phase 2.4 — parallel cabinet resolver diagnostics (default OFF)."""
+    return env("CABINET_ACCESS_SHADOW_MODE", "false").lower() in {"1", "true", "yes", "on"}
+
+
 def cors_allowed_origins() -> List[str]:
     raw = env("CORS_ALLOWED_ORIGINS")
     if raw:

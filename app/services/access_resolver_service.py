@@ -274,6 +274,14 @@ def resolve_effective_access(user_id: int) -> Dict[str, Any]:
         result["employee_id"] = employee_id
         result["person_id"] = person_id
         result["subjects"] = {k: sorted(v) for k, v in subjects.items()}
+
+        from app.services.cabinet_access_shadow_service import maybe_run_cabinet_access_shadow
+
+        maybe_run_cabinet_access_shadow(
+            user_id=int(user_id),
+            legacy_result=result,
+            conn=conn,
+        )
         return result
 
 
