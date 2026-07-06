@@ -39,6 +39,7 @@
 | [ACCESS-001](../access/ACCESS-001-organizational-permission-matrix.md) | Organizational Permission Matrix (Phase 2.6b policy) | High | **Reviewed** |
 | [ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md) | Organizational Management Authority Model (future scope policy) | Medium | **Reviewed** |
 | [OPS-030](../ops/OPS-030-permission-template-contour-binding.md) | Permission Template Contour Binding (Phase 2.6b) | High | **Blocked (ACCESS-001 Approved + AC3)** |
+| [DEBT-DATA-001](../ops/DEBT-DATA-001-adr042-b23-backfill-defect.md) | ADR-042 B2.3 backfill data integrity defect | High | **Registered** — repair **Blocked** until Accepted |
 | [ADR-046](../adr/ADR-046-org-unit-allowed-positions.md) | Org-unit allowed positions (Future ADR) | Medium | **Proposed** |
 
 ---
@@ -498,6 +499,29 @@ Reference: [ADR-044 R2.5 Operations Architecture](../adr/ADR-044-r2.5-operations
 2. [ADR-053 AC3](../adr/ADR-053-permission-template-binding-model.md#11-acceptance-criteria-ratified) — ops mapping published and approved before production data backfill.
 
 [ACCESS-002](../access/ACCESS-002-organizational-management-authority-model.md) **Approved** is **not** a gate for OPS-030 or Phase 2.6b.
+
+---
+
+### DEBT-DATA-001 — ADR-042 B2.3 Backfill Data Integrity Defect
+
+**Статус:** **Registered** — 2026-07-06. Repair **Blocked** until **Accepted**.
+
+**Класс:** Implementation Data Debt (не Policy Debt).
+
+**Deliverables:**
+
+- ☑ Investigation — [WP-B4-BACKFILL-DATA-DEFECT-INVESTIGATION.md](../access/WP-B4-BACKFILL-DATA-DEFECT-INVESTIGATION.md)
+- ☑ Architectural decision — [WP-B4-DATA-DEBT-ARCHITECTURAL-DECISION.md](../access/WP-B4-DATA-DEBT-ARCHITECTURAL-DECISION.md)
+- ☑ Official registration — [DEBT-DATA-001](../ops/DEBT-DATA-001-adr042-b23-backfill-defect.md)
+- ☐ Acceptance signatures (ops + architecture + HR owner)
+- ☐ **OPS-031** unified repair runbook (design) — **blocked**
+- ☐ OPS-031 production execution — **blocked**
+- ☐ Post-repair inventory — **blocked**
+- ☐ [Repair validation report](../ops/DEBT-DATA-001-REPAIR-VALIDATION-REPORT.md) — **blocked**
+
+**Gates:** DEBT-DATA-001 **Accepted** → OPS-031 design → ops window → **Execution** → post-repair inventory → [repair validation report](../ops/DEBT-DATA-001-REPAIR-VALIDATION-REPORT.md) → **Closed**.
+
+**Does not block:** ACCESS ratification track; OPS-030 governance preparation; legacy RBAC pilot.
 
 ---
 
