@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user
+from app.directory.rbac import require_personnel_admin_or_403
 from app.security.directory_scope import is_privileged as _is_privileged
 from app.services.directory_service import list_personnel_events as svc_list_personnel_events
 from app.services.professional_documents_service import (
@@ -40,8 +41,7 @@ def list_personnel_events_register(
 ) -> Dict[str, Any]:
     """Track B: organization-wide personnel event register."""
     try:
-        if not _is_privileged(user):
-            raise HTTPException(status_code=403, detail="Forbidden.")
+        require_personnel_admin_or_403(user)
 
         return call_service(
             svc_list_personnel_events,

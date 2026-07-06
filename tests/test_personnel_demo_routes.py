@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
+from tests.test_adr042_role_targeted_grants import _db_available
 
 
 @pytest.fixture
@@ -248,6 +249,54 @@ def test_list_personnel_events_unprivileged_returns_403(client, seed):
         headers=auth_headers(seed["executor_user_id"]),
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_list_personnel_events_personnel_admin_role_grant(client, seed):
+    from app.services.access_grant_service import grant_access
+    from tests.test_adr042_role_targeted_grants import (
+        _cleanup,
+        _create_user,
+        _get_access_role_id,
+        _require_b2,
+        _role_target_type_allowed,
+        create_role,
+    )
+
+    _require_b2()
+    if not _role_target_type_allowed():
+        pytest.skip("Migration i8j9k0l1m2n3 not applied (ROLE target_type unavailable)")
+
+    suffix = uuid4().hex[:8]
+    grant_id: int | None = None
+    created: dict = {}
+
+    with engine.begin() as conn:
+        hr_role_id = create_role(conn, f"pytest_hr_journal_{suffix}")
+        created = _create_user(conn, seed, role_id=hr_role_id, suffix=suffix)
+        access_role_id = _get_access_role_id(conn, "HR_ENROLLMENT_MANAGER")
+
+    granted = grant_access(
+        access_role_id=access_role_id,
+        target_type="ROLE",
+        target_id=created["role_id"],
+        granted_by_user_id=int(seed["initiator_user_id"]),
+        reason="pytest personnel journal",
+    )
+    grant_id = int(granted["grant_id"])
+
+    try:
+        resp = client.get(
+            "/directory/personnel-events",
+            headers=auth_headers(created["user_id"]),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body.get("items"), list)
+    finally:
+        _cleanup(created, role_grant_ids=[grant_id] if grant_id else None)
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM public.roles WHERE role_id = :rid"), {"rid": created["role_id"]})
 
 
 def test_professional_documents_availability(client, seed):

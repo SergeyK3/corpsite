@@ -23,13 +23,28 @@ def require_privileged_or_403(user_ctx: Dict[str, Any]) -> None:
         raise HTTPException(status_code=403, detail="Forbidden.")
 
 
-def require_hr_import_admin_or_403(user_ctx: Dict[str, Any]) -> None:
-    """HR import write actions: sysadmin/privileged operator or personnel admin (ADR-045)."""
+def _require_privileged_or_personnel_admin(user_ctx: Dict[str, Any], *, detail: str) -> None:
     if _is_privileged(user_ctx):
         return
     if evaluate_personnel_admin_access(user_ctx):
         return
-    raise HTTPException(status_code=403, detail="HR import admin access required.")
+    raise HTTPException(status_code=403, detail=detail)
+
+
+def require_personnel_admin_or_403(user_ctx: Dict[str, Any]) -> None:
+    """Org-wide personnel journal and HR process reads (ADR-045)."""
+    _require_privileged_or_personnel_admin(
+        user_ctx,
+        detail="Personnel admin access required.",
+    )
+
+
+def require_hr_import_admin_or_403(user_ctx: Dict[str, Any]) -> None:
+    """HR import write actions: sysadmin/privileged operator or personnel admin (ADR-045)."""
+    _require_privileged_or_personnel_admin(
+        user_ctx,
+        detail="HR import admin access required.",
+    )
 
 
 def _apply_dept_rbac_scope(
