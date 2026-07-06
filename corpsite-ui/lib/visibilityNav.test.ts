@@ -30,10 +30,22 @@ describe("visibilityNav", () => {
     expect(shouldShowOrgUnitsPanel("/directory/staff", observerWithAssignment)).toBe(true);
   });
 
+  it("shouldShowOrgUnitsPanel keeps org tree on position cabinet routes for visibility users", () => {
+    expect(shouldShowOrgUnitsPanel("/dashboards", observerWithAssignment)).toBe(true);
+    expect(shouldShowOrgUnitsPanel("/education", observerWithAssignment)).toBe(true);
+    expect(shouldShowOrgUnitsPanel("/dashboards", observerPlain)).toBe(false);
+  });
+
   it("canAccessDirectoryRoute allows staff for visibility users only", () => {
     expect(canAccessDirectoryRoute("/directory/staff", observerPlain)).toBe(false);
     expect(canAccessDirectoryRoute("/directory/staff", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/directory/personnel/journal", observerWithAssignment)).toBe(false);
     expect(canAccessDirectoryRoute("/tasks", observerWithAssignment)).toBe(false);
+  });
+
+  it("canAccessDirectoryRoute allows position cabinet stub sections without task read access", () => {
+    expect(canAccessDirectoryRoute("/dashboards", observerWithAssignment)).toBe(true);
+    expect(canAccessDirectoryRoute("/education", observerWithAssignment)).toBe(true);
+    expect(canAccessDirectoryRoute("/dashboards", observerPlain)).toBe(true);
   });
 });

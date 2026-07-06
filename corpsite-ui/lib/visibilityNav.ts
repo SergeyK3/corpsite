@@ -2,6 +2,7 @@
 import type { MeInfo } from "./types";
 
 import { canSeeAdminShell } from "./adminNav";
+import { isPositionCabinetRoute } from "./positionCabinetNav";
 import {
   canSeeHrProcessesNav,
   canSeePersonnelDirectoryNav,
@@ -27,6 +28,13 @@ export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | un
   if (isHrProcessesRoute(pathname)) return canSeeHrProcessesNav(me);
   if (isPersonnelDirectoryRoute(pathname)) return canSeePersonnelDirectoryNav(me);
 
+  if (isPositionCabinetRoute(pathname)) {
+    if (pathname.startsWith("/tasks") && hasPersonnelVisibility(me) && !canViewPersonnelTasksReadOnly(me)) {
+      return false;
+    }
+    return true;
+  }
+
   if (!hasPersonnelVisibility(me)) return false;
 
   if (pathname.startsWith("/directory")) return true;
@@ -47,13 +55,20 @@ export function shouldShowOrgUnitsPanel(
   if (canSeeAdminShell(me)) {
     return (
       pathname.startsWith("/tasks") ||
+      pathname.startsWith("/dashboards") ||
+      pathname.startsWith("/education") ||
       pathname.startsWith("/admin/regular-tasks") ||
       pathname.startsWith("/regular-tasks") ||
       pathname.startsWith("/directory")
     );
   }
 
-  return pathname.startsWith("/tasks") || pathname.startsWith("/directory");
+  return (
+    pathname.startsWith("/tasks") ||
+    pathname.startsWith("/dashboards") ||
+    pathname.startsWith("/education") ||
+    pathname.startsWith("/directory")
+  );
 }
 
 export type VisibilityNavItem = {

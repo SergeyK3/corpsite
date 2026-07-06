@@ -140,6 +140,8 @@ export function isDirectorySidebarNavItemActive(pathname: string, item: Personne
 
 export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/tasks")) return "/tasks";
+  if (pathname.startsWith("/dashboards")) return "/dashboards";
+  if (pathname.startsWith("/education")) return "/education";
   if (pathname.startsWith("/admin/regular-tasks/catch-up")) return "/admin/regular-tasks/catch-up";
   if (pathname.startsWith("/admin/regular-tasks")) return "/admin/regular-tasks";
   if (pathname.startsWith("/regular-tasks")) return "/regular-tasks";

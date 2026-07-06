@@ -33,9 +33,12 @@ import {
 } from "@/lib/personnelNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
+import { isPositionCabinetRoute } from "@/lib/positionCabinetNav";
 import { resolveCabinetTitle } from "@/lib/userCabinetTitle";
 
 import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
+import PositionCabinetLibraryLinks from "./PositionCabinetLibraryLinks";
+import PositionCabinetNav from "./PositionCabinetNav";
 
 type NavItem = {
   href: string;
@@ -330,6 +333,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const orgTreeBasePath = useMemo(() => resolveDirectoryOrgTreeBasePath(pathname), [pathname]);
 
+  const showPositionCabinetNav = isPositionCabinetRoute(pathname);
+
+  function renderMainSection(content: React.ReactNode) {
+    return <section className="min-w-0">{content}</section>;
+  }
+
   if (isLogin) return <>{children}</>;
 
   return (
@@ -364,6 +373,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
+        {!loading && !err && showPositionCabinetNav ? (
+          <div className="mb-4 mt-2 space-y-3">
+            <PositionCabinetLibraryLinks me={me} />
+            <PositionCabinetNav />
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 text-sm text-zinc-600 dark:text-zinc-400">
             Загрузка…
@@ -385,7 +401,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {showOrgUnitsPanel ? <OrgUnitsSidebarPanel basePath={orgTreeBasePath} /> : null}
             </aside>
 
-            <section className="min-w-0">{children}</section>
+            {renderMainSection(children)}
           </div>
         ) : showPersonnelVisibility ? (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -399,15 +415,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {showOrgUnitsPanel ? <OrgUnitsSidebarPanel basePath={orgTreeBasePath} /> : null}
             </aside>
 
-            <section className="min-w-0">
-              {forbiddenNonAdminRoute ? (
+            {renderMainSection(
+              forbiddenNonAdminRoute ? (
                 <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 text-sm text-zinc-600 dark:text-zinc-400">
                   Нет доступа к этому разделу.
                 </div>
               ) : (
                 children
-              )}
-            </section>
+              ),
+            )}
           </div>
         ) : showHrDirectoryOnly ? (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -419,21 +435,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </aside>
 
-            <section className="min-w-0">{children}</section>
+            {renderMainSection(children)}
           </div>
         ) : privilegedSysadminOnly || personnelAdminStandaloneRoute ? (
-          <section className="min-w-0">{children}</section>
+          renderMainSection(children)
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            <section className="min-w-0">
-              {forbiddenNonAdminRoute ? (
+            {renderMainSection(
+              forbiddenNonAdminRoute ? (
                 <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 text-sm text-zinc-600 dark:text-zinc-400">
                   Переход к задачам…
                 </div>
               ) : (
                 children
-              )}
-            </section>
+              ),
+            )}
           </div>
         )}
       </div>

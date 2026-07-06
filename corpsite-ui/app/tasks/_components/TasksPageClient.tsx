@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { apiAuthMe, apiFetchJson, apiGetTask, apiPostTaskAction } from "@/lib/api";
 import { isAuthed, logout } from "@/lib/auth";
-import { getDepartmentDiLibraryUrl, getSectionDiLibraryUrl } from "@/lib/diLibraries";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { taskStatusLabel } from "@/lib/i18n";
 import { parseTaskIdFromSearchParams, resolveTaskDrawerCloseTarget } from "@/lib/taskNav";
@@ -859,18 +858,6 @@ export default function TasksPageClient() {
 
   const tableColSpan = showExecutorColumn ? 7 : 6;
 
-  const departmentDiLibraryUrl = React.useMemo(
-    () => getDepartmentDiLibraryUrl(me?.unit_id),
-    [me?.unit_id],
-  );
-  const sectionDiLibraryUrl = React.useMemo(
-    () => getSectionDiLibraryUrl(me?.login),
-    [me?.login],
-  );
-
-  const diLibraryButtonClassName =
-    "inline-flex h-10 items-center rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700";
-
   return (
     <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="w-full px-0 py-0">
@@ -886,65 +873,26 @@ export default function TasksPageClient() {
               </div>
             ) : null}
 
-            <div className="mb-3 flex flex-wrap items-end gap-3">
-              {departmentDiLibraryUrl ? (
-                <a
-                  href={departmentDiLibraryUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={diLibraryButtonClassName}
-                >
-                  Библиотека отдела
-                </a>
-              ) : null}
-
-              {sectionDiLibraryUrl ? (
-                <a
-                  href={sectionDiLibraryUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={diLibraryButtonClassName}
-                >
-                  Библиотека секции
-                </a>
-              ) : null}
-            </div>
-
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
-                {canSeeTeamTasks ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTaskScope("team");
-                      setOffset(0);
-                      resetDrawerState();
-                    }}
-                    className={[
-                      "rounded-md px-3 py-2 text-sm transition",
-                      taskScope === "team" ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
-                    ].join(" ")}
-                  >
-                    Все задачи
-                  </button>
-                ) : null}
-
+            {canSeeTeamTasks ? (
+              <div className="mb-3 flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 <button
                   type="button"
                   onClick={() => {
-                    setTaskScope("mine");
+                    setTaskScope((prev) => (prev === "team" ? "mine" : "team"));
                     setOffset(0);
                     resetDrawerState();
                   }}
                   className={[
                     "rounded-md px-3 py-2 text-sm transition",
-                    taskScope === "mine" ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+                    taskScope === "team"
+                      ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                      : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                   ].join(" ")}
                 >
-                  Мои задачи
+                  Все задачи
                 </button>
               </div>
-            </div>
+            ) : null}
 
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
               <div className="flex-1">
