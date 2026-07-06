@@ -873,26 +873,45 @@ export default function TasksPageClient() {
               </div>
             ) : null}
 
-            {canSeeTeamTasks ? (
-              <div className="mb-3 flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
+                {canSeeTeamTasks ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskScope("team");
+                      setOffset(0);
+                      resetDrawerState();
+                    }}
+                    className={[
+                      "rounded-md px-3 py-2 text-sm transition",
+                      taskScope === "team"
+                        ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                        : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+                    ].join(" ")}
+                  >
+                    Все задачи
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
                   onClick={() => {
-                    setTaskScope((prev) => (prev === "team" ? "mine" : "team"));
+                    setTaskScope("mine");
                     setOffset(0);
                     resetDrawerState();
                   }}
                   className={[
                     "rounded-md px-3 py-2 text-sm transition",
-                    taskScope === "team"
+                    taskScope === "mine"
                       ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
                       : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700",
                   ].join(" ")}
                 >
-                  Все задачи
+                  Мои задачи
                 </button>
               </div>
-            ) : null}
+            </div>
 
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
               <div className="flex-1">
