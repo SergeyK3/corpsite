@@ -2,9 +2,14 @@
 // Временный статический маппинг библиотек ДИ.
 // Следующий этап: справочник «Библиотеки ДИ» с UI для администрирования.
 
+const QM_DEPARTMENT_DI_LIBRARY_URL =
+  "https://drive.google.com/drive/folders/1zx-9CU3RgN0923PZsmzJRs6bvAfAGrnw?usp=sharing";
+
 const DEPARTMENT_DI_LIBRARY_BY_UNIT_ID: Record<number, string> = {
-  // ОВЭиПД / отдел экспертизы (пилот)
-  44: "https://drive.google.com/drive/folders/1zx-9CU3RgN0923PZsmzJRs6bvAfAGrnw?usp=sharing",
+  // ОВЭиПД / отдел экспертизы (pilot VPS: unit_id=44 qm_ovipd)
+  44: QM_DEPARTMENT_DI_LIBRARY_URL,
+  // Local / expanded org tree: «Отдел менеджмента и качества» (QM)
+  72: QM_DEPARTMENT_DI_LIBRARY_URL,
 };
 
 const SECTION_DI_LIBRARY_BY_LOGIN: Record<string, string> = {
