@@ -117,7 +117,13 @@ describe("personnelNav", () => {
       const items = buildVisibilityDirectoryNavItems(headWithVisibility);
       expect(findNav("Персонал", items)?.href).toBe("/directory/staff");
       expect(findNav("Кадровые процессы", items)).toBeUndefined();
+      expect(findNav("Контакты", items)?.href).toBe("/directory/contacts");
       expect(canSeeSysadminCabinetNav(headWithVisibility)).toBe(false);
+    });
+
+    it("HR head visibility shell matches sysadmin personnel split without directory extras", () => {
+      const items = buildVisibilityDirectoryNavItems(hrManager);
+      expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы"]);
     });
 
     it("nav item constants are not cross-wired", () => {

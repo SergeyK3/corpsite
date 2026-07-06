@@ -11,10 +11,16 @@ import {
   PERSONNEL_DIRECTORY_NAV_ITEM,
 } from "./personnelNav";
 
+/** ADR-042 E1 assignment / org-sidebar flag (excludes HR-only operational contour). */
+export function hasE1PersonnelVisibility(me: MeInfo | null | undefined): boolean {
+  return me?.show_org_sidebar === true || me?.has_personnel_visibility === true;
+}
+
 /** ADR-042 E1 — org sidebar / personnel directory (not full admin shell). */
 export function hasPersonnelVisibility(me: MeInfo | null | undefined): boolean {
   if (canSeeAdminShell(me)) return true;
-  return me?.show_org_sidebar === true || me?.has_personnel_visibility === true;
+  if (canSeeHrProcessesNav(me)) return true;
+  return hasE1PersonnelVisibility(me);
 }
 
 export function canViewPersonnelTasksReadOnly(me: MeInfo | null | undefined): boolean {

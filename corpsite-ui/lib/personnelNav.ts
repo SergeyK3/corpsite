@@ -104,7 +104,10 @@ export function buildVisibilityDirectoryNavItems(
     });
   }
   items.push(...buildPersonnelSidebarNavItems(me));
-  items.push(...VISIBILITY_DIRECTORY_EXTRAS);
+  // E1 visibility users keep read-only directory extras; HR operational contour does not.
+  if (me?.show_org_sidebar === true || me?.has_personnel_visibility === true) {
+    items.push(...VISIBILITY_DIRECTORY_EXTRAS);
+  }
   return items;
 }
 
