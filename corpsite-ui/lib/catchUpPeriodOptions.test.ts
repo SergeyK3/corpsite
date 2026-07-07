@@ -27,8 +27,18 @@ describe("catchUpPeriodOptions", () => {
   it("monthly options use calendar month labels", () => {
     const options = buildCatchUpPeriodOptions("monthly", FIXED_TODAY, 3);
     expect(options[0]?.preset).toBe("past_month");
-    expect(options[0]?.label).toBe("Апрель 2026");
+    expect(options[0]?.label).toBe("Май 2026");
     expect(formatMonthYearLabel(new Date(2026, 3, 1))).toBe("Апрель 2026");
+  });
+
+  it("includes completed months up to previous month for current date", () => {
+    const today = new Date(2026, 6, 7);
+    const options = buildCatchUpPeriodOptions("monthly", today, 6);
+    const labels = options.map((option) => option.label);
+
+    expect(labels).toContain("Июнь 2026");
+    expect(labels).not.toContain("Июль 2026");
+    expect(options[0]?.label).toBe("Июнь 2026");
   });
 
   it("yearly options display reporting year", () => {

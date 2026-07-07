@@ -133,11 +133,10 @@ function buildMonthlyPeriodOptions(today: Date, count: number): CatchUpPeriodOpt
 
   for (let i = 0; i < count; i += 1) {
     const runForDate = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
-    const { start } = prevMonthPeriodBounds(runForDate);
     const manualDate = toIsoDateLocal(runForDate);
     options.push({
       key: `monthly:${manualDate}`,
-      label: formatMonthYearLabel(start),
+      label: formatMonthYearLabel(runForDate),
       preset: i === 0 ? "past_month" : "manual",
       manualDate: i === 0 ? "" : manualDate,
     });

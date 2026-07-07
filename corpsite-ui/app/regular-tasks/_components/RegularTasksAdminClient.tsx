@@ -3,8 +3,17 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import OrgScopeFilter from "@/components/OrgScopeFilter";
-import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
+import RegularTaskTemplateFiltersBar from "@/components/RegularTaskTemplateFiltersBar";
+import {
+  buildRegularTasksListApiQuery,
+  clearExecutorRoleIfNotAllowed,
+  deriveExecutorRoleOptionsFromTemplates,
+  EMPTY_REGULAR_TASK_TEMPLATE_LIST_FILTERS,
+  resetRegularTaskTemplateListFilters,
+  stripLegacyOrgScopeParams,
+  stripExecutorRoleFilter,
+  type RegularTaskTemplateListFilters,
+} from "@/lib/regularTaskTemplateListFilters";
 import { apiFetchJson } from "../../../lib/api";
 import { runStatusLabel, scheduleTypeLabel, formatThrownError, translateRunIssueMessage, uiFieldLabel } from "@/lib/i18n";
 import { canEditTemplate, listStatusFilterToApi } from "@/lib/regularTaskTemplatePolicy";
@@ -268,13 +277,11 @@ export default function RegularTasksAdminClient() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const orgScope = readOrgScopeFromSearchParams(sp);
-  const orgGroupId = orgScope.org_group_id;
-  const orgUnitId = sp.get("org_unit_id") ?? "";
-  const prevOrgUnitRef = React.useRef<string>(orgUnitId);
-  const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
 
   const [activeTab, setActiveTab] = React.useState<MainTab>("templates");
+  const [listFilters, setListFilters] = React.useState<RegularTaskTemplateListFilters>(
+    EMPTY_REGULAR_TASK_TEMPLATE_LIST_FILTERS,
+  );
 
   const [templates, setTemplates] = React.useState<RegularTaskItem[]>([]);
   const [templatesTotal, setTemplatesTotal] = React.useState(0);
@@ -285,6 +292,8 @@ export default function RegularTasksAdminClient() {
   const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
   const [executorRoleOptions, setExecutorRoleOptions] = React.useState<TemplateFormExecutorRoleOption[]>([]);
   const [executorRoleLoading, setExecutorRoleLoading] = React.useState(false);
+  const [scopeRoleSourceTemplates, setScopeRoleSourceTemplates] = React.useState<RegularTaskItem[]>([]);
+  const [scopeRolesLoading, setScopeRolesLoading] = React.useState(false);
 
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<number | null>(null);
   const [selectedTemplate, setSelectedTemplate] = React.useState<RegularTaskItem | null>(null);
@@ -315,19 +324,23 @@ export default function RegularTasksAdminClient() {
   const [lastRunResult, setLastRunResult] = React.useState<RunResult | null>(null);
   const [formValidationError, setFormValidationError] = React.useState<string | null>(null);
 
-  const loadTemplates = React.useCallback(async () => {
+  const loadTemplates = React.useCallback(async (override?: {
+    filters?: RegularTaskTemplateListFilters;
+    status?: "all" | "active" | "inactive";
+  }) => {
     setTemplatesLoading(true);
     setTemplatesError(null);
 
+    const effectiveFilters = override?.filters ?? listFilters;
+    const effectiveStatus = override?.status ?? listStatusFilterToApi(activeFilter);
+
     try {
       const data = await apiFetchJson<RegularTasksListResponse>("/regular-tasks", {
-        query: {
-          status: listStatusFilterToApi(activeFilter),
+        query: buildRegularTasksListApiQuery(effectiveFilters, {
+          status: effectiveStatus,
           limit: 200,
           offset: 0,
-          org_group_id: orgGroupId ?? undefined,
-          org_unit_id: orgUnitId || undefined,
-        },
+        }),
       });
 
       const rows = normalizeTemplateList(data);
@@ -355,7 +368,36 @@ export default function RegularTasksAdminClient() {
     } finally {
       setTemplatesLoading(false);
     }
-  }, [orgGroupId, orgUnitId, selectedTemplateId, drawerOpen, drawerMode, activeFilter]);
+  }, [listFilters, selectedTemplateId, drawerOpen, drawerMode, activeFilter]);
+
+  const scopeListFilters = React.useMemo(
+    () => stripExecutorRoleFilter(listFilters),
+    [listFilters],
+  );
+
+  const filterExecutorRoleOptions = React.useMemo(
+    () => deriveExecutorRoleOptionsFromTemplates(scopeRoleSourceTemplates),
+    [scopeRoleSourceTemplates],
+  );
+
+  const loadScopeRoleSourceTemplates = React.useCallback(async () => {
+    setScopeRolesLoading(true);
+
+    try {
+      const data = await apiFetchJson<RegularTasksListResponse>("/regular-tasks", {
+        query: buildRegularTasksListApiQuery(scopeListFilters, {
+          status: listStatusFilterToApi(activeFilter),
+          limit: 200,
+          offset: 0,
+        }),
+      });
+      setScopeRoleSourceTemplates(normalizeTemplateList(data));
+    } catch {
+      setScopeRoleSourceTemplates([]);
+    } finally {
+      setScopeRolesLoading(false);
+    }
+  }, [scopeListFilters, activeFilter]);
 
   const loadOwnerUnits = React.useCallback(async () => {
     setOwnerUnitLoading(true);
@@ -414,12 +456,7 @@ export default function RegularTasksAdminClient() {
     setRunsError(null);
 
     try {
-      const data = await apiFetchJson<RegularTaskRun[]>("/regular-task-runs", {
-        query: {
-          org_group_id: orgGroupId ?? undefined,
-          org_unit_id: orgUnitId || undefined,
-        },
-      });
+      const data = await apiFetchJson<RegularTaskRun[]>("/regular-task-runs");
       const rows = Array.isArray(data) ? data : [];
       setRuns(rows);
 
@@ -438,7 +475,7 @@ export default function RegularTasksAdminClient() {
     } finally {
       setRunsLoading(false);
     }
-  }, [orgGroupId, orgUnitId, selectedRunId]);
+  }, [selectedRunId]);
 
   const loadRunItems = React.useCallback(
     async (runId: number) => {
@@ -446,12 +483,7 @@ export default function RegularTasksAdminClient() {
       setRunItemsError(null);
 
       try {
-        const data = await apiFetchJson<RunItem[]>(`/regular-task-runs/${runId}/items`, {
-          query: {
-            org_group_id: orgGroupId ?? undefined,
-            org_unit_id: orgUnitId || undefined,
-          },
-        });
+        const data = await apiFetchJson<RunItem[]>(`/regular-task-runs/${runId}/items`);
         setRunItems(Array.isArray(data) ? data : []);
       } catch (err) {
         setRunItemsError(errorText(err, "Не удалось загрузить детали запуска."));
@@ -460,44 +492,35 @@ export default function RegularTasksAdminClient() {
         setRunItemsLoading(false);
       }
     },
-    [orgGroupId, orgUnitId],
+    [],
   );
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(sp.toString());
+    if (!stripLegacyOrgScopeParams(params)) return;
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname);
+  }, [pathname, router, sp]);
 
   React.useEffect(() => {
     void Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits(), loadExecutorRoles()]);
   }, [loadTemplates, loadRuns, loadOwnerUnits, loadExecutorRoles]);
 
   React.useEffect(() => {
-    if (prevOrgUnitRef.current !== orgUnitId) {
-      prevOrgUnitRef.current = orgUnitId;
-
-      setSelectedTemplateId(null);
-      setSelectedTemplate(null);
-      setDrawerOpen(false);
-      setDrawerMode("view");
-      setDrawerError(null);
-
-      setSelectedRunId(null);
-      setRunItems([]);
-      setRunItemsError(null);
-    }
-  }, [orgUnitId]);
+    void loadScopeRoleSourceTemplates();
+  }, [loadScopeRoleSourceTemplates]);
 
   React.useEffect(() => {
-    if (prevOrgGroupRef.current !== orgGroupId) {
-      prevOrgGroupRef.current = orgGroupId;
+    setListFilters((prev) => clearExecutorRoleIfNotAllowed(prev, filterExecutorRoleOptions));
+  }, [filterExecutorRoleOptions]);
 
-      setSelectedTemplateId(null);
-      setSelectedTemplate(null);
-      setDrawerOpen(false);
-      setDrawerMode("view");
-      setDrawerError(null);
-
-      setSelectedRunId(null);
-      setRunItems([]);
-      setRunItemsError(null);
-    }
-  }, [orgGroupId]);
+  React.useEffect(() => {
+    setSelectedTemplateId(null);
+    setSelectedTemplate(null);
+    setDrawerOpen(false);
+    setDrawerMode("view");
+    setDrawerError(null);
+  }, [listFilters]);
 
   React.useEffect(() => {
     if (selectedRunId == null) {
@@ -613,6 +636,7 @@ export default function RegularTasksAdminClient() {
     setScheduleFilter("all");
     setActiveFilter("active");
     setOwnerFilter("all");
+    setListFilters(resetRegularTaskTemplateListFilters());
     setRunSubmitError(null);
     setLastRunResult(null);
 
@@ -622,18 +646,15 @@ export default function RegularTasksAdminClient() {
     setDrawerMode("view");
     setDrawerError(null);
 
-    const params = new URLSearchParams(sp.toString());
-    const hadOrgUnitFilter = params.has("org_unit_id");
-    const hadOrgGroupFilter = params.has(ORG_GROUP_ID_PARAM);
-    if (hadOrgUnitFilter || hadOrgGroupFilter) {
-      if (hadOrgUnitFilter) params.delete("org_unit_id");
-      if (hadOrgGroupFilter) params.delete(ORG_GROUP_ID_PARAM);
-      const next = params.toString();
-      router.replace(next ? `${pathname}?${next}` : pathname);
-      return;
-    }
-
-    await Promise.all([loadTemplates(), loadRuns(), loadOwnerUnits(), loadExecutorRoles()]);
+    await Promise.all([
+      loadTemplates({
+        filters: EMPTY_REGULAR_TASK_TEMPLATE_LIST_FILTERS,
+        status: "active",
+      }),
+      loadRuns(),
+      loadOwnerUnits(),
+      loadExecutorRoles(),
+    ]);
 
     if (selectedRunId != null) {
       await loadRunItems(selectedRunId);
@@ -881,8 +902,6 @@ export default function RegularTasksAdminClient() {
                 Запуски
               </button>
 
-              <OrgScopeFilter basePath="/regular-tasks" className="min-w-[240px]" />
-
               <button
                 type="button"
                 onClick={handleRefreshAll}
@@ -895,6 +914,13 @@ export default function RegularTasksAdminClient() {
 
           {activeTab === "templates" ? (
             <div className="flex flex-col gap-2">
+              <RegularTaskTemplateFiltersBar
+                filters={listFilters}
+                onChange={setListFilters}
+                executorRoleOptions={filterExecutorRoleOptions}
+                executorRolesLoading={scopeRolesLoading}
+              />
+
               <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap">
                   <input

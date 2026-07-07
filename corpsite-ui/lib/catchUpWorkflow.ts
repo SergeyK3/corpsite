@@ -1,6 +1,7 @@
 // FILE: corpsite-ui/lib/catchUpWorkflow.ts
 
 import type { CatchUpPreset, CatchUpRegularTasksParams } from "./api";
+import { resolveDefaultPeriodKey, type CatchUpPeriodOption } from "./catchUpPeriodOptions";
 import { catchUpUiLabel } from "./i18n";
 import {
   fmtDate,
@@ -29,6 +30,16 @@ export function resolveDefaultScheduleType(preset: CatchUpPreset): CatchUpSchedu
   if (preset === "past_month") return "monthly";
   if (preset === "past_week") return "weekly";
   return "weekly";
+}
+
+/** Suggested periodicity for a catch-up period option (null = do not auto-change). */
+export function resolveSuggestedScheduleTypeForPeriod(
+  option: Pick<CatchUpPeriodOption, "preset" | "key">,
+): CatchUpScheduleType | null {
+  if (option.preset === "past_week") return "weekly";
+  if (option.preset === "past_month") return "monthly";
+  if (option.key === resolveDefaultPeriodKey("yearly")) return "yearly";
+  return null;
 }
 
 export function pastWeekPresetHint(): string {
@@ -71,12 +82,21 @@ export function resolveAggregateOccurrenceDate(
   return fallback || null;
 }
 
+const CATCH_UP_SKIP_REASON_LABELS: Record<string, string> = {
+  template_created_after_reporting_period: "Шаблон создан позже отчётного периода",
+};
+
 export function catchUpItemReasonLabel(
   item: RegularTaskRunItemRow,
   options: { isDryRunPreview: boolean },
 ): string {
   const { isDryRunPreview } = options;
-  if (isDryRunPreview) {
+  const reasonKey = String(item.meta?.reason ?? "").trim();
+  const skipMessage = String(item.meta?.skip_message ?? "").trim();
+  if (reasonKey && CATCH_UP_SKIP_REASON_LABELS[reasonKey]) {
+    return skipMessage || CATCH_UP_SKIP_REASON_LABELS[reasonKey];
+  }
+  if (isDryRunPreview && (reasonKey === "dry_run" || item.meta?.dry_run === true)) {
     return catchUpUiLabel("dry_run_reason");
   }
 

@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 
 import CatchUpReviewPanel from "./CatchUpReviewPanel";
 
 import SchedulerStatusPanel from "@/app/regular-tasks/_components/SchedulerStatusPanel";
+import RegularTaskTemplateFiltersBar from "@/components/RegularTaskTemplateFiltersBar";
 import {
   apiCatchUpRegularTasks,
   apiFetchJson,
@@ -23,52 +24,29 @@ import {
 import {
   buildCatchUpPayload,
   payloadsEquivalent,
+  resolveSuggestedScheduleTypeForPeriod,
   validateCatchUpForm,
   type CatchUpFormState,
   type CatchUpScheduleType,
 } from "@/lib/catchUpWorkflow";
 import {
-  buildOrgUnitSelectGroups,
-  loadOrgUnitSelectOptions,
-  type OrgUnitSelectOption,
-} from "@/lib/orgUnitsSelect";
-import {
   catchUpUiLabel,
   formatThrownError,
   scheduleTypeLabel,
-  uiFieldLabel,
 } from "@/lib/i18n";
-import { directoryRoleLabel, type RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
+import {
+  buildRegularTasksListApiQuery,
+  clearExecutorRoleIfNotAllowed,
+  deriveExecutorRoleOptionsFromTemplates,
+  EMPTY_REGULAR_TASK_TEMPLATE_LIST_FILTERS,
+  stripLegacyOrgScopeParams,
+  stripExecutorRoleFilter,
+  type RegularTaskTemplateListFilters,
+  type TemplateExecutorRoleSource,
+} from "@/lib/regularTaskTemplateListFilters";
+import { type RegularTaskRunItemRow } from "@/lib/regularTaskRunJournal";
 
-type OrgGroupFilter = "all" | string;
-
-type DeptGroupRow = {
-  group_id: number;
-  group_name: string;
-  effective_log_group?: string | null;
-};
-
-type DeptGroupsResponse = {
-  items?: Array<{
-    group_id: number;
-    group_name?: string;
-    effective_log_group?: string | null;
-  }>;
-};
-
-type RoleRow = {
-  role_id: number;
-  role_name?: string | null;
-  name?: string | null;
-  role_code?: string | null;
-  code?: string | null;
-};
-
-type RolesResponse = {
-  items?: RoleRow[];
-};
-
-type TemplateRow = {
+type TemplateRow = TemplateExecutorRoleSource & {
   regular_task_id: number;
   title: string;
   is_active?: boolean;
@@ -93,30 +71,26 @@ const WORKFLOW_STEPS = [
   { id: 5, labelKey: "workflow_journal" },
 ] as const;
 
-function readEnvGroupId(name: string, fallback: number): number {
-  const raw = String(process.env[name] ?? "").trim();
-  if (!raw) return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return n;
-}
+function normalizeTemplateRows(data: TemplatesResponse | TemplateRow[]): TemplateRow[] {
+  const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
 
-const ENV_ORG_GROUP_IDS: Record<string, number> = {
-  clinical: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_CLINICAL", 1),
-  paraclinical: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_PARACLINICAL", 2),
-  admin_household: readEnvGroupId("NEXT_PUBLIC_ORG_GROUP_ID_ADMIN", 3),
-};
-
-function resolveOrgGroupId(filter: OrgGroupFilter, deptGroups: DeptGroupRow[]): number | null {
-  if (filter === "all") return null;
-
-  const bySlug = deptGroups.find((g) => g.effective_log_group === filter);
-  if (bySlug) return bySlug.group_id;
-
-  const envId = ENV_ORG_GROUP_IDS[filter];
-  if (envId != null && deptGroups.some((g) => g.group_id === envId)) return envId;
-
-  return envId ?? null;
+  return rows
+    .map((t) => ({
+      regular_task_id: Number(t.regular_task_id),
+      title: String(t.title ?? "").trim() || `Шаблон #${t.regular_task_id}`,
+      is_active: t.is_active,
+      archived_at: t.archived_at ?? null,
+      executor_role_id: t.executor_role_id ?? null,
+      executor_role_name: t.executor_role_name ?? null,
+      executor_role_code: t.executor_role_code ?? null,
+    }))
+    .filter(
+      (t) =>
+        Number.isFinite(t.regular_task_id) &&
+        t.regular_task_id > 0 &&
+        t.is_active !== false &&
+        !t.archived_at,
+    );
 }
 
 function resolveActiveStep(params: {
@@ -182,23 +156,21 @@ function WorkflowStepper({ activeStep }: { activeStep: number }) {
 }
 
 export default function CatchUpRunClient() {
+  const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
-  const orgUnitFromUrl = sp.get("org_unit_id") ?? "";
 
   const [scheduleType, setScheduleType] = React.useState<CatchUpScheduleType>("weekly");
+  const [scheduleTypeManuallySet, setScheduleTypeManuallySet] = React.useState(false);
   const [periodKey, setPeriodKey] = React.useState(() => resolveDefaultPeriodKey("weekly"));
-  const [orgGroup, setOrgGroup] = React.useState<OrgGroupFilter>("all");
-  const [deptGroups, setDeptGroups] = React.useState<DeptGroupRow[]>([]);
-  const [orgUnitId, setOrgUnitId] = React.useState(orgUnitFromUrl);
-  const [executorRoleId, setExecutorRoleId] = React.useState("");
+  const [listFilters, setListFilters] = React.useState<RegularTaskTemplateListFilters>(
+    EMPTY_REGULAR_TASK_TEMPLATE_LIST_FILTERS,
+  );
   const [regularTaskId, setRegularTaskId] = React.useState("");
-  const [roleOptions, setRoleOptions] = React.useState<RoleRow[]>([]);
-  const [rolesLoading, setRolesLoading] = React.useState(false);
+  const [scopeRoleSourceTemplates, setScopeRoleSourceTemplates] = React.useState<TemplateRow[]>([]);
+  const [scopeRolesLoading, setScopeRolesLoading] = React.useState(false);
   const [templateOptions, setTemplateOptions] = React.useState<TemplateRow[]>([]);
   const [templatesLoading, setTemplatesLoading] = React.useState(false);
-  const [ownerUnitOptions, setOwnerUnitOptions] = React.useState<OrgUnitSelectOption[]>([]);
-  const [ownerUnitLoading, setOwnerUnitLoading] = React.useState(false);
-  const [ownerUnitLoadError, setOwnerUnitLoadError] = React.useState<string | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -210,31 +182,22 @@ export default function CatchUpRunClient() {
   const [liveResult, setLiveResult] = React.useState<CatchUpRegularTasksResult | null>(null);
   const [liveItems, setLiveItems] = React.useState<RegularTaskRunItemRow[]>([]);
 
-  const selectedOrgGroupId = React.useMemo(
-    () => resolveOrgGroupId(orgGroup, deptGroups),
-    [orgGroup, deptGroups],
-  );
-
-  const parsedOrgUnitId = React.useMemo(() => {
-    const s = (orgUnitId || orgUnitFromUrl).trim();
-    if (!s) return null;
-    const n = Number(s);
-    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
-  }, [orgUnitId, orgUnitFromUrl]);
-
-  const parsedExecutorRoleId = React.useMemo(() => {
-    const s = executorRoleId.trim();
-    if (!s) return null;
-    const n = Number(s);
-    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
-  }, [executorRoleId]);
-
   const parsedRegularTaskId = React.useMemo(() => {
     const s = regularTaskId.trim();
     if (!s) return null;
     const n = Number(s);
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
   }, [regularTaskId]);
+
+  const scopeListFilters = React.useMemo(
+    () => stripExecutorRoleFilter(listFilters),
+    [listFilters],
+  );
+
+  const filterExecutorRoleOptions = React.useMemo(
+    () => deriveExecutorRoleOptionsFromTemplates(scopeRoleSourceTemplates),
+    [scopeRoleSourceTemplates],
+  );
 
   const periodOptions = React.useMemo(
     () => buildCatchUpPeriodOptions(scheduleType),
@@ -251,19 +214,12 @@ export default function CatchUpRunClient() {
       preset: selectedPeriod?.preset ?? "past_week",
       manualDate: selectedPeriod?.manualDate ?? "",
       scheduleType,
-      orgGroupId: selectedOrgGroupId,
-      orgUnitId: parsedOrgUnitId,
-      executorRoleId: parsedExecutorRoleId,
+      orgGroupId: listFilters.org_group_id ?? null,
+      orgUnitId: listFilters.org_unit_id ?? null,
+      executorRoleId: listFilters.executor_role_id ?? null,
       regularTaskId: parsedRegularTaskId,
     }),
-    [
-      selectedPeriod,
-      scheduleType,
-      selectedOrgGroupId,
-      parsedOrgUnitId,
-      parsedExecutorRoleId,
-      parsedRegularTaskId,
-    ],
+    [selectedPeriod, scheduleType, listFilters, parsedRegularTaskId],
   );
 
   const activeStep = resolveActiveStep({
@@ -288,8 +244,11 @@ export default function CatchUpRunClient() {
   }, [periodOptions, periodKey]);
 
   React.useEffect(() => {
-    setOrgUnitId(orgUnitFromUrl);
-  }, [orgUnitFromUrl]);
+    const params = new URLSearchParams(sp.toString());
+    if (!stripLegacyOrgScopeParams(params)) return;
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname);
+  }, [pathname, router, sp]);
 
   const resetWorkflow = React.useCallback(() => {
     setPreviewResult(null);
@@ -301,113 +260,33 @@ export default function CatchUpRunClient() {
     setLiveItems([]);
   }, []);
 
-  const orgGroupOptions = React.useMemo(() => {
-    const opts: Array<{ value: OrgGroupFilter; label: string }> = [
-      { value: "all", label: "Все группы отделений" },
-    ];
-    for (const g of deptGroups) {
-      const slug = g.effective_log_group || String(g.group_id);
-      opts.push({ value: slug, label: g.group_name });
-    }
-    return opts;
-  }, [deptGroups]);
-
-  const groupLabelById = React.useMemo(() => {
-    return new Map(deptGroups.map((g) => [g.group_id, g.group_name]));
-  }, [deptGroups]);
-
-  const filteredOwnerUnitOptions = React.useMemo(() => {
-    if (selectedOrgGroupId == null) return ownerUnitOptions;
-    return ownerUnitOptions.filter((u) => Number(u.group_id) === Number(selectedOrgGroupId));
-  }, [ownerUnitOptions, selectedOrgGroupId]);
-
-  const unitSelectGroups = React.useMemo(
-    () => buildOrgUnitSelectGroups(filteredOwnerUnitOptions, groupLabelById),
-    [filteredOwnerUnitOptions, groupLabelById],
-  );
+  React.useEffect(() => {
+    setListFilters((prev) => clearExecutorRoleIfNotAllowed(prev, filterExecutorRoleOptions));
+  }, [filterExecutorRoleOptions]);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
+      setScopeRolesLoading(true);
       try {
-        const data = await apiFetchJson<DeptGroupsResponse>("/directory/department-groups", {
-          query: { status: "active", limit: 200 },
+        const data = await apiFetchJson<TemplatesResponse>("/regular-tasks", {
+          query: buildRegularTasksListApiQuery(scopeListFilters, {
+            status: "active",
+            limit: 200,
+            offset: 0,
+          }),
         });
-        const rows = Array.isArray(data?.items) ? data.items : [];
-        if (!cancelled) {
-          setDeptGroups(
-            rows
-              .map((g) => ({
-                group_id: Number(g.group_id),
-                group_name: String(g.group_name ?? "").trim() || `#${g.group_id}`,
-                effective_log_group: g.effective_log_group ?? null,
-              }))
-              .filter((g) => Number.isFinite(g.group_id) && g.group_id > 0),
-          );
-        }
+        if (!cancelled) setScopeRoleSourceTemplates(normalizeTemplateRows(data));
       } catch {
-        if (!cancelled) setDeptGroups([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setOwnerUnitLoading(true);
-      setOwnerUnitLoadError(null);
-      try {
-        const options = await loadOrgUnitSelectOptions();
-        if (!cancelled) setOwnerUnitOptions(options);
-      } catch (err) {
-        if (!cancelled) {
-          setOwnerUnitOptions([]);
-          setOwnerUnitLoadError(formatThrownError(err, { fallback: "Не удалось загрузить список отделений." }));
-        }
+        if (!cancelled) setScopeRoleSourceTemplates([]);
       } finally {
-        if (!cancelled) setOwnerUnitLoading(false);
+        if (!cancelled) setScopeRolesLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setRolesLoading(true);
-      try {
-        const data = await apiFetchJson<RolesResponse>("/directory/roles", {
-          query: { is_active: true, limit: 200 },
-        });
-        const rows = Array.isArray(data?.items) ? data.items : [];
-        if (!cancelled) {
-          setRoleOptions(
-            rows
-              .map((r) => ({
-                role_id: Number(r.role_id),
-                role_name: r.role_name ?? r.name ?? null,
-                name: r.name ?? r.role_name ?? null,
-                role_code: r.role_code ?? r.code ?? null,
-                code: r.code ?? r.role_code ?? null,
-              }))
-              .filter((r) => Number.isFinite(r.role_id) && r.role_id > 0),
-          );
-        }
-      } catch {
-        if (!cancelled) setRoleOptions([]);
-      } finally {
-        if (!cancelled) setRolesLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [scopeListFilters]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -416,33 +295,15 @@ export default function CatchUpRunClient() {
       try {
         const data = await apiFetchJson<TemplatesResponse>("/regular-tasks", {
           query: {
-            status: "active",
+            ...buildRegularTasksListApiQuery(listFilters, {
+              status: "active",
+              limit: 200,
+              offset: 0,
+            }),
             schedule_type: scheduleType,
-            executor_role_id: parsedExecutorRoleId ?? undefined,
-            org_group_id: selectedOrgGroupId ?? undefined,
-            org_unit_id: parsedOrgUnitId ?? undefined,
-            limit: 200,
           },
         });
-        const rows = Array.isArray(data?.items) ? data.items : [];
-        if (!cancelled) {
-          setTemplateOptions(
-            rows
-              .map((t) => ({
-                regular_task_id: Number(t.regular_task_id),
-                title: String(t.title ?? "").trim() || `Шаблон #${t.regular_task_id}`,
-                is_active: t.is_active,
-                archived_at: t.archived_at ?? null,
-              }))
-              .filter(
-                (t) =>
-                  Number.isFinite(t.regular_task_id) &&
-                  t.regular_task_id > 0 &&
-                  t.is_active !== false &&
-                  !t.archived_at,
-              ),
-          );
-        }
+        if (!cancelled) setTemplateOptions(normalizeTemplateRows(data));
       } catch {
         if (!cancelled) setTemplateOptions([]);
       } finally {
@@ -452,7 +313,7 @@ export default function CatchUpRunClient() {
     return () => {
       cancelled = true;
     };
-  }, [scheduleType, selectedOrgGroupId, parsedOrgUnitId, parsedExecutorRoleId]);
+  }, [scheduleType, listFilters]);
 
   React.useEffect(() => {
     if (!regularTaskId.trim()) return;
@@ -463,18 +324,33 @@ export default function CatchUpRunClient() {
     }
   }, [templateOptions, regularTaskId]);
 
-  React.useEffect(() => {
-    if (!orgUnitId.trim()) return;
-    const selectedId = Number(orgUnitId);
-    if (!Number.isFinite(selectedId) || selectedId <= 0) return;
-    if (!filteredOwnerUnitOptions.some((u) => u.unit_id === selectedId)) {
-      setOrgUnitId("");
-    }
-  }, [filteredOwnerUnitOptions, orgUnitId]);
+  function handleListFiltersChange(next: RegularTaskTemplateListFilters) {
+    setListFilters(next);
+    resetWorkflow();
+  }
 
   function handleScheduleTypeChange(next: CatchUpScheduleType) {
+    setScheduleTypeManuallySet(true);
     setScheduleType(next);
     setPeriodKey(resolveDefaultPeriodKey(next));
+    resetWorkflow();
+  }
+
+  function handlePeriodChange(nextKey: string) {
+    const option = findCatchUpPeriodOption(scheduleType, nextKey);
+    if (!option) return;
+
+    if (!scheduleTypeManuallySet) {
+      const suggested = resolveSuggestedScheduleTypeForPeriod(option);
+      if (suggested != null && suggested !== scheduleType) {
+        setScheduleType(suggested);
+        setPeriodKey(resolveDefaultPeriodKey(suggested));
+        resetWorkflow();
+        return;
+      }
+    }
+
+    setPeriodKey(nextKey);
     resetWorkflow();
   }
 
@@ -575,6 +451,15 @@ export default function CatchUpRunClient() {
 
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-4 shadow-sm">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">1. Параметры и пробный прогон</h2>
+
+        <RegularTaskTemplateFiltersBar
+          className="mt-4"
+          filters={listFilters}
+          onChange={handleListFiltersChange}
+          executorRoleOptions={filterExecutorRoleOptions}
+          executorRolesLoading={scopeRolesLoading}
+        />
+
         <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="catch-up-form-grid">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-zinc-800 dark:text-zinc-200">{catchUpUiLabel("schedule_type")}</span>
@@ -597,10 +482,7 @@ export default function CatchUpRunClient() {
             <select
               className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
               value={periodKey}
-              onChange={(e) => {
-                setPeriodKey(e.target.value);
-                resetWorkflow();
-              }}
+              onChange={(e) => handlePeriodChange(e.target.value)}
               data-testid="catch-up-period-select"
             >
               {periodOptions.map((opt) => (
@@ -611,80 +493,7 @@ export default function CatchUpRunClient() {
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">Группа отделений (опционально)</span>
-            <select
-              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
-              value={orgGroup}
-              onChange={(e) => {
-                setOrgGroup(e.target.value as OrgGroupFilter);
-                setOrgUnitId("");
-                resetWorkflow();
-              }}
-              data-testid="catch-up-org-group"
-            >
-              {orgGroupOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">
-              {uiFieldLabel("owner_unit_id")} (опционально)
-            </span>
-            <select
-              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
-              value={orgUnitId}
-              onChange={(e) => {
-                setOrgUnitId(e.target.value);
-                resetWorkflow();
-              }}
-              disabled={ownerUnitLoading}
-              data-testid="catch-up-org-unit"
-            >
-              <option value="">Все отделения в группе</option>
-              {unitSelectGroups.map((group) => (
-                <optgroup key={group.key} label={group.label}>
-                  {group.items.map((u) => (
-                    <option key={u.unit_id} value={String(u.unit_id)}>
-                      {`${u.name} (#${u.unit_id})`}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            {ownerUnitLoadError ? (
-              <span className="text-xs text-red-600 dark:text-red-400">{ownerUnitLoadError}</span>
-            ) : null}
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">
-              {catchUpUiLabel("executor_role_id")} (опционально)
-            </span>
-            <select
-              className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 px-3 py-2 text-zinc-900 dark:text-zinc-50"
-              value={executorRoleId}
-              onChange={(e) => {
-                setExecutorRoleId(e.target.value);
-                resetWorkflow();
-              }}
-              disabled={rolesLoading}
-              data-testid="catch-up-executor"
-            >
-              <option value="">Все роли</option>
-              {roleOptions.map((role) => (
-                <option key={role.role_id} value={String(role.role_id)}>
-                  {directoryRoleLabel(role)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex flex-col gap-1 text-sm md:col-span-2">
             <span className="font-medium text-zinc-800 dark:text-zinc-200">
               {catchUpUiLabel("regular_task_id")} (опционально)
             </span>

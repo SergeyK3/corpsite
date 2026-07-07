@@ -12,8 +12,10 @@ import {
   resolveAggregatePeriodFromItems,
   resolveCatchUpTemplateFilterLabel,
   resolveDefaultScheduleType,
+  resolveSuggestedScheduleTypeForPeriod,
   validateCatchUpForm,
 } from "./catchUpWorkflow";
+import { resolveDefaultPeriodKey } from "./catchUpPeriodOptions";
 import type { RegularTaskRunItemRow } from "./regularTaskRunJournal";
 
 const sampleItem: RegularTaskRunItemRow = {
@@ -45,6 +47,24 @@ describe("catchUpWorkflow", () => {
     expect(resolveDefaultScheduleType("manual")).toBe("weekly");
   });
 
+  it("resolveSuggestedScheduleTypeForPeriod maps preset shortcuts", () => {
+    expect(
+      resolveSuggestedScheduleTypeForPeriod({ preset: "past_week", key: "weekly:2026-01-01" }),
+    ).toBe("weekly");
+    expect(
+      resolveSuggestedScheduleTypeForPeriod({ preset: "past_month", key: "monthly:2026-02-01" }),
+    ).toBe("monthly");
+    expect(
+      resolveSuggestedScheduleTypeForPeriod({
+        preset: "manual",
+        key: resolveDefaultPeriodKey("yearly"),
+      }),
+    ).toBe("yearly");
+    expect(
+      resolveSuggestedScheduleTypeForPeriod({ preset: "manual", key: "weekly:2026-01-01" }),
+    ).toBeNull();
+  });
+
   it("formatReportingPeriodRange renders human period", () => {
     expect(formatReportingPeriodRange("2026-06-17", "2026-06-23")).toBe("17.06.2026–23.06.2026");
   });
@@ -60,6 +80,24 @@ describe("catchUpWorkflow", () => {
     expect(row.due_date_label).toBe("23.06.2026");
     expect(row.reason_label).toBe("Пробный прогон");
     expect(row.title_final).toContain("QM weekly");
+  });
+
+  it("buildCatchUpReviewRow maps template-created-after-period skip reason in preview", () => {
+    const skippedItem: RegularTaskRunItemRow = {
+      ...sampleItem,
+      status: "skip",
+      is_due: false,
+      meta: {
+        ...sampleItem.meta,
+        reason: "template_created_after_reporting_period",
+        skip_message: "Шаблон создан позже отчётного периода",
+        period_start: "2026-06-01",
+        period_end: "2026-06-30",
+      },
+    };
+    const row = buildCatchUpReviewRow(skippedItem, { isDryRunPreview: true });
+    expect(row.reason_label).toBe("Шаблон создан позже отчётного периода");
+    expect(row.period_label).toBe("01.06.2026–30.06.2026");
   });
 
   it("buildCatchUpReviewRow maps live create reason", () => {

@@ -40,4 +40,18 @@ describe("RegularTasksAdminClient primary actions", () => {
     expect(source).toContain("Архивировать");
     expect(source).toContain("Редактировать");
   });
+
+  it("uses explicit local template filters instead of URL org scope", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "app/regular-tasks/_components/RegularTasksAdminClient.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("RegularTaskTemplateFiltersBar");
+    expect(source).toContain("buildRegularTasksListApiQuery");
+    expect(source).toContain("stripLegacyOrgScopeParams");
+    expect(source).not.toContain("OrgScopeFilter");
+    expect(source).not.toContain("readOrgScopeFromSearchParams");
+    expect(source).not.toMatch(/sp\.get\("org_unit_id"\)/);
+  });
 });

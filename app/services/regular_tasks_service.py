@@ -987,6 +987,41 @@ class CatchUpResolvedPayload(TypedDict, total=False):
     templates_in_scope: int
 
 
+CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD = "template_created_after_reporting_period"
+CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD_MSG = "Шаблон создан позже отчётного периода"
+
+
+def resolve_reporting_period_bounds_for_date(
+    schedule_type: str,
+    for_date: date,
+) -> Tuple[date, date]:
+    return _fallback_period_bounds(schedule_type, for_date)
+
+
+def template_created_on_date(template_row: Any) -> Optional[date]:
+    created_at = template_row.get("created_at")
+    if created_at is None:
+        return None
+    if isinstance(created_at, datetime):
+        if created_at.tzinfo is not None:
+            return created_at.astimezone(_LOCAL_TZ).date()
+        return created_at.date()
+    if isinstance(created_at, date):
+        return created_at
+    return None
+
+
+def is_catch_up_allowed_for_template_created_at(
+    *,
+    template_created_on: Optional[date],
+    period_end: date,
+) -> bool:
+    """Catch-up must not create tasks for reporting periods that ended before template creation."""
+    if template_created_on is None:
+        return True
+    return period_end >= template_created_on
+
+
 @dataclass(frozen=True)
 class CatchUpTemplateFilters:
     schedule_type: Optional[str] = None
@@ -1132,6 +1167,7 @@ def _load_regular_task_templates(
                 rt.schedule_params,
                 rt.create_offset_days,
                 rt.due_offset_days,
+                rt.created_at,
                 r.name AS executor_role_name,
                 r.code AS executor_role_code
             FROM public.regular_tasks rt
@@ -1293,6 +1329,40 @@ def run_regular_tasks_generation_tx(
 
             if not is_due:
                 continue
+
+            if catch_up_meta is not None:
+                period_start, period_end = resolve_reporting_period_bounds_for_date(
+                    schedule_type,
+                    today_effective,
+                )
+                template_created_on = template_created_on_date(t)
+                if not is_catch_up_allowed_for_template_created_at(
+                    template_created_on=template_created_on,
+                    period_end=period_end,
+                ):
+                    _log_run_item(
+                        conn,
+                        run_id=int(run_id),
+                        regular_task_id=int(rid),
+                        period_id=None,
+                        executor_role_id=_safe_int(t.get("executor_role_id")),
+                        is_due=False,
+                        created_tasks=0,
+                        status="skip",
+                        error=None,
+                        meta={
+                            **base_meta,
+                            "period_start": period_start.isoformat(),
+                            "period_end": period_end.isoformat(),
+                            "reason": CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD,
+                            "skip_message": CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD_MSG,
+                            "template_created_at": (
+                                template_created_on.isoformat() if template_created_on else None
+                            ),
+                        },
+                        journal_errors=journal_errors,
+                    )
+                    continue
 
             due += 1
             template_marked_due = True

@@ -13,12 +13,17 @@ from app.db.engine import engine
 from app.main import app
 from app.services.regular_tasks_service import (
     CatchUpTemplateFilters,
+    CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD,
+    CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD_MSG,
     _load_regular_task_templates,
     build_catch_up_resolved_payload,
     build_catch_up_template_filters,
+    is_catch_up_allowed_for_template_created_at,
     resolve_catch_up_run_for_date,
     resolve_catch_up_schedule_type,
+    resolve_reporting_period_bounds_for_date,
     run_regular_tasks_catch_up_tx,
+    template_created_on_date,
 )
 from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 
@@ -52,6 +57,43 @@ def test_resolve_schedule_type_presets():
     assert resolve_catch_up_schedule_type("past_month", None) == "monthly"
     assert resolve_catch_up_schedule_type("manual", None) is None
     assert resolve_catch_up_schedule_type("past_week", "monthly") == "monthly"
+
+
+def test_is_catch_up_allowed_for_template_created_at_monthly_periods():
+    june_end = date(2026, 6, 30)
+    may_end = date(2026, 5, 31)
+
+    assert is_catch_up_allowed_for_template_created_at(
+        template_created_on=date(2026, 7, 7),
+        period_end=june_end,
+    ) is False
+    assert is_catch_up_allowed_for_template_created_at(
+        template_created_on=date(2026, 7, 7),
+        period_end=may_end,
+    ) is False
+    assert is_catch_up_allowed_for_template_created_at(
+        template_created_on=date(2026, 6, 15),
+        period_end=june_end,
+    ) is True
+    assert is_catch_up_allowed_for_template_created_at(
+        template_created_on=date(2026, 6, 15),
+        period_end=may_end,
+    ) is False
+    assert is_catch_up_allowed_for_template_created_at(
+        template_created_on=None,
+        period_end=may_end,
+    ) is True
+
+
+def test_resolve_reporting_period_bounds_for_date_monthly_june():
+    start, end = resolve_reporting_period_bounds_for_date("monthly", date(2026, 7, 1))
+    assert start == date(2026, 6, 1)
+    assert end == date(2026, 6, 30)
+
+
+def test_template_created_on_date_parses_datetime_and_date():
+    assert template_created_on_date({"created_at": date(2026, 7, 7)}) == date(2026, 7, 7)
+    assert template_created_on_date({"created_at": None}) is None
 
 
 def test_build_catch_up_resolved_payload_includes_regular_task_id():
@@ -195,6 +237,7 @@ def _insert_catch_up_template(
     schedule_params: dict,
     owner_unit_id: int | None = None,
     executor_role_id: int = 1,
+    created_on: date | None = None,
 ) -> int:
     cols = ["title", "is_active", "schedule_type", "schedule_params", "create_offset_days", "executor_role_id"]
     vals: dict = {
@@ -205,6 +248,10 @@ def _insert_catch_up_template(
         "create_offset_days": 0,
         "executor_role_id": int(executor_role_id),
     }
+    effective_created_on = created_on or date(2020, 1, 1)
+    if _col_exists(conn, "regular_tasks", "created_at"):
+        cols.append("created_at")
+        vals["created_at"] = f"{effective_created_on.isoformat()} 12:00:00"
     if _col_exists(conn, "regular_tasks", "code"):
         cols.append("code")
         slug = "".join(c if c.isalnum() else "_" for c in title).strip("_").lower()[:48]
@@ -231,6 +278,98 @@ def _insert_catch_up_template(
         vals,
     ).scalar_one()
     return int(rid)
+
+
+def _set_template_created_at(conn, regular_task_id: int, created_on: date) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE public.regular_tasks
+            SET created_at = CAST(:created_at AS date) + time '12:00:00'
+            WHERE regular_task_id = :rid
+            """
+        ),
+        {"rid": int(regular_task_id), "created_at": created_on.isoformat()},
+    )
+
+
+def _fetch_run_items(conn, run_id: int) -> list[dict]:
+    rows = conn.execute(
+        text(
+            """
+            SELECT regular_task_id, status, error, is_due, meta
+            FROM public.regular_task_run_items
+            WHERE run_id = :rid
+            ORDER BY item_id
+            """
+        ),
+        {"rid": int(run_id)},
+    ).mappings().all()
+    out: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        meta = item.get("meta")
+        if isinstance(meta, str):
+            item["meta"] = json.loads(meta)
+        out.append(item)
+    return out
+
+
+def _scoped_catch_up_template_ids(
+    conn,
+    *,
+    schedule_type: str,
+    org_group_id: int | None = None,
+    org_unit_id: int | None = None,
+    regular_task_id: int | None = None,
+) -> set[int]:
+    rows = _load_regular_task_templates(
+        conn,
+        template_filters=build_catch_up_template_filters(
+            schedule_type=schedule_type,
+            org_group_id=org_group_id,
+            org_unit_id=org_unit_id,
+            regular_task_id=regular_task_id,
+        ),
+    )
+    return {
+        int(row["regular_task_id"])
+        for row in rows
+        if row.get("regular_task_id") is not None
+    }
+
+
+def _assert_templates_belong_to_org_group(
+    conn,
+    template_ids: set[int],
+    org_group_id: int,
+) -> None:
+    if not template_ids:
+        return
+
+    rows = conn.execute(
+        text(
+            """
+            SELECT rt.regular_task_id, ou.group_id
+            FROM public.regular_tasks rt
+            LEFT JOIN public.org_units ou ON ou.unit_id = rt.owner_unit_id
+            WHERE rt.regular_task_id = ANY(:template_ids)
+            """
+        ),
+        {"template_ids": list(template_ids)},
+    ).mappings().all()
+
+    by_id = {int(row["regular_task_id"]): row.get("group_id") for row in rows}
+    assert by_id.keys() == template_ids
+
+    outside = [
+        rid
+        for rid, group_id in by_id.items()
+        if group_id is None or int(group_id) != int(org_group_id)
+    ]
+    assert outside == [], (
+        f"templates outside org_group_id={org_group_id}: {outside}"
+    )
 
 
 def _create_unit_with_group(conn, *, name: str, group_id: int) -> int:
@@ -322,6 +461,15 @@ def test_catch_up_dry_run_scoped_by_org_group_id(seed):
             executor_role_id=seed["executor_role_id"],
         )
 
+        scoped_ids = _scoped_catch_up_template_ids(
+            conn,
+            schedule_type="weekly",
+            org_group_id=group_a,
+        )
+        assert rid_in in scoped_ids
+        assert rid_out not in scoped_ids
+        _assert_templates_belong_to_org_group(conn, scoped_ids, group_a)
+
         run_id, stats, resolved = run_regular_tasks_catch_up_tx(
             conn,
             preset="manual",
@@ -332,9 +480,19 @@ def test_catch_up_dry_run_scoped_by_org_group_id(seed):
         )
 
         assert resolved["org_group_id"] == group_a
-        assert stats["templates_total"] == 1
-        assert stats["templates_due"] == 1
+        assert stats["templates_total"] == len(scoped_ids)
+        assert stats["templates_total"] >= 1
+        assert stats["templates_due"] >= 1
         assert stats["created"] == 0
+
+        item_ids = {
+            int(item["regular_task_id"])
+            for item in _fetch_run_items(conn, int(run_id))
+            if item.get("regular_task_id") is not None
+        }
+        assert rid_in in item_ids
+        assert rid_out not in item_ids
+        assert item_ids.issubset(scoped_ids)
 
         conn.execute(
             text("DELETE FROM public.regular_tasks WHERE regular_task_id IN (:a, :b)"),
@@ -449,7 +607,7 @@ def test_catch_up_past_month_monthly_scoped_by_regular_task_id(seed):
         group_id = group_ids[0] if group_ids else 1
         unit_id = _create_unit_with_group(conn, name=f"pytest_rt_catchup_monthly_{suffix}", group_id=group_id)
 
-        monthly_params = {"day": 1, "time": "00:00"}
+        monthly_params = {"bymonthday": [1], "time": "00:00"}
         rid_a = _insert_catch_up_template(
             conn,
             title=f"CATCHUP MONTHLY A {suffix}",
@@ -495,6 +653,112 @@ def test_catch_up_past_month_monthly_scoped_by_regular_task_id(seed):
             text("DELETE FROM public.regular_tasks WHERE regular_task_id IN (:a, :b, :c)"),
             {"a": rid_a, "b": rid_b, "c": rid_c},
         )
+        conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :unit_id"), {"unit_id": unit_id})
+        conn.execute(text("DELETE FROM public.regular_task_runs WHERE run_id = :rid"), {"rid": int(run_id)})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_catch_up_skips_monthly_template_created_after_reporting_period(seed):
+    suffix = date.today().isoformat()
+    with engine.begin() as conn:
+        group_ids = _find_distinct_group_ids(conn, limit=1)
+        group_id = group_ids[0] if group_ids else 1
+        unit_id = _create_unit_with_group(conn, name=f"pytest_rt_catchup_created_at_{suffix}", group_id=group_id)
+
+        rid = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP CREATED AT {suffix}",
+            schedule_type="monthly",
+            schedule_params={"bymonthday": [1], "time": "00:00"},
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+            created_on=date(2026, 7, 7),
+        )
+
+        run_id, stats, _resolved = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="manual",
+            dry_run=True,
+            run_for_date_manual=date(2026, 7, 1),
+            schedule_type="monthly",
+            regular_task_id=rid,
+        )
+
+        assert stats["templates_total"] == 1
+        assert stats["templates_due"] == 0
+        assert stats["errors"] == 0
+
+        items = _fetch_run_items(conn, int(run_id))
+        assert len(items) == 1
+        item = items[0]
+        assert item["status"] == "skip"
+        assert item["is_due"] is False
+        assert item["error"] is None
+        assert item["meta"]["reason"] == CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD
+        assert item["meta"]["skip_message"] == CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD_MSG
+        assert item["meta"]["period_start"] == "2026-06-01"
+        assert item["meta"]["period_end"] == "2026-06-30"
+
+        run_id_may, stats_may, _resolved_may = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="manual",
+            dry_run=True,
+            run_for_date_manual=date(2026, 6, 1),
+            schedule_type="monthly",
+            regular_task_id=rid,
+        )
+        assert stats_may["templates_due"] == 0
+        may_items = _fetch_run_items(conn, int(run_id_may))
+        assert may_items[0]["meta"]["period_end"] == "2026-05-31"
+        assert may_items[0]["meta"]["reason"] == CATCH_UP_SKIP_TEMPLATE_CREATED_AFTER_PERIOD
+
+        conn.execute(text("DELETE FROM public.regular_tasks WHERE regular_task_id = :rid"), {"rid": rid})
+        conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :unit_id"), {"unit_id": unit_id})
+        conn.execute(
+            text("DELETE FROM public.regular_task_runs WHERE run_id IN (:a, :b)"),
+            {"a": int(run_id), "b": int(run_id_may)},
+        )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_catch_up_allows_monthly_template_created_before_period_end(seed):
+    suffix = date.today().isoformat()
+    with engine.begin() as conn:
+        group_ids = _find_distinct_group_ids(conn, limit=1)
+        group_id = group_ids[0] if group_ids else 1
+        unit_id = _create_unit_with_group(conn, name=f"pytest_rt_catchup_created_before_{suffix}", group_id=group_id)
+
+        rid = _insert_catch_up_template(
+            conn,
+            title=f"CATCHUP CREATED BEFORE {suffix}",
+            schedule_type="monthly",
+            schedule_params={"bymonthday": [1], "time": "00:00"},
+            owner_unit_id=unit_id,
+            executor_role_id=seed["executor_role_id"],
+            created_on=date(2026, 6, 15),
+        )
+
+        run_id, stats, _resolved = run_regular_tasks_catch_up_tx(
+            conn,
+            preset="manual",
+            dry_run=True,
+            run_for_date_manual=date(2026, 7, 1),
+            schedule_type="monthly",
+            regular_task_id=rid,
+        )
+
+        assert stats["templates_total"] == 1
+        assert stats["templates_due"] == 1
+        assert stats["errors"] == 0
+
+        items = _fetch_run_items(conn, int(run_id))
+        assert len(items) == 1
+        item = items[0]
+        assert item["status"] == "skip"
+        assert item["meta"]["reason"] == "dry_run"
+        assert item["meta"]["period_end"] == "2026-06-30"
+
+        conn.execute(text("DELETE FROM public.regular_tasks WHERE regular_task_id = :rid"), {"rid": rid})
         conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :unit_id"), {"unit_id": unit_id})
         conn.execute(text("DELETE FROM public.regular_task_runs WHERE run_id = :rid"), {"rid": int(run_id)})
 
