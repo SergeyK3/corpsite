@@ -82,6 +82,8 @@ export type RunItemMeta = {
   deduped?: boolean;
   task_id?: number | null;
   reason?: string | null;
+  /** Human-readable skip explanation from backend (overrides reason label when set). */
+  skip_message?: string | null;
   dry_run?: boolean;
   origin_metadata_text?: string | null;
 };
