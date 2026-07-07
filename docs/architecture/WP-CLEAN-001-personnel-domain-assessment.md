@@ -8,7 +8,7 @@
 | Область | Personnel domain — inventory, dependency map, classification, cleanup register |
 | Ограничение этапа | Код, БД, API, UI, архив **не изменяются** |
 | Связанные документы | ARCH-001, ADR-031–045, ADR-050/051/053, ACCESS-001, WP-RT-002, [CLEAN-GATE-001](./CLEAN-GATE-001-cleanup-decision-gate.md) |
-| Следующие WP | WP-CLEAN-003 Safe Removal, WP-CLEAN-004 Simplification |
+| Следующие WP | **Paused** — [Phase 2 closure](./WP-CLEAN-PHASE2-CLOSURE-REPORT.md); next: [WP-CLEAN-005C](./WP-CLEAN-005C-plan.md) authorization |
 | WP-CLEAN-002 | **Complete** (2026-07-07) — governance + deprecation markers |
 
 ### R2 — что изменилось относительно R1
@@ -20,7 +20,8 @@
 | Dependency diagrams | AS-IS: enforcement через `access_resolver_service`; shadow — sidecar |
 | Invariants | Формализованы правила **Unknown > Dead**, **Transitional > Legacy** |
 | Cleanup | Новый § **Cleanup Candidates Register**; WP-CLEAN-002 — только documentation markers, без переноса `.tsx` в `docs/archive/` |
-| **WP-CLEAN-003A** | 2026-07-07 | CCR-001 removed; [post-removal report](./WP-CLEAN-003A-post-removal-report.md) |
+| **WP-CLEAN-003D** | 2026-07-07 | CCR-003 removed; [post-removal report](./WP-CLEAN-003D-post-removal-report.md) |
+| **WP-CLEAN-PROGRAM-REVIEW** | 2026-07-07 | Phase 1 closed; Phase 2 paused — [closure](./WP-CLEAN-PHASE2-CLOSURE-REPORT.md) |
 
 ---
 
@@ -276,11 +277,13 @@ flowchart TB
 
 | Artifact | Class | Verification |
 |----------|-------|--------------|
-| `DirectorySidebar.tsx` | **Dead** | Zero component imports (name collision with `isDirectorySidebarNavItemActive` in `personnelNav.ts` only) |
-| `directory/_lib/api.client.ts` | **Dead** | Zero importers |
-| ~~`app/api/directory.ts`~~ | **Removed** (WP-CLEAN-003D) | Was Dead — misplaced TypeScript in Python `app/api/` tree; zero importers |
-| `demoApi.client.ts` | **Transitional** | Active journal client — rename candidate only |
-| `ProfessionalDocumentsPageClient` | **Transitional** | Core route + legacy availability probe |
+| `DirectorySidebar.tsx` | **Removed** (WP-CLEAN-003A) | — |
+| `directory/_lib/api.client.ts` | **Removed** (WP-CLEAN-003B) | — |
+| ~~`app/api/directory.ts`~~ | **Removed** (WP-CLEAN-003D) | — |
+| ~~`employees/_lib/directory.ts`~~ | **Removed** (WP-CLEAN-005A) | — |
+| ~~`employees/_lib/api.server.ts`~~ | **Removed** (WP-CLEAN-005A) | — |
+| `personnelJournalApi.client.ts` | **Core** | Active journal API (`listPersonnelEvents`) only |
+| `ProfessionalDocumentsPageClient` | **Core** | ADR-037 `documentsApi.client.ts`; demo probe removed from UI |
 
 ### 3.3. Backend routers (extended R2)
 
@@ -291,7 +294,7 @@ flowchart TB
 | Contacts | `contacts_routes.py` | **Core** |
 | HR import / sync | `hr_import_routes.py`, `hr_sync_routes.py` | **Core** |
 | Employee documents | `employee_documents_routes.py` | **Core** |
-| Personnel events + demo docs | `personnel_demo_routes.py` | **Mixed** |
+| Personnel events (Track B) | `personnel_demo_routes.py` | **Core** |
 | Legacy bulk import | `import_routes.py` | **Legacy** |
 | Personnel admin | `personnel_admin_router.py` | **Core** |
 | Admin / Auth | `admin_router.py`, `auth.py` | **Core** |
@@ -430,7 +433,7 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 | ~~`app/api/directory.ts`~~ | **Removed** (WP-CLEAN-003D) | — |
 | `import_routes.py` | **API registered**, no UI, no tests | **Legacy**, risk elevated |
 | `employees_import*` | Legacy service only | **Legacy**, audit required |
-| `professional_documents*` | UI probe + tests | **Legacy**, not Dead |
+| ~~`professional_documents*` demo API~~ | **Removed** (WP-CLEAN-005B) | — |
 | `hr_review_override_backfill` | Tests + ADR-043; no HTTP | **Transitional** ✓ |
 | Missing runbook | ~~ADR links 404~~ restored | **Gap closed** (CCR-004 verified) |
 
@@ -442,30 +445,33 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 
 **Status values:** `open` → `verified` → `frozen` → `archived` → `removed` | `blocked` | `rejected`
 
-**Last synchronized:** WP-CLEAN-002 (2026-07-07). Status changes only with evidence below.
+**Last synchronized:** WP-CLEAN-PROGRAM-REVIEW (2026-07-07). Phase 1 removals complete; see [program review](./WP-CLEAN-PROGRAM-REVIEW.md).
 
 | ID | Artifact | Class | Risk | Status | Blocking milestone | Target WP | Deprecation doc | Verification |
 |----|----------|-------|------|--------|-------------------|-----------|-----------------|--------------|
 | CCR-001 | ~~`DirectorySidebar.tsx`~~ | Dead | Low | **removed** | — | 003A | [CCR-001](../deprecated/personnel/CCR-001-directory-sidebar.md) | ✓ G7 complete (2026-07-07); rollback `0c678749` |
 | CCR-002 | ~~`directory/_lib/api.client.ts`~~ | Dead | Low | **removed** | — | 003B | [CCR-002](../deprecated/personnel/CCR-002-directory-api-client.md) | ✓ G7 complete (2026-07-07); rollback `0c678749` |
 | CCR-003 | ~~`app/api/directory.ts`~~ | Dead | Low | **removed** | — | 003D | [CCR-003](../deprecated/personnel/CCR-003-app-api-directory-ts.md) | ✓ G7 complete (2026-07-07); rollback `d1c31cd` |
-| CCR-004 | Runbook `hr-dual-personnel-registry.md` | Gap | Medium | **verified** | — | — | [runbook](../runbooks/hr-dual-personnel-registry.md) | ✓ file restored ✓ ADR-040/041 links |
-| CCR-005 | `/directory` home page | Legacy | Medium | open | traffic check | 004 | [CCR-005](../deprecated/personnel/CCR-005-directory-home.md) | ☐ traffic |
-| CCR-006 | `import_routes.py` + CSV/XLSX | Legacy | Med-High | open | 30d access log zero | 003 | [CCR-006](../deprecated/personnel/CCR-006-legacy-bulk-import.md) | ☐ OpenAPI audit ☐ access log |
-| CCR-007 | `employees_import*` tables | Legacy | Medium | open | CCR-006 + DBA audit | 003 | [CCR-007](../deprecated/personnel/CCR-007-employees-import-tables.md) | ☐ rows ☐ ETL |
-| CCR-008 | `professional_documents*` demo | Legacy | Medium | open | UI probe removed | 003 | [CCR-008](../deprecated/personnel/CCR-008-professional-documents-demo.md) | ☐ UI ☐ tests |
-| CCR-009 | `/directory/employees` redirect | Legacy | Low | blocked | bookmark policy | — | [CCR-009](../deprecated/personnel/CCR-009-employees-redirect.md) | ADR-045 |
-| CCR-010 | `/directory/employees/[id]` | Transitional | High | blocked | ADR-045 URL migration | 004 | — | ADR-045 |
-| CCR-011 | `employees` + CRUD | Core | Critical | rejected | ARCH-001 | — | — | permanent |
-| CCR-012 | `employee_events` / Journal | Core | High | rejected | — | — | — | permanent |
-| CCR-013 | `persons` / `person_assignments` | Transitional | High | rejected | dual registry | — | — | permanent |
-| CCR-014 | `positions` catalog | Legacy | Critical | blocked | ADR-050 Phase 3 | 004 | [CCR-014](../deprecated/personnel/CCR-014-positions-catalog.md) | ARCH-001 Ph.3 |
-| CCR-015 | `access_grants` + `role_id` | Transitional | Critical | blocked | ADR-051 cutover | 004 | — | shadow parity |
-| CCR-016 | `cabinet_access_shadow_service` | Transitional | Medium | blocked | ADR-051 cutover | 004 | — | OPS-030 |
-| CCR-017 | `demoApi.client.ts` rename | Transitional | Low | open | — | 004 | — | ☐ rename PR |
-| CCR-018 | `hr_review_override_backfill` | Transitional | Low | blocked | ADR-043 ops sign-off | — | — | ✓ ADR-043 B3 |
-| CCR-019 | `access_resolver_service` | Transitional | Critical | rejected | ADR-051 | — | — | enforcement |
-| CCR-020 | `user_linkage_*` suite | Transitional | High | rejected | ADR-044 | — | — | permanent |
+| CCR-004 | Runbook `hr-dual-personnel-registry.md` | Gap | Medium | **verified** | — | — | [runbook](../runbooks/hr-dual-personnel-registry.md) | ✓ restored — **keep** |
+| CCR-005 | `/directory` home redirect | Legacy | Low | **frozen** | — | **004** ✓ | [CCR-005](../deprecated/personnel/CCR-005-directory-home.md) | ✓ redirect |
+| CCR-006 | `import_routes.py` + CSV/XLSX | Legacy | Med-High | open | B1 formal 30d nginx or waiver | **005C** | [CCR-006](../deprecated/personnel/CCR-006-legacy-bulk-import.md) | ✓ OpenAPI ✓ VPS partial log ☐ formal 30d |
+| CCR-007 | `employees_import*` tables | Legacy | Medium | open | CCR-006 + DBA | **005C** | [CCR-007](../deprecated/personnel/CCR-007-employees-import-tables.md) | ✓ rows ✓ ETL ✓ DBA closed |
+| CCR-008 | ~~`professional_documents*` demo API~~ | Legacy | Low | **removed** | — | 005B | [CCR-008](../deprecated/personnel/CCR-008-professional-documents-demo.md) | ✓ G7 complete (2026-07-07); rollback `a9fcf5d` |
+| CCR-009 | `/directory/employees` redirect | Legacy | Low | **blocked** | bookmark policy | — | [CCR-009](../deprecated/personnel/CCR-009-employees-redirect.md) | ADR-045 keep |
+| CCR-010 | `/directory/employees/[id]` redirect | Transitional | Low | **frozen** | — | **004** ✓ | [CCR-010](../deprecated/personnel/CCR-010-employees-detail-redirect.md) | ✓ redirect + drawer |
+| CCR-011 | `employees` + CRUD | Core | Critical | **rejected** | ARCH-001 | — | — | permanent |
+| CCR-012 | `employee_events` / Journal | Core | High | **rejected** | — | — | — | permanent |
+| CCR-013 | `persons` / `person_assignments` | Transitional | High | **rejected** | dual registry | — | — | permanent |
+| CCR-014 | `positions` catalog | Legacy | Critical | **blocked** | **ADR-050 Phase 3** | 004+ | [CCR-014](../deprecated/personnel/CCR-014-positions-catalog.md) | ARCH-001 Ph.3 |
+| CCR-015 | `access_grants` + `role_id` | Transitional | Critical | **blocked** | **ADR-051 cutover** | 004+ | — | shadow parity |
+| CCR-016 | `cabinet_access_shadow_service` | Transitional | Medium | **blocked** | **ADR-051 cutover** | 004+ | — | OPS-030 |
+| CCR-017 | ~~`demoApi.client.ts`~~ → `personnelJournalApi.client.ts` | Transitional | Low | **archived** | — | **004** ✓ | — | ✓ rename |
+| CCR-018 | `hr_review_override_backfill` | Transitional | Low | **blocked** | **ADR-043** ops sign-off | — | — | ✓ ADR-043 B3 |
+| CCR-019 | `access_resolver_service` | Transitional | Critical | **rejected** | **ADR-051** | — | — | enforcement |
+| CCR-020 | `user_linkage_*` suite | Transitional | High | **rejected** | **ADR-044** | — | — | permanent |
+| CCR-021 | ~~`employees/_lib/directory.ts`~~ | Dead | Low | **removed** | — | 005A | [CCR-021](../deprecated/personnel/CCR-021-employees-directory-ts.md) | ✓ G7 complete (2026-07-07); rollback `a9fcf5d` |
+| CCR-022 | ~~`employees/_lib/api.server.ts`~~ | Dead | Low | **removed** | — | 005A | [CCR-022](../deprecated/personnel/CCR-022-employees-api-server-ts.md) | ✓ G7 complete (2026-07-07); rollback `a9fcf5d` |
+| CCR-023 | ~~`personnelJournalApi.client.ts` demo-doc exports~~ | Dead | Low | **removed** | — | 005B | [CCR-023](../deprecated/personnel/CCR-023-personnel-journal-demo-exports.md) | ✓ G7 complete (2026-07-07); rollback `a9fcf5d` |
 
 **WP-CLEAN-002 evidence:** CCR-004 runbook created; Legacy markers; CLEAN-GATE-001 published.
 
@@ -477,6 +483,14 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 
 **WP-CLEAN-003D evidence (2026-07-07):** CCR-003 file deleted; build/test pass; lint baseline unchanged; G7 post-removal documented in [WP-CLEAN-003D report](./WP-CLEAN-003D-post-removal-report.md).
 
+**WP-CLEAN-PROGRAM-REVIEW evidence (2026-07-07):** Phase 1 closed; remaining CCR reclassified; CCR-021…023 registered; see [program review](./WP-CLEAN-PROGRAM-REVIEW.md).
+
+**WP-CLEAN-004 evidence (2026-07-07):** CCR-005/010 redirects; CCR-017 rename; ADR-045 detail URL migration complete — see [WP-CLEAN-004 report](./WP-CLEAN-004-post-removal-report.md).
+
+**WP-CLEAN-005A evidence (2026-07-07):** CCR-021/022 deleted; build/test pass; G7 post-removal documented in [WP-CLEAN-005A report](./WP-CLEAN-005A-post-removal-report.md).
+
+**WP-CLEAN-005B evidence (2026-07-07):** CCR-008 demo API + CCR-023 exports removed; demo contour finalized — see [WP-CLEAN-005B report](./WP-CLEAN-005B-post-removal-report.md). Doc audit: [WP-CLEAN-005B-doc-audit-report](./WP-CLEAN-005B-doc-audit-report.md).
+
 ---
 
 ## 9. Legacy Inventory (consolidated)
@@ -484,14 +498,14 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 | # | Artifact | Layer | Class | Still needed? |
 |---|----------|-------|-------|---------------|
 | L1 | Legacy import path | Backend/DB | Legacy | API reachable — audit first |
-| L2 | `professional_documents` demo | Backend/DB | Legacy | UI probe active |
+| L2 | `professional_documents` demo | Backend/DB | Legacy | Demo **API removed** (005B); optional local tables may remain |
 | L3 | `departments` | DB | Legacy | Legacy import writes |
 | L4 | `positions` catalog | DB | Legacy | **Yes — critical** |
 | L5 | `/directory/employees` redirect | Frontend | Legacy | Bookmarks |
 | L6 | `/directory` home | Frontend | Legacy | Direct URL |
 | L7 | `users.role_id` | Auth | Transitional auth | **Yes** |
 | L8 | `legacy_position_mapping` | DB | Legacy bridge | Until catalog retired |
-| L9 | Orphans CCR-001…003 | Frontend/API | Dead | **All removed** (WP-CLEAN-003A/B/D) |
+| L9 | Orphans CCR-001…003, CCR-021…023 | Frontend/adapter | Dead | **All removed** (003A–D, 005A, 005B) |
 
 ---
 
@@ -555,9 +569,43 @@ Dual registry drift, NULL `person_id`, three event streams, ACCESS-001 gate — 
 - [x] Build / test / lint executed (see [report](./WP-CLEAN-003D-post-removal-report.md))
 - [x] CCR-003 → **removed**; G7 post-removal complete
 
-### WP-CLEAN-004 — Simplification
+### WP-CLEAN-PROGRAM-REVIEW — Phase 1 closure (**complete**, 2026-07-07)
 
-Blocked on ADR-048, ADR-050 Ph.3, ADR-051, ADR-045 detail URL, event stream ADR.
+- [x] Full CCR register re-assessment ([review](./WP-CLEAN-PROGRAM-REVIEW.md))
+- [x] CCR-021…023 registered (post-removal scan)
+- [x] Phase 2 packages defined: **004** (frontend/URL), **005** (legacy backend), **006** (ADR-gated)
+
+### WP-CLEAN-004 — Frontend simplification (**complete**, 2026-07-07)
+
+- [x] CCR-005 `/directory` → `/directory/staff` redirect
+- [x] CCR-010 `/directory/employees/[id]` → staff drawer deep-link redirect
+- [x] CCR-017 `personnelJournalApi.client.ts` rename
+- [x] Build / test verification (see [report](./WP-CLEAN-004-post-removal-report.md))
+
+### WP-CLEAN-005A — Dead frontend orphans (**complete**, 2026-07-07)
+
+- [x] CCR-021 `employees/_lib/directory.ts` removed
+- [x] CCR-022 `employees/_lib/api.server.ts` removed
+- [x] Build / test verification (see [report](./WP-CLEAN-005A-post-removal-report.md))
+
+### WP-CLEAN-005B — Demo API finalization (**complete**, 2026-07-07)
+
+- [x] CCR-008 demo routes + service removed (`/personnel-events` preserved)
+- [x] CCR-023 dead exports removed from `personnelJournalApi.client.ts`
+- [x] Backend + frontend verification (see [report](./WP-CLEAN-005B-post-removal-report.md))
+- [x] Post-cleanup doc audit (see [doc audit](./WP-CLEAN-005B-doc-audit-report.md))
+
+### WP-CLEAN-005C — Legacy import retirement (**paused** — readiness complete)
+
+CCR-006/007. VPS DBA closed (B2); Ops partial (B1). **Not authorized.** [Plan](./WP-CLEAN-005C-plan.md) · [readiness](./WP-CLEAN-005C-kickoff-readiness.md) · [Phase 2 closure](./WP-CLEAN-PHASE2-CLOSURE-REPORT.md)
+
+### WP-CLEAN-PHASE2-CLOSURE — Program stop point (**published**, 2026-07-07)
+
+Official Phase 2 pause pending B1. [closure report](./WP-CLEAN-PHASE2-CLOSURE-REPORT.md)
+
+### WP-CLEAN-006 — ADR cutover cleanup (future)
+
+Blocked on ADR-048, ADR-050 Ph.3, ADR-051, event stream ADR.
 
 ---
 
@@ -619,10 +667,12 @@ If any check is uncertain → **Unknown**. If migration path active → **Transi
 
 | Document | Purpose |
 |----------|---------|
+| [WP-CLEAN-PROGRAM-REVIEW](./WP-CLEAN-PROGRAM-REVIEW.md) | Program roadmap; Phase 2 paused |
+| [WP-CLEAN-PHASE2-CLOSURE-REPORT](./WP-CLEAN-PHASE2-CLOSURE-REPORT.md) | Official Phase 2 stop + resume criteria |
 | [CLEAN-GATE-001](./CLEAN-GATE-001-cleanup-decision-gate.md) | Removal/archive decision gates |
 | [deprecated/personnel/INDEX.md](../deprecated/personnel/INDEX.md) | Legacy deprecation markers |
 | [runbooks/hr-dual-personnel-registry.md](../runbooks/hr-dual-personnel-registry.md) | Dual registry operator guide |
 
 ---
 
-*Конец документа R2 (+ WP-CLEAN-002 sync). Код/схема/runtime не изменялись. WP-CLEAN-003 requires CLEAN-GATE-001 per CCR.*
+*Конец документа R2 (+ WP-CLEAN-002…PHASE2-CLOSURE). Cleanup Program Phase 2 **paused** — [closure report](./WP-CLEAN-PHASE2-CLOSURE-REPORT.md). Next: WP-CLEAN-005C authorization.*

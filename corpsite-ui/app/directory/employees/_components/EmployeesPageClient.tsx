@@ -155,6 +155,7 @@ export default function EmployeesPageClient(props: Props) {
   const orgUnitId = sp.get("org_unit_id") ?? "";
   const limitStr = sp.get("limit") ?? "50";
   const offsetStr = sp.get("offset") ?? "0";
+  const deepLinkEmployeeId = (sp.get("employeeId") ?? "").trim();
 
   const limitNum = React.useMemo(() => Math.max(1, toInt(limitStr, 50)), [limitStr]);
   const offsetNum = React.useMemo(() => Math.max(0, toInt(offsetStr, 0)), [offsetStr]);
@@ -346,6 +347,12 @@ export default function EmployeesPageClient(props: Props) {
     void loadItems();
   }, [loadItems]);
 
+  React.useEffect(() => {
+    if (!deepLinkEmployeeId) return;
+    setDrawerEmployeeId(deepLinkEmployeeId);
+    setDrawerOpen(true);
+  }, [deepLinkEmployeeId]);
+
   function applySearch() {
     updateUrl({ q: search }, { resetOffset: true });
   }
@@ -357,6 +364,12 @@ export default function EmployeesPageClient(props: Props) {
 
   function handleCloseDrawer() {
     setDrawerOpen(false);
+    if (deepLinkEmployeeId) {
+      const nextParams = new URLSearchParams(sp.toString());
+      nextParams.delete("employeeId");
+      const qs = nextParams.toString();
+      router.replace(qs ? `${routeBase}?${qs}` : routeBase);
+    }
   }
 
   function handleOpenCreateDrawer() {

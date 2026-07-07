@@ -1431,6 +1431,9 @@ def list_personnel_events(
     event_type: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    org_group_id: Optional[int] = None,
+    org_unit_id: Optional[int] = None,
+    position_id: Optional[int] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -1464,6 +1467,34 @@ def list_personnel_events(
     if date_to is not None:
         where_parts.append("ev.effective_date <= :date_to")
         params["date_to"] = date_to
+    if org_unit_id is not None:
+        where_parts.append(
+            "(ev.from_org_unit_id = :org_unit_id OR ev.to_org_unit_id = :org_unit_id)"
+        )
+        params["org_unit_id"] = int(org_unit_id)
+    if org_group_id is not None:
+        where_parts.append(
+            """
+            (
+                EXISTS (
+                    SELECT 1 FROM public.org_units oug
+                    WHERE oug.unit_id = ev.from_org_unit_id
+                      AND oug.group_id = :org_group_id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM public.org_units oug
+                    WHERE oug.unit_id = ev.to_org_unit_id
+                      AND oug.group_id = :org_group_id
+                )
+            )
+            """.strip()
+        )
+        params["org_group_id"] = int(org_group_id)
+    if position_id is not None:
+        where_parts.append(
+            "(ev.from_position_id = :position_id OR ev.to_position_id = :position_id)"
+        )
+        params["position_id"] = int(position_id)
 
     where_sql = " AND ".join(where_parts)
 

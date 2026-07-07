@@ -342,7 +342,7 @@ export default function ProfessionalDocumentsPageClient() {
 
       {forbidden ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-200">
-          Недостаточно прав для просмотра реестра документов. Требуется privileged HR.
+          Недостаточно прав для просмотра реестра документов. Требуется доступ к кадровым процессам (personnel admin).
         </div>
       ) : null}
 

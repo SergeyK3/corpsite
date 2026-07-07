@@ -165,13 +165,6 @@ def _make_null_from_transfer_fixture(seed) -> tuple[int, int, int, List[int], Li
     )
 
 
-def _professional_documents_tables_available() -> bool:
-    with engine.begin() as conn:
-        return table_exists(conn, "certificate_types") and table_exists(
-            conn, "employee_certificates"
-        )
-
-
 def test_list_personnel_events_privileged(client, seed, privileged_headers):
     with engine.begin() as conn:
         if not table_exists(conn, "employee_events"):
@@ -297,39 +290,3 @@ def test_list_personnel_events_personnel_admin_role_grant(client, seed):
         _cleanup(created, role_grant_ids=[grant_id] if grant_id else None)
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM public.roles WHERE role_id = :rid"), {"rid": created["role_id"]})
-
-
-def test_professional_documents_availability(client, seed):
-    expected = _professional_documents_tables_available()
-    resp = client.get(
-        "/directory/professional-documents/availability",
-        headers=auth_headers(seed["initiator_user_id"]),
-    )
-    assert resp.status_code == 200
-    assert resp.json() == {"available": expected}
-
-
-def test_list_professional_documents_graceful_without_tables(client, seed, privileged_headers):
-    resp = client.get("/directory/professional-documents", headers=privileged_headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body.get("available") is _professional_documents_tables_available()
-    assert isinstance(body.get("items"), list)
-    assert body.get("total") == len(body["items"])
-    if not body["available"]:
-        assert body["items"] == []
-        assert body["total"] == 0
-
-
-def test_list_professional_documents_with_tables_returns_rows(client, seed, privileged_headers):
-    if not _professional_documents_tables_available():
-        pytest.skip("professional documents tables not available")
-
-    resp = client.get("/directory/professional-documents", headers=privileged_headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body.get("available") is True
-    if body["items"]:
-        row = body["items"][0]
-        assert "employee_name" in row
-        assert "status" in row

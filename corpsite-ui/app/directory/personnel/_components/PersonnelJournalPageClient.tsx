@@ -5,11 +5,13 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
+import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
+import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
 import {
   listPersonnelEvents,
-  mapDemoApiError,
+  mapPersonnelJournalApiError,
   type PersonnelEventRow,
-} from "../_lib/demoApi.client";
+} from "../_lib/personnelJournalApi.client";
 
 const EVENT_TYPES = [
   { value: "", label: "Все" },
@@ -254,6 +256,10 @@ export default function PersonnelJournalPageClient() {
   const dateFrom = searchParams.get("date_from") || "";
   const dateTo = searchParams.get("date_to") || "";
   const employeeSearch = searchParams.get("q") || "";
+  const orgFilters = React.useMemo(
+    () => readTaskOrgFiltersFromSearchParams(searchParams),
+    [searchParams],
+  );
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -263,6 +269,9 @@ export default function PersonnelJournalPageClient() {
         event_type: eventType || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
+        org_group_id: orgFilters.org_group_id,
+        org_unit_id: orgFilters.org_unit_id,
+        position_id: orgFilters.position_id,
         limit: 200,
         offset: 0,
       });
@@ -271,11 +280,11 @@ export default function PersonnelJournalPageClient() {
     } catch (e) {
       setItems([]);
       setTotal(0);
-      setError(mapDemoApiError(e, "Не удалось загрузить кадровый журнал"));
+      setError(mapPersonnelJournalApiError(e, "Не удалось загрузить кадровый журнал"));
     } finally {
       setLoading(false);
     }
-  }, [eventType, dateFrom, dateTo]);
+  }, [eventType, dateFrom, dateTo, orgFilters.org_group_id, orgFilters.org_unit_id, orgFilters.position_id]);
 
   React.useEffect(() => {
     void load();
@@ -330,6 +339,8 @@ export default function PersonnelJournalPageClient() {
           История кадровых событий организации
         </p>
       </div>
+
+      <TaskOrgFiltersBar basePath="/directory/personnel/journal" className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40" />
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
         <div>

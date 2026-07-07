@@ -1,4 +1,4 @@
-// FILE: corpsite-ui/app/directory/personnel/_lib/demoApi.client.ts
+// FILE: corpsite-ui/app/directory/personnel/_lib/personnelJournalApi.client.ts
 import { getSessionAccessToken } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
@@ -21,7 +21,7 @@ function buildQuery(params: Record<string, string | number | null | undefined>):
   return q.toString();
 }
 
-export function mapDemoApiError(e: unknown, fallback = "Ошибка запроса."): string {
+export function mapPersonnelJournalApiError(e: unknown, fallback = "Ошибка запроса."): string {
   return formatThrownError(e, { fallback });
 }
 
@@ -74,6 +74,9 @@ export async function listPersonnelEvents(args?: {
   event_type?: string;
   date_from?: string;
   date_to?: string;
+  org_group_id?: number;
+  org_unit_id?: number;
+  position_id?: number;
   limit?: number;
   offset?: number;
 }): Promise<PersonnelEventsResponse> {
@@ -81,42 +84,11 @@ export async function listPersonnelEvents(args?: {
     event_type: args?.event_type,
     date_from: args?.date_from,
     date_to: args?.date_to,
+    org_group_id: args?.org_group_id,
+    org_unit_id: args?.org_unit_id,
+    position_id: args?.position_id,
     limit: args?.limit ?? 100,
     offset: args?.offset ?? 0,
   });
   return apiGetJson<PersonnelEventsResponse>("/directory/personnel-events", qs);
-}
-
-export type ProfessionalDocumentRow = {
-  certificate_id: number | null;
-  employee_id: number;
-  employee_name: string;
-  certificate_type_name: string;
-  expires_at: string | null;
-  status: "VALID" | "EXPIRING_60" | "EXPIRING_30" | "EXPIRED" | "MISSING" | string;
-};
-
-export type ProfessionalDocumentsResponse = {
-  items: ProfessionalDocumentRow[];
-  total: number;
-  available?: boolean;
-};
-
-export type ProfessionalDocumentsAvailabilityResponse = {
-  available: boolean;
-};
-
-export async function fetchProfessionalDocumentsAvailability(): Promise<boolean> {
-  try {
-    const body = await apiGetJson<ProfessionalDocumentsAvailabilityResponse>(
-      "/directory/professional-documents/availability"
-    );
-    return body.available === true;
-  } catch {
-    return false;
-  }
-}
-
-export async function listProfessionalDocuments(): Promise<ProfessionalDocumentsResponse> {
-  return apiGetJson<ProfessionalDocumentsResponse>("/directory/professional-documents");
 }

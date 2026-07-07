@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.directory.rbac import require_hr_import_admin_or_403, require_privileged_or_403
+from app.directory.rbac import require_hr_import_admin_or_403, require_personnel_admin_or_403
 from app.services.hr_import_analytics_service import (
     BatchNotFoundError,
     age_distribution,
@@ -137,7 +137,7 @@ def get_personnel_employee_import_card(
     employee_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_employee_import_card, employee_id=employee_id)
     except EmployeeImportCardNotFoundError as e:
@@ -156,7 +156,7 @@ def patch_personnel_employee_import_card(
     body: Dict[str, Any] = Body(default={}),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     profile = body.get("profile")
     if not isinstance(profile, dict):
         raise HTTPException(status_code=422, detail="profile object is required")
@@ -182,7 +182,7 @@ def delete_personnel_employee_import_card(
     employee_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             delete_employee_import_card,
@@ -204,7 +204,7 @@ def get_import_batches(
     with_normalized_records: bool = Query(default=False),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             list_batches,
@@ -221,7 +221,7 @@ def delete_import_batch(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(delete_batch, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -258,7 +258,7 @@ def get_import_batch_summary(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(batch_summary, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -274,7 +274,7 @@ def get_import_batch_diff_summary(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_batch_diff_summary, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -300,7 +300,7 @@ def list_hr_change_events_route(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             list_hr_change_events,
@@ -338,7 +338,7 @@ def get_hr_change_events_export(
     q: Optional[str] = Query(default=None),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Response:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         with engine.begin() as conn:
             content, filename = export_hr_change_events_xlsx(
@@ -376,7 +376,7 @@ def get_canonical_snapshot_export(
     include_metadata: bool = Query(default=False),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Response:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         with engine.begin() as conn:
             content, filename = export_canonical_snapshot_xlsx(
@@ -403,7 +403,7 @@ def post_import_batch_compute_diff(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(compute_batch_monthly_diff, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -421,7 +421,7 @@ def get_import_batch_age_distribution(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(age_distribution, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -437,7 +437,7 @@ def get_import_batch_departments(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(department_analytics, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -454,7 +454,7 @@ def get_import_batch_positions(
     limit: int = Query(default=20, ge=1, le=100),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(position_analytics, batch_id=batch_id, limit=limit)
     except BatchNotFoundError as e:
@@ -470,7 +470,7 @@ def get_import_batch_training(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(training_analytics, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -486,7 +486,7 @@ def get_import_batch_certification(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(certification_analytics, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -502,7 +502,7 @@ def get_import_batch_risks(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(risk_analytics, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -518,7 +518,7 @@ def get_import_batch_sheet_diagnostics(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(sheet_diagnostics, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -543,7 +543,7 @@ def get_import_batch_document_candidates(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             list_document_candidates,
@@ -571,7 +571,7 @@ def get_import_batch_document_candidates_summary(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(document_candidates_summary, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -587,7 +587,7 @@ def post_import_batch_rebuild_document_candidates(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(rebuild_document_candidates, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -604,7 +604,7 @@ def get_import_batch_employee_training_history(
     row_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(employee_training_history, batch_id=batch_id, row_id=row_id)
     except BatchNotFoundError as e:
@@ -619,7 +619,7 @@ def get_import_batch_employee_training_history(
 def get_department_recoding_options(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(list_recoding_options)
     except HTTPException:
@@ -632,7 +632,7 @@ def get_department_recoding_options(
 def post_department_recoding_seed(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(seed_department_recoding)
     except HTTPException:
@@ -646,7 +646,7 @@ def get_import_batch_education_portfolio(
     batch_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(education_portfolio, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -671,7 +671,7 @@ def get_import_batch_education_profiles(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             list_education_profiles,
@@ -700,7 +700,7 @@ def get_import_batch_education_profile_detail(
     profile_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_education_profile, batch_id=batch_id, profile_id=profile_id)
     except BatchNotFoundError as e:
@@ -718,7 +718,7 @@ def patch_import_batch_education_profile(
     body: Dict[str, Any] = Body(default={}),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             update_education_profile,
@@ -745,7 +745,7 @@ def post_import_batch_education_profile_archive(
     profile_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(archive_education_profile, batch_id=batch_id, profile_id=profile_id)
     except BatchNotFoundError as e:
@@ -762,7 +762,7 @@ def get_import_batch_row_review(
     row_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_row_review_detail, batch_id=batch_id, row_id=row_id)
     except BatchNotFoundError as e:
@@ -779,7 +779,7 @@ def post_import_batch_row_ai_extraction(
     row_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(run_ai_extraction, batch_id=batch_id, row_id=row_id)
     except BatchNotFoundError as e:
@@ -801,7 +801,7 @@ def get_import_batch_declarations_export(
     q_name: Optional[str] = Query(default=None),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Response:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         with engine.begin() as conn:
             content = export_declarations_excel(
@@ -855,7 +855,7 @@ def get_import_batch_rows(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             list_batch_rows,
@@ -896,7 +896,7 @@ def get_import_batch_row_medical_categories(
     row_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_row_medical_category_history, batch_id=batch_id, row_id=row_id)
     except BatchNotFoundError as e:
@@ -913,7 +913,7 @@ async def upload_import_control_list(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Stage HR control list Excel — no apply, no employee writes."""
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     filename = (file.filename or "").strip()
     if not filename.lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Expected .xlsx control list file.")
@@ -958,7 +958,7 @@ def get_import_normalized_records_summary(
     batch_id: Optional[int] = Query(default=None, ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(review_normalized_records_summary, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -983,7 +983,7 @@ def get_import_normalized_records(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(
             list_review_normalized_records,
@@ -1015,7 +1015,7 @@ def post_import_batch_roster_promotion(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """ADR-039 Phase 3H — create/update directory employees from import roster rows."""
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     dry_run = bool(body.get("dry_run", True))
     row_ids_raw = body.get("row_ids")
     row_ids: Optional[list[int]] = None
@@ -1045,7 +1045,7 @@ def post_import_normalized_records_promote(
     body: Dict[str, Any] = Body(default={}),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     record_ids_raw = body.get("record_ids")
     record_ids: Optional[list[int]] = None
     if record_ids_raw is not None:
@@ -1088,7 +1088,7 @@ def post_import_batch_employee_bindings_repair(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """ADR-039 Phase 3G — auto-bind import rows and propagate employee_id to normalized records."""
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(repair_batch_employee_bindings, batch_id=batch_id)
     except BatchNotFoundError as e:
@@ -1106,7 +1106,7 @@ def get_import_normalized_record(
     record_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_review_normalized_record, record_id=record_id)
     except NormalizedRecordNotFoundError as e:
@@ -1200,7 +1200,7 @@ def patch_import_normalized_record_review(
     body: Dict[str, Any] = Body(default={}),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     has_review_override = "review_override" in body
     review_status = body.get("review_status")
     employee_id_raw = body.get("employee_id")

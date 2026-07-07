@@ -504,9 +504,9 @@ VALUES (64, 'Специалист')
 |----------------------|------|---------------|
 | **Должности** | `/directory/positions` | Основной экран: 1 → 96 записей; фильтр по category |
 | **Персонал (список)** | `/directory/employees`, `/directory/personnel` | Dropdown фильтра «Должность»; колонка должности для 6 employees |
-| **Карточка сотрудника** | `/directory/employees/[id]` | Поле «Должность» (join `positions.name`) |
+| **Карточка сотрудника** | `/directory/staff?employeeId={id}` (alias: `/directory/employees/[id]`) | Поле «Должность» (join `positions.name`) |
 | **Создание сотрудника** | EmployeeCreateDrawer | Dropdown `positionOptions` — 96 вариантов |
-| **Directory hub** | `/directory` | Список сотрудников — `position.name` в превью |
+| **Directory hub** | `/directory` (redirect → `/directory/staff`) | Список сотрудников — `position.name` в превью |
 | **AppShell nav** | Sidebar «Должности» | Без изменений структуры; больше данных на странице |
 
 ### Не затронуты

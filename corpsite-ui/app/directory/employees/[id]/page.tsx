@@ -1,125 +1,19 @@
 // ROUTE: /directory/employees/[id]
 // FILE: corpsite-ui/app/directory/employees/[id]/page.tsx
+import { redirect } from "next/navigation";
 
-"use client";
+export const dynamic = "force-dynamic";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+type Props = {
+  params: Promise<{ id: string }>;
+};
 
-import { getEmployee } from "../_lib/api.client";
-import type { EmployeeDTO } from "../_lib/types";
-import EmployeeStatusBadge from "../_components/EmployeeStatusBadge";
-import { formatThrownError } from "@/lib/i18n";
-
-type LoadState =
-  | { status: "idle" | "loading" }
-  | { status: "ok"; item: EmployeeDTO }
-  | { status: "error"; message: string };
-
-function fmtStatus(item: EmployeeDTO): React.ReactNode {
-  return <EmployeeStatusBadge item={item} />;
-}
-
-function fmt(v: unknown): string {
-  if (v == null) return "—";
-  const s = String(v).trim();
-  return s ? s : "—";
-}
-
-export default function EmployeeDetailsPage() {
-  const params = useParams<{ id: string }>();
-  const id = useMemo(() => String(params?.id || "").trim(), [params]);
-
-  const [state, setState] = useState<LoadState>({ status: "idle" });
-
-  useEffect(() => {
-    if (!id) return;
-
-    let cancelled = false;
-    setState({ status: "loading" });
-
-    (async () => {
-      try {
-        const item = await getEmployee(id);
-        if (cancelled) return;
-        setState({ status: "ok", item });
-      } catch (e: unknown) {
-        if (cancelled) return;
-        setState({
-          status: "error",
-          message: formatThrownError(e, { fallback: "Не удалось загрузить сотрудника" }),
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  if (!id) {
-    return (
-      <div style={{ padding: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Сотрудник</h1>
-        <p style={{ marginTop: 12 }}>Некорректный идентификатор.</p>
-      </div>
-    );
+/** Legacy employee detail URL — opens staff drawer (ADR-045, CCR-010). */
+export default async function EmployeeDetailsRedirectPage({ params }: Props) {
+  const { id } = await params;
+  const trimmed = String(id ?? "").trim();
+  if (!trimmed) {
+    redirect("/directory/staff");
   }
-
-  if (state.status === "idle" || state.status === "loading") {
-    return (
-      <div style={{ padding: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Сотрудник {id}</h1>
-        <p style={{ marginTop: 12 }}>Загрузка…</p>
-      </div>
-    );
-  }
-
-  if (state.status === "error") {
-    return (
-      <div style={{ padding: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Сотрудник {id}</h1>
-        <p style={{ marginTop: 12, color: "crimson" }}>{state.message}</p>
-      </div>
-    );
-  }
-
-  if (state.status !== "ok") {
-    return null;
-  }
-
-  const e = state.item;
-
-  return (
-    <div style={{ padding: 16, display: "grid", gap: 12 }}>
-      <h1 style={{ margin: 0, fontSize: 18 }}>{fmt(e.fio)}</h1>
-
-      <div
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 12,
-          padding: 12,
-          display: "grid",
-          gap: 8,
-        }}
-      >
-        <Row label="ID" value={e.id} />
-        <Row label="Отдел" value={e.department?.name} />
-        <Row label="Должность" value={e.position?.name} />
-        <Row label="Ставка" value={e.rate} />
-        <Row label="Статус" value={fmtStatus(e)} />
-        <Row label="Дата с" value={e.date_from} />
-        <Row label="Дата по" value={e.date_to} />
-      </div>
-    </div>
-  );
-}
-
-function Row(props: { label: string; value: React.ReactNode }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 12 }}>
-      <div style={{ color: "#6b7280" }}>{props.label}</div>
-      <div>{props.value == null ? "—" : props.value}</div>
-    </div>
-  );
+  redirect(`/directory/staff?employeeId=${encodeURIComponent(trimmed)}`);
 }

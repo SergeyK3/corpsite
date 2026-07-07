@@ -171,3 +171,33 @@ def test_hr_head_can_list_personnel_events(client: TestClient, seed):
         assert isinstance(body.get("items"), list)
     finally:
         _cleanup_ephemeral_user(created)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_hr_head_can_access_hr_process_endpoints(client: TestClient, seed):
+    """ADR-045: HR_HEAD with HR_ENROLLMENT_MANAGER grant — not only is_privileged()."""
+    _require_b2()
+    if not _role_target_type_allowed():
+        pytest.skip("Migration i8j9k0l1m2n3 not applied (ROLE target_type unavailable)")
+
+    _ensure_adr045_hr_head_role_grant()
+
+    created = _create_ephemeral_hr_head_user(seed)
+    if created is None:
+        pytest.skip("HR_HEAD role missing in database")
+
+    uid = int(created["user_id"])
+    headers = auth_headers(uid)
+    try:
+        _assert_user_can_call_auth_me(uid)
+
+        for path in (
+            "/directory/employee-documents?limit=1&offset=0",
+            "/directory/personnel/hr-change-events?limit=1&offset=0",
+            "/directory/personnel/import/batches?limit=1&offset=0",
+            "/directory/personnel/import/normalized-records?limit=1&offset=0",
+        ):
+            resp = client.get(path, headers=headers)
+            assert resp.status_code == 200, f"{path}: {resp.status_code} {resp.text}"
+    finally:
+        _cleanup_ephemeral_user(created)

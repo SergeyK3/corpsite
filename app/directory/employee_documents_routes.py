@@ -25,7 +25,7 @@ from app.services.employee_documents_service import (
 )
 
 from .common import as_http500, call_service
-from .rbac import require_privileged_or_403
+from .rbac import require_personnel_admin_or_403
 
 router = APIRouter()
 
@@ -85,7 +85,7 @@ def get_document_types(
     is_active: bool = Query(default=True),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(list_document_types, is_active=is_active)
     except Exception as e:
@@ -97,7 +97,7 @@ def get_document_kinds(
     is_active: bool = Query(default=True),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(list_document_kinds, is_active=is_active)
     except Exception as e:
@@ -108,7 +108,7 @@ def get_document_kinds(
 def get_medical_specialty_groups(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(list_medical_specialty_groups)
     except Exception as e:
@@ -122,7 +122,7 @@ def get_medical_specialties(
     is_active: bool = Query(default=True),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(
             list_medical_specialties,
@@ -148,7 +148,7 @@ def get_employee_documents(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(
             list_employee_documents,
@@ -175,7 +175,7 @@ def get_employee_training_summary(
     as_of: Optional[date] = Query(default=None),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(
             get_employee_training_hours_summary,
@@ -193,7 +193,7 @@ def get_employee_document_route(
     document_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         item = call_service(get_employee_document, document_id=document_id)
         if item is None:
@@ -210,7 +210,7 @@ def post_employee_document(
     payload: EmployeeDocumentCreateIn,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         return call_service(
             create_employee_document,
@@ -244,7 +244,7 @@ def put_employee_document(
     document_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     if not payload.model_dump(exclude_unset=True):
         raise HTTPException(status_code=422, detail="At least one field must be provided.")
     try:
@@ -285,7 +285,7 @@ def delete_employee_document(
     document_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    require_privileged_or_403(user)
+    require_personnel_admin_or_403(user)
     try:
         item = call_service(soft_delete_employee_document, document_id=document_id)
         if item is None:

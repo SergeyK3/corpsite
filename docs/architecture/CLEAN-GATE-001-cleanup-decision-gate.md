@@ -4,7 +4,7 @@
 |------|----------|
 | Статус | **Accepted** |
 | Дата | 2026-07-07 |
-| Программа | Personnel Domain Cleanup (WP-CLEAN-001…004) |
+| Программа | Personnel Domain Cleanup (WP-CLEAN-001…005) |
 | Связанные документы | [WP-CLEAN-001](./WP-CLEAN-001-personnel-domain-assessment.md), [Cleanup Candidates Register §8](./WP-CLEAN-001-personnel-domain-assessment.md#8-cleanup-candidates-register) |
 | Применимость | Любой runtime artifact (код, UI, API, schema, config) в домене Personnel и смежных контурах |
 
@@ -22,6 +22,8 @@ CLEAN-GATE-001 defines **mandatory decision gates** that must pass before any ru
 Documentation-only work (WP-CLEAN-002) does **not** require these gates. Gates apply from **WP-CLEAN-003** onward.
 
 Program invariants from WP-CLEAN-001 R2 remain in force: **Unknown > Dead**, **Transitional > Legacy**, **Register before remove**.
+
+**Work package discipline:** one Cleanup WP = one logically complete candidate group. Do not merge adjacent packages (e.g. 005A + 005B) even when changes appear small — each WP must have its own G1–G7 evidence set and independent rollback (validated in WP-CLEAN-003A…D and WP-CLEAN-005A).
 
 ---
 

@@ -16,7 +16,7 @@
 - [ADR-033 — Personnel Governance Model](./ADR-033-personnel-governance-model.md) — RBAC HR, append-only journal
 - [ADR-036 — HR Events Unified Model](./ADR-036-hr-events-unified-model.md) — разделение проф. документов и кадровых приказов; `document_registry` Phase 3
 - **ADR-034 (local demo, deprecated)** — `certificate_types` / `employee_certificates`; read-only demo, заменяется ADR-037
-- [HR Demo Local Runbook](../demo/HR-DEMO-LOCAL-RUNBOOK.md) — demo SQL scripts (sunset после Phase 1A)
+- [HR Demo Local Runbook](../demo/HR-DEMO-LOCAL-RUNBOOK.md) — Track B demo; ADR-034 SQL archived (demo API removed WP-CLEAN-005B)
 
 ---
 
@@ -195,7 +195,7 @@ ix_employee_documents_valid_until
 |--------------|--------|
 | `certificate_types` | `document_types` |
 | `employee_certificates` | `employee_documents` |
-| `GET /directory/professional-documents*` | Deprecated; UI Phase 1A → `GET /directory/employee-documents*` (backend demo endpoints остаются, без 410) |
+| `GET /directory/professional-documents*` | **Removed** (WP-CLEAN-005B / CCR-008); replaced by `GET /directory/employee-documents*` |
 
 ---
 
@@ -576,16 +576,16 @@ Hard DELETE **запрещён** в Phase 1A.
 
 ---
 
-### Deprecated endpoints (Phase 1A)
+### Demo endpoints — retired (WP-CLEAN-005B)
 
-Demo endpoints **остаются** в backend, помечены deprecated. **410 Gone не возвращать** в Phase 1A.
+Demo HTTP API **удалён** из runtime (CCR-008, 2026-07-07). Endpoints больше не регистрируются:
 
-| Endpoint | Behavior Phase 1A |
-|----------|-------------------|
-| `GET /directory/professional-documents/availability` | Deprecated; unchanged behavior if demo tables exist |
-| `GET /directory/professional-documents` | Deprecated; unchanged read-only demo if demo tables exist |
+| Endpoint | Status |
+|----------|--------|
+| ~~`GET /directory/professional-documents/availability`~~ | **Removed** |
+| ~~`GET /directory/professional-documents`~~ | **Removed** |
 
-**UI Phase 1A:** полностью переключить на `/directory/employee-documents*`; **не вызывать** demo API (`demoApi.client.ts` → `documentsApi.client.ts`). Sunset demo endpoints — Phase 1B+.
+**UI:** production-only — `/directory/employee-documents*` via `documentsApi.client.ts`. Optional local ADR-034 tables may exist in dev DBs without API consumer; see [HR Demo Runbook Appendix A](../demo/HR-DEMO-LOCAL-RUNBOOK.md#appendix-a--adr-034-demo-archive-historical).
 
 ---
 
@@ -675,7 +675,7 @@ Demo endpoints **остаются** в backend, помечены deprecated. **4
 | `documentsApi.client.ts` | New production client |
 | `professionalProfile.ts` | Remove demo constants; use API specialty names |
 | `EmployeeProfessionalProfile.tsx` | Filter documents by `employee_id` from new API |
-| `demoApi.client.ts` | **Remove** professional-documents calls from UI (Phase 1A acceptance) |
+| `documentsApi.client.ts` | Production client (Phase 1A); demo professional-documents exports removed (CCR-023 / 005B) |
 
 ---
 
@@ -736,8 +736,8 @@ Demo endpoints **остаются** в backend, помечены deprecated. **4
 
 ### Deprecation / docs
 
-- [ ] `HR-DEMO-LOCAL-RUNBOOK.md` обновлён: ADR-037 replaces ADR-034 demo path
-- [ ] Demo endpoints помечены deprecated в code comments
+- [x] `HR-DEMO-LOCAL-RUNBOOK.md` обновлён: ADR-037 replaces ADR-034 demo path ([doc audit](../architecture/WP-CLEAN-005B-doc-audit-report.md))
+- [x] Demo endpoints удалены из runtime (WP-CLEAN-005B)
 - [ ] Optional manual backfill script documented; not run in mandatory migration path
 
 ### Explicitly NOT in acceptance (Phase 1A)
@@ -771,7 +771,7 @@ Demo endpoints **остаются** в backend, помечены deprecated. **4
 | # | Решение |
 |---|---------|
 | 1 | **Backfill** demo `employee_certificates` → `employee_documents` — **optional**. Не включать в обязательную Alembic migration. Отдельный manual script только если нужно сохранить VPS demo data. |
-| 2 | **Demo endpoints** `/directory/professional-documents*` — **deprecated** в Phase 1A, **без 410**. UI после Phase 1A **не использует** demo API. |
+| 2 | **Demo endpoints** `/directory/professional-documents*` — **removed** (WP-CLEAN-005B). UI на production API only. |
 | 3 | **Lifecycle:** Phase 1A UI — только `ACTIVE` и `SUPERSEDED`. `DRAFT` остаётся в DB CHECK как reserved; workflow DRAFT — не в Phase 1A. |
 | 4 | **Specialties:** `medical_specialty_groups` и `medical_specialties` — **read-only seed** в Phase 1A. Только GET endpoints; CRUD/UI редактирования — отложено. |
 | 5 | **Acceptance extras:** документы неактивных сотрудников видны privileged HR; CRUD не пишет в `employee_events`; `file_url` — text/copyable link, без upload. |
@@ -780,4 +780,4 @@ Demo endpoints **остаются** в backend, помечены deprecated. **4
 
 ## Решение (summary)
 
-Phase 1A вводит **document-centric** production registry на 4 таблицах с CRUD API, computed expiry, `file_url` (text/copyable, no upload), read-only seed справочников типов и специальностей. Demo ADR-034 deprecated без 410; UI полностью на production API. CRUD не пишет в `employee_events`. Backfill demo data — optional manual script, не Alembic. Training-centric сущности, DRAFT workflow и specialties admin — Phase 1B+.
+Phase 1A вводит **document-centric** production registry на 4 таблицах с CRUD API, computed expiry, `file_url` (text/copyable, no upload), read-only seed справочников типов и специальностей. Demo ADR-034 HTTP API retired (WP-CLEAN-005B); UI полностью на production API. CRUD не пишет в `employee_events`. Backfill demo data — optional manual script, не Alembic. Training-centric сущности, DRAFT workflow и specialties admin — Phase 1B+.
