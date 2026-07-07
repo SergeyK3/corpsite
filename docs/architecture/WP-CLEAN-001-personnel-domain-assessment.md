@@ -278,7 +278,7 @@ flowchart TB
 |----------|-------|--------------|
 | `DirectorySidebar.tsx` | **Dead** | Zero component imports (name collision with `isDirectorySidebarNavItemActive` in `personnelNav.ts` only) |
 | `directory/_lib/api.client.ts` | **Dead** | Zero importers |
-| `app/api/directory.ts` | **Unknown** | TypeScript file in Python `app/api/` tree; comment references corpsite-ui; zero imports — misplaced orphan |
+| ~~`app/api/directory.ts`~~ | **Removed** (WP-CLEAN-003D) | Was Dead — misplaced TypeScript in Python `app/api/` tree; zero importers |
 | `demoApi.client.ts` | **Transitional** | Active journal client — rename candidate only |
 | `ProfessionalDocumentsPageClient` | **Transitional** | Core route + legacy availability probe |
 
@@ -427,7 +427,7 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 | Position Cabinet routes | **Active** — primary nav `/tasks` | **Core** |
 | `DirectorySidebar.tsx` | **Removed** (WP-CLEAN-003A) | — |
 | `directory/_lib/api.client.ts` | **Removed** (WP-CLEAN-003B) | — |
-| `app/api/directory.ts` | **Unused** | **Unknown** ✓ |
+| ~~`app/api/directory.ts`~~ | **Removed** (WP-CLEAN-003D) | — |
 | `import_routes.py` | **API registered**, no UI, no tests | **Legacy**, risk elevated |
 | `employees_import*` | Legacy service only | **Legacy**, audit required |
 | `professional_documents*` | UI probe + tests | **Legacy**, not Dead |
@@ -448,7 +448,7 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 |----|----------|-------|------|--------|-------------------|-----------|-----------------|--------------|
 | CCR-001 | ~~`DirectorySidebar.tsx`~~ | Dead | Low | **removed** | — | 003A | [CCR-001](../deprecated/personnel/CCR-001-directory-sidebar.md) | ✓ G7 complete (2026-07-07); rollback `0c678749` |
 | CCR-002 | ~~`directory/_lib/api.client.ts`~~ | Dead | Low | **removed** | — | 003B | [CCR-002](../deprecated/personnel/CCR-002-directory-api-client.md) | ✓ G7 complete (2026-07-07); rollback `0c678749` |
-| CCR-003 | `app/api/directory.ts` | Unknown | Low | open | CI/build audit | 003 | [CCR-003](../deprecated/personnel/CCR-003-app-api-directory-ts.md) | ✓ grep ☐ build |
+| CCR-003 | ~~`app/api/directory.ts`~~ | Dead | Low | **removed** | — | 003D | [CCR-003](../deprecated/personnel/CCR-003-app-api-directory-ts.md) | ✓ G7 complete (2026-07-07); rollback `d1c31cd` |
 | CCR-004 | Runbook `hr-dual-personnel-registry.md` | Gap | Medium | **verified** | — | — | [runbook](../runbooks/hr-dual-personnel-registry.md) | ✓ file restored ✓ ADR-040/041 links |
 | CCR-005 | `/directory` home page | Legacy | Medium | open | traffic check | 004 | [CCR-005](../deprecated/personnel/CCR-005-directory-home.md) | ☐ traffic |
 | CCR-006 | `import_routes.py` + CSV/XLSX | Legacy | Med-High | open | 30d access log zero | 003 | [CCR-006](../deprecated/personnel/CCR-006-legacy-bulk-import.md) | ☐ OpenAPI audit ☐ access log |
@@ -473,6 +473,10 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 
 **WP-CLEAN-003B evidence (2026-07-07):** CCR-002 file deleted; build/test pass; lint baseline unchanged; G7 post-removal documented in [WP-CLEAN-003B report](./WP-CLEAN-003B-post-removal-report.md).
 
+**WP-CLEAN-003C evidence (2026-07-07):** CCR-003 architecture audit — class Dead; see [WP-CLEAN-003C audit](./WP-CLEAN-003C-CCR003-audit.md).
+
+**WP-CLEAN-003D evidence (2026-07-07):** CCR-003 file deleted; build/test pass; lint baseline unchanged; G7 post-removal documented in [WP-CLEAN-003D report](./WP-CLEAN-003D-post-removal-report.md).
+
 ---
 
 ## 9. Legacy Inventory (consolidated)
@@ -487,7 +491,7 @@ Modules that are **neither Legacy nor Core** — highest cleanup danger if miscl
 | L6 | `/directory` home | Frontend | Legacy | Direct URL |
 | L7 | `users.role_id` | Auth | Transitional auth | **Yes** |
 | L8 | `legacy_position_mapping` | DB | Legacy bridge | Until catalog retired |
-| L9 | Orphans CCR-001…003 | Frontend/API | Dead/Unknown | CCR-001/002 removed; CCR-003 pending audit |
+| L9 | Orphans CCR-001…003 | Frontend/API | Dead | **All removed** (WP-CLEAN-003A/B/D) |
 
 ---
 
@@ -539,9 +543,17 @@ Dual registry drift, NULL `person_id`, three event streams, ACCESS-001 gate — 
 - [x] Build / test / lint executed (see [report](./WP-CLEAN-003B-post-removal-report.md))
 - [x] CCR-002 → **removed**; G7 post-removal complete
 
-### WP-CLEAN-003C — CCR-003 audit (**next**)
+### WP-CLEAN-003C — CCR-003 audit (**complete**, 2026-07-07)
 
-Prerequisite: CI/build audit per CLEAN-GATE-001. Candidate: `app/api/directory.ts`. **Do not touch CCR-003 in 003B.**
+- [x] Architecture audit of `app/api/directory.ts` (see [report](./WP-CLEAN-003C-CCR003-audit.md))
+- [x] CCR-003 reclassified Unknown → **Dead**
+
+### WP-CLEAN-003D — CCR-003 removal (**complete**, 2026-07-07)
+
+- [x] Removed `app/api/directory.ts` only
+- [x] Preserved `employees/_lib/api.client.ts`, FastAPI routers, HTTP `/api/directory/` proxy docs
+- [x] Build / test / lint executed (see [report](./WP-CLEAN-003D-post-removal-report.md))
+- [x] CCR-003 → **removed**; G7 post-removal complete
 
 ### WP-CLEAN-004 — Simplification
 
@@ -587,7 +599,7 @@ If any check is uncertain → **Unknown**. If migration path active → **Transi
 | `app/services/hr_review_override_backfill_service.py` | Transitional migration |
 | `app/services/operational_contact_service.py` | Enrollment |
 | `app/tg_bind.py` | Platform account |
-| `app/api/directory.ts` | **Unknown** orphan |
+| ~~`app/api/directory.ts`~~ | **Removed** (WP-CLEAN-003D) |
 | `corpsite-ui/lib/positionCabinetNav.ts` | Cabinet nav |
 | `corpsite-ui/components/OrgUnitsSidebarPanel.tsx` | Visibility sidebar |
 | `corpsite-ui/app/directory/working-contacts/` | Working contacts UI |
