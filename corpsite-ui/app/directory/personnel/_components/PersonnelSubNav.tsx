@@ -16,6 +16,11 @@ const BASE_ITEMS = [
     prefixes: ["/directory/personnel/journal"],
   },
   {
+    href: "/directory/personnel/orders",
+    title: "Приказы",
+    prefixes: ["/directory/personnel/orders"],
+  },
+  {
     href: "/directory/personnel/documents",
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],

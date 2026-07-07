@@ -16,6 +16,7 @@ from .users_routes import router as users_router
 from .working_contacts_routes import router as working_contacts_router
 from .personnel_demo_routes import router as personnel_demo_router
 from .employee_documents_routes import router as employee_documents_router
+from .personnel_orders_routes import router as personnel_orders_router
 from .hr_import_routes import router as hr_import_router
 from .hr_sync_routes import router as hr_sync_router
 
@@ -43,5 +44,6 @@ router.include_router(users_router)
 router.include_router(working_contacts_router)
 router.include_router(personnel_demo_router)
 router.include_router(employee_documents_router)
+router.include_router(personnel_orders_router)
 router.include_router(hr_import_router)
 router.include_router(hr_sync_router)

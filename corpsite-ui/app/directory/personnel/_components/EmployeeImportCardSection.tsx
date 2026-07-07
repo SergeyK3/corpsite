@@ -11,6 +11,7 @@ export const EMPLOYEE_IMPORT_CARD_SECTIONS: EmployeeImportCardSectionDef[] = [
   { id: "assignment", title: "Назначение" },
   { id: "hr-contour", title: "Кадровый контур" },
   { id: "access", title: "Доступ" },
+  { id: "history", title: "История" },
 ];
 
 type SectionProps = {

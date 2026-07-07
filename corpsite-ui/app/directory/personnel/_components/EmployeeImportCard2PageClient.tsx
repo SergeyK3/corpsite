@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
 import ImportProfileCardSections from "./ImportProfileCardSections";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
+import EmployeePersonnelHistorySection from "./EmployeePersonnelHistorySection";
 import {
   EmployeeImportCardSection,
   EmployeeImportCardSectionNav,
@@ -376,6 +377,17 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
                   refreshToken={assignmentRefreshToken}
                   embedded
                   showEvents={false}
+                />
+              </EmployeeImportCardSection>
+
+              <EmployeeImportCardSection
+                id="history"
+                title="История"
+                description="Хронология кадровых событий сотрудника и связанных приказов. Только просмотр."
+              >
+                <EmployeePersonnelHistorySection
+                  employeeId={employeeId}
+                  refreshToken={assignmentRefreshToken}
                 />
               </EmployeeImportCardSection>
             </div>

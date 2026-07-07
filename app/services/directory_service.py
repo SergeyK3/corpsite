@@ -11,6 +11,7 @@ from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
 from app.services.hr_event_registry import get_event_class, get_event_label
+from app.services.personnel_orders_query_service import personnel_orders_available
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import build_dept_scope_cte
@@ -982,6 +983,8 @@ def _insert_employee_event(
     order_ref: Optional[str],
     comment: Optional[str],
     created_by: int,
+    order_id: Optional[int] = None,
+    order_item_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     metadata_json = json.dumps(metadata) if metadata is not None else None
     q_insert_event = text(
@@ -1000,6 +1003,8 @@ def _insert_employee_event(
             to_position_id,
             to_rate,
             order_ref,
+            order_id,
+            order_item_id,
             comment,
             created_by
         )
@@ -1017,6 +1022,8 @@ def _insert_employee_event(
             :to_position_id,
             :to_rate,
             :order_ref,
+            :order_id,
+            :order_item_id,
             :comment,
             :created_by
         )
@@ -1034,6 +1041,8 @@ def _insert_employee_event(
             to_position_id,
             to_rate,
             order_ref,
+            order_id,
+            order_item_id,
             comment,
             created_by,
             created_at
@@ -1055,6 +1064,8 @@ def _insert_employee_event(
             "to_position_id": to_position_id,
             "to_rate": to_rate,
             "order_ref": order_ref,
+            "order_id": int(order_id) if order_id is not None else None,
+            "order_item_id": int(order_item_id) if order_item_id is not None else None,
             "comment": comment,
             "created_by": int(created_by),
         },
@@ -1098,7 +1109,14 @@ def _normalize_employee_event(row: Dict[str, Any]) -> Dict[str, Any]:
     else:
         lifecycle_status = "APPROVED"
 
-    return {
+    order_id = row.get("order_id")
+    order_item_id = row.get("order_item_id")
+    order_number = row.get("order_number")
+    order_date = row.get("order_date")
+    order_status = row.get("order_status")
+    order_item_number = row.get("order_item_number")
+
+    normalized: Dict[str, Any] = {
         "event_id": int(row["event_id"]),
         "event_type": event_type,
         "event_class": event_class,
@@ -1121,6 +1139,96 @@ def _normalize_employee_event(row: Dict[str, Any]) -> Dict[str, Any]:
             else created_at
         ),
     }
+
+    if order_id is not None:
+        normalized["order_id"] = int(order_id)
+    if order_item_id is not None:
+        normalized["order_item_id"] = int(order_item_id)
+    if order_number is not None:
+        normalized["order_number"] = str(order_number)
+    if order_date is not None:
+        normalized["order_date"] = (
+            order_date.isoformat() if hasattr(order_date, "isoformat") else str(order_date)
+        )
+    if order_status is not None:
+        normalized["order_status"] = str(order_status)
+    if order_item_number is not None:
+        normalized["order_item_number"] = int(order_item_number)
+
+    return normalized
+
+
+def _employee_events_order_columns_available() -> bool:
+    with engine.begin() as conn:
+        cols = {
+            r[0]
+            for r in conn.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'employee_events'
+                    """
+                )
+            ).all()
+        }
+        return "order_id" in cols and "order_item_id" in cols
+
+
+def _employee_events_list_select_sql(*, include_order_linkage: bool) -> str:
+    base_columns = """
+            ev.event_id,
+            ev.event_type,
+            ev.event_class,
+            ev.lifecycle_status,
+            ev.metadata,
+            ev.effective_date,
+            ev.from_org_unit_id,
+            ev.from_position_id,
+            ev.from_rate,
+            ev.to_org_unit_id,
+            ev.to_position_id,
+            ev.to_rate,
+            ev.order_ref,
+            ev.comment,
+            ev.created_by,
+            ev.created_at
+    """
+    if not include_order_linkage:
+        return base_columns
+
+    order_columns = """
+            ev.order_id,
+            ev.order_item_id
+    """
+    if personnel_orders_available():
+        return f"""
+            {base_columns},
+            {order_columns},
+            po.order_number,
+            po.order_date,
+            po.status AS order_status,
+            poi.item_number AS order_item_number
+        """
+
+    return f"""
+            {base_columns},
+            {order_columns}
+    """
+
+
+def _employee_events_list_from_sql(*, include_order_linkage: bool) -> str:
+    if not include_order_linkage:
+        return "public.employee_events ev"
+
+    if personnel_orders_available():
+        return """
+            public.employee_events ev
+            LEFT JOIN public.personnel_orders po ON po.order_id = ev.order_id
+            LEFT JOIN public.personnel_order_items poi ON poi.item_id = ev.order_item_id
+        """
+
+    return "public.employee_events ev"
 
 
 def _apply_employee_org_change(
@@ -1367,7 +1475,11 @@ def list_employee_events(
         """
     )
 
-    where_parts = ["employee_id = :employee_id"]
+    include_order_linkage = _employee_events_order_columns_available()
+    select_sql = _employee_events_list_select_sql(include_order_linkage=include_order_linkage)
+    from_sql = _employee_events_list_from_sql(include_order_linkage=include_order_linkage)
+
+    where_parts = ["ev.employee_id = :employee_id"]
     params: Dict[str, Any] = {
         "employee_id": None,
         "limit": int(limit),
@@ -1375,7 +1487,7 @@ def list_employee_events(
     }
 
     if event_type is not None:
-        where_parts.append("event_type = :event_type")
+        where_parts.append("ev.event_type = :event_type")
         params["event_type"] = event_type
 
     where_sql = " AND ".join(where_parts)
@@ -1383,32 +1495,17 @@ def list_employee_events(
     q_total = text(
         f"""
         SELECT COUNT(*) AS cnt
-        FROM public.employee_events
+        FROM {from_sql}
         WHERE {where_sql}
         """
     )
     q_list = text(
         f"""
         SELECT
-            event_id,
-            event_type,
-            event_class,
-            lifecycle_status,
-            metadata,
-            effective_date,
-            from_org_unit_id,
-            from_position_id,
-            from_rate,
-            to_org_unit_id,
-            to_position_id,
-            to_rate,
-            order_ref,
-            comment,
-            created_by,
-            created_at
-        FROM public.employee_events
+            {select_sql}
+        FROM {from_sql}
         WHERE {where_sql}
-        ORDER BY effective_date DESC, event_id DESC
+        ORDER BY ev.effective_date DESC, ev.event_id DESC
         LIMIT :limit OFFSET :offset
         """
     )

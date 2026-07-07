@@ -73,6 +73,12 @@ export type EmployeeEventDTO = {
   from_rate: number | null;
   to_rate: number | null;
   order_ref: string | null;
+  order_id?: number | null;
+  order_item_id?: number | null;
+  order_number?: string | null;
+  order_date?: string | null;
+  order_status?: string | null;
+  order_item_number?: number | null;
   comment: string | null;
   created_by: number;
   created_at: string;
