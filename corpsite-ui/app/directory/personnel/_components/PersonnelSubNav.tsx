@@ -30,6 +30,11 @@ const BASE_ITEMS = [
     title: "Изменения реестра",
     prefixes: ["/directory/personnel/hr-change-events"],
   },
+  {
+    href: "/directory/personnel/migration",
+    title: "Миграция",
+    prefixes: ["/directory/personnel/migration"],
+  },
 ] as const;
 
 type ImportNavItem =
