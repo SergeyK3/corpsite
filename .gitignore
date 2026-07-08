@@ -75,6 +75,8 @@ docs/*
 !docs/workshop/**
 !docs/demo/
 !docs/demo/**
+!docs/position-cabinet/
+!docs/position-cabinet/**
 
 
 # -----------------------
