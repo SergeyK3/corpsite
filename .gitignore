@@ -67,6 +67,8 @@ docs/*
 !docs/ops/**
 !docs/access/
 !docs/access/**
+!docs/personnel-migration/
+!docs/personnel-migration/*.md
 !docs/roadmap/
 !docs/roadmap/**
 !docs/deploy/
