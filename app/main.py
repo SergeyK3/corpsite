@@ -37,6 +37,7 @@ from app.services.regular_tasks_public_router import router as regular_tasks_pub
 from app.api.regular_tasks import router as regular_tasks_router  # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
 from app.api.admin_router import router as admin_router
 from app.api.personnel_admin_router import router as personnel_admin_router
+from app.api.personnel_migration_router import router as personnel_migration_router
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -115,6 +116,8 @@ app.include_router(regular_tasks_router)  # /regular-task-runs, /import-xlsx
 app.include_router(admin_router)
 # ADR-043 Phase C4.1 — personnel lifecycle API
 app.include_router(personnel_admin_router)
+# PMF-3A — personnel migration draft API
+app.include_router(personnel_migration_router)
 
 # -----------------------
 # Routers (internal)
