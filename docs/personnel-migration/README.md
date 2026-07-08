@@ -7,6 +7,8 @@
 | **Контур** | Кадровые процессы → Миграция |
 | **Канонический формат** | **Markdown** (`.md`) |
 | **Последнее обновление индекса** | 2026-07-08 |
+| **Development status** | **Pilot Freeze** — см. [PMF-PILOT-FREEZE.md](./PMF-PILOT-FREEZE.md) |
+| **Successor program** | [Personnel Intake Framework (PIF)](../personnel-intake/README.md) |
 
 ---
 
@@ -30,12 +32,14 @@
 | **PMF-3A** | Draft API | **done** | `app/api/personnel_migration_router.py` (draft layer); `tests/test_pmf_3a_api.py` |
 | **PMF-3B** | Mutation API | **done** | [PMF-3B-mutation-api-design.md](./PMF-3B-mutation-api-design.md); `tests/test_pmf_3b_mutation_api.py` |
 | **PMF-4A** | Wizard Design | **done** | [PMF-4A-migration-wizard-design.md](./PMF-4A-migration-wizard-design.md) |
-| **PMF-4B** | Navigation + shell | **next** | — |
-| PMF-4C | Draft Run UI | planned | см. [PMF-4A §12](./PMF-4A-migration-wizard-design.md#12-реализация--разбиение-pmf-4) |
-| PMF-4D | Items Grid + mapping | planned | см. PMF-4A §12 |
-| PMF-4E | Commit UI | planned | см. PMF-4A §12 |
-| PMF-4F | History UI | planned | см. PMF-4A §12 |
-| PMF-4G | Pilot (Education) | planned | см. PMF-4A §12 |
+| **PMF-4B** | Navigation + shell | **done** | `corpsite-ui/app/directory/personnel/migration/` |
+| **PMF-4B.1** | HR-first UX polish | **done** | `MigrationHomePageClient`, `personnelMigrationHrLabels.ts` |
+| **PMF-4C** | Entry Architecture | **done** (architecture) | [PMF-4C-entry-architecture.md](./PMF-4C-entry-architecture.md), [PMF-4C-ratification-record.md](./PMF-4C-ratification-record.md) |
+| PMF-4C | Session Bootstrap (code) | **next** | см. [PMF-4C-entry-architecture.md §13](./PMF-4C-entry-architecture.md#13-relationship-to-pmf-4c) |
+| PMF-4D | Items Grid + mapping | **done** | Session workspace, candidate list |
+| PMF-4E | Commit UI | **done** | Commit confirm, success panel |
+| PMF-4F | History / Advanced Mapping / Lifecycle | **frozen** | Deferred — см. [PMF-PILOT-FREEZE.md](./PMF-PILOT-FREEZE.md) |
+| PMF-5 | Pilot Readiness | **done** | [PMF-PILOT-READINESS-REVIEW.md](./PMF-PILOT-READINESS-REVIEW.md) |
 
 > **PMF-3A** реализован в коде; отдельного design-документа в `docs/personnel-migration/` нет. Контракт draft-layer описан в [PMF-3B-mutation-api-design.md](./PMF-3B-mutation-api-design.md) и [ADR-PMF-001 §4](../adr/ADR-PMF-001-personnel-migration-framework.md#4-детализация-компонентов).
 
@@ -48,6 +52,12 @@
 | [README.md](./README.md) | Этот индекс |
 | [PMF-3B-mutation-api-design.md](./PMF-3B-mutation-api-design.md) | Design mutation API: commit, void, supersede, record events |
 | [PMF-4A-migration-wizard-design.md](./PMF-4A-migration-wizard-design.md) | Design Migration Wizard UI (экраны, UX, навигация, PMF-4B–4G) |
+| [PMF-4C-entry-architecture.md](./PMF-4C-entry-architecture.md) | **Ratified** Entry Architecture — dual entry, session, deep links (authoritative for entry layer) |
+| [PMF-4C-ratification-record.md](./PMF-4C-ratification-record.md) | Ratification record — Architecture Ready for Implementation |
+| [PMF-PILOT-READINESS-REVIEW.md](./PMF-PILOT-READINESS-REVIEW.md) | Pilot Readiness Review — **Pilot Ready with Recommendations** |
+| [PMF-PILOT-CHECKLIST.md](./PMF-PILOT-CHECKLIST.md) | Pilot readiness checklist |
+| [PMF-PILOT-RATIFICATION-RECORD.md](./PMF-PILOT-RATIFICATION-RECORD.md) | Pilot ratification record |
+| [PMF-PILOT-FREEZE.md](./PMF-PILOT-FREEZE.md) | **Pilot Freeze** — development frozen; pivot to PIF |
 
 ---
 
@@ -97,13 +107,15 @@
 Детальное описание: [PMF-4A §12 — Реализация](./PMF-4A-migration-wizard-design.md#12-реализация--разбиение-pmf-4).
 
 ```text
-PMF-4A (design) ──► PMF-4B ──► PMF-4C ──► PMF-4D ──► PMF-4E ──► PMF-4F ──► PMF-4G (pilot)
+PMF-4A (design) ──► PMF-4B ──► PMF-4B.1 ──► PMF-4C (entry arch ✓) ──► PMF-4C (code) ──► PMF-4D ──► PMF-4E ──► PMF-4F ──► PMF-4G (pilot)
 ```
 
 | WP | Название | Deliverable |
 |----|----------|-------------|
-| **PMF-4B** | Navigation + shell | Routes `/directory/personnel/migration/**`, sub-nav, guards, `MigrationWizardShell`, domain cards |
-| **PMF-4C** | Draft Run UI | Employee select, `POST /runs/draft`, workflow stepper, session route |
+| **PMF-4B** | Navigation + shell | **done** — routes, sub-nav, guards, `MigrationWizardShell`, domain cards |
+| **PMF-4B.1** | HR-first UX polish | **done** — process chain, HR copy, roadmap panel |
+| **PMF-4C** | Entry Architecture | **done** — [PMF-4C-entry-architecture.md](./PMF-4C-entry-architecture.md) ratified |
+| **PMF-4C** | Session Bootstrap (code) | **next** — session route, auto draft run, resolver, stepper shell, deep links |
 | **PMF-4D** | Items Grid + mapping | Candidates table, split-view, `EducationMigrationForm`, `POST .../items` |
 | **PMF-4E** | Commit UI | Pre-commit review, confirm, 422 errors, void/supersede dialogs |
 | **PMF-4F** | History UI | Record events table, Run Details, side rail |

@@ -90,6 +90,11 @@ const boundRecord: NormalizedRecord = {
   },
 };
 
+const approvedBoundRecord: NormalizedRecord = {
+  ...boundRecord,
+  review_status: "approved",
+};
+
 describe("ImportNormalizedRecordDrawer", () => {
   afterEach(() => {
     cleanup();
@@ -168,5 +173,20 @@ describe("ImportNormalizedRecordDrawer", () => {
         "Сотрудник уже создан в персонале. Если сотруднику нужен вход в систему, выдайте доступ к Corpsite."
       )
     ).not.toBeInTheDocument();
+  });
+
+  it("shows migration CTA for approved bound education/training records", () => {
+    renderDrawer(approvedBoundRecord);
+
+    const link = screen.getByRole("link", { name: "Перенести в кадровую карточку" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/directory/personnel/migration/education/45?candidate_id=education%3Anormalized_record%3A42&source=review",
+    );
+  });
+
+  it("hides migration CTA for pending records", () => {
+    renderDrawer(baseRecord);
+    expect(screen.queryByRole("link", { name: "Перенести в кадровую карточку" })).not.toBeInTheDocument();
   });
 });

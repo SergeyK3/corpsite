@@ -148,3 +148,139 @@ export function migrationHrEmptyStateTitle(): string {
 export function migrationHrEmptyStateDescription(): string {
   return "Обратитесь к системному администратору для настройки переноса данных.";
 }
+
+// PMF-4C — session bootstrap HR copy
+
+export type MigrationSessionWorkflowStepId = "employee" | "records" | "review" | "commit";
+
+export type MigrationSessionWorkflowStep = {
+  id: MigrationSessionWorkflowStepId;
+  title: string;
+};
+
+export const MIGRATION_SESSION_WORKFLOW_STEPS: MigrationSessionWorkflowStep[] = [
+  { id: "employee", title: "Сотрудник" },
+  { id: "records", title: "Записи" },
+  { id: "review", title: "Проверка" },
+  { id: "commit", title: "Готово" },
+];
+
+export function migrationHrSessionTitle(domainDisplayName: string): string {
+  return `Перенос данных — ${domainDisplayName}`;
+}
+
+export function migrationHrSessionEntrySourceLabel(
+  source: "review" | "migration_home" | "deep_link",
+): string {
+  switch (source) {
+    case "review":
+      return "Из проверки записей";
+    case "migration_home":
+      return "Из раздела миграции";
+    default:
+      return "По прямой ссылке";
+  }
+}
+
+export const MIGRATION_PERSON_BLOCKER_TITLE = "Нужна привязка кадровой записи";
+
+export const MIGRATION_PERSON_BLOCKER_MESSAGE =
+  "Для сотрудника не создана постоянная кадровая запись. Сначала завершите привязку сотрудника.";
+
+export function migrationHrSessionResumeBanner(resumed: boolean): string | null {
+  if (!resumed) return null;
+  return "Продолжение незавершённого переноса.";
+}
+
+export function migrationHrSessionNextPhaseHint(): string {
+  return "Выберите запись для переноса или продолжите сопоставление полей.";
+}
+
+export function migrationHrSessionAddItemError(message: string): string {
+  return message;
+}
+
+export function migrationHrSessionCommittedMessage(): string {
+  return "Перенос по этой сессии уже зафиксирован. Просмотр истории будет доступен на следующем этапе.";
+}
+
+export function migrationHrDomainNotFound(domainCode: string): string {
+  return `Тип кадровых данных «${domainCode}» не найден.`;
+}
+
+export function migrationHrDomainDisabled(displayName: string): string {
+  return `Перенос «${displayName}» пока недоступен. Обратитесь к администратору.`;
+}
+
+export function migrationHrEmployeeNotFound(): string {
+  return "Сотрудник не найден в справочнике.";
+}
+
+// PMF-4E — commit UX HR copy
+
+export const MIGRATION_COMMIT_CONFIRM_TITLE = "Подтвердите перенос";
+
+export const MIGRATION_COMMIT_CONFIRM_MESSAGE =
+  "Запись будет добавлена в кадровую карточку сотрудника. После переноса она станет частью кадровых данных.";
+
+export const MIGRATION_COMMIT_CTA_LABEL = "Перенести в кадровую карточку";
+
+export const MIGRATION_COMMIT_CONFIRM_BUTTON = "Подтвердить перенос";
+
+export const MIGRATION_COMMIT_CANCEL_BUTTON = "Отмена";
+
+export const MIGRATION_COMMIT_SUCCESS_TITLE = "Запись перенесена";
+
+export const MIGRATION_COMMIT_SUCCESS_MESSAGE =
+  "Данные добавлены в кадровую карточку сотрудника и теперь являются частью кадровых сведений.";
+
+export const MIGRATION_REVIEW_SUMMARY_TITLE = "Проверка перед переносом";
+
+export const MIGRATION_REVIEW_READINESS_READY = "Готово к переносу";
+
+export function migrationHrCommitUnavailableReason(args: {
+  hasItem: boolean;
+  isDraft: boolean;
+  hasPersonLink: boolean;
+}): string | null {
+  if (!args.hasItem) {
+    return "Сначала выберите запись для переноса.";
+  }
+  if (!args.hasPersonLink) {
+    return MIGRATION_PERSON_BLOCKER_MESSAGE;
+  }
+  if (!args.isDraft) {
+    return "Перенос уже завершён или недоступен для повторного подтверждения.";
+  }
+  return null;
+}
+
+export function migrationHrCommitError(rawMessage: string): string {
+  const normalized = rawMessage.trim().toLowerCase();
+  if (
+    normalized.includes("not draft") ||
+    normalized.includes("is not draft") ||
+    normalized.includes("409")
+  ) {
+    return "Перенос уже был завершён. Обновите страницу или начните новый перенос.";
+  }
+  if (
+    normalized.includes("person_id") ||
+    normalized.includes("person link") ||
+    normalized.includes("привязк")
+  ) {
+    return MIGRATION_PERSON_BLOCKER_MESSAGE;
+  }
+  if (
+    normalized.includes("validation") ||
+    normalized.includes("education_kind") ||
+    normalized.includes("training_kind") ||
+    normalized.includes("422")
+  ) {
+    return "Данные записи не готовы к переносу. Проверьте запись в разделе проверки или обратитесь к администратору.";
+  }
+  if (normalized.includes("failed to fetch") || normalized.includes("network")) {
+    return "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.";
+  }
+  return "Не удалось завершить перенос. Повторите попытку или обратитесь к администратору.";
+}

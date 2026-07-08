@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
@@ -22,6 +23,12 @@ import {
   type NormalizedRecordReviewStatus,
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
+import {
+  buildMigrationCandidateId,
+  buildMigrationSessionHref,
+  canShowMigrationCta,
+  normalizedRecordToMigrationDomain,
+} from "../_lib/personnelMigrationCandidates";
 
 type Props = {
   record: NormalizedRecord | null;
@@ -430,6 +437,18 @@ export default function ImportNormalizedRecordDrawer({
     bindingStatus === "bound" &&
     Number.isInteger(boundEmployeeId) &&
     boundEmployeeId > 0;
+  const migrationDomainCode = normalizedRecordToMigrationDomain(record.record_kind);
+  const showMigrationCta =
+    !editing && canShowMigrationCta(record) && migrationDomainCode != null;
+  const migrationHref =
+    showMigrationCta && record.employee_id
+      ? buildMigrationSessionHref({
+          domainCode: migrationDomainCode!,
+          employeeId: record.employee_id,
+          candidateId: buildMigrationCandidateId(migrationDomainCode!, record.normalized_record_id),
+          source: "review",
+        })
+      : null;
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -667,6 +686,14 @@ export default function ImportNormalizedRecordDrawer({
             </>
           ) : (
             <>
+              {showMigrationCta && migrationHref ? (
+                <Link
+                  href={migrationHref}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Перенести в кадровую карточку
+                </Link>
+              ) : null}
               {canApprove ? (
                 <button
                   type="button"

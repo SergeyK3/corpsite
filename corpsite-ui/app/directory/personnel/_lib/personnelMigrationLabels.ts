@@ -21,3 +21,7 @@ export function migrationTechnicalRegistryEnabled(domain: MigrationDomainRow): b
 export function migrationTechnicalDescription(domain: MigrationDomainRow): string | null {
   return domain.description?.trim() || null;
 }
+
+export function migrationTechnicalRunStatus(status: string): string {
+  return status.trim() || "—";
+}
