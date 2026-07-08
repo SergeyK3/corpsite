@@ -1,5 +1,7 @@
 // FILE: corpsite-ui/lib/positionCabinetNav.ts
 
+import { isHrProcessesRoute } from "./personnelNav";
+
 /** Position Cabinet section identifiers (UI shell only — no backend binding yet). */
 export type PositionCabinetSection = "tasks" | "dashboards" | "education";
 
@@ -61,4 +63,18 @@ export function resolvePositionCabinetSection(pathname: string): PositionCabinet
     ({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
   return match?.section ?? null;
+}
+
+export type ShouldShowPositionCabinetNavOptions = {
+  showPersonnelVisibility: boolean;
+};
+
+/** Whether AppShell should render Position Cabinet top nav (tabs + library links). */
+export function shouldShowPositionCabinetNav(
+  pathname: string,
+  options: ShouldShowPositionCabinetNavOptions,
+): boolean {
+  if (isPositionCabinetRoute(pathname)) return true;
+  if (options.showPersonnelVisibility && isHrProcessesRoute(pathname)) return true;
+  return false;
 }

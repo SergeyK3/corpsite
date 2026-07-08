@@ -6,6 +6,7 @@ import {
   POSITION_CABINET_NAV_ITEMS,
   POSITION_CABINET_TAB_LABELS,
   resolvePositionCabinetSection,
+  shouldShowPositionCabinetNav,
 } from "./positionCabinetNav";
 
 describe("positionCabinetNav", () => {
@@ -40,6 +41,23 @@ describe("positionCabinetNav", () => {
     expect(isPositionCabinetRoute("/dashboards")).toBe(true);
     expect(isPositionCabinetRoute("/education")).toBe(true);
     expect(isPositionCabinetRoute("/profile")).toBe(false);
+    expect(isPositionCabinetRoute("/directory/personnel/orders")).toBe(false);
+  });
+
+  it("shouldShowPositionCabinetNav keeps HR routes out of active tab semantics", () => {
+    expect(shouldShowPositionCabinetNav("/tasks", { showPersonnelVisibility: false })).toBe(true);
+    expect(shouldShowPositionCabinetNav("/dashboards", { showPersonnelVisibility: false })).toBe(true);
+    expect(shouldShowPositionCabinetNav("/education", { showPersonnelVisibility: false })).toBe(true);
+    expect(shouldShowPositionCabinetNav("/directory/personnel/orders", { showPersonnelVisibility: true })).toBe(
+      true,
+    );
+    expect(shouldShowPositionCabinetNav("/directory/personnel/journal", { showPersonnelVisibility: true })).toBe(
+      true,
+    );
+    expect(shouldShowPositionCabinetNav("/directory/personnel/orders", { showPersonnelVisibility: false })).toBe(
+      false,
+    );
+    expect(shouldShowPositionCabinetNav("/directory/employees", { showPersonnelVisibility: true })).toBe(false);
   });
 
   it("resolves active section from pathname", () => {

@@ -33,7 +33,7 @@ import {
 } from "@/lib/personnelNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
-import { isPositionCabinetRoute } from "@/lib/positionCabinetNav";
+import { shouldShowPositionCabinetNav } from "@/lib/positionCabinetNav";
 import { resolveCabinetTitle } from "@/lib/userCabinetTitle";
 
 import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
@@ -333,7 +333,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const orgTreeBasePath = useMemo(() => resolveDirectoryOrgTreeBasePath(pathname), [pathname]);
 
-  const showPositionCabinetNav = isPositionCabinetRoute(pathname);
+  const showPositionCabinetNav = shouldShowPositionCabinetNav(pathname, { showPersonnelVisibility });
 
   function renderMainSection(content: React.ReactNode) {
     return <section className="min-w-0">{content}</section>;
