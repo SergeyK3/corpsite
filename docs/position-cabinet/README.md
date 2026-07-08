@@ -10,7 +10,7 @@ Normative ADR остаются **canonical** в [`docs/adr/`](../adr/) — эт�
 
 | ID | Document | Status |
 |----|----------|--------|
-| **PC-CONCEPT-001** | [Unified Position Cabinet Concept](./PC-CONCEPT-001-unified-position-cabinet-concept.md) | **Draft** |
+| **PC-CONCEPT-001** | [Unified Position Cabinet Concept](./PC-CONCEPT-001-unified-position-cabinet-concept.md) | **Architecture Draft v0.3** |
 | — | [PC-CONCEPT-001 Review Notes](./PC-CONCEPT-001-review-notes.md) | Review backlog |
 
 ---
