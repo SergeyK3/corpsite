@@ -14,6 +14,16 @@ class PersonnelMigrationError(Exception):
 class PersonnelMigrationValidationError(PersonnelMigrationError):
     """Invalid input or precondition failure."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        item_errors: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.item_errors = item_errors or []
+
 
 class PersonnelMigrationConflictError(PersonnelMigrationError):
     """Run/item state conflict (wrong status, already committed)."""

@@ -394,10 +394,17 @@ def commit_run(
 
     plugin = get_domain_plugin(run_ctx.domain_code)
     all_errors: list[str] = []
+    item_error_details: list[dict[str, Any]] = []
     for item in items:
         errors = plugin.validate_draft(conn, item=item, run=run_ctx)
         if errors:
             all_errors.extend(f"item {item.item_id}: {err}" for err in errors)
+            item_error_details.append(
+                {
+                    "item_id": item.item_id,
+                    "validation_errors": errors,
+                }
+            )
             conn.execute(
                 text(
                     """
@@ -412,7 +419,10 @@ def commit_run(
                 },
             )
     if all_errors:
-        raise PersonnelMigrationValidationError("; ".join(all_errors))
+        raise PersonnelMigrationValidationError(
+            "; ".join(all_errors),
+            item_errors=item_error_details,
+        )
 
     written = plugin.write_records(conn, run=run_ctx, items=items, actor_id=actor_id)
     written_by_item = {record.item_id: record for record in written}
