@@ -93,8 +93,8 @@ export function MigrationForbiddenPanel() {
     <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
       <p className="font-medium">Недостаточно прав</p>
       <p className="mt-2">
-        Миграция кадровых данных доступна HR-операторам с правами import admin (HR enrollment manager,
-        privileged operator или system admin).
+        Перенос данных в кадровую карточку доступен только уполномоченным HR-операторам. Если вам нужен
+        доступ, обратитесь к системному администратору.
       </p>
     </div>
   );
