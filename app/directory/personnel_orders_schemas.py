@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 
 class PersonnelOrderHeaderOut(BaseModel):
     order_id: int
-    order_number: str
-    order_date: str
+    order_number: Optional[str] = None
+    order_date: Optional[str] = None
     order_type_code: str
     order_class: str
     status: str
@@ -139,8 +139,8 @@ class PersonnelOrderDetailResponse(BaseModel):
 
 
 class PersonnelOrderCreateIn(BaseModel):
-    order_number: str = Field(..., min_length=1, max_length=200)
-    order_date: date
+    order_number: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    order_date: Optional[date] = None
     order_type_code: str = Field(..., min_length=1, max_length=80)
     source_mode: str = Field(default="DIGITAL", max_length=20)
     legal_basis_article: Optional[str] = Field(default=None, max_length=500)

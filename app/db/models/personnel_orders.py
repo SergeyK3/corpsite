@@ -93,8 +93,9 @@ class PersonnelOrder(Base):
     )
 
     order_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    order_number: Mapped[str] = mapped_column(Text, nullable=False)
-    order_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Nullable until paper-journal registration (WP-PO-008 Paper First drafts).
+    order_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    order_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     order_type_code: Mapped[str] = mapped_column(Text, nullable=False)
     order_class: Mapped[str] = mapped_column(
         Text,

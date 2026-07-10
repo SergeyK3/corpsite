@@ -53,6 +53,33 @@ describe("personnelOrdersApi.client", () => {
     expect(buildPersonnelOrdersHref({ status: "VOIDED" })).toBe(
       "/directory/personnel/orders?status=VOIDED",
     );
+    expect(buildPersonnelOrdersHref({ order_id: 15, employee_id: 9 })).toBe(
+      "/directory/personnel/orders?employee_id=9&order_id=15",
+    );
+  });
+
+  it("parses order_id deep-link filter", () => {
+    const params = new URLSearchParams("order_id=42&employee_id=7");
+    expect(parsePersonnelOrdersFilters(params)).toEqual({
+      status: undefined,
+      order_type_code: undefined,
+      date_from: undefined,
+      date_to: undefined,
+      employee_id: 7,
+      org_unit_id: undefined,
+      order_id: 42,
+      q: undefined,
+    });
+  });
+
+  it("does not send order_id to API list query params", () => {
+    const qs = buildPersonnelOrdersQueryParams(
+      { order_id: 15, employee_id: 9, status: "DRAFT" },
+      { includeClientSearch: false },
+    );
+    expect(qs.get("order_id")).toBeNull();
+    expect(qs.get("employee_id")).toBe("9");
+    expect(qs.get("status")).toBe("DRAFT");
   });
 
   it("filters items by order number and employee names client-side", () => {

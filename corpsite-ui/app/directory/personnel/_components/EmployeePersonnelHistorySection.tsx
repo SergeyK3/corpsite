@@ -183,11 +183,12 @@ function EventOrderLink({
 }) {
   if (event.order_id) {
     const employeeNumericId = Number(employeeId);
-    const href = buildPersonnelOrdersHref(
-      Number.isFinite(employeeNumericId) && employeeNumericId > 0
+    const href = buildPersonnelOrdersHref({
+      order_id: event.order_id,
+      ...(Number.isFinite(employeeNumericId) && employeeNumericId > 0
         ? { employee_id: employeeNumericId }
-        : {},
-    );
+        : {}),
+    });
     return (
       <Link
         href={href}

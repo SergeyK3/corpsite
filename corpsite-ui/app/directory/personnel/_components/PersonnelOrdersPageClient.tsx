@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 
+import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
 import {
@@ -18,12 +19,14 @@ import {
   parsePersonnelOrdersFilters,
   personnelOrderStatusLabel,
   personnelOrderTypeLabel,
+  type PersonnelOrderDetailResponse,
   type PersonnelOrderListItem,
   type PersonnelOrdersFilters,
 } from "../_lib/personnelOrdersApi.client";
 
 function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
   const parts: string[] = [];
+  if (filters.order_id) parts.push(`приказ #${filters.order_id}`);
   if (filters.employee_id) parts.push(`сотрудник #${filters.employee_id}`);
   if (filters.org_unit_id) parts.push(`подразделение #${filters.org_unit_id}`);
   if (filters.status) parts.push(personnelOrderStatusLabel(filters.status));
@@ -50,6 +53,8 @@ export default function PersonnelOrdersPageClient() {
   const [error, setError] = React.useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = React.useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [toast, setToast] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -57,6 +62,7 @@ export default function PersonnelOrdersPageClient() {
     try {
       const body = await listPersonnelOrders({
         ...filters,
+        order_id: undefined,
         q: undefined,
         limit: 200,
         offset: 0,
@@ -76,6 +82,13 @@ export default function PersonnelOrdersPageClient() {
     void load();
   }, [load]);
 
+  React.useEffect(() => {
+    if (filters.order_id && filters.order_id > 0) {
+      setSelectedOrderId(filters.order_id);
+      setDrawerOpen(true);
+    }
+  }, [filters.order_id]);
+
   const filteredItems = React.useMemo(
     () => filterPersonnelOrdersBySearch(items, filters.q),
     [filters.q, items],
@@ -85,7 +98,7 @@ export default function PersonnelOrdersPageClient() {
 
   function updateFilters(next: Partial<PersonnelOrdersFilters>) {
     const merged: PersonnelOrdersFilters = { ...filters, ...next };
-    const params = buildPersonnelOrdersQueryParams(merged);
+    const params = buildPersonnelOrdersQueryParams(merged, { includeOrderIdInQuery: true });
     const qs = params.toString();
     router.replace(qs ? `${PERSONNEL_ORDERS_BASE_PATH}?${qs}` : PERSONNEL_ORDERS_BASE_PATH);
   }
@@ -97,16 +110,54 @@ export default function PersonnelOrdersPageClient() {
   function openOrder(row: PersonnelOrderListItem) {
     setSelectedOrderId(row.order_id);
     setDrawerOpen(true);
+    updateFilters({ order_id: row.order_id });
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    setSelectedOrderId(null);
+    if (filters.order_id) {
+      const { order_id: _removed, ...rest } = filters;
+      updateFilters({ ...rest, order_id: undefined });
+    }
+  }
+
+  function handleCreated(detail: PersonnelOrderDetailResponse) {
+    setToast(`Создан черновик приказа #${detail.order.order_id}`);
+    void load();
+    setSelectedOrderId(detail.order.order_id);
+    setDrawerOpen(true);
+    updateFilters({ order_id: detail.order.order_id });
+  }
+
+  function handleChanged() {
+    void load();
   }
 
   return (
     <div className="space-y-4 px-4 py-3">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Кадровые приказы</h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Журнал приказов организации — просмотр заголовков, пунктов и связанных событий
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Кадровые приказы</h1>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Журнал приказов: создание черновиков, регистрация и применение кадровых изменений
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          data-testid="personnel-order-create-button"
+        >
+          Создать приказ
+        </button>
       </div>
+
+      {toast ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/55 dark:bg-emerald-950/35 dark:text-emerald-100">
+          {toast}
+        </div>
+      ) : null}
 
       {filterHints.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100">
@@ -232,7 +283,7 @@ export default function PersonnelOrdersPageClient() {
         emptyMessage={
           filterHints.length > 0
             ? "По выбранным фильтрам приказы не найдены."
-            : "Приказы пока не зарегистрированы."
+            : "Приказы пока не созданы."
         }
         onRowClick={openOrder}
       />
@@ -240,10 +291,14 @@ export default function PersonnelOrdersPageClient() {
       <PersonnelOrderDetailDrawer
         orderId={selectedOrderId}
         open={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setSelectedOrderId(null);
-        }}
+        onClose={closeDrawer}
+        onChanged={handleChanged}
+      />
+
+      <PersonnelOrderCreateDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={handleCreated}
       />
     </div>
   );

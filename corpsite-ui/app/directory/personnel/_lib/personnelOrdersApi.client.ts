@@ -9,8 +9,19 @@ export type { PersonnelOrderStatus, PersonnelOrderType } from "./personnelOrderL
 export {
   PERSONNEL_ORDER_STATUS_FILTER_OPTIONS,
   PERSONNEL_ORDER_TYPE_FILTER_OPTIONS,
+  PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
+  PERSONNEL_ORDER_CREATE_TYPES,
+  canApplyPersonnelOrder,
+  canApplyPersonnelOrderAction,
+  canRegisterPersonnelOrder,
+  canVoidPersonnelOrder,
   formatPersonnelOrderDate,
   formatPersonnelOrderDateTime,
+  formatPersonnelOrderNumber,
+  isEditablePersonnelOrderStatus,
+  isPersonnelOrderApplied,
+  PERSONNEL_ORDER_APPLIED_LABEL,
+  personnelOrderAppliedBadgeClass,
   personnelOrderSourceModeLabel,
   personnelOrderStatusBadgeClass,
   personnelOrderStatusLabel,
@@ -20,8 +31,8 @@ export {
 
 export type PersonnelOrderListItem = {
   order_id: number;
-  order_number: string;
-  order_date: string;
+  order_number?: string | null;
+  order_date?: string | null;
   order_type_code: string;
   order_class: string;
   status: string;
@@ -158,9 +169,58 @@ export type PersonnelOrdersFilters = {
   date_to?: string;
   employee_id?: number;
   org_unit_id?: number;
+  order_id?: number;
   q?: string;
   limit?: number;
   offset?: number;
+};
+
+export type PersonnelOrderCreatePayload = {
+  order_type_code: string;
+  order_number?: string | null;
+  order_date?: string | null;
+  source_mode?: string;
+  legal_basis_article?: string | null;
+  signed_by_employee_id?: number | null;
+  signed_by_name?: string | null;
+  signed_by_position?: string | null;
+  executor_name?: string | null;
+  basis_summary?: string | null;
+  comment?: string | null;
+};
+
+export type PersonnelOrderUpdatePayload = {
+  order_number?: string;
+  order_date?: string;
+  order_type_code?: string;
+  source_mode?: string;
+  legal_basis_article?: string | null;
+  signed_by_employee_id?: number | null;
+  signed_by_name?: string | null;
+  signed_by_position?: string | null;
+  executor_name?: string | null;
+  basis_summary?: string | null;
+  comment?: string | null;
+};
+
+export type PersonnelOrderItemCreatePayload = {
+  item_type_code: string;
+  employee_id?: number | null;
+  effective_date?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  payload?: Record<string, unknown>;
+  item_number?: number;
+};
+
+export type PersonnelOrderItemUpdatePayload = {
+  item_type_code?: string;
+  employee_id?: number | null;
+  effective_date?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  payload?: Record<string, unknown>;
+  item_number?: number;
 };
 
 export const PERSONNEL_ORDERS_BASE_PATH = "/directory/personnel/orders";
@@ -181,7 +241,7 @@ function authHeaders(): Record<string, string> {
 
 function parseErrorBody(status: number, body: string, fallback: string): Error {
   if (status === 403) {
-    return new Error("Недостаточно прав для просмотра кадровых приказов.");
+    return new Error("Недостаточно прав для работы с кадровыми приказами.");
   }
   const trimmed = body.trim();
   if (trimmed.startsWith("{")) {
@@ -190,11 +250,45 @@ function parseErrorBody(status: number, body: string, fallback: string): Error {
       if (typeof parsed.detail === "string" && parsed.detail.trim()) {
         return new Error(parsed.detail.trim());
       }
+      if (Array.isArray(parsed.detail)) {
+        const parts = parsed.detail
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object" && "msg" in item) {
+              return String((item as { msg?: unknown }).msg || "");
+            }
+            return "";
+          })
+          .filter(Boolean);
+        if (parts.length) return new Error(parts.join("; "));
+      }
     } catch {
       // keep raw body fallback
     }
   }
   return new Error(trimmed || fallback || `HTTP ${status}`);
+}
+
+async function requestJson<T>(
+  method: string,
+  path: string,
+  options?: { body?: unknown; fallback?: string },
+): Promise<T> {
+  const res = await fetch(resolveApiUrl(path), {
+    method,
+    headers: {
+      ...authHeaders(),
+      ...(options?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, body, options?.fallback || "Ошибка запроса.");
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
 }
 
 export function mapPersonnelOrdersApiError(e: unknown, fallback = "Ошибка запроса."): string {
@@ -203,7 +297,7 @@ export function mapPersonnelOrdersApiError(e: unknown, fallback = "Ошибка 
 
 export function buildPersonnelOrdersQueryParams(
   filters: PersonnelOrdersFilters,
-  options?: { includeClientSearch?: boolean },
+  options?: { includeClientSearch?: boolean; includeOrderIdInQuery?: boolean },
 ): URLSearchParams {
   const params = new URLSearchParams();
   const includeClientSearch = options?.includeClientSearch ?? true;
@@ -218,6 +312,10 @@ export function buildPersonnelOrdersQueryParams(
   if (filters.org_unit_id != null && filters.org_unit_id > 0) {
     params.set("org_unit_id", String(filters.org_unit_id));
   }
+  // order_id is a UI deep-link only; not an API list filter.
+  if (options?.includeOrderIdInQuery && filters.order_id != null && filters.order_id > 0) {
+    params.set("order_id", String(filters.order_id));
+  }
   if (includeClientSearch && filters.q?.trim()) params.set("q", filters.q.trim());
   if (filters.limit != null && filters.limit > 0) params.set("limit", String(filters.limit));
   if (filters.offset != null && filters.offset >= 0) params.set("offset", String(filters.offset));
@@ -227,6 +325,7 @@ export function buildPersonnelOrdersQueryParams(
 
 export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): PersonnelOrdersFilters {
   const employeeId = Number(searchParams.get("employee_id"));
+  const orderId = Number(searchParams.get("order_id"));
   const orgFilters = readTaskOrgFiltersFromSearchParams(searchParams);
 
   return {
@@ -236,12 +335,13 @@ export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): Pers
     date_to: searchParams.get("date_to") || undefined,
     employee_id: Number.isFinite(employeeId) && employeeId > 0 ? employeeId : undefined,
     org_unit_id: orgFilters.org_unit_id,
+    order_id: Number.isFinite(orderId) && orderId > 0 ? orderId : undefined,
     q: searchParams.get("q") || undefined,
   };
 }
 
 export function buildPersonnelOrdersHref(filters: PersonnelOrdersFilters = {}): string {
-  const qs = buildPersonnelOrdersQueryParams(filters).toString();
+  const qs = buildPersonnelOrdersQueryParams(filters, { includeOrderIdInQuery: true }).toString();
   return qs ? `${PERSONNEL_ORDERS_BASE_PATH}?${qs}` : PERSONNEL_ORDERS_BASE_PATH;
 }
 
@@ -257,7 +357,8 @@ export function filterPersonnelOrdersBySearch(
     const number = String(row.order_number || "").toLowerCase();
     const names = (row.employee_names || []).join(" ").toLowerCase();
     const ids = (row.employee_ids || []).map(String).join(" ");
-    return number.includes(q) || names.includes(q) || ids.includes(q);
+    const orderId = String(row.order_id);
+    return number.includes(q) || names.includes(q) || ids.includes(q) || orderId.includes(q);
   });
 }
 
@@ -275,11 +376,93 @@ export async function listPersonnelOrders(
 }
 
 export async function getPersonnelOrder(orderId: number): Promise<PersonnelOrderDetailResponse> {
-  const url = resolveApiUrl(`/directory/personnel-orders/${orderId}`);
-  const res = await fetch(url, { method: "GET", headers: authHeaders(), cache: "no-store" });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw parseErrorBody(res.status, body, "Не удалось загрузить приказ.");
-  }
-  return res.json() as Promise<PersonnelOrderDetailResponse>;
+  return requestJson<PersonnelOrderDetailResponse>("GET", `/directory/personnel-orders/${orderId}`, {
+    fallback: "Не удалось загрузить приказ.",
+  });
+}
+
+export async function createPersonnelOrder(
+  payload: PersonnelOrderCreatePayload,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>("POST", "/directory/personnel-orders", {
+    body: payload,
+    fallback: "Не удалось создать приказ.",
+  });
+}
+
+export async function updatePersonnelOrder(
+  orderId: number,
+  payload: PersonnelOrderUpdatePayload,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>("PATCH", `/directory/personnel-orders/${orderId}`, {
+    body: payload,
+    fallback: "Не удалось обновить приказ.",
+  });
+}
+
+export async function createPersonnelOrderItem(
+  orderId: number,
+  payload: PersonnelOrderItemCreatePayload,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>("POST", `/directory/personnel-orders/${orderId}/items`, {
+    body: payload,
+    fallback: "Не удалось добавить пункт приказа.",
+  });
+}
+
+export async function updatePersonnelOrderItem(
+  orderId: number,
+  itemId: number,
+  payload: PersonnelOrderItemUpdatePayload,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>(
+    "PATCH",
+    `/directory/personnel-orders/${orderId}/items/${itemId}`,
+    {
+      body: payload,
+      fallback: "Не удалось обновить пункт приказа.",
+    },
+  );
+}
+
+export async function markPersonnelOrderReadyForSignature(
+  orderId: number,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>(
+    "POST",
+    `/directory/personnel-orders/${orderId}/ready-for-signature`,
+    { fallback: "Не удалось перевести приказ в статус «На подписи»." },
+  );
+}
+
+export async function registerPersonnelOrder(
+  orderId: number,
+  targetStatus: "REGISTERED" | "SIGNED" = "REGISTERED",
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>(
+    "POST",
+    `/directory/personnel-orders/${orderId}/register`,
+    {
+      body: { target_status: targetStatus },
+      fallback: "Не удалось зарегистрировать приказ.",
+    },
+  );
+}
+
+export async function applyPersonnelOrder(orderId: number): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>(
+    "POST",
+    `/directory/personnel-orders/${orderId}/apply`,
+    { fallback: "Не удалось применить приказ." },
+  );
+}
+
+export async function voidPersonnelOrder(
+  orderId: number,
+  voidReason: string,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>("POST", `/directory/personnel-orders/${orderId}/void`, {
+    body: { void_reason: voidReason },
+    fallback: "Не удалось аннулировать приказ.",
+  });
 }

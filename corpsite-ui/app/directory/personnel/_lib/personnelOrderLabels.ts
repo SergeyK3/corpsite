@@ -130,6 +130,66 @@ export function personnelOrderTypeBadgeClass(typeCode: string | null | undefined
   }
 }
 
+export const PERSONNEL_ORDER_CREATE_TYPES = [
+  "HIRE",
+  "TRANSFER",
+  "TERMINATION",
+  "CONCURRENT_DUTY_START",
+  "CONCURRENT_DUTY_END",
+] as const satisfies readonly PersonnelOrderType[];
+
+export const PERSONNEL_ORDER_CREATE_TYPE_OPTIONS: ReadonlyArray<{
+  value: (typeof PERSONNEL_ORDER_CREATE_TYPES)[number];
+  label: string;
+}> = PERSONNEL_ORDER_CREATE_TYPES.map((value) => ({
+  value,
+  label: PERSONNEL_ORDER_TYPE_LABELS[value],
+}));
+
+export function isEditablePersonnelOrderStatus(status: string | null | undefined): boolean {
+  const normalized = String(status || "").trim().toUpperCase();
+  return normalized === "DRAFT" || normalized === "READY_FOR_SIGNATURE";
+}
+
+export function canRegisterPersonnelOrder(status: string | null | undefined): boolean {
+  const normalized = String(status || "").trim().toUpperCase();
+  return normalized === "DRAFT" || normalized === "READY_FOR_SIGNATURE";
+}
+
+export function canApplyPersonnelOrder(status: string | null | undefined): boolean {
+  const normalized = String(status || "").trim().toUpperCase();
+  return normalized === "SIGNED" || normalized === "REGISTERED";
+}
+
+/** Applied is terminal UX state derived from linked employee_events, not a separate order.status. */
+export function isPersonnelOrderApplied(linkedEventCount: number | null | undefined): boolean {
+  return Number(linkedEventCount || 0) > 0;
+}
+
+/** Apply is allowed only for SIGNED/REGISTERED orders that have not yet produced linked events. */
+export function canApplyPersonnelOrderAction(
+  status: string | null | undefined,
+  linkedEventCount: number | null | undefined,
+): boolean {
+  return canApplyPersonnelOrder(status) && !isPersonnelOrderApplied(linkedEventCount);
+}
+
+export const PERSONNEL_ORDER_APPLIED_LABEL = "Применён";
+
+export function personnelOrderAppliedBadgeClass(): string {
+  return "border-teal-200 bg-teal-100 text-teal-900 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-200";
+}
+
+export function canVoidPersonnelOrder(status: string | null | undefined): boolean {
+  const normalized = String(status || "").trim().toUpperCase();
+  return normalized !== "" && normalized !== "VOIDED";
+}
+
+export function formatPersonnelOrderNumber(value: string | null | undefined): string {
+  const trimmed = String(value || "").trim();
+  return trimmed || "без номера";
+}
+
 export function formatPersonnelOrderDate(value: string | null | undefined): string {
   if (!value) return "—";
   const dt = new Date(value);

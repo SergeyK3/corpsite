@@ -206,9 +206,11 @@ def _build_list_filters(
 
 
 def _serialize_order_header(row: Dict[str, Any]) -> Dict[str, Any]:
+    raw_number = row.get("order_number")
+    order_number = str(raw_number).strip() if raw_number is not None and str(raw_number).strip() else None
     return {
         "order_id": int(row["order_id"]),
-        "order_number": str(row["order_number"]),
+        "order_number": order_number,
         "order_date": _iso_date(row.get("order_date")),
         "order_type_code": str(row["order_type_code"]),
         "order_class": str(row.get("order_class") or "PERSONNEL"),

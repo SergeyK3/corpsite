@@ -234,8 +234,8 @@ def _resolve_header_type_from_items(conn, order_id: int, fallback: str) -> str:
 def create_personnel_order_draft(
     *,
     created_by: int,
-    order_number: str,
-    order_date: date,
+    order_number: Optional[str] = None,
+    order_date: Optional[date] = None,
     order_type_code: str,
     source_mode: str = SOURCE_MODE_DIGITAL,
     legal_basis_article: Optional[str] = None,
@@ -248,12 +248,8 @@ def create_personnel_order_draft(
 ) -> Dict[str, Any]:
     _require_available()
 
-    normalized_number = str(order_number or "").strip()
-    if not normalized_number:
-        raise PersonnelOrderValidationError("order_number is required.")
-    if order_date is None:
-        raise PersonnelOrderValidationError("order_date is required.")
-
+    # Paper First: registration number/date may be filled later from the paper journal.
+    normalized_number = str(order_number or "").strip() or None
     normalized_type = _normalize_header_type(order_type_code)
     normalized_source_mode = _normalize_source_mode(source_mode)
 
@@ -315,9 +311,11 @@ def create_personnel_order_draft(
                 },
             ).scalar_one()
     except IntegrityError as exc:
-        raise PersonnelOrderConflictError(
-            f"Personnel order number already exists: {normalized_number}"
-        ) from exc
+        if normalized_number:
+            raise PersonnelOrderConflictError(
+                f"Personnel order number already exists: {normalized_number}"
+            ) from exc
+        raise
 
     return get_personnel_order(int(order_id))
 

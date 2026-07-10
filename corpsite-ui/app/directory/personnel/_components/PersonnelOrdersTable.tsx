@@ -4,6 +4,7 @@ import * as React from "react";
 
 import {
   formatPersonnelOrderDate,
+  formatPersonnelOrderNumber,
   type PersonnelOrderListItem,
 } from "../_lib/personnelOrdersApi.client";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
@@ -79,7 +80,7 @@ export function PersonnelOrdersTable({
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
               <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
-                {row.order_number}
+                {formatPersonnelOrderNumber(row.order_number)}
               </td>
               <td className="whitespace-nowrap px-3 py-2 text-zinc-700 dark:text-zinc-300">
                 {formatPersonnelOrderDate(row.order_date)}
