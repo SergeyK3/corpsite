@@ -2,8 +2,14 @@
 
 import * as React from "react";
 
-import { getEmployees, getPositions } from "@/app/directory/employees/_lib/api.client";
-import { getOrgUnitsTree, type TreeNode } from "@/app/directory/org-units/_lib/api.client";
+import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import OrgScopeFilter from "@/components/OrgScopeFilter";
+import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
+import {
+  loadScopedPositionOptions,
+  type TaskOrgFilterOption,
+} from "@/lib/taskOrgFilters";
+import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
 import {
   PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
@@ -20,6 +26,14 @@ import {
   type ItemPayloadDraft,
 } from "../_lib/personnelOrderPayload";
 import {
+  clearOrgDependentFields,
+  isOrgScopedItemType,
+  selectedOrgUnitIdFromDraft,
+  selectedPositionIdFromDraft,
+  setOrgUnitAndClearPosition,
+  setPositionId,
+} from "../_lib/personnelOrderOrgScope";
+import {
   mapEmployeesResponseToSearchOptions,
   requireEmployeeIdForItemType,
   type EmployeeSearchOption,
@@ -32,22 +46,7 @@ type Props = {
   onChanged: (detail: PersonnelOrderDetailResponse) => void;
 };
 
-type NamedOption = { id: number; name: string };
-
-function flattenOrgUnits(nodes: TreeNode[], out: NamedOption[]) {
-  for (const node of nodes) {
-    const unitId = Number(node.unit_id ?? node.id);
-    if (Number.isFinite(unitId) && unitId > 0) {
-      out.push({
-        id: unitId,
-        name: String(node.name ?? node.name_ru ?? `#${unitId}`).trim() || `#${unitId}`,
-      });
-    }
-    if (Array.isArray(node.children) && node.children.length > 0) {
-      flattenOrgUnits(node.children, out);
-    }
-  }
-}
+const ORG_SCOPE_BASE_PATH = "/directory/personnel/orders";
 
 export default function PersonnelOrderItemEditor({
   orderId,
@@ -62,44 +61,16 @@ export default function PersonnelOrderItemEditor({
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
   const [effectiveDate, setEffectiveDate] = React.useState("");
   const [payloadDraft, setPayloadDraft] = React.useState<ItemPayloadDraft>(emptyItemPayloadDraft());
-  const [orgUnits, setOrgUnits] = React.useState<NamedOption[]>([]);
-  const [positions, setPositions] = React.useState<NamedOption[]>([]);
+  const [orgGroupId, setOrgGroupId] = React.useState<number | null>(null);
+  const [positions, setPositions] = React.useState<TaskOrgFilterOption[]>([]);
+  const [positionsLoading, setPositionsLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    async function loadLookups() {
-      try {
-        const tree = await getOrgUnitsTree();
-        const units: NamedOption[] = [];
-        flattenOrgUnits(Array.isArray(tree?.items) ? tree.items : [], units);
-        if (!cancelled) setOrgUnits(units);
-      } catch {
-        if (!cancelled) setOrgUnits([]);
-      }
-      try {
-        const raw = await getPositions({ limit: 1000, offset: 0 });
-        const list = Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : [];
-        const mapped: NamedOption[] = [];
-        for (const row of list) {
-          const id = Number((row as { position_id?: number; id?: number }).position_id ?? (row as { id?: number }).id);
-          if (!Number.isFinite(id) || id <= 0) continue;
-          mapped.push({
-            id,
-            name: String((row as { name?: string }).name ?? `#${id}`).trim() || `#${id}`,
-          });
-        }
-        if (!cancelled) setPositions(mapped);
-      } catch {
-        if (!cancelled) setPositions([]);
-      }
-    }
-    void loadLookups();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const type = itemTypeCode.toUpperCase();
+  const orgScoped = isOrgScopedItemType(itemTypeCode);
+  const selectedOrgUnitId = selectedOrgUnitIdFromDraft(payloadDraft, itemTypeCode);
+  const selectedPositionValue = selectedPositionIdFromDraft(payloadDraft, itemTypeCode);
 
   React.useEffect(() => {
     const q = employeeQuery.trim();
@@ -124,6 +95,34 @@ export default function PersonnelOrderItemEditor({
     };
   }, [employeeQuery]);
 
+  React.useEffect(() => {
+    if (!orgScoped || selectedOrgUnitId == null) {
+      setPositions([]);
+      setPositionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPositionsLoading(true);
+    void loadScopedPositionOptions({
+      org_group_id: orgGroupId ?? undefined,
+      org_unit_id: selectedOrgUnitId,
+    })
+      .then((options) => {
+        if (!cancelled) setPositions(options);
+      })
+      .catch(() => {
+        if (!cancelled) setPositions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPositionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orgScoped, orgGroupId, selectedOrgUnitId]);
+
   function resetForm(typeCode = "HIRE") {
     setEditingItemId(null);
     setItemTypeCode(typeCode);
@@ -131,21 +130,49 @@ export default function PersonnelOrderItemEditor({
     setEmployeeQuery("");
     setEffectiveDate("");
     setPayloadDraft(emptyItemPayloadDraft());
+    setOrgGroupId(null);
+    setPositions([]);
     setError(null);
   }
 
-  function startEdit(item: PersonnelOrderItem) {
+  async function startEdit(item: PersonnelOrderItem) {
+    const draft = itemPayloadDraftFromRecord(item.payload);
     setEditingItemId(item.item_id);
     setItemTypeCode(item.item_type_code);
     setEmployeeId(item.employee_id ? String(item.employee_id) : "");
     setEmployeeQuery(item.employee_name || "");
     setEffectiveDate(item.effective_date || "");
-    setPayloadDraft(itemPayloadDraftFromRecord(item.payload));
+    setPayloadDraft(draft);
     setError(null);
+
+    const unitId = selectedOrgUnitIdFromDraft(draft, item.item_type_code);
+    if (unitId == null) {
+      setOrgGroupId(null);
+      return;
+    }
+    try {
+      const prefill = await resolveEmployeeOrgScopePrefill(unitId);
+      setOrgGroupId(prefill.org_group_id);
+    } catch {
+      setOrgGroupId(null);
+    }
   }
 
   function updatePayloadField<K extends keyof ItemPayloadDraft>(key: K, value: string) {
     setPayloadDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleOrgGroupChange(nextGroupId: number | null) {
+    setOrgGroupId(nextGroupId);
+    setPayloadDraft((prev) => clearOrgDependentFields(prev, itemTypeCode));
+  }
+
+  function handleOrgUnitChange(nextUnitId: number | null) {
+    setPayloadDraft((prev) => setOrgUnitAndClearPosition(prev, itemTypeCode, nextUnitId));
+  }
+
+  function handlePositionChange(nextPositionId: string) {
+    setPayloadDraft((prev) => setPositionId(prev, itemTypeCode, nextPositionId));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -181,7 +208,53 @@ export default function PersonnelOrderItemEditor({
     }
   }
 
-  const type = itemTypeCode.toUpperCase();
+  function renderOrgScopeCascade(labels: { unit: string; position: string; unitEmpty: string }) {
+    return (
+      <div className="sm:col-span-2 space-y-3" data-testid="personnel-order-org-scope-cascade">
+        <OrgScopeFilter
+          basePath={ORG_SCOPE_BASE_PATH}
+          label="Группа отделений"
+          value={orgGroupId}
+          onChange={handleOrgGroupChange}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <OrgUnitScopeFilter
+            basePath={ORG_SCOPE_BASE_PATH}
+            label={labels.unit}
+            allLabel={labels.unitEmpty}
+            orgGroupId={orgGroupId}
+            value={selectedOrgUnitId}
+            onChange={handleOrgUnitChange}
+          />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              {labels.position}
+            </label>
+            <select
+              data-testid="personnel-order-position-select"
+              value={selectedPositionValue}
+              onChange={(e) => handlePositionChange(e.target.value)}
+              disabled={selectedOrgUnitId == null || positionsLoading}
+              className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              <option value="">
+                {selectedOrgUnitId == null
+                  ? "Сначала выберите подразделение"
+                  : positionsLoading
+                    ? "Загрузка…"
+                    : "—"}
+              </option>
+              {positions.map((position) => (
+                <option key={position.id} value={String(position.id)}>
+                  {position.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" data-testid="personnel-order-item-editor">
@@ -218,7 +291,7 @@ export default function PersonnelOrderItemEditor({
                       <button
                         type="button"
                         className="text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
-                        onClick={() => startEdit(item)}
+                        onClick={() => void startEdit(item)}
                       >
                         Изменить
                       </button>
@@ -302,36 +375,11 @@ export default function PersonnelOrderItemEditor({
 
             {type === "HIRE" ? (
               <>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Подразделение</label>
-                  <select
-                    value={payloadDraft.org_unit_id || ""}
-                    onChange={(e) => updatePayloadField("org_unit_id", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  >
-                    <option value="">—</option>
-                    {orgUnits.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Должность</label>
-                  <select
-                    value={payloadDraft.position_id || ""}
-                    onChange={(e) => updatePayloadField("position_id", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  >
-                    <option value="">—</option>
-                    {positions.map((position) => (
-                      <option key={position.id} value={position.id}>
-                        {position.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {renderOrgScopeCascade({
+                  unit: "Подразделение",
+                  position: "Должность",
+                  unitEmpty: "Выберите подразделение",
+                })}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Ставка</label>
                   <input
@@ -345,36 +393,11 @@ export default function PersonnelOrderItemEditor({
 
             {type === "TRANSFER" ? (
               <>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Новое подразделение</label>
-                  <select
-                    value={payloadDraft.to_org_unit_id || ""}
-                    onChange={(e) => updatePayloadField("to_org_unit_id", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  >
-                    <option value="">без изменения</option>
-                    {orgUnits.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Новая должность</label>
-                  <select
-                    value={payloadDraft.to_position_id || ""}
-                    onChange={(e) => updatePayloadField("to_position_id", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  >
-                    <option value="">—</option>
-                    {positions.map((position) => (
-                      <option key={position.id} value={position.id}>
-                        {position.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {renderOrgScopeCascade({
+                  unit: "Новое подразделение",
+                  position: "Новая должность",
+                  unitEmpty: "без изменения",
+                })}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Новая ставка</label>
                   <input
