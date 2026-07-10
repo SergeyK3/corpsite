@@ -1,0 +1,7 @@
+flowchart TB
+    subgraph EventWorkflow[Personnel Event Workflow]
+        E1[Draft] --> E2[Prepared] --> E3[Approved] --> E4[Active] --> E5[Completed] --> E6[Archived]
+    end
+    subgraph OrderLifecycle[Personnel Order Lifecycle]
+        O1[Draft] --> O2[Prepared] --> O3[Approval In Progress] --> O4[Approved] --> O5[Signed] --> O6[Registered] --> O7[Executed] --> O8[Archived]
+    end

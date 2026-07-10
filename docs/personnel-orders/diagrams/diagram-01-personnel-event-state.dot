@@ -1,0 +1,21 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", fontname="Arial", pad="0.4", nodesep="0.8"];
+  node [shape=box, style="rounded,filled", fillcolor="#F7F7F7", color="#444444", fontname="Arial", fontsize=12];
+  edge [color="#555555", fontname="Arial", fontsize=10];
+
+  Employee [label="Employee\nСотрудник"];
+  Event [label="Personnel Event\nКадровое событие"];
+  ChangeSet [label="Change Set\nНабор изменений"];
+  State [label="Personnel State\nТекущее состояние"];
+  Card [label="Employee Card\nКарточка сотрудника"];
+  Cabinet [label="Position Cabinet\nКабинет должности"];
+  Reports [label="Reports\nОтчеты"];
+
+  Employee -> Event [label="имеет события"];
+  Event -> ChangeSet [label="порождает"];
+  ChangeSet -> State [label="изменяет"];
+  State -> Card;
+  State -> Cabinet;
+  State -> Reports;
+}

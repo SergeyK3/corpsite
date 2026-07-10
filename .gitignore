@@ -79,6 +79,13 @@ docs/*
 !docs/demo/**
 !docs/position-cabinet/
 !docs/position-cabinet/**
+!docs/personnel-orders/
+!docs/personnel-orders/**
+
+# Keep operational / private personnel-order drops out of Git
+docs/personnel-orders/operational/
+docs/personnel-orders/import-source/
+docs/personnel-orders/private/
 
 
 # -----------------------
@@ -124,6 +131,9 @@ sql/fix_titles.sql
 
 # Temporary exports
 *.csv
+# Aggregated (non file-level) inventory summary may be tracked
+!docs/personnel-orders/inventories/order-samples-inventory-summary.csv
+*.personnel-order-source.zip
 __tmp__*
 tmp/
 .venv/

@@ -1,0 +1,27 @@
+﻿section,key,value
+meta,source_scan_date,2026-07-10
+meta,files_scanned,252
+meta,total_size_bytes,22276113
+meta,note,Aggregated summary only. Full file-level inventory is local and not tracked by Git because filenames/paths may contain personal names.
+classification,ARCHIVE_CONTAINER,3
+classification,AUXILIARY_FILE,2
+classification,OPERATIONAL_DOCUMENT,237
+classification,REFERENCE_SAMPLE,1
+classification,TEMPLATE_CANDIDATE,9
+extension,.doc,9
+extension,.docx,238
+extension,.pdf,2
+extension,.txt,1
+extension,.zip,2
+contains_possible_personal_data,no,1
+contains_possible_personal_data,unknown,11
+contains_possible_personal_data,yes,240
+recommended_action,ANONYMIZE_BEFORE_COPY,1
+recommended_action,IGNORE,1
+recommended_action,IMPORT_LATER,3
+recommended_action,KEEP_EXTERNAL,237
+recommended_action,MANUAL_REVIEW,1
+recommended_action,REVIEW_FOR_TEMPLATE,9
+top_level_zone,archive_tree_personnel_2026,43
+top_level_zone,archive_tree_production,193
+top_level_zone,root,16

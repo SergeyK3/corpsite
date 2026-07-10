@@ -1,0 +1,21 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", fontname="Arial", pad="0.4", nodesep="0.8"];
+  node [shape=box, style="rounded,filled", fillcolor="#F7F7F7", color="#444444", fontname="Arial", fontsize=12];
+  edge [color="#555555", fontname="Arial", fontsize=10];
+
+  Event [label="Personnel Event\nКадровое событие"];
+  Item [label="Order Item\nПункт приказа"];
+  Order [label="Personnel Order\nПриказ ЛС"];
+  DocxKz [label="DOCX KZ\nПроект"];
+  PdfKz [label="PDF KZ\nПодписанный оригинал"];
+  DocxRu [label="DOCX RU\nПеревод"];
+  PdfRu [label="PDF RU\nПеревод"];
+
+  Event -> Item [label="оформляется пунктом"];
+  Item -> Order [label="входит в"];
+  Order -> DocxKz;
+  Order -> PdfKz;
+  Order -> DocxRu;
+  Order -> PdfRu;
+}

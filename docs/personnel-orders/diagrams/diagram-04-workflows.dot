@@ -1,0 +1,32 @@
+
+digraph G {
+  graph [rankdir=TB, bgcolor="white", fontname="Arial", pad="0.4", nodesep="0.6", ranksep="0.6"];
+  node [shape=box, style="rounded,filled", fillcolor="#F7F7F7", color="#444444", fontname="Arial", fontsize=11];
+  edge [color="#555555", fontname="Arial", fontsize=10];
+
+  subgraph cluster_event {
+    label="Personnel Event Workflow";
+    color="#AAAAAA";
+    E1 [label="Draft"];
+    E2 [label="Prepared"];
+    E3 [label="Approved"];
+    E4 [label="Active"];
+    E5 [label="Completed"];
+    E6 [label="Archived"];
+    E1 -> E2 -> E3 -> E4 -> E5 -> E6;
+  }
+
+  subgraph cluster_order {
+    label="Personnel Order Lifecycle";
+    color="#AAAAAA";
+    O1 [label="Draft"];
+    O2 [label="Prepared"];
+    O3 [label="Approval\nIn Progress"];
+    O4 [label="Approved"];
+    O5 [label="Signed"];
+    O6 [label="Registered"];
+    O7 [label="Executed"];
+    O8 [label="Archived"];
+    O1 -> O2 -> O3 -> O4 -> O5 -> O6 -> O7 -> O8;
+  }
+}

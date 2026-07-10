@@ -1,0 +1,7 @@
+flowchart LR
+    Event[Personnel Event<br/>Кадровое событие] --> Item[Order Item<br/>Пункт приказа]
+    Item --> Order[Personnel Order<br/>Приказ ЛС]
+    Order --> DocxKz[DOCX KZ<br/>Проект]
+    Order --> PdfKz[PDF KZ<br/>Подписанный оригинал]
+    Order --> DocxRu[DOCX RU<br/>Перевод]
+    Order --> PdfRu[PDF RU<br/>Перевод]

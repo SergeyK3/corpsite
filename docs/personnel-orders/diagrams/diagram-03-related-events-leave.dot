@@ -1,0 +1,17 @@
+
+digraph G {
+  graph [rankdir=TB, bgcolor="white", fontname="Arial", pad="0.4", nodesep="0.8", ranksep="0.7"];
+  node [shape=box, style="rounded,filled", fillcolor="#F7F7F7", color="#444444", fontname="Arial", fontsize=12];
+  edge [color="#555555", fontname="Arial", fontsize=10];
+
+  Leave [label="Leave Event\nОтпуск / командировка"];
+  Temp [label="Temporary Assignment Event\nЗамещение / ИО"];
+  Allowance [label="Allowance Event\nДоплата"];
+  Order [label="Personnel Order\nОдин комплексный приказ\nили отдельные приказы"];
+
+  Leave -> Temp [label="может породить"];
+  Temp -> Allowance [label="может породить"];
+  Leave -> Order [label="оформляется"];
+  Temp -> Order [label="оформляется"];
+  Allowance -> Order [label="оформляется"];
+}

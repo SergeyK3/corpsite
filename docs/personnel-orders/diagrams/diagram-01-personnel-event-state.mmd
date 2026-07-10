@@ -1,0 +1,7 @@
+flowchart LR
+    Employee[Employee<br/>Сотрудник] --> Event[Personnel Event<br/>Кадровое событие]
+    Event --> ChangeSet[Change Set<br/>Набор изменений]
+    ChangeSet --> State[Personnel State<br/>Текущее состояние]
+    State --> Card[Employee Card<br/>Карточка сотрудника]
+    State --> Cabinet[Position Cabinet<br/>Кабинет должности]
+    State --> Reports[Reports<br/>Отчеты]

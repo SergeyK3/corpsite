@@ -1,0 +1,6 @@
+flowchart TB
+    Leave[Leave Event<br/>Отпуск / командировка] --> Temp[Temporary Assignment Event<br/>Замещение / ИО]
+    Temp --> Allowance[Allowance Event<br/>Доплата]
+    Leave --> Order[Personnel Order<br/>Один комплексный приказ или отдельные приказы]
+    Temp --> Order
+    Allowance --> Order
