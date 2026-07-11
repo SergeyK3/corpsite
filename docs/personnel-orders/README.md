@@ -80,6 +80,9 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 | Назначение | Путь |
 |---|---|
 | Архитектура модуля | `architecture/` |
+| Печатная форма и статусы | `architecture/PO-PRINT-001-print-form.md` |
+| Концепция подписания (без реализации) | `PO-SIGN-001-signing-concept.md` |
+| Политика удаления / void (без реализации) | `PO-LIFECYCLE-002-delete-and-void-policy.md` |
 | Storage concept | `storage-design/PERSONNEL-ORDERS-DOCUMENT-STORAGE-CONCEPT.md` |
 | Инвентарь CSV (summary) | `inventories/order-samples-inventory-summary.csv` |
 | Инвентарь CSV (full, local only) | `inventories/order-samples-inventory.csv` |

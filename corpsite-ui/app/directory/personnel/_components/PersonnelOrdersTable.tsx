@@ -15,6 +15,7 @@ export type PersonnelOrdersTableProps = {
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: PersonnelOrderListItem) => void;
+  onPrintClick?: (row: PersonnelOrderListItem) => void;
 };
 
 function formatEmployees(row: PersonnelOrderListItem): string {
@@ -25,11 +26,17 @@ function formatEmployees(row: PersonnelOrderListItem): string {
   return "—";
 }
 
+const actionCellClass =
+  "sticky right-0 z-[1] whitespace-nowrap border-l border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950";
+const actionHeaderClass =
+  "sticky right-0 z-[1] border-l border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50";
+
 export function PersonnelOrdersTable({
   items,
   loading = false,
   emptyMessage = "Приказы не найдены.",
   onRowClick,
+  onPrintClick,
 }: PersonnelOrdersTableProps) {
   if (loading) {
     return (
@@ -69,6 +76,7 @@ export function PersonnelOrdersTable({
                 {header}
               </th>
             ))}
+            <th className={actionHeaderClass}>Действия</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-100 bg-white dark:divide-zinc-800 dark:bg-zinc-950">
@@ -95,6 +103,36 @@ export function PersonnelOrdersTable({
                 {formatEmployees(row)}
               </td>
               <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400">{row.item_count}</td>
+              <td className={actionCellClass}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onRowClick ? (
+                    <button
+                      type="button"
+                      className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                      data-testid={`personnel-order-open-${row.order_id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRowClick(row);
+                      }}
+                    >
+                      Открыть
+                    </button>
+                  ) : null}
+                  {onPrintClick ? (
+                    <button
+                      type="button"
+                      className="rounded-md border border-zinc-300 bg-zinc-900 px-2 py-1 text-xs font-medium text-white hover:bg-zinc-800 dark:border-zinc-200 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                      data-testid={`personnel-order-print-${row.order_id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPrintClick(row);
+                      }}
+                    >
+                      Печать
+                    </button>
+                  ) : null}
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>

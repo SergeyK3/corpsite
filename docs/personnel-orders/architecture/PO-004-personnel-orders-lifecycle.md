@@ -167,6 +167,12 @@ Archived
 
 Окончательное решение должно быть принято в модели реализации.
 
+Политика удаления vs аннулирования (концепция, без кода):
+[`PO-LIFECYCLE-002-delete-and-void-policy.md`](../PO-LIFECYCLE-002-delete-and-void-policy.md).
+
+Печатные отметки статусов:
+[`PO-PRINT-001-print-form.md`](./PO-PRINT-001-print-form.md).
+
 ---
 
 # 9. Вывод

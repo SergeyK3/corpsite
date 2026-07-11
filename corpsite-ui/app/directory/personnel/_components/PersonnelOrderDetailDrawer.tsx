@@ -20,6 +20,11 @@ import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderLifecycleActions from "./PersonnelOrderLifecycleActions";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
 import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
+import PersonnelOrderPrintLanguageDialog from "./print/PersonnelOrderPrintLanguageDialog";
+import {
+  buildPersonnelOrderPrintHref,
+  type PersonnelOrderPrintLanguage,
+} from "../_lib/personnelOrderPrintLanguage";
 
 type Props = {
   orderId: number | null;
@@ -88,6 +93,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ message: string; kind: "success" | "error" } | null>(null);
+  const [printOpen, setPrintOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -157,13 +163,25 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
               </p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
-          >
-            Закрыть
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {orderId != null ? (
+              <button
+                type="button"
+                data-testid="personnel-order-drawer-print"
+                onClick={() => setPrintOpen(true)}
+                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                Печать
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
+            >
+              Закрыть
+            </button>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4">
@@ -191,6 +209,16 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
             <>
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Действия</h3>
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    data-testid="personnel-order-actions-print"
+                    onClick={() => setPrintOpen(true)}
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                  >
+                    Печать
+                  </button>
+                </div>
                 <PersonnelOrderLifecycleActions
                   order={order}
                   itemCount={detail?.items.length || 0}
@@ -323,6 +351,16 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
           ) : null}
         </div>
       </aside>
+
+      <PersonnelOrderPrintLanguageDialog
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        onConfirm={(language: PersonnelOrderPrintLanguage) => {
+          if (orderId == null) return;
+          setPrintOpen(false);
+          window.open(buildPersonnelOrderPrintHref(orderId, language), "_blank", "noopener,noreferrer");
+        }}
+      />
     </div>
   );
 }

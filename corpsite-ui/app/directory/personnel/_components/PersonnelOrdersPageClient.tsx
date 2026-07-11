@@ -8,6 +8,7 @@ import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
+import PersonnelOrderPrintLanguageDialog from "./print/PersonnelOrderPrintLanguageDialog";
 import {
   PERSONNEL_ORDERS_BASE_PATH,
   PERSONNEL_ORDER_STATUS_FILTER_OPTIONS,
@@ -23,6 +24,10 @@ import {
   type PersonnelOrderListItem,
   type PersonnelOrdersFilters,
 } from "../_lib/personnelOrdersApi.client";
+import {
+  buildPersonnelOrderPrintHref,
+  type PersonnelOrderPrintLanguage,
+} from "../_lib/personnelOrderPrintLanguage";
 
 function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
   const parts: string[] = [];
@@ -55,6 +60,7 @@ export default function PersonnelOrdersPageClient() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
+  const [printOrderId, setPrintOrderId] = React.useState<number | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -132,6 +138,17 @@ export default function PersonnelOrdersPageClient() {
 
   function handleChanged() {
     void load();
+  }
+
+  function openPrintDialog(row: PersonnelOrderListItem) {
+    setPrintOrderId(row.order_id);
+  }
+
+  function confirmPrint(language: PersonnelOrderPrintLanguage) {
+    if (printOrderId == null) return;
+    const href = buildPersonnelOrderPrintHref(printOrderId, language);
+    setPrintOrderId(null);
+    window.open(href, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -286,6 +303,7 @@ export default function PersonnelOrdersPageClient() {
             : "Приказы пока не созданы."
         }
         onRowClick={openOrder}
+        onPrintClick={openPrintDialog}
       />
 
       <PersonnelOrderDetailDrawer
@@ -299,6 +317,12 @@ export default function PersonnelOrdersPageClient() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
+      />
+
+      <PersonnelOrderPrintLanguageDialog
+        open={printOrderId != null}
+        onClose={() => setPrintOrderId(null)}
+        onConfirm={confirmPrint}
       />
     </div>
   );

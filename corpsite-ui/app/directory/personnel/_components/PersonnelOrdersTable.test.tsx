@@ -31,13 +31,26 @@ describe("PersonnelOrdersTable", () => {
 
   it("renders table rows and handles click", () => {
     const onRowClick = vi.fn();
-    render(<PersonnelOrdersTable items={[sampleRow]} onRowClick={onRowClick} />);
+    const onPrintClick = vi.fn();
+    render(
+      <PersonnelOrdersTable
+        items={[sampleRow]}
+        onRowClick={onRowClick}
+        onPrintClick={onPrintClick}
+      />,
+    );
 
     expect(screen.getByTestId("personnel-orders-table")).toBeInTheDocument();
+    expect(screen.queryByText("PRINT TABLE V2")).not.toBeInTheDocument();
     expect(screen.getByText("WPPO-101")).toBeInTheDocument();
+    expect(screen.getByText("Действия")).toBeInTheDocument();
     expect(screen.getByText("Петрова Анна")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-print-101")).toHaveTextContent("Печать");
 
     screen.getByTestId("personnel-order-row-101").click();
     expect(onRowClick).toHaveBeenCalledWith(sampleRow);
+
+    screen.getByTestId("personnel-order-print-101").click();
+    expect(onPrintClick).toHaveBeenCalledWith(sampleRow);
   });
 });

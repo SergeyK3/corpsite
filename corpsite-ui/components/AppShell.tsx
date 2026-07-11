@@ -40,6 +40,9 @@ import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
 import PositionCabinetLibraryLinks from "./PositionCabinetLibraryLinks";
 import PositionCabinetNav from "./PositionCabinetNav";
 
+function isPersonnelOrderPrintRoute(pathname: string): boolean {
+  return /\/directory\/personnel\/orders\/\d+\/print(?:\/|$)/.test(pathname);
+}
 type NavItem = {
   href: string;
   title: string;
@@ -231,7 +234,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/tasks";
 
   const isLogin = pathname === "/login";
-
+  const isPrintPage = isPersonnelOrderPrintRoute(pathname);
   const [me, setMe] = useState<MeInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(!isLogin);
   const [err, setErr] = useState<string | null>(null);
@@ -324,10 +327,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     (isHrProcessesRoute(pathname) || isPersonnelDirectoryRoute(pathname));
 
   useEffect(() => {
-    if (isLogin || loading) return;
+    if (isLogin || loading || isPrintPage) return;
     if (!forbiddenNonAdminRoute) return;
     router.replace("/tasks");
-  }, [isLogin, loading, forbiddenNonAdminRoute, router]);
+  }, [isLogin, loading, isPrintPage, forbiddenNonAdminRoute, router]);
 
   const showOrgUnitsPanel = useMemo(() => shouldShowOrgUnitsPanel(pathname, me), [me, pathname]);
 
@@ -341,10 +344,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isLogin) return <>{children}</>;
 
+  if (isPrintPage) {
+    if (loading) {
+      return (
+        <div className="p-6 text-sm text-zinc-600 dark:text-zinc-400">Загрузка…</div>
+      );
+    }
+    if (err) {
+      return (
+        <div className="p-6 text-sm text-red-800 dark:text-red-200">{err}</div>
+      );
+    }
+    if (forbiddenNonAdminRoute) {
+      return (
+        <div className="p-6 text-sm text-zinc-600 dark:text-zinc-400">
+          Нет доступа к этому разделу.
+        </div>
+      );
+    }
+    return <>{children}</>;
+  }
+
   return (
     <div className="min-h-[calc(100vh-52px)] bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="w-full px-3 py-2 xl:px-4 xl:py-3">
-        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-3 print:hidden">
           <div>
             <div className="text-2xl font-semibold">{cabinetTitle}</div>
           </div>
