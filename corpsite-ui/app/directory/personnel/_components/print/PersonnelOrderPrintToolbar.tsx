@@ -13,12 +13,16 @@ type Props = {
   backHref: string;
   language: PersonnelOrderPrintLanguage;
   onLanguageChange: (language: PersonnelOrderPrintLanguage) => void;
+  onOpenPdf?: () => void;
+  pdfBusy?: boolean;
 };
 
 export default function PersonnelOrderPrintToolbar({
   backHref,
   language,
   onLanguageChange,
+  onOpenPdf,
+  pdfBusy = false,
 }: Props) {
   return (
     <div
@@ -47,21 +51,32 @@ export default function PersonnelOrderPrintToolbar({
             ))}
           </select>
         </label>
+        {onOpenPdf ? (
+          <button
+            type="button"
+            onClick={onOpenPdf}
+            disabled={pdfBusy}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            data-testid="personnel-order-print-pdf-button"
+          >
+            {pdfBusy ? "PDF…" : "PDF / Печать"}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => window.print()}
-          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
           data-testid="personnel-order-print-button"
         >
-          Печать
+          Печать HTML
         </button>
       </div>
       <p
         className="print:hidden max-w-3xl text-xs leading-snug text-zinc-500 dark:text-zinc-400"
         data-testid="personnel-order-print-headers-hint"
       >
-        Для печати без даты, URL и номера страницы отключите «Дополнительные настройки →
-        Колонтитулы» в диалоге браузера.
+        Для печати из HTML без даты, URL и номера страницы отключите «Дополнительные настройки →
+        Колонтитулы» в диалоге браузера. Официальный документ — кнопка «PDF / Печать».
       </p>
     </div>
   );

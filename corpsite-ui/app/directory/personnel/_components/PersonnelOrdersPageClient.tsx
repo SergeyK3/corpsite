@@ -28,6 +28,8 @@ import {
   buildPersonnelOrderPrintHref,
   type PersonnelOrderPrintLanguage,
 } from "../_lib/personnelOrderPrintLanguage";
+import { openPersonnelOrderPdf } from "../_lib/personnelOrderPdfOpen.client";
+import type { PersonnelOrderPrintDialogAction } from "./print/PersonnelOrderPrintLanguageDialog";
 
 function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
   const parts: string[] = [];
@@ -61,6 +63,8 @@ export default function PersonnelOrdersPageClient() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
   const [printOrderId, setPrintOrderId] = React.useState<number | null>(null);
+  const [printBusy, setPrintBusy] = React.useState(false);
+  const [printError, setPrintError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -141,14 +145,30 @@ export default function PersonnelOrdersPageClient() {
   }
 
   function openPrintDialog(row: PersonnelOrderListItem) {
+    setPrintError(null);
     setPrintOrderId(row.order_id);
   }
 
-  function confirmPrint(language: PersonnelOrderPrintLanguage) {
+  async function confirmPrint(
+    language: PersonnelOrderPrintLanguage,
+    action: PersonnelOrderPrintDialogAction,
+  ) {
     if (printOrderId == null) return;
-    const href = buildPersonnelOrderPrintHref(printOrderId, language);
-    setPrintOrderId(null);
-    window.open(href, "_blank", "noopener,noreferrer");
+    const orderId = printOrderId;
+    if (action === "preview") {
+      setPrintOrderId(null);
+      window.open(buildPersonnelOrderPrintHref(orderId, language), "_blank", "noopener,noreferrer");
+      return;
+    }
+    setPrintBusy(true);
+    setPrintError(null);
+    const result = await openPersonnelOrderPdf(orderId, language);
+    setPrintBusy(false);
+    if (result.ok) {
+      setPrintOrderId(null);
+      return;
+    }
+    setPrintError(result.error);
   }
 
   return (
@@ -173,6 +193,15 @@ export default function PersonnelOrdersPageClient() {
       {toast ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/55 dark:bg-emerald-950/35 dark:text-emerald-100">
           {toast}
+        </div>
+      ) : null}
+
+      {printError ? (
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-100"
+          data-testid="personnel-order-pdf-open-error"
+        >
+          {printError}
         </div>
       ) : null}
 
@@ -321,8 +350,12 @@ export default function PersonnelOrdersPageClient() {
 
       <PersonnelOrderPrintLanguageDialog
         open={printOrderId != null}
-        onClose={() => setPrintOrderId(null)}
+        onClose={() => {
+          if (printBusy) return;
+          setPrintOrderId(null);
+        }}
         onConfirm={confirmPrint}
+        busy={printBusy}
       />
     </div>
   );

@@ -20,11 +20,14 @@ import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderLifecycleActions from "./PersonnelOrderLifecycleActions";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
 import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
-import PersonnelOrderPrintLanguageDialog from "./print/PersonnelOrderPrintLanguageDialog";
+import PersonnelOrderPrintLanguageDialog, {
+  type PersonnelOrderPrintDialogAction,
+} from "./print/PersonnelOrderPrintLanguageDialog";
 import {
   buildPersonnelOrderPrintHref,
   type PersonnelOrderPrintLanguage,
 } from "../_lib/personnelOrderPrintLanguage";
+import { openPersonnelOrderPdf } from "../_lib/personnelOrderPdfOpen.client";
 
 type Props = {
   orderId: number | null;
@@ -94,6 +97,8 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
   const [error, setError] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ message: string; kind: "success" | "error" } | null>(null);
   const [printOpen, setPrintOpen] = React.useState(false);
+  const [printBusy, setPrintBusy] = React.useState(false);
+  const [printError, setPrintError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -209,16 +214,6 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
             <>
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Действия</h3>
-                <div className="mb-3">
-                  <button
-                    type="button"
-                    data-testid="personnel-order-actions-print"
-                    onClick={() => setPrintOpen(true)}
-                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
-                  >
-                    Печать
-                  </button>
-                </div>
                 <PersonnelOrderLifecycleActions
                   order={order}
                   itemCount={detail?.items.length || 0}
@@ -354,13 +349,38 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
 
       <PersonnelOrderPrintLanguageDialog
         open={printOpen}
-        onClose={() => setPrintOpen(false)}
-        onConfirm={(language: PersonnelOrderPrintLanguage) => {
-          if (orderId == null) return;
+        onClose={() => {
+          if (printBusy) return;
           setPrintOpen(false);
-          window.open(buildPersonnelOrderPrintHref(orderId, language), "_blank", "noopener,noreferrer");
+        }}
+        busy={printBusy}
+        onConfirm={async (language: PersonnelOrderPrintLanguage, action: PersonnelOrderPrintDialogAction) => {
+          if (orderId == null) return;
+          if (action === "preview") {
+            setPrintOpen(false);
+            setPrintError(null);
+            window.open(buildPersonnelOrderPrintHref(orderId, language), "_blank", "noopener,noreferrer");
+            return;
+          }
+          setPrintBusy(true);
+          setPrintError(null);
+          const result = await openPersonnelOrderPdf(orderId, language);
+          setPrintBusy(false);
+          if (result.ok) {
+            setPrintOpen(false);
+            return;
+          }
+          setPrintError(result.error);
         }}
       />
+      {printError ? (
+        <div
+          className="fixed bottom-4 right-4 z-[70] max-w-sm rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900/55 dark:bg-red-950/90 dark:text-red-100"
+          data-testid="personnel-order-drawer-pdf-error"
+        >
+          {printError}
+        </div>
+      ) : null}
     </div>
   );
 }

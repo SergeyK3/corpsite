@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  // Playwright ships native Chromium binaries; keep it external to the Next bundle.
+  serverExternalPackages: ["playwright"],
   // ВАЖНО:
   // Никаких rewrites для /directory/* — UI-роуты обрабатывает Next.js.
   // API same-origin prefix /api проксируется nginx → FastAPI (см. docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md).

@@ -56,14 +56,17 @@ const detail: PersonnelOrderDetailResponse = {
 };
 
 describe("PersonnelOrderPrintLanguageDialog", () => {
-  it("confirms selected language", () => {
+  it("confirms selected language for preview and pdf actions", () => {
     const onConfirm = vi.fn();
     render(
       <PersonnelOrderPrintLanguageDialog open onClose={vi.fn()} onConfirm={onConfirm} />,
     );
     fireEvent.click(screen.getByLabelText("Қазақша"));
     fireEvent.click(screen.getByTestId("personnel-order-print-open"));
-    expect(onConfirm).toHaveBeenCalledWith("kk");
+    expect(onConfirm).toHaveBeenCalledWith("kk", "preview");
+
+    fireEvent.click(screen.getByTestId("personnel-order-pdf-open"));
+    expect(onConfirm).toHaveBeenCalledWith("kk", "pdf");
   });
 });
 
@@ -80,9 +83,11 @@ describe("PersonnelOrderPrintToolbar", () => {
     expect(toolbar.className).toContain("print:hidden");
     expect(toolbar.className).not.toContain("personnel-order-print-document");
     expect(screen.getByTestId("personnel-order-print-button").className).toContain("text-sm");
+    expect(screen.getByTestId("personnel-order-print-button")).toHaveTextContent("Печать HTML");
 
     const hint = screen.getByTestId("personnel-order-print-headers-hint");
     expect(hint).toHaveTextContent("Колонтитулы");
+    expect(hint).toHaveTextContent("PDF");
     expect(hint.className).toContain("print:hidden");
   });
 });

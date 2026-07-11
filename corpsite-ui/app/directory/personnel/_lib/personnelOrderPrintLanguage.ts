@@ -40,3 +40,7 @@ export function buildPersonnelOrderPrintHref(
 export function isPersonnelOrderPrintRoute(pathname: string | null | undefined): boolean {
   return /\/directory\/personnel\/orders\/\d+\/print(?:\/|$)/.test(String(pathname || ""));
 }
+
+export function isPersonnelOrderPdfRoute(pathname: string | null | undefined): boolean {
+  return /\/directory\/personnel\/orders\/\d+\/pdf(?:\/|$)/.test(String(pathname || ""));
+}

@@ -81,6 +81,7 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 |---|---|
 | Архитектура модуля | `architecture/` |
 | Печатная форма и статусы | `architecture/PO-PRINT-001-print-form.md` |
+| Официальный PDF engine | `architecture/PO-PDF-001-official-pdf-engine.md` |
 | Концепция подписания (без реализации) | `PO-SIGN-001-signing-concept.md` |
 | Политика удаления / void (без реализации) | `PO-LIFECYCLE-002-delete-and-void-policy.md` |
 | Storage concept | `storage-design/PERSONNEL-ORDERS-DOCUMENT-STORAGE-CONCEPT.md` |

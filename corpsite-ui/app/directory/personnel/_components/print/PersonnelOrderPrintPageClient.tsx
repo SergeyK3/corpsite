@@ -17,6 +17,7 @@ import {
   parsePersonnelOrderPrintLanguage,
   type PersonnelOrderPrintLanguage,
 } from "../../_lib/personnelOrderPrintLanguage";
+import { openPersonnelOrderPdf } from "../../_lib/personnelOrderPdfOpen.client";
 import {
   buildPersonnelOrderPrintViewModel,
   collectPersonnelOrderPrintLookupIds,
@@ -68,6 +69,8 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
   const [model, setModel] = React.useState<PersonnelOrderPrintViewModel | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = React.useState(false);
+  const [pdfError, setPdfError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -131,6 +134,14 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
     router.replace(buildPersonnelOrderPrintHref(orderId, next));
   }
 
+  async function handleOpenPdf() {
+    setPdfBusy(true);
+    setPdfError(null);
+    const result = await openPersonnelOrderPdf(orderId, language);
+    setPdfBusy(false);
+    if (!result.ok) setPdfError(result.error);
+  }
+
   return (
     <div className="personnel-order-print-page min-h-screen bg-zinc-100 px-3 py-4 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
       <div className="mx-auto max-w-[210mm]">
@@ -138,6 +149,8 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
           backHref={`${PERSONNEL_ORDERS_BASE_PATH}?order_id=${orderId}`}
           language={language}
           onLanguageChange={handleLanguageChange}
+          onOpenPdf={handleOpenPdf}
+          pdfBusy={pdfBusy}
         />
 
         {languageInvalid ? (
@@ -161,6 +174,15 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
             data-testid="personnel-order-print-error"
           >
             {error}
+          </div>
+        ) : null}
+
+        {pdfError ? (
+          <div
+            className="print:hidden mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            data-testid="personnel-order-pdf-error"
+          >
+            {pdfError}
           </div>
         ) : null}
 

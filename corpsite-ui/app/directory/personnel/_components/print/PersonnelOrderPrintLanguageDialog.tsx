@@ -9,11 +9,14 @@ import {
   type PersonnelOrderPrintLanguage,
 } from "../../_lib/personnelOrderPrintLanguage";
 
+export type PersonnelOrderPrintDialogAction = "preview" | "pdf";
+
 type Props = {
   open: boolean;
   onClose: () => void;
-  onConfirm: (language: PersonnelOrderPrintLanguage) => void;
+  onConfirm: (language: PersonnelOrderPrintLanguage, action: PersonnelOrderPrintDialogAction) => void;
   initialLanguage?: PersonnelOrderPrintLanguage;
+  busy?: boolean;
 };
 
 export default function PersonnelOrderPrintLanguageDialog({
@@ -21,6 +24,7 @@ export default function PersonnelOrderPrintLanguageDialog({
   onClose,
   onConfirm,
   initialLanguage = PERSONNEL_ORDER_PRINT_LANGUAGE_DEFAULT,
+  busy = false,
 }: Props) {
   const [language, setLanguage] = React.useState<PersonnelOrderPrintLanguage>(initialLanguage);
 
@@ -61,16 +65,18 @@ export default function PersonnelOrderPrintLanguageDialog({
                 value={value}
                 checked={language === value}
                 onChange={() => setLanguage(value)}
+                disabled={busy}
               />
               <span>{PERSONNEL_ORDER_PRINT_LANGUAGE_LABELS[value]}</span>
             </label>
           ))}
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
+            disabled={busy}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
           >
             Отмена
@@ -78,10 +84,20 @@ export default function PersonnelOrderPrintLanguageDialog({
           <button
             type="button"
             data-testid="personnel-order-print-open"
-            onClick={() => onConfirm(language)}
+            disabled={busy}
+            onClick={() => onConfirm(language, "preview")}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
+          >
+            Предпросмотр
+          </button>
+          <button
+            type="button"
+            data-testid="personnel-order-pdf-open"
+            disabled={busy}
+            onClick={() => onConfirm(language, "pdf")}
             className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
           >
-            Открыть печатную форму
+            {busy ? "Формирование…" : "Открыть PDF"}
           </button>
         </div>
       </div>

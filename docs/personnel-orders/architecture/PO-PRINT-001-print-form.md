@@ -1,20 +1,26 @@
 # PO-PRINT-001 — Печатная форма кадрового приказа
 
-**Статус:** Implemented (MVP print UI)  
-**WP:** WP-PO-PRINT-002 / WP-PO-PRINT-003  
-**Код:** `corpsite-ui/app/directory/personnel/**/print/**`, `_lib/personnelOrderPrint*`
+**Статус:** Implemented (MVP print UI + official PDF)  
+**WP:** WP-PO-PRINT-002 / WP-PO-PRINT-003 / WP-PO-PDF-001  
+**Код:** `corpsite-ui/app/directory/personnel/**/print/**`, `**/pdf/**`, `_lib/personnelOrderPrint*`, `_lib/personnelOrderPdf*`
 
 ---
 
 ## 1. Назначение
 
-Экранный предпросмотр и браузерная печать кадрового приказа в режимах:
+Экранный предпросмотр и **официальный PDF** кадрового приказа в режимах:
 
 - `kk`
 - `ru`
 - `kk-ru`
 
-Маршруты, выбор языка и система item-renderer’ов сохраняются; печатная форма — **проекция** данных приказа, не отдельный SoT.
+| Канал | Маршрут | Роль |
+|---|---|---|
+| HTML preview | `/directory/personnel/orders/{id}/print?language=` | экранный предпросмотр; браузерная печать HTML |
+| Official PDF | `/directory/personnel/orders/{id}/pdf?language=` | серверный PDF без браузерных колонтитулов |
+
+Маршруты, выбор языка и система item-renderer’ов сохраняются; печатная форма — **проекция** данных приказа, не отдельный SoT.  
+Официальный PDF-движок: [`PO-PDF-001-official-pdf-engine.md`](./PO-PDF-001-official-pdf-engine.md).
 
 ### Типографика документа (PO-PRINT-004)
 
@@ -25,7 +31,8 @@
 - `line-height: 1.35;`
 
 Исключения: тип документа 16 pt; подпись под линией ознакомления 11 pt.  
-Панель «Назад | Язык | Печать» сохраняет UI-шрифт и скрывается через `print:hidden`.
+Панель «Назад | Язык | PDF / Печать | Печать HTML» сохраняет UI-шрифт и скрывается через `print:hidden`.  
+Подсказка про отключение браузерных колонтитулов относится **только** к HTML browser print; основной сценарий — PDF.
 
 ---
 
@@ -82,6 +89,7 @@
 
 Концепции:
 
+- официальный PDF (динамический MVP) — [`PO-PDF-001-official-pdf-engine.md`](./PO-PDF-001-official-pdf-engine.md);
 - подписание — [`PO-SIGN-001-signing-concept.md`](../PO-SIGN-001-signing-concept.md);
 - удаление / void — [`PO-LIFECYCLE-002-delete-and-void-policy.md`](../PO-LIFECYCLE-002-delete-and-void-policy.md).
 
