@@ -476,7 +476,7 @@ Physical storage: normalized block-row model (see §5.2 and [PO-EDIT-002](../imp
 |---|---|
 | **WP-PO-EDIT-001** | Architecture + ratification + non-prod spike (**done**) |
 | **WP-PO-EDIT-002** | Persistence; generate/regenerate/restore-generated APIs; **DRAFT-only structured+editorial writes**; READY required-block gate; ViewModel fallback — see §18.1 |
-| **WP-PO-EDIT-003** | Block editor UI (DRAFT only); stale/review UX |
+| **WP-PO-EDIT-003** | Block editor UI (DRAFT only, **Kazakh-first**): UI edits `kk`; generate persists `kk`+`ru` |
 | **WP-PO-EDIT-004** | Versioned DB clause/template library + legal review |
 | **WP-PO-EDIT-005** | return-to-DRAFT; audit polish; optional FIO forms |
 | **WP-PO-LEAVE-001** | Annual Leave Structured Item Model (R12 in/out) |
@@ -515,6 +515,22 @@ Physical storage: normalized block-row model (see §5.2 and [PO-EDIT-002](../imp
 | READY gate | missing title/preamble/item body → 422; basis missing only if `basis_required`; unresolved stale → 422; clean effective → allow |
 | ViewModel | override wins; generated when no override; no editorial → legacy/generator fallback; HTML/PDF share ViewModel |
 | Basis | PERSONAL_APPLICATION ru/kk; nominative fallback; free_text OTHER |
+
+### 18.3 Future work — editorial readiness (separate WP)
+
+**Not in EDIT-003.** Open architectural question:
+
+> What counts as an editorially ready document?
+
+To consider later:
+
+- Automatic generation ≠ editorial review by HR
+- Presence of a stored block ≠ confirmation by a кадровик
+- Under Kazakh-first UX the user may never open Russian text
+- Possible need for explicit confirmation per locale
+- Possible statuses (Review Pending / Reviewed) or a dedicated editorial-approval workflow
+
+Track as a future WP; do not implement in EDIT-003.
 
 ---
 

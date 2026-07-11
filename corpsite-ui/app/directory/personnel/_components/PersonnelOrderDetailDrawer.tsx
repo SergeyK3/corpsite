@@ -15,6 +15,7 @@ import {
   type PersonnelOrderLinkedEvent,
 } from "../_lib/personnelOrdersApi.client";
 import PersonnelOrderAppliedBadge from "./PersonnelOrderAppliedBadge";
+import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
 import PersonnelOrderHeaderEditor from "./PersonnelOrderHeaderEditor";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderLifecycleActions from "./PersonnelOrderLifecycleActions";
@@ -156,7 +157,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-order-detail-drawer">
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-2xl flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+      <aside className="relative flex h-full w-full max-w-3xl flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
           <div>
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -294,33 +295,11 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
               </section>
 
               <section>
-                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  Тексты ({detail?.localized_texts.length || 0})
-                </h3>
-                <p className="text-sm text-zinc-500">
-                  Редактор локализованных текстов — в следующем WP. Сейчас только просмотр.
-                </p>
-                {(detail?.localized_texts.length || 0) > 0 ? (
-                  <div className="mt-3 space-y-3">
-                    {detail?.localized_texts.map((textRow) => (
-                      <div
-                        key={textRow.localized_text_id}
-                        className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
-                      >
-                        <div className="text-xs font-medium uppercase text-zinc-500">
-                          {textRow.locale}
-                          {textRow.is_authoritative ? " · авторитетный" : ""}
-                        </div>
-                        {textRow.title ? <div className="mt-1 text-sm font-medium">{textRow.title}</div> : null}
-                        {textRow.body_text ? (
-                          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-zinc-700 dark:text-zinc-300">
-                            {textRow.body_text}
-                          </pre>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                <PersonnelOrderEditorialTextEditor
+                  orderId={order.order_id}
+                  items={detail?.items || []}
+                  editable={editable}
+                />
               </section>
 
               <section>

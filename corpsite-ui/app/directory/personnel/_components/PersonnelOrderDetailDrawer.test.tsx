@@ -33,6 +33,20 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   return {
     ...actual,
     getPersonnelOrder: vi.fn(),
+    getPersonnelOrderEditorial: vi.fn(async () => ({
+      order_id: 42,
+      order_status: "DRAFT",
+      editable: true,
+      order_blocks: [],
+      items: [],
+    })),
+    generatePersonnelOrderEditorial: vi.fn(async () => ({
+      order_id: 42,
+      order_status: "DRAFT",
+      editable: true,
+      order_blocks: [],
+      items: [],
+    })),
   };
 });
 

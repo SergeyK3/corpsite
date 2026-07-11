@@ -435,6 +435,55 @@ export async function getPersonnelOrderEditorial(
   );
 }
 
+export async function generatePersonnelOrderEditorial(
+  orderId: number,
+  scope?: {
+    locale?: string;
+    item_id?: number;
+    block_id?: number;
+    block_type?: string;
+  },
+): Promise<PersonnelOrderEditorialState> {
+  return requestJson<PersonnelOrderEditorialState>(
+    "POST",
+    `/directory/personnel-orders/${orderId}/editorial/generate`,
+    {
+      body: scope ?? {},
+      fallback: "Не удалось сформировать текст приказа.",
+    },
+  );
+}
+
+export async function patchPersonnelOrderEditorialBlock(
+  orderId: number,
+  blockId: number,
+  payload: {
+    override_text?: string | null;
+    clear_override?: boolean;
+    expected_revision?: number;
+  },
+): Promise<PersonnelOrderEditorialState> {
+  return requestJson<PersonnelOrderEditorialState>(
+    "PATCH",
+    `/directory/personnel-orders/${orderId}/editorial/blocks/${blockId}`,
+    {
+      body: payload,
+      fallback: "Не удалось сохранить текст блока.",
+    },
+  );
+}
+
+export async function resetPersonnelOrderEditorialBlock(
+  orderId: number,
+  blockId: number,
+): Promise<PersonnelOrderEditorialState> {
+  return requestJson<PersonnelOrderEditorialState>(
+    "POST",
+    `/directory/personnel-orders/${orderId}/editorial/blocks/${blockId}/reset-to-generated`,
+    { fallback: "Не удалось вернуть автоматически сформированный текст." },
+  );
+}
+
 export async function createPersonnelOrder(
   payload: PersonnelOrderCreatePayload,
 ): Promise<PersonnelOrderDetailResponse> {
