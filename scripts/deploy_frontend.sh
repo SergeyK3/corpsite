@@ -67,6 +67,17 @@ if [[ ! -f "${UI_DIR}/package.json" ]]; then
   fail "package.json missing in ${UI_DIR}"
 fi
 
+CURSOR_GUARD="${REPO_ROOT}/scripts/ops/check_cursor_remote.sh"
+if [[ -x "${CURSOR_GUARD}" ]]; then
+  log "cursor remote guard"
+  "${CURSOR_GUARD}" || fail "Refusing on-VPS build while Cursor remote is active"
+fi
+
+if command -v sar >/dev/null 2>&1; then
+  log "disk snapshot (sar -d 1 3)"
+  sar -d 1 3 2>/dev/null | tail -n 8 || true
+fi
+
 cd "${UI_DIR}"
 log "Working directory: $(pwd)"
 

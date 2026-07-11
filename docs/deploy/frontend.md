@@ -2,7 +2,20 @@
 
 Production frontend (`corpsite-frontend`) must **never** start without a valid Next.js production build in `corpsite-ui/.next/`.
 
-## Standard deploy (VPS)
+## I/O guardrails (WP-INFRA-IO-002)
+
+Production VPS disk is IOPS-limited. **Do not** run on-VPS `npm run build` while **Cursor Remote** is connected.
+
+| Rule | Detail |
+|------|--------|
+| **Forbidden** | Cursor remote + `npm run build` / `deploy_frontend.sh` concurrently |
+| **Guard** | `deploy_frontend.sh` calls `scripts/ops/check_cursor_remote.sh` |
+| **Preferred deploy** | Off-box build → `deploy_frontend_artifact.sh` (no compile on VPS) |
+| **Config** | `.cursorignore`, `.vscode/settings.json` (`files.watcherExclude`, `files.exclude`) |
+
+Full runbook: [`docs/ops/WP-INFRA-IO-002-VPS-IO-Guardrails.md`](../ops/WP-INFRA-IO-002-VPS-IO-Guardrails.md)
+
+## Standard deploy (VPS, on-box build)
 
 From the repository root on the server:
 
@@ -124,6 +137,22 @@ Next.js may warn about multiple lockfiles when building from `corpsite-ui/`. Thi
 
 Removing the root lockfiles would break `npm run dev` at the repo root unless dev scripts are moved elsewhere.
 
+## Preferred deploy — artifact (off-box build)
+
+Avoids compile I/O on the production VPS:
+
+```bash
+# Off-box (laptop / CI)
+./scripts/build_frontend_artifact.sh
+
+# Copy tarball to VPS, then:
+sudo ./scripts/deploy_frontend_artifact.sh tmp/frontend-artifacts/corpsite-ui-next-....tar.gz
+```
+
+If `corpsite-ui/package-lock.json` changed, run `cd corpsite-ui && npm ci` on VPS before artifact install.
+
+Optional CI: `.github/workflows/frontend-artifact.yml` (`workflow_dispatch` or tag `v*-frontend*`).
+
 ## Environment
 
 Production browser API base URL is baked at build time. See `docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md`:
@@ -135,11 +164,12 @@ NEXT_PUBLIC_APP_ENV=prod
 BACKEND_URL=http://127.0.0.1:8000
 ```
 
-After changing `NEXT_PUBLIC_*`, run `sudo ./scripts/deploy_frontend.sh` again (rebuild required).
+After changing `NEXT_PUBLIC_*`, run a frontend deploy again (rebuild or new artifact required).
 
 ## Related
 
 - `README_DEPLOY.md` — full stack deploy checklist
 - `docs/deploy/VPS_STABILITY.md` — ADR-INFRA-005 port guard, recovery, health timer
+- `docs/ops/WP-INFRA-IO-002-VPS-IO-Guardrails.md` — disk I/O guardrails, Cursor rule, artifact deploy
 - `docs/ops/NGINX_SAME_ORIGIN_API_RUNBOOK.md` — nginx `/api` + UI routing
 - `scripts/verify_frontend_phase2f3.sh` — optional bundle content verification after build

@@ -60,7 +60,9 @@
 2. Скопируй обновлённые файлы проекта на сервер.
 3. Примени миграции БД до запуска новой версии backend.
 4. Обнови backend-зависимости, если они изменились.
-5. Собери или обнови frontend (`sudo ./scripts/deploy_frontend.sh` — см. `docs/deploy/frontend.md`).
+5. Собери или обнови frontend:
+   - **предпочтительно:** артефакт off-box → `sudo ./scripts/deploy_frontend_artifact.sh` (см. `docs/ops/WP-INFRA-IO-002-VPS-IO-Guardrails.md`);
+   - **интерим:** `sudo ./scripts/deploy_frontend.sh` — только с **отключённым** Cursor Remote (см. `docs/deploy/frontend.md`).
 6. Перезапусти backend через `sudo ./scripts/deploy_backend.sh` (см. `docs/deploy/VPS_STABILITY.md`).
    Скрипт автоматически выполняет health-check и **scheduler post-deploy smoke** после успешного `/health`.
 7. Запусти backend и frontend (если не использовал deploy-скрипты выше).

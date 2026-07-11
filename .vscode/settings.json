@@ -1,0 +1,39 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/.venv/**": true,
+    "**/venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.turbo/**": true,
+    "**/.cache/**": true,
+    "**/coverage/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/logs/**": true,
+    "**/tmp/**": true,
+    "**/data/sync/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.venv": true,
+    "**/venv": true,
+    "**/__pycache__": true,
+    "**/coverage": true,
+    "**/.git": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/logs": true,
+    "**/tmp": true,
+    "**/data/sync": true
+  },
+  "files.exclude": {
+    "**/.next": true,
+    "**/.venv": true,
+    "**/node_modules": true
+  },
+  "typescript.tsserver.maxTsServerMemory": 2048
+}

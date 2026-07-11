@@ -21,11 +21,13 @@ Related backend incident (2026-06-16): stale orphan **uvicorn** on `:8000` — s
 - **`npm run start` вручную** на VPS (и `next start` вне `corpsite-frontend.service`)
 - `git pull` + `systemctl restart corpsite-frontend` **без** `npm run build`
 - Игнорировать `systemctl status` = **failed** после deploy
+- **Cursor Remote + on-VPS `npm run build`** одновременно (WP-INFRA-IO-002) — отключить Cursor перед `deploy_frontend.sh`
 
 ### Разрешено
 
 - **`sudo ./scripts/deploy_backend.sh`** — единственный путь restart backend
-- **`sudo ./scripts/deploy_frontend.sh`** — build + port guard + restart + smoke
+- **`sudo ./scripts/deploy_frontend.sh`** — build + port guard + restart + smoke (Cursor отключён)
+- **`sudo ./scripts/deploy_frontend_artifact.sh`** — установка готового `.next` без сборки на VPS (предпочтительно)
 
 ## Root causes (confirmed)
 
@@ -67,6 +69,9 @@ sudo ./scripts/deploy_backend.sh
 
 # Frontend (always builds)
 sudo ./scripts/deploy_frontend.sh
+
+# Frontend (preferred when artifact available — no on-VPS compile)
+# sudo ./scripts/deploy_frontend_artifact.sh tmp/frontend-artifacts/corpsite-ui-next-....tar.gz
 ```
 
 ## Install / update systemd units (VPS)

@@ -1,0 +1,40 @@
+# Optional CI — build frontend artifact (WP-INFRA-IO-002)
+#
+# Produces a downloadable .next tarball. Deploy to VPS manually or extend this
+# workflow with your scp/ssh deploy step.
+#
+# Triggers: manual (workflow_dispatch) or tag v*-frontend*
+
+name: frontend-artifact
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*-frontend*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: corpsite-ui/package-lock.json
+
+      - name: Build artifact
+        run: ./scripts/build_frontend_artifact.sh
+        env:
+          CORPSITE_ARTIFACT_DIR: ${{ runner.temp }}/frontend-artifacts
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpsite-ui-next
+          path: |
+            ${{ runner.temp }}/frontend-artifacts/*.tar.gz
+            ${{ runner.temp }}/frontend-artifacts/*.manifest.json
+          if-no-files-found: error

@@ -1,0 +1,31 @@
+# WP-INFRA-IO-002 — reduce Cursor indexing / watcher I/O on VPS and dev hosts.
+# See docs/ops/WP-INFRA-IO-002-VPS-IO-Guardrails.md
+
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/.turbo/
+**/.cache/
+**/coverage/
+**/dist/
+**/build/
+
+# Python
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Runtime / logs
+**/logs/
+**/tmp/
+**/*.log
+
+# Git internals (large object store)
+**/.git/objects/
+**/.git/subtree-cache/
+
+# Local sync / exports
+**/data/sync/
