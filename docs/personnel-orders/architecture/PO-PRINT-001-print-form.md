@@ -90,6 +90,7 @@
 Концепции:
 
 - официальный PDF (динамический MVP) — [`PO-PDF-001-official-pdf-engine.md`](./PO-PDF-001-official-pdf-engine.md);
+- редакционный слой (generated + override) — [`PO-EDIT-001-editorial-document-model.md`](./PO-EDIT-001-editorial-document-model.md);
 - подписание — [`PO-SIGN-001-signing-concept.md`](../PO-SIGN-001-signing-concept.md);
 - удаление / void — [`PO-LIFECYCLE-002-delete-and-void-policy.md`](../PO-LIFECYCLE-002-delete-and-void-policy.md).
 
