@@ -11,6 +11,10 @@ BACKEND_HEALTH_URL="${CORPSITE_BACKEND_HEALTH_URL:-http://127.0.0.1:8000/health}
 PUBLIC_PERSONNEL_URL="${CORPSITE_PUBLIC_PERSONNEL_URL:-https://mmc.004.kz/directory/personnel}"
 ENSURE_PORT="${REPO_ROOT}/scripts/ops/ensure_port_free.sh"
 ATTEMPT_RECOVERY="${CORPSITE_HEALTHCHECK_RECOVER:-1}"
+POSTGRES_HOST="${CORPSITE_POSTGRES_HOST:-127.0.0.1}"
+POSTGRES_PORT="${CORPSITE_POSTGRES_PORT:-5432}"
+POSTGRES_USER="${CORPSITE_POSTGRES_USER:-postgres}"
+POSTGRES_DB="${CORPSITE_POSTGRES_DB:-corpsite}"
 
 timestamp() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
@@ -42,6 +46,43 @@ service_active() {
 
 service_failed() {
   systemctl_cmd is-failed --quiet "$1" 2>/dev/null
+}
+
+# Returns 0 when PostgreSQL accepts connections; non-zero otherwise.
+# pg_isready exit codes: 0=accepting, 1=rejecting, 2=no response, other=error.
+# Must not abort under set -e when pg_isready is unavailable or unhealthy.
+postgres_ready() {
+  if ! command -v pg_isready >/dev/null 2>&1; then
+    log "postgres ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -> pg_isready not found"
+    return 127
+  fi
+
+  local rc=0
+  pg_isready \
+    -h "${POSTGRES_HOST}" \
+    -p "${POSTGRES_PORT}" \
+    -U "${POSTGRES_USER}" \
+    -d "${POSTGRES_DB}" \
+    >/dev/null 2>&1 || rc=$?
+
+  case "${rc}" in
+    0)
+      log "postgres ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -> accepting connections"
+      return 0
+      ;;
+    1)
+      log "postgres ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -> rejecting connections (startup/recovery?)"
+      return 1
+      ;;
+    2)
+      log "postgres ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -> no response"
+      return 2
+      ;;
+    *)
+      log "postgres ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -> check failed (exit ${rc})"
+      return "${rc}"
+      ;;
+  esac
 }
 
 recover_frontend() {
@@ -116,7 +157,11 @@ main() {
   if [[ "${backend_code}" != "200" ]] || ! service_active "${BACKEND_SERVICE}"; then
     ok=1
     if [[ "${ATTEMPT_RECOVERY}" == "1" ]]; then
-      recover_backend || true
+      if postgres_ready; then
+        recover_backend || true
+      else
+        log "backend unhealthy while PostgreSQL unavailable; backend recovery skipped"
+      fi
     else
       log "backend unhealthy; recovery disabled"
     fi
