@@ -19,8 +19,13 @@ Product decisions ratified before WP-PO-EDIT-002 persistence work:
 | R3 | FIO morphology | Phase 1: auto proposal + manual override. **No** mandatory genitive/possessive profile fields. No 100% morphology claim. Optional FIO forms → EDIT-005 or separate WP. |
 | R4 | Clause library | EDIT-002: generation contract + `generator_version` + generated snapshot + fingerprint. **No** DB admin library yet. **No** new legal wording in React components. Versioned DB library → **EDIT-004**. |
 | R5 | Leave | Multi-period annual leave **out** of generic editorial persistence. Roadmap: **WP-PO-LEAVE-001**. Override may temporarily fix wording; does **not** replace structured leave SoT. |
-| R6 | Legacy `localized_texts` | **Keep**; backward-compatible fallback; **do not** extend with new duties; document mapping → deprecation path. |
+| R6 | Legacy `localized_texts` | **Keep**; backward-compatible fallback; **do not** extend with new duties; staged deprecation (see R11). |
 | R7 | Locales | Store editorial for `kk` + `ru`. `kk-ru` = render-time composition. Before READY: valid **effective** blocks for both locales (generated may be effective). Stale/failed required locale **blocks READY** or must be fixed. |
+| R8 | READY required blocks | For each of `kk` and `ru`: **title**, **preamble**, and **body of every active item** are required. **Basis** required only when `basis_required=true` for the order/event/item type. Signature and acknowledgement are structured/rendered chrome — **not** in editorial persistence gate. |
+| R9 | Regenerate | Updates `generated` snapshot + fingerprint only. Existing **override is kept**; marked **stale / review-required**. Clearing override is a separate confirmed command («Вернуть автоматически сформированный текст»). |
+| R10 | Write lock in EDIT-002 | EDIT-002 forbids **both structured and editorial** writes for READY/SIGNED/REGISTERED/VOIDED. **DRAFT** is the only editable status. return-to-DRAFT remains EDIT-005. |
+| R11 | localized_texts deprecation | EDIT-002: read fallback/mapping; new writes → editorial layer only. EDIT-003: editor uses new API. Legacy write API deprecated only after production migration verification. Table drop = separate cleanup WP (no fixed date). |
+| R12 | WP-PO-LEAVE-001 | Preliminary scope ratified (in/out lists in §5.4 / roadmap). |
 
 Spike remains **non-production**: no persistence, no editorial API, no editor UI wired.
 
@@ -186,13 +191,33 @@ Generated wording строится из type + employee name + dates; override �
 | Block tables + fingerprint | Clear effective_text; per-block regen | More tables/API | **Recommend** |
 | Immutable revision every save | Strong audit | Heavy; UI complexity | Phase 2+ |
 
-### 5.4 Leave / multi-period (R5)
+### 5.4 Leave / multi-period (R5, R12)
 
 Annual leave with multiple periods is **out of scope** for generic editorial persistence.
 
-- Roadmap: **WP-PO-LEAVE-001 — Annual Leave Structured Item Model** (structured periods/days/payments as SoT).
-- Until then: HR may use **item body override** to correct leave wording temporarily.
-- Override **must not** be treated as structured leave SoT for apply/events.
+Roadmap: **WP-PO-LEAVE-001 — Annual Leave Structured Item Model**.
+
+**In (preliminary):**
+
+- multiple work periods;
+- days per period;
+- additional leave days and reason;
+- total days;
+- actual leave dates;
+- leave allowance clause;
+- arithmetic validation;
+- kk/ru generation;
+- structured payload as SoT.
+
+**Out (preliminary):**
+
+- full leave balance engine;
+- timesheet integration;
+- payroll calculation;
+- recalls/transfers;
+- compensation workflows.
+
+Until LEAVE-001: HR may use **item body override** to correct leave wording temporarily. Override **must not** be treated as structured leave SoT for apply/events.
 
 ---
 
@@ -253,7 +278,7 @@ Spike: `personnelOrderBasisGenerate.ts` — templates without false morphology c
 
 ---
 
-## 8. Language strategy (R7)
+## 8. Language strategy (R7, R8)
 
 | Mode | Storage | Render |
 |---|---|---|
@@ -261,11 +286,21 @@ Spike: `personnelOrderBasisGenerate.ts` — templates without false morphology c
 | `kk` | editorial rows `locale=kk` | kk effective texts |
 | `kk-ru` | **не** отдельная редакция | композиция kk + ru (как сейчас в print) |
 
-**Before READY_FOR_SIGNATURE:**
+### READY required editorial blocks (R8)
 
-- Valid **effective** blocks must exist for **both** `kk` and `ru` (required set: at least title + preamble + each active item body; basis per product rules).
+For **each** locale `kk` and `ru`, before `READY_FOR_SIGNATURE`:
+
+| Block | Required? |
+|---|---|
+| `title` | **Yes** (non-empty effective) |
+| `preamble` | **Yes** (non-empty effective) |
+| each active item `body` | **Yes** (non-empty effective) |
+| item `basis` | **Only if** `basis_required=true` for that order type / event type / item type |
+| signature | **No** — structured/rendered; not editorial gate |
+| acknowledgement | **No** — structured/rendered; not editorial gate |
+
 - Manual edit of both languages is **not** required: `generated` may be the effective text.
-- If a required locale is **missing**, **stale** (with unresolved override policy), or **failed** generation → **block READY** until fixed.
+- Missing required effective text, failed generation, or **unresolved stale** required block → **block READY**.
 
 **kk authoritative** (WP-PO-002): UI shows both; official sense prefers kk when policies conflict.
 
@@ -273,27 +308,25 @@ Spike: `personnelOrderBasisGenerate.ts` — templates without false morphology c
 
 ---
 
-## 9. Lifecycle — editability (R1, R2)
+## 9. Lifecycle — editability (R1, R2, R10)
 
 ### Target policy (ratified)
 
-| Status | Structured edit | Editorial edit |
+| Status | Structured write | Editorial write |
 |---|---|---|
 | `DRAFT` | Yes | Yes |
-| `READY_FOR_SIGNATURE` | **No** (read-only) | **No** (read-only) |
+| `READY_FOR_SIGNATURE` | **No** | **No** |
 | `SIGNED` | No | No |
 | `REGISTERED` | No | No |
 | `VOIDED` | No | No |
 
-Corrections while READY: only via **return-to-DRAFT**, then edit in DRAFT, then READY again.
+Corrections while READY: only via **return-to-DRAFT** (EDIT-005), then edit in DRAFT, then READY again.
 
-### Compatibility note vs current MVP code
+### EDIT-002 enforcement (R10)
 
-Today `_ensure_order_editable` still allows DRAFT **and** READY. That is **legacy MVP behavior**, not the target policy.
-
-- EDIT-002 editorial write APIs: enforce **DRAFT only**.
-- EDIT-002 structured write path: prefer aligning to DRAFT-only when touching editorial-related gates; full structured lock on READY may land with EDIT-005 together with return-to-DRAFT (avoid silent half-migration — document in EDIT-002 if structured READY edit remains temporarily).
-- **return-to-DRAFT** endpoint: **EDIT-005** (not EDIT-002), but schema/API must not preclude it (no irreversible READY-only editorial columns).
+- **Both** structured and editorial write APIs must reject READY/SIGNED/REGISTERED/VOIDED (**DRAFT only**).
+- This replaces the legacy MVP `_ensure_order_editable` allowance of READY as soon as EDIT-002 lands for those endpoints.
+- **return-to-DRAFT** endpoint remains **EDIT-005**; schema must stay compatible (editorial rows survive READY ↔ DRAFT).
 
 Early UI editor (EDIT-003): **DRAFT only**.
 
@@ -301,30 +334,29 @@ PO-004 conceptual lifecycle is **not** silently rewritten; MVP enum remains `DRA
 
 ---
 
-## 10. Stale-data handling
-
-Когда меняются structured data после ручной правки:
+## 10. Stale-data handling & regenerate (R9)
 
 ```text
-on structured change (item/header facts used by fingerprint):
-  recompute fingerprint
-  if override exists AND fingerprint != stored:
-    mark block STALE
-    do NOT auto-wipe override
+on regenerate (or structured change that triggers regen of generated_*):
+  rewrite generated_* from templates + facts
+  update source_fingerprint (+ generator_version)
+  if override exists:
+    KEEP override
+    mark block STALE / review-required
   else:
-    regenerate generated_* only
+    effective = generated (clean)
 ```
 
-**Команды UI:**
+**Команды:**
 
 | Command | Behavior |
 |---|---|
-| Сохранить правку | set `override`, clear stale or keep until regen |
-| Вернуть автоматически сформированный | `override = null`; show `generated` |
-| Перегенерировать | rewrite `generated_*` from templates+facts; **ask** if override exists: keep override / replace / cancel |
-| Перегенерировать только блок | same, scoped to title/preamble/item body/basis |
+| Сохранить правку | set `override`; clear or set review flags per UX |
+| **Перегенерировать** | update `generated` + fingerprint; **do not** delete/replace override; if override present → **stale/review-required** |
+| **Вернуть автоматически сформированный текст** | separate command with **confirmation**; clears `override` (`null`); effective becomes `generated` |
+| Перегенерировать только блок | same regenerate semantics, scoped |
 
-Default: **не** молча затирать ручной текст.
+Default: **never** silently wipe manual text on regenerate.
 
 ---
 
@@ -360,11 +392,13 @@ structured + editorial effective
 ```text
 POST   /personnel-orders/{id}/editorial/generate
 GET    /personnel-orders/{id}/editorial?locale=kk|ru
-PATCH  /personnel-orders/{id}/editorial/...          # DRAFT only
-POST   /personnel-orders/{id}/editorial/.../regenerate
+PATCH  /personnel-orders/{id}/editorial/...                 # set override; DRAFT only
+POST   /personnel-orders/{id}/editorial/.../regenerate      # R9: keep override → stale
+POST   /personnel-orders/{id}/editorial/.../restore-generated  # R9: confirm; clear override
 # item-level equivalents
 
-# READY gate: validate kk+ru effective blocks; reject if stale/missing
+# Structured + editorial writes: DRAFT only (R10)
+# READY gate: R8 required blocks for kk+ru; reject missing/unresolved stale
 ```
 
 ### EDIT-005 (reserved; keep compatible)
@@ -402,28 +436,28 @@ Fields: ids, locale, block_kind, result, duration — **не** body text.
 
 ---
 
-## 16. Migration / backward compatibility
+## 16. Migration / backward compatibility (R6, R11)
 
 1. Existing orders: no editorial rows → print uses current generators (+ optional localized_texts title/preamble fallback).
-2. First generate: create kk+ru snapshots; import legacy localized title/preamble per R6 mapping.
+2. First generate: create kk+ru snapshots; import legacy localized title/preamble per §5.2 D.
 3. Do not extend `personnel_order_localized_texts` schema for editorial duties.
-4. `body_text`: not item SoT.
-5. ViewModel: prefer editorial effective; fallback chain as in §5.4/R6.
-6. Leave multi-period: no new structured leave tables in EDIT-002 (WP-PO-LEAVE-001).
+4. **New editorial writes** go only to the new editorial layer (EDIT-002+).
+5. **EDIT-003:** editor UI uses the new editorial API only.
+6. **Legacy write API** (`PUT …/localized-texts/{locale}`): deprecate only **after** production migration verification (not automatic in EDIT-002).
+7. **Table drop:** separate cleanup WP; **no fixed date** in this ratification.
+8. `body_text`: not item SoT.
+9. Leave multi-period: no new structured leave tables in EDIT-002 (WP-PO-LEAVE-001).
 
 ---
 
-## 17. Open questions (remaining)
+## 17. Open questions (remaining technical details)
 
-Ratified items removed from this list (see §0).
+Product decisions R1–R12 are closed. Remaining items are implementation details for EDIT-002 (not architecture blockers):
 
-Still open / deferred detail (not blockers for EDIT-002 start):
-
-1. Exact **required block set** for READY gate (minimum: title + preamble + each active item body; is item basis mandatory for all types?).
-2. On regenerate with existing override: default UX = keep override / ask / replace? (architecture allows ask; product default TBD in EDIT-003).
-3. Whether EDIT-002 also locks **structured** READY writes immediately, or only editorial writes until EDIT-005.
-4. Deprecation calendar for `personnel_order_localized_texts` write API (after EDIT-003?).
-5. Scope details of **WP-PO-LEAVE-001** (payload shape for periods/days/payments).
+1. **Catalog of `basis_required`:** which `order_type_code` / `item_type_code` combinations set `basis_required=true` (initial matrix in EDIT-002 code/config).
+2. **Stale representation:** boolean column vs `review_status` enum (`OK` / `STALE` / `REVIEW_REQUIRED`) on editorial cells.
+3. **Fingerprint algorithm:** exact canonical serialization of structured inputs (field order, null handling).
+4. **Item basis storage:** dedicated `personnel_order_item_bases` table vs JSONB on item payload for EDIT-002 MVP.
 
 ---
 
@@ -432,24 +466,25 @@ Still open / deferred detail (not blockers for EDIT-002 start):
 | WP | Scope |
 |---|---|
 | **WP-PO-EDIT-001** | Architecture + ratification + non-prod spike (**done**) |
-| **WP-PO-EDIT-002** | Persistence + generate API + ViewModel fallback wiring + READY locale gate (no return-to-draft; no editor UI; no DB clause admin) — see §18.1 |
-| **WP-PO-EDIT-003** | Block editor UI (DRAFT only); stale/regenerate/restore |
+| **WP-PO-EDIT-002** | Persistence; generate/regenerate/restore-generated APIs; **DRAFT-only structured+editorial writes**; READY required-block gate; ViewModel fallback — see §18.1 |
+| **WP-PO-EDIT-003** | Block editor UI (DRAFT only); stale/review UX |
 | **WP-PO-EDIT-004** | Versioned DB clause/template library + legal review |
-| **WP-PO-EDIT-005** | return-to-DRAFT; align structured READY lock; audit polish; optional FIO forms |
-| **WP-PO-LEAVE-001** | Annual Leave Structured Item Model (separate) |
-| Later | Immutable print snapshot (PO-PDF phase 2) |
+| **WP-PO-EDIT-005** | return-to-DRAFT; audit polish; optional FIO forms |
+| **WP-PO-LEAVE-001** | Annual Leave Structured Item Model (R12 in/out) |
+| Later | localized_texts cleanup WP; immutable print snapshot (PO-PDF phase 2) |
 
 ### 18.1 Exact scope — WP-PO-EDIT-002
 
 **In:**
 
-- Alembic: editorial order/item tables + optional item basis facts; columns include `generator_version`, fingerprints, generated/override pairs.
-- Server generators (shared module) producing kk/ru snapshots; stamp `generator_version`.
-- API: generate / get / patch override / regenerate — **DRAFT only**.
-- READY transition validation: both locales have valid effective required blocks; reject stale/missing.
-- Print ViewModel: consume editorial effective when present; legacy fallback otherwise.
-- Mapping from existing `localized_texts` on first generate.
-- Tests: migration, API auth/status gates, ViewModel effective/fallback, READY gate, basis generate.
+- Alembic: editorial order/item tables (+ optional item bases); `generator_version`, fingerprints, generated/override; stale/review flag support.
+- Server generators (shared module) for kk/ru; stamp `generator_version`.
+- API: generate / get / patch override / regenerate / clear-override (restore generated) — **DRAFT only**.
+- **Structured write lock:** READY/SIGNED/REGISTERED/VOIDED reject mutations (align `_ensure_order_editable` to DRAFT-only).
+- READY gate: R8 required blocks for kk+ru; reject missing/unresolved stale.
+- Print ViewModel: editorial effective when present; legacy fallback otherwise.
+- Mapping from existing `localized_texts` on first generate (read-only legacy thereafter for new writes).
+- Tests: migration, API auth/status gates (structured+editorial), ViewModel, READY gate, regenerate-keeps-override, restore-clears-override, basis generate.
 
 **Out:**
 
@@ -458,18 +493,19 @@ Still open / deferred detail (not blockers for EDIT-002 start):
 - DB clause admin library (EDIT-004).
 - Employee FIO morphological profile fields (EDIT-005+).
 - Leave multi-period structured model (LEAVE-001).
-- Dropping `personnel_order_localized_texts`.
+- Deprecating/dropping `personnel_order_localized_texts` write API/table (post-verification cleanup WP).
 
 ### 18.2 Recommended EDIT-002 test matrix
 
 | Layer | Cases |
 |---|---|
 | Migration | tables/constraints/uniques; upgrade/downgrade smoke |
-| API | 401/403; DRAFT ok; READY/SIGNED reject writes; generate creates kk+ru; patch override; clear override; regenerate |
-| READY gate | missing locale → 422; stale required block → 422; both effective ok → allow |
-| ViewModel | editorial override wins; generated used when no override; no editorial → legacy/generator fallback; HTML/PDF still share ViewModel |
+| API writes | 401/403; DRAFT ok; READY/SIGNED/REGISTERED/VOIDED reject **structured and editorial** writes |
+| Generate / regenerate | creates kk+ru; regenerate updates generated+fingerprint; override preserved + stale |
+| Restore generated | confirmed clear override; effective = generated |
+| READY gate | missing title/preamble/item body → 422; basis missing only if `basis_required`; unresolved stale → 422; clean effective → allow |
+| ViewModel | override wins; generated when no override; no editorial → legacy/generator fallback; HTML/PDF share ViewModel |
 | Basis | PERSONAL_APPLICATION ru/kk; nominative fallback; free_text OTHER |
-| Compat | return-to-draft not present but READY remains read-only for editorial writes |
 
 ---
 
@@ -480,11 +516,11 @@ Still open / deferred detail (not blockers for EDIT-002 start):
 | Manual text diverges from apply payload | UI warnings; apply never reads overrides |
 | Morphology errors in basis | Manual override; no 100% claim; FIO forms deferred |
 | Dual storage (`localized_texts` + editorial) | Fallback + mapping; no new duties on legacy table |
-| READY still editable in old structured code | Target policy R1; editorial DRAFT-only in EDIT-002; full lock in EDIT-005 |
+| READY still editable in old structured code | **R10:** EDIT-002 locks structured+editorial to DRAFT only |
 | Template legal drift | generator_version now; DB library EDIT-004 |
 | HTML injection | Plain text only + escape |
-| Leave text via override mistaken for SoT | Document R5; LEAVE-001 |
-
+| Leave text via override mistaken for SoT | Document R5/R12; LEAVE-001 |
+| Regenerate wiping manual text | **R9:** keep override; mark stale; separate restore command |
 ---
 
 ## 20. Spike artifacts (non-production)

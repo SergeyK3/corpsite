@@ -4,12 +4,15 @@ Draft only. Do **not** run against production until WP-PO-EDIT-002.
 
 Ratified constraints (PO-EDIT-001 §0):
 
-- Editorial writes: **DRAFT only** (READY read-only; return-to-DRAFT in EDIT-005).
+- Editorial **and structured** writes: **DRAFT only** (R10). READY/SIGNED/REGISTERED/VOIDED read-only.
+- return-to-DRAFT in EDIT-005; rows must survive READY ↔ DRAFT.
 - Store locales `kk` + `ru` only (`kk-ru` is render-time).
+- READY gate: title + preamble + each active item body; basis only if `basis_required` (R8).
+- Regenerate keeps override and marks stale; restore-generated is separate (R9).
 - Stamp `generator_version` + `source_fingerprint` on generate.
-- `template_set_version` nullable reserved for EDIT-004 clause library.
-- Do **not** alter/drop `personnel_order_localized_texts` here.
-- No leave multi-period structured tables (WP-PO-LEAVE-001).
+- `template_set_version` nullable reserved for EDIT-004.
+- Do **not** alter/drop `personnel_order_localized_texts` here (R11).
+- No leave multi-period structured tables (WP-PO-LEAVE-001 / R12).
 
 ```sql
 -- personnel_order_editorial_blocks
@@ -26,6 +29,8 @@ CREATE TABLE IF NOT EXISTS personnel_order_editorial_blocks (
   source_fingerprint VARCHAR(128) NULL,
   generator_version VARCHAR(64) NULL,
   template_set_version INTEGER NULL,  -- reserved EDIT-004
+  -- R9: when override present and generated refreshed → review_status = STALE / REVIEW_REQUIRED
+  review_status VARCHAR(32) NULL,  -- NULL|OK|STALE|REVIEW_REQUIRED (exact enum in EDIT-002)
   generated_at TIMESTAMPTZ NULL,
   edited_at TIMESTAMPTZ NULL,
   edited_by BIGINT NULL,
@@ -48,6 +53,7 @@ CREATE TABLE IF NOT EXISTS personnel_order_item_editorial_blocks (
   source_fingerprint VARCHAR(128) NULL,
   generator_version VARCHAR(64) NULL,
   template_set_version INTEGER NULL,  -- reserved EDIT-004
+  review_status VARCHAR(32) NULL,
   generated_at TIMESTAMPTZ NULL,
   edited_at TIMESTAMPTZ NULL,
   edited_by BIGINT NULL,

@@ -95,8 +95,9 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 | WP | Status | Scope |
 |---|---|---|
 | WP-PO-EDIT-001 | **Ratified** | Editorial architecture + spike (non-prod) |
-| WP-PO-EDIT-002 | Next | Persistence, generate API, ViewModel fallback, READY locale gate |
+| WP-PO-EDIT-002 | Next | Persistence; DRAFT-only structured+editorial writes; generate/READY gate |
 | WP-PO-EDIT-003 | Planned | DRAFT-only block editor UI |
 | WP-PO-EDIT-004 | Planned | Versioned DB clause/template library |
-| WP-PO-EDIT-005 | Planned | return-to-DRAFT, READY structured lock, optional FIO forms |
-| WP-PO-LEAVE-001 | Planned | Annual Leave Structured Item Model (separate from generic editorial) |
+| WP-PO-EDIT-005 | Planned | return-to-DRAFT; audit polish; optional FIO forms |
+| WP-PO-LEAVE-001 | Planned | Annual leave structured item model (periods/days/dates/allowance; no balance/payroll) |
+| Later | Planned | localized_texts cleanup WP; immutable PDF snapshot |
