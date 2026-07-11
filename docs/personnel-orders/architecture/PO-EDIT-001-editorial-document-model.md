@@ -1,8 +1,10 @@
 # PO-EDIT-001 — Personnel Order Editorial Document Model
 
 **Статус:** Architecture Approved for Implementation  
-**WP:** WP-PO-EDIT-001 (research + ratification complete; production persistence not started)  
-**Связано:** [PO-PRINT-001](./PO-PRINT-001-print-form.md), [PO-PDF-001](./PO-PDF-001-official-pdf-engine.md), [PO-004](./PO-004-personnel-orders-lifecycle.md), [WP-PO-002](../work-packages/WP-PO-002-personnel-orders-architecture-scope-decision.md), [PO-LIFECYCLE-002](../PO-LIFECYCLE-002-delete-and-void-policy.md)
+**WP:** WP-PO-EDIT-001 (research + ratification complete; production persistence in WP-PO-EDIT-002)  
+**Связано:** [PO-PRINT-001](./PO-PRINT-001-print-form.md), [PO-PDF-001](./PO-PDF-001-official-pdf-engine.md), [PO-004](./PO-004-personnel-orders-lifecycle.md), [WP-PO-002](../work-packages/WP-PO-002-personnel-orders-architecture-scope-decision.md), [PO-LIFECYCLE-002](../PO-LIFECYCLE-002-delete-and-void-policy.md), [PO-EDIT-002](../implementation/PO-EDIT-002-editorial-persistence.md)
+
+> **Physical storage refined from wide-row draft to normalized block-row model in WP-PO-EDIT-002. Architectural semantics R1–R12 remain unchanged.**
 
 ---
 
@@ -127,46 +129,51 @@ is_stale = structured_fingerprint != fingerprint_at_generation
 
 **Отвергнуто (на MVP):** полные immutable revisions на каждое нажатие — дорого; достаточно `revision` + audit metadata + optional history later.
 
-**Рекомендация:**
+**Physical storage refined from wide-row draft to normalized block-row model in WP-PO-EDIT-002. Architectural semantics R1–R12 remain unchanged.**
+
+**Рекомендация (EDIT-002 implemented shape):** one DB row per `(scope, locale, block_type)`.
 
 #### A. Order-level editorial (`personnel_order_editorial_blocks`)
 
 | Column | Purpose |
 |---|---|
-| `order_id`, `locale` (`kk`\|`ru`) | PK scope |
-| `title_generated`, `title_override` | Заголовок |
-| `preamble_generated`, `preamble_override` | Преамбула |
-| `closing_generated`, `closing_override` | Заключительная часть (если нужна) |
-| `source_fingerprint` | Hash structured inputs used at last generate |
-| `generator_version` | Code/contract version of the generator (EDIT-002; not DB clause admin) |
-| `template_set_version` | Nullable until EDIT-004 clause library; reserved for future |
-| `generated_at`, `edited_at`, `edited_by` | Metadata |
-| `revision` | Monotonic |
+| `order_id`, `locale` (`kk`\|`ru`), `block_type` | Unique scope |
+| `block_type` | `title` \| `preamble` \| `closing` |
+| `generated_text`, `override_text` | Snapshot + optional manual override |
+| `generator_key`, `generator_version` | Generator contract identity |
+| `source_fingerprint` | SHA-256 of canonical structured inputs for this block |
+| `review_status` | `CURRENT` \| `STALE` \| `REVIEW_REQUIRED` \| `GENERATION_FAILED` |
+| `generated_at`, `edited_at`, `edited_by_user_id` | Metadata |
+| `revision` | Optimistic concurrency |
 
-Unique `(order_id, locale)`.
+Unique `(order_id, locale, block_type)`.
 
 #### B. Item-level editorial (`personnel_order_item_editorial_blocks`)
 
 | Column | Purpose |
 |---|---|
-| `order_item_id`, `locale` | PK scope |
-| `body_generated`, `body_override` | Текст пункта |
-| `basis_generated`, `basis_override` | Основание пункта |
-| `source_fingerprint` | Hash item structured inputs |
-| `generator_version` | Same contract as order-level |
-| `template_set_version` | Reserved for EDIT-004 |
-| `generated_at`, `edited_at`, `edited_by` | |
-| `revision` | |
+| `order_item_id`, `locale`, `block_type` | Unique scope |
+| `block_type` | `body` \| `basis` |
+| `generated_text`, `override_text` | Snapshot + optional manual override |
+| `generator_key`, `generator_version`, `source_fingerprint` | Same contract as order-level |
+| `review_status` | Same enum as order-level |
+| `basis_required` | Policy projection (especially for `basis` rows) |
+| `generated_at`, `edited_at`, `edited_by_user_id`, `revision` | Metadata |
 
-#### C. Structured basis facts (`personnel_order_item_bases` or payload extension)
+Unique `(order_item_id, locale, block_type)`.
+
+#### C. Structured basis facts (`personnel_order_item_bases`)
+
+Dedicated 1:1 table (not JSONB-as-primary):
 
 | Column / field | Purpose |
 |---|---|
+| `order_item_id` | UNIQUE FK → item |
 | `basis_type` | PERSONAL_APPLICATION, MEMO, … |
 | `subject_employee_id` | Обычно = item.employee_id |
 | `document_date`, `document_number` | Опционально |
 | `free_text` | Структурированное доп. поле (не HTML) |
-| `attachment_id` | Опциональная ссылка |
+| `metadata` | Optional JSONB extras only |
 
 Generated wording строится из type + employee name + dates; override хранится в editorial block.
 
@@ -452,12 +459,14 @@ Fields: ids, locale, block_kind, result, duration — **не** body text.
 
 ## 17. Open questions (remaining technical details)
 
-Product decisions R1–R12 are closed. Remaining items are implementation details for EDIT-002 (not architecture blockers):
+Product decisions R1–R12 are closed. EDIT-002 closed the former implementation details:
 
-1. **Catalog of `basis_required`:** which `order_type_code` / `item_type_code` combinations set `basis_required=true` (initial matrix in EDIT-002 code/config).
-2. **Stale representation:** boolean column vs `review_status` enum (`OK` / `STALE` / `REVIEW_REQUIRED`) on editorial cells.
-3. **Fingerprint algorithm:** exact canonical serialization of structured inputs (field order, null handling).
-4. **Item basis storage:** dedicated `personnel_order_item_bases` table vs JSONB on item payload for EDIT-002 MVP.
+1. **`basis_required` catalog:** fail-closed policy; P0 types (`HIRE`, `TRANSFER`, `TERMINATION`, `CONCURRENT_DUTY_*`) → required; unknown → unsupported / review-required.
+2. **Stale representation:** enum `CURRENT` \| `STALE` \| `REVIEW_REQUIRED` \| `GENERATION_FAILED`.
+3. **Fingerprint algorithm:** SHA-256 of canonical JSON (stable keys; relevant fields + generator_key/version).
+4. **Item basis storage:** dedicated `personnel_order_item_bases` table (1:1), not JSONB-as-primary.
+
+Physical storage: normalized block-row model (see §5.2 and [PO-EDIT-002](../implementation/PO-EDIT-002-editorial-persistence.md)).
 
 ---
 

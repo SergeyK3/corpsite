@@ -147,8 +147,9 @@ export const PERSONNEL_ORDER_CREATE_TYPE_OPTIONS: ReadonlyArray<{
 }));
 
 export function isEditablePersonnelOrderStatus(status: string | null | undefined): boolean {
+  // WP-PO-EDIT-002 R10: structured + editorial user writes are DRAFT-only.
   const normalized = String(status || "").trim().toUpperCase();
-  return normalized === "DRAFT" || normalized === "READY_FOR_SIGNATURE";
+  return normalized === "DRAFT";
 }
 
 export function canRegisterPersonnelOrder(status: string | null | undefined): boolean {

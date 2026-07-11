@@ -52,6 +52,45 @@ def _cleanup_order(order_id: int) -> None:
             text("DELETE FROM public.employee_events WHERE order_id = :order_id"),
             {"order_id": order_id},
         )
+        editorial_exists = conn.execute(
+            text(
+                """
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = 'personnel_order_editorial_blocks'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if editorial_exists:
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM public.personnel_order_item_editorial_blocks
+                    WHERE order_item_id IN (
+                        SELECT item_id FROM public.personnel_order_items WHERE order_id = :order_id
+                    )
+                    """
+                ),
+                {"order_id": order_id},
+            )
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM public.personnel_order_item_bases
+                    WHERE order_item_id IN (
+                        SELECT item_id FROM public.personnel_order_items WHERE order_id = :order_id
+                    )
+                    """
+                ),
+                {"order_id": order_id},
+            )
+            conn.execute(
+                text(
+                    "DELETE FROM public.personnel_order_editorial_blocks WHERE order_id = :order_id"
+                ),
+                {"order_id": order_id},
+            )
         conn.execute(
             text("DELETE FROM public.personnel_order_localized_texts WHERE order_id = :order_id"),
             {"order_id": order_id},
@@ -179,6 +218,20 @@ def test_register_to_signed_from_ready_for_signature(client, privileged_headers)
             },
             headers=privileged_headers,
         )
+
+        # WP-PO-EDIT-002: ready gate requires generated editorial when tables exist.
+        try:
+            from tests.test_wp_po_edit_002_migration import _schema_available as _edit_schema
+
+            if _edit_schema():
+                gen_resp = client.post(
+                    f"/directory/personnel-orders/{order_id}/editorial/generate",
+                    json={},
+                    headers=privileged_headers,
+                )
+                assert gen_resp.status_code == 200, gen_resp.text
+        except Exception:
+            pass
 
         ready_resp = client.post(
             f"/directory/personnel-orders/{order_id}/ready-for-signature",

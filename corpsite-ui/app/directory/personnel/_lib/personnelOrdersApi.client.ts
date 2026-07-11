@@ -162,6 +162,50 @@ export type PersonnelOrderDetailResponse = {
   events: PersonnelOrderLinkedEvent[];
 };
 
+/** WP-PO-EDIT-002 editorial persistence projection. */
+export type PersonnelOrderEditorialReviewStatus =
+  | "CURRENT"
+  | "STALE"
+  | "REVIEW_REQUIRED"
+  | "GENERATION_FAILED";
+
+export type PersonnelOrderEditorialBlock = {
+  block_id: number;
+  scope: "order" | "item" | string;
+  order_item_id?: number | null;
+  locale: "kk" | "ru" | string;
+  block_type: "title" | "preamble" | "closing" | "body" | "basis" | string;
+  generated_text?: string | null;
+  override_text?: string | null;
+  effective_text: string;
+  generator_key?: string | null;
+  generator_version?: string | null;
+  source_fingerprint?: string | null;
+  review_status: PersonnelOrderEditorialReviewStatus | string;
+  basis_required?: boolean | null;
+  editable: boolean;
+  revision: number;
+  generated_at?: string | null;
+  edited_at?: string | null;
+  edited_by_user_id?: number | null;
+};
+
+export type PersonnelOrderEditorialItemGroup = {
+  order_item_id: number;
+  item_number: number;
+  item_type_code: string;
+  basis_required: boolean;
+  blocks: PersonnelOrderEditorialBlock[];
+};
+
+export type PersonnelOrderEditorialState = {
+  order_id: number;
+  order_status: string;
+  editable: boolean;
+  order_blocks: PersonnelOrderEditorialBlock[];
+  items: PersonnelOrderEditorialItemGroup[];
+};
+
 export type PersonnelOrdersFilters = {
   status?: PersonnelOrderStatus | string;
   order_type_code?: PersonnelOrderType | string;
@@ -379,6 +423,16 @@ export async function getPersonnelOrder(orderId: number): Promise<PersonnelOrder
   return requestJson<PersonnelOrderDetailResponse>("GET", `/directory/personnel-orders/${orderId}`, {
     fallback: "Не удалось загрузить приказ.",
   });
+}
+
+export async function getPersonnelOrderEditorial(
+  orderId: number,
+): Promise<PersonnelOrderEditorialState> {
+  return requestJson<PersonnelOrderEditorialState>(
+    "GET",
+    `/directory/personnel-orders/${orderId}/editorial`,
+    { fallback: "Не удалось загрузить редакционные блоки приказа." },
+  );
 }
 
 export async function createPersonnelOrder(

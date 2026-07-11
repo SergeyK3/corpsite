@@ -203,3 +203,57 @@ class PersonnelOrderRegisterIn(BaseModel):
 
 class PersonnelOrderVoidIn(BaseModel):
     void_reason: str = Field(..., min_length=1, max_length=2000)
+
+
+class EditorialBlockOut(BaseModel):
+    block_id: int
+    scope: str
+    order_item_id: Optional[int] = None
+    locale: str
+    block_type: str
+    generated_text: Optional[str] = None
+    override_text: Optional[str] = None
+    effective_text: str = ""
+    generator_key: Optional[str] = None
+    generator_version: Optional[str] = None
+    source_fingerprint: Optional[str] = None
+    review_status: str
+    basis_required: Optional[bool] = None
+    editable: bool = False
+    revision: int = 1
+    generated_at: Optional[str] = None
+    edited_at: Optional[str] = None
+    edited_by_user_id: Optional[int] = None
+
+
+class EditorialItemGroupOut(BaseModel):
+    order_item_id: int
+    item_number: int
+    item_type_code: str
+    basis_required: bool = False
+    blocks: List[EditorialBlockOut] = Field(default_factory=list)
+
+
+class EditorialStateResponse(BaseModel):
+    order_id: int
+    order_status: str
+    editable: bool
+    order_blocks: List[EditorialBlockOut] = Field(default_factory=list)
+    items: List[EditorialItemGroupOut] = Field(default_factory=list)
+
+
+class EditorialGenerateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    locale: Optional[str] = Field(default=None, max_length=8)
+    item_id: Optional[int] = Field(default=None, ge=1)
+    block_id: Optional[int] = Field(default=None, ge=1)
+    block_type: Optional[str] = Field(default=None, max_length=40)
+
+
+class EditorialBlockPatchIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    override_text: Optional[str] = None
+    clear_override: bool = False
+    expected_revision: Optional[int] = Field(default=None, ge=1)

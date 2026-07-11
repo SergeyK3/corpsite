@@ -80,6 +80,51 @@ STORAGE_TYPE_URL = "URL"
 PRINT_FORMAT_PDF = "pdf"
 PRINT_FORMAT_DOCX = "docx"
 
+# WP-PO-EDIT-002 editorial block types
+ORDER_BLOCK_TYPE_TITLE = "title"
+ORDER_BLOCK_TYPE_PREAMBLE = "preamble"
+ORDER_BLOCK_TYPE_CLOSING = "closing"
+ORDER_BLOCK_TYPES = (
+    ORDER_BLOCK_TYPE_TITLE,
+    ORDER_BLOCK_TYPE_PREAMBLE,
+    ORDER_BLOCK_TYPE_CLOSING,
+)
+
+ITEM_BLOCK_TYPE_BODY = "body"
+ITEM_BLOCK_TYPE_BASIS = "basis"
+ITEM_BLOCK_TYPES = (
+    ITEM_BLOCK_TYPE_BODY,
+    ITEM_BLOCK_TYPE_BASIS,
+)
+
+REVIEW_STATUS_CURRENT = "CURRENT"
+REVIEW_STATUS_STALE = "STALE"
+REVIEW_STATUS_REVIEW_REQUIRED = "REVIEW_REQUIRED"
+REVIEW_STATUS_GENERATION_FAILED = "GENERATION_FAILED"
+REVIEW_STATUSES = (
+    REVIEW_STATUS_CURRENT,
+    REVIEW_STATUS_STALE,
+    REVIEW_STATUS_REVIEW_REQUIRED,
+    REVIEW_STATUS_GENERATION_FAILED,
+)
+
+BASIS_TYPE_PERSONAL_APPLICATION = "PERSONAL_APPLICATION"
+BASIS_TYPE_MEMO = "MEMO"
+BASIS_TYPE_MANAGEMENT_SUBMISSION = "MANAGEMENT_SUBMISSION"
+BASIS_TYPE_MEDICAL_CONCLUSION = "MEDICAL_CONCLUSION"
+BASIS_TYPE_COMMISSION_PROTOCOL = "COMMISSION_PROTOCOL"
+BASIS_TYPE_COURT_ACT = "COURT_ACT"
+BASIS_TYPE_OTHER = "OTHER"
+BASIS_TYPES = (
+    BASIS_TYPE_PERSONAL_APPLICATION,
+    BASIS_TYPE_MEMO,
+    BASIS_TYPE_MANAGEMENT_SUBMISSION,
+    BASIS_TYPE_MEDICAL_CONCLUSION,
+    BASIS_TYPE_COMMISSION_PROTOCOL,
+    BASIS_TYPE_COURT_ACT,
+    BASIS_TYPE_OTHER,
+)
+
 
 class PersonnelOrder(Base):
     """Header record for a personnel order (кадровый приказ)."""
@@ -284,4 +329,154 @@ class PersonnelOrderPrint(Base):
         BigInteger,
         ForeignKey("users.user_id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+
+class PersonnelOrderEditorialBlock(Base):
+    """Order-level editorial block (title / preamble / closing) per locale."""
+
+    __tablename__ = "personnel_order_editorial_blocks"
+    __table_args__ = (
+        UniqueConstraint(
+            "order_id",
+            "locale",
+            "block_type",
+            name="uq_personnel_order_editorial_blocks_order_locale_type",
+        ),
+        Index("ix_personnel_order_editorial_blocks_order_id", "order_id"),
+    )
+
+    editorial_block_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("personnel_orders.order_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    locale: Mapped[str] = mapped_column(Text, nullable=False)
+    block_type: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generator_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generator_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_fingerprint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{REVIEW_STATUS_CURRENT}'"),
+    )
+    generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+
+class PersonnelOrderItemEditorialBlock(Base):
+    """Item-level editorial block (body / basis) per locale."""
+
+    __tablename__ = "personnel_order_item_editorial_blocks"
+    __table_args__ = (
+        UniqueConstraint(
+            "order_item_id",
+            "locale",
+            "block_type",
+            name="uq_personnel_order_item_editorial_blocks_item_locale_type",
+        ),
+        Index("ix_personnel_order_item_editorial_blocks_item_id", "order_item_id"),
+    )
+
+    item_editorial_block_id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    order_item_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("personnel_order_items.item_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    locale: Mapped[str] = mapped_column(Text, nullable=False)
+    block_type: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generator_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generator_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_fingerprint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{REVIEW_STATUS_CURRENT}'"),
+    )
+    basis_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
+    generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+
+class PersonnelOrderItemBasis(Base):
+    """Structured basis facts for an order item (1:1). metadata is optional extras only."""
+
+    __tablename__ = "personnel_order_item_bases"
+    __table_args__ = (
+        UniqueConstraint("order_item_id", name="uq_personnel_order_item_bases_order_item_id"),
+        Index("ix_personnel_order_item_bases_order_item_id", "order_item_id"),
+    )
+
+    item_basis_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    order_item_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("personnel_order_items.item_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    basis_type: Mapped[str] = mapped_column(Text, nullable=False)
+    subject_employee_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("employees.employee_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    document_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    document_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    free_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Column name is "metadata"; attr renamed to avoid SQLAlchemy reserved name.
+    basis_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )

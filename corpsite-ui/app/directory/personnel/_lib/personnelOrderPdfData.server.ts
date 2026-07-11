@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { resolveApiUrl } from "@/lib/apiBase";
 
-import type { PersonnelOrderDetailResponse } from "./personnelOrdersApi.client";
+import type { PersonnelOrderDetailResponse, PersonnelOrderEditorialState } from "./personnelOrdersApi.client";
 import {
   buildPersonnelOrderPrintViewModel,
   collectPersonnelOrderPrintLookupIds,
@@ -107,7 +107,7 @@ export async function loadPersonnelOrderPrintViewModelForPdf(
   );
 
   const ids = collectPersonnelOrderPrintLookupIds(detail);
-  const [organizationName, tree, positionsRaw] = await Promise.all([
+  const [organizationName, tree, positionsRaw, editorial] = await Promise.all([
     loadOrganizationName(),
     fetchJson<{ items?: TreeNode[] }>(
       "/directory/org-units/tree?include_inactive=false",
@@ -118,6 +118,11 @@ export async function loadPersonnelOrderPrintViewModelForPdf(
       "/directory/positions?limit=1000&offset=0",
       auth,
       "Не удалось загрузить должности.",
+    ).catch(() => null),
+    fetchJson<PersonnelOrderEditorialState>(
+      `/directory/personnel-orders/${orderId}/editorial`,
+      auth,
+      "Не удалось загрузить редакционные блоки.",
     ).catch(() => null),
   ]);
 
@@ -145,5 +150,6 @@ export async function loadPersonnelOrderPrintViewModelForPdf(
     organizationName,
     orgUnitNames,
     positionNames,
+    editorial,
   });
 }

@@ -91,8 +91,19 @@
 
 - официальный PDF (динамический MVP) — [`PO-PDF-001-official-pdf-engine.md`](./PO-PDF-001-official-pdf-engine.md);
 - редакционный слой (generated + override) — [`PO-EDIT-001-editorial-document-model.md`](./PO-EDIT-001-editorial-document-model.md);
+- editorial persistence / ViewModel — [`PO-EDIT-002-editorial-persistence.md`](../implementation/PO-EDIT-002-editorial-persistence.md);
 - подписание — [`PO-SIGN-001-signing-concept.md`](../PO-SIGN-001-signing-concept.md);
 - удаление / void — [`PO-LIFECYCLE-002-delete-and-void-policy.md`](../PO-LIFECYCLE-002-delete-and-void-policy.md).
+
+### ViewModel fallback (WP-PO-EDIT-002)
+
+`PersonnelOrderPrintViewModel` resolves text as:
+
+1. editorial effective (`override ?? generated`);
+2. legacy `localized_texts` title/preamble;
+3. deterministic templates (`personnelOrderPrintItemText` / type titles).
+
+HTML preview and PDF use the same ViewModel builder and shared HTML renderer.
 
 ---
 

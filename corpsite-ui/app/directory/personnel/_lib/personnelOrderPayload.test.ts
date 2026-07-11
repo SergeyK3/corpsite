@@ -49,6 +49,7 @@ describe("personnelOrderLabels helpers", () => {
 
   it("exposes lifecycle capability helpers", () => {
     expect(isEditablePersonnelOrderStatus("DRAFT")).toBe(true);
+    expect(isEditablePersonnelOrderStatus("READY_FOR_SIGNATURE")).toBe(false);
     expect(isEditablePersonnelOrderStatus("REGISTERED")).toBe(false);
     expect(canRegisterPersonnelOrder("READY_FOR_SIGNATURE")).toBe(true);
     expect(canApplyPersonnelOrder("REGISTERED")).toBe(true);

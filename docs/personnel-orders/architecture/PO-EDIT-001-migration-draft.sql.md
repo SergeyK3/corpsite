@@ -1,6 +1,9 @@
-# WP-PO-EDIT-002 — Migration draft (NOT APPLIED)
+# WP-PO-EDIT-002 — Migration draft → implemented reference
 
-Draft only. Do **not** run against production until WP-PO-EDIT-002.
+**Status:** Implemented in Alembic revision `s3t4u5v6w7x8`  
+**WP:** WP-PO-EDIT-002
+
+> **Physical storage refined from wide-row draft to normalized block-row model in WP-PO-EDIT-002. Architectural semantics R1–R12 remain unchanged.**
 
 Ratified constraints (PO-EDIT-001 §0):
 
@@ -8,84 +11,41 @@ Ratified constraints (PO-EDIT-001 §0):
 - return-to-DRAFT in EDIT-005; rows must survive READY ↔ DRAFT.
 - Store locales `kk` + `ru` only (`kk-ru` is render-time).
 - READY gate: title + preamble + each active item body; basis only if `basis_required` (R8).
-- Regenerate keeps override and marks stale; restore-generated is separate (R9).
-- Stamp `generator_version` + `source_fingerprint` on generate.
-- `template_set_version` nullable reserved for EDIT-004.
-- Do **not** alter/drop `personnel_order_localized_texts` here (R11).
+- Regenerate keeps override and marks stale/review-required; restore-generated is separate (R9).
+- Stamp `generator_key` + `generator_version` + `source_fingerprint` on generate.
+- Do **not** alter/drop `personnel_order_localized_texts` (R11).
 - No leave multi-period structured tables (WP-PO-LEAVE-001 / R12).
+
+## Final schema (normalized block-row)
 
 ```sql
 -- personnel_order_editorial_blocks
-CREATE TABLE IF NOT EXISTS personnel_order_editorial_blocks (
-  editorial_block_id BIGSERIAL PRIMARY KEY,
-  order_id BIGINT NOT NULL REFERENCES personnel_orders(order_id) ON DELETE RESTRICT,
-  locale VARCHAR(8) NOT NULL CHECK (locale IN ('kk', 'ru')),
-  title_generated TEXT NULL,
-  title_override TEXT NULL,
-  preamble_generated TEXT NULL,
-  preamble_override TEXT NULL,
-  closing_generated TEXT NULL,
-  closing_override TEXT NULL,
-  source_fingerprint VARCHAR(128) NULL,
-  generator_version VARCHAR(64) NULL,
-  template_set_version INTEGER NULL,  -- reserved EDIT-004
-  -- R9: when override present and generated refreshed → review_status = STALE / REVIEW_REQUIRED
-  review_status VARCHAR(32) NULL,  -- NULL|OK|STALE|REVIEW_REQUIRED (exact enum in EDIT-002)
-  generated_at TIMESTAMPTZ NULL,
-  edited_at TIMESTAMPTZ NULL,
-  edited_by BIGINT NULL,
-  revision INTEGER NOT NULL DEFAULT 1,
-  UNIQUE (order_id, locale)
-);
-
-CREATE INDEX IF NOT EXISTS ix_po_editorial_blocks_order
-  ON personnel_order_editorial_blocks (order_id);
+-- Unique (order_id, locale, block_type)
+-- block_type IN ('title', 'preamble', 'closing')
+-- review_status IN ('CURRENT', 'STALE', 'REVIEW_REQUIRED', 'GENERATION_FAILED')
 
 -- personnel_order_item_editorial_blocks
-CREATE TABLE IF NOT EXISTS personnel_order_item_editorial_blocks (
-  item_editorial_block_id BIGSERIAL PRIMARY KEY,
-  order_item_id BIGINT NOT NULL REFERENCES personnel_order_items(item_id) ON DELETE RESTRICT,
-  locale VARCHAR(8) NOT NULL CHECK (locale IN ('kk', 'ru')),
-  body_generated TEXT NULL,
-  body_override TEXT NULL,
-  basis_generated TEXT NULL,
-  basis_override TEXT NULL,
-  source_fingerprint VARCHAR(128) NULL,
-  generator_version VARCHAR(64) NULL,
-  template_set_version INTEGER NULL,  -- reserved EDIT-004
-  review_status VARCHAR(32) NULL,
-  generated_at TIMESTAMPTZ NULL,
-  edited_at TIMESTAMPTZ NULL,
-  edited_by BIGINT NULL,
-  revision INTEGER NOT NULL DEFAULT 1,
-  UNIQUE (order_item_id, locale)
-);
+-- Unique (order_item_id, locale, block_type)
+-- block_type IN ('body', 'basis')
+-- + basis_required BOOLEAN
 
-CREATE INDEX IF NOT EXISTS ix_po_item_editorial_blocks_item
-  ON personnel_order_item_editorial_blocks (order_item_id);
-
--- Structured basis facts (optional in EDIT-002; may start as payload JSONB — decide in EDIT-002 impl)
-CREATE TABLE IF NOT EXISTS personnel_order_item_bases (
-  item_basis_id BIGSERIAL PRIMARY KEY,
-  order_item_id BIGINT NOT NULL UNIQUE REFERENCES personnel_order_items(item_id) ON DELETE RESTRICT,
-  basis_type VARCHAR(64) NOT NULL,
-  subject_employee_id BIGINT NULL REFERENCES employees(employee_id),
-  document_date DATE NULL,
-  document_number VARCHAR(128) NULL,
-  free_text TEXT NULL,
-  attachment_id BIGINT NULL
-);
-
--- NOTE: No return_to_draft table/column required.
--- Compatibility: editorial rows remain valid across DRAFT ↔ READY ↔ DRAFT
--- once EDIT-005 adds return-to-draft; do not bind mutability to READY.
+-- personnel_order_item_bases
+-- Unique order_item_id (1:1)
+-- basis_type, subject_employee_id, document_date, document_number, free_text, metadata JSONB
 ```
 
-## Legacy mapping (not DDL)
+See Alembic: `alembic/versions/s3t4u5v6w7x8_wp_po_edit_002_editorial_persistence.py`  
+Implementation notes: `docs/personnel-orders/implementation/PO-EDIT-002-editorial-persistence.md`
+
+## Legacy mapping (runtime, not DDL)
 
 On first `editorial/generate` for an order:
 
-1. For each locale `kk`, `ru`: upsert editorial row.
+1. For each locale `kk`, `ru`: upsert editorial block rows.
 2. If `personnel_order_localized_texts` has `title`/`preamble` → seed editorial (prefer generated if equal to generator output; else override).
 3. Ignore `body_text` as item SoT.
 4. Leave `personnel_order_localized_texts` unchanged (no DROP, no new columns).
+
+## Historical note
+
+Earlier drafts used a wide-row shape (`title_generated` / `title_override` columns on one row per locale). EDIT-002 intentionally replaced that with one row per `(scope, locale, block_type)` for per-block regenerate, stale, PATCH, and READY gate.

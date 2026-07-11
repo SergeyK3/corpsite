@@ -1,4 +1,9 @@
-import type { PersonnelOrderDetailResponse, PersonnelOrderItem } from "./personnelOrdersApi.client";
+import type {
+  PersonnelOrderDetailResponse,
+  PersonnelOrderEditorialBlock,
+  PersonnelOrderEditorialState,
+  PersonnelOrderItem,
+} from "./personnelOrdersApi.client";
 import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import { localizedFromSingle, localizedText } from "./personnelOrderPrintLocalized";
 import type { PersonnelOrderPrintItemContext } from "./personnelOrderPrintItemText";
@@ -13,6 +18,13 @@ export type PersonnelOrderPrintItemViewModel = {
   employeeName: string | null;
   effectiveDate: string | null;
   context: PersonnelOrderPrintItemContext;
+  /**
+   * Effective editorial body (override → generated) when editorial state exists.
+   * Null means HTML renderer should fall back to deterministic templates.
+   */
+  body: LocalizedText | null;
+  /** Effective editorial item basis when present. */
+  basis: LocalizedText | null;
 };
 
 export type PersonnelOrderPrintViewModel = {
@@ -42,6 +54,8 @@ export type PersonnelOrderPrintNameMaps = {
   positionNames?: Record<number, string>;
   /** Optional localized signatory position from directory when order field is empty. */
   signatoryPosition?: LocalizedText | string | null;
+  /** Optional editorial state from GET …/editorial (WP-PO-EDIT-002). */
+  editorial?: PersonnelOrderEditorialState | null;
 };
 
 /** Official document titles — not technical type labels (HIRE / Составной). */
@@ -116,10 +130,37 @@ function documentTitleFallback(typeCode: string | null | undefined): LocalizedTe
   );
 }
 
-function pickLocalizedTexts(detail: PersonnelOrderDetailResponse): {
+function pickEffectiveByLocale(
+  blocks: PersonnelOrderEditorialBlock[] | undefined,
+  blockType: string,
+): LocalizedText | null {
+  if (!blocks?.length) return null;
+  const kk = optionalString(
+    blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === "kk")
+      ?.effective_text,
+  );
+  const ru = optionalString(
+    blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === "ru")
+      ?.effective_text,
+  );
+  if (!kk && !ru) return null;
+  return localizedText(kk, ru);
+}
+
+/**
+ * Fallback priority (PO-EDIT-002):
+ * editorial override/generated effective → legacy localized → deterministic renderer.
+ */
+function pickLocalizedTexts(
+  detail: PersonnelOrderDetailResponse,
+  editorial: PersonnelOrderEditorialState | null | undefined,
+): {
   title: LocalizedText;
   preamble: LocalizedText | null;
 } {
+  const editorialTitle = pickEffectiveByLocale(editorial?.order_blocks, "title");
+  const editorialPreamble = pickEffectiveByLocale(editorial?.order_blocks, "preamble");
+
   const rows = detail.localized_texts || [];
   const kk = rows.find((row) => String(row.locale).toLowerCase() === "kk");
   const ru = rows.find((row) => String(row.locale).toLowerCase() === "ru");
@@ -130,13 +171,17 @@ function pickLocalizedTexts(detail: PersonnelOrderDetailResponse): {
   );
   const fallback = documentTitleFallback(detail.order.order_type_code);
   const title: LocalizedText = {
-    kk: fromLocalized.kk || fallback.kk || null,
-    ru: fromLocalized.ru || fallback.ru || null,
+    kk: editorialTitle?.kk || fromLocalized.kk || fallback.kk || null,
+    ru: editorialTitle?.ru || fromLocalized.ru || fallback.ru || null,
   };
 
-  const preamble = localizedText(kk?.preamble, ru?.preamble);
-  const hasPreamble = Boolean(preamble.kk || preamble.ru);
-  return { title, preamble: hasPreamble ? preamble : null };
+  const legacyPreamble = localizedText(kk?.preamble, ru?.preamble);
+  const preambleMerged = localizedText(
+    editorialPreamble?.kk || legacyPreamble.kk,
+    editorialPreamble?.ru || legacyPreamble.ru,
+  );
+  const hasPreamble = Boolean(preambleMerged.kk || preambleMerged.ru);
+  return { title, preamble: hasPreamble ? preambleMerged : null };
 }
 
 function resolveSignatoryPosition(
@@ -190,12 +235,24 @@ function buildItemContext(
   };
 }
 
+function itemEditorialTexts(
+  editorial: PersonnelOrderEditorialState | null | undefined,
+  itemId: number,
+): { body: LocalizedText | null; basis: LocalizedText | null } {
+  const group = editorial?.items?.find((row) => row.order_item_id === itemId);
+  return {
+    body: pickEffectiveByLocale(group?.blocks, "body"),
+    basis: pickEffectiveByLocale(group?.blocks, "basis"),
+  };
+}
+
 export function buildPersonnelOrderPrintViewModel(
   detail: PersonnelOrderDetailResponse,
   maps: PersonnelOrderPrintNameMaps = {},
 ): PersonnelOrderPrintViewModel {
   const order = detail.order;
-  const { title, preamble } = pickLocalizedTexts(detail);
+  const editorial = maps.editorial ?? null;
+  const { title, preamble } = pickLocalizedTexts(detail, editorial);
 
   const basis: LocalizedText[] = [];
   const legal = optionalString(order.legal_basis_article);
@@ -207,15 +264,28 @@ export function buildPersonnelOrderPrintViewModel(
     (item) => String(item.item_status || "").toUpperCase() !== "VOIDED",
   );
 
-  const items: PersonnelOrderPrintItemViewModel[] = activeItems.map((item) => ({
-    itemId: item.item_id,
-    itemNumber: item.item_number,
-    itemTypeCode: item.item_type_code,
-    employeeId: item.employee_id ?? null,
-    employeeName: optionalString(item.employee_name),
-    effectiveDate: optionalString(item.effective_date),
-    context: buildItemContext(item, maps),
-  }));
+  const items: PersonnelOrderPrintItemViewModel[] = activeItems.map((item) => {
+    const editorialTexts = itemEditorialTexts(editorial, item.item_id);
+    if (editorialTexts.basis) {
+      const already = basis.some(
+        (entry) =>
+          (entry.kk && entry.kk === editorialTexts.basis?.kk) ||
+          (entry.ru && entry.ru === editorialTexts.basis?.ru),
+      );
+      if (!already) basis.push(editorialTexts.basis);
+    }
+    return {
+      itemId: item.item_id,
+      itemNumber: item.item_number,
+      itemTypeCode: item.item_type_code,
+      employeeId: item.employee_id ?? null,
+      employeeName: optionalString(item.employee_name),
+      effectiveDate: optionalString(item.effective_date),
+      context: buildItemContext(item, maps),
+      body: editorialTexts.body,
+      basis: editorialTexts.basis,
+    };
+  });
 
   const seenEmployees = new Set<string>();
   const acknowledgements: PersonnelOrderPrintViewModel["acknowledgements"] = [];

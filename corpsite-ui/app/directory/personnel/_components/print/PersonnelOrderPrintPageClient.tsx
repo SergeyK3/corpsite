@@ -9,6 +9,7 @@ import { getOrgUnitsTree, type TreeNode } from "@/app/directory/org-units/_lib/a
 import {
   PERSONNEL_ORDERS_BASE_PATH,
   getPersonnelOrder,
+  getPersonnelOrderEditorial,
   mapPersonnelOrdersApiError,
 } from "../../_lib/personnelOrdersApi.client";
 import {
@@ -81,10 +82,11 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
       try {
         const detail = await getPersonnelOrder(orderId);
         const ids = collectPersonnelOrderPrintLookupIds(detail);
-        const [organizationName, tree, positionsRaw] = await Promise.all([
+        const [organizationName, tree, positionsRaw, editorial] = await Promise.all([
           loadOrganizationName(),
           getOrgUnitsTree({ include_inactive: false }).catch(() => null),
           getPositions({ limit: 1000, offset: 0 }).catch(() => null),
+          getPersonnelOrderEditorial(orderId).catch(() => null),
         ]);
 
         const orgUnitNames: Record<number, string> = {};
@@ -113,6 +115,7 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
             organizationName,
             orgUnitNames,
             positionNames,
+            editorial,
           }),
         );
       } catch (e) {

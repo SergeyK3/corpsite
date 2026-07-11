@@ -222,6 +222,108 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     );
     expect(model.signatory.position?.ru).toBe("Директор");
   });
+
+  it("prefers editorial effective title/body/basis over legacy and templates", () => {
+    const model = buildPersonnelOrderPrintViewModel(sampleDetail(), {
+      orgUnitNames: { 10: "Хирургия" },
+      positionNames: { 20: "Врач" },
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 1,
+            scope: "order",
+            locale: "kk",
+            block_type: "title",
+            effective_text: "Редакциялық тақырып",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+          {
+            block_id: 2,
+            scope: "order",
+            locale: "ru",
+            block_type: "title",
+            effective_text: "Редакционный заголовок",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+          {
+            block_id: 3,
+            scope: "order",
+            locale: "ru",
+            block_type: "preamble",
+            effective_text: "Редакционная преамбула",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [
+          {
+            order_item_id: 1,
+            item_number: 1,
+            item_type_code: "HIRE",
+            basis_required: true,
+            blocks: [
+              {
+                block_id: 10,
+                scope: "item",
+                order_item_id: 1,
+                locale: "ru",
+                block_type: "body",
+                effective_text: "OVERRIDE BODY RU",
+                review_status: "CURRENT",
+                editable: true,
+                revision: 1,
+              },
+              {
+                block_id: 11,
+                scope: "item",
+                order_item_id: 1,
+                locale: "kk",
+                block_type: "body",
+                effective_text: "OVERRIDE BODY KK",
+                review_status: "CURRENT",
+                editable: true,
+                revision: 1,
+              },
+              {
+                block_id: 12,
+                scope: "item",
+                order_item_id: 1,
+                locale: "ru",
+                block_type: "basis",
+                effective_text: "Основание: личное заявление.",
+                review_status: "CURRENT",
+                editable: true,
+                revision: 1,
+                basis_required: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(model.title.ru).toBe("Редакционный заголовок");
+    expect(model.title.kk).toBe("Редакциялық тақырып");
+    expect(model.preamble?.ru).toBe("Редакционная преамбула");
+    expect(model.items[0]?.body?.ru).toBe("OVERRIDE BODY RU");
+    expect(model.items[0]?.body?.kk).toBe("OVERRIDE BODY KK");
+    expect(model.items[0]?.basis?.ru).toContain("личное заявление");
+    expect(model.basis.some((b) => b.ru?.includes("личное заявление"))).toBe(true);
+  });
+
+  it("falls back to legacy localized title when editorial absent", () => {
+    const model = buildPersonnelOrderPrintViewModel(sampleDetail(), {});
+    expect(model.title.ru).toBe("О приёме на работу");
+    expect(model.items[0]?.body).toBeNull();
+  });
 });
 
 describe("personnelOrderPrint item text", () => {

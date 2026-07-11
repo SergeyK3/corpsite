@@ -81,7 +81,12 @@ function renderItem(
   item: PersonnelOrderPrintItemViewModel,
   language: PersonnelOrderPrintLanguage,
 ): string {
-  const lines = renderPersonnelOrderPrintItemText(item.context, language);
+  // Prefer editorial effective body; fall back to deterministic templates.
+  const editorialLines = item.body ? resolveLocalizedLines(item.body, language) : [];
+  const lines =
+    editorialLines.length > 0
+      ? editorialLines
+      : renderPersonnelOrderPrintItemText(item.context, language);
   const body = lines
     .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
     .join("");

@@ -10,6 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from app.auth import get_current_user
 from app.directory.common import as_http500, call_service
 from app.directory.personnel_orders_schemas import (
+    EditorialBlockPatchIn,
+    EditorialGenerateIn,
+    EditorialStateResponse,
     PersonnelOrderCreateIn,
     PersonnelOrderDetailResponse,
     PersonnelOrderItemCreateIn,
@@ -42,6 +45,15 @@ from app.services.personnel_orders_command_service import (
     update_personnel_order_draft,
     update_personnel_order_item,
     upsert_personnel_order_localized_text,
+)
+from app.services.personnel_orders_editorial_service import (
+    PersonnelOrderEditorialBlockNotFoundError,
+    PersonnelOrderEditorialConflictError,
+    PersonnelOrderReadyGateError,
+    generate_editorial,
+    get_editorial_state,
+    patch_editorial_block,
+    reset_block_to_generated,
 )
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
@@ -305,6 +317,143 @@ def mark_personnel_order_ready_for_signature_route(
         require_personnel_admin_or_403(user)
         return call_service(mark_personnel_order_ready_for_signature, order_id=order_id)
     except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderReadyGateError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "READY_GATE_FAILED", "problems": exc.problems},
+        )
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except PersonnelOrderConflictError as exc:
+        raise _conflict_http409(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get(
+    "/personnel-orders/{order_id}/editorial",
+    response_model=EditorialStateResponse,
+)
+def get_personnel_order_editorial_route(
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return editorial block state for a personnel order."""
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(get_editorial_state, order_id=order_id)
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post(
+    "/personnel-orders/{order_id}/editorial/generate",
+    response_model=EditorialStateResponse,
+)
+def generate_personnel_order_editorial_route(
+    order_id: int = Path(..., ge=1),
+    payload: EditorialGenerateIn = EditorialGenerateIn(),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Generate or regenerate editorial blocks (DRAFT only)."""
+    try:
+        require_personnel_admin_or_403(user)
+        scope = {
+            key: value
+            for key, value in {
+                "locale": payload.locale,
+                "item_id": payload.item_id,
+                "block_id": payload.block_id,
+                "block_type": payload.block_type,
+            }.items()
+            if value is not None
+        }
+        return call_service(
+            generate_editorial,
+            order_id=order_id,
+            user_id=_require_user_id(user),
+            scope=scope or None,
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except PersonnelOrderConflictError as exc:
+        raise _conflict_http409(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.patch(
+    "/personnel-orders/{order_id}/editorial/blocks/{block_id}",
+    response_model=EditorialStateResponse,
+)
+def patch_personnel_order_editorial_block_route(
+    payload: EditorialBlockPatchIn,
+    order_id: int = Path(..., ge=1),
+    block_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Patch override text on an editorial block (DRAFT only)."""
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(
+            patch_editorial_block,
+            order_id=order_id,
+            block_id=block_id,
+            user_id=_require_user_id(user),
+            override_text=payload.override_text,
+            clear_override=payload.clear_override,
+            expected_revision=payload.expected_revision,
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderEditorialBlockNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderEditorialConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except PersonnelOrderConflictError as exc:
+        raise _conflict_http409(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post(
+    "/personnel-orders/{order_id}/editorial/blocks/{block_id}/reset-to-generated",
+    response_model=EditorialStateResponse,
+)
+def reset_personnel_order_editorial_block_route(
+    order_id: int = Path(..., ge=1),
+    block_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Clear override and restore generated text as effective (DRAFT only)."""
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(
+            reset_block_to_generated,
+            order_id=order_id,
+            block_id=block_id,
+            user_id=_require_user_id(user),
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderEditorialBlockNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)

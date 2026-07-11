@@ -208,7 +208,7 @@ SIGNED / REGISTERED
 | Auth | client Bearer → API | server Bearer → API |
 | SoT | `PersonnelOrderPrintViewModel` | тот же |
 
-**Integration note (future):** editorial effective texts ([PO-EDIT-001](./PO-EDIT-001-editorial-document-model.md)) must feed the same ViewModel so HTML and PDF stay aligned. Until editorial persistence ships, ViewModel continues to use structured generators + optional `localized_texts` title/preamble.
+**Integration note (WP-PO-EDIT-002):** editorial effective texts ([PO-EDIT-001](./PO-EDIT-001-editorial-document-model.md), [PO-EDIT-002](../implementation/PO-EDIT-002-editorial-persistence.md)) feed the same `PersonnelOrderPrintViewModel` used by HTML preview and Playwright PDF. Fallback: editorial effective → legacy `localized_texts` title/preamble → deterministic templates.
 
 ---
 

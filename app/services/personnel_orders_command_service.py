@@ -36,7 +36,6 @@ from app.services.personnel_orders_query_service import (
 
 EDITABLE_ORDER_STATUSES = {
     ORDER_STATUS_DRAFT,
-    ORDER_STATUS_READY_FOR_SIGNATURE,
 }
 REGISTERABLE_FROM_STATUSES = {
     ORDER_STATUS_DRAFT,
@@ -60,6 +59,17 @@ class PersonnelOrderConflictError(RuntimeError):
 
 class PersonnelOrderItemNotFoundError(LookupError):
     """Personnel order item not found."""
+
+
+def _mark_editorial_stale(conn, order_id: int, *, item_id: int | None = None) -> None:
+    try:
+        from app.services.personnel_orders_editorial_service import (
+            mark_blocks_stale_after_structured_change,
+        )
+
+        mark_blocks_stale_after_structured_change(conn, int(order_id), item_id=item_id)
+    except Exception:
+        pass
 
 
 def _require_available() -> None:
@@ -389,6 +399,10 @@ def update_personnel_order_draft(
                 ),
                 params,
             )
+            try:
+                _mark_editorial_stale(conn, int(order_id))
+            except Exception:
+                pass
     except IntegrityError as exc:
         raise PersonnelOrderConflictError("Personnel order number already exists.") from exc
 
@@ -471,6 +485,10 @@ def create_personnel_order_item(
             ),
             {"order_id": int(order_id)},
         )
+        try:
+            _mark_editorial_stale(conn, int(order_id))
+        except Exception:
+            pass
 
     return get_personnel_order(int(order_id))
 
@@ -567,6 +585,10 @@ def update_personnel_order_item(
             ),
             {"order_id": int(order_id)},
         )
+        try:
+            _mark_editorial_stale(conn, int(order_id), item_id=int(item_id))
+        except Exception:
+            pass
 
     return get_personnel_order(int(order_id))
 
@@ -688,6 +710,40 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
             )
         _validate_registerable_order(conn, order)
 
+    from app.services.personnel_orders_editorial_service import (
+        PersonnelOrderReadyGateError,
+        editorial_tables_available,
+        evaluate_ready_gate,
+    )
+
+    if editorial_tables_available():
+        problems = evaluate_ready_gate(int(order_id))
+        if problems:
+            try:
+                from app.services.security_audit_service import write_security_event
+
+                write_security_event(
+                    event_type="READY_GATE_REJECTED",
+                    success=False,
+                    metadata={
+                        "order_id": int(order_id),
+                        "result": "READY_GATE_FAILED",
+                        "problem_count": len(problems),
+                        "problem_codes": sorted(
+                            {str(p.get("code")) for p in problems if p.get("code")}
+                        ),
+                    },
+                )
+            except Exception:
+                pass
+            raise PersonnelOrderReadyGateError(problems)
+
+    with engine.begin() as conn:
+        order = _fetch_order_row(conn, order_id)
+        if str(order["status"]) != ORDER_STATUS_DRAFT:
+            raise PersonnelOrderConflictError(
+                f"Only DRAFT orders can move to READY_FOR_SIGNATURE (current: {order['status']})."
+            )
         conn.execute(
             text(
                 """

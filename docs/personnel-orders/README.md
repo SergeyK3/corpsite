@@ -83,6 +83,7 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 | Печатная форма и статусы | `architecture/PO-PRINT-001-print-form.md` |
 | Официальный PDF engine | `architecture/PO-PDF-001-official-pdf-engine.md` |
 | Редакционная модель документа (**Approved**) | `architecture/PO-EDIT-001-editorial-document-model.md` |
+| Editorial persistence (**Implemented**) | `implementation/PO-EDIT-002-editorial-persistence.md` |
 | Концепция подписания (без реализации) | `PO-SIGN-001-signing-concept.md` |
 | Политика удаления / void (без реализации) | `PO-LIFECYCLE-002-delete-and-void-policy.md` |
 | Storage concept | `storage-design/PERSONNEL-ORDERS-DOCUMENT-STORAGE-CONCEPT.md` |
@@ -95,7 +96,7 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 | WP | Status | Scope |
 |---|---|---|
 | WP-PO-EDIT-001 | **Ratified** | Editorial architecture + spike (non-prod) |
-| WP-PO-EDIT-002 | Next | Persistence; DRAFT-only structured+editorial writes; generate/READY gate |
+| WP-PO-EDIT-002 | **Implemented** | Normalized block persistence; generate API; DRAFT-only writes; READY gate; ViewModel |
 | WP-PO-EDIT-003 | Planned | DRAFT-only block editor UI |
 | WP-PO-EDIT-004 | Planned | Versioned DB clause/template library |
 | WP-PO-EDIT-005 | Planned | return-to-DRAFT; audit polish; optional FIO forms |
