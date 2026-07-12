@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user
 from app.directory.common import as_http500, call_service
+from app.operational_orders.auth_projection import has_any_operational_orders_read
 from app.operational_orders.errors import (
     OperationalOrderBlockNotFoundError,
     OperationalOrderClarificationNotFoundError,
@@ -88,6 +89,7 @@ from app.operational_orders.schemas.draft_workspace import (
 )
 from app.operational_orders.schemas.document_aggregate import (
     DocumentDetailOut,
+    DocumentListOut,
     DocumentLocalizationListOut,
     DocumentVersionDetailOut,
     PromotionIn,
@@ -226,6 +228,8 @@ def list_draft_workspaces(
     stage: str | None = Query(default=None),
     submitting_org_unit_id: int | None = Query(default=None),
     record_creator_user_id: int | None = Query(default=None),
+    drafting_path: str | None = Query(default=None),
+    promoted: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: dict[str, Any] = Depends(get_current_user),
@@ -243,6 +247,8 @@ def list_draft_workspaces(
             stage=stage,
             submitting_org_unit_id=submitting_org_unit_id,
             record_creator_user_id=creator_filter,
+            drafting_path=drafting_path,
+            promoted=promoted,
             scope_unit_ids=sorted(scope_unit_ids) if scope_unit_ids is not None else None,
             limit=limit,
             offset=offset,
@@ -782,6 +788,33 @@ def promote_workspace_endpoint(
             expected_workspace_version=body.expected_workspace_version,
         )
         return mappers.to_promotion_result_out(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents", response_model=DocumentListOut)
+def list_documents_endpoint(
+    status: str | None = Query(default=None),
+    workspace_id: int | None = Query(default=None),
+    submitting_org_unit_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    if not (is_privileged(user) or has_any_operational_orders_read(user)):
+        raise HTTPException(status_code=403, detail={"code": "OO_FORBIDDEN", "message": "Access denied."})
+    scope_unit_ids = resolve_user_scope_unit_ids(user)
+    try:
+        result = call_service(
+            promotion_svc.list_documents,
+            status=status,
+            workspace_id=workspace_id,
+            submitting_org_unit_id=submitting_org_unit_id,
+            scope_unit_ids=sorted(scope_unit_ids) if scope_unit_ids is not None else None,
+            limit=limit,
+            offset=offset,
+        )
+        return mappers.to_document_list_out(result)
     except Exception as exc:
         raise _domain_http(exc) from exc
 

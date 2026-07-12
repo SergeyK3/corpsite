@@ -10,6 +10,7 @@ import {
   isPersonnelDirectoryRoute,
   PERSONNEL_DIRECTORY_NAV_ITEM,
 } from "./personnelNav";
+import { canSeeOperationalOrdersNav, isOperationalOrdersRoute } from "./operationalOrdersNav";
 
 /** ADR-042 E1 assignment / org-sidebar flag (excludes HR-only operational contour). */
 export function hasE1PersonnelVisibility(me: MeInfo | null | undefined): boolean {
@@ -33,6 +34,7 @@ export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | un
 
   if (isHrProcessesRoute(pathname)) return canSeeHrProcessesNav(me);
   if (isPersonnelDirectoryRoute(pathname)) return canSeePersonnelDirectoryNav(me);
+  if (isOperationalOrdersRoute(pathname)) return canSeeOperationalOrdersNav(me);
 
   if (isPositionCabinetRoute(pathname)) {
     if (pathname.startsWith("/tasks") && hasPersonnelVisibility(me) && !canViewPersonnelTasksReadOnly(me)) {

@@ -31,6 +31,9 @@ import {
   resolveDirectoryOrgTreeBasePath,
   shouldShowPrimaryAdminNavItem,
 } from "@/lib/personnelNav";
+import {
+  OPERATIONAL_ORDERS_NAV_ITEM,
+} from "@/lib/operationalOrdersNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import type { MeInfo } from "@/lib/types";
 import { shouldShowPositionCabinetNav } from "@/lib/positionCabinetNav";
@@ -97,6 +100,7 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   },
   PERSONNEL_DIRECTORY_NAV_ITEM,
   HR_PROCESSES_NAV_ITEM,
+  OPERATIONAL_ORDERS_NAV_ITEM,
 ];
 
 const SECONDARY_DIRECTORY_NAV: NavItem[] = [

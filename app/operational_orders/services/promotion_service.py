@@ -825,6 +825,72 @@ def get_document(*, document_id: int) -> dict[str, Any]:
         return _build_document_detail(conn, document_id)
 
 
+def list_documents(
+    *,
+    status: str | None = None,
+    workspace_id: int | None = None,
+    submitting_org_unit_id: int | None = None,
+    scope_unit_ids: list[int] | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    _require_available()
+    clauses = ["1=1"]
+    params: dict[str, Any] = {
+        "limit": max(1, min(int(limit), 200)),
+        "offset": max(0, int(offset)),
+    }
+    if status:
+        clauses.append("d.status = :status")
+        params["status"] = str(status).strip().upper()
+    if workspace_id is not None:
+        clauses.append("d.workspace_id = :workspace_id")
+        params["workspace_id"] = int(workspace_id)
+    if submitting_org_unit_id is not None:
+        clauses.append("w.submitting_org_unit_id = :submitting_org_unit_id")
+        params["submitting_org_unit_id"] = int(submitting_org_unit_id)
+    if scope_unit_ids is not None:
+        if not scope_unit_ids:
+            return {"items": [], "total": 0, "limit": params["limit"], "offset": params["offset"]}
+        clauses.append("w.submitting_org_unit_id = ANY(:scope_unit_ids)")
+        params["scope_unit_ids"] = [int(unit_id) for unit_id in scope_unit_ids]
+
+    where_sql = " AND ".join(clauses)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                f"""
+                SELECT d.*, w.submitting_org_unit_id
+                FROM public.operational_order_documents d
+                JOIN public.operational_order_draft_workspaces w
+                  ON w.workspace_id = d.workspace_id
+                WHERE {where_sql}
+                ORDER BY d.created_at DESC, d.id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            params,
+        ).mappings().all()
+        total = conn.execute(
+            text(
+                f"""
+                SELECT COUNT(1)
+                FROM public.operational_order_documents d
+                JOIN public.operational_order_draft_workspaces w
+                  ON w.workspace_id = d.workspace_id
+                WHERE {where_sql}
+                """
+            ),
+            params,
+        ).scalar()
+    return {
+        "items": [_document_summary(dict(row)) for row in rows],
+        "total": int(total or 0),
+        "limit": params["limit"],
+        "offset": params["offset"],
+    }
+
+
 def list_document_versions(*, document_id: int) -> dict[str, Any]:
     _require_available()
     with engine.connect() as conn:

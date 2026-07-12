@@ -18,6 +18,7 @@ from app.operational_orders.schemas.draft_workspace import (
 )
 from app.operational_orders.schemas.document_aggregate import (
     DocumentDetailOut,
+    DocumentListOut,
     DocumentLocalizationListOut,
     DocumentSummaryOut,
     DocumentVersionDetailOut,
@@ -75,6 +76,13 @@ def _workspace_summary(row: dict[str, Any]) -> DraftWorkspaceSummaryOut:
         version=int(row["version"]),
         ru_present=row.get("ru_present"),
         kk_present=row.get("kk_present"),
+        document_id=int(row["document_id"]) if row.get("document_id") is not None else None,
+        open_clarification_count=int(row["open_clarification_count"])
+        if row.get("open_clarification_count") is not None
+        else None,
+        has_active_translation=bool(row["has_active_translation"])
+        if row.get("has_active_translation") is not None
+        else None,
     )
 
 
@@ -110,6 +118,15 @@ def to_detail_out(detail: dict[str, Any]) -> DraftWorkspaceDetailOut:
 def to_list_out(result: dict[str, Any]) -> DraftWorkspaceListOut:
     return DraftWorkspaceListOut(
         items=[_workspace_summary(item) for item in result["items"]],
+        total=int(result["total"]),
+        limit=int(result["limit"]),
+        offset=int(result["offset"]),
+    )
+
+
+def to_document_list_out(result: dict[str, Any]) -> DocumentListOut:
+    return DocumentListOut(
+        items=[DocumentSummaryOut.model_validate(item) for item in result["items"]],
         total=int(result["total"]),
         limit=int(result["limit"]),
         offset=int(result["offset"]),

@@ -1,5 +1,6 @@
 // FILE: corpsite-ui/lib/personnelNav.ts
 import type { MeInfo } from "./types";
+import { canSeeOperationalOrdersNav, OPERATIONAL_ORDERS_NAV_ITEM } from "./operationalOrdersNav";
 
 function isSystemAdminRole(me: MeInfo | null | undefined): boolean {
   return Number(me?.role_id ?? 0) === 2;
@@ -73,6 +74,7 @@ export function buildPersonnelSidebarNavItems(me: MeInfo | null | undefined): Pe
   const items: PersonnelNavItem[] = [];
   if (canSeePersonnelDirectoryNav(me)) items.push(PERSONNEL_DIRECTORY_NAV_ITEM);
   if (canSeeHrProcessesNav(me)) items.push(HR_PROCESSES_NAV_ITEM);
+  if (canSeeOperationalOrdersNav(me)) items.push(OPERATIONAL_ORDERS_NAV_ITEM);
   return items;
 }
 
@@ -123,6 +125,7 @@ export function shouldShowPrimaryAdminNavItem(
   if (item.href === "/admin/system") return opts.showSysadminNav;
   if (isPersonnelDirectoryNavItem(item)) return canSeePersonnelDirectoryNav(me);
   if (isHrProcessesNavItem(item)) return canSeeHrProcessesNav(me);
+  if (item.href === OPERATIONAL_ORDERS_NAV_ITEM.href) return canSeeOperationalOrdersNav(me);
   return opts.isAdmin;
 }
 
@@ -153,6 +156,7 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/directory/positions")) return "/directory/positions";
   if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
   if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
+  if (pathname.startsWith("/directory/operational-orders")) return "/directory/operational-orders";
   if (pathname.startsWith("/directory/working-contacts")) return "/directory/working-contacts";
   if (pathname.startsWith("/directory/org-units")) return "/directory/org-units";
   if (pathname.startsWith("/directory/org-unit-types")) return "/directory/org-units";

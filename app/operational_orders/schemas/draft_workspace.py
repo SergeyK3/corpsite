@@ -140,6 +140,9 @@ class DraftWorkspaceSummaryOut(BaseModel):
     version: int
     ru_present: bool | None = None
     kk_present: bool | None = None
+    document_id: int | None = None
+    open_clarification_count: int | None = None
+    has_active_translation: bool | None = None
 
 
 class LocaleCompletenessOut(BaseModel):

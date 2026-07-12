@@ -290,6 +290,14 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["has_personnel_orders_archive"] = has_admin_permission(uid, "PERSONNEL_ORDERS_ARCHIVE")
     out["has_personnel_orders_restore"] = has_admin_permission(uid, "PERSONNEL_ORDERS_RESTORE")
 
+    from app.operational_orders.auth_projection import (
+        build_operational_orders_permissions,
+        has_any_operational_orders_read,
+    )
+
+    out["operational_orders_permissions"] = build_operational_orders_permissions(out)
+    out["has_operational_orders_read"] = has_any_operational_orders_read(out)
+
     from app.services.personnel_visibility_resolver_service import (
         enrich_user_with_personnel_visibility,
     )

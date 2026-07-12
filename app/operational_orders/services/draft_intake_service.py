@@ -42,6 +42,8 @@ from app.db.models.operational_orders import (
     WORKSPACE_STAGE_CONTENT_CONFIRMATION_REQUIRED,
     WORKSPACE_STAGE_BILINGUAL_RECONCILIATION,
     WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY,
+    WORKSPACE_STAGE_DOCUMENT_PROMOTED,
+    WORKSPACE_STAGES,
 )
 from app.document_engine import DraftingPath, DocumentKind, TextSourceType
 from app.operational_orders.domain import (
@@ -586,30 +588,40 @@ def list_workspaces(
     stage: str | None = None,
     submitting_org_unit_id: int | None = None,
     record_creator_user_id: int | None = None,
+    drafting_path: str | None = None,
+    promoted: bool | None = None,
     scope_unit_ids: list[int] | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
     _require_available()
-    clauses = ["stage = ANY(:active_stages)"]
-    params: dict[str, Any] = {
-        "active_stages": list(ACTIVE_INTAKE_STAGES),
-        "limit": max(1, min(int(limit), 200)),
-        "offset": max(0, int(offset)),
-    }
     if stage:
-        clauses = ["stage = :stage"]
-        params["stage"] = str(stage).strip().upper()
+        clauses = ["w.stage = :stage"]
+        params: dict[str, Any] = {"stage": str(stage).strip().upper()}
+    elif promoted is True:
+        clauses = ["w.stage = :promoted_stage"]
+        params = {"promoted_stage": WORKSPACE_STAGE_DOCUMENT_PROMOTED}
+    elif promoted is False:
+        clauses = ["w.stage <> :promoted_stage"]
+        params = {"promoted_stage": WORKSPACE_STAGE_DOCUMENT_PROMOTED}
+    else:
+        clauses = ["w.stage = ANY(:all_stages)"]
+        params = {"all_stages": list(WORKSPACE_STAGES)}
+    params["limit"] = max(1, min(int(limit), 200))
+    params["offset"] = max(0, int(offset))
     if submitting_org_unit_id is not None:
-        clauses.append("submitting_org_unit_id = :submitting_org_unit_id")
+        clauses.append("w.submitting_org_unit_id = :submitting_org_unit_id")
         params["submitting_org_unit_id"] = int(submitting_org_unit_id)
     if record_creator_user_id is not None:
-        clauses.append("record_creator_user_id = :record_creator_user_id")
+        clauses.append("w.record_creator_user_id = :record_creator_user_id")
         params["record_creator_user_id"] = int(record_creator_user_id)
+    if drafting_path:
+        clauses.append("w.drafting_path = :drafting_path")
+        params["drafting_path"] = str(drafting_path).strip().upper()
     if scope_unit_ids is not None:
         if not scope_unit_ids:
             return {"items": [], "total": 0, "limit": params["limit"], "offset": params["offset"]}
-        clauses.append("submitting_org_unit_id = ANY(:scope_unit_ids)")
+        clauses.append("w.submitting_org_unit_id = ANY(:scope_unit_ids)")
         params["scope_unit_ids"] = [int(unit_id) for unit_id in scope_unit_ids]
 
     where_sql = " AND ".join(clauses)
@@ -626,14 +638,36 @@ def list_workspaces(
                     EXISTS (
                         SELECT 1 FROM public.operational_order_draft_blocks b
                         WHERE b.workspace_id = w.workspace_id AND b.locale = 'kk'
-                    ) AS kk_present
+                    ) AS kk_present,
+                    (
+                        SELECT d.id
+                        FROM public.operational_order_documents d
+                        WHERE d.workspace_id = w.workspace_id
+                        LIMIT 1
+                    ) AS document_id,
+                    (
+                        SELECT COUNT(1)
+                        FROM public.operational_order_clarifications c
+                        WHERE c.workspace_id = w.workspace_id
+                          AND c.status = :open_clarification_status
+                    ) AS open_clarification_count,
+                    EXISTS (
+                        SELECT 1
+                        FROM public.operational_order_translation_assignments ta
+                        WHERE ta.workspace_id = w.workspace_id
+                          AND ta.status = ANY(:active_translation_statuses)
+                    ) AS has_active_translation
                 FROM public.operational_order_draft_workspaces w
                 WHERE {where_sql}
                 ORDER BY w.created_at DESC, w.workspace_id DESC
                 LIMIT :limit OFFSET :offset
                 """
             ),
-            params,
+            {
+                **params,
+                "open_clarification_status": CLARIFICATION_STATUS_OPEN,
+                "active_translation_statuses": ["REQUESTED", "ACCEPTED", "IN_PROGRESS"],
+            },
         ).mappings().all()
         total = conn.execute(
             text(

@@ -34,6 +34,23 @@ export type MeInfo = {
   personnel_visibility?: PersonnelVisibilityInfo;
   /** GET /auth/me — backend can_view_team_tasks(); controls «Все задачи» tab visibility. */
   can_view_all_tasks?: boolean;
+  /** OO-UI-001 — operational orders read access projection. */
+  has_operational_orders_read?: boolean;
+  operational_orders_permissions?: {
+    intake_create?: boolean;
+    intake_read?: boolean;
+    intake_operate?: boolean;
+    translation_assign?: boolean;
+    translation_work?: boolean;
+    content_confirm?: boolean;
+    reconcile?: boolean;
+    editorial_ready?: boolean;
+    promote?: boolean;
+    signature_readiness_read?: boolean;
+    assign_signing_authority?: boolean;
+    mark_ready_for_signature?: boolean;
+    return_from_signature?: boolean;
+  };
 };
 
 export type PersonnelVisibilityInfo = {

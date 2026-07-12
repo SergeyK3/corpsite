@@ -140,6 +140,13 @@ class DocumentLocalizationListOut(BaseModel):
     items: list[DocumentLocalizationOut]
 
 
+class DocumentListOut(BaseModel):
+    items: list[DocumentSummaryOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class PromotionResultOut(BaseModel):
     workspace_id: int
     document: DocumentDetailOut
