@@ -224,7 +224,7 @@ export type PersonnelOrdersFilters = {
   org_unit_id?: number;
   order_id?: number;
   q?: string;
-  include_archived?: boolean;
+  include_closed?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -371,7 +371,7 @@ export function buildPersonnelOrdersQueryParams(
     params.set("order_id", String(filters.order_id));
   }
   if (includeClientSearch && filters.q?.trim()) params.set("q", filters.q.trim());
-  if (filters.include_archived) params.set("include_archived", "true");
+  if (filters.include_closed) params.set("include_closed", "true");
   if (filters.limit != null && filters.limit > 0) params.set("limit", String(filters.limit));
   if (filters.offset != null && filters.offset >= 0) params.set("offset", String(filters.offset));
 
@@ -392,7 +392,9 @@ export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): Pers
     org_unit_id: orgFilters.org_unit_id,
     order_id: Number.isFinite(orderId) && orderId > 0 ? orderId : undefined,
     q: searchParams.get("q") || undefined,
-    include_archived: searchParams.get("include_archived") === "true",
+    include_closed:
+      searchParams.get("include_closed") === "true"
+      || searchParams.get("include_archived") === "true",
   };
 }
 

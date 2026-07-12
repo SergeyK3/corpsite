@@ -14,6 +14,7 @@ from app.db.models.personnel_orders import (
     MVP_HEADER_ORDER_TYPE_CODES,
     MVP_ITEM_TYPE_CODES,
     ORDER_STATUSES,
+    ORDER_STATUS_VOIDED,
 )
 from app.services.hr_event_registry import get_event_class, get_event_label
 
@@ -129,6 +130,37 @@ def _normalize_order_type_filter(order_type_code: Optional[str]) -> Optional[str
     return normalized
 
 
+def _apply_journal_closed_scope(
+    where_parts: list[str],
+    params: Dict[str, Any],
+    *,
+    include_closed: bool,
+    normalized_status: Optional[str],
+) -> None:
+    """WP-PO-LC-006: default journal hides VOIDED and archived orders."""
+    if include_closed:
+        if normalized_status is not None:
+            where_parts.append("po.status = :status")
+            params["status"] = normalized_status
+        return
+
+    if normalized_status == ORDER_STATUS_VOIDED:
+        where_parts.append("po.archived_at IS NULL")
+        where_parts.append("po.status = :status")
+        params["status"] = normalized_status
+        return
+
+    if normalized_status is not None:
+        where_parts.append("po.archived_at IS NULL")
+        where_parts.append("po.status = :status")
+        params["status"] = normalized_status
+        return
+
+    where_parts.append("po.archived_at IS NULL")
+    where_parts.append("po.status <> :voided_status")
+    params["voided_status"] = ORDER_STATUS_VOIDED
+
+
 def _build_list_filters(
     *,
     status: Optional[str],
@@ -138,18 +170,20 @@ def _build_list_filters(
     employee_id: Optional[int],
     org_unit_id: Optional[int],
     q: Optional[str],
+    include_closed: bool = False,
     include_archived: bool = False,
 ) -> tuple[list[str], Dict[str, Any]]:
     where_parts = ["TRUE"]
     params: Dict[str, Any] = {}
 
-    if not include_archived:
-        where_parts.append("po.archived_at IS NULL")
-
+    effective_closed = bool(include_closed) or bool(include_archived)
     normalized_status = _normalize_status_filter(status)
-    if normalized_status is not None:
-        where_parts.append("po.status = :status")
-        params["status"] = normalized_status
+    _apply_journal_closed_scope(
+        where_parts,
+        params,
+        include_closed=effective_closed,
+        normalized_status=normalized_status,
+    )
 
     normalized_type = _normalize_order_type_filter(order_type_code)
     if normalized_type is not None:
@@ -380,6 +414,7 @@ def list_personnel_orders(
     employee_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     q: Optional[str] = None,
+    include_closed: bool = False,
     include_archived: bool = False,
     limit: int = 100,
     offset: int = 0,
@@ -395,6 +430,7 @@ def list_personnel_orders(
         employee_id=employee_id,
         org_unit_id=org_unit_id,
         q=q,
+        include_closed=bool(include_closed),
         include_archived=bool(include_archived),
     )
     params["limit"] = int(limit)

@@ -42,7 +42,7 @@ function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
     parts.push(`период ${filters.date_from || "…"} — ${filters.date_to || "…"}`);
   }
   if (filters.q?.trim()) parts.push(`поиск «${filters.q.trim()}»`);
-  if (filters.include_archived) parts.push("включая архив");
+  if (filters.include_closed) parts.push("включая закрытые документы");
   return parts;
 }
 
@@ -312,12 +312,12 @@ export default function PersonnelOrdersPageClient() {
         <label className="flex items-center gap-2 pb-2 text-sm text-zinc-700 dark:text-zinc-300">
           <input
             type="checkbox"
-            data-testid="personnel-orders-include-archived"
-            checked={Boolean(filters.include_archived)}
-            onChange={(e) => updateFilters({ include_archived: e.target.checked || undefined })}
+            data-testid="personnel-orders-include-closed"
+            checked={Boolean(filters.include_closed)}
+            onChange={(e) => updateFilters({ include_closed: e.target.checked || undefined })}
             className="rounded border-zinc-300 dark:border-zinc-600"
           />
-          Показывать архив
+          Показывать закрытые документы
         </label>
         <div className="text-sm text-zinc-500 dark:text-zinc-400">
           {loading

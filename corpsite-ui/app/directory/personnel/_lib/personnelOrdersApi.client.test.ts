@@ -43,6 +43,7 @@ describe("personnelOrdersApi.client", () => {
       employee_id: 5,
       org_unit_id: 3,
       q: "WPPO",
+      include_closed: false,
     });
   });
 
@@ -69,6 +70,7 @@ describe("personnelOrdersApi.client", () => {
       org_unit_id: undefined,
       order_id: 42,
       q: undefined,
+      include_closed: false,
     });
   });
 
@@ -80,6 +82,31 @@ describe("personnelOrdersApi.client", () => {
     expect(qs.get("order_id")).toBeNull();
     expect(qs.get("employee_id")).toBe("9");
     expect(qs.get("status")).toBe("DRAFT");
+  });
+
+  it("emits include_closed and not include_archived", () => {
+    const qs = buildPersonnelOrdersQueryParams(
+      { include_closed: true },
+      { includeClientSearch: false },
+    );
+    expect(qs.get("include_closed")).toBe("true");
+    expect(qs.get("include_archived")).toBeNull();
+  });
+
+  it("parses include_closed from URL", () => {
+    const params = new URLSearchParams("include_closed=true");
+    expect(parsePersonnelOrdersFilters(params).include_closed).toBe(true);
+  });
+
+  it("parses legacy include_archived as include_closed", () => {
+    const params = new URLSearchParams("include_archived=true");
+    expect(parsePersonnelOrdersFilters(params).include_closed).toBe(true);
+  });
+
+  it("builds href with include_closed", () => {
+    expect(buildPersonnelOrdersHref({ include_closed: true })).toBe(
+      "/directory/personnel/orders?include_closed=true",
+    );
   });
 
   it("filters items by order number and employee names client-side", () => {

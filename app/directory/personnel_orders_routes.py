@@ -140,7 +140,14 @@ def list_personnel_orders_route(
     employee_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     q: Optional[str] = Query(default=None, max_length=200),
-    include_archived: bool = Query(default=False),
+    include_closed: bool = Query(
+        default=False,
+        description="Include closed documents (VOIDED and archived) in the journal.",
+    ),
+    include_archived: bool = Query(
+        default=False,
+        description="Deprecated alias for include_closed (WP-PO-LC-006).",
+    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -157,6 +164,7 @@ def list_personnel_orders_route(
             employee_id=employee_id,
             org_unit_id=org_unit_id,
             q=q,
+            include_closed=include_closed,
             include_archived=include_archived,
             limit=limit,
             offset=offset,
