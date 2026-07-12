@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.b{fill:#f8fafc;stroke:#334155;rx:6}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:11px sans-serif;fill:#475569}.h{fill:#ecfdf5;stroke:#059669}.p{fill:#eff6ff;stroke:#2563eb}</style></defs>
+  <text x="440" y="28" text-anchor="middle" class="t">Order Item Generation Anatomy</text>
+  <rect x="40" y="50" width="800" height="50" class="b h"/><text x="60" y="80" class="l">OrderItem: sequence · item_kind · manual_override_state</text>
+  <rect x="60" y="120" width="760" height="90" class="b p"/>
+  <text x="80" y="145" class="l">ExecutionObligation(s)  1..N (14% multi-obligation)</text>
+  <text x="80" y="165" class="m">primary_intent · action · managed_object · responsible_party · co_executors</text>
+  <text x="80" y="185" class="m">conditions · deadline · expected_result · evidence · dependencies · attachment_ref</text>
+  <rect x="60" y="230" width="360" height="70" class="b"/>
+  <text x="80" y="255" class="l">Clause Rendering</text>
+  <text x="80" y="275" class="m">Action ’ Party ’ Object ’ Conditions ’ Deadline ’ Result</text>
+  <text x="80" y="290" class="m">RU: action_first · KK: mandate suffix</text>
+  <rect x="440" y="230" width="380" height="70" class="b"/>
+  <text x="460" y="255" class="l">Language Variants</text>
+  <text x="460" y="275" class="m">ru_rendering · kk_rendering (independent)</text>
+  <text x="460" y="290" class="m">effective = override || generated</text>
+  <rect x="60" y="320" width="760" height="70" class="b h"/>
+  <text x="80" y="345" class="l">Optional: ControlObligation (separate item or embedded)</text>
+  <text x="80" y="365" class="m">controller · scope (order|item|direction) · auto-generated · editable</text>
+  <text x="80" y="380" class="m">Item Kind (render template) ` Business Intent (management meaning)</text>
+</svg>

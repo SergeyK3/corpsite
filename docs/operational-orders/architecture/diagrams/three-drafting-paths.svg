@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 15px sans-serif;fill:#0f172a}.a{fill:#eff6ff;stroke:#2563eb;rx:8}.b{fill:#ecfdf5;stroke:#059669;rx:8}.c{fill:#fff7ed;stroke:#ea580c;rx:8}.x{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}.p{font:700 10px sans-serif;fill:#ea580c}</style></defs>
+  <text x="450" y="20" text-anchor="middle" class="t">Three Drafting Paths (OP-RES-006A)</text>
+  <rect x="30" y="40" width="250" height="130" class="a"/>
+  <text x="155" y="62" text-anchor="middle" class="x">Model A  Semantic-first</text>
+  <text x="45" y="82" class="m">Scenario ’ Structured Inputs</text>
+  <text x="45" y="96" class="m">’ Semantic Model ’ RU/KK Render</text>
+  <text x="45" y="118" class="p">P2 for OO MVP (parallel)</text>
+  <rect x="325" y="40" width="250" height="130" class="b"/>
+  <text x="450" y="62" text-anchor="middle" class="x">Model B  Internal RU-first</text>
+  <text x="340" y="82" class="m">RU Draft ’ Translation ’ KK</text>
+  <text x="340" y="96" class="m">’ Reconciliation ’ Official Draft</text>
+  <text x="340" y="118" class="p">P1 for OO (after intake established)</text>
+  <rect x="620" y="40" width="250" height="130" class="c"/>
+  <text x="745" y="62" text-anchor="middle" class="x">Model C  Submitted-text Intake</text>
+  <text x="635" y="82" class="m">Submitted RU/KK ’ Intake ’ Enrichment</text>
+  <text x="635" y="96" class="m">’ Translation ’ Content Confirm</text>
+  <text x="635" y="110" class="m">’ Official Draft</text>
+  <text x="635" y="128" class="p">P0 for OO MVP (first-class)</text>
+  <text x="450" y="195" text-anchor="middle" class="m">Paths may switch: Model C ’ semantic mapping ’ Model A/B</text>
+  <text x="450" y="210" text-anchor="middle" class="m">PO primarily: Model A/B (HR as author+operator) · OO primarily: Model C</text>
+  <text x="450" y="250" text-anchor="middle" class="m">Legal equivalence ` editorial symmetry (all paths)</text>
+</svg>

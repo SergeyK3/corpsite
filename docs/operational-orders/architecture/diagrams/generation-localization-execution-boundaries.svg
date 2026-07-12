@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 340" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 16px sans-serif;fill:#0f172a}.g{fill:#ecfdf5;stroke:#059669;rx:6}.l{fill:#eff6ff;stroke:#2563eb;rx:6}.e{fill:#fff7ed;stroke:#ea580c;rx:6}.x{font:600 11px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="460" y="22" text-anchor="middle" class="t">Generation · Localization · Execution Boundaries</text>
+  <rect x="20" y="40" width="860" height="55" class="g"/>
+  <text x="40" y="62" class="x">Generation Pipeline</text>
+  <text x="40" y="78" class="m">Scenario ’ Input ’ Semantic Items ’ Obligation Validation ’ Clause Render ’ Control Meta-item ’ Assembly ’ Locale Render ’ Manual Adjust ’ Bilingual Validation ’ Preview/Export</text>
+  <rect x="20" y="110" width="420" height="90" class="l"/>
+  <text x="230" y="135" text-anchor="middle" class="x">Localization (within Generation tail)</text>
+  <text x="35" y="155" class="m">Model A: semantic ’ RU renderer + KK renderer</text>
+  <text x="35" y="171" class="m">Model B: RU effective ’ translate ’ reconcile</text>
+  <text x="35" y="187" class="m">generated_text ` effective_text · staleness on semantic change</text>
+  <rect x="460" y="110" width="420" height="90" class="e"/>
+  <text x="670" y="135" text-anchor="middle" class="x">Execution Projection (after Generation)</text>
+  <text x="475" y="155" class="m">Extract ExecutionObligationDescriptor[]</text>
+  <text x="475" y="171" class="m">Moment: after REGISTERED (configurable preview in DRAFT)</text>
+  <text x="475" y="187" class="m">Idempotent · compensating on VOIDED/ANNUL</text>
+  <line x1="440" y1="200" x2="460" y2="200" stroke="#334155" stroke-width="2"/>
+  <text x="450" y="195" class="m">handoff</text>
+  <rect x="20" y="220" width="860" height="100" class="g"/>
+  <text x="40" y="245" class="x">Document Engine ends at:</text>
+  <text x="40" y="263" class="m">Validated effective bilingual package · immutable signed snapshot · audit trail · projection descriptor emission</text>
+  <text x="40" y="285" class="x">Execution contour begins at:</text>
+  <text x="40" y="303" class="m">Task/work item creation · assignee resolution · deadline tracking · evidence collection · control workflow</text>
+  <text x="460" y="330" text-anchor="middle" class="m">Personnel Orders: apply’employee_events is domain-specific execution projection (already implemented)</text>
+</svg>

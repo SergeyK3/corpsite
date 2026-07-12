@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 820" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font: 700 20px sans-serif; fill: #0f172a; }
+      .domain { font: 600 13px sans-serif; fill: #1e3a5f; }
+      .cat { font: 12px sans-serif; fill: #334155; }
+      .type { font: 11px sans-serif; fill: #64748b; }
+      .box-d { fill: #dbeafe; stroke: #2563eb; stroke-width: 1.2; rx: 5; }
+      .box-c { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1; rx: 4; }
+      .line { stroke: #94a3b8; stroke-width: 1; fill: none; }
+    </style>
+  </defs>
+  <text x="550" y="28" text-anchor="middle" class="title">Operational Order Taxonomy Tree (corpus-derived, n=193)</text>
+
+  <!-- ORGANIZATION 39 -->
+  <rect x="30" y="50" width="200" height="28" class="box-d"/><text x="40" y="69" class="domain">ORGANIZATION (39)</text>
+  <rect x="250" y="50" width="170" height="22" class="box-c"/><text x="258" y="65" class="cat">governance_body (28)</text>
+  <text x="430" y="65" class="type">commission_create</text>
+  <rect x="250" y="78" width="170" height="22" class="box-c"/><text x="258" y="93" class="cat">events (6)</text>
+  <text x="430" y="93" class="type">institutional_event · conference_support</text>
+  <rect x="250" y="106" width="170" height="22" class="box-c"/><text x="258" y="121" class="cat">responsibility (5)</text>
+  <text x="430" y="121" class="type">responsibility_assignment</text>
+
+  <!-- CLINICAL 40 -->
+  <rect x="30" y="150" width="200" height="28" class="box-d"/><text x="40" y="169" class="domain">CLINICAL (40)</text>
+  <rect x="250" y="150" width="170" height="22" class="box-c"/><text x="258" y="165" class="cat">clinical_ops (35)</text>
+  <text x="430" y="165" class="type">clinical_operations</text>
+  <rect x="250" y="178" width="170" height="22" class="box-c"/><text x="258" y="193" class="cat">pharmacy (5)</text>
+  <text x="430" y="193" class="type">pharmaceutical_control</text>
+
+  <!-- OPERATIONS 33 -->
+  <rect x="30" y="220" width="200" height="28" class="box-d"/><text x="40" y="239" class="domain">OPERATIONS (33)</text>
+  <rect x="250" y="220" width="170" height="22" class="box-c"/><text x="258" y="235" class="cat">mobility (33)</text>
+  <text x="430" y="235" class="type">business_travel</text>
+
+  <!-- FINANCE 33 -->
+  <rect x="30" y="270" width="200" height="28" class="box-d"/><text x="40" y="289" class="domain">FINANCE (33)</text>
+  <rect x="250" y="270" width="170" height="22" class="box-c"/><text x="258" y="285" class="cat">accounting (18)</text>
+  <text x="430" y="285" class="type">accounting_procedure</text>
+  <rect x="250" y="298" width="170" height="22" class="box-c"/><text x="258" y="313" class="cat">revenue (10)</text>
+  <text x="430" y="313" class="type">paid_services</text>
+  <rect x="250" y="326" width="150" height="22" class="box-c"/><text x="258" y="341" class="cat">allocation (3) · planning (2)</text>
+
+  <!-- SAFETY 17 -->
+  <rect x="30" y="370" width="200" height="28" class="box-d"/><text x="40" y="389" class="domain">SAFETY (17)</text>
+  <rect x="250" y="370" width="300" height="22" class="box-c"/><text x="258" y="385" class="cat">infection_control (11) · facility/transport (3) · emergency_drill (2) · radiation (1)</text>
+
+  <!-- GOVERNANCE 14 -->
+  <rect x="30" y="420" width="200" height="28" class="box-d"/><text x="40" y="439" class="domain">GOVERNANCE (14)</text>
+  <rect x="250" y="420" width="300" height="22" class="box-c"/><text x="258" y="435" class="cat">procurement (8) · regulation (5) · compliance (1)</text>
+
+  <!-- DEVELOPMENT 10 -->
+  <rect x="30" y="470" width="200" height="28" class="box-d"/><text x="40" y="489" class="domain">DEVELOPMENT (10)</text>
+  <rect x="250" y="470" width="170" height="22" class="box-c"/><text x="258" y="485" class="cat">training (10)</text>
+  <text x="430" y="485" class="type">training_assignment</text>
+
+  <!-- HR_OPERATIONS 6 -->
+  <rect x="30" y="520" width="200" height="28" class="box-d"/><text x="40" y="539" class="domain">HR_OPERATIONS (6)</text>
+  <rect x="250" y="520" width="170" height="22" class="box-c"/><text x="258" y="535" class="cat">discipline (6)</text>
+  <text x="430" y="535" class="type">disciplinary_action</text>
+
+  <!-- ADMIN 1 -->
+  <rect x="30" y="570" width="200" height="28" class="box-d"/><text x="40" y="589" class="domain">ADMINISTRATIVE (1)</text>
+  <text x="250" y="589" class="type">operational_directive (unclassified DOC)</text>
+
+  <rect x="580" y="50" width="490" height="200" fill="#fffbeb" stroke="#d97706" rx="6"/>
+  <text x="600" y="78" class="domain">Folder ` Domain (research note)</text>
+  <text x="600" y="100" class="cat">«><0=48@>2:0» ’ 100% OPERATIONS/mobility</text>
+  <text x="600" y="120" class="cat">«CE30;B5@8O» ’ mostly FINANCE, but includes commissions</text>
+  <text x="600" y="140" class="cat">«EG» ’ mix: SAFETY, ORGANIZATION, FINANCE, CLINICAL</text>
+  <text x="600" y="160" class="cat">«.CAB0D8=0» ’ CLINICAL events + ORGANIZATION responsibility</text>
+  <text x="600" y="180" class="cat">Taxonomy must use business purpose, not folder provenance</text>
+
+  <rect x="580" y="270" width="490" height="320" fill="#f8fafc" stroke="#cbd5e1" rx="6"/>
+  <text x="600" y="298" class="domain">Top Order Types (business purpose)</text>
+  <text x="600" y="322" class="cat">1. clinical_operations  35 (18%)</text>
+  <text x="600" y="342" class="cat">2. business_travel  33 (17%)</text>
+  <text x="600" y="362" class="cat">3. commission_create  28 (15%)</text>
+  <text x="600" y="382" class="cat">4. accounting_procedure  18 (9%)</text>
+  <text x="600" y="402" class="cat">5. infection_control  11 (6%)</text>
+  <text x="600" y="422" class="cat">6. training_assignment  10 (5%)</text>
+  <text x="600" y="442" class="cat">7. paid_services  10 (5%)</text>
+  <text x="600" y="462" class="cat">8. procurement_procedure  8 (4%)</text>
+  <text x="600" y="482" class="cat">9. disciplinary_action  6 (3%)</text>
+  <text x="600" y="510" class="type">Long tail: 12 additional order types (15 docs each)</text>
+  <text x="600" y="540" class="type">Personnel Orders overlap: HR_OPERATIONS/discipline</text>
+  <text x="600" y="560" class="type">shares intents with Personnel but different payload</text>
+</svg>

@@ -1,0 +1,51 @@
+﻿section,key,value
+meta,work_package,OP-RES-001
+meta,scan_date_utc,2026-07-12
+meta,source_root,d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\Производственные приказы
+meta,files_scanned,193
+meta,total_size_bytes,10597834
+meta,note,Aggregated summary. Full file-level inventory may contain personal names in paths/filenames.
+extension,.docx,183
+extension,.doc,8
+extension,.pdf,2
+language,ru,184
+language,kk,7
+language,unknown,1
+language,mixed,1
+presumed_year,none,148
+presumed_year,2026,41
+presumed_year,2025,4
+text_extraction_suitability,good,183
+text_extraction_suitability,fair,8
+text_extraction_suitability,poor_ocr_needed,2
+version_or_copy,no,181
+version_or_copy,yes,12
+possible_duplicate,no,189
+possible_duplicate,same_size|identical_content_hash,2
+possible_duplicate,same_normalized_stem,2
+thematic_folder_file_count,Командировка,37
+thematic_folder_file_count,по платным услугам 2026,23
+thematic_folder_file_count,Бухгалтерия,21
+thematic_folder_file_count,Обучение,16
+thematic_folder_file_count,Ахч,12
+thematic_folder_file_count,ККМУ,11
+thematic_folder_file_count,Экономисты,10
+thematic_folder_file_count,Б.Мустафина,9
+thematic_folder_file_count,Эпидемиолог -Производ.приказы на 2026 год,9
+thematic_folder_file_count,приказ наказание,7
+thematic_folder_file_count,Трансфузиология,7
+thematic_folder_file_count,Гос.закуп,5
+thematic_folder_file_count,Праздничный приказ,4
+thematic_folder_file_count,Аптека,3
+thematic_folder_file_count,ВЦРО,3
+thematic_folder_file_count,Главная медсестра,3
+thematic_folder_file_count,Лучевая,2
+thematic_folder_file_count,Нурбеков Б.Б,2
+thematic_folder_file_count,О снятии испытательного срока,2
+thematic_folder_file_count,Альянс онкологов,1
+thematic_folder_file_count,Инсульт,1
+thematic_folder_file_count,Комплаенс-офицер,1
+thematic_folder_file_count,ОУЧР,1
+thematic_folder_file_count,Практика врачей,1
+thematic_folder_file_count,Приказы о снятии наказания,1
+thematic_folder_file_count,root,1

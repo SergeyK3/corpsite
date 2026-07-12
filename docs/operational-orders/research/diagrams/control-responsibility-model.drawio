@@ -1,0 +1,14 @@
+<mxfile host="app.diagrams.net" version="22.1.0" type="device">
+  <diagram id="ctrl" name="Control Responsibility">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="600">
+      <root>
+        <mxCell id="0"/><mxCell id="1" parent="0"/>
+        <mxCell id="ex" value="Исполнитель" style="rounded=1;fillColor=#dae8fc;" vertex="1" parent="1"><mxGeometry x="40" y="60" width="140" height="50" as="geometry"/></mxCell>
+        <mxCell id="resp" value="Ответственный" style="rounded=1;fillColor=#d5e8d4;" vertex="1" parent="1"><mxGeometry x="210" y="60" width="140" height="50" as="geometry"/></mxCell>
+        <mxCell id="ctrl" value="Контролирующий" style="rounded=1;fillColor=#ffe6cc;" vertex="1" parent="1"><mxGeometry x="380" y="60" width="140" height="50" as="geometry"/></mxCell>
+        <mxCell id="sign" value="Подписант" style="rounded=1;fillColor=#f5f5f5;" vertex="1" parent="1"><mxGeometry x="550" y="60" width="140" height="50" as="geometry"/></mxCell>
+        <mxCell id="n" value="Не смешивать control и execution; один человек может иметь разные роли в разных пунктах" style="shape=note;fillColor=#fff2cc;" vertex="1" parent="1"><mxGeometry x="40" y="150" width="650" height="60" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

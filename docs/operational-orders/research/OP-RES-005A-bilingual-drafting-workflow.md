@@ -1,0 +1,473 @@
+# OP-RES-005A — Bilingual Drafting and Translation Workflow Validation
+
+WP: **OP-RES-005A** — Bilingual Drafting and Translation Workflow Validation  
+Date: **2026-07-12**  
+Mode: **research-only** (read-only analysis; no runtime changes)  
+Corpus: `order_samples/Производственные приказы/` — **193 documents** (183 DOCX analyzed)  
+Prior work: [OP-RES-001](./OP-RES-001-corpus-passport.md) … [OP-RES-005](./OP-RES-005-generation-model.md)
+
+---
+
+## 1. Executive Summary
+
+OP-RES-005A проверяет гипотезу **RU-first drafting → KK translation → bilingual reconciliation** против корпуса и уточняет multilingual-выводы OP-RES-005.
+
+**Главный результат:** корпус подтверждает **языковую асимметрию и доминирование RU**, а также **вероятный RU-first layout** в двуязычных документах, но **не доказывает** полный organizational translation workflow как отдельный cross-file процесс.
+
+| Finding | Evidence |
+|---|---|
+| Separate RU-file + KK-file pairs | **0** true translation candidates (refined) |
+| Intra-document bilingual (one DOCX) | **135 / 183** DOCX (74%) |
+| Layout KK block after RU block | **75** docs (probable RU-first **layout**) |
+| Layout RU block after KK block | **54** docs (mixed practice) |
+| RU-only content (no KK block) | **4** docs |
+| KK-only content (no RU block) | **41** docs |
+| Direct translation relation (intra-doc) | **85 / 135** bilingual |
+| Semantic drift (partial/adapted) | **50 / 135** bilingual |
+
+**Архитектурный вывод:** Document Engine должен поддерживать **гибрид**:
+
+- **Model A (target):** language-independent semantic model → independent RU/KK renderers (OP-RES-005, Personnel Orders).
+- **Model B (observed editorial mode):** RU effective draft → translation workflow → KK effective draft → bilingual reconciliation + **language-version staleness**.
+
+**Legal equivalence** финальных RU/KK версий и **editorial symmetry** процесса подготовки — **разные вопросы**. Корпус информирует второй; первый требует отдельного правового исследования.
+
+Диаграммы: [`diagrams/bilingual-drafting-workflow.svg`](diagrams/bilingual-drafting-workflow.svg), [`diagrams/symmetric-vs-asymmetric-generation.svg`](diagrams/symmetric-vs-asymmetric-generation.svg), [`diagrams/language-version-staleness.svg`](diagrams/language-version-staleness.svg), [`diagrams/bilingual-consistency-validation.svg`](diagrams/bilingual-consistency-validation.svg), [`diagrams/bilingual-approval-workflow.svg`](diagrams/bilingual-approval-workflow.svg)
+
+Data: [`data/OP-RES-005A-language-pair-summary.csv`](data/OP-RES-005A-language-pair-summary.csv), [`data/OP-RES-005A-bilingual-consistency-checks.csv`](data/OP-RES-005A-bilingual-consistency-checks.csv), [`data/OP-RES-005A-workflow-evidence-summary.csv`](data/OP-RES-005A-workflow-evidence-summary.csv)
+
+Script: [`scripts/op_res_005a_bilingual_probe.py`](scripts/op_res_005a_bilingual_probe.py), refine: [`scripts/op_res_005a_pair_refine.py`](scripts/op_res_005a_pair_refine.py)
+
+---
+
+## 2. Исследовательский вопрос
+
+**Являются ли RU и KK равноправными независимыми редакционными версиями с самого начала, или фактический процесс — RU primary draft → review → KK translation → reconciliation → approval?**
+
+**Ответ корпуса (вероятностный):**
+
+- **Не** равноправны с самого начала как **default editorial practice**.
+- **Вероятен** asymmetric RU-first **внутри одного DOCX** (75 kk-after-ru vs 54 обратный порядок).
+- **Не доказан** обязательный cross-file workflow «RU.docx → translate → KK.docx» — таких пар **нет**.
+- **Целевая** symmetric semantic-first модель (OP-RES-005) остаётся valid **as target architecture**, но должна сосуществовать с **translation editorial mode**.
+
+---
+
+## 3. Методика
+
+### 3.1 Steps
+
+1. Read-only OOXML extraction (183 DOCX).
+2. Language detection: content markers (`ПРИКАЗЫВАЮ` / `БҰЙЫРАМЫН`) + filename heuristics.
+3. Layout classification: ru_only, kk_only, bilingual_kk_after_ru, bilingual_ru_after_kk, interleaved.
+4. Separate-file pair scoring (stem, folder hash, item count, dates, amounts, mtime) → confidence.
+5. **Refined filter** for true cross-file translation candidates (complementary layout/lang).
+6. Intra-document structural comparison (item counts, control parity, relation class).
+7. Cross-check with OP-RES-001 inventory (language counts, version markers, duplicates).
+
+### 3.2 Anonymization
+
+- Git CSVs use `doc_id` (SHA-256 prefix), `folder_code` (hash of top folder), `pair_id`.
+- No filenames with ФИО, no paths in tracked artifacts.
+- Full pair list includes automated false positives — interpret with refine script counts.
+
+### 3.3 Confidence model limitations
+
+- Filesystem mtime/ctime: **low reliability** (copy, sync, resave); used only as weak signal.
+- Automated stem similarity produces false positives for template-heavy folders (same item count).
+- **Authoritative refined counts** in [`data/OP-RES-005A-refined-pair-counts.txt`](data/OP-RES-005A-refined-pair-counts.txt) (generated by refine script).
+
+---
+
+## 4. Ограничения корпуса
+
+| Limitation | Impact |
+|---|---|
+| Archive, not live workflow system | No status history, no translation tickets |
+| 184 RU-primary **filenames** ≠ 184 RU-first **drafts** | Filename language ≠ editorial source |
+| 0 cross-file translation pairs | Cannot observe separate-file handoff |
+| mtime unreliable | Cannot prove temporal RU→KK sequence definitively |
+| 41 kk-only-content docs | May be incomplete archive or KK-only practice |
+| 4 ru-only-content docs | May omit KK intentionally or KK lost |
+| No organizational interviews | Approval order unconfirmed |
+| No legal WP | Legal equivalence of languages not decided here |
+
+---
+
+## 5. Языковая асимметрия
+
+### 5.1 Filename-level (OP-RES-001)
+
+| Language | Files |
+|---|---:|
+| ru (presumed) | 184 |
+| kk | 7 |
+| mixed | 1 |
+| unknown | 1 |
+
+### 5.2 Content-level (OP-RES-005A probe)
+
+| Layout | DOCX count | Share |
+|---|---:|---:|
+| bilingual (any) | 135 | 74% |
+| kk_only_content | 41 | 22% |
+| ru_only_content | 4 | 2% |
+| unknown | 3 | 2% |
+
+**Вывод:** RU доминирует на уровне корпуса и имён файлов; **большинство двуязычия — в одном файле**, не в парах файлов.
+
+---
+
+## 6. Поиск RU/KK-пар
+
+### 6.1 Separate files
+
+Automated scan: **1 331** candidate pairs above weak threshold.
+
+**Refined true cross-file translation candidates: 0**
+
+Причина: «высокие» automated pairs — это либо **два уже двуязычных DOCX** одного сценария, либо template siblings с одинаковым числом пунктов.
+
+**Revision siblings (not language pairs):** 16 probable pairs — same scenario, high stem similarity, both bilingual — **версии/редакции**, не RU↔KK split.
+
+### 6.2 Intra-document «pairs»
+
+**135 documents** contain both RU and KK substantive blocks in **one artifact** — this is the **dominant multilingual pattern** in the archive.
+
+---
+
+## 7. Confidence Model
+
+| Level | Separate-file (refined) | Intra-document |
+|---|---|---|
+| **high** | 0 translation pairs | 135 bilingual docs (same file) |
+| **probable** | 16 revision siblings | 85 `direct_translation` relation |
+| **weak** | 1 331 automated (not used for workflow claims) | 50 drift cases |
+| **no_match** | Cross-file RU+KK split | — |
+
+**Rule:** workflow conclusions rest on **intra-document** evidence + corpus asymmetry, not on separate-file pair CSV alone.
+
+---
+
+## 8. Временная последовательность
+
+| Signal | Finding | Reliability |
+|---|---|---|
+| mtime delta between candidate pairs | Highly variable (0h–20 000h) | **Low** |
+| kk_after_ru layout order | 75 docs | **Medium** (structural) |
+| ru_after_kk layout order | 54 docs | **Medium** |
+| Version markers `(1)`, `копия` | 12 files (OP-RES-001) | Medium — revision not translation |
+| Identical hash duplicates | 2 files | Confirmed copy, not translation |
+
+**Вывод:** **нельзя** доказать «RU файл создан раньше KK файла» — пар файлов нет. **Можно** сказать: в **55%** bilingual docs (75/135) KK-текст расположен **после** RU-текста — согласуется с RU-first **компоновкой**, не обязательно с editorial sequence.
+
+---
+
+## 9. Структурное сравнение (intra-document)
+
+| Check | Match rate (135 bilingual) | Notes |
+|---|---|---|
+| Item count parity | ~63% direct_translation | 85 docs |
+| Abbreviated/expanded KK | 33 docs | Different item density |
+| Partial translation | 12 docs | Control/evidence mismatch |
+| Adapted translation | 5 docs | — |
+| Control clause both locales | ~91% | 12 partial exceptions |
+| Attachment refs | Partial | Often RU «Приложение» + KK «қосымша» |
+
+**KK relation to RU (probabilistic):**
+
+| Class | n | Description |
+|---|---:|---|
+| direct_translation | 85 | Same item count, control match |
+| abbreviated_or_expanded | 33 | KK shorter/longer |
+| partial_translation | 12 | Missing control/evidence in KK |
+| adapted_translation | 5 | Structural adaptation |
+
+---
+
+## 10. Source Language Indicators
+
+| Indicator | Supports RU-first | Supports KK-first | Corpus |
+|---|---|---|---|
+| KK block after RU block | **75 docs** | — | Medium |
+| RU block after KK block | — | **54 docs** | Medium |
+| RU filename dominance | **184 files** | — | High |
+| kk-only content (41) | — | Possible KK draft | Medium |
+| Separate RU+KK files | — | — | **None found** |
+| Calque NLP detection | Not run | — | — |
+
+**Probabilistic conclusion:** **вероятный RU-first** для типового bilingual DOCX; **не исключён** KK-first в части АХЧ/ kk-filename docs; **symmetric independent drafting** — не default в архиве.
+
+---
+
+## 11. Corpus-wide RU-first Hypothesis
+
+| Claim level | Statement |
+|---|---|
+| **Confirmed** | RU linguistic dominance in corpus filenames and working language |
+| **Confirmed** | Multilingual delivery primarily **single DOCX**, not file pairs |
+| **Probable** | RU block precedes KK block in majority of bilingual docs |
+| **Not confirmed** | All RU-primary files later translated to KK |
+| **Not confirmed** | Organizational approval sequence |
+| **Insufficient** | Mandatory translation for every order type |
+
+**Формулировка для OP-RES-006:** *языковая асимметрия подтверждена; RU-first editorial workflow — вероятен, но требует organizational validation.*
+
+---
+
+## 12. Полнота перевода
+
+| Question | Answer |
+|---|---|
+| All categories translated? | **No** — 4 ru-only, 41 kk-only in content |
+| Domain-specific? | Bilingual intra-doc spans all major scenarios; **S_TRAVEL** only 11/33 bilingual |
+| Only RU orders? | **Yes** — at least 4 confirmed ru-only content |
+| Only KK orders? | **41** kk-only content docs |
+| Bilingual in one file? | **135** — dominant |
+| Partial translation? | **12** partial + **33** abbreviated |
+| Attachments translated? | **Partial** — refs often both languages when bilingual |
+| Acknowledgement blocks? | **Partial** — «Танысу парағы» often KK-tail |
+| Legal basis translated? | **Mixed** — kk boilerplate + RU law refs common |
+
+---
+
+## 13. Различия по доменам и сценариям
+
+Intra-document bilingual by scenario (top):
+
+| Scenario | Bilingual docs |
+|---|---:|
+| S_COMMISSION | 27 |
+| S_CLINICAL | 24 |
+| S_ACCOUNTING | 17 |
+| S_TRAVEL | 11 / 33 total |
+| S_PAID_SERVICES | 10 |
+| S_DISCIPLINE | 6 |
+
+**S_TRAVEL:** bilingual coverage **33%** in archive — many travel orders exist as single-language artifacts (often kk-only content in Командировка folder).
+
+**S_COMMISSION / S_CLINICAL:** highest bilingual rate — aligns with institutional visibility requirements.
+
+---
+
+## 14. Drafting Workflow (research stages)
+
+| Stage | Evidence |
+|---|---|
+| semantic draft | Inferred — matches OP-RES-005 |
+| RU draft | Probable — RU dominance |
+| RU content review | **Requires interview** |
+| translation requested | Inferred from bilingual structure |
+| KK draft | Confirmed existence (135 docs) |
+| KK terminology review | **Requires interview** |
+| bilingual consistency review | Inferred — partial_translation implies need |
+| approval | **Requires interview** |
+| ready for signature | Inferred — PO-EDIT pattern |
+| signed / registered | Out of corpus scope |
+
+---
+
+## 15. Translation Workflow
+
+**Observed archive pattern:**
+
+```text
+[Single DOCX]
+  RU section (ПРИКАЗЫВАЮ + items)   ← often first (75 cases)
+  KK section (БҰЙЫРАМЫН + items)    ← often second
+  [Optional: trailing basis, ack blocks]
+```
+
+**Not observed:** `order_ru.docx` + `order_kk.docx` as standing pair.
+
+**Translation locus (probable):** after RU text stabilizes **within same document** or exported copy — **not proven** as system step.
+
+---
+
+## 16. Language-version Staleness
+
+Research states (not production enum):
+
+| State | Meaning |
+|---|---|
+| CURRENT | KK aligned with source RU effective snapshot |
+| STALE | RU changed after KK derived |
+| REVIEW_REQUIRED | Structural drift detected (BC024) |
+| UNKNOWN | Legacy import, partial translation |
+
+**Corpus indirect evidence:** 12 partial + 33 abbreviated intra-doc relations; version filename markers (`испр.`, `копия`).
+
+**Model:**
+
+```text
+RU effective text change → mark KK blocks STALE → block READY until reconciliation
+```
+
+Aligns with Personnel Orders `regenerate → override stale`.
+
+---
+
+## 17. Bilingual Consistency Validation
+
+See [`data/OP-RES-005A-bilingual-consistency-checks.csv`](data/OP-RES-005A-bilingual-consistency-checks.csv) — 25 checks in 4 layers.
+
+| Layer | Machine | Assisted | Human |
+|---|---|---|---|
+| Structural | BC001–BC006 | BC006 | — |
+| Entity | BC007–BC009 | BC010–BC012 | BC011 |
+| Semantic | — | BC013–BC018 | BC021 |
+| Cross-version | BC023–BC024 | BC025 | confirm |
+
+---
+
+## 18. Approval Workflow
+
+Variants A–G (see diagram) — **none confirmed** organizationally.
+
+| Variant | Corpus support | Risk |
+|---|---|---|
+| A RU approved → translate | Plausible (user + layout) | Late KK |
+| B RU content OK → KK | Plausible | Unsigned RU drift |
+| C Parallel | Weak | — |
+| D Separate translation approval | Interview needed | — |
+| E Bilingual package approval | Personnel Orders precedent | **Recommended default** |
+| F RU formally primary | 4 ru-only docs | **Unreviewed KK at sign** |
+| G Domain-specific | Possible (travel vs commission) | Inconsistent policy |
+
+**Interview required** for: who translates, READY before KK, authoritative version on conflict.
+
+---
+
+## 19. Symmetric vs Asymmetric Generation
+
+| | Model A Symmetric | Model B Asymmetric |
+|---|---|---|
+| Corpus support | Target / partial | **Probable editorial default** |
+| Best for | Scenario templates, greenfield | Legacy, human translation |
+| Personnel Orders | Aligned | Coexists via translation mode |
+
+**Hypothesis confirmed (research):** Engine needs **semantic-first target** AND **RU-first translation workflow** as editorial mode.
+
+**Both modes coexist:** same semantic model; different **drafting_path** metadata.
+
+---
+
+## 20. Semantic Source vs Effective Text
+
+| Concept | Confirmed | Notes |
+|---|---|---|
+| semantic model | Yes | Language-independent facts |
+| generated RU / KK | Yes | Per-locale renderer output |
+| effective RU / KK | Yes | override \|\| generated (PO-EDIT) |
+| translated KK text | Inferred | May be manual, not generated |
+| source_language | **Recommended** | `ru` default for operational corpus |
+| target_language | Per block | `kk` derived |
+| authoritative drafting version | **Interview** | Likely RU for drafting; package both for sign |
+| legally effective bilingual package | **Legal WP** | Not decided here |
+
+---
+
+## 21. Изменения к OP-RES-005 (OP-RES-005A findings)
+
+Точечные уточнения внесены в [OP-RES-005-generation-model.md](./OP-RES-005-generation-model.md):
+
+1. **§1 Executive Summary** — multilingual row qualified.
+2. **§17.5** — новый подраздел OP-RES-005A findings.
+3. **§18** — RU change → KK staleness.
+4. **§20** — bilingual consistency checks reference.
+5. **§21** — translation/reconciliation pipeline stages.
+6. **§28** — OP-RES-006 recommendations extended.
+
+**Уточнённая формулировка OP-RES-005:**
+
+> Целевая Generation Model допускает независимый RU и KK rendering из общей semantic model. Фактический editorial workflow **вероятно асимметричен (RU-first)**; архитектура должна поддерживать translation workflow, language-version staleness и bilingual reconciliation.
+
+---
+
+## 22. Вопросы для организационного интервью
+
+1. Кто создаёт первый проект — HR, делопроизводитель, инициатор?
+2. На каком языке пишется первый текст — всегда RU?
+3. Кто переводит на KK — штатный переводчик, юрист, делопроизводитель?
+4. Когда начинается перевод — после согласования RU или параллельно?
+5. Кто проверяет терминологию KK?
+6. Кто подтверждает эквивалентность RU/KK?
+7. Можно ли согласовать/подписать только RU?
+8. Когда документ READY — оба языка обязательны?
+9. Что происходит при поздней правке RU после перевода KK?
+10. Какая версия authoritative при расхождении?
+11. Как обрабатываются приложения — отдельный translation status?
+12. Есть ли домены без KK (командировки, внутренние)?
+
+---
+
+## 23. Архитектурные последствия
+
+1. **Do not assume** symmetric parallel drafting as only mode.
+2. **Do assume** bilingual package validation before signature (Personnel precedent).
+3. **Track** `drafting_path`: `symmetric_generated` | `ru_first_translated`.
+4. **Track** per-locale staleness independent of document-level status.
+5. **Separate-file** bilingual export optional; **intra-document** sections match corpus.
+6. Attachments need **per-locale completion** flags.
+
+---
+
+## 24. Рекомендации для OP-RES-006
+
+| # | Recommendation |
+|---|---|
+| 1 | Semantic model **remains language-independent** |
+| 2 | Add **`source_language`** (default `ru` for operational) |
+| 3 | Add **`drafting_path`** + **translation workflow** concept |
+| 4 | Link **`source_locale_block_id` → `translated_locale_block_id`** |
+| 5 | Implement **`language_version_staleness`** per block/locale |
+| 6 | **Bilingual consistency validation** before READY (BC001–BC025) |
+| 7 | **Human KK terminology review** — required gate, not optional |
+| 8 | **Do not READY_FOR_SIGNATURE** if required KK is STALE/REVIEW_REQUIRED |
+| 9 | Attachments: **separate language status** |
+| 10 | **Reuse Personnel Orders** editorial block model (kk/ru rows, effective_text) |
+| 11 | Language-independent: scenarios, obligations, parties, deadlines |
+| 12 | Language-specific: rendered text, morphology, official titles, reconciliation |
+
+---
+
+## 25. Conclusions
+
+1. **RU dominance confirmed**; **RU-first workflow probable** but not proven as org process.
+2. **Zero** true separate-file RU/KK translation pairs — multilingualism is **intra-document**.
+3. **75/135** bilingual docs place KK after RU — strongest corpus signal for RU-first **layout**.
+4. **Semantic drift** exists (50/135) — bilingual reconciliation and staleness **necessary**.
+5. **Symmetric semantic-first** remains valid **target**; **asymmetric translation mode** required for realism.
+6. **Legal equivalence ≠ editorial symmetry** — architecture must support both concepts.
+7. OP-RES-005 multilingual claims **refined**, not revoked.
+
+---
+
+## Appendix A — Mandatory Questions
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | RU dominance or RU-first workflow? | **Dominance confirmed**; **RU-first workflow probable**, not fully proven |
+| 2 | High / probable separate pairs? | **0** true cross-file; **135** intra-doc bilingual; 16 revision siblings |
+| 3 | Which version earlier? | **RU block before KK** in 75 docs; **not proven** by file timestamps |
+| 4 | KK direct translation of RU? | **85/135 probable direct**; 50 adapted/partial |
+| 5 | Structure/items/deadlines match? | **Often yes** in direct_translation; drift in 50 cases |
+| 6 | Semantic drift? | **Yes** — 12 partial, 33 abbreviated |
+| 7 | All orders translated? | **No** — 4 ru-only, 41 kk-only, partial domain coverage |
+| 8 | Attachments translated? | **Partially** — refs often both; content not fully verified |
+| 9 | RU approved before KK ready? | **Plausible, not confirmed** — interview required |
+| 10 | RU changed after KK? | **Risk confirmed conceptually**; corpus shows drift patterns |
+| 11 | Stale status needed? | **Yes** — CURRENT/STALE/REVIEW_REQUIRED/UNKNOWN |
+| 12 | Automatable checks? | Structural + entity dates/amounts + item counts |
+| 13 | Human-only checks? | Terminology, legal equivalence, party name morphology |
+| 14 | Semantic model language-independent? | **Yes** |
+| 15 | Separate translation workflow? | **Yes** — as editorial mode |
+| 16 | Both symmetric and asymmetric? | **Yes — hybrid** |
+| 17 | Authoritative drafting version? | **Probable RU** for drafting; **interview** for conflict rule |
+| 18 | Legally effective package? | **Bilingual signed package** — legal WP needed |
+| 19 | OP-RES-005 corrections? | **Qualify** independent render claim; add translation/staleness |
+| 20 | Requirements for OP-RES-006? | See §24 |
+
+---
+
+*OP-RES-005A complete. Research documentation only. No source files modified.*

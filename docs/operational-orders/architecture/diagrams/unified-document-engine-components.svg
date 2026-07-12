@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.c{fill:#f8fafc;stroke:#64748b;rx:6}.g{fill:#ecfdf5;stroke:#059669;rx:6}.b{fill:#eff6ff;stroke:#2563eb;rx:6}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="24" text-anchor="middle" class="t">Logical Components  Unified Document Engine</text>
+  <rect x="30" y="45" width="160" height="70" class="b"/><text x="110" y="72" text-anchor="middle" class="l">Document Core</text><text x="40" y="92" class="m">identity · kind · status</text>
+  <rect x="210" y="45" width="160" height="70" class="b"/><text x="290" y="72" text-anchor="middle" class="l">Document Structure</text><text x="220" y="92" class="m">blocks · items · attach</text>
+  <rect x="390" y="45" width="160" height="70" class="g"/><text x="470" y="72" text-anchor="middle" class="l">Editorial Core</text><text x="400" y="92" class="m">generated · effective</text>
+  <rect x="570" y="45" width="160" height="70" class="g"/><text x="650" y="72" text-anchor="middle" class="l">Localization</text><text x="580" y="92" class="m">RU/KK · staleness</text>
+  <rect x="750" y="45" width="130" height="70" class="g"/><text x="815" y="72" text-anchor="middle" class="l">Generation</text><text x="760" y="92" class="m">scenario · render</text>
+  <rect x="90" y="150" width="180" height="70" class="c"/><text x="180" y="177" text-anchor="middle" class="l">Validation Engine</text><text x="100" y="197" class="m">semantic · locale · lifecycle</text>
+  <rect x="300" y="150" width="180" height="70" class="c"/><text x="390" y="177" text-anchor="middle" class="l">Lifecycle Service</text><text x="310" y="197" class="m">DRAFT’READY’SIGNED</text>
+  <rect x="510" y="150" width="180" height="70" class="c"/><text x="600" y="177" text-anchor="middle" class="l">Audit Component</text><text x="520" y="197" class="m">append-only events</text>
+  <rect x="720" y="150" width="160" height="70" class="c"/><text x="800" y="177" text-anchor="middle" class="l">Renderer/Exporter</text><text x="730" y="197" class="m">HTML · PDF · DOCX</text>
+  <rect x="150" y="260" width="220" height="80" class="b"/><text x="260" y="290" text-anchor="middle" class="l">Specialization Registry</text><text x="160" y="310" class="m">kind · scenario · item · validation</text><text x="160" y="326" class="m">renderer · projection policy</text>
+  <rect x="60" y="380" width="200" height="70" class="g"/><text x="160" y="408" text-anchor="middle" class="l">Personnel Module</text><text x="70" y="428" class="m">HR events · apply</text>
+  <rect x="350" y="380" width="200" height="70" class="g"/><text x="450" y="408" text-anchor="middle" class="l">Operational Module</text><text x="360" y="428" class="m">obligations · control</text>
+  <rect x="640" y="380" width="220" height="70" class="c"/><text x="750" y="408" text-anchor="middle" class="l">Execution Projection</text><text x="650" y="428" class="m">adapter · downstream only</text>
+  <line x1="260" y1="340" x2="160" y2="380" stroke="#334155"/>
+  <line x1="260" y1="340" x2="450" y2="380" stroke="#334155"/>
+  <line x1="450" y1="450" x2="750" y2="380" stroke="#dc2626" stroke-dasharray="5,3"/>
+  <text x="560" y="365" class="m">forbidden: Generation’Task</text>
+  <text x="450" y="540" text-anchor="middle" class="m">Modular monolith · composition + policy/registry · no microservices at MVP</text>
+</svg>

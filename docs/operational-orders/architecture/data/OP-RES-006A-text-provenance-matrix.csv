@@ -1,0 +1,14 @@
+text_layer,definition,equals_effective,equals_semantic_sot,typical_source_type,provenance_level,staleness_trigger,promotion_to_effective,oo_mvp_required
+submitted_text,Text as received from author/unit before official processing,No,No,SUBMITTED,per block (recommended),N/A until accepted,After intake validation + editorial acceptance,Yes
+generated_text,System-rendered from semantic model,No,Derived,GENERATED,per block,Semantic/fingerprint change,Becomes effective if no override,Yes (parallel path)
+translated_text,KK (or RU) derived from other locale,No,No,TRANSLATED,per block,Source locale effective change,After localization review,Yes
+manually_authored_text,Written directly in official workspace,No,Partial,MANUALLY_AUTHORED,per block,Semantic change under override,Direct to effective,Yes
+manually_edited_text,Edit of submitted/generated/translated,No,Partial,MANUALLY_EDITED,per block,Further source change,After edit saved,Yes
+effective_text,Authoritative wording for signing,Yes,Aligned pre-sign,Mixed (derived),per block,Superseded by new effective,N/A — terminal pre-sign,Yes
+imported_legacy,Legacy scan or old system import,No,No,IMPORTED_LEGACY,document-level,Unknown until review,After editorial normalization,P2
+source_type_SUBMITTED,Author/unit provided text,—,—,SUBMITTED,block,Source resubmission,Intake acceptance,Yes
+source_type_TRANSLATED,Translation of another locale,—,—,TRANSLATED,block,Source locale STALE,Review + reconciliation,Yes
+source_type_GENERATED,From semantic model render,—,—,GENERATED,block,Fingerprint mismatch,Override or accept,Yes
+provenance_attrs,source_actor source_unit source_timestamp derived_from_version,—,—,—,per block,—,Audit trail,Yes
+content_confirmed_by,Content Author acknowledgment,—,—,—,document or block,Content change after confirm,Resets confirmation,Yes
+localization_reviewed_by,Localization Reviewer sign-off,—,—,—,per locale,Locale STALE after review,Resets review,Yes

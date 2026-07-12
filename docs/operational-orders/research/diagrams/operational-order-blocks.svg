@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font: 700 20px sans-serif; fill: #0f172a; }
+      .box { stroke-width: 1.5; rx: 6; }
+      .h1 { font: 600 13px sans-serif; fill: #0f172a; }
+      .h2 { font: 11px sans-serif; fill: #475569; }
+      .edge { stroke: #94a3b8; stroke-width: 1.2; fill: none; }
+    </style>
+  </defs>
+
+  <text x="500" y="28" text-anchor="middle" class="title">Document Engine  Block Decomposition (research view)</text>
+
+  <!-- Shell -->
+  <rect x="30" y="50" width="200" height="540" fill="#f1f5f9" stroke="#334155" class="box"/>
+  <text x="130" y="78" text-anchor="middle" class="h1">Document Shell</text>
+  <text x="130" y="98" text-anchor="middle" class="h2">shared by Personnel + Operational</text>
+
+  <rect x="50" y="115" width="160" height="36" fill="#ecfdf5" stroke="#059669" class="box"/>
+  <text x="130" y="138" text-anchor="middle" class="h2">header_requisites</text>
+  <rect x="50" y="160" width="160" height="36" fill="#eff6ff" stroke="#2563eb" class="box"/>
+  <text x="130" y="183" text-anchor="middle" class="h2">preamble_basis</text>
+  <rect x="50" y="205" width="160" height="36" fill="#ecfdf5" stroke="#059669" class="box"/>
+  <text x="130" y="228" text-anchor="middle" class="h2">order_formula</text>
+  <rect x="50" y="250" width="160" height="56" fill="#ecfdf5" stroke="#059669" class="box"/>
+  <text x="130" y="272" text-anchor="middle" class="h2">dispositive_items[]</text>
+  <text x="130" y="290" text-anchor="middle" class="h2">(1..N numbered)</text>
+  <rect x="50" y="315" width="160" height="36" fill="#fff7ed" stroke="#ea580c" class="box"/>
+  <text x="130" y="338" text-anchor="middle" class="h2">attachments_ref</text>
+  <rect x="50" y="360" width="160" height="36" fill="#ecfdf5" stroke="#059669" class="box"/>
+  <text x="130" y="383" text-anchor="middle" class="h2">signature_block</text>
+  <rect x="50" y="405" width="160" height="36" fill="#fff7ed" stroke="#ea580c" class="box"/>
+  <text x="130" y="428" text-anchor="middle" class="h2">agreement_vetting</text>
+  <rect x="50" y="450" width="160" height="36" fill="#fff7ed" stroke="#ea580c" class="box"/>
+  <text x="130" y="473" text-anchor="middle" class="h2">ack_distribution</text>
+  <rect x="50" y="495" width="160" height="36" fill="#fff7ed" stroke="#ea580c" class="box"/>
+  <text x="130" y="518" text-anchor="middle" class="h2">preparer_line (8A?:)</text>
+
+  <!-- Item anatomy -->
+  <rect x="280" y="50" width="260" height="540" fill="#fafafa" stroke="#334155" class="box"/>
+  <text x="410" y="78" text-anchor="middle" class="h1">Dispositive Item (atom)</text>
+  <text x="410" y="98" text-anchor="middle" class="h2">repeating inside section 4</text>
+
+  <rect x="300" y="120" width="220" height="30" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="410" y="140" text-anchor="middle" class="h2">item_number (1. / 1.1. / 1))</text>
+  <rect x="300" y="158" width="220" height="30" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="410" y="178" text-anchor="middle" class="h2">directive_verb (research set)</text>
+  <rect x="300" y="196" width="220" height="30" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="410" y="216" text-anchor="middle" class="h2">actor (position / person / unit)</text>
+  <rect x="300" y="234" width="220" height="30" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="410" y="254" text-anchor="middle" class="h2">action_object (what to do)</text>
+  <rect x="300" y="272" width="220" height="30" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="410" y="292" text-anchor="middle" class="h2">deadline (optional)</text>
+  <rect x="300" y="310" width="220" height="30" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="410" y="330" text-anchor="middle" class="h2">nested_subitems / bullet list</text>
+  <rect x="300" y="348" width="220" height="30" fill="#ffedd5" stroke="#ea580c" class="box"/>
+  <text x="410" y="368" text-anchor="middle" class="h2">inline_basis (per-item)</text>
+  <rect x="300" y="386" width="220" height="30" fill="#ffedd5" stroke="#ea580c" class="box"/>
+  <text x="410" y="406" text-anchor="middle" class="h2">control_delegate (sometimes)</text>
+
+  <!-- Cross-cutting -->
+  <rect x="590" y="50" width="380" height="540" fill="#f8fafc" stroke="#334155" class="box"/>
+  <text x="780" y="78" text-anchor="middle" class="h1">Cross-cutting Patterns (corpus)</text>
+
+  <text x="610" y="115" class="h1">Executor recording styles</text>
+  <text x="610" y="138" class="h2">" Dative position: «0254CNI5<C >B45;5=85< &»</text>
+  <text x="610" y="158" class="h2">" Named + position inline: «@0715:>2C .!.  70<. 48@5:B>@0»</text>
+  <text x="610" y="178" class="h2">" Unit as subject: «B45;C D0@<0F88», «!;C615 >E@0=K»</text>
+  <text x="610" y="198" class="h2">" Commission roster block (chair / members / secretary)</text>
+
+  <text x="610" y="235" class="h1">Control patterns</text>
+  <text x="610" y="258" class="h2">" Final meta-item (~75%): «>=B@>;L 2>7;>68BL =0 &»</text>
+  <text x="610" y="278" class="h2">" Self: «>AB02;ON 70 A>1>9» (travel, finance)</text>
+  <text x="610" y="298" class="h2">" Embedded: «27OBL =0 :>=B@>;L» within body item</text>
+
+  <text x="610" y="335" class="h1">Commission pattern</text>
+  <text x="610" y="358" class="h2">" Item 1: A>740BL :><8AA8N · Item 2: CB25@48BL A>AB02</text>
+  <text x="610" y="378" class="h2">" Chair + members listed · attachment optional</text>
+  <text x="610" y="398" class="h2">" «"0=KAC ?0@0“K» multi-sign acknowledgement</text>
+
+  <text x="610" y="435" class="h1">Locale composition</text>
+  <text x="610" y="458" class="h2">" kk + ru pairs (not separate legal acts)</text>
+  <text x="610" y="478" class="h2">" Same item count mirrored across languages</text>
+  <text x="610" y="498" class="h2">" Personnel Orders: same shell (PO-EDIT-001)</text>
+
+  <!-- connectors -->
+  <path d="M230 268 H280" class="edge"/>
+  <path d="M540 268 H590" class="edge"/>
+  <text x="255" y="262" class="h2">contains</text>
+  <text x="555" y="262" class="h2">instances</text>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.b{fill:#f8fafc;stroke:#334155;rx:6}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:11px sans-serif;fill:#475569}.c{fill:#ecfdf5;stroke:#059669}.w{fill:#fff7ed;stroke:#ea580c}.u{fill:#f1f5f9;stroke:#94a3b8}</style></defs>
+  <text x="440" y="28" text-anchor="middle" class="t">Language-Version Staleness (Research States)</text>
+  <rect x="80" y="60" width="140" height="44" class="b c"/><text x="150" y="88" text-anchor="middle" class="l">CURRENT</text>
+  <rect x="280" y="60" width="160" height="44" class="b w"/><text x="360" y="88" text-anchor="middle" class="l">STALE</text>
+  <rect x="500" y="60" width="180" height="44" class="b w"/><text x="590" y="88" text-anchor="middle" class="l">REVIEW_REQUIRED</text>
+  <rect x="720" y="60" width="120" height="44" class="b u"/><text x="780" y="88" text-anchor="middle" class="l">UNKNOWN</text>
+  <rect x="40" y="130" width="800" height="260" class="b"/>
+  <text x="60" y="158" class="l">Transitions (conceptual)</text>
+  <text x="60" y="182" class="m">CURRENT ’ STALE: source locale (RU) effective text changed after KK derived</text>
+  <text x="60" y="202" class="m">STALE ’ REVIEW_REQUIRED: automated structural drift detected (BC024)</text>
+  <text x="60" y="222" class="m">REVIEW_REQUIRED ’ CURRENT: human reconciliation + explicit confirm</text>
+  <text x="60" y="242" class="m">UNKNOWN: legacy import, partial translation, or missing lineage metadata</text>
+  <text x="60" y="272" class="l">Scope</text>
+  <text x="60" y="296" class="m">Per locale block: preamble, item body, control, attachment (independent staleness possible)</text>
+  <text x="60" y="316" class="m">Not a production enum  research states for OP-RES-006 architecture input</text>
+  <text x="60" y="346" class="m">Aligns with Personnel Orders regenerate ’ override marked stale/review-required</text>
+  <text x="60" y="376" class="m">Corpus: 12 partial_translation + 33 abbreviated_or_expanded intra-doc cases suggest drift without explicit stale markers</text>
+</svg>

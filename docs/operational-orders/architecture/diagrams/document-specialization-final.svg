@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 300" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 14px sans-serif;fill:#0f172a}.c{fill:#eff6ff;stroke:#2563eb;rx:8}.p{fill:#f0fdf4;stroke:#16a34a;rx:8}.o{fill:#fff7ed;stroke:#ea580c;rx:8}.x{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="375" y="20" text-anchor="middle" class="t">Document Specialization  Final (UDE-000)</text>
+  <rect x="225" y="40" width="300" height="70" class="c"/>
+  <text x="375" y="65" text-anchor="middle" class="x">Shared Document Core</text>
+  <text x="235" y="85" class="m">composition + policy/registry  ADR-002</text>
+  <rect x="275" y="130" width="200" height="45" class="c"/>
+  <text x="375" y="158" text-anchor="middle" class="x">Specialization Policy</text>
+  <rect x="50" y="200" width="200" height="80" class="p"/>
+  <text x="150" y="228" text-anchor="middle" class="x">Personnel Orders</text>
+  <text x="60" y="248" class="m">HR author+operator · employee_events</text>
+  <text x="60" y="262" class="m">Model A/B · 5 item types</text>
+  <rect x="275" y="200" width="200" height="80" class="o"/>
+  <text x="375" y="228" text-anchor="middle" class="x">Operational Orders</text>
+  <text x="285" y="248" class="m">Dept author · HR operator</text>
+  <text x="285" y="262" class="m">Model C intake P0 · 14 item types</text>
+  <rect x="500" y="200" width="200" height="80" class="c"/>
+  <text x="600" y="228" text-anchor="middle" class="x">Future</text>
+  <text x="510" y="248" class="m">New registries only</text>
+  <line x1="375" y1="110" x2="375" y2="130" stroke="#334155"/><line x1="150" y1="200" x2="325" y2="175" stroke="#334155"/><line x1="375" y1="175" x2="375" y2="200" stroke="#334155"/><line x1="600" y1="200" x2="425" y2="175" stroke="#334155"/>
+</svg>

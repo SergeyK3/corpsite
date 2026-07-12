@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 14px sans-serif;fill:#0f172a}.r{fill:#f0fdf4;stroke:#16a34a;rx:6}.a{fill:#eff6ff;stroke:#2563eb;rx:6}.i{fill:#fff7ed;stroke:#ea580c;rx:6}.x{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="18" text-anchor="middle" class="t">Research ’ Implementation Transition (UDE-000)</text>
+  <rect x="30" y="35" width="380" height="200" class="r"/>
+  <text x="220" y="58" text-anchor="middle" class="x">RESEARCH PHASE  CLOSED</text>
+  <text x="45" y="78" class="m">OP-RES-001 Corpus baseline</text>
+  <text x="45" y="92" class="m">OP-RES-002 Structure · 003 Taxonomy · 004 Execution</text>
+  <text x="45" y="106" class="m">OP-RES-005 Generation · 005A Bilingual</text>
+  <text x="45" y="120" class="m">OP-RES-006 Target Architecture</text>
+  <text x="45" y="134" class="m">OP-RES-006A Initiation &amp; Intake</text>
+  <text x="45" y="155" class="x">Evidence: 193 files · 1926 items · 8 domains · 21 scenarios</text>
+  <text x="45" y="175" class="x">Outputs: ADR-001016 · matrices · diagrams · gap analysis</text>
+  <text x="45" y="195" class="m">Status: Architecture Ratified with Minor Findings</text>
+  <text x="45" y="215" class="m">Date closed: 2026-07-12</text>
+  <rect x="490" y="35" width="380" height="200" class="a"/>
+  <text x="680" y="58" text-anchor="middle" class="x">IMPLEMENTATION PHASE  AUTHORIZED</text>
+  <text x="505" y="85" class="m">UDE-001 Shared Terminology and Contracts</text>
+  <text x="505" y="105" class="m">UDE-002 Draft Intake Architecture</text>
+  <text x="505" y="125" class="m">UDE-003005 Editorial · Locale · Validation</text>
+  <text x="505" y="145" class="m">OO-IMP-001 Submitted-text Intake MVP</text>
+  <text x="505" y="165" class="m">& OO-IMP-005 Execution Projection</text>
+  <text x="505" y="185" class="m">UDE-006 Personnel Convergence (last)</text>
+  <rect x="430" y="110" width="60" height="40" class="i"/>
+  <text x="460" y="128" text-anchor="middle" class="x">UDE-000</text>
+  <text x="460" y="140" text-anchor="middle" class="m">GATE</text>
+  <line x1="410" y1="130" x2="430" y2="130" stroke="#16a34a" stroke-width="2"/><line x1="490" y1="130" x2="490" y2="130" stroke="#2563eb" stroke-width="2"/>
+  <path d="M490 130 L490 90" stroke="#2563eb" stroke-width="2" fill="none"/>
+  <text x="450" y="260" text-anchor="middle" class="m">Constraints: no PO breakage · no big-bang · contracts before code</text>
+</svg>

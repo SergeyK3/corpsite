@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 16px sans-serif;fill:#0f172a}.s{fill:#eff6ff;stroke:#2563eb;rx:8}.r{fill:#ecfdf5;stroke:#059669;rx:6}.k{fill:#fff7ed;stroke:#ea580c;rx:6}.x{font:600 11px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="22" text-anchor="middle" class="t">Hybrid Multilingual Architecture (ADR-UDE-006)</text>
+  <rect x="300" y="45" width="300" height="60" class="s"/>
+  <text x="450" y="70" text-anchor="middle" class="x">Language-Independent Semantic Model</text>
+  <text x="310" y="88" class="m">Order Items · Obligations · Parties · Deadlines</text>
+  <rect x="80" y="140" width="280" height="100" class="r"/>
+  <text x="220" y="165" text-anchor="middle" class="x">Model A  Target (Symmetric)</text>
+  <text x="95" y="185" class="m">semantic model ’ RU renderer</text>
+  <text x="95" y="201" class="m">semantic model ’ KK renderer</text>
+  <text x="95" y="217" class="m">independent generated_text per locale</text>
+  <rect x="540" y="140" width="280" height="100" class="k"/>
+  <text x="680" y="165" text-anchor="middle" class="x">Model B  Observed (Asymmetric)</text>
+  <text x="555" y="185" class="m">RU effective draft ’ translation</text>
+  <text x="555" y="201" class="m">’ KK effective draft ’ reconciliation</text>
+  <text x="555" y="217" class="m">135/183 bilingual in single DOCX</text>
+  <line x1="450" y1="105" x2="220" y2="140" stroke="#334155"/><line x1="450" y1="105" x2="680" y2="140" stroke="#334155"/>
+  <rect x="80" y="270" width="740" height="110" class="s"/>
+  <text x="450" y="295" text-anchor="middle" class="x">Per-Block Locale Representation (part of Document aggregate)</text>
+  <text x="95" y="315" class="m">generated_text · override_text · effective_text · review_status (CURRENT/STALE/REVIEW_REQUIRED)</text>
+  <text x="95" y="331" class="m">source_language · drafting_path · semantic_version_ref · stale_reason · reconciliation_result · waiver</text>
+  <text x="95" y="355" class="m">Rule: READY_FOR_SIGNATURE blocked if mandatory locale STALE or REVIEW_REQUIRED without policy waiver</text>
+  <text x="95" y="371" class="m">Legal equivalence ` editorial symmetry (OP-RES-005A)</text>
+</svg>

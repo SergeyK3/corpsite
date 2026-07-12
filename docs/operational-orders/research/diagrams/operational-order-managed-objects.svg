@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .t { font: 700 18px sans-serif; fill: #0f172a; }
+      .l { font: 12px sans-serif; fill: #334155; }
+      .v { font: 11px sans-serif; fill: #64748b; }
+    </style>
+  </defs>
+  <text x="460" y="28" text-anchor="middle" class="t">Managed Objects  Corpus Frequency (183 DOCX)</text>
+  <text x="460" y="48" text-anchor="middle" class="v">Candidate future Document Engine governed-entity references</text>
+
+  <text x="240" y="78" class="l">:>=B@>;L (control relationship)</text><rect x="240" y="84" width="523" height="16" fill="#059669" rx="3"/><text x="770" y="96" class="v">164</text>
+  <text x="240" y="112" class="l">A>B@C4=8:8</text><rect x="240" y="118" width="427" height="16" fill="#2563eb" rx="3"/><text x="674" y="130" class="v">134</text>
+  <text x="240" y="146" class="l">?>4@0745;5=8O</text><rect x="240" y="152" width="395" height="16" fill="#2563eb" rx="3"/><text x="642" y="164" class="v">124</text>
+  <text x="240" y="180" class="l">?@>F5AAK</text><rect x="240" y="186" width="385" height="16" fill="#7c3aed" rx="3"/><text x="632" y="198" class="v">121</text>
+  <text x="240" y="214" class="l">4>:C<5=BK</text><rect x="240" y="220" width="293" height="16" fill="#7c3aed" rx="3"/><text x="540" y="232" class="v">92</text>
+  <text x="240" y="248" class="l">D8=0=AK</text><rect x="240" y="254" width="268" height="16" fill="#0891b2" rx="3"/><text x="515" y="266" class="v">84</text>
+  <text x="240" y="282" class="l">:><8AA88</text><rect x="240" y="288" width="172" height="16" fill="#0891b2" rx="3"/><text x="419" y="300" class="v">54</text>
+  <text x="240" y="316" class="l">CA;C38</text><rect x="240" y="322" width="124" height="16" fill="#ea580c" rx="3"/><text x="371" y="334" class="v">39</text>
+  <text x="240" y="350" class="l"><5@>?@8OB8O</text><rect x="240" y="356" width="86" height="16" fill="#ea580c" rx="3"/><text x="333" y="368" class="v">27</text>
+  <text x="240" y="384" class="l">A@>:8 · 8<CI5AB2> · ?@>5:BK · >1>@C4>20=85 · 70:C?:8 · ?;0=K · ?><5I5=8O</text>
+  <text x="240" y="404" class="v">22 · 21 · 19 · 18 · 16 · 6 · 4 docs</text>
+  <text x="240" y="428" class="l">8=D>@<0F8>==K5 A8AB5<K</text><rect x="240" y="434" width="24" height="16" fill="#94a3b8" rx="3"/><text x="271" y="446" class="v">1 (weak corpus signal)</text>
+
+  <rect x="40" y="70" width="180" height="200" fill="#f8fafc" stroke="#cbd5e1" rx="6"/>
+  <text x="55" y="95" class="l">Object clusters</text>
+  <text x="55" y="118" class="v">People &amp; org:</text>
+  <text x="55" y="136" class="v">A>B@C4=8:8, ?>4@0745;5=8O</text>
+  <text x="55" y="158" class="v">Governance:</text>
+  <text x="55" y="176" class="v">:><8AA88, :>=B@>;L, 4>:C<5=BK</text>
+  <text x="55" y="198" class="v">Resources:</text>
+  <text x="55" y="216" class="v">D8=0=AK, 8<CI5AB2>, CA;C38</text>
+  <text x="55" y="238" class="v">Operations:</text>
+  <text x="55" y="256" class="v">?@>F5AAK, <5@>?@8OB8O, A@>:8</text>
+
+  <rect x="40" y="290" width="820" height="200" fill="#eff6ff" stroke="#93c5fd" rx="6"/>
+  <text x="60" y="318" class="l">Implication for Document Engine (research only)</text>
+  <text x="60" y="342" class="v">" Managed Object is plural per order  expect multi-tag payload, not single enum</text>
+  <text x="60" y="362" class="v">" «:>=B@>;L» is both object and relationship (meta-item links controller party)</text>
+  <text x="60" y="382" class="v">" «?@>F5AAK» is the most generic object  appears in 66% of docs; use as fallback category</text>
+  <text x="60" y="402" class="v">" «A>B@C4=8:8» vs Personnel Order: same object type; operational orders rarely change employment SoT</text>
+  <text x="60" y="422" class="v">" «4>:C<5=BK» + «?;0=K» underpin regulation/approval scenarios (GOVERNANCE + FINANCE)</text>
+  <text x="60" y="442" class="v">" IT systems underrepresented in this corpus  do not over-fit architecture to IT</text>
+</svg>

@@ -1,0 +1,17 @@
+component,responsibility,inputs,outputs,depends_on,forbidden_dependencies,extension_points
+Document Core,Identity metadata status archive ownership,document_kind org user,Document aggregate root,none,Execution runtime;Task engine,document_kind registry
+Document Structure,Block sequence header preamble items attachments,Document metadata,Structured sections,Document Core,Scenario semantics,block_kind registry
+Editorial Core,Generated effective override manual edits,Semantic blocks locale,Effective localized text,Document Structure;Localization,Task statuses,per-block override
+Semantic Model,Intent party object deadline obligation definitions,Scenario inputs item payloads,OrderItem semantic graph,Specialization registries,Print templates,item_type registry
+Localization Engine,RU/KK render staleness reconciliation,draft_path semantic version,LocaleRepresentation states,Editorial Core;Semantic Model,HR apply logic,drafting_path policy
+Generation Engine,Scenario→items→clauses→assembly,Scenario params registries,Generated text + validation,Semantic Model;Registries,PDF Playwright,scenario hooks;renderers
+Validation Engine,Semantic structural locale lifecycle projection checks,Document aggregate,ValidationResult errors/warnings,All upstream layers,Direct DB mutation,waiver policy (conceptual)
+Lifecycle Service,DRAFT→READY→SIGNED→VOID transitions,Commands + guards,Lifecycle state + audit,Lifecycle policy;Validation,Generation internals,per-kind lifecycle policy
+Audit Component,Append-only lifecycle editorial projection events,Domain events,Audit trail,All mutating components,Mutable history,event taxonomy
+Attachment Component,File refs structured artifacts obligation sources,Uploads generation,Attachment definitions,Document Structure,Execution tracking,attachment_type registry
+Renderer/Exporter,HTML PDF future DOCX from effective text,Print ViewModel,Artifacts,Editorial Core;Lifecycle,Semantic mutation,versioned templates
+Specialization Registry,Document kind scenario item validation policies,Config tables,Policy resolution,Document Core,Concrete generators,plugin-like modules
+Personnel Order Module,HR events apply void rollback,Employee refs,PersonnelOrder specialization,Shared core,OO scenario logic,HR item registry
+Operational Order Module,OO scenarios obligations control,P0 scenarios,OperationalOrder specialization,Shared core,employee_events apply,OO registries
+Execution Projection Adapter,Extract obligation descriptors,Registered/signed document,Projection snapshot,Semantic Model,Document editing,projection policy per kind
+Party Resolution,Role-first refs org structure snapshot,PartyReference + as_of_date,ResolvedPartySnapshot,Organization context,Access permissions,resolution policy

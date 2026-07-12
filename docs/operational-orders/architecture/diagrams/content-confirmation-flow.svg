@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 280" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 14px sans-serif;fill:#0f172a}.e{fill:#f0fdf4;stroke:#16a34a;rx:6}.c{fill:#fff7ed;stroke:#ea580c;rx:6}.f{fill:#fef2f2;stroke:#dc2626;rx:6}.x{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="18" text-anchor="middle" class="t">Content Confirmation Flow</text>
+  <rect x="50" y="40" width="150" height="40" class="e"/><text x="125" y="65" text-anchor="middle" class="x">Editorial Processing</text>
+  <rect x="220" y="40" width="150" height="40" class="c"/><text x="295" y="58" text-anchor="middle" class="x">Change</text><text x="295" y="70" text-anchor="middle" class="x">Classification</text>
+  <rect x="390" y="40" width="130" height="40" class="f"/><text x="455" y="58" text-anchor="middle" class="x">Content</text><text x="455" y="70" text-anchor="middle" class="x">Change?</text>
+  <rect x="540" y="40" width="120" height="40" class="c"/><text x="600" y="65" text-anchor="middle" class="x">Confirmation</text>
+  <line x1="200" y1="60" x2="220" y2="60" stroke="#334155"/><line x1="370" y1="60" x2="390" y2="60" stroke="#334155"/><line x1="520" y1="60" x2="540" y2="60" stroke="#334155"/>
+  <text x="125" y="100" class="m">Form-only: numbering</text>
+  <text x="125" y="112" class="m">requisites preamble chrome</text>
+  <text x="295" y="100" class="m">Content: executors</text>
+  <text x="295" y="112" class="m">deadlines control items</text>
+  <text x="455" y="100" class="m">Yes ’ author must</text>
+  <text x="455" y="112" class="m">confirm or reject</text>
+  <rect x="80" y="135" width="540" height="120" class="e"/>
+  <text x="350" y="158" text-anchor="middle" class="x">Outcomes</text>
+  <text x="95" y="178" class="m">Accepted  meaning preserved (audit: CONTENT_CONFIRMED)</text>
+  <text x="95" y="194" class="m">Accepted with edits  author acknowledges changes</text>
+  <text x="95" y="210" class="m">Rejected  return to editorial / clarification</text>
+  <text x="95" y="226" class="m">Blocks READY_FOR_SIGNATURE and approval without confirmation when content changes detected</text>
+  <text x="350" y="265" text-anchor="middle" class="m">ADR-UDE-014 · Form-only HR edits do not require confirmation (policy-configurable)</text>
+</svg>

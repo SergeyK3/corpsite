@@ -1,0 +1,17 @@
+adr_id,title,status,readiness_notes,blocking_issues,evidence_strength,ratified_date
+ADR-UDE-001,Unified Document Core,Ready for Ratification,One Document Core multiple specializations via composition,none,Strong corpus+PO,2026-07-12
+ADR-UDE-002,Composition over Duplicated Modules,Ready for Ratification,Policy/registry over inheritance,none,Strong OP-RES-003+gap,2026-07-12
+ADR-UDE-003,Order Item vs Execution Obligation,Ready for Ratification,1 item to 0..N obligations,none,Strong OP-RES-004 14%,2026-07-12
+ADR-UDE-004,Three Independent Lifecycles,Ready for Ratification,Document Localization Execution archive orthogonal,none,Strong PO+OP-RES-004/005A,2026-07-12
+ADR-UDE-005,Generated Text vs Effective Text,Ready for Ratification,Distinct layers override preserved,none,Strong PO-EDIT-002 production,2026-07-12
+ADR-UDE-006,Hybrid Multilingual Workflow,Ready for Ratification,Model A target Model B editorial,none,Strong OP-RES-005A 135 bilingual,2026-07-12
+ADR-UDE-007,Role-first Party Reference,Ready for Ratification,NamedPerson optional snapshot at sign,none,Strong OP-RES-004/005,F-003 PO convergence deferred not blocking,2026-07-12
+ADR-UDE-008,Execution Projection Boundary,Ready for Ratification,Downstream handoff after REGISTERED,none,Strong OP-RES-004/005,2026-07-12
+ADR-UDE-009,Immutable Signed Snapshot,Ready for Ratification,Effective text frozen at sign,none,Strong PO locked+archive,2026-07-12
+ADR-UDE-010,Incremental Migration,Ready for Ratification,6-phase no big-bang OO parallel,none,Strong gap analysis,2026-07-12
+ADR-UDE-011,Content Author ≠ Record Creator,Ready for Ratification,Mandatory separate metadata for OO,none,Organizational observation+PO pattern,F-004 interview validates practice,2026-07-12
+ADR-UDE-012,Submitted-text Intake First-class,Ready for Ratification,Model C P0 for OO MVP,none,OP-RES-006A organizational,2026-07-12
+ADR-UDE-013,Text Provenance per Locale,Ready for Ratification,Per-block source_type minimum,none,OP-RES-006A,2026-07-12
+ADR-UDE-014,Content Confirmation,Ready for Ratification,Content vs form-only policy default stated,Policy details TBD at impl,Organizational observation,Interview before OO-IMP-002 not blocking ADR,2026-07-12
+ADR-UDE-015,HR as Document Operator,Ready for Ratification,HR not default OO content author,none,OP-RES-006A,2026-07-12
+ADR-UDE-016,Hybrid SoT during Intake,Ready for Ratification,Staged SoT complements ADR-005,Clarify in terminology,OP-RES-006A §17,F-002 resolved in terminology freeze,2026-07-12

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.g{fill:#ecfdf5;stroke:#059669;rx:6}.e{fill:#fff7ed;stroke:#ea580c;rx:6}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:11px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="28" text-anchor="middle" class="t">Generation Model vs Execution Model</text>
+  <rect x="40" y="50" width="400" height="300" class="g"/>
+  <text x="240" y="80" text-anchor="middle" class="l">Generation Model (OP-RES-005)</text>
+  <text x="60" y="110" class="m">· Document meaning and structure</text>
+  <text x="60" y="130" class="m">· Order Items and clause text</text>
+  <text x="60" y="150" class="m">· RU/KK language versions</text>
+  <text x="60" y="170" class="m">· Validation before release</text>
+  <text x="60" y="190" class="m">· Ends at Preview/Export</text>
+  <text x="60" y="220" class="l">Outputs:</text>
+  <text x="60" y="240" class="m">SemanticDocument · ValidationResult</text>
+  <text x="60" y="260" class="m">ExecutionObligationDescriptor[] (snapshot)</text>
+  <rect x="460" y="50" width="400" height="300" class="e"/>
+  <text x="660" y="80" text-anchor="middle" class="l">Execution Model (future)</text>
+  <text x="480" y="110" class="m">· Tasks and work items</text>
+  <text x="480" y="130" class="m">· Actual assignees and statuses</text>
+  <text x="480" y="150" class="m">· Deadline tracking and overdue</text>
+  <text x="480" y="170" class="m">· Evidence collection and confirmation</text>
+  <text x="480" y="190" class="m">· Control workflow (organizational)</text>
+  <text x="480" y="220" class="l">Not in scope:</text>
+  <text x="480" y="240" class="m">task engine · event bus · state machine</text>
+  <text x="480" y="260" class="m">(OP-RES-005 defines handoff descriptor only)</text>
+  <line x1="440" y1="200" x2="460" y2="200" stroke="#334155" stroke-width="2" marker-end="url(#a)"/>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#334155"/></marker></defs>
+  <text x="450" y="190" text-anchor="middle" class="m">Projection</text>
+  <text x="450" y="370" text-anchor="middle" class="m">Apply reads structured payload, not free text (Personnel Orders invariant)</text>
+</svg>

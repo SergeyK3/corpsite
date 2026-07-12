@@ -1,0 +1,47 @@
+capability_area,element,scope,shared_core,personnel_specialization,operational_specialization,evidence_source,notes
+identity,order_id,Document Core,yes,uses,uses,PO-003;OP-RES-002,UUID primary key
+identity,document_kind,Document Core,yes,PersonnelOrder,OperationalOrder,OP-RES-006,Registry-driven
+identity,organization,Document Core,yes,uses,uses,OP-RES-005,Org profile default
+identity,number_date,Document Core,yes,uses,uses,OP-RES-002,Paper-first drafts
+identity,status,Document Core,yes,DRAFT..VOIDED,DRAFT..VOIDED,PO-LC;OP-RES-004,Document lifecycle
+identity,archive_marker,Document Core,yes,orthogonal flag,orthogonal flag,PO-LC-006,Not a status
+structure,header,Document Structure,yes,title block,title block,OP-RES-002,~97% corpus
+structure,preamble,Document Structure,yes,editorial block,editorial block,OP-RES-002;PO-EDIT-001,Normative basis
+structure,operative_formula,Document Structure,yes,print chrome,print chrome,OP-RES-002,ПРИКАЗЫВАЮ
+structure,numbered_items,Document Structure,yes,PersonnelOrderItem,OrderItem,OP-RES-004,Generation unit
+structure,attachments,Document Structure,yes,scan/basis,commission roster etc,OP-RES-004,19% docs
+structure,signature,Document Structure,yes,frozen signatory,frozen signatory,OP-RES-002,~99%
+structure,agreement,Document Structure,yes,optional,optional,OP-RES-002,Келісілді episodic
+structure,acknowledgement,Document Structure,yes,rare,common,OP-RES-002,Танысу парағы
+semantic,scenario,Semantic Content,no,item-first,scenario-first,OP-RES-003;OP-RES-005,PO gap
+semantic,business_intent,Semantic Content,partial,implicit in item_type,explicit,OP-RES-003,14 intents
+semantic,managed_object,Semantic Content,partial,employee/org,8 object families,OP-RES-003,OO richer
+semantic,parties,Semantic Content,yes,employee_id,role-first refs,OP-RES-004;OP-RES-005,Role-first
+semantic,deadlines,Semantic Content,partial,effective_date,deadline models,OP-RES-004,OO formalizable
+semantic,expected_result,Semantic Content,no,derived,optional explicit,OP-RES-004,Do not auto-add
+semantic,evidence_expectation,Semantic Content,no,none,ack_list etc,OP-RES-004,Minority explicit
+semantic,dependencies,Semantic Content,no,rare,optional,OP-RES-004,Sequential rare
+semantic,execution_obligation,Semantic Content,no,1:1 item event,1:N per item,OP-RES-004,14% multi
+semantic,control_obligation,Semantic Content,no,none,meta-item,OP-RES-004,92% docs
+localization,locale_representation,Localization,yes,kk+ru blocks,kk+ru blocks,OP-RES-005A;PO-EDIT,Per block
+localization,generated_text,Localization,yes,uses,uses,PO-EDIT-002,From semantic
+localization,effective_text,Localization,yes,override??generated,override??generated,PO-EDIT-002,SoT pre-sign
+localization,source_language,Localization,yes,conceptual,conceptual,OP-RES-005A,RU-first probable
+localization,drafting_path,Localization,yes,symmetric+asymmetric,symmetric+asymmetric,OP-RES-005A,Hybrid
+localization,translation_state,Localization,yes,CURRENT/STALE/REVIEW,extends PO,OP-RES-005A,Research states
+localization,bilingual_reconciliation,Localization,yes,BC001-BC025,BC001-BC025,OP-RES-005A,Validation layer
+generation,scenario_selection,Generation,no,item picker,scenario registry,OP-RES-005,P0 entry
+generation,item_construction,Generation,partial,HR payloads,obligation model,OP-RES-005,Shared shell
+generation,clause_rendering,Generation,partial,HR generators,OO templates,OP-RES-005,Registry-driven
+generation,control_meta_item,Generation,no,none,auto+editable,OP-RES-005,OO only
+generation,validation,Generation,partial,ready_gate,V001-V016+BC,OP-RES-005,Extend rules
+lifecycle,draft_ready_sign,Document Lifecycle,yes,implemented,planned,PO-LC,Shared transitions
+lifecycle,sign_register,Document Lifecycle,yes,implemented,planned,PO-SIGN,Immutable after
+lifecycle,cancel_annul,Document Lifecycle,yes,CANCEL/ANNUL,CANCEL/ANNUL,PO-LC-DEL-002,void_kind
+lifecycle,archive_restore,Document Lifecycle,yes,implemented,planned,PO-LC-006,Orthogonal
+lifecycle,audit,Document Lifecycle,yes,append-only,append-only,PO-LC,Shared pattern
+execution,projection,Execution Projection,no,apply→employee_events,obligation descriptor,OP-RES-004;PO apply,Downstream
+execution,task_runtime,Execution Projection,no,out of UDE scope,out of UDE scope,OP-RES-005,Task engine
+specialization,item_type_registry,Specialization,no,HIRE/TRANSFER/5 types,14 families,OP-RES-005,Separate registries
+specialization,validation_policy,Specialization,partial,basis_policy,scenario rules,OP-RES-005,Policy hooks
+specialization,apply_integration,Specialization,no,employee_events,future task handoff,PO apply,Domain-specific

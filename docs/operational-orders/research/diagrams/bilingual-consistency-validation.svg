@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.b{fill:#f8fafc;stroke:#334155;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}.g{fill:#ecfdf5;stroke:#059669}.y{fill:#fff7ed;stroke:#ea580c}.r{fill:#fef2f2;stroke:#dc2626}</style></defs>
+  <text x="450" y="28" text-anchor="middle" class="t">Bilingual Consistency Validation Layers</text>
+  <rect x="40" y="50" width="820" height="70" class="b g"/>
+  <text x="450" y="78" text-anchor="middle" class="l">Structural  machine-checkable (item count, numbering, attachments)</text>
+  <text x="450" y="98" text-anchor="middle" class="m">BC001-BC006 · errors block READY if bilingual required</text>
+  <rect x="40" y="140" width="820" height="70" class="b g"/>
+  <text x="450" y="168" text-anchor="middle" class="l">Entity  mostly machine-checkable (dates, amounts, doc numbers)</text>
+  <text x="450" y="188" text-anchor="middle" class="m">BC007-BC012 · party/unit names machine-assisted</text>
+  <rect x="40" y="230" width="820" height="70" class="b y"/>
+  <text x="450" y="258" text-anchor="middle" class="l">Semantic  machine-assisted (intent, controller, deadline parity)</text>
+  <text x="450" y="278" text-anchor="middle" class="m">BC013-BC018 · requires semantic model projection</text>
+  <rect x="40" y="320" width="820" height="70" class="b y"/>
+  <text x="450" y="348" text-anchor="middle" class="l">Text / Terminology  human-only (legal equivalence, calques, official titles)</text>
+  <text x="450" y="368" text-anchor="middle" class="m">BC021-BC022 · KK terminology review</text>
+  <rect x="40" y="410" width="820" height="70" class="b r"/>
+  <text x="450" y="438" text-anchor="middle" class="l">Cross-version staleness  machine-assisted + human confirm</text>
+  <text x="450" y="458" text-anchor="middle" class="m">BC023-BC025 · RU change after KK translation</text>
+</svg>

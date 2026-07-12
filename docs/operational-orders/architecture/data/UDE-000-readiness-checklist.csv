@@ -1,0 +1,21 @@
+check_id,category,check_item,status,notes
+R001,Consistency,No Critical findings across OP-RES-001..006A,Pass,14 pairs reviewed
+R002,Consistency,OP-RES cross-references intact,Pass,
+R003,ADR,All 16 ADRs Ready for Ratification,Pass,Policy details deferred to implementation not ADR
+R004,Terminology,34 terms frozen in registry,Pass,UDE-000-terminology-freeze.md
+R005,Boundaries,UDE vs Task Engine separated,Pass,ADR-008
+R006,Boundaries,Draft Intake inside UDE,Pass,OP-RES-006A
+R007,Non-goals,10 non-goals documented,Pass,§6 ratification record
+R008,PO Compatibility,16 Class A components identified,Pass,Gap analysis
+R009,PO Compatibility,Lifecycle archive audit PDF unchanged,Pass,Compatibility guarantees
+R010,Migration,Roadmap UDE-001 through OO-IMP-005 sequenced,Pass,No architectural gaps
+R011,MVP,Submitted-text Intake P0 confirmed,Pass,ADR-012
+R012,MVP,Scenario-first coexists Model A parallel,Pass,F-001 reconciled
+R013,Open Questions,Organizational interviews scheduled gate,Pass,Before OO-IMP-001 not UDE-001
+R014,Open Questions,No blocking legal WP,Pass,Separate legal research
+R015,Risks,Critical risks mitigated at architecture level,Pass,Risk register in review report
+R016,Research,Program OP-RES-001..006A complete,Pass,
+R017,Implementation,No runtime changes in UDE-000,Pass,
+R018,Authorization,UDE-001 authorized as next WP,Pass,
+R019,Authorization,OO-IMP-001 not until UDE-002 complete,Pass,
+R020,Ratification,Decision Approved with minor findings,Pass,5 minor 1 editorial 0 critical

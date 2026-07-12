@@ -1,0 +1,9 @@
+path_id,path_name,entry_point,suitable_scenarios,oo_mvp_priority,can_switch_to_other,late_semantic_mapping,personnel_fit,primary_actor,translation_mode,content_confirmation_required,evidence
+Model_A,Semantic-first,Scenario selection → structured inputs,Greenfield; regulatory templates; future P1+,P2 (parallel),Yes → Model B/C after intake,Native from start,High (HR generates),HR / system,Symmetric RU+KK render,When HR enriches beyond author brief,OP-RES-005
+Model_B,Internal RU-first,RU draft in system → translate,Most bilingual orders; PO pattern,P1 for OO (after intake),Yes ↔ Model C,After RU stabilizes,High (PO today),HR or Author,Translation workflow,When editorial changes content,OP-RES-005A
+Model_C,Submitted-text Intake,External RU/KK text → intake,All OO; especially dept-prepared drafts,P0 (first),Yes → Model A after semantic mapping,Progressive enrichment,Low (PO rare),Dept Author → HR Operator,Any language combo,Yes before approval,OP-RES-006A organizational
+Variant_A,Submitted RU only,RU text pasted/uploaded,Dept drafts; travel; commissions,P0,→ Model B translation,Partial then full,Low,Dept → HR,KK required → translate,Yes,Organizational observation
+Variant_B,Submitted RU+KK,Both languages provided,Commission; clinical; bilingual-ready,P0,→ reconciliation only,Optional mapping,Low,Dept → HR,Both submitted,Yes if HR edits,OP-RES-005A 135 bilingual
+Variant_C,Submitted KK only,KK text only,KK-primary units; AHC docs,P1,→ RU translation required,Partial,Low,Dept → HR,RU required,Yes,OP-RES-005A 41 kk-only
+Variant_D,Notes/intent only,Business brief no full text,Emergency; simple directives,P2,→ Model A generation,Full generation,Medium (HR drafts PO),HR,Generated both,If HR drafts for author,OP-RES-005 scenario
+Variant_E,Partial bilingual,One language complete other partial,Common in practice,P0,→ completion workflow,Progressive,Low,Dept + HR,Complete missing blocks,Yes,OP-RES-005A abbreviated 33

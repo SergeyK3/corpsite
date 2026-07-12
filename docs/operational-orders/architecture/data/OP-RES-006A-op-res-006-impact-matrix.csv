@@ -1,0 +1,20 @@
+op_res_006_section,impact_level,change_type,op_res_006a_finding,action_required
+Architectural Principles,High,Add principle 15,Content ownership ≠ Document processing ownership,Add §5 principle + cross-ref
+UDE Boundaries,High,Add boundary,Document Initiation and Draft Intake contour,Add §7 intake boundary
+Domain Model,High,Add entities,ContentAuthor RecordCreator SubmittingUnit TextProvenance ContentConfirmation,Add §8 entities
+Document Aggregate,Medium,Clarify,Early intake: submitted+provenance in aggregate,Footnote §9
+Party and Responsibility,High,Expand,Process roles distinct from Party references,Expand §22
+Generation Architecture,High,Add path,Model C Submitted-text Intake as first-class,Expand §15
+Localization Architecture,High,Add provenance,Text source type per locale block,Expand §16-17
+Hybrid RU/KK Workflow,Medium,Extend,Submitted RU/KK variants A-E,Cross-ref addendum
+Lifecycle Interaction,Medium,Add substates,Editorial substates not document status enum,Expand §21
+Audit and Versioning,High,Add events,Record creator ≠ content author events,Expand §25
+Access and Authority,High,Add capabilities,submit intake confirm translate etc,Expand §32
+Gap Analysis,Medium,Add gap,Submitted-text intake Class E → now architected,P2 note in gap doc
+Migration Strategy,High,Reorder WP,Intake before scenario-first OO MVP,Update roadmap
+ADR Backlog,High,Add ADR,ADR-UDE-011 through 016,Add 6 ADRs
+Implementation Roadmap,High,Reorder,OO-IMP-001 intake-first,Update CSV
+Open Questions,Medium,Add,Content confirmation policy interview items,Expand §39
+Ratification Criteria,High,Add,OP-RES-006A ratification items,Expand §41
+Executive Summary,High,Add,Three drafting paths intake-first MVP,Update summary
+Mandatory Questions,High,Add,30 new Q&A in addendum,New addendum section

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker>
+    <style>
+      .t{font:700 18px sans-serif;fill:#0f172a}.n{font:600 12px sans-serif;fill:#0f172a}.s{font:11px sans-serif;fill:#475569}
+      .doc{fill:#e0e7ff;stroke:#4338ca;rx:8}.item{fill:#dbeafe;stroke:#2563eb;rx:6}.obl{fill:#d1fae5;stroke:#059669;rx:5}
+      .ctrl{fill:#ffedd5;stroke:#ea580c;rx:5}.e{stroke:#64748b;fill:none;marker-end:url(#a)}
+    </style>
+  </defs>
+  <text x="480" y="26" text-anchor="middle" class="t">Operational Order  Execution Model (research)</text>
+
+  <rect x="340" y="45" width="280" height="44" class="doc"/>
+  <text x="480" y="66" text-anchor="middle" class="n">Operational Order (Document)</text>
+  <text x="480" y="82" text-anchor="middle" class="s">Document Shell  OP-RES-002</text>
+
+  <rect x="360" y="110" width="240" height="40" class="item"/>
+  <text x="480" y="135" text-anchor="middle" class="n">Order Item (numbered ?C=:B)</text>
+
+  <rect x="80" y="175" width="200" height="70" class="obl"/>
+  <text x="180" y="198" text-anchor="middle" class="n">Execution Obligation</text>
+  <text x="180" y="216" text-anchor="middle" class="s">Intent · Object · Actor</text>
+  <text x="180" y="232" text-anchor="middle" class="s">Deadline · Expected Result</text>
+
+  <rect x="380" y="175" width="200" height="70" class="obl"/>
+  <text x="480" y="198" text-anchor="middle" class="n">Execution Obligation</text>
+  <text x="480" y="216" text-anchor="middle" class="s">(another in same item</text>
+  <text x="480" y="232" text-anchor="middle" class="s">if multi-verb)</text>
+
+  <rect x="680" y="175" width="200" height="70" class="ctrl"/>
+  <text x="780" y="198" text-anchor="middle" class="n">Control Obligation</text>
+  <text x="780" y="216" text-anchor="middle" class="s">Controller · Scope</text>
+  <text x="780" y="232" text-anchor="middle" class="s">order / item / direction</text>
+
+  <rect x="200" y="270" width="160" height="36" class="item"/>
+  <text x="280" y="293" text-anchor="middle" class="s">Sub-item 1.1</text>
+  <rect x="400" y="270" width="160" height="36" class="item"/>
+  <text x="480" y="293" text-anchor="middle" class="s">Sub-item 1.2</text>
+
+  <rect x="620" y="265" width="220" height="46" class="doc"/>
+  <text x="730" y="286" text-anchor="middle" class="n">Commission / WG</text>
+  <text x="730" y="302" text-anchor="middle" class="s">Party + Mechanism</text>
+
+  <rect x="340" y="330" width="280" height="40" class="item"/>
+  <text x="480" y="355" text-anchor="middle" class="n">Attachment-referenced tasks</text>
+
+  <path d="M480 89 L480 110" class="e"/>
+  <path d="M480 150 L180 175" class="e"/><path d="M480 150 L480 175" class="e"/><path d="M480 150 L780 175" class="e"/>
+  <path d="M180 245 L280 270" class="e"/><path d="M480 245 L480 270" class="e"/>
+  <path d="M780 245 L730 265" class="e"/>
+  <path d="M480 306 L480 330" class="e"/>
+
+  <rect x="40" y="390" width="880" height="110" fill="#f8fafc" stroke="#cbd5e1" rx="6"/>
+  <text x="60" y="414" class="n">Confirmed by corpus (183 DOCX)</text>
+  <text x="60" y="436" class="s">" Primary execution unit = Order Item (~10.5 items/doc, 1926 items total)</text>
+  <text x="60" y="454" class="s">" 14% items show multi-obligation signals (270 items); sub-items add further split</text>
+  <text x="60" y="472" class="s">" Control Obligation often separate item at end (156 docs)  not same as executor</text>
+  <text x="60" y="490" class="s">" P0 scenarios (TRAVEL, COMMISSION, CLINICAL, ACCOUNTING) share this skeleton</text>
+</svg>

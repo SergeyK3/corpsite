@@ -1,0 +1,27 @@
+check_id,check_category,check_name,severity,blocker_type,applies_to,clarification_required,notes
+I001,metadata,initiator_declared,error,blocker,all_intake,No,Content author may differ
+I002,metadata,content_author_declared,error,blocker,all_intake,No,≠ record creator
+I003,metadata,submitting_unit_declared,error,blocker,oo_intake,No,OrganizationalUnit ref
+I004,metadata,document_kind_identified,error,blocker,all_intake,Yes if ambiguous,Scenario hint optional
+I005,metadata,signatory_hint_present,warning,warning,draft_intake,Yes,May default director
+I006,metadata,basis_reference_present,warning,warning,most_scenarios,Yes,Scenario-dependent
+I007,structural,title_present,error,blocker,text_intake,No,
+I008,structural,preamble_or_basis_detected,warning,warning,text_intake,Yes,HR may add
+I009,structural,operative_formula_detected,warning,warning,text_intake,Yes,HR may add
+I010,structural,numbered_items_present,error,blocker,text_intake,No,Minimum 1 item
+I011,structural,control_clause_detected,warning,warning,oo_intake,Yes,92% expect control
+I012,structural,signature_block_hint,warning,warning,text_intake,Yes,
+I013,structural,attachment_refs_valid,error,blocker,attachment_driven,Yes,
+I014,semantic,executors_identifiable,warning,clarification,text_intake,Yes,May need mapping
+I015,semantic,deadlines_identifiable,warning,clarification,deadline_scenarios,Yes,
+I016,semantic,managed_objects_identifiable,warning,clarification,text_intake,Yes,
+I017,semantic,controller_identifiable,warning,clarification,oo_intake,Yes,HR may add
+I018,semantic,internal_contradictions,error,blocker,text_intake,No,Conflicting parties/dates
+I019,localization,ru_present,error,blocker,bilingual_policy,No,Policy may waive KK
+I020,localization,kk_present_or_declared_missing,error,blocker,bilingual_policy,No,Explicit missing-KK flag
+I021,localization,structural_parity_ru_kk,warning,warning,ru_kk_submitted,Yes,BC001-BC006
+I022,localization,translation_quality_unknown,warning,clarification,kk_submitted_by_author,Yes,Needs localization review
+I023,provenance,submitter_recorded,error,blocker,all_intake,No,Who handed text to HR
+I024,provenance,content_author_recorded,error,blocker,all_intake,No,≠ submitter possible
+I025,provenance,translation_origin_recorded,warning,warning,mixed_origin,Yes,SUBMITTED vs TRANSLATED per block
+I026,provenance,edit_chain_preserved,error,blocker,all_intake,No,No silent overwrite of submitted

@@ -1,0 +1,17 @@
+document_state,localization_state,execution_state,interaction_rule,blocks_document_transition,blocks_signing,blocks_projection,affects_execution,evidence
+DRAFT,CURRENT,not_created,Independent; draft editable,none,none,none,none,PO-EDIT write lock
+DRAFT,STALE,not_created,KK/RU stale after semantic change,none,READY_FOR_SIGNATURE if mandatory locale stale,none,none,OP-RES-005A BC023
+DRAFT,REVIEW_REQUIRED,not_created,Structural drift detected,none,READY_FOR_SIGNATURE unless waiver,none,none,OP-RES-005A BC024
+READY_FOR_SIGNATURE,CURRENT,not_created,All mandatory locales CURRENT,none,none,none,none,PO ready_gate
+READY_FOR_SIGNATURE,STALE,not_created,Mandatory locale stale blocks sign,return to edit or reconcile,READY_FOR_SIGNATURE,none,none,OP-RES-006 rule
+READY_FOR_SIGNATURE,REVIEW_REQUIRED,not_created,Human review required,none,READY_FOR_SIGNATURE unless waiver,none,none,BC021 terminology
+SIGNED,CURRENT,created,Projection after registration policy,immutable document,none,none,obligations created,OP-RES-004
+SIGNED,STALE,created,Signed text immutable; locale stale irrelevant post-sign,none,none,none,uses signed snapshot,Immutability rule
+REGISTERED,CURRENT,in_progress,Execution independent of doc edits,none,none,none,task states evolve,OP-RES-004 lifecycle
+REGISTERED,CURRENT,overdue,Execution overdue does not revert document,none,none,none,downstream alert,Execution contour
+VOIDED,CANCEL,not_created,Pre-registration cancel; no projection,terminal,none,cancels draft projection,none,PO cancel
+VOIDED,ANNUL,cancelled/replaced,Annul invalidates legal effect,terminal,none,compensating cancel projection,void cascade,PO annul
+VOIDED,ANNUL,in_progress,Annul triggers compensating projection,terminal,none,replacement required,execution cancelled,OP-RES-004
+ARCHIVED,any,any,Archive orthogonal; immutable,blocks all mutations,none,none,execution may continue,PO-LC-006
+DRAFT,UNKNOWN,not_created,Legacy import; treat as REVIEW_REQUIRED,none,READY_FOR_SIGNATURE,none,none,OP-RES-005A
+DRAFT,waived_STALE,not_created,Policy waiver for non-mandatory locale,none,allowed with audit,none,none,OP-RES-006 policy

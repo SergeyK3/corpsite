@@ -1,0 +1,35 @@
+term_id,official_name,short_definition,first_appearance,term_class,related_adr,notes
+T001,Document,Legal act instance; aggregate root of UDE,OP-RES-006,Architectural,ADR-001,
+T002,Document Core,Shared identity metadata status archive lifecycle shell,OP-RES-006,Architectural,ADR-001,
+T003,Document Structure,Ordered blocks header preamble formula items attachments signature,OP-RES-002,Architectural,ADR-001,
+T004,Document Section,Single structural block within Document Structure,OP-RES-006,Architectural,,
+T005,Order Item,Numbered generation/editorial unit with locale renderings,OP-RES-004,Architectural,ADR-003,
+T006,Execution Obligation,Minimal executable management duty unit,OP-RES-004,Domain,ADR-003,1..N per Order Item
+T007,Control Obligation,Supervision duty separate from execution,OP-RES-004,Domain,ADR-003,Often meta-item
+T008,Managed Object,Entity governed by obligation intent,OP-RES-003,Domain,,
+T009,Party,Actor in org context for obligations,OP-RES-004,Domain,ADR-007,
+T010,Party Reference,Role-first pointer to Party optional NamedPerson,OP-RES-005,Architectural,ADR-007,
+T011,Scenario,Business blueprint for generation defaults,OP-RES-003,Domain,,21 research scenarios
+T012,Item Type,Semantic family determining render template,OP-RES-005,Domain,,14 OO families
+T013,Generated Text,System-produced prose from semantic model,OP-RES-005,Architectural,ADR-005,
+T014,Effective Text,Authoritative wording override??generated for signing,PO-EDIT-002,Architectural,ADR-005,
+T015,Submitted Text,Text as received at intake before official acceptance,OP-RES-006A,Architectural,ADR-012,≠ effective text
+T016,Translated Text,Locale text derived from another locale,OP-RES-006A,Architectural,ADR-013,source_type TRANSLATED
+T017,Locale Representation,Per-locale block state incl generated effective provenance,OP-RES-006,Architectural,ADR-006,
+T018,Draft Intake,Contour accepting external draft declaring authorship provenance,OP-RES-006A,Architectural,ADR-012,
+T019,Content Author,Owner of management content not record creator,OP-RES-006A,Process,ADR-011,PartyReference
+T020,Document Operator,HR staff creating and formatting official record,OP-RES-006A,Process,ADR-015,
+T021,Record Creator,System user creating document entry created_by,OP-RES-006A,Process,ADR-011,Often HR
+T022,Document Lifecycle,DRAFT READY SIGNED REGISTERED VOIDED,OP-RES-006,Architectural,ADR-004,Archive orthogonal
+T023,Localization Lifecycle,CURRENT STALE REVIEW_REQUIRED per locale,OP-RES-005A,Architectural,ADR-006,Research states
+T024,Execution Lifecycle,Task states downstream created waiting completed etc,OP-RES-004,Architectural,ADR-004,Downstream only
+T025,Execution Projection,Handoff of obligation descriptors to task contour,OP-RES-005,Architectural,ADR-008,After REGISTERED
+T026,Content Confirmation,Author acknowledgment meaning preserved after edits,OP-RES-006A,Process,ADR-014,Gates READY OO default
+T027,Text Provenance,Origin metadata per locale block source_type actor unit,OP-RES-006A,Architectural,ADR-013,
+T028,Source of Truth,Authority for decisions varies by phase see staged SoT,OP-RES-006,Architectural,ADR-005+016,Intake editorial ready sign
+T029,Unified Document Engine,Shared document mechanism for PO OO future kinds,OP-RES-006,Architectural,ADR-001,
+T030,Personnel Orders,UDE specialization for employee events,OP-RES-006,Domain,ADR-001,
+T031,Operational Orders,UDE specialization for operational obligations,OP-RES-003,Domain,ADR-001,
+T032,Submitting Unit,Org unit providing draft to HR,OP-RES-006A,Process,,OrganizationalUnit ref
+T033,drafting_path,Research: symmetric ru_first_translation kk_first,OP-RES-005A,Architectural,ADR-006,Not production enum
+T034,Editorial Substate,Derived condition intake_review translation_required etc,OP-RES-006A,Architectural,,Not document status enum

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker>
+    <style>
+      .t { font: 700 18px sans-serif; fill: #0f172a; }
+      .n { font: 600 13px sans-serif; fill: #0f172a; }
+      .s { font: 11px sans-serif; fill: #475569; }
+      .core { fill: #dbeafe; stroke: #1d4ed8; stroke-width: 2; rx: 10; }
+      .dim { fill: #f8fafc; stroke: #64748b; stroke-width: 1.5; rx: 8; }
+      .edge { stroke: #64748b; fill: none; marker-end: url(#arr); }
+    </style>
+  </defs>
+  <text x="450" y="28" text-anchor="middle" class="t">Operational Order  Preliminary Domain Map (research)</text>
+
+  <rect x="300" y="55" width="300" height="56" class="core"/>
+  <text x="450" y="80" text-anchor="middle" class="n">Operational Order</text>
+  <text x="450" y="98" text-anchor="middle" class="s">(Document Engine specialization)</text>
+
+  <rect x="60" y="160" width="150" height="48" class="dim"/><text x="135" y="182" text-anchor="middle" class="n">Business Intent</text><text x="135" y="198" text-anchor="middle" class="s">directive verb</text>
+  <rect x="240" y="160" width="150" height="48" class="dim"/><text x="315" y="182" text-anchor="middle" class="n">Managed Object</text><text x="315" y="198" text-anchor="middle" class="s">what is governed</text>
+  <rect x="420" y="160" width="150" height="48" class="dim"/><text x="495" y="182" text-anchor="middle" class="n">Responsible Parties</text><text x="495" y="198" text-anchor="middle" class="s">actors &amp; roles</text>
+  <rect x="600" y="160" width="150" height="48" class="dim"/><text x="675" y="182" text-anchor="middle" class="n">Control</text><text x="675" y="198" text-anchor="middle" class="s">delegate / self</text>
+  <rect x="780" y="160" width="100" height="48" class="dim"/><text x="830" y="182" text-anchor="middle" class="n">Deadlines</text><text x="830" y="198" text-anchor="middle" class="s">optional</text>
+
+  <rect x="120" y="250" width="150" height="48" class="dim"/><text x="195" y="272" text-anchor="middle" class="n">Attachments</text><text x="195" y="288" text-anchor="middle" class="s">ref / inline</text>
+  <rect x="300" y="250" width="170" height="48" class="dim"/><text x="385" y="272" text-anchor="middle" class="n">Supporting Docs</text><text x="385" y="288" text-anchor="middle" class="s">basis / evidence</text>
+  <rect x="500" y="250" width="150" height="48" class="dim"/><text x="575" y="272" text-anchor="middle" class="n">Taxonomy</text><text x="575" y="288" text-anchor="middle" class="s">domain’type</text>
+  <rect x="680" y="250" width="150" height="48" class="dim"/><text x="755" y="272" text-anchor="middle" class="n">Document Shell</text><text x="755" y="288" text-anchor="middle" class="s">OP-RES-002 blocks</text>
+
+  <path d="M450 111 L135 160" class="edge"/><path d="M450 111 L315 160" class="edge"/><path d="M450 111 L495 160" class="edge"/>
+  <path d="M450 111 L675 160" class="edge"/><path d="M450 111 L830 160" class="edge"/>
+  <path d="M450 111 L195 250" class="edge"/><path d="M450 111 L385 250" class="edge"/><path d="M450 111 L575 250" class="edge"/><path d="M450 111 L755 250" class="edge"/>
+
+  <rect x="40" y="340" width="820" height="250" fill="#f1f5f9" stroke="#cbd5e1" rx="8"/>
+  <text x="60" y="368" class="n">Relationships (research, not implementation)</text>
+  <text x="60" y="392" class="s">" One Operational Order has 1 primary Business Intent and 1..N secondary intents (per items)</text>
+  <text x="60" y="412" class="s">" Managed Objects are many-to-many: one order may govern A>B@C4=8:8 + ?@>F5AAK + A@>:8</text>
+  <text x="60" y="432" class="s">" Responsible Parties include signatory, item actors, controller, commission members, preparer</text>
+  <text x="60" y="452" class="s">" Control is almost always explicit (92% corpus); links controller ’ controlled items</text>
+  <text x="60" y="472" class="s">" Supporting Documents ground preamble / trailing basis; distinct from Attachments</text>
+  <text x="60" y="492" class="s">" Taxonomy classifies business purpose; orthogonal to Document Shell structure</text>
+  <text x="60" y="520" class="s">" Shared with Personnel Order: same shell + editorial blocks; different payload &amp; generators</text>
+  <text x="60" y="548" class="s">" NOT designed here: DB tables, API, DSL, UI  research primitives only</text>
+</svg>

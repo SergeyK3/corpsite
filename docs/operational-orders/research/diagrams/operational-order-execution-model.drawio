@@ -1,0 +1,21 @@
+<mxfile host="app.diagrams.net" version="22.1.0" type="device">
+  <diagram id="exec-model" name="Execution Model">
+    <mxGraphModel dx="1100" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850">
+      <root>
+        <mxCell id="0"/><mxCell id="1" parent="0"/>
+        <mxCell id="t" value="Operational Order Execution Model (OP-RES-004)" style="text;html=1;fontSize=16;fontStyle=1" vertex="1" parent="1"><mxGeometry x="300" y="20" width="500" height="30" as="geometry"/></mxCell>
+        <mxCell id="doc" value="Operational Order" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="420" y="70" width="260" height="50" as="geometry"/></mxCell>
+        <mxCell id="item" value="Order Item" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="440" y="150" width="220" height="40" as="geometry"/></mxCell>
+        <mxCell id="eo" value="Execution Obligation" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="200" y="230" width="200" height="50" as="geometry"/></mxCell>
+        <mxCell id="co" value="Control Obligation" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="700" y="230" width="200" height="50" as="geometry"/></mxCell>
+        <mxCell id="comm" value="Commission / WG" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="440" y="320" width="220" height="40" as="geometry"/></mxCell>
+        <mxCell id="att" value="Attachment tasks" style="rounded=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="440" y="390" width="220" height="40" as="geometry"/></mxCell>
+        <mxCell id="e1" style="endArrow=block;" edge="1" parent="1" source="doc" target="item"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" style="endArrow=block;" edge="1" parent="1" source="item" target="eo"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" style="endArrow=block;" edge="1" parent="1" source="item" target="co"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" style="endArrow=block;" edge="1" parent="1" source="item" target="comm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" style="endArrow=block;" edge="1" parent="1" source="item" target="att"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

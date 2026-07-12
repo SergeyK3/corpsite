@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 480" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.r{fill:#eff6ff;stroke:#2563eb;rx:8}.n{fill:#fff;stroke:#94a3b8;rx:4}.d{fill:#fef2f2;stroke:#dc2626;rx:6;stroke-dasharray:4,3}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="24" text-anchor="middle" class="t">Document Aggregate (OP-RES-006)</text>
+  <rect x="200" y="40" width="300" height="400" class="r"/>
+  <text x="350" y="65" text-anchor="middle" class="l">Document (Aggregate Root)</text>
+  <rect x="220" y="80" width="260" height="36" class="n"/><text x="350" y="102" text-anchor="middle" class="m">Metadata (identity · kind · status · archive)</text>
+  <rect x="220" y="125" width="260" height="36" class="n"/><text x="350" y="147" text-anchor="middle" class="m">Structure (header · preamble · formula)</text>
+  <rect x="220" y="170" width="260" height="70" class="n"/><text x="350" y="192" text-anchor="middle" class="l">Items[]</text>
+  <text x="230" y="210" class="m">Semantic Definition + Locale Renderings</text>
+  <text x="230" y="226" class="m">generated · effective · override</text>
+  <rect x="220" y="250" width="260" height="36" class="n"/><text x="350" y="272" text-anchor="middle" class="m">Attachments[]</text>
+  <rect x="220" y="295" width="260" height="36" class="n"/><text x="350" y="317" text-anchor="middle" class="m">Locale Representations (document-level)</text>
+  <rect x="220" y="340" width="260" height="36" class="n"/><text x="350" y="362" text-anchor="middle" class="m">Lifecycle + Audit (append-only)</text>
+  <rect x="480" y="200" width="180" height="100" class="d"/>
+  <text x="570" y="230" text-anchor="middle" class="l">Execution Projection</text>
+  <text x="490" y="252" class="m">Downstream snapshot</text>
+  <text x="490" y="268" class="m">Eventual consistency OK</text>
+  <text x="490" y="284" class="m">Not in aggregate boundary</text>
+  <line x1="480" y1="235" x2="480" y2="235" stroke="#dc2626"/>
+  <line x1="480" y1="235" x2="480" y2="235" stroke="#dc2626"/>
+  <path d="M480 220 L480 250" stroke="#dc2626" stroke-dasharray="4,3" fill="none"/>
+  <text x="350" y="420" text-anchor="middle" class="m">Atomic: item+locale edits · lifecycle transitions · regeneration scope</text>
+  <text x="350" y="438" text-anchor="middle" class="m">Immutable after SIGNED/REGISTERED: effective text snapshot</text>
+  <text x="350" y="465" text-anchor="middle" class="m">Authority pre-sign: semantic model · post-sign: effective localized snapshot</text>
+</svg>

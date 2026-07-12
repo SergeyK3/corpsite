@@ -1,0 +1,57 @@
+total_items=1926
+item_exec_dative_person=412
+item_exec_commission=273
+item_multi_obligation_candidate=270
+multi_obligation_items=270
+item_deadline_calendar_date=265
+item_deadline_until_event=255
+docs_analyzed=183
+item_exec_kk_mandate=169
+doc_no_explicit_control=168
+control_in_final_items=156
+item_evidence_ack_list=102
+item_result_maintain_regime=97
+item_result_create_object=74
+item_result_conduct_action=69
+doc_with_commission=57
+commission_with_chair=49
+item_exec_dative_position=49
+item_result_state_change=48
+item_deadline_from_signature=40
+item_exec_unit_subject=40
+commission_with_secretary=36
+doc_with_attachment_ref=35
+item_evidence_report=30
+item_dep_per_attachment=25
+item_result_acknowledgement=25
+item_ctrl_responsibility_delegated=19
+item_evidence_protocol=18
+item_deadline_period_range=16
+item_ctrl_item_embedded=12
+item_ctrl_ensure_control=11
+avg_items_per_doc=10.5
+item_evidence_payment=8
+item_result_provide_report=8
+item_deadline_monthly=7
+doc_ctrl_item_embedded=7
+doc_ctrl_ensure_control=7
+item_evidence_act=6
+doc_ctrl_responsibility_delegated=6
+item_deadline_within_n_days=6
+item_deadline_permanent=5
+item_deadline_quarterly=3
+item_dep_per_item_ref=3
+item_ctrl_report_progress=3
+item_evidence_signed_doc=2
+item_ctrl_order_delegated=1
+item_ctrl_order_self=1
+item_dep_supersede=1
+doc_ctrl_report_progress=1
+---scenario---
+S_CLINICAL:{'ctrl_responsibility_delegated': 3, 'ctrl_report_progress': 1}
+S_DISCIPLINE:{'ctrl_item_embedded': 4, 'ctrl_ensure_control': 4}
+S_EPID:{'ctrl_ensure_control': 1, 'ctrl_responsibility_delegated': 1}
+S_PROCUREMENT:{'ctrl_item_embedded': 2, 'ctrl_ensure_control': 2}
+S_RADIATION:{'ctrl_responsibility_delegated': 1}
+S_RESPONSIBILITY:{'ctrl_responsibility_delegated': 1}
+S_TRANSPORT:{'ctrl_item_embedded': 1}

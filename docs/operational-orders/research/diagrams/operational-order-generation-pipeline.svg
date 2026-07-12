@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker>
+    <style>
+      .t{font:700 20px sans-serif;fill:#0f172a}.s{font:13px sans-serif;fill:#64748b}
+      .b{fill:#f8fafc;stroke:#334155;stroke-width:1.5;rx:8}.h{fill:#ecfdf5;stroke:#059669}
+      .p{fill:#eff6ff;stroke:#2563eb}.o{fill:#fff7ed;stroke:#ea580c}
+      .l{font:600 13px sans-serif;fill:#0f172a}.m{font:11px sans-serif;fill:#475569}
+    </style>
+  </defs>
+  <text x="480" y="32" text-anchor="middle" class="t">Operational Order Generation Pipeline</text>
+  <text x="480" y="54" text-anchor="middle" class="s">OP-RES-005 research model</text>
+  <g transform="translate(40,80)">
+    <rect width="140" height="44" class="b h"/><text x="70" y="27" text-anchor="middle" class="l">1. Scenario</text>
+    <rect x="160" width="140" height="44" class="b"/><text x="230" y="27" text-anchor="middle" class="l">2. Input</text>
+    <rect x="320" width="160" height="44" class="b p"/><text x="400" y="27" text-anchor="middle" class="l">3. Item Build</text>
+    <rect x="500" width="140" height="44" class="b"/><text x="570" y="27" text-anchor="middle" class="l">4. Validate</text>
+    <rect x="660" width="140" height="44" class="b p"/><text x="730" y="27" text-anchor="middle" class="l">5. Render</text>
+    <rect x="820" width="100" height="44" class="b o"/><text x="870" y="27" text-anchor="middle" class="l">6. Control</text>
+    <line x1="140" y1="22" x2="160" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+    <line x1="300" y1="22" x2="320" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+    <line x1="480" y1="22" x2="500" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+    <line x1="640" y1="22" x2="660" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+    <line x1="800" y1="22" x2="820" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+  </g>
+  <g transform="translate(120,180)">
+    <rect width="160" height="44" class="b p"/><text x="80" y="27" text-anchor="middle" class="l">7. Assembly</text>
+    <rect x="200" width="160" height="44" class="b p"/><text x="280" y="27" text-anchor="middle" class="l">8. Languages</text>
+    <rect x="400" width="160" height="44" class="b o"/><text x="480" y="27" text-anchor="middle" class="l">9. Manual edit</text>
+    <rect x="600" width="160" height="44" class="b h"/><text x="680" y="27" text-anchor="middle" class="l">10. Validation</text>
+    <line x1="160" y1="22" x2="200" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+    <line x1="360" y1="22" x2="400" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+    <line x1="560" y1="22" x2="600" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+  </g>
+  <line x1="870" y1="124" x2="870" y2="150" stroke="#475569"/>
+  <line x1="870" y1="150" x2="200" y2="150" stroke="#475569"/>
+  <line x1="200" y1="150" x2="200" y2="180" stroke="#475569" marker-end="url(#arr)"/>
+  <g transform="translate(120,280)">
+    <rect width="180" height="44" class="b"/><text x="90" y="27" text-anchor="middle" class="l">11. Preview/Export</text>
+    <rect x="220" width="200" height="44" class="b o"/><text x="320" y="27" text-anchor="middle" class="l">12. Execution Projection</text>
+    <line x1="180" y1="22" x2="220" y2="22" stroke="#475569" marker-end="url(#arr)"/>
+  </g>
+  <rect x="40" y="360" width="880" height="130" class="b"/>
+  <text x="60" y="388" class="l">Legend</text>
+  <text x="60" y="412" class="m">Green = mandatory gate · Blue = semantic generation · Orange = human intervention point</text>
+  <text x="60" y="434" class="m">Generation ends at Preview/Export; Execution Projection is downstream handoff (not task engine)</text>
+  <text x="60" y="456" class="m">Steps 4 and 10 may repeat after input change or manual override reset</text>
+  <text x="60" y="478" class="m">Step 9 allowed at: preamble, item, obligation, control, locale level</text>
+</svg>

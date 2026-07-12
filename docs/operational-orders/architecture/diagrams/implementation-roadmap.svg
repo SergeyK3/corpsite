@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 15px sans-serif;fill:#0f172a}.w{fill:#f8fafc;stroke:#64748b;rx:4}.h{fill:#eff6ff;stroke:#2563eb}.o{fill:#fff7ed;stroke:#ea580c}.x{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="18" text-anchor="middle" class="t">Implementation Roadmap (post OP-RES-006)</text>
+  <rect x="20" y="30" width="70" height="140" class="h"/><text x="55" y="50" text-anchor="middle" class="x">UDE-000</text><text x="55" y="65" text-anchor="middle" class="m">Ratify</text>
+  <rect x="100" y="30" width="70" height="140" class="h"/><text x="135" y="50" text-anchor="middle" class="x">UDE-001</text><text x="135" y="65" text-anchor="middle" class="m">Terms</text>
+  <rect x="180" y="30" width="70" height="140" class="h"/><text x="215" y="50" text-anchor="middle" class="x">UDE-002</text><text x="215" y="65" text-anchor="middle" class="m">Core plan</text>
+  <rect x="260" y="30" width="70" height="140" class="h"/><text x="295" y="50" text-anchor="middle" class="x">UDE-003</text><text x="295" y="65" text-anchor="middle" class="m">Editorial</text>
+  <rect x="340" y="30" width="70" height="140" class="h"/><text x="375" y="50" text-anchor="middle" class="x">UDE-004</text><text x="375" y="65" text-anchor="middle" class="m">Locale</text>
+  <rect x="420" y="30" width="70" height="140" class="h"/><text x="455" y="50" text-anchor="middle" class="x">UDE-005</text><text x="455" y="65" text-anchor="middle" class="m">Validate</text>
+  <rect x="500" y="30" width="70" height="140" class="o"/><text x="535" y="50" text-anchor="middle" class="x">OO-001</text><text x="535" y="65" text-anchor="middle" class="m">OO model</text>
+  <rect x="580" y="30" width="70" height="140" class="o"/><text x="615" y="50" text-anchor="middle" class="x">OO-002</text><text x="615" y="65" text-anchor="middle" class="m">Editor</text>
+  <rect x="660" y="30" width="70" height="140" class="o"/><text x="695" y="50" text-anchor="middle" class="x">OO-003</text><text x="695" y="65" text-anchor="middle" class="m">Gen reg</text>
+  <rect x="740" y="30" width="70" height="140" class="o"/><text x="775" y="50" text-anchor="middle" class="x">OO-004</text><text x="775" y="65" text-anchor="middle" class="m">PDF</text>
+  <rect x="820" y="30" width="60" height="140" class="o"/><text x="850" y="50" text-anchor="middle" class="x">OO-005+</text><text x="850" y="65" text-anchor="middle" class="m">LC·BI·EP</text>
+  <text x="450" y="185" text-anchor="middle" class="m">PO MVP unchanged · OO added in parallel · Personnel convergence (UDE-006) last</text>
+</svg>

@@ -1,0 +1,14 @@
+role,responsibility,typical_actor,role_combination_allowed,auto_equivalence_forbidden,ude_scope,oo_specific,po_specific,party_model_link,audit_required,evidence
+Business Initiator,Initiates need for order,Dept head / manager,May also be Content Author,≠ Document Operator,Shared,Yes,Sometimes,PartyReference initiator,yes,Organizational observation
+Content Author,Forms management content,Dept head / subject expert,May be Initiator,≠ Record Creator ≠ HR by default,Shared,Yes (external to HR),Sometimes HR,PartyReference content_author,yes,Organizational observation
+Submitting Unit,Org unit submitting draft,Production department,—,≠ Document Operator ownership,Shared,Yes,Rare,OrganizationalUnit ref,yes,Organizational observation
+Document Operator,Creates record; official form,HR staff,May be Editorial Processor,≠ Content Author,Shared,Yes (primary),Yes (primary),system actor not Party,yes,Organizational observation
+Editorial Processor,Structure numbering requisites,HR / document specialist,May combine with Operator,≠ Content Author,Shared,Yes,Yes,system actor,yes,OP-RES-002 structure
+Translation Requester,Requests KK version,HR or Content Author,Often HR on behalf of author,≠ Translator automatically,Shared,Yes,Yes,system actor,yes,Organizational observation
+Translator,Produces KK translation,HR translator / external,Separate from Author,≠ Content Author,Shared,Yes,Yes,system actor,yes,Organizational observation
+Localization Reviewer,KK terminology quality,HR language reviewer,Separate from Translator,≠ Approver,Shared,Yes,Yes,system actor,yes,OP-RES-005A BC021
+Content Reviewer,Confirms meaning preserved,Content Author (default),Must not be only HR unless delegated,HR ≠ Content Reviewer by default,Shared,Yes,Rare,Content Author PartyRef,yes,OP-RES-006A new
+Approver,Visa within competence,Legal / functional manager,Multiple approvers possible,≠ Signer,Shared,Yes,Yes,PartyReference approver,yes,Episodic in corpus
+Signer,Signs effective package,Director / authorized,May be Initiator rarely,≠ Executor,Shared,Yes,Yes,Signatory metadata,yes,OP-RES-002 99%
+Registrar,Number and register,HR registry clerk,May combine with Operator,≠ Content Author,Shared,Yes,Yes,system actor,yes,PO REGISTERED
+Record Creator,System user creating document entry,Often HR Document Operator,—,≠ Content Author (mandatory distinction),Shared,Yes,Yes,created_by field,yes,PO created_by pattern

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.b{fill:#f8fafc;stroke:#334155;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}.u{fill:#fef2f2;stroke:#dc2626}.c{fill:#fff7ed;stroke:#ea580c}</style></defs>
+  <text x="460" y="28" text-anchor="middle" class="t">Bilingual Approval Workflow Variants (Research)</text>
+  <text x="460" y="48" text-anchor="middle" class="m">Evidence insufficient to confirm org process  risk analysis only</text>
+  <rect x="40" y="70" width="260" height="100" class="b c"/>
+  <text x="170" y="95" text-anchor="middle" class="l">A: RU approved ’ translate</text>
+  <text x="170" y="115" text-anchor="middle" class="m">Matches user hypothesis</text>
+  <text x="170" y="135" text-anchor="middle" class="m">Risk: late KK blocks signing</text>
+  <rect x="330" y="70" width="260" height="100" class="b c"/>
+  <text x="460" y="95" text-anchor="middle" class="l">B: RU content OK, unsigned</text>
+  <text x="460" y="115" text-anchor="middle" class="m">Then KK prepared</text>
+  <text x="460" y="135" text-anchor="middle" class="m">Corpus: plausible</text>
+  <rect x="620" y="70" width="260" height="100" class="b"/>
+  <text x="750" y="95" text-anchor="middle" class="l">C: Parallel review</text>
+  <text x="750" y="115" text-anchor="middle" class="m">Symmetric model A</text>
+  <text x="750" y="135" text-anchor="middle" class="m">Corpus: weak support</text>
+  <rect x="40" y="190" width="260" height="100" class="b"/>
+  <text x="170" y="215" text-anchor="middle" class="l">D: Separate translation approval</text>
+  <text x="170" y="235" text-anchor="middle" class="m">KK reviewer distinct</text>
+  <text x="170" y="255" text-anchor="middle" class="m">Inferred  needs interview</text>
+  <rect x="330" y="190" width="260" height="100" class="b c"/>
+  <text x="460" y="215" text-anchor="middle" class="l">E: Bilingual package approval</text>
+  <text x="460" y="235" text-anchor="middle" class="m">Both locales READY gate</text>
+  <text x="460" y="255" text-anchor="middle" class="m">Personnel Orders pattern</text>
+  <rect x="620" y="190" width="260" height="100" class="b u"/>
+  <text x="750" y="215" text-anchor="middle" class="l">F: RU formally primary</text>
+  <text x="750" y="235" text-anchor="middle" class="m">Risk: KK unreviewed at sign</text>
+  <text x="750" y="255" text-anchor="middle" class="m">4 ru-only docs in corpus</text>
+  <rect x="40" y="320" width="840" height="170" class="b"/>
+  <text x="60" y="348" class="l">Key risks (all variants)</text>
+  <text x="60" y="372" class="m">" Signed RU with unreviewed KK · semantic drift · inconsistent appendices</text>
+  <text x="60" y="392" class="m">" Mismatched dates/amounts · correction after approval · unclear authoritative version</text>
+  <text x="60" y="412" class="l">Recommendation (research)</text>
+  <text x="60" y="436" class="m">Default to E (bilingual package) for READY_FOR_SIGNATURE; allow asymmetric drafting mode B with staleness</text>
+  <text x="60" y="456" class="m">Do not allow READY if required locale STALE or REVIEW_REQUIRED without explicit waiver (interview)</text>
+</svg>

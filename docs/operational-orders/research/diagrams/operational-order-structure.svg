@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 1180" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 22px sans-serif; fill: #0f172a; }
+      .subtitle { font: 14px sans-serif; fill: #64748b; }
+      .block { fill: #f8fafc; stroke: #334155; stroke-width: 1.5; rx: 8; }
+      .mandatory { fill: #ecfdf5; stroke: #059669; }
+      .common { fill: #eff6ff; stroke: #2563eb; }
+      .optional { fill: #fff7ed; stroke: #ea580c; }
+      .label { font: 600 14px sans-serif; fill: #0f172a; }
+      .meta { font: 12px sans-serif; fill: #475569; }
+      .legend-box { fill: #ffffff; stroke: #cbd5e1; rx: 6; }
+    </style>
+  </defs>
+
+  <text x="460" y="36" text-anchor="middle" class="title">Operational Order  Canonical Block Sequence</text>
+  <text x="460" y="58" text-anchor="middle" class="subtitle">OP-RES-002 research model (Document Engine shell, not order-type specific)</text>
+
+  <rect x="260" y="80" width="400" height="56" class="block mandatory"/>
+  <text x="460" y="104" text-anchor="middle" class="label">1. Header / Requisites</text>
+  <text x="460" y="124" text-anchor="middle" class="meta">org · city · « » ·  · date · title</text>
+
+  <line x1="460" y1="136" x2="460" y2="156" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="160" width="400" height="56" class="block common"/>
+  <text x="460" y="184" text-anchor="middle" class="label">2. Preamble / Basis</text>
+  <text x="460" y="204" text-anchor="middle" class="meta">law · ministerial order · memo · protocol · « F5;OE&»</text>
+
+  <line x1="460" y1="216" x2="460" y2="236" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="240" width="400" height="48" class="block mandatory"/>
+  <text x="460" y="264" text-anchor="middle" class="label">3. Order Formula</text>
+  <text x="460" y="280" text-anchor="middle" class="meta"> +. / °+ + / !"/.</text>
+
+  <line x1="460" y1="288" x2="460" y2="308" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="220" y="312" width="480" height="72" class="block mandatory"/>
+  <text x="460" y="338" text-anchor="middle" class="label">4. Dispositive Section (numbered items)</text>
+  <text x="460" y="358" text-anchor="middle" class="meta">1. & 2. & 2.1. & sub-lists · commission roster · duties</text>
+  <text x="460" y="376" text-anchor="middle" class="meta">meta-items may appear here: control · effective date · repeal</text>
+
+  <line x1="460" y1="384" x2="460" y2="404" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="408" width="400" height="48" class="block optional"/>
+  <text x="460" y="432" text-anchor="middle" class="label">5. Attachments Reference</text>
+  <text x="460" y="448" text-anchor="middle" class="meta">«@8;>65=85 1» / «1-›>AK<H0» · inline tables</text>
+
+  <line x1="460" y1="456" x2="460" y2="476" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="480" width="400" height="48" class="block common"/>
+  <text x="460" y="504" text-anchor="middle" class="label">6. Trailing Basis (variant)</text>
+  <text x="460" y="520" text-anchor="middle" class="meta">A=>20=85: / 53V7: / 53V745<5:</text>
+
+  <line x1="460" y1="528" x2="460" y2="548" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="552" width="400" height="48" class="block mandatory"/>
+  <text x="460" y="576" text-anchor="middle" class="label">7. Signature Block</text>
+  <text x="460" y="592" text-anchor="middle" class="meta">8@5:B>@ · 4>;6=>ABL · $ · ..</text>
+
+  <line x1="460" y1="600" x2="460" y2="620" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="624" width="400" height="48" class="block optional"/>
+  <text x="460" y="648" text-anchor="middle" class="label">8. Agreement / Vetting</text>
+  <text x="460" y="664" text-anchor="middle" class="meta">5;VAV;4V / !>3;0A>20=> · N@8AB</text>
+
+  <line x1="460" y1="672" x2="460" y2="692" stroke="#475569" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="696" width="400" height="48" class="block optional"/>
+  <text x="460" y="720" text-anchor="middle" class="label">9. Acknowledgement / Distribution</text>
+  <text x="460" y="736" text-anchor="middle" class="meta">"0=KAC ?0@0“K · >7=0:><8BL · @0AAK;:0 · 8A?:</text>
+
+  <rect x="40" y="780" width="280" height="150" class="legend-box"/>
+  <text x="60" y="808" class="label">Legend</text>
+  <rect x="60" y="822" width="18" height="18" class="mandatory"/>
+  <text x="86" y="836" class="meta">Mandatory in e95% corpus</text>
+  <rect x="60" y="852" width="18" height="18" class="common"/>
+  <text x="86" y="866" class="meta">Common (4095%)</text>
+  <rect x="60" y="882" width="18" height="18" class="optional"/>
+  <text x="86" y="896" class="meta">Optional / situational</text>
+
+  <rect x="600" y="780" width="280" height="330" class="legend-box"/>
+  <text x="620" y="808" class="label">Bilingual layout variants</text>
+  <text x="620" y="832" class="meta">A  RU classic: header’body’sign</text>
+  <text x="620" y="854" class="meta">B  KK block then RU mirror (full doc)</text>
+  <text x="620" y="876" class="meta">C  interleaved items (KK item, RU item)</text>
+  <text x="620" y="898" class="meta">D  KK-only with org boilerplate</text>
+  <text x="620" y="928" class="meta">Frequency (183 DOCX):</text>
+  <text x="620" y="950" class="meta">order formula 97% · control 92%</text>
+  <text x="620" y="972" class="meta">signature role 99% · preamble 6184%</text>
+  <text x="620" y="994" class="meta">attachments ref 19% · agreement 6%</text>
+  <text x="620" y="1024" class="meta">Personnel Orders share same shell;</text>
+  <text x="620" y="1046" class="meta">item semantics differ (PO-EDIT-001).</text>
+</svg>

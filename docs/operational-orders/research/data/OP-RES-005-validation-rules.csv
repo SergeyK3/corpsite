@@ -1,0 +1,28 @@
+rule_id,rule_category,severity,rule_description,applies_to,trigger_condition,error_message_ru,auto_fixable,notes
+V001,semantic,error,scenario_selected,OperationalOrderDefinition,scenario_code is null,Не выбран сценарий генерации,false,P0 gate
+V002,semantic,error,mandatory_items_present,OrderItemDefinitions,scenario required item kinds missing,Отсутствуют обязательные пункты сценария,false,Per scenario-generation-matrix
+V003,semantic,error,intent_item_type_compatible,ExecutionObligation,intent incompatible with item_type,Намерение несовместимо с типом пункта,false,Registry constraints
+V004,semantic,error,executor_specified,ExecutionObligation,responsible_party is null,Не указан исполнитель,false,Except META_EFFECT
+V005,semantic,error,managed_object_defined,ExecutionObligation,managed_object is null,Не определён объект управления,false,Except CONTROL/META
+V006,semantic,error,mandatory_deadline,ExecutionObligation,scenario requires deadline and none set,Обязательный срок не указан,false,S_TRAVEL S_DISCIPLINE etc
+V007,semantic,error,controller_when_required,ControlObligation,control mandatory and controller null,Не назначен контролёр,false,92% docs expect control
+V008,semantic,error,commission_has_composition,CREATE_BODY,commission without chair or members,Комиссия без состава,false,When CREATE_BODY present
+V009,semantic,error,attachment_exists,AttachmentDefinitions,item references attachment N but definition missing,Приложение не найдено,false,Attachment-driven scenarios
+V010,semantic,error,item_refs_valid,OrderItemDefinitions,dependency references unknown item,Некорректная ссылка на пункт,false,Cross-item refs
+V011,semantic,error,no_empty_obligations,ExecutionObligation,obligation has no intent and no text,Пустое обязательство,false,
+V012,text,error,item_complete_formulation,LanguageRendering,rendered clause empty or fragment,Пункт имеет незавершённую формулировку,false,
+V013,text,error,correct_numbering,DocumentAssembly,duplicate or gap in sequence,Некорректная нумерация пунктов,true,Renumber on assembly
+V014,text,error,no_duplicate_items,OrderItemDefinitions,duplicate semantic items detected,Дублирующиеся пункты,false,Warning if intentional
+V015,text,error,no_unfilled_placeholders,LanguageRendering,placeholder token in effective text,Незаполненные placeholders,false,[___] patterns
+V016,text,error,language_version_complete,LanguageRenderings,required locale block empty,Языковая версия не завершена,false,kk and ru if bilingual
+V017,text,warning,manual_text_preserved,ManualOverride,regeneration would drop override without flag,Ручной текст может быть потерян,false,User confirm required
+W001,semantic,warning,deadline_unformalizable,Deadline,until_event or as_needed without text,Срок неформализуем — требуется ручная формулировка,false,Common in corpus
+W002,semantic,warning,controller_equals_executor,ControlObligation,controller same as executor,Контролёр совпадает с исполнителем,false,Rare conflict
+W003,semantic,warning,expected_result_missing,ExecutionObligation,no explicit or derived result,Expected result не определён,false,Often acceptable
+W004,semantic,warning,evidence_undefined,ExecutionObligation,scenario suggests evidence but none set,Evidence не определён,false,Do not auto-add if changes meaning
+W005,semantic,warning,multi_obligation_in_one_item,OrderItem,multiple verbs detected in one item,Один пункт содержит несколько обязательств,false,14% corpus; suggest split
+W006,semantic,warning,attachment_unparsed_tasks,AttachmentDefinitions,attachment rows without linked obligations,Приложение содержит неразобранные задачи,false,
+W007,semantic,warning,fio_where_role_preferred,ResponsibleParty,named person for permanent duty,ФИО использовано там где предпочтительна роль,false,Role-first principle
+W008,semantic,warning,preamble_missing,PreambleDefinition,scenario expects preamble and none,Преамбула отсутствует,false,S_RESPONSIBILITY optional
+W009,semantic,warning,bilingual_asymmetry,LanguageRenderings,kk and ru item counts differ,Асимметрия языковых версий,false,Mirror expected
+W010,semantic,warning,control_not_final,ControlObligation,control item not in last positions,Контрольный пункт не в конце,false,33 docs embedded control

@@ -1,0 +1,15 @@
+pair_id,source_wp,target_wp,consistency_status,finding_id,severity,summary,evidence_basis,resolution
+P01,OP-RES-001,OP-RES-002,Consistent,,,183 DOCX corpus supports structural analysis scope,OP-RES-001 inventory metrics match OP-RES-002 sample,No action
+P02,OP-RES-002,OP-RES-003,Consistent,,,Shell orthogonal to taxonomy; folder≠domain confirmed,OP-RES-003 §2.1 structural orthogonality,No action
+P03,OP-RES-003,OP-RES-004,Consistent,,,21 scenarios map to execution matrix; intents align,OP-RES-004 matrix 21 rows,No action
+P04,OP-RES-004,OP-RES-005,Consistent,,,Order Item→Obligation; control separate; generation ends at export,OP-RES-005 inherits OP-RES-004,No action
+P05,OP-RES-005,OP-RES-005A,Consistent,,,Hybrid multilingual refines 005; legal≠editorial symmetry preserved,OP-RES-005A §19 confirms Model A+B coexist,No action
+P06,OP-RES-005A,OP-RES-006,Consistent,,,BC checks staleness drafting_path integrated in 006,OP-RES-006 §17 references 005A,No action
+P07,OP-RES-006,OP-RES-006A,Consistent,F-001,Minor,Scenario-first (005) vs intake-first OO MVP — specialization-specific paths not contradiction,OP-RES-006A §8 three paths; 006 §15 updated,Document in UDE-001 contracts
+P08,OP-RES-006,OP-RES-006A,Consistent,F-002,Minor,Pre-sign semantic SoT (ADR-005) vs staged intake SoT (ADR-016),ADR-UDE-016 staged model,Terminology freeze clarifies phases
+P09,OP-RES-006,Personnel Orders MVP,Consistent,F-003,Minor,PO employee_id centric vs role-first Party (ADR-007),Gap analysis Class A/B,Deferred to UDE-006 convergence
+P10,OP-RES-006A,Organizational observation,Partially confirmed,F-004,Minor,Content author≠HR based on observation not corpus,OP-RES-006A §2 evidence table,Interview before OO-IMP-001
+P11,OP-RES-005,OP-RES-006A,Consistent,,,Model C adds path; does not replace generation architecture,OP-RES-006A §8,No action
+P12,OP-RES-004,OP-RES-006A,Consistent,,,Execution projection unchanged; intake upstream of projection,OP-RES-006 §27 boundary,No action
+P13,OP-RES-002,Personnel PO-EDIT-001,Consistent,,,Block model alignment confirmed in OP-RES-002 §3.3,PO-EDIT-001 editorial blocks,Foundation for extraction
+P14,OP-RES-006,Migration roadmap,Consistent,F-005,Editorial,UDE-004/005 numbering vs user UDE-000 chain — roadmap CSV authoritative,OP-RES-006 implementation CSV,Use CSV in UDE-001 planning

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.n{font:600 11px sans-serif;fill:#0f172a}.s{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="440" y="24" text-anchor="middle" class="t">Execution Obligation  Anatomy (research primitive)</text>
+
+  <rect x="30" y="45" width="820" height="55" fill="#d1fae5" stroke="#059669" rx="6"/>
+  <text x="440" y="68" text-anchor="middle" class="n">Execution Obligation</text>
+  <text x="440" y="86" text-anchor="middle" class="s"><8=8<0;L=0O 8A?>;=8<0O 548=8F0 A<KA;0 (>1KG=> = >48= ?C=:B 8;8 ?>4?C=:B)</text>
+
+  <rect x="50" y="115" width="115" height="42" fill="#dbeafe" stroke="#2563eb" rx="4"/><text x="107" y="133" text-anchor="middle" class="n">Intent</text><text x="107" y="148" text-anchor="middle" class="s">3;03>;</text>
+  <rect x="180" y="115" width="115" height="42" fill="#dbeafe" stroke="#2563eb" rx="4"/><text x="237" y="133" text-anchor="middle" class="n">Managed Object</text><text x="237" y="148" text-anchor="middle" class="s">GB></text>
+  <rect x="310" y="115" width="115" height="42" fill="#dbeafe" stroke="#2563eb" rx="4"/><text x="367" y="133" text-anchor="middle" class="n">Responsible Party</text><text x="367" y="148" text-anchor="middle" class="s">:><C</text>
+  <rect x="440" y="115" width="115" height="42" fill="#dbeafe" stroke="#2563eb" rx="4"/><text x="497" y="133" text-anchor="middle" class="n">Co-executors</text><text x="497" y="148" text-anchor="middle" class="s">0..N</text>
+  <rect x="570" y="115" width="115" height="42" fill="#dbeafe" stroke="#2563eb" rx="4"/><text x="627" y="133" text-anchor="middle" class="n">Deadline</text><text x="627" y="148" text-anchor="middle" class="s">optional</text>
+  <rect x="700" y="115" width="130" height="42" fill="#dbeafe" stroke="#2563eb" rx="4"/><text x="765" y="133" text-anchor="middle" class="n">Expected Result</text><text x="765" y="148" text-anchor="middle" class="s">often implicit</text>
+
+  <rect x="120" y="175" width="130" height="42" fill="#ffedd5" stroke="#ea580c" rx="4"/><text x="185" y="193" text-anchor="middle" class="n">Control link</text><text x="185" y="208" text-anchor="middle" class="s">optional ref</text>
+  <rect x="270" y="175" width="130" height="42" fill="#e9d5ff" stroke="#7c3aed" rx="4"/><text x="335" y="193" text-anchor="middle" class="n">Evidence</text><text x="335" y="208" text-anchor="middle" class="s">if required</text>
+  <rect x="420" y="175" width="130" height="42" fill="#f1f5f9" stroke="#64748b" rx="4"/><text x="485" y="193" text-anchor="middle" class="n">Dependencies</text><text x="485" y="208" text-anchor="middle" class="s">0..N refs</text>
+  <rect x="570" y="175" width="130" height="42" fill="#fef3c7" stroke="#d97706" rx="4"/><text x="635" y="193" text-anchor="middle" class="n">Recurrence</text><text x="635" y="208" text-anchor="middle" class="s">if periodic</text>
+
+  <rect x="40" y="240" width="800" height="140" fill="#f8fafc" stroke="#cbd5e1" rx="6"/>
+  <text x="60" y="264" class="n">Hypothesis Intent × Object × Party × Control × Deadline × Result  CONFIRMED with refinements</text>
+  <text x="60" y="286" class="s"> All six dimensions appear in corpus; Control often separate Obligation, not field on Execution Obligation</text>
+  <text x="60" y="304" class="s"> Expected Result frequently derived from Intent verb, not stated explicitly</text>
+  <text x="60" y="322" class="s"> Evidence rarely mandated except: ack_list (102 items), reports (30), advance report (travel/funds)</text>
+  <text x="60" y="340" class="s"> Dependencies weakly expressed: attachment refs (25), item refs (3), event triggers (255 until_event phrases)</text>
+  <text x="60" y="358" class="s"> Instruction (bullet under item) is presentation, not separate obligation unless numbered sub-item</text>
+</svg>

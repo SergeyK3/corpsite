@@ -1,0 +1,28 @@
+component_area,current_po_state,target_ude_state,gap_class,priority,extraction_effort,risk_if_ignored
+editorial_blocks,implemented generated/override/effective,shared Editorial Core,A,reuse as-is,P0,low
+fingerprint_staleness,implemented review_status,shared Localization lifecycle,A,reuse as-is,P0,low
+lifecycle_audit,append-only CANCEL/ANNUL/ARCHIVE,shared Audit Component,A,reuse as-is,P0,low
+archive_orthogonal,implemented archived_at flag,shared Document Core,A,reuse as-is,P1,low
+void_kind_cancel_annul,implemented CANCEL vs ANNUL,shared Lifecycle Service,A,reuse as-is,P0,low
+print_view_model,PersonnelOrderPrintViewModel,generic Print ViewModel,B,extract interface,P0,medium
+playwright_pdf,implemented on-demand,shared Renderer,B,swap document builder,P1,low
+generation_service,scoped regenerate per block,shared Generation Engine,B,generalize orchestration,P0,medium
+command_service,raw SQL PO-specific,Document Core commands,B,extract contracts,P1,high
+ready_gate,bilingual effective text check,shared Validation Engine,B,extend rules,P0,medium
+legacy_localized_texts,deprecated parallel path,remove after convergence,D,deprecate,P2,medium
+ready_editable_drift,READY still editable vs R1/R10,enforce return-to-DRAFT,D,fix in PO,P1,medium
+blanket_personnel_admin,most routes HR_HEAD only,granular capabilities,D,wire grants,P2,medium
+void_ui_watermark,always cancelled watermark,void_kind aware,D,UI alignment,P2,low
+scenario_first_entry,missing item picker only,Scenario Registry,E,build for OO,P0,high
+execution_obligations,missing 1:1 item=event,Execution Obligation model,E,OO domain,P0,high
+control_meta_item,missing,Control Obligation + generator,E,OO P0,P0,high
+oo_item_registry,5 HR types,14 semantic families,E,OO registries,P0,high
+oo_scenario_taxonomy,missing,21 scenarios 8 domains,E,OO registries,P0,high
+party_role_model,employee_id centric,role-first PartyReference,E,extend model,P0,medium
+compensating_order_links,missing,reversal/replacement refs,E,lifecycle,P2,medium
+order_approvals_visas,documented not built,optional future,E,defer,P3,low
+signed_pdf_snapshot,ephemeral Playwright,immutable artifact store,E,phase 5+,P3,medium
+docx_export,missing,future renderer,E,defer,P3,low
+execution_projection_oo,missing apply analog,Execution Projection Adapter,E,phase 5,P1,high
+translation_workflow_mode,symmetric kk/ru generate,RU-first + reconciliation,B,extend localization,P1,medium
+attachment_obligation_source,basis scans only,structured roster rows,E,OO attachments,P1,medium

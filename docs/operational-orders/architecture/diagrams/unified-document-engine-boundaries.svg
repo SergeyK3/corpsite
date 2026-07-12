@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 15px sans-serif;fill:#0f172a}.i{fill:#eff6ff;stroke:#2563eb;rx:6}.o{fill:#fef2f2;stroke:#dc2626;rx:6}.x{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="18" text-anchor="middle" class="t">UDE Boundaries  Ratified (UDE-000)</text>
+  <rect x="30" y="35" width="840" height="200" class="i"/>
+  <text x="450" y="58" text-anchor="middle" class="x">INSIDE Unified Document Engine</text>
+  <text x="45" y="78" class="m">Document Core · Structure · Draft Intake · Editorial · Localization · Generation</text>
+  <text x="45" y="92" class="m">Validation · Lifecycle · Audit · Rendering (HTML/PDF) · Attachments metadata</text>
+  <text x="45" y="106" class="m">Specializations: Personnel Orders · Operational Orders · PO apply adapter (HR projection)</text>
+  <text x="45" y="120" class="m">Execution Projection descriptor emission (handoff only)</text>
+  <text x="45" y="145" class="x">Personnel Orders (inside as specialization):</text>
+  <text x="55" y="159" class="m">lifecycle · archive · bilingual editorial · PDF · item registry  unchanged during migration</text>
+  <text x="45" y="180" class="x">Operational Orders (inside as specialization):</text>
+  <text x="55" y="194" class="m">intake · provenance · content confirmation · obligations · control meta-item</text>
+  <rect x="30" y="250" width="840" height="130" class="o"/>
+  <text x="450" y="272" text-anchor="middle" class="x">OUTSIDE Unified Document Engine</text>
+  <text x="45" y="292" class="m">Task Engine / workflow runtime · ECM/EDMS · BPM · machine translation · low-code platform</text>
+  <text x="45" y="306" class="m">Universal document constructor · org-wide archive · legal expert system · external -& EDO</text>
+  <text x="45" y="320" class="m">Organization master data (upstream) · full access control model (separate concern)</text>
+  <text x="45" y="345" class="m">Deferred later: DOCX export engine · signed PDF immutable store · approval visa workflow · compensating order links</text>
+  <text x="450" y="385" text-anchor="middle" class="m">Modular monolith  no microservices at MVP (ADR-010)</text>
+</svg>

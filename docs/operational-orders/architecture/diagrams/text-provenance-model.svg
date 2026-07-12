@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 300" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 14px sans-serif;fill:#0f172a}.s{fill:#fff7ed;stroke:#ea580c;rx:6}.g{fill:#ecfdf5;stroke:#059669;rx:6}.e{fill:#eff6ff;stroke:#2563eb;rx:6}.x{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="375" y="18" text-anchor="middle" class="t">Text Provenance Model (per locale block)</text>
+  <rect x="280" y="35" width="190" height="40" class="s"/><text x="375" y="60" text-anchor="middle" class="x">submitted_text</text>
+  <rect x="80" y="100" width="130" height="50" class="g"/><text x="145" y="122" text-anchor="middle" class="x">GENERATED</text><text x="145" y="136" text-anchor="middle" class="m">from semantic</text>
+  <rect x="230" y="100" width="130" height="50" class="s"/><text x="295" y="122" text-anchor="middle" class="x">SUBMITTED</text><text x="295" y="136" text-anchor="middle" class="m">from author</text>
+  <rect x="380" y="100" width="130" height="50" class="g"/><text x="445" y="122" text-anchor="middle" class="x">TRANSLATED</text><text x="445" y="136" text-anchor="middle" class="m">from other locale</text>
+  <rect x="530" y="100" width="140" height="50" class="g"/><text x="600" y="122" text-anchor="middle" class="x">MANUALLY_*</text><text x="600" y="136" text-anchor="middle" class="m">authored/edited</text>
+  <line x1="375" y1="75" x2="295" y2="100" stroke="#334155"/><line x1="375" y1="75" x2="145" y2="100" stroke="#334155" stroke-dasharray="4,3"/>
+  <rect x="200" y="175" width="350" height="70" class="e"/>
+  <text x="375" y="198" text-anchor="middle" class="x">effective_text (signing authority pre-sign)</text>
+  <text x="210" y="216" class="m">attrs: source_type · source_actor · source_unit · derived_from_version</text>
+  <text x="210" y="230" class="m">content_confirmed_by · localization_reviewed_by · stale_state</text>
+  <line x1="295" y1="150" x2="320" y2="175" stroke="#334155"/><line x1="445" y1="150" x2="400" y2="175" stroke="#334155"/><line x1="145" y1="150" x2="280" y2="175" stroke="#334155" stroke-dasharray="4,3"/>
+  <text x="375" y="270" text-anchor="middle" class="m">Provenance level: per block (minimum) · document-level aggregate for bilingual readiness</text>
+  <text x="375" y="285" text-anchor="middle" class="m">submitted_text ` effective_text (automatic promotion forbidden)</text>
+</svg>

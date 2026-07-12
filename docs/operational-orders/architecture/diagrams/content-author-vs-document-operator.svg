@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 320" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 15px sans-serif;fill:#0f172a}.a{fill:#fff7ed;stroke:#ea580c;rx:8}.h{fill:#f0fdf4;stroke:#16a34a;rx:8}.n{fill:#fef2f2;stroke:#dc2626;rx:6}.x{font:600 12px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Content Author vs Document Operator</text>
+  <rect x="40" y="50" width="260" height="120" class="a"/>
+  <text x="170" y="78" text-anchor="middle" class="x">Content Author</text>
+  <text x="55" y="100" class="m">Business goal and directives</text>
+  <text x="55" y="116" class="m">Executors deadlines results</text>
+  <text x="55" y="132" class="m">Subject matter of attachments</text>
+  <text x="55" y="148" class="m">Typically: dept head / expert</text>
+  <rect x="400" y="50" width="260" height="120" class="h"/>
+  <text x="530" y="78" text-anchor="middle" class="x">Document Operator (HR)</text>
+  <text x="415" y="100" class="m">Creates system record</text>
+  <text x="415" y="116" class="m">Official form and requisites</text>
+  <text x="415" y="132" class="m">Translation coordination</text>
+  <text x="415" y="148" class="m">Routing registration archive</text>
+  <rect x="120" y="200" width="460" height="50" class="n"/>
+  <text x="350" y="222" text-anchor="middle" class="x">FORBIDDEN: Record Creator = Content Author (automatic)</text>
+  <text x="350" y="238" text-anchor="middle" class="m">created_by (HR) must not imply content authorship in audit or journal</text>
+  <text x="350" y="290" text-anchor="middle" class="m">ADR-UDE-011 · ADR-UDE-015</text>
+</svg>

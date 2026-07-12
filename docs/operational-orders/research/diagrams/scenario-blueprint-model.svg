@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.b{fill:#f8fafc;stroke:#334155;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}.p0{fill:#ecfdf5;stroke:#059669}.p1{fill:#eff6ff;stroke:#2563eb}</style></defs>
+  <text x="440" y="28" text-anchor="middle" class="t">Scenario Blueprint Model (P0)</text>
+  <rect x="40" y="50" width="190" height="380" class="b p0"/>
+  <text x="135" y="75" text-anchor="middle" class="l">S_TRAVEL</text>
+  <text x="55" y="95" class="m">33 docs · 17%</text>
+  <text x="55" y="115" class="m">Items: 4-7</text>
+  <text x="55" y="135" class="m">DIRECT’FUND’</text>
+  <text x="55" y="150" class="m">ENSURE’CONTROL</text>
+  <text x="55" y="175" class="m">Ctrl: director_self</text>
+  <text x="55" y="195" class="m">Basis: trailing</text>
+  <rect x="250" y="50" width="190" height="380" class="b p0"/>
+  <text x="345" y="75" text-anchor="middle" class="l">S_COMMISSION</text>
+  <text x="265" y="95" class="m">28 docs · 15%</text>
+  <text x="265" y="115" class="m">Items: 2-4</text>
+  <text x="265" y="135" class="m">CREATE_BODY+</text>
+  <text x="265" y="150" class="m">CONTROL</text>
+  <text x="265" y="175" class="m">Ctrl: chief_acct</text>
+  <text x="265" y="195" class="m">Roster: inline</text>
+  <rect x="460" y="50" width="190" height="380" class="b p0"/>
+  <text x="555" y="75" text-anchor="middle" class="l">S_CLINICAL</text>
+  <text x="475" y="95" class="m">35 docs · 18%</text>
+  <text x="475" y="115" class="m">Items: 3-15</text>
+  <text x="475" y="135" class="m">Parallel ORGANIZE</text>
+  <text x="475" y="150" class="m">per unit</text>
+  <text x="475" y="175" class="m">Ctrl: deputy_clin</text>
+  <rect x="670" y="50" width="190" height="380" class="b p0"/>
+  <text x="765" y="75" text-anchor="middle" class="l">S_ACCOUNTING</text>
+  <text x="685" y="95" class="m">18 docs · 9%</text>
+  <text x="685" y="115" class="m">Items: 3-10</text>
+  <text x="685" y="135" class="m">Commission+act</text>
+  <text x="685" y="175" class="m">Ctrl: chief_acct</text>
+  <rect x="40" y="450" width="820" height="36" class="b p1"/>
+  <text x="450" y="473" text-anchor="middle" class="m">P0 cumulative ~59% corpus · shared Generation Model with scenario parameters · not separate document types</text>
+</svg>

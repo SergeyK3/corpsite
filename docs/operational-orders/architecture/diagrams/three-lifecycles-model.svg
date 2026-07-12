@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.d{fill:#eff6ff;stroke:#2563eb;rx:8}.l{fill:#f0fdf4;stroke:#16a34a;rx:8}.e{fill:#fff7ed;stroke:#ea580c;rx:8}.x{font:600 12px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="24" text-anchor="middle" class="t">Three Independent Lifecycles (ADR-UDE-004)</text>
+  <rect x="30" y="50" width="260" height="280" class="d"/>
+  <text x="160" y="78" text-anchor="middle" class="x">A. Document Lifecycle</text>
+  <text x="45" y="105" class="m">DRAFT</text><text x="120" y="105" class="m">’</text><text x="140" y="105" class="m">READY_FOR_SIGNATURE</text>
+  <text x="45" y="130" class="m">’ SIGNED / REGISTERED ’ VOIDED</text>
+  <text x="45" y="155" class="m">Archive: orthogonal flag (immutable)</text>
+  <text x="45" y="185" class="x">PO implemented:</text>
+  <text x="45" y="203" class="m">CANCEL (pre-reg) · ANNUL (post-reg)</text>
+  <text x="45" y="221" class="m">lifecycle audit · hidden closed journal</text>
+  <rect x="320" y="50" width="260" height="280" class="l"/>
+  <text x="450" y="78" text-anchor="middle" class="x">B. Localization Lifecycle</text>
+  <text x="335" y="105" class="m">CURRENT · STALE · REVIEW_REQUIRED</text>
+  <text x="335" y="130" class="m">UNKNOWN (legacy import)</text>
+  <text x="335" y="155" class="m">drafting: generated ’ translated</text>
+  <text x="335" y="173" class="m">’ reviewed ’ reconciled ’ waived</text>
+  <text x="335" y="200" class="x">Blocks READY if mandatory</text>
+  <text x="335" y="218" class="m">locale STALE or REVIEW_REQUIRED</text>
+  <text x="335" y="236" class="m">(without policy waiver)</text>
+  <rect x="610" y="50" width="260" height="280" class="e"/>
+  <text x="740" y="78" text-anchor="middle" class="x">C. Execution Lifecycle</text>
+  <text x="625" y="105" class="m">created ’ waiting ’ in progress</text>
+  <text x="625" y="123" class="m">’ completed / partially / overdue</text>
+  <text x="625" y="141" class="m">’ cancelled / replaced / continuous</text>
+  <text x="625" y="159" class="m">’ closed by controller</text>
+  <text x="625" y="185" class="x">Downstream contour</text>
+  <text x="625" y="203" class="m">VOIDED/ANNUL ’ compensating</text>
+  <text x="625" y="221" class="m">projection cancel</text>
+  <text x="450" y="355" text-anchor="middle" class="m">Independent: execution does not block document edits in DRAFT; document VOID does not auto-delete tasks without policy</text>
+</svg>

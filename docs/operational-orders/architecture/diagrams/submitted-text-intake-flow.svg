@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 14px sans-serif;fill:#0f172a}.i{fill:#fff7ed;stroke:#ea580c;rx:6}.p{fill:#f0fdf4;stroke:#16a34a;rx:6}.r{fill:#eff6ff;stroke:#2563eb;rx:6}.x{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="18" text-anchor="middle" class="t">Submitted-text Intake Flow</text>
+  <rect x="250" y="35" width="200" height="36" class="i"/><text x="350" y="58" text-anchor="middle" class="x">Submitted Text (RU and/or KK)</text>
+  <rect x="250" y="85" width="200" height="36" class="p"/><text x="350" y="108" text-anchor="middle" class="x">Intake Validation (I001I026)</text>
+  <rect x="230" y="135" width="240" height="36" class="p"/><text x="350" y="158" text-anchor="middle" class="x">Declare Author · Unit · Provenance</text>
+  <rect x="220" y="185" width="260" height="36" class="p"/><text x="350" y="208" text-anchor="middle" class="x">Structural + Semantic Enrichment</text>
+  <rect x="240" y="235" width="220" height="36" class="p"/><text x="350" y="258" text-anchor="middle" class="x">Translation (if KK missing)</text>
+  <rect x="230" y="285" width="240" height="36" class="r"/><text x="350" y="308" text-anchor="middle" class="x">Effective RU/KK + Staleness</text>
+  <rect x="210" y="335" width="280" height="36" class="r"/><text x="350" y="358" text-anchor="middle" class="x">Content Confirmation ’ Official Draft</text>
+  <line x1="350" y1="71" x2="350" y2="85" stroke="#334155"/><line x1="350" y1="121" x2="350" y2="135" stroke="#334155"/><line x1="350" y1="171" x2="350" y2="185" stroke="#334155"/><line x1="350" y1="221" x2="350" y2="235" stroke="#334155"/><line x1="350" y1="271" x2="350" y2="285" stroke="#334155"/><line x1="350" y1="321" x2="350" y2="335" stroke="#334155"/>
+  <text x="520" y="108" class="m">NOT official yet</text>
+  <text x="520" y="208" class="m">HR adds control</text>
+  <text x="520" y="258" class="m">BC checks</text>
+  <text x="520" y="358" class="m">Blocks READY w/o confirm</text>
+  <text x="350" y="390" text-anchor="middle" class="m">Intake does NOT auto-promote submitted ’ effective · does NOT auto-READY</text>
+</svg>

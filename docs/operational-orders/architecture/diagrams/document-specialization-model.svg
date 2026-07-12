@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.c{fill:#eff6ff;stroke:#2563eb;rx:8}.p{fill:#f0fdf4;stroke:#16a34a;rx:8}.o{fill:#fff7ed;stroke:#ea580c;rx:8}.r{fill:#f8fafc;stroke:#64748b;rx:6}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="410" y="24" text-anchor="middle" class="t">Specialization Model  Composition + Policy/Registry</text>
+  <rect x="260" y="45" width="300" height="90" class="c"/>
+  <text x="410" y="72" text-anchor="middle" class="l">Document Core (shared)</text>
+  <text x="270" y="92" class="m">shell · lifecycle · editorial · localization · audit</text>
+  <text x="270" y="108" class="m">composition  NOT class inheritance</text>
+  <rect x="310" y="160" width="200" height="60" class="r"/>
+  <text x="410" y="185" text-anchor="middle" class="l">Specialization Policy</text>
+  <text x="320" y="203" class="m">document_kind ’ registries</text>
+  <rect x="40" y="260" width="220" height="120" class="p"/>
+  <text x="150" y="288" text-anchor="middle" class="l">Personnel Order</text>
+  <text x="50" y="308" class="m">Employee event semantics</text>
+  <text x="50" y="324" class="m">HIRE · TRANSFER · TERMINATION</text>
+  <text x="50" y="340" class="m">apply ’ employee_events</text>
+  <text x="50" y="356" class="m">HR item registry · basis policy</text>
+  <rect x="300" y="260" width="220" height="120" class="o"/>
+  <text x="410" y="288" text-anchor="middle" class="l">Operational Order</text>
+  <text x="310" y="308" class="m">21 scenarios · 14 item types</text>
+  <text x="310" y="324" class="m">Execution + Control obligations</text>
+  <text x="310" y="340" class="m">commissions · deadlines</text>
+  <text x="310" y="356" class="m">projection ’ task contour</text>
+  <rect x="560" y="260" width="220" height="120" class="r"/>
+  <text x="670" y="288" text-anchor="middle" class="l">Future Family</text>
+  <text x="570" y="308" class="m">Same core + new registry</text>
+  <text x="570" y="324" class="m">No artificial universality</text>
+  <line x1="410" y1="135" x2="410" y2="160" stroke="#334155" stroke-width="2"/>
+  <line x1="150" y1="260" x2="350" y2="220" stroke="#334155"/>
+  <line x1="410" y1="220" x2="410" y2="260" stroke="#334155"/>
+  <line x1="670" y1="260" x2="470" y2="220" stroke="#334155"/>
+  <text x="410" y="400" text-anchor="middle" class="m">Recommended: composition + policy/registry + plugin-like modules (ADR-UDE-002)</text>
+</svg>

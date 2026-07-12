@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.n{font:600 11px sans-serif;fill:#0f172a}.s{font:10px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="24" text-anchor="middle" class="t">Commission  Three Research Perspectives</text>
+
+  <rect x="40" y="50" width="250" height="160" fill="#dbeafe" stroke="#2563eb" rx="6"/>
+  <text x="165" y="75" text-anchor="middle" class="n">Commission as Party</text>
+  <text x="55" y="98" class="s">" ?@54A540B5;L (49/57 docs)</text>
+  <text x="55" y="116" class="s">" G;5=K :><8AA88</text>
+  <text x="55" y="134" class="s">" A5:@5B0@L (36/57  minority)</text>
+  <text x="55" y="152" class="s">" role-based 8;8 personal roster</text>
+  <text x="55" y="170" class="s">" "0=KAC ?0@0“K = ack evidence</text>
+  <text x="55" y="188" class="s">" <>65B 459AB2>20BL :0: collective actor</text>
+
+  <rect x="325" y="50" width="250" height="160" fill="#d1fae5" stroke="#059669" rx="6"/>
+  <text x="450" y="75" text-anchor="middle" class="n">Commission as Managed Object</text>
+  <text x="340" y="98" class="s">" «A>740BL :><8AA8N ?>&»</text>
+  <text x="340" y="116" class="s">" ?@54<5B: A?8A0=85 !, ?@8Q<:0,</text>
+  <text x="340" y="132" class="s">  D>@<C;O@, @0480F8O, 70:C?:0</text>
+  <text x="340" y="152" class="s">" ?>AB>O==0O / 2@5<5==0O (@54:> explicit)</text>
+  <text x="340" y="170" class="s">" A@>: ?>;=><>G89  >1KG=> =5 C:070=</text>
+  <text x="340" y="188" class="s">" :2>@C<  =5 2AB@5G05BAO 2 :>@?CA5</text>
+
+  <rect x="610" y="50" width="250" height="160" fill="#ffedd5" stroke="#ea580c" rx="6"/>
+  <text x="735" y="75" text-anchor="middle" class="n">Commission as Execution Mechanism</text>
+  <text x="625" y="98" class="s">" :><8AA8O 2K?>;=O5B ?@>25@:C / 0:B</text>
+  <text x="625" y="116" class="s">" expected result: 0:B, 70:;NG5=85</text>
+  <text x="625" y="134" class="s">" control often delegated to chair/</text>
+  <text x="625" y="150" class="s">  chief accountant, not commission</text>
+  <text x="625" y="170" class="s">" ?C=:B «?> @57C;LB0B0< >D>@<8BL 0:B»</text>
+  <text x="625" y="188" class="s">  = mechanism + evidence type</text>
+
+  <rect x="40" y="230" width="820" height="170" fill="#f8fafc" stroke="#cbd5e1" rx="6"/>
+  <text x="60" y="254" class="n">Execution flow (S_COMMISSION, n=28)</text>
+  <text x="60" y="276" class="s">1. Order Item: A>740BL :><8AA8N + roster (inline 80% / attachment 20%)</text>
+  <text x="60" y="294" class="s">2. Optional items: CB25@48BL ?>;>65=85, 3@0D8: @01>BK :><8AA88</text>
+  <text x="60" y="312" class="s">3. Control Obligation: 2>7;>68BL =0 4>;6=>ABL (3;021CE / 70<. 48@5:B>@0)</text>
+  <text x="60" y="330" class="s">4. Commission members execute inspection/act  implied, not task-managed in text</text>
+  <text x="60" y="348" class="s">5. Evidence: 0:B / ?@>B>:>; (18 protocol hits corpus-wide); ack signatures on order</text>
+  <text x="60" y="366" class="s">6. Termination: «?@5:@0B8BL ?>;=><>G8O»  rare; supersede other order  1 doc in corpus</text>
+  <text x="60" y="384" class="s">Distinction: creating commission ` completing its work; two-phase execution</text>
+</svg>

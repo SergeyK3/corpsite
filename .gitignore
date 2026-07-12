@@ -134,6 +134,23 @@ sql/fix_titles.sql
 *.csv
 # Aggregated (non file-level) inventory summary may be tracked
 !docs/personnel-orders/inventories/order-samples-inventory-summary.csv
+
+!docs/operational-orders/
+!docs/operational-orders/**
+!docs/operational-orders/research/data/OP-RES-001-corpus-inventory-summary.csv
+!docs/operational-orders/research/data/OP-RES-003-order-taxonomy-summary.csv
+!docs/operational-orders/research/data/OP-RES-004-control-execution-matrix.csv
+!docs/operational-orders/research/data/OP-RES-005-item-type-registry.csv
+!docs/operational-orders/research/data/OP-RES-005-scenario-generation-matrix.csv
+!docs/operational-orders/research/data/OP-RES-005-validation-rules.csv
+!docs/operational-orders/research/data/OP-RES-005A-language-pair-summary.csv
+!docs/operational-orders/research/data/OP-RES-005A-bilingual-consistency-checks.csv
+!docs/operational-orders/research/data/OP-RES-005A-workflow-evidence-summary.csv
+# Full corpus inventory (local paths / PII) — keep local only
+docs/operational-orders/research/data/OP-RES-001-corpus-inventory.csv
+
+!docs/unified-document-engine/
+!docs/unified-document-engine/**
 *.personnel-order-source.zip
 __tmp__*
 tmp/

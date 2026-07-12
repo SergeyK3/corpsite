@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 15px sans-serif;fill:#0f172a}.b{fill:#eff6ff;stroke:#2563eb;rx:6}.g{fill:#f0fdf4;stroke:#16a34a;rx:6}.o{fill:#fff7ed;stroke:#ea580c;rx:6}.x{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="18" text-anchor="middle" class="t">Operational Order Initiation Flow (OP-RES-006A)</text>
+  <rect x="10" y="35" width="75" height="40" class="o"/><text x="47" y="52" text-anchor="middle" class="x">Business</text><text x="47" y="64" text-anchor="middle" class="x">Initiator</text>
+  <rect x="95" y="35" width="75" height="40" class="o"/><text x="132" y="52" text-anchor="middle" class="x">Content</text><text x="132" y="64" text-anchor="middle" class="x">Author</text>
+  <rect x="180" y="35" width="75" height="40" class="o"/><text x="217" y="58" text-anchor="middle" class="x">Draft Submit</text>
+  <rect x="265" y="35" width="65" height="40" class="g"/><text x="297" y="58" text-anchor="middle" class="x">HR Intake</text>
+  <rect x="340" y="35" width="80" height="40" class="g"/><text x="380" y="52" text-anchor="middle" class="x">Editorial</text><text x="380" y="64" text-anchor="middle" class="x">Processing</text>
+  <rect x="430" y="35" width="70" height="40" class="g"/><text x="465" y="58" text-anchor="middle" class="x">Translation</text>
+  <rect x="510" y="35" width="85" height="40" class="b"/><text x="552" y="52" text-anchor="middle" class="x">Content</text><text x="552" y="64" text-anchor="middle" class="x">Confirm</text>
+  <rect x="605" y="35" width="65" height="40" class="b"/><text x="637" y="58" text-anchor="middle" class="x">Approval</text>
+  <rect x="680" y="35" width="55" height="40" class="b"/><text x="707" y="58" text-anchor="middle" class="x">Sign</text>
+  <rect x="745" y="35" width="70" height="40" class="b"/><text x="780" y="58" text-anchor="middle" class="x">Register</text>
+  <line x1="85" y1="55" x2="95" y2="55" stroke="#334155"/><line x1="170" y1="55" x2="180" y2="55" stroke="#334155"/><line x1="255" y1="55" x2="265" y2="55" stroke="#334155"/><line x1="330" y1="55" x2="340" y2="55" stroke="#334155"/><line x1="420" y1="55" x2="430" y2="55" stroke="#334155"/><line x1="500" y1="55" x2="510" y2="55" stroke="#334155"/><line x1="595" y1="55" x2="605" y2="55" stroke="#334155"/><line x1="670" y1="55" x2="680" y2="55" stroke="#334155"/><line x1="735" y1="55" x2="745" y2="55" stroke="#334155"/>
+  <text x="450" y="105" text-anchor="middle" class="m">Confirmed: Initiator/Author often dept head · HR = Document Operator (not default content author)</text>
+  <text x="450" y="120" text-anchor="middle" class="m">Interview required: approval sequence · KK mandatory policy · content confirmation rules</text>
+  <rect x="150" y="135" width="600" height="55" class="o"/>
+  <text x="450" y="155" text-anchor="middle" class="x">Content Ownership (dept) vs Document Processing Ownership (HR)</text>
+  <text x="160" y="175" class="m">HR: official form · requisites · translation coordination · routing · registration  NOT management decision author by default</text>
+</svg>

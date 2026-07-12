@@ -1,0 +1,6 @@
+separate_file_pairs_total=1331
+true_cross_file_translation_candidates=0
+bilingual_revision_siblings=16
+intra_document_bilingual=135
+intra_kk_after_ru=75
+intra_ru_after_kk=54

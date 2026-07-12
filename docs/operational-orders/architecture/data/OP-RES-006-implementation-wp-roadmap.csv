@@ -1,0 +1,14 @@
+wp_id,title,phase,objective,prerequisites,scope,out_of_scope,acceptance_criteria,risk_level,sequence_order,op_res_006a_update
+UDE-000,Architecture Ratification,0,Ratify OP-RES-006 + 006A and ADR backlog,OP-RES-006A complete,Terminology freeze ADR-UDE-001-016,Implementation,Stakeholder sign-off on principles+authorship,low,1,yes
+UDE-001,Shared Terminology and Roles,1,Contracts incl content author vs document operator,UDE-000,Document Kind Order Item roles glossary,OO runtime,Published contracts no API break,low,2,yes
+UDE-002,Draft Intake and Text Provenance,1b,Intake boundary provenance content confirmation,UDE-001,Intake spec I001-I026 provenance model,Runtime implementation,Spec ratified ADR-011-016,medium,3,yes
+UDE-003,Shared Editorial and Localization Core,2,Unify generated/effective/override+provenance,UDE-002,Editorial abstraction staleness BC mapping,OO generators,PO unchanged behavior,medium,4,yes
+UDE-004,Localization Model,2,Hybrid symmetric+asymmetric+provenance,UDE-003,drafting_path BC checks waiver concept,Auto-translation,READY blocked on STALE rule,medium,5,updated
+UDE-005,Shared Validation Framework,2,Unified validation incl intake checks,UDE-004,error/warning/waiver+I checks,OO scenario rules,PO ready_gate mapped,medium,6,updated
+OO-IMP-001,Operational Orders Submitted-text Intake MVP,4,Model C intake from dept draft,UDE-002;UDE-003,RU/KK paste provenance missing-KK flag,Scenario generation,Create intake draft with author declared,high,7,yes
+OO-IMP-002,Content Confirmation and Translation Workflow,4,Author confirm + translation chain,OO-IMP-001,content confirm STALE BC checks,Machine translation,Bilingual draft content-confirmed,high,8,yes
+OO-IMP-003,Scenario-driven Generation,4,Model A P0 scenarios parallel,UDE-005;OO-IMP-001,scenario registries generators,Full 21 scenarios,P0 blueprints generate valid draft,medium,9,reordered
+OO-IMP-004,Lifecycle and Approval Integration,4,OO lifecycle cancel annul archive,OO-IMP-002,shared lifecycle service,Execution projection,OO lifecycle parity with PO,medium,10,reordered
+OO-IMP-005,Execution Projection,5,Handoff obligation descriptors,OO-IMP-004,projection adapter,idempotent tasks,Descriptor on REGISTERED,high,11,reordered
+UDE-006,Controlled Personnel Convergence,6,Migrate PO to shared core,UDE-003..005;OO-IMP-004,adapter layer,Big-bang rewrite,PO routes API PDF unchanged,high,12,unchanged
+UDE-007,Shared Lifecycle Audit Extraction,3,Lifecycle audit as shared component,UDE-002,audit taxonomy,OO-specific events,PO audit unchanged,low,13,unchanged

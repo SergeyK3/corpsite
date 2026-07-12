@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 18px sans-serif;fill:#0f172a}.b{fill:#f8fafc;stroke:#334155;rx:6}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:11px sans-serif;fill:#475569}.c{fill:#eff6ff;stroke:#2563eb}.s{fill:#ecfdf5;stroke:#059669}</style></defs>
+  <text x="450" y="28" text-anchor="middle" class="t">Multilingual Generation Model</text>
+  <rect x="300" y="50" width="300" height="40" class="b c"/><text x="450" y="75" text-anchor="middle" class="l">Single Semantic Model (locale-agnostic)</text>
+  <line x1="450" y1="90" x2="250" y2="130" stroke="#334155"/><line x1="450" y1="90" x2="650" y2="130" stroke="#334155"/>
+  <rect x="80" y="130" width="340" height="100" class="b s"/>
+  <text x="250" y="155" text-anchor="middle" class="l">RU Language Renderer</text>
+  <text x="250" y="175" text-anchor="middle" class="m">action_first · dative party · RU boilerplate</text>
+  <text x="250" y="195" text-anchor="middle" class="m">generated / override / effective per block</text>
+  <text x="250" y="215" text-anchor="middle" class="m">no auto-copy from KK</text>
+  <rect x="480" y="130" width="340" height="100" class="b s"/>
+  <text x="650" y="155" text-anchor="middle" class="l">KK Language Renderer</text>
+  <text x="650" y="175" text-anchor="middle" class="m">mandate suffix · KK org boilerplate</text>
+  <text x="650" y="195" text-anchor="middle" class="m">independent render · manual edit allowed</text>
+  <text x="650" y="215" text-anchor="middle" class="m">limited template coverage (7 kk files)</text>
+  <rect x="80" y="260" width="740" height="180" class="b"/>
+  <text x="100" y="285" class="l">Corpus modes</text>
+  <text x="100" y="305" class="m">RU only: 1 doc · KK+RU mirror: 129 docs · bilingual partial: 176 docs</text>
+  <text x="100" y="325" class="m">kk-ru print composition = render-time only (Personnel Orders pattern)</text>
+  <text x="100" y="345" class="m">Risks: morphology · official translations · asymmetric legacy layout</text>
+  <text x="100" y="365" class="m">No automatic translation  parallel generation from semantic facts</text>
+  <text x="100" y="385" class="m">Shared with Personnel Orders: one semantic model, independent locale renderings</text>
+  <text x="100" y="405" class="m">Regenerate: update generated snapshot; preserve override as stale/review-required</text>
+</svg>

@@ -1,0 +1,26 @@
+check_id,check_category,check_name,description,machine_checkable,machine_assisted,human_only,applies_to,priority,notes
+BC001,structural,item_count_match,Same top-level numbered item count in RU and KK blocks,yes,no,no,intra_document_bilingual,P0,85/135 direct_translation in corpus
+BC002,structural,numbering_sequence_match,Item numbers 1..N identical sequence,yes,no,no,intra_document_bilingual,P0,
+BC003,structural,subitem_structure_match,Sub-numbering 1.1..1.n parity,yes,partial,no,regulatory_orders,P1,
+BC004,structural,attachment_count_match,Same count of attachment references,yes,no,no,attachment_driven,P1,
+BC005,structural,attachment_ref_match,Same attachment numbers cited (Приложение N / N-қосымша),yes,no,no,attachment_driven,P1,
+BC006,structural,block_order_match,KK block placement consistent with declared layout policy,partial,yes,no,bilingual_document,P2,75 kk_after_ru vs 54 ru_after_kk
+BC007,entity,date_values_match,Calendar dates and periods identical across locales,yes,partial,no,all_bilingual,P0,High formalizability
+BC008,entity,amount_values_match,Amounts and currency values identical,yes,no,no,finance_travel,P0,
+BC009,entity,order_number_match,Document number field consistent if filled,partial,yes,no,signed_ready,P1,Often blank in draft
+BC010,entity,party_role_match,Same responsible roles (position codes) not necessarily same surface form,no,yes,yes,all_bilingual,P0,Role-first semantic compare
+BC011,entity,party_name_match,Named persons consistent when present,no,partial,yes,person_specific_orders,P1,Privacy-sensitive
+BC012,entity,unit_name_match,Organizational unit references equivalent,no,yes,yes,clinical_commission,P1,Official KK titles
+BC013,semantic,intent_parity,Same business intent per item pair,no,yes,yes,all_bilingual,P0,Requires semantic model
+BC014,semantic,managed_object_parity,Same managed object tags per item,no,yes,yes,all_bilingual,P0,
+BC015,semantic,controller_parity,Control obligation scope and controller role match,partial,yes,no,control_meta_item,P0,12 partial_translation cases
+BC016,semantic,deadline_parity,Deadline semantics equivalent,yes,partial,no,deadline_items,P0,
+BC017,semantic,evidence_parity,Evidence expectation equivalent,no,yes,yes,discipline_funds,P1,
+BC018,semantic,dependency_parity,Cross-item dependencies preserved,no,yes,yes,sequential_orders,P2,Rare explicit refs
+BC019,text,clause_completeness,both locales have non-empty effective text for required blocks,yes,no,no,pre_signature,P0,PO-EDIT READY gate pattern
+BC020,text,no_placeholder_residue,No unfilled placeholders in either locale,yes,no,no,pre_signature,P0,
+BC021,text,terminology_equivalence,Official terms legally equivalent,no,partial,yes,kk_review,P0,Human terminology review
+BC022,text,calque_detection,KK text free of RU word-order calques,no,partial,yes,kk_review,P2,Corpus not NLP-validated
+BC023,cross_version,ru_change_after_kk,KK stale after RU effective text change,partial,yes,no,asymmetric_workflow,P0,Conceptual staleness
+BC024,cross_version,structural_drift_score,Item count ratio below threshold flags review,yes,no,no,intra_document,P1,33 abbreviated_or_expanded cases
+BC025,cross_file,pair_existence,Separate RU and KK files exist for same order,partial,yes,no,cross_file_mode,P2,0 true candidates in corpus

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 120" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 13px sans-serif;fill:#0f172a}.r{fill:#fef3c7;stroke:#d97706;rx:4}.i{fill:#eff6ff;stroke:#2563eb;rx:4}.o{fill:#fff7ed;stroke:#ea580c;rx:4}.d{fill:#f0fdf4;stroke:#16a34a;rx:4}.m{font:8px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="14" text-anchor="middle" class="t">Implementation Roadmap  Ratified (UDE-000)</text>
+  <rect x="10" y="22" width="55" height="75" class="r"/><text x="37" y="40" text-anchor="middle" class="m">UDE-000</text><text x="37" y="52" text-anchor="middle" class="m">Ratify</text>
+  <rect x="75" y="22" width="55" height="75" class="i"/><text x="102" y="40" text-anchor="middle" class="m">UDE-001</text><text x="102" y="52" text-anchor="middle" class="m">Terms</text>
+  <rect x="140" y="22" width="55" height="75" class="i"/><text x="167" y="40" text-anchor="middle" class="m">UDE-002</text><text x="167" y="52" text-anchor="middle" class="m">Intake</text>
+  <rect x="205" y="22" width="55" height="75" class="i"/><text x="232" y="40" text-anchor="middle" class="m">UDE-003</text><text x="232" y="52" text-anchor="middle" class="m">Editorial</text>
+  <rect x="270" y="22" width="55" height="75" class="i"/><text x="297" y="40" text-anchor="middle" class="m">UDE-004</text><text x="297" y="52" text-anchor="middle" class="m">Locale</text>
+  <rect x="335" y="22" width="55" height="75" class="i"/><text x="362" y="40" text-anchor="middle" class="m">UDE-005</text><text x="362" y="52" text-anchor="middle" class="m">Valid</text>
+  <rect x="400" y="22" width="55" height="75" class="o"/><text x="427" y="40" text-anchor="middle" class="m">OO-001</text><text x="427" y="52" text-anchor="middle" class="m">Intake</text>
+  <rect x="465" y="22" width="55" height="75" class="o"/><text x="492" y="40" text-anchor="middle" class="m">OO-002</text><text x="492" y="52" text-anchor="middle" class="m">Confirm</text>
+  <rect x="530" y="22" width="55" height="75" class="o"/><text x="557" y="40" text-anchor="middle" class="m">OO-003</text><text x="557" y="52" text-anchor="middle" class="m">Scenario</text>
+  <rect x="595" y="22" width="55" height="75" class="o"/><text x="622" y="40" text-anchor="middle" class="m">OO-004</text><text x="622" y="52" text-anchor="middle" class="m">Lifecycle</text>
+  <rect x="660" y="22" width="55" height="75" class="d"/><text x="687" y="40" text-anchor="middle" class="m">OO-005</text><text x="687" y="52" text-anchor="middle" class="m">Project</text>
+  <rect x="725" y="22" width="55" height="75" class="d"/><text x="752" y="40" text-anchor="middle" class="m">UDE-006</text><text x="752" y="52" text-anchor="middle" class="m">PO conv</text>
+  <text x="450" y="108" text-anchor="middle" class="m">Next: UDE-001 · PO MVP untouched · Interviews before OO-IMP-001</text>
+</svg>

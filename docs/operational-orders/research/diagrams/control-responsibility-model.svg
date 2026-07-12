@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .t{font:700 18px sans-serif;fill:#0f172a}.n{font:600 12px sans-serif;fill:#0f172a}.s{font:11px sans-serif;fill:#475569}
+      .box{stroke-width:1.5;rx:6}
+    </style>
+  </defs>
+  <text x="450" y="26" text-anchor="middle" class="t">Control &amp; Responsibility  Role Separation</text>
+
+  <rect x="40" y="55" width="150" height="55" fill="#dbeafe" stroke="#2563eb" class="box"/>
+  <text x="115" y="78" text-anchor="middle" class="n">A?>;=8B5;L</text>
+  <text x="115" y="96" text-anchor="middle" class="s">2K?>;=O5B 459AB285</text>
+
+  <rect x="220" y="55" width="150" height="55" fill="#d1fae5" stroke="#059669" class="box"/>
+  <text x="295" y="78" text-anchor="middle" class="n">B25BAB25==K9</text>
+  <text x="295" y="96" text-anchor="middle" class="s">?5@A>=0;L=0O >B25BAB25==>ABL</text>
+
+  <rect x="400" y="55" width="150" height="55" fill="#e9d5ff" stroke="#7c3aed" class="box"/>
+  <text x="475" y="78" text-anchor="middle" class="n">!>8A?>;=8B5;L</text>
+  <text x="475" y="96" text-anchor="middle" class="s">?0@0;;5;L=>5 CG0AB85</text>
+
+  <rect x="580" y="55" width="150" height="55" fill="#ffedd5" stroke="#ea580c" class="box"/>
+  <text x="655" y="78" text-anchor="middle" class="n">>=B@>;8@CNI89</text>
+  <text x="655" y="96" text-anchor="middle" class="s">=047>@ 70 8A?>;=5=85<</text>
+
+  <rect x="760" y="55" width="120" height="55" fill="#f1f5f9" stroke="#64748b" class="box"/>
+  <text x="820" y="78" text-anchor="middle" class="n">>4?8A0=B</text>
+  <text x="820" y="96" text-anchor="middle" class="s">48@5:B>@</text>
+
+  <rect x="40" y="140" width="840" height="100" fill="#fffbeb" stroke="#d97706" rx="6"/>
+  <text x="60" y="165" class="n">5 A<5H820BL: «>B25BAB25==>ABL» ` «:>=B@>;L» (=> <>3CB A>2?040BL =0 >4=>< ;8F5 2 @07=KE ?C=:B0E)</text>
+  <text x="60" y="188" class="s">" «>=B@>;L 2>7;>68BL =0 3;021CE0»  Control Obligation (S_COMMISSION, S_ACCOUNTING)</text>
+  <text x="60" y="206" class="s">" «7OBL =0 :>=B@>;L @01>BC A>B@C4=8:>2»  embedded control duty (S_DISCIPLINE)  8A?>;=8B5;L ` :>=B@>;Q@</text>
+  <text x="60" y="224" class="s">" «AB02;ON :>=B@>;L 70 A>1>9»  48@5:B>@ = controller, =5 executor (S_TRAVEL, S_FUNDS)</text>
+
+  <rect x="40" y="260" width="400" height="190" fill="#f8fafc" stroke="#cbd5e1" rx="6"/>
+  <text x="60" y="285" class="n">Control scope models</text>
+  <text x="60" y="308" class="s">order  25AL ?@8:07 (dominant; final meta-item)</text>
+  <text x="60" y="326" class="s">item  >B45;L=K9 ?C=:B (embedded, 12 item-level hits)</text>
+  <text x="60" y="344" class="s">direction  «?> ;8=88» / «CA8;8BL :>=B@>;L» (disciplinary)</text>
+  <text x="60" y="362" class="s">self  48@5:B>@ (director_self in P0 travel/funds)</text>
+  <text x="60" y="380" class="s">multi  =5A:>;L:> :>=B@>;Q@>2 2 >4=>< ?@8:075 (disciplinary)</text>
+  <text x="60" y="398" class="s">none  ~8% docs 157 O2=>3> control (OP-RES-002)</text>
+  <text x="60" y="420" class="s">formal  control 157 A@>:0 8 157 >BGQB=>AB8 (1>;LH8=AB2>)</text>
+
+  <rect x="460" y="260" width="420" height="190" fill="#eff6ff" stroke="#93c5fd" rx="6"/>
+  <text x="480" y="285" class="n">Party recording models (corpus)</text>
+  <text x="480" y="308" class="s">dative_position  49 items («0254CNI5<C&»)</text>
+  <text x="480" y="326" class="s">dative_person  412 items ($ 2 40B5;L=><)</text>
+  <text x="480" y="344" class="s">unit_subject  40 items («B45;C D0@<0F88&»)</text>
+  <text x="480" y="362" class="s">commission  273 commission-related items</text>
+  <text x="480" y="380" class="s">role-based preferred for longevity; named person for one-off acts</text>
+  <text x="480" y="398" class="s">multiple executors  parallel items, not co-executor field</text>
+  <text x="480" y="420" class="s">co-executors rarely labeled; inferred from parallel structure</text>
+</svg>

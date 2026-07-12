@@ -1,0 +1,12 @@
+pairs_separate_high=64
+pairs_separate_probable=360
+pairs_separate_weak=907
+intra_bilingual=135
+ru_only_content=4
+kk_only_content=41
+kk_after_ru=75
+ru_after_kk=54
+intra_relation_direct_translation=85
+intra_relation_abbreviated_or_expanded=33
+intra_relation_partial_translation=12
+intra_relation_adapted_translation=5

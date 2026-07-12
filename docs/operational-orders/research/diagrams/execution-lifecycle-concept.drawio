@@ -1,0 +1,12 @@
+<mxfile host="app.diagrams.net" version="22.1.0" type="device">
+  <diagram id="lc" name="Lifecycle">
+    <mxGraphModel dx="900" dy="500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="500">
+      <root>
+        <mxCell id="0"/><mxCell id="1" parent="0"/>
+        <mxCell id="d1" value="Document: draft → signed → registered" style="rounded=1;fillColor=#dae8fc;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="360" height="40" as="geometry"/></mxCell>
+        <mxCell id="e1" value="Obligation: created → in_progress → done (+ overdue, perpetual)" style="rounded=1;fillColor=#d5e8d4;" vertex="1" parent="1"><mxGeometry x="40" y="120" width="420" height="40" as="geometry"/></mxCell>
+        <mxCell id="n" value="Orthogonal lifecycles — signing ≠ executing" style="shape=note;fillColor=#fff2cc;" vertex="1" parent="1"><mxGeometry x="40" y="190" width="400" height="50" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
