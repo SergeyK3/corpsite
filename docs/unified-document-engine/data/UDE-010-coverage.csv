@@ -1,0 +1,11 @@
+area,unit_test,compatibility_test,dependency_test,read_service_regression,characterization_regression
+EditorialService,yes,yes,yes,yes,yes
+LocalizationService,yes,yes,yes,yes,yes
+FingerprintService,yes,n/a,yes,yes,yes
+OverrideResolver,yes,yes,yes,yes,yes
+ReviewPolicy,yes,yes,yes,yes,yes
+OfficialDraftBuilder,yes,yes,yes,yes,yes
+DocumentEngineEditorialFacade,yes,yes,yes,yes,yes
+EditorialCompatibilityHarness,yes,yes,n/a,yes,yes
+DependencyRulesEditorial,yes,n/a,yes,n/a,n/a
+DependencyRulesPONoImport,yes,n/a,yes,n/a,n/a

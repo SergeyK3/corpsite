@@ -1,0 +1,11 @@
+area,unit_test,compatibility_test,dependency_test,editorial_regression,characterization_regression
+ActivationService,yes,yes,yes,yes,yes
+LifecycleEvaluationService,yes,yes,yes,yes,yes
+PromotionPolicy,yes,yes,yes,yes,yes
+RegistrationPolicy,yes,yes,yes,yes,yes
+ReadinessPolicy,yes,yes,yes,yes,yes
+LifecycleRules,yes,n/a,yes,yes,yes
+DocumentEngineLifecycleFacade,yes,yes,yes,yes,yes
+LifecycleCompatibilityHarness,yes,yes,n/a,yes,yes
+DependencyRulesLifecycle,yes,n/a,yes,n/a,n/a
+DependencyRulesPONoImport,yes,n/a,yes,n/a,n/a

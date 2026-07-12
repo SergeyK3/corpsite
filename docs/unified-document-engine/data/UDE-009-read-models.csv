@@ -1,0 +1,12 @@
+read_model,module,type,not_persistence,not_orm,not_api_dto,key_fields
+DocumentReadModel,document.py,aggregate,yes,yes,yes,"document_id, document_kind, specialization, lifecycle_state, archive_state, void_kind, metadata, legacy_status, is_archived"
+DocumentMetadataReadModel,document.py,nested,yes,yes,yes,"order_number, order_date, order_type_code, source_mode, legal_basis, timestamps, archive fields"
+LifecycleReadModel,lifecycle.py,aggregate,yes,yes,yes,"document_id, lifecycle_state, archive_state, void_kind, legacy_status, is_archived"
+LocaleReadModel,locale.py,aggregate,yes,yes,yes,"blocks tuple, snapshots tuple"
+LocaleBlockReadModel,locale.py,nested,yes,yes,yes,"block_id, locale, generated_text, override_text, effective_text, text_source_type, staleness_state, review_status"
+LocaleSnapshotReadModel,locale.py,nested,yes,yes,yes,"localized_text_id, locale, title, preamble, body_text, is_authoritative, render_version"
+AuditReadModel,audit.py,aggregate,yes,yes,yes,"document_order_id, events tuple"
+AuditEventReadModel,audit.py,nested,yes,yes,yes,"event_id, action, status transitions, void_kind transitions, actor, reason, metadata_json"
+PrintReadModel,print.py,aggregate,yes,yes,yes,"order_id, lifecycle_state, archive_state, status_mark, printable, records"
+PrintRecordReadModel,print.py,nested,yes,yes,yes,"print_id, locale, format, file_path, file_url, is_signed_copy, render_version"
+ItemReadModel,item.py,aggregate,yes,yes,yes,"item_id, backend/display item types, event_subject, payload, org_unit"

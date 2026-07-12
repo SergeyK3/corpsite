@@ -1,0 +1,12 @@
+area,unit_test,compatibility_test,dependency_test,adapter_test_regression,characterization_regression
+DocumentReadService,yes,yes,yes,yes,yes
+LifecycleReadService,yes,yes,yes,yes,yes
+LocalizationReadService,yes,yes,yes,yes,yes
+AuditReadService,yes,yes,yes,yes,yes
+PrintReadService,yes,yes,yes,yes,yes
+ItemReadService,yes,yes,yes,yes,yes
+DocumentEngineReadFacade,yes,yes,yes,yes,yes
+ReadServiceCompatibilityHarness,yes,yes,n/a,n/a,yes
+DependencyRulesReadModels,yes,n/a,yes,n/a,n/a
+DependencyRulesReadServices,yes,n/a,yes,n/a,n/a
+DependencyRulesPONoImport,yes,n/a,yes,n/a,n/a

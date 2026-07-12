@@ -1,0 +1,10 @@
+adapter_name,input_source,output_view,shared_contracts_used,write_path,tests,notes
+PersonnelDocumentAdapter,personnel_orders_query header dict,PersonnelDocumentReadView,"DocumentId, DocumentKind, DocumentSpecialization, DocumentLifecycleState, ArchiveState, VoidKind",no,test_personnel_adapters.py,Supplement fills void_kind API gap
+PersonnelPartyAdapter,personnel_order_items employee_id,PartyReference,PartyReference, no,test_personnel_adapters.py,Event subject only — not responsible party
+PersonnelLifecycleAdapter,order header status/is_archived,enum values,"DocumentLifecycleState, ArchiveState, VoidKind",no,test_personnel_adapters.py,Parallel to PO enums — no replacement
+PersonnelLocaleAdapter,editorial blocks + localized_texts,"PersonnelLocaleBlockReadView, PersonnelLocaleSnapshotReadView","LocaleCode, StalenessState, TextSourceType",no,test_personnel_adapters.py,Editorial is primary; localized_texts legacy channel
+PersonnelItemAdapter,personnel_order_items dict,PersonnelItemReadView,PartyReference (event subject),no,test_personnel_adapters.py,RATE_CHANGE display alias for TRANSFER+to_rate
+PersonnelAuditAdapter,lifecycle_audit rows,PersonnelAuditEventReadView,VoidKind,no,test_personnel_adapters.py,Append-only read — no synthetic events
+PersonnelPrintAdapter,prints[] + header status,PersonnelPrintReadView,"DocumentLifecycleState, ArchiveState",no,test_personnel_adapters.py,Metadata only — no PDF/HTML generation
+PersonnelReadAdapter,detail envelope,PersonnelReadBundle,all above,no,"test_personnel_adapters.py, test_personnel_adapter_integration.py",Single public facade entry point
+CompatibilityHarness,legacy detail vs bundle,CompatibilityReport,n/a,no,test_personnel_adapters.py,Read-only diff reporter

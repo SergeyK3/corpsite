@@ -1,0 +1,27 @@
+contract_name,category,runtime_location,status,first_consumer,po_dependency,oo_dependency,tests,notes
+DocumentId,value_object,app/document_engine/value_objects/identity.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,Opaque string identity; frozen dataclass
+DocumentKind,value_object,app/document_engine/value_objects/identity.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,PERSONNEL_ORDER and OPERATIONAL_ORDER only
+DocumentSpecialization,value_object,app/document_engine/value_objects/identity.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,PERSONNEL and OPERATIONAL bindings
+DocumentLifecycleState,value_object,app/document_engine/value_objects/lifecycle.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,Parallels PO ORDER_STATUSES; not wired to PO persistence
+ArchiveState,value_object,app/document_engine/value_objects/lifecycle.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,ACTIVE and ARCHIVED orthogonal flag
+VoidKind,value_object,app/document_engine/value_objects/lifecycle.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,CANCEL and ANNUL; mirrors PO void_kind
+LocaleCode,value_object,app/document_engine/value_objects/localization.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,ru and kk
+StalenessState,value_object,app/document_engine/value_objects/localization.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,Derived localization staleness reasons
+TextSourceType,value_object,app/document_engine/value_objects/provenance.py,implemented,none,no,no,tests/document_engine/test_value_objects.py,GENERATED OVERRIDE SUBMITTED IMPORTED
+PartyReferenceType,contract,app/document_engine/contracts/party.py,implemented,none,no,no,tests/document_engine/test_party_contracts.py,Six generic party discriminators
+PartyReference,contract,app/document_engine/contracts/party.py,implemented,none,no,no,tests/document_engine/test_party_contracts.py,Adapter mapping shape only; no PO employee_id replacement
+ValidationSeverity,contract,app/document_engine/contracts/validation.py,implemented,none,no,no,tests/document_engine/test_validation_contracts.py,ERROR WARNING INFO
+ValidationIssue,contract,app/document_engine/contracts/validation.py,implemented,none,no,no,tests/document_engine/test_validation_contracts.py,Frozen issue descriptor
+ValidationResult,contract,app/document_engine/contracts/validation.py,implemented,none,no,no,tests/document_engine/test_validation_contracts.py,Aggregated is_valid semantics
+Document,contract,app/document_engine/contracts/document.py,deferred,none,no,no,,Aggregate root runtime deferred to UDE-008+
+DocumentMetadata,contract,,deferred,none,no,no,,No consumer in UDE-007
+OrderItem,contract,,deferred,none,no,no,,Specialization shell deferred
+ExecutionObligation,contract,,deferred,none,no,no,,No consumer; per WP forbidden in UDE-007
+ScenarioRegistry,contract,,deferred,none,no,no,,Generation engine not started
+LifecycleOrchestrator,service,,deferred,none,no,no,,UDE-005 architecture only
+LifecycleAuditEventRecord,contract,,deferred,UDE-008,no,no,,Adapter read model in next WP
+LocaleRepresentation,contract,,deferred,UDE-008,no,no,,Read adapter view shape
+GeneratedText,contract,,deferred,UDE-008,no,no,,Editorial runtime deferred
+EffectiveText,contract,,deferred,UDE-008,no,no,,Editorial runtime deferred
+DraftWorkspace,contract,,deferred,none,no,no,,UDE-002 architecture only
+ContentConfirmation,contract,,deferred,none,no,no,,Needs clarification per UDE-001

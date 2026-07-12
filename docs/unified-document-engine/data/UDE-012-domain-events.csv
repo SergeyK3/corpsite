@@ -1,0 +1,11 @@
+event,module,persisted,trigger_command,notes
+DocumentActivated,domain_events.py,no,CreateDocumentCommand,Runtime only
+DocumentPromoted,domain_events.py,no,PromoteDraftCommand,Runtime only
+DocumentMarkedReady,domain_events.py,no,MarkReadyCommand,DRAFT→READY
+DocumentReturnedToDraft,domain_events.py,no,ReturnToDraftCommand,READY→DRAFT
+DocumentSigned,domain_events.py,no,SignDocumentCommand,READY→SIGNED
+DocumentRegistered,domain_events.py,no,RegisterDocumentCommand,SIGNED→REGISTERED
+DocumentCancelled,domain_events.py,no,CancelDocumentCommand,void_kind CANCEL
+DocumentAnnulled,domain_events.py,no,AnnulDocumentCommand,void_kind ANNUL
+DocumentArchived,domain_events.py,no,ArchiveDocumentCommand,orthogonal archive
+DocumentRestored,domain_events.py,no,RestoreDocumentCommand,orthogonal restore

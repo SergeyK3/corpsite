@@ -1,0 +1,40 @@
+area,behavior,existing_test,new_test,coverage_status,risk,notes
+Lifecycle statuses,Five PO statuses exposed in detail API,test_wp_po_004a; test_wp_po_004b,test_personnel_orders_characterization_lifecycle.py,covered,low,Shared enum parity verified without PO wiring
+Cancel draft,CANCEL void_kind and VOIDED status,test_wp_po_lc_del_004_cancel_api.py,test_personnel_orders_characterization_lifecycle.py,covered,low,Characterization confirms current API
+Cancel ready,CANCEL from READY_FOR_SIGNATURE,test_wp_po_lc_del_004_cancel_api.py,test_personnel_orders_characterization_lifecycle.py,covered,low,
+Cancel registered rejected,ORDER_NOT_CANCELLABLE,test_wp_po_lc_del_004_cancel_api.py,test_personnel_orders_characterization_lifecycle.py,covered,low,
+Annul signed/registered,ANNUL via void endpoint,test_wp_po_004d; test_wp_po_lc_del_003,test_personnel_orders_characterization_lifecycle.py (void_kind matrix),partial,medium,Characterization documents resolve_void_kind; full annul API path still in legacy WP tests
+void_kind matrix,CANCEL vs ANNUL by status,test_wp_po_lc_del_003_lifecycle_audit_foundation.py,test_personnel_orders_characterization_lifecycle.py,covered,low,
+Archive registered,Archive success and audit row,test_wp_po_lc_del_005_archive_api.py,test_personnel_orders_characterization_archive.py,covered,low,
+Archive voided,Archive VOIDED order,test_wp_po_lc_del_005_archive_api.py,test_personnel_orders_characterization_archive.py,covered,low,
+Archived immutability,ORDER_ARCHIVED on mutation,test_wp_po_lc_del_005a_archived_immutability_api.py,test_personnel_orders_characterization_archive.py,covered,low,
+Restore,Clears archived_at,test_wp_po_lc_del_005_archive_api.py,test_personnel_orders_characterization_archive.py,covered,low,
+Archived read/audit,Detail and audit remain available,test_wp_po_lc_del_005a_archived_immutability_api.py,test_personnel_orders_characterization_archive.py,covered,low,
+Ownership cancel own,Owner can cancel own draft,test_wp_po_lc_del_004_cancel_api.py,test_personnel_orders_characterization_ownership.py,covered,low,
+Non-owner denial,cancel.own foreign draft 403,test_wp_po_lc_del_004_cancel_api.py,test_personnel_orders_characterization_ownership.py,covered,low,
+Privileged cancel,directory privileged alone denied,test_wp_po_lc_del_004_cancel_api.py,test_personnel_orders_characterization_ownership.py,covered,low,DIRECTORY_PRIVILEGED != cancel grant
+Cancel scope,Org subtree scope grants,test_wp_po_lc_del_004_cancel_api.py,,partial,medium,CANCEL_SCOPE characterization deferred; existing DEL-004 covers
+Journal default hides voided,List excludes VOIDED,test_wp_po_lc_del_006_journal_closed_filter_api.py,test_personnel_orders_characterization_journal.py,covered,low,
+Journal default hides archived,List excludes archived,test_wp_po_lc_del_006_journal_closed_filter_api.py,test_personnel_orders_characterization_journal.py,covered,low,
+include_closed,Shows closed documents,test_wp_po_lc_del_006_journal_closed_filter_api.py,test_personnel_orders_characterization_journal.py,covered,low,
+include_archived alias,Legacy alias preserved,test_wp_po_lc_del_006_journal_closed_filter_api.py,test_personnel_orders_characterization_journal.py,covered,low,
+Active orders visible,Draft remains in default list,test_wp_po_lc_del_006_journal_closed_filter_api.py,test_personnel_orders_characterization_journal.py,covered,low,
+RU/KK independent generation,Distinct generated titles,test_wp_po_edit_002_generators.py; test_wp_po_edit_002_editorial_api.py,test_personnel_orders_characterization_localization.py,covered,low,
+Override not equal generated,Effective differs from generated,test_wp_po_edit_002_editorial_api.py,test_personnel_orders_characterization_localization.py,covered,low,
+Locale isolation,RU override does not replace KK,test_wp_po_edit_002_editorial_api.py,test_personnel_orders_characterization_localization.py,covered,low,
+Regenerate keeps override,Override survives regenerate,test_wp_po_edit_002_editorial_api.py,test_personnel_orders_characterization_localization.py,covered,low,
+Item registry MVP types,Six backend item types,test_wp_po_edit_002_basis_policy.py; test_wp_po_004b,test_personnel_orders_characterization_item_registry.py,covered,low,HIRE TRANSFER TERMINATION CONCURRENT_DUTY_START CONCURRENT_DUTY_END
+RATE_CHANGE UI alias,Backend rejects RATE_CHANGE item type,personnelOrderItemFormRegistry.test.ts,test_personnel_orders_characterization_item_registry.py,covered,low,Documentation drift: RATE_CHANGE is UI-only
+HIRE without employee_id,Allowed on item create,none,test_personnel_orders_characterization_hire.py,covered,medium,New characterization baseline
+HIRE register requires employee,Register fails without employee_id,none,test_personnel_orders_characterization_hire.py,covered,medium,New characterization baseline
+Audit append-only,Cancel adds one audit row,test_wp_po_lc_del_003; test_wp_po_lc_del_004,test_personnel_orders_characterization_audit.py,covered,low,
+Audit GET success,Lifecycle audit endpoint returns rows,test_wp_po_lc_del_003 (auth only),test_personnel_orders_characterization_audit.py,covered,medium,Successful GET with rows was a prior gap
+No synthetic activation audit,Draft create writes zero audit rows,none,test_personnel_orders_characterization_audit.py,covered,low,Confirms no fabricated history
+Print VM bilingual,RU/KK title fields,personnelOrderPrint.test.ts,personnelOrderPrint.characterization.test.ts,covered,low,
+Print voided watermark,cancelled status mark,personnelOrderPrint.test.ts,personnelOrderPrint.characterization.test.ts,covered,low,
+Journal UI include_closed,personnelOrdersApi.client.test.ts,personnelOrdersApi.client.characterization.test.ts,covered,low,
+Full HIRE E2E apply,Apply hire to history rollback,test_wp_po_004c; test_wp_po_006 (TRANSFER only),,gap,medium,Deferred; not required for UDE-007 P0
+TERMINATION apply E2E,Apply termination path,none,,gap,medium,Existing tests cover draft/register only
+CONCURRENT_DUTY apply,Apply paths for duty items,test_wp_po_004b item create only,,gap,low,Item create covered; apply E2E deferred
+Lifecycle audit UI,Audit trail in drawer,none,,gap,low,No frontend audit UI tests
+PDF binary golden,Playwright PDF bytes,personnelOrderPdf.test.ts,,partial,low,Intentionally excluded from P0 characterization per WP

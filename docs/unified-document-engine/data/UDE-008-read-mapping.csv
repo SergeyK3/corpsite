@@ -1,0 +1,19 @@
+po_field,po_source,shared_target,adapter,transform_type,notes
+order_id,personnel_orders.order_id,DocumentId.value,PersonnelDocumentAdapter,direct,prefixed po:{id}
+order_class,personnel_orders.order_class,DocumentSpecialization,PersonnelDocumentAdapter,direct,PERSONNEL default
+status,personnel_orders.status,DocumentLifecycleState,PersonnelLifecycleAdapter,direct,Same string values
+is_archived,archived_at IS NOT NULL,ArchiveState,PersonnelLifecycleAdapter,direct,Orthogonal flag
+void_kind,personnel_orders.void_kind (DB),VoidKind,PersonnelDocumentAdapter,supplement,Not in API header (F-007)
+employee_id,personnel_order_items.employee_id,PartyReference(PERSON),PersonnelPartyAdapter,transform,metadata po_role=event_subject
+employee_name,employees.full_name,PartyReference.display_name,PersonnelPartyAdapter,direct,Read-only display
+item_type_code,personnel_order_items.item_type_code,backend_item_type_code,PersonnelItemAdapter,direct,MVP registry unchanged
+TRANSFER+to_rate only,payload heuristic,display_item_type_code RATE_CHANGE,PersonnelItemAdapter,transform,UI alias only
+locale,editorial_blocks.locale / localized_texts.locale,LocaleCode,PersonnelLocaleAdapter,direct,ru/kk
+override_text,editorial_blocks.override_text,TextSourceType.OVERRIDE,PersonnelLocaleAdapter,direct,Effective authority
+generated_text,editorial_blocks.generated_text,TextSourceType.GENERATED,PersonnelLocaleAdapter,direct,
+review_status,editorial_blocks.review_status,StalenessState,PersonnelLocaleAdapter,transform,GENERATION_FAILED→REVIEW_REQUIRED
+effective_text,override or generated,PersonnelLocaleBlockReadView.effective_text,PersonnelLocaleAdapter,direct,Mirrors editorial mapper
+audit.action,lifecycle_audit.action,PersonnelAuditEventReadView.action,PersonnelAuditAdapter,direct,Append-only
+audit.new_void_kind,lifecycle_audit.new_void_kind,VoidKind,PersonnelAuditAdapter,direct,
+prints.locale,personnel_order_prints.locale,LocaleCode,PersonnelPrintAdapter,direct,Metadata only
+status,order.status,print status_mark,PersonnelPrintAdapter,transform,draft/unsigned/cancelled/none

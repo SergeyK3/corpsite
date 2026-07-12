@@ -1,0 +1,10 @@
+model,module,type,immutable,write_path,key_fields
+ActivationDecision,lifecycle_models.py,decision,yes,no,"is_allowed, blockers, validation"
+LifecycleDecision,lifecycle_models.py,decision,yes,no,"current_state, archive_state, void_kind, allowed_transitions, blockers"
+LifecycleTransition,lifecycle_models.py,value,yes,no,"from_state, to_state, gate, allowed, reason"
+LifecycleGate,lifecycle_models.py,enum,yes,no,"ACTIVATION, PROMOTION, MARK_READY, SIGN, REGISTER, CANCEL, ANNUL, ARCHIVE, RETURN_TO_DRAFT"
+LifecycleViolation,lifecycle_models.py,finding,yes,no,"code, message, gate, field_path"
+PromotionReadiness,lifecycle_models.py,readiness,yes,no,"is_ready, blockers, validation"
+RegistrationReadiness,lifecycle_models.py,readiness,yes,no,"is_ready, blockers, validation"
+LifecycleEvaluation,lifecycle_models.py,aggregate,yes,no,"lifecycle, decision, signed_snapshot, promotion_readiness, registration_readiness"
+SignedSnapshotDescriptor,lifecycle_models.py,descriptor,yes,no,"is_eligible, lifecycle_state, blockers"

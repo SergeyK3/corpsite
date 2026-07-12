@@ -1,0 +1,11 @@
+model,module,type,immutable,not_orm,not_dto,key_fields
+EditorialDocument,editorial_models.py,aggregate,yes,yes,yes,"document_kind, specialization, lifecycle_state, sections, locales"
+EditorialSection,editorial_models.py,nested,yes,yes,yes,"section_key, scope, order_item_id, blocks"
+EditorialLocale,editorial_models.py,nested,yes,yes,yes,"locale, blocks"
+EditorialBlock,editorial_models.py,nested,yes,yes,yes,"block_id, generated_text, override, effective_text, fingerprint, review_state, staleness_state"
+EditorialOverride,editorial_models.py,value,yes,yes,yes,"override_text, is_active"
+EditorialFingerprint,editorial_models.py,value,yes,yes,yes,"value, generator_key, generator_version, source_fingerprint"
+ReviewState,editorial_models.py,enum,yes,yes,yes,"CURRENT, STALE, REVIEW_REQUIRED, UNKNOWN"
+OfficialDraftSnapshot,editorial_models.py,snapshot,yes,yes,yes,"workspace_reference (no DocumentId), locale_blocks, item_count, draft_metadata"
+OfficialDraftLocaleBlock,editorial_models.py,nested,yes,yes,yes,"locale, generated, override, effective, review, fingerprint"
+LocalizationView,localization_service.py,view,yes,yes,yes,"effective_blocks, generated_blocks, override_blocks, review_states, staleness_states"

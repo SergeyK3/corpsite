@@ -1,0 +1,8 @@
+service,module,adapter,read_model,write_path,notes
+DocumentReadService,document.py,PersonnelReadAdapter / PersonnelDocumentAdapter,DocumentReadModel,no,Maps document identity lifecycle archive void metadata
+LifecycleReadService,lifecycle.py,PersonnelLifecycleAdapter,LifecycleReadModel,no,No lifecycle mutations
+LocalizationReadService,localization.py,PersonnelLocaleAdapter,LocaleReadModel,no,Blocks + snapshots; no regeneration
+AuditReadService,audit.py,PersonnelAuditAdapter,AuditReadModel,no,Append-only; no new audit events
+PrintReadService,print.py,PersonnelPrintAdapter,PrintReadModel,no,Metadata only; no PDF/HTML
+ItemReadService,item.py,PersonnelItemAdapter,ItemReadModel,no,All current PO item types incl RATE_CHANGE alias
+DocumentEngineReadFacade,facade.py,PersonnelReadAdapter (all),DocumentEngineReadSnapshot,no,Single public entry point

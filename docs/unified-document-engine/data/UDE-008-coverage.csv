@@ -1,0 +1,14 @@
+area,test_file,coverage_status,notes
+Document mapping,test_personnel_adapters.py,covered,Golden synthetic header
+Party mapping,test_personnel_adapters.py,covered,Event subject metadata
+Lifecycle mapping,test_personnel_adapters.py,covered,All five states via enums
+Locale editorial,test_personnel_adapters.py,covered,Override and staleness
+Locale legacy snapshots,test_personnel_adapters.py,covered,RU/KK localized_texts
+Item registry,test_personnel_adapters.py,covered,Six backend + RATE_CHANGE display
+Audit mapping,test_personnel_adapters.py,covered,Cancel audit row shape
+Print mapping,test_personnel_adapters.py,covered,Status mark + printable flag
+Facade aggregation,test_personnel_adapters.py,covered,PersonnelReadAdapter.from_detail
+Service wiring,test_personnel_adapter_integration.py,covered,from_order_id monkeypatched PO services
+Dependency direction,test_dependency_rules.py,covered,Core isolated; PO does not import adapters
+PO characterization regression,tests/personnel_orders/characterization/,existing,Re-run required — no PO changes
+Compatibility harness,test_personnel_adapters.py,covered,Synthetic compatible report

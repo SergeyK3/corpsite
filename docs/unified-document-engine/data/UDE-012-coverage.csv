@@ -1,0 +1,15 @@
+area,unit_test,compatibility_test,dependency_test,lifecycle_regression,characterization_regression
+AggregateFactory,yes,yes,yes,yes,yes
+DocumentAggregate,yes,yes,yes,yes,yes
+CreateDocumentCommand,yes,yes,yes,yes,yes
+PromoteDraftCommand,yes,yes,yes,yes,yes
+MarkReadyCommand,yes,yes,yes,yes,yes
+CancelDocumentCommand,yes,yes,yes,yes,yes
+RegisterDocumentCommand,yes,yes,yes,yes,yes
+CommandPolicy,yes,yes,yes,yes,yes
+WriteOrchestrator,yes,yes,yes,yes,yes
+DocumentEngineWriteFacade,yes,yes,yes,yes,yes
+DomainEvents,yes,n/a,yes,yes,yes
+WriteCompatibilityHarness,yes,yes,n/a,yes,yes
+DependencyRulesWrite,yes,n/a,yes,n/a,n/a
+DependencyRulesPONoImport,yes,n/a,yes,n/a,n/a

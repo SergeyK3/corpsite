@@ -1,0 +1,12 @@
+gate,from_state,to_state,void_kind,readiness_required,notes
+ACTIVATION,pre-document,n/a,n/a,yes,Eligibility only — no commit
+PROMOTION,DRAFT,n/a,n/a,yes,No Document created
+MARK_READY,DRAFT,READY_FOR_SIGNATURE,n/a,yes,E* editorial gates
+RETURN_TO_DRAFT,READY_FOR_SIGNATURE,DRAFT,n/a,no,Structural allow
+SIGN,READY_FOR_SIGNATURE,SIGNED,n/a,yes,Pre-sign readiness
+REGISTER,SIGNED,REGISTERED,n/a,yes,SIGNED only
+CANCEL,DRAFT,VOIDED,CANCEL,no,Terminal void
+CANCEL,READY_FOR_SIGNATURE,VOIDED,CANCEL,no,Terminal void
+ANNUL,SIGNED,VOIDED,ANNUL,no,Post-sign void
+ANNUL,REGISTERED,VOIDED,ANNUL,no,Post-registration void
+ARCHIVE,any,orthogonal,n/a,no,ArchiveState ACTIVE→ARCHIVED

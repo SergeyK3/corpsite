@@ -1,0 +1,10 @@
+source_input,target_review_state,policy_rule,notes
+review_status CURRENT,ReviewState.CURRENT,from_adapter_review_status,Primary — preserves PO behavior
+review_status STALE,ReviewState.STALE,from_adapter_review_status,PO coarse STALE
+review_status REVIEW_REQUIRED,ReviewState.REVIEW_REQUIRED,from_adapter_review_status,Direct mapping
+review_status GENERATION_FAILED,ReviewState.REVIEW_REQUIRED,from_adapter_review_status,PO failure → review
+staleness CURRENT,ReviewState.CURRENT,from_staleness_state,Fallback when review_status unknown
+staleness STALE_FINGERPRINT_MISMATCH,ReviewState.STALE,from_staleness_state,Adapter transform from PO STALE
+staleness REVIEW_REQUIRED,ReviewState.REVIEW_REQUIRED,from_staleness_state,Direct mapping
+override + fingerprint mismatch,ReviewState.REVIEW_REQUIRED,compute_for_block,UDE-003 regenerate rule
+unrecognized input,ReviewState.UNKNOWN,compute_for_block,Explicit unknown state

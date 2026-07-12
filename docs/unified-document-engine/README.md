@@ -4,7 +4,73 @@ WP series defining the **Unified Document Engine (UDE)** shared architecture for
 
 **Mode:** Architecture foundation only — no runtime changes in architecture WPs unless explicitly stated.
 
-**Runtime status:** Production Personnel Orders and Operational Orders behavior **unchanged** through UDE-006.
+**Runtime status:** Production Personnel Orders behavior **unchanged** through UDE-012. Shared write runtime complete; PO write-path untouched. **Shared Runtime stack finished.**
+
+---
+
+## UDE-012 Summary
+
+| Item | Detail |
+|---|---|
+| Package | `app/document_engine/write/` |
+| Facade | `DocumentEngineWriteFacade` |
+| Components | Commands, Command Policies, Write Orchestrator, Aggregate Factory, Domain Events |
+| Models | DocumentAggregate, LifecycleMutationPlan, WriteEvaluation, etc. |
+| Production PO changes | **None** |
+| Record | [UDE-012-shared-write-runtime.md](./UDE-012-shared-write-runtime.md) |
+| Next | **OO-IMP-001** — Operational Orders implementation |
+
+---
+
+## UDE-011 Summary
+
+| Item | Detail |
+|---|---|
+| Package | `app/document_engine/lifecycle/` |
+| Facade | `DocumentEngineLifecycleFacade` |
+| Services | Activation, LifecycleEvaluation, Readiness, Promotion, Registration policies |
+| Models | ActivationDecision, LifecycleEvaluation, PromotionReadiness, etc. |
+| Production PO changes | **None** |
+| Record | [UDE-011-shared-activation-and-lifecycle-runtime.md](./UDE-011-shared-activation-and-lifecycle-runtime.md) |
+
+---
+
+## UDE-010 Summary
+
+| Item | Detail |
+|---|---|
+| Package | `app/document_engine/editorial/` |
+| Facade | `DocumentEngineEditorialFacade` |
+| Services | Editorial, Localization, Fingerprint, OverrideResolver, ReviewPolicy, OfficialDraftBuilder |
+| Models | EditorialDocument, EditorialBlock, OfficialDraftSnapshot, ReviewState, etc. |
+| Production PO changes | **None** |
+| Record | [UDE-010-shared-editorial-runtime.md](./UDE-010-shared-editorial-runtime.md) |
+
+---
+
+## UDE-009 Summary
+
+| Item | Detail |
+|---|---|
+| Packages | `app/document_engine/read_models/`, `app/document_engine/read_services/` |
+| Facade | `DocumentEngineReadFacade` |
+| Services | Document, Lifecycle, Localization, Audit, Print, Item read services |
+| Read models | 6 shared runtime read models (not ORM, not API DTO) |
+| Production PO changes | **None** |
+| Record | [UDE-009-shared-read-services.md](./UDE-009-shared-read-services.md) |
+
+---
+
+## UDE-008 Summary
+
+| Item | Detail |
+|---|---|
+| Package | `app/document_engine/adapters/personnel/` |
+| Facade | `PersonnelReadAdapter` |
+| Adapters | Document, Party, Lifecycle, Locale, Item, Audit, Print + CompatibilityHarness |
+| First consumer | All 14 UDE-007 runtime contracts |
+| Production PO changes | **None** |
+| Record | [UDE-008-shared-read-adapters.md](./UDE-008-shared-read-adapters.md) |
 
 ---
 
@@ -19,7 +85,12 @@ WP series defining the **Unified Document Engine (UDE)** shared architecture for
 | UDE-004 | Document Activation and Promotion | Complete | [UDE-004-document-activation-and-promotion.md](./UDE-004-document-activation-and-promotion.md) |
 | UDE-005 | Shared Lifecycle Core and Orchestration | Complete | [UDE-005-shared-lifecycle-core-and-orchestration.md](./UDE-005-shared-lifecycle-core-and-orchestration.md) |
 | **UDE-006** | **Personnel Orders Compatibility and Extraction Plan** | **Complete** | [UDE-006-personnel-orders-compatibility-and-extraction-plan.md](./UDE-006-personnel-orders-compatibility-and-extraction-plan.md) |
-| UDE-007 | Shared Runtime Contracts and PO Characterization Baseline | **Next — Planned** | [UDE-006-ude-007-initiation-package.md](./UDE-006-ude-007-initiation-package.md) |
+| **UDE-007** | **Shared Runtime Contracts and PO Characterization Baseline** | **Complete (local)** | [UDE-007-shared-runtime-contracts-and-characterization-baseline.md](./UDE-007-shared-runtime-contracts-and-characterization-baseline.md) |
+| **UDE-008** | **Shared Read-only Adapters for Personnel Orders** | **Complete (local)** | [UDE-008-shared-read-adapters.md](./UDE-008-shared-read-adapters.md) |
+| **UDE-009** | **Shared Read Services and Document Read Model** | **Complete (local)** | [UDE-009-shared-read-services.md](./UDE-009-shared-read-services.md) |
+| **UDE-010** | **Shared Editorial & Localization Runtime** | **Complete (local)** | [UDE-010-shared-editorial-runtime.md](./UDE-010-shared-editorial-runtime.md) |
+| **UDE-011** | **Shared Activation & Lifecycle Runtime** | **Complete (local)** | [UDE-011-shared-activation-and-lifecycle-runtime.md](./UDE-011-shared-activation-and-lifecycle-runtime.md) |
+| **UDE-012** | **Shared Write Runtime and Document Aggregate Foundation** | **Complete (local)** | [UDE-012-shared-write-runtime.md](./UDE-012-shared-write-runtime.md) |
 
 ---
 
@@ -65,21 +136,39 @@ UDE-000 Ratification
                 → UDE-004 Activation & Promotion
                     → UDE-005 Lifecycle Core
                         → UDE-006 PO Compatibility Plan  ← complete
-                            → UDE-007 Contracts + Tests (next)
-                                → UDE-008 Adapters
+                            → UDE-007 Contracts + Tests  ← complete (local)
+                                → UDE-008 Read Adapters  ← complete (local)
+                                    → UDE-009 Read Services  ← complete (local)
+                                        → UDE-010 Editorial Runtime  ← complete (local)
+                                            → UDE-011 Lifecycle Runtime  ← complete (local)
+                                                → UDE-012 Write Runtime  ← complete (local)
+                                                    → OO-IMP-001 (next)
                                 → OO-IMP-001..005
                                 → PO-CONV-001 (optional)
 ```
 
 ---
 
-## Next: UDE-007
+## Shared Runtime Complete
 
-**UDE-007 — Shared Runtime Contracts and PO Characterization Baseline**
+UDE-007 through UDE-012 deliver the full Shared Runtime stack:
 
-- First WP permitted to write code
-- Must not change Personnel Orders production behavior
-- Full scope: [UDE-006-ude-007-initiation-package.md](./UDE-006-ude-007-initiation-package.md)
+| Layer | Facade |
+|---|---|
+| Contracts (UDE-007) | `app.document_engine` |
+| Read Adapters (UDE-008) | `PersonnelReadAdapter` |
+| Read Services (UDE-009) | `DocumentEngineReadFacade` |
+| Editorial (UDE-010) | `DocumentEngineEditorialFacade` |
+| Lifecycle (UDE-011) | `DocumentEngineLifecycleFacade` |
+| Write (UDE-012) | `DocumentEngineWriteFacade` |
+
+## Next: OO-IMP-001
+
+**OO-IMP-001 — Operational Orders Implementation**
+
+- Wire `DocumentEngineWriteFacade` as OO consumer entry
+- Add persistence and API in OO scope — not Shared Runtime
+- No additional Shared Runtime WPs required
 
 ---
 
