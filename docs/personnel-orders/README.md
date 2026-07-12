@@ -86,6 +86,8 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 | Editorial persistence (**Implemented**) | `implementation/PO-EDIT-002-editorial-persistence.md` |
 | Концепция подписания (без реализации) | `PO-SIGN-001-signing-concept.md` |
 | Политика удаления / void (без реализации) | `PO-LIFECYCLE-002-delete-and-void-policy.md` |
+| Lifecycle delete/void research (PO-LC-DEL-001) | `PO-LC-DEL-001-deletion-cancellation-archival-research.md` |
+| Lifecycle taxonomy, permissions, audit foundation (**Implementation-ready**) | `PO-LC-DEL-002-lifecycle-permission-audit-foundation.md` |
 | Storage concept | `storage-design/PERSONNEL-ORDERS-DOCUMENT-STORAGE-CONCEPT.md` |
 | Инвентарь CSV (summary) | `inventories/order-samples-inventory-summary.csv` |
 | Инвентарь CSV (full, local only) | `inventories/order-samples-inventory.csv` |
