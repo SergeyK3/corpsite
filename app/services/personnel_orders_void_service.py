@@ -26,9 +26,14 @@ from app.services.personnel_orders_command_service import (
     _fetch_order_row,
 )
 from app.services.personnel_orders_query_service import (
+    PersonnelOrderNotFoundError,
     PersonnelOrderValidationError,
     get_personnel_order,
     personnel_orders_available,
+)
+from app.services.personnel_order_lifecycle_audit_service import (
+    append_void_order_audit,
+    resolve_void_kind,
 )
 
 CANCELABLE_ORDER_STATUSES = {
@@ -396,12 +401,14 @@ def _mark_order_voided(
     order_id: int,
     void_reason: str,
     voided_by: int,
+    void_kind: str,
 ) -> None:
     conn.execute(
         text(
             """
             UPDATE public.personnel_orders
             SET status = :status,
+                void_kind = :void_kind,
                 void_reason = :void_reason,
                 voided_at = now(),
                 voided_by = :voided_by,
@@ -413,6 +420,7 @@ def _mark_order_voided(
         {
             "order_id": int(order_id),
             "status": ORDER_STATUS_VOIDED,
+            "void_kind": str(void_kind),
             "void_reason": void_reason,
             "voided_by": int(voided_by),
             "voided_status": ORDER_STATUS_VOIDED,
@@ -466,6 +474,7 @@ def _maybe_promote_order_void(
     order_id: int,
     void_reason: str,
     voided_by: int,
+    void_kind: str,
 ) -> None:
     if _all_items_voided(conn, order_id):
         _mark_order_voided(
@@ -473,6 +482,7 @@ def _maybe_promote_order_void(
             order_id=order_id,
             void_reason=void_reason,
             voided_by=voided_by,
+            void_kind=void_kind,
         )
 
 
@@ -490,6 +500,8 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
             )
 
         if status in CANCELABLE_ORDER_STATUSES:
+            void_kind = resolve_void_kind(status)
+            previous_void_kind = order.get("void_kind")
             items = _fetch_items(conn, order_id, item_status=ITEM_STATUS_ACTIVE)
             for item in items:
                 _mark_item_voided(
@@ -504,8 +516,20 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
                 order_id=int(order_id),
                 void_reason=normalized_reason,
                 voided_by=int(voided_by),
+                void_kind=void_kind,
+            )
+            append_void_order_audit(
+                conn,
+                order_id=int(order_id),
+                previous_status=status,
+                previous_void_kind=previous_void_kind,
+                void_kind=void_kind,
+                void_reason=normalized_reason,
+                actor_user_id=int(voided_by),
             )
         elif status in VOIDABLE_ORDER_STATUSES:
+            void_kind = resolve_void_kind(status)
+            previous_void_kind = order.get("void_kind")
             items = _fetch_items(conn, order_id, item_status=ITEM_STATUS_ACTIVE)
             if not items:
                 raise PersonnelOrderValidationError(
@@ -523,6 +547,16 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
                 order_id=int(order_id),
                 void_reason=normalized_reason,
                 voided_by=int(voided_by),
+                void_kind=void_kind,
+            )
+            append_void_order_audit(
+                conn,
+                order_id=int(order_id),
+                previous_status=status,
+                previous_void_kind=previous_void_kind,
+                void_kind=void_kind,
+                void_reason=normalized_reason,
+                actor_user_id=int(voided_by),
             )
         else:
             raise PersonnelOrderConflictError(
@@ -560,17 +594,33 @@ def void_personnel_order_item(
             )
 
         item = _fetch_item(conn, order_id, item_id)
+        void_kind = resolve_void_kind(status)
+        previous_void_kind = order.get("void_kind")
         _void_item_with_events(
             conn,
             item=item,
             void_reason=normalized_reason,
             voided_by=int(voided_by),
         )
+        before_voided = status != ORDER_STATUS_VOIDED
         _maybe_promote_order_void(
             conn,
             order_id=int(order_id),
             void_reason=normalized_reason,
             voided_by=int(voided_by),
+            void_kind=void_kind,
         )
+        if before_voided:
+            order_after = _fetch_order_row(conn, order_id)
+            if str(order_after["status"]) == ORDER_STATUS_VOIDED:
+                append_void_order_audit(
+                    conn,
+                    order_id=int(order_id),
+                    previous_status=status,
+                    previous_void_kind=previous_void_kind,
+                    void_kind=void_kind,
+                    void_reason=normalized_reason,
+                    actor_user_id=int(voided_by),
+                )
 
     return get_personnel_order(int(order_id))

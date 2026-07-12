@@ -17,6 +17,7 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderDetailResponse,
     PersonnelOrderItemCreateIn,
     PersonnelOrderItemUpdateIn,
+    PersonnelOrderLifecycleAuditListResponse,
     PersonnelOrderListResponse,
     PersonnelOrderLocalizedTextUpsertIn,
     PersonnelOrderRegisterIn,
@@ -61,6 +62,9 @@ from app.services.personnel_orders_query_service import (
     get_personnel_order,
     list_personnel_orders,
     validation_error_to_http422,
+)
+from app.services.personnel_order_lifecycle_audit_service import (
+    list_personnel_order_lifecycle_audit,
 )
 
 router = APIRouter()
@@ -512,6 +516,35 @@ def apply_personnel_order_route(
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
         raise _conflict_http409(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get(
+    "/personnel-orders/{order_id}/lifecycle-audit",
+    response_model=PersonnelOrderLifecycleAuditListResponse,
+)
+def list_personnel_order_lifecycle_audit_route(
+    order_id: int = Path(..., ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Read-only lifecycle audit trail for a personnel order (WP-PO-LC-DEL-003)."""
+    try:
+        # Transitional: keep existing personnel admin guard until PERSONNEL_ORDERS_AUDIT_READ
+        # grants are bound to contours (PO-LC-DEL-002 §6.2).
+        require_personnel_admin_or_403(user)
+        return call_service(
+            list_personnel_order_lifecycle_audit,
+            order_id=order_id,
+            limit=limit,
+            offset=offset,
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except HTTPException:
         raise
     except Exception as exc:

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -257,3 +257,28 @@ class EditorialBlockPatchIn(BaseModel):
     override_text: Optional[str] = None
     clear_override: bool = False
     expected_revision: Optional[int] = Field(default=None, ge=1)
+
+
+PersonnelOrderVoidKind = Literal["CANCEL", "ANNUL"]
+
+
+class PersonnelOrderLifecycleAuditOut(BaseModel):
+    id: int
+    order_id: int
+    action: PersonnelOrderVoidKind
+    previous_status: Optional[str] = None
+    new_status: Optional[str] = None
+    previous_void_kind: Optional[PersonnelOrderVoidKind] = None
+    new_void_kind: Optional[PersonnelOrderVoidKind] = None
+    actor_user_id: int
+    reason_code: Optional[str] = None
+    reason_text: Optional[str] = None
+    metadata_json: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[str] = None
+
+
+class PersonnelOrderLifecycleAuditListResponse(BaseModel):
+    items: List[PersonnelOrderLifecycleAuditOut]
+    total: int
+    limit: int
+    offset: int

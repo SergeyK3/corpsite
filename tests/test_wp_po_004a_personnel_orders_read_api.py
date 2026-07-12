@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from tests.conftest import auth_headers, table_exists
 from tests.test_wp_po_003_personnel_orders_schema import (
+    _delete_personnel_order_audit_rows,
     _insert_returning,
     _pick_employee_id,
     _pick_user_id,
@@ -159,6 +160,7 @@ def _create_registered_hire_order(
 
 def _cleanup_order(order_id: int, event_id: int | None = None) -> None:
     with engine.begin() as conn:
+        _delete_personnel_order_audit_rows(conn, order_id)
         if event_id:
             conn.execute(
                 text("DELETE FROM public.employee_events WHERE event_id = :event_id"),

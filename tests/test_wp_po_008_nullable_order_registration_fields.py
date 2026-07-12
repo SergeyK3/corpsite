@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from tests.conftest import auth_headers
 from tests.test_wp_po_003_personnel_orders_schema import (
+    _delete_personnel_order_audit_rows,
     _pick_employee_id,
     _require_schema,
 )
@@ -30,6 +31,7 @@ def privileged_headers(seed, monkeypatch):
 
 def _cleanup_order(order_id: int) -> None:
     with engine.begin() as conn:
+        _delete_personnel_order_audit_rows(conn, order_id)
         conn.execute(
             text("DELETE FROM public.employee_events WHERE order_id = :order_id"),
             {"order_id": order_id},

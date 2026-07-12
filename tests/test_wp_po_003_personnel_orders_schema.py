@@ -50,6 +50,42 @@ def _require_schema() -> None:
         )
 
 
+def _delete_personnel_order_audit_rows(conn, order_id: int) -> None:
+    if table_exists(conn, "personnel_order_lifecycle_audit"):
+        conn.execute(
+            text(
+                """
+                DELETE FROM public.personnel_order_lifecycle_audit
+                WHERE order_id = :order_id
+                """
+            ),
+            {"order_id": int(order_id)},
+        )
+
+
+def _require_lc_del_003_schema() -> None:
+    _require_schema()
+    with engine.begin() as conn:
+        cols = get_columns(conn, "personnel_orders")
+        for column in (
+            "void_kind",
+            "archived_at",
+            "archived_by",
+            "archive_reason_code",
+            "archive_reason_text",
+        ):
+            if column not in cols:
+                pytest.skip(
+                    "WP-PO-LC-DEL-003 lifecycle foundation missing — run: alembic upgrade head "
+                    "(revision t4u5v6w7x8y9)"
+                )
+        if not table_exists(conn, "personnel_order_lifecycle_audit"):
+            pytest.skip(
+                "WP-PO-LC-DEL-003 lifecycle audit table missing — run: alembic upgrade head "
+                "(revision t4u5v6w7x8y9)"
+            )
+
+
 def _insert_returning(conn, sql: str, params: dict[str, Any] | None = None) -> int:
     row = conn.execute(text(sql), params or {}).one()
     return int(row[0])
@@ -304,6 +340,7 @@ def test_personnel_order_hire_roundtrip_and_employee_event_fk() -> None:
             text("DELETE FROM public.employee_events WHERE event_id = :event_id"),
             {"event_id": event_id},
         )
+        _delete_personnel_order_audit_rows(conn, order_id)
         conn.execute(
             text("DELETE FROM public.personnel_order_prints WHERE print_id = :print_id"),
             {"print_id": print_id},
@@ -431,6 +468,7 @@ def test_rejects_invalid_order_type_and_duplicate_item_number() -> None:
     )
 
     with engine.begin() as conn:
+        _delete_personnel_order_audit_rows(conn, order_id)
         conn.execute(
             text("DELETE FROM public.personnel_order_items WHERE order_id = :order_id"),
             {"order_id": order_id},

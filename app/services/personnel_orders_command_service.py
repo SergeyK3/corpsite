@@ -124,7 +124,8 @@ def _fetch_order_row(conn, order_id: int) -> Dict[str, Any]:
                 order_date,
                 order_type_code,
                 status,
-                source_mode
+                source_mode,
+                void_kind
             FROM public.personnel_orders
             WHERE order_id = :order_id
             """

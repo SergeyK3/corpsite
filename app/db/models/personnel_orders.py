@@ -61,6 +61,27 @@ ORDER_STATUSES = (
     ORDER_STATUS_VOIDED,
 )
 
+VOID_KIND_CANCEL = "CANCEL"
+VOID_KIND_ANNUL = "ANNUL"
+VOID_KINDS = (VOID_KIND_CANCEL, VOID_KIND_ANNUL)
+
+LIFECYCLE_AUDIT_ACTION_CANCEL = "CANCEL"
+LIFECYCLE_AUDIT_ACTION_ANNUL = "ANNUL"
+LIFECYCLE_AUDIT_ACTION_ARCHIVE = "ARCHIVE"
+LIFECYCLE_AUDIT_ACTION_RESTORE = "RESTORE"
+LIFECYCLE_AUDIT_ACTION_VOID_APPLIED = "VOID_APPLIED"
+LIFECYCLE_AUDIT_ACTION_HARD_DELETE = "HARD_DELETE"
+LIFECYCLE_AUDIT_ACTION_COMPENSATE_LINK = "COMPENSATE_LINK"
+LIFECYCLE_AUDIT_ACTIONS = (
+    LIFECYCLE_AUDIT_ACTION_CANCEL,
+    LIFECYCLE_AUDIT_ACTION_ANNUL,
+    LIFECYCLE_AUDIT_ACTION_ARCHIVE,
+    LIFECYCLE_AUDIT_ACTION_RESTORE,
+    LIFECYCLE_AUDIT_ACTION_VOID_APPLIED,
+    LIFECYCLE_AUDIT_ACTION_HARD_DELETE,
+    LIFECYCLE_AUDIT_ACTION_COMPENSATE_LINK,
+)
+
 SOURCE_MODE_PAPER = "PAPER"
 SOURCE_MODE_DIGITAL = "DIGITAL"
 
@@ -167,6 +188,15 @@ class PersonnelOrder(Base):
         ForeignKey("users.user_id", ondelete="SET NULL"),
         nullable=True,
     )
+    void_kind: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    archive_reason_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    archive_reason_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.user_id", ondelete="RESTRICT"),
@@ -476,6 +506,46 @@ class PersonnelOrderItemBasis(Base):
         server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class PersonnelOrderLifecycleAudit(Base):
+    """Append-only lifecycle audit trail for personnel orders (WP-PO-LC-DEL-003)."""
+
+    __tablename__ = "personnel_order_lifecycle_audit"
+    __table_args__ = (
+        Index("ix_po_lifecycle_audit_order_created", "order_id", "created_at"),
+        Index("ix_po_lifecycle_audit_actor_created", "actor_user_id", "created_at"),
+        Index("ix_po_lifecycle_audit_action", "action"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("personnel_orders.order_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    previous_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    previous_void_kind: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_void_kind: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    actor_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.user_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
