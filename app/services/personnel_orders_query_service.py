@@ -138,9 +138,13 @@ def _build_list_filters(
     employee_id: Optional[int],
     org_unit_id: Optional[int],
     q: Optional[str],
+    include_archived: bool = False,
 ) -> tuple[list[str], Dict[str, Any]]:
     where_parts = ["TRUE"]
     params: Dict[str, Any] = {}
+
+    if not include_archived:
+        where_parts.append("po.archived_at IS NULL")
 
     normalized_status = _normalize_status_filter(status)
     if normalized_status is not None:
@@ -205,10 +209,16 @@ def _build_list_filters(
     return where_parts, params
 
 
-def _serialize_order_header(row: Dict[str, Any]) -> Dict[str, Any]:
+def _serialize_order_header(
+    row: Dict[str, Any],
+    *,
+    include_archive_summary: bool = False,
+) -> Dict[str, Any]:
     raw_number = row.get("order_number")
     order_number = str(raw_number).strip() if raw_number is not None and str(raw_number).strip() else None
-    return {
+    archived_at = row.get("archived_at")
+    is_archived = archived_at is not None
+    payload = {
         "order_id": int(row["order_id"]),
         "order_number": order_number,
         "order_date": _iso_date(row.get("order_date")),
@@ -231,7 +241,17 @@ def _serialize_order_header(row: Dict[str, Any]) -> Dict[str, Any]:
         "created_by": int(row["created_by"]),
         "created_at": _iso_datetime(row.get("created_at")),
         "updated_at": _iso_datetime(row.get("updated_at")),
+        "is_archived": is_archived,
     }
+    if include_archive_summary and is_archived:
+        payload["archive_summary_at"] = _iso_datetime(archived_at)
+        payload["archive_summary_by_name"] = row.get("archive_summary_by_name")
+        payload["archive_summary_reason"] = row.get("archive_summary_reason")
+    else:
+        payload["archive_summary_at"] = None
+        payload["archive_summary_by_name"] = None
+        payload["archive_summary_reason"] = None
+    return payload
 
 
 def _serialize_list_item(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -244,7 +264,7 @@ def _serialize_list_item(row: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(employee_names_raw, list):
         employee_names = [str(v) for v in employee_names_raw if v is not None]
 
-    item = _serialize_order_header(row)
+    item = _serialize_order_header(row, include_archive_summary=False)
     item["item_count"] = int(row.get("item_count") or 0)
     item["employee_ids"] = employee_ids
     item["employee_names"] = employee_names
@@ -360,6 +380,7 @@ def list_personnel_orders(
     employee_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     q: Optional[str] = None,
+    include_archived: bool = False,
     limit: int = 100,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -374,6 +395,7 @@ def list_personnel_orders(
         employee_id=employee_id,
         org_unit_id=org_unit_id,
         q=q,
+        include_archived=bool(include_archived),
     )
     params["limit"] = int(limit)
     params["offset"] = int(offset)
@@ -406,6 +428,7 @@ def list_personnel_orders(
             po.void_reason,
             po.voided_at,
             po.voided_by,
+            po.archived_at,
             po.created_by,
             po.created_at,
             po.updated_at,
@@ -478,10 +501,15 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
                     po.void_reason,
                     po.voided_at,
                     po.voided_by,
+                    po.archived_at,
+                    po.archive_reason_text,
                     po.created_by,
                     po.created_at,
-                    po.updated_at
+                    po.updated_at,
+                    arch_u.full_name AS archive_summary_by_name,
+                    COALESCE(po.archive_reason_text, po.archive_reason_code) AS archive_summary_reason
                 FROM public.personnel_orders po
+                LEFT JOIN public.users arch_u ON arch_u.user_id = po.archived_by
                 WHERE po.order_id = :order_id
                 """
             ),
@@ -628,7 +656,7 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
         ).mappings().all()
 
     return {
-        "order": _serialize_order_header(dict(header_row)),
+        "order": _serialize_order_header(dict(header_row), include_archive_summary=True),
         "items": [_serialize_order_item(dict(row)) for row in item_rows],
         "localized_texts": [_serialize_localized_text(dict(row)) for row in localized_rows],
         "attachments": [_serialize_attachment(dict(row)) for row in attachment_rows],

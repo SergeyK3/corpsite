@@ -152,6 +152,13 @@ export function isEditablePersonnelOrderStatus(status: string | null | undefined
   return normalized === "DRAFT";
 }
 
+export function isWritablePersonnelOrder(
+  status: string | null | undefined,
+  isArchived?: boolean | null,
+): boolean {
+  return isEditablePersonnelOrderStatus(status) && !Boolean(isArchived);
+}
+
 export function canRegisterPersonnelOrder(status: string | null | undefined): boolean {
   const normalized = String(status || "").trim().toUpperCase();
   return normalized === "DRAFT" || normalized === "READY_FOR_SIGNATURE";
@@ -185,6 +192,25 @@ export function canVoidPersonnelOrder(status: string | null | undefined): boolea
   const normalized = String(status || "").trim().toUpperCase();
   return normalized !== "" && normalized !== "VOIDED";
 }
+
+export function canArchivePersonnelOrder(
+  status: string | null | undefined,
+  isArchived?: boolean | null,
+): boolean {
+  if (isArchived) return false;
+  const normalized = String(status || "").trim().toUpperCase();
+  return normalized === "REGISTERED" || normalized === "VOIDED";
+}
+
+export function canRestorePersonnelOrder(isArchived?: boolean | null): boolean {
+  return Boolean(isArchived);
+}
+
+export function personnelOrderArchivedBadgeClass(): string {
+  return "border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
+}
+
+export const PERSONNEL_ORDER_ARCHIVED_LABEL = "📦 Архив";
 
 export function formatPersonnelOrderNumber(value: string | null | undefined): string {
   const trimmed = String(value || "").trim();

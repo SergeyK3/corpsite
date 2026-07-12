@@ -13,15 +13,20 @@ export {
   PERSONNEL_ORDER_CREATE_TYPES,
   canApplyPersonnelOrder,
   canApplyPersonnelOrderAction,
+  canArchivePersonnelOrder,
   canRegisterPersonnelOrder,
+  canRestorePersonnelOrder,
   canVoidPersonnelOrder,
   formatPersonnelOrderDate,
   formatPersonnelOrderDateTime,
   formatPersonnelOrderNumber,
   isEditablePersonnelOrderStatus,
+  isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   PERSONNEL_ORDER_APPLIED_LABEL,
   personnelOrderAppliedBadgeClass,
+  personnelOrderArchivedBadgeClass,
+  PERSONNEL_ORDER_ARCHIVED_LABEL,
   personnelOrderSourceModeLabel,
   personnelOrderStatusBadgeClass,
   personnelOrderStatusLabel,
@@ -50,6 +55,10 @@ export type PersonnelOrderListItem = {
   created_by: number;
   created_at?: string | null;
   updated_at?: string | null;
+  is_archived?: boolean;
+  archive_summary_at?: string | null;
+  archive_summary_by_name?: string | null;
+  archive_summary_reason?: string | null;
   item_count: number;
   employee_ids: number[];
   employee_names: string[];
@@ -215,6 +224,7 @@ export type PersonnelOrdersFilters = {
   org_unit_id?: number;
   order_id?: number;
   q?: string;
+  include_archived?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -361,6 +371,7 @@ export function buildPersonnelOrdersQueryParams(
     params.set("order_id", String(filters.order_id));
   }
   if (includeClientSearch && filters.q?.trim()) params.set("q", filters.q.trim());
+  if (filters.include_archived) params.set("include_archived", "true");
   if (filters.limit != null && filters.limit > 0) params.set("limit", String(filters.limit));
   if (filters.offset != null && filters.offset >= 0) params.set("offset", String(filters.offset));
 
@@ -381,6 +392,7 @@ export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): Pers
     org_unit_id: orgFilters.org_unit_id,
     order_id: Number.isFinite(orderId) && orderId > 0 ? orderId : undefined,
     q: searchParams.get("q") || undefined,
+    include_archived: searchParams.get("include_archived") === "true",
   };
 }
 
@@ -567,5 +579,27 @@ export async function voidPersonnelOrder(
   return requestJson<PersonnelOrderDetailResponse>("POST", `/directory/personnel-orders/${orderId}/void`, {
     body: { void_reason: voidReason },
     fallback: "Не удалось аннулировать приказ.",
+  });
+}
+
+export type PersonnelOrderArchivePayload = {
+  reason_code: "completed" | "voided_record" | "migrated_legacy" | "duplicate_reference" | "other";
+  reason_text?: string;
+};
+
+export async function archivePersonnelOrder(
+  orderId: number,
+  payload: PersonnelOrderArchivePayload,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>("POST", `/directory/personnel-orders/${orderId}/archive`, {
+    body: payload,
+    fallback: "Не удалось архивировать приказ.",
+  });
+}
+
+export async function restorePersonnelOrder(orderId: number): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>("POST", `/directory/personnel-orders/${orderId}/restore`, {
+    body: {},
+    fallback: "Не удалось восстановить приказ.",
   });
 }

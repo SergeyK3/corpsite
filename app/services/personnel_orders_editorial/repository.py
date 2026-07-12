@@ -33,7 +33,8 @@ def fetch_order(conn: Connection, order_id: int) -> Dict[str, Any]:
                 order_date,
                 order_type_code,
                 status,
-                legal_basis_article
+                legal_basis_article,
+                archived_at
             FROM public.personnel_orders
             WHERE order_id = :order_id
             """

@@ -24,6 +24,7 @@ from app.db.models.personnel_orders import (
 )
 from app.services.directory_service import _insert_employee_event
 from app.services.hr_event_registry import get_event_class
+from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_orders_command_service import (
     PersonnelOrderConflictError,
     _fetch_order_row,
@@ -560,6 +561,7 @@ def apply_personnel_order(*, order_id: int, created_by: int) -> Dict[str, Any]:
 
     with engine.begin() as conn:
         order = _fetch_order_row(conn, order_id)
+        assert_order_not_archived(order)
         status = str(order["status"])
         if status not in APPLYABLE_ORDER_STATUSES:
             raise PersonnelOrderConflictError(

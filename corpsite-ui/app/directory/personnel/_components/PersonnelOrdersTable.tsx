@@ -8,6 +8,7 @@ import {
   type PersonnelOrderListItem,
 } from "../_lib/personnelOrdersApi.client";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
+import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
 
 export type PersonnelOrdersTableProps = {
@@ -97,7 +98,10 @@ export function PersonnelOrdersTable({
                 <PersonnelOrderTypeBadge typeCode={row.order_type_code} />
               </td>
               <td className="px-3 py-2">
-                <PersonnelOrderStatusBadge status={row.status} />
+                <div className="flex flex-wrap gap-1.5">
+                  <PersonnelOrderStatusBadge status={row.status} />
+                  {row.is_archived ? <PersonnelOrderArchivedBadge /> : null}
+                </div>
               </td>
               <td className="max-w-[16rem] truncate px-3 py-2 text-zinc-700 dark:text-zinc-300">
                 {formatEmployees(row)}

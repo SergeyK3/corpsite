@@ -53,4 +53,13 @@ describe("PersonnelOrdersTable", () => {
     screen.getByTestId("personnel-order-print-101").click();
     expect(onPrintClick).toHaveBeenCalledWith(sampleRow);
   });
+
+  it("renders archived badge when order is archived", () => {
+    render(
+      <PersonnelOrdersTable
+        items={[{ ...sampleRow, is_archived: true }]}
+      />,
+    );
+    expect(screen.getByTestId("personnel-order-archived-badge")).toHaveTextContent("📦 Архив");
+  });
 });

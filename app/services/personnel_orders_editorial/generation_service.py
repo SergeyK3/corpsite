@@ -19,6 +19,7 @@ from app.db.models.personnel_orders import (
     REVIEW_STATUS_GENERATION_FAILED,
 )
 from app.services.personnel_orders_editorial.audit import write_editorial_audit
+from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_orders_editorial.availability import require_available
 from app.services.personnel_orders_editorial.basis_policy import resolve_basis_required
 from app.services.personnel_orders_editorial.constants import ALLOWED_LOCALES
@@ -91,6 +92,7 @@ def generate_editorial(
 
     with engine.begin() as conn:
         order = fetch_order(conn, order_id)
+        assert_order_not_archived(order)
         ensure_draft_writable(order)
 
         items = load_items(conn, order_id)

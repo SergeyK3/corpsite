@@ -14,6 +14,7 @@ from app.db.models.personnel_orders import (
     VOID_KIND_CANCEL,
 )
 from app.security.admin_permissions import has_admin_permission
+from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_order_cancel_scope_service import evaluate_order_cancel_scope
 from app.services.personnel_order_lifecycle_audit_service import append_cancel_order_audit
 from app.services.personnel_orders_command_service import PersonnelOrderConflictError
@@ -107,6 +108,7 @@ def _fetch_order_row_for_cancel(conn, order_id: int) -> Dict[str, Any]:
                 status,
                 source_mode,
                 void_kind,
+                archived_at,
                 created_by
             FROM public.personnel_orders
             WHERE order_id = :order_id
@@ -212,6 +214,7 @@ def cancel_personnel_order(
 
     with engine.begin() as conn:
         order = _fetch_order_row_for_cancel(conn, int(order_id))
+        assert_order_not_archived(order)
         status = str(order["status"])
         previous_void_kind = order.get("void_kind")
 

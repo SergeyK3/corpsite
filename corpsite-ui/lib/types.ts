@@ -24,6 +24,10 @@ export type MeInfo = {
   has_personnel_admin?: boolean;
   /** ADR-043 C4.2 — override approve/reject (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_hr_governance?: boolean;
+  /** WP-PO-LC-DEL-005 — archive archived personnel orders. */
+  has_personnel_orders_archive?: boolean;
+  /** WP-PO-LC-DEL-005 — restore archived personnel orders. */
+  has_personnel_orders_restore?: boolean;
   /** ADR-042 E1 — personnel directory / org sidebar visibility. */
   has_personnel_visibility?: boolean;
   show_org_sidebar?: boolean;

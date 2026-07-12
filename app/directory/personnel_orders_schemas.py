@@ -28,6 +28,10 @@ class PersonnelOrderHeaderOut(BaseModel):
     created_by: int
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    is_archived: bool = False
+    archive_summary_at: Optional[str] = None
+    archive_summary_by_name: Optional[str] = None
+    archive_summary_reason: Optional[str] = None
 
 
 class PersonnelOrderListItemOut(PersonnelOrderHeaderOut):
@@ -220,6 +224,24 @@ class PersonnelOrderCancelIn(BaseModel):
     reason_text: Optional[str] = Field(default=None, max_length=2000)
 
 
+PersonnelOrderArchiveReasonCode = Literal[
+    "completed",
+    "voided_record",
+    "migrated_legacy",
+    "duplicate_reference",
+    "other",
+]
+
+
+class PersonnelOrderArchiveIn(BaseModel):
+    reason_code: str = Field(..., min_length=1, max_length=80)
+    reason_text: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PersonnelOrderRestoreIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+
 class EditorialBlockOut(BaseModel):
     block_id: int
     scope: str
@@ -275,12 +297,21 @@ class EditorialBlockPatchIn(BaseModel):
 
 
 PersonnelOrderVoidKind = Literal["CANCEL", "ANNUL"]
+PersonnelOrderLifecycleAuditAction = Literal[
+    "CANCEL",
+    "ANNUL",
+    "ARCHIVE",
+    "RESTORE",
+    "VOID_APPLIED",
+    "HARD_DELETE",
+    "COMPENSATE_LINK",
+]
 
 
 class PersonnelOrderLifecycleAuditOut(BaseModel):
     id: int
     order_id: int
-    action: PersonnelOrderVoidKind
+    action: PersonnelOrderLifecycleAuditAction
     previous_status: Optional[str] = None
     new_status: Optional[str] = None
     previous_void_kind: Optional[PersonnelOrderVoidKind] = None

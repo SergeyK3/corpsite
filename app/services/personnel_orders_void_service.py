@@ -31,6 +31,7 @@ from app.services.personnel_orders_query_service import (
     get_personnel_order,
     personnel_orders_available,
 )
+from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_order_lifecycle_audit_service import (
     append_void_order_audit,
     resolve_void_kind,
@@ -493,6 +494,7 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
 
     with engine.begin() as conn:
         order = _fetch_order_row(conn, order_id)
+        assert_order_not_archived(order)
         status = str(order["status"])
         if status == ORDER_STATUS_VOIDED:
             raise PersonnelOrderAlreadyVoidedError(
@@ -579,6 +581,7 @@ def void_personnel_order_item(
 
     with engine.begin() as conn:
         order = _fetch_order_row(conn, order_id)
+        assert_order_not_archived(order)
         status = str(order["status"])
         if status == ORDER_STATUS_VOIDED:
             raise PersonnelOrderAlreadyVoidedError(

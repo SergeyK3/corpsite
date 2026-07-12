@@ -275,6 +275,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     """Add backend-aligned privilege flags for UI (no enforcement)."""
     from app.security.admin_guard import evaluate_admin_access
     from app.security.admin_permissions import (
+        has_admin_permission,
         has_any_personnel_read_permission,
         has_hr_governance_permission,
     )
@@ -286,6 +287,8 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["has_sysadmin_api"] = evaluate_admin_access(out)
     out["has_personnel_admin"] = out["has_sysadmin_api"] or has_any_personnel_read_permission(uid)
     out["has_hr_governance"] = out["has_sysadmin_api"] or has_hr_governance_permission(uid)
+    out["has_personnel_orders_archive"] = has_admin_permission(uid, "PERSONNEL_ORDERS_ARCHIVE")
+    out["has_personnel_orders_restore"] = has_admin_permission(uid, "PERSONNEL_ORDERS_RESTORE")
 
     from app.services.personnel_visibility_resolver_service import (
         enrich_user_with_personnel_visibility,

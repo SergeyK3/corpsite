@@ -27,6 +27,7 @@ from app.db.models.personnel_orders import (
     SOURCE_MODE_DIGITAL,
     SOURCE_MODE_PAPER,
 )
+from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
     PersonnelOrderValidationError,
@@ -126,6 +127,7 @@ def _fetch_order_row(conn, order_id: int) -> Dict[str, Any]:
                 status,
                 source_mode,
                 void_kind,
+                archived_at,
                 created_by
             FROM public.personnel_orders
             WHERE order_id = :order_id
@@ -139,6 +141,7 @@ def _fetch_order_row(conn, order_id: int) -> Dict[str, Any]:
 
 
 def _ensure_order_editable(order: Dict[str, Any]) -> None:
+    assert_order_not_archived(order)
     status = str(order["status"])
     if status in LOCKED_ORDER_STATUSES:
         raise PersonnelOrderConflictError(
@@ -706,6 +709,7 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
 
     with engine.begin() as conn:
         order = _fetch_order_row(conn, order_id)
+        assert_order_not_archived(order)
         if str(order["status"]) != ORDER_STATUS_DRAFT:
             raise PersonnelOrderConflictError(
                 f"Only DRAFT orders can move to READY_FOR_SIGNATURE (current: {order['status']})."
@@ -742,6 +746,7 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
 
     with engine.begin() as conn:
         order = _fetch_order_row(conn, order_id)
+        assert_order_not_archived(order)
         if str(order["status"]) != ORDER_STATUS_DRAFT:
             raise PersonnelOrderConflictError(
                 f"Only DRAFT orders can move to READY_FOR_SIGNATURE (current: {order['status']})."
@@ -771,6 +776,7 @@ def register_personnel_order(
 
     with engine.begin() as conn:
         order = _fetch_order_row(conn, order_id)
+        assert_order_not_archived(order)
         current_status = str(order["status"])
         if current_status in LOCKED_ORDER_STATUSES:
             raise PersonnelOrderConflictError(

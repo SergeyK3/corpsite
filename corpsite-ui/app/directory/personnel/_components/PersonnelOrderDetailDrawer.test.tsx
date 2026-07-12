@@ -97,4 +97,29 @@ describe("PersonnelOrderDetailDrawer print entry", () => {
     expect(screen.getByTestId("personnel-order-print-open")).toHaveTextContent("Предпросмотр");
     expect(screen.getByTestId("personnel-order-pdf-open")).toHaveTextContent("Открыть PDF");
   });
+
+  it("shows archive block for archived orders", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({
+      ...detail,
+      order: {
+        ...detail.order,
+        status: "REGISTERED",
+        is_archived: true,
+        archive_summary_at: "2026-07-12T10:00:00",
+        archive_summary_by_name: "Иванова",
+        archive_summary_reason: "Перенесён в архив",
+      },
+    });
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-archive-block")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Иванова")).toBeInTheDocument();
+    expect(screen.getByText("Перенесён в архив")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-archived-badge")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Аннулировать" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-drawer-print")).toBeInTheDocument();
+  });
 });

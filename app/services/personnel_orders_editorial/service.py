@@ -25,6 +25,7 @@ from app.services.personnel_orders_editorial.repository import (
     update_item_block_override,
     update_order_block_override,
 )
+from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_orders_editorial.write_lock import ensure_draft_writable
 from app.services.personnel_orders_query_service import PersonnelOrderValidationError
 
@@ -95,6 +96,7 @@ def patch_editorial_block(
 
     with engine.begin() as conn:
         order = fetch_order(conn, order_id)
+        assert_order_not_archived(order)
         ensure_draft_writable(order)
         scope, row = find_block(conn, order_id, block_id)
 

@@ -14,6 +14,7 @@ from app.directory.personnel_orders_schemas import (
     EditorialGenerateIn,
     EditorialStateResponse,
     PersonnelOrderCancelIn,
+    PersonnelOrderArchiveIn,
     PersonnelOrderCreateIn,
     PersonnelOrderDetailResponse,
     PersonnelOrderItemCreateIn,
@@ -22,10 +23,12 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderListResponse,
     PersonnelOrderLocalizedTextUpsertIn,
     PersonnelOrderRegisterIn,
+    PersonnelOrderRestoreIn,
     PersonnelOrderUpdateIn,
     PersonnelOrderVoidIn,
 )
 from app.directory.rbac import require_personnel_admin_or_403
+from app.services.personnel_order_archive_guard import PersonnelOrderArchivedError
 from app.services.personnel_orders_apply_service import (
     PersonnelOrderAlreadyAppliedError,
     apply_personnel_order,
@@ -33,6 +36,11 @@ from app.services.personnel_orders_apply_service import (
 from app.services.personnel_orders_cancel_service import (
     PersonnelOrderCancelError,
     cancel_personnel_order,
+)
+from app.services.personnel_orders_archive_service import (
+    PersonnelOrderArchiveError,
+    archive_personnel_order,
+    restore_personnel_order,
 )
 from app.services.personnel_orders_void_service import (
     PersonnelOrderAlreadyVoidedError,
@@ -82,6 +90,13 @@ def _require_user_id(user: Dict[str, Any]) -> int:
     return int(uid)
 
 
+def _order_archived_http(exc: PersonnelOrderArchivedError) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": exc.code, "message": str(exc)},
+    )
+
+
 def _conflict_http409(exc: PersonnelOrderConflictError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
 
@@ -101,6 +116,21 @@ def _cancel_error_http(exc: PersonnelOrderCancelError) -> HTTPException:
     )
 
 
+def _archive_error_http(exc: PersonnelOrderArchiveError) -> HTTPException:
+    status_by_code = {
+        "ORDER_NOT_ARCHIVABLE": 409,
+        "ORDER_ALREADY_ARCHIVED": 409,
+        "ORDER_NOT_ARCHIVED": 409,
+        "ARCHIVE_PERMISSION_DENIED": 403,
+        "RESTORE_PERMISSION_DENIED": 403,
+        "INVALID_ARCHIVE_REASON": 422,
+    }
+    return HTTPException(
+        status_code=status_by_code.get(exc.code, 409),
+        detail={"code": exc.code, "message": str(exc)},
+    )
+
+
 @router.get("/personnel-orders", response_model=PersonnelOrderListResponse)
 def list_personnel_orders_route(
     status: Optional[str] = Query(default=None),
@@ -110,6 +140,7 @@ def list_personnel_orders_route(
     employee_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     q: Optional[str] = Query(default=None, max_length=200),
+    include_archived: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -126,9 +157,12 @@ def list_personnel_orders_route(
             employee_id=employee_id,
             org_unit_id=org_unit_id,
             q=q,
+            include_archived=include_archived,
             limit=limit,
             offset=offset,
         )
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except HTTPException:
@@ -160,6 +194,8 @@ def create_personnel_order_route(
             basis_summary=payload.basis_summary,
             comment=payload.comment,
         )
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -213,6 +249,8 @@ def update_personnel_order_route(
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -245,6 +283,8 @@ def create_personnel_order_item_route(
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -284,6 +324,8 @@ def update_personnel_order_item_route(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -318,6 +360,8 @@ def upsert_personnel_order_localized_text_route(
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -347,6 +391,8 @@ def mark_personnel_order_ready_for_signature_route(
             status_code=422,
             detail={"code": "READY_GATE_FAILED", "problems": exc.problems},
         )
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -371,6 +417,8 @@ def get_personnel_order_editorial_route(
         return call_service(get_editorial_state, order_id=order_id)
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except HTTPException:
@@ -409,6 +457,8 @@ def generate_personnel_order_editorial_route(
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -447,6 +497,8 @@ def patch_personnel_order_editorial_block_route(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderEditorialConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -479,6 +531,8 @@ def reset_personnel_order_editorial_block_route(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderEditorialBlockNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -505,6 +559,8 @@ def register_personnel_order_route(
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -532,6 +588,8 @@ def apply_personnel_order_route(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderAlreadyAppliedError as exc:
         raise _conflict_http409(exc)
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -595,6 +653,64 @@ def cancel_personnel_order_route(
         )
     except PersonnelOrderCancelError as exc:
         raise _cancel_error_http(exc)
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post("/personnel-orders/{order_id}/archive", response_model=PersonnelOrderDetailResponse)
+def archive_personnel_order_route(
+    payload: PersonnelOrderArchiveIn,
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Archive a REGISTERED/VOIDED personnel order (WP-PO-LC-DEL-005)."""
+    try:
+        return call_service(
+            archive_personnel_order,
+            order_id=order_id,
+            reason_code=payload.reason_code,
+            reason_text=payload.reason_text,
+            actor_user_id=_require_user_id(user),
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": str(exc)})
+    except PersonnelOrderArchiveError as exc:
+        raise _archive_error_http(exc)
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post("/personnel-orders/{order_id}/restore", response_model=PersonnelOrderDetailResponse)
+def restore_personnel_order_route(
+    payload: PersonnelOrderRestoreIn,
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Restore an archived personnel order (WP-PO-LC-DEL-005)."""
+    try:
+        return call_service(
+            restore_personnel_order,
+            order_id=order_id,
+            actor_user_id=_require_user_id(user),
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": str(exc)})
+    except PersonnelOrderArchiveError as exc:
+        raise _archive_error_http(exc)
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except HTTPException:
@@ -622,6 +738,8 @@ def void_personnel_order_route(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderAlreadyVoidedError as exc:
         raise _conflict_http409(exc)
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -662,6 +780,8 @@ def void_personnel_order_item_route(
         raise _conflict_http409(exc)
     except PersonnelOrderVoidChainError as exc:
         raise _conflict_http409(exc)
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:

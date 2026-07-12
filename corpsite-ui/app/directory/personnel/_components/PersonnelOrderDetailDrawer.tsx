@@ -8,6 +8,7 @@ import {
   formatPersonnelOrderNumber,
   getPersonnelOrder,
   isEditablePersonnelOrderStatus,
+  isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
   personnelOrderSourceModeLabel,
@@ -15,6 +16,7 @@ import {
   type PersonnelOrderLinkedEvent,
 } from "../_lib/personnelOrdersApi.client";
 import PersonnelOrderAppliedBadge from "./PersonnelOrderAppliedBadge";
+import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
 import PersonnelOrderHeaderEditor from "./PersonnelOrderHeaderEditor";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
@@ -152,7 +154,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
   const order = detail?.order;
   const linkedEventCount = detail?.events.length || 0;
   const applied = isPersonnelOrderApplied(linkedEventCount);
-  const editable = order ? isEditablePersonnelOrderStatus(order.status) : false;
+  const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-order-detail-drawer">
@@ -238,6 +240,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
                         <PersonnelOrderTypeBadge typeCode={order.order_type_code} />
                         <PersonnelOrderStatusBadge status={order.status} />
                         {applied ? <PersonnelOrderAppliedBadge /> : null}
+                        {order.is_archived ? <PersonnelOrderArchivedBadge /> : null}
                       </div>
                     </div>
                     <dl className="grid gap-3 sm:grid-cols-2">
@@ -257,6 +260,20 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
                   </>
                 )}
               </section>
+
+              {order.is_archived ? (
+                <section data-testid="personnel-order-archive-block">
+                  <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Архивирование</h3>
+                  <dl className="grid gap-3 sm:grid-cols-2">
+                    <Field
+                      label="Дата архивирования"
+                      value={formatPersonnelOrderDateTime(order.archive_summary_at)}
+                    />
+                    <Field label="Пользователь" value={order.archive_summary_by_name || "—"} />
+                    <Field label="Причина" value={order.archive_summary_reason || "—"} />
+                  </dl>
+                </section>
+              ) : null}
 
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Пункты приказа</h3>

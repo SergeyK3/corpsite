@@ -2,18 +2,25 @@
 
 import * as React from "react";
 
+import { apiAuthMe } from "@/lib/api";
+import type { MeInfo } from "@/lib/types";
+
 import {
   applyPersonnelOrder,
   canApplyPersonnelOrderAction,
+  canArchivePersonnelOrder,
   canRegisterPersonnelOrder,
+  canRestorePersonnelOrder,
   canVoidPersonnelOrder,
   isEditablePersonnelOrderStatus,
   mapPersonnelOrdersApiError,
   markPersonnelOrderReadyForSignature,
   registerPersonnelOrder,
+  restorePersonnelOrder,
   type PersonnelOrderDetailResponse,
   type PersonnelOrderHeader,
 } from "../_lib/personnelOrdersApi.client";
+import PersonnelOrderArchiveDialog from "./PersonnelOrderArchiveDialog";
 import PersonnelOrderVoidDialog from "./PersonnelOrderVoidDialog";
 
 type Props = {
@@ -34,6 +41,9 @@ export default function PersonnelOrderLifecycleActions({
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [voidOpen, setVoidOpen] = React.useState(false);
+  const [archiveOpen, setArchiveOpen] = React.useState(false);
+  const [confirmRestore, setConfirmRestore] = React.useState(false);
+  const [me, setMe] = React.useState<MeInfo | null>(null);
   const [confirmApply, setConfirmApply] = React.useState(false);
   const [confirmRegister, setConfirmRegister] = React.useState(false);
   const applyInFlightRef = React.useRef(false);
@@ -42,12 +52,35 @@ export default function PersonnelOrderLifecycleActions({
   const canReady = String(order.status).toUpperCase() === "DRAFT";
   const canRegister = canRegisterPersonnelOrder(order.status);
   const canApply = canApplyPersonnelOrderAction(order.status, linkedEventCount);
-  const canVoid = canVoidPersonnelOrder(order.status);
+  const canVoid = canVoidPersonnelOrder(order.status) && !order.is_archived;
+  const canArchive =
+    me?.has_personnel_orders_archive === true &&
+    canArchivePersonnelOrder(order.status, order.is_archived);
+  const canRestore =
+    me?.has_personnel_orders_restore === true && canRestorePersonnelOrder(order.is_archived);
   const editable = isEditablePersonnelOrderStatus(order.status);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void apiAuthMe()
+      .then((body) => {
+        if (!cancelled) setMe(body);
+      })
+      .catch(() => {
+        if (!cancelled) setMe(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!canApply) setConfirmApply(false);
   }, [canApply]);
+
+  React.useEffect(() => {
+    if (!canRestore) setConfirmRestore(false);
+  }, [canRestore]);
 
   async function runAction(key: string, action: () => Promise<PersonnelOrderDetailResponse>, successMessage: string) {
     if (key === "apply") {
@@ -143,6 +176,30 @@ export default function PersonnelOrderLifecycleActions({
             Аннулировать
           </button>
         ) : null}
+
+        {canArchive ? (
+          <button
+            type="button"
+            data-testid="personnel-order-archive-button"
+            disabled={busy != null}
+            onClick={() => setArchiveOpen(true)}
+            className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-800 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-200"
+          >
+            Архивировать
+          </button>
+        ) : null}
+
+        {canRestore ? (
+          <button
+            type="button"
+            data-testid="personnel-order-restore-button"
+            disabled={busy != null}
+            onClick={() => setConfirmRestore(true)}
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+          >
+            Восстановить
+          </button>
+        ) : null}
       </div>
 
       {editable && !hasRegistrationFields ? (
@@ -218,6 +275,36 @@ export default function PersonnelOrderLifecycleActions({
         </div>
       ) : null}
 
+      {confirmRestore && canRestore ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
+          <p>Восстановить приказ из архива?</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              data-testid="personnel-order-restore-confirm"
+              disabled={busy != null}
+              onClick={() =>
+                void runAction(
+                  "restore",
+                  () => restorePersonnelOrder(order.order_id),
+                  "Приказ восстановлен из архива.",
+                )
+              }
+              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm text-white disabled:opacity-60"
+            >
+              {busy === "restore" ? "…" : "Подтвердить"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmRestore(false)}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <PersonnelOrderVoidDialog
         open={voidOpen}
         orderId={order.order_id}
@@ -225,6 +312,16 @@ export default function PersonnelOrderLifecycleActions({
         onVoided={(detail) => {
           onChanged(detail);
           onToast?.("Приказ аннулирован.", "success");
+        }}
+      />
+
+      <PersonnelOrderArchiveDialog
+        open={archiveOpen}
+        orderId={order.order_id}
+        onClose={() => setArchiveOpen(false)}
+        onArchived={(detail) => {
+          onChanged(detail);
+          onToast?.("Приказ архивирован.", "success");
         }}
       />
     </div>

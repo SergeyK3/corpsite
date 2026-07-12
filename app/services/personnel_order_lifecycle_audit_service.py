@@ -11,6 +11,8 @@ from sqlalchemy.engine import Connection
 
 from app.db.engine import engine
 from app.db.models.personnel_orders import (
+    LIFECYCLE_AUDIT_ACTION_ARCHIVE,
+    LIFECYCLE_AUDIT_ACTION_RESTORE,
     LIFECYCLE_AUDIT_ACTIONS,
     ORDER_STATUS_DRAFT,
     ORDER_STATUS_READY_FOR_SIGNATURE,
@@ -176,6 +178,54 @@ def append_void_order_audit(
         new_void_kind=normalized_kind,
         actor_user_id=int(actor_user_id),
         reason_text=str(void_reason).strip(),
+        metadata_json=metadata_json,
+    )
+
+
+def append_archive_order_audit(
+    conn: Connection,
+    *,
+    order_id: int,
+    previous_status: str,
+    previous_void_kind: Optional[str],
+    reason_code: str,
+    reason_text: str,
+    actor_user_id: int,
+    metadata_json: Optional[Dict[str, Any]] = None,
+) -> Optional[int]:
+    return append_personnel_order_lifecycle_audit(
+        conn,
+        order_id=int(order_id),
+        action=LIFECYCLE_AUDIT_ACTION_ARCHIVE,
+        previous_status=str(previous_status),
+        new_status=str(previous_status),
+        previous_void_kind=previous_void_kind,
+        new_void_kind=previous_void_kind,
+        actor_user_id=int(actor_user_id),
+        reason_code=str(reason_code).strip().lower(),
+        reason_text=str(reason_text).strip(),
+        metadata_json=metadata_json,
+    )
+
+
+def append_restore_order_audit(
+    conn: Connection,
+    *,
+    order_id: int,
+    previous_status: str,
+    previous_void_kind: Optional[str],
+    actor_user_id: int,
+    metadata_json: Optional[Dict[str, Any]] = None,
+) -> Optional[int]:
+    return append_personnel_order_lifecycle_audit(
+        conn,
+        order_id=int(order_id),
+        action=LIFECYCLE_AUDIT_ACTION_RESTORE,
+        previous_status=str(previous_status),
+        new_status=str(previous_status),
+        previous_void_kind=previous_void_kind,
+        new_void_kind=previous_void_kind,
+        actor_user_id=int(actor_user_id),
         metadata_json=metadata_json,
     )
 
