@@ -6,27 +6,27 @@ import {
 } from "./personnelOrderEmployeeSearch";
 
 describe("mapEmployeesResponseToSearchOptions", () => {
-  it("builds options from { items, total } payload with id/fio", () => {
+  const activeRow = {
+    id: "138",
+    fio: "Макибаева Акмарал Сабитовна",
+    department: null,
+    position: { id: 86, name: "Руководитель отдела кадров" },
+    org_unit: {
+      unit_id: 73,
+      name: "Отдел кадров",
+      code: null,
+      parent_unit_id: null,
+      is_active: true,
+    },
+    rate: "1",
+    status: "active",
+    date_from: null,
+    date_to: null,
+  };
+
+  it("builds options from { items, total } payload with placement fields", () => {
     const options = mapEmployeesResponseToSearchOptions({
-      items: [
-        {
-          id: "138",
-          fio: "Макибаева Акмарал Сабитовна",
-          department: null,
-          position: { id: 86, name: "Руководитель отдела кадров" },
-          org_unit: {
-            unit_id: 73,
-            name: "Отдел кадров",
-            code: null,
-            parent_unit_id: null,
-            is_active: true,
-          },
-          rate: null,
-          status: "active",
-          date_from: null,
-          date_to: null,
-        },
-      ],
+      items: [activeRow],
       total: 1,
     });
 
@@ -34,8 +34,48 @@ describe("mapEmployeesResponseToSearchOptions", () => {
       {
         employee_id: 138,
         full_name: "Макибаева Акмарал Сабитовна",
+        org_unit_id: 73,
+        org_unit_name: "Отдел кадров",
+        position_id: 86,
+        position_name: "Руководитель отдела кадров",
+        rate: "1",
+        status: "active",
       },
     ]);
+  });
+
+  it("filters inactive employees when activeOnly is true", () => {
+    const options = mapEmployeesResponseToSearchOptions(
+      {
+        items: [
+          activeRow,
+          {
+            ...activeRow,
+            id: "200",
+            fio: "Бывший Сотрудник",
+            status: "inactive",
+          },
+        ],
+        total: 2,
+      },
+      { activeOnly: true },
+    );
+
+    expect(options).toHaveLength(1);
+    expect(options[0]?.employee_id).toBe(138);
+  });
+
+  it("keeps rows with unknown status when activeOnly is true", () => {
+    const options = mapEmployeesResponseToSearchOptions(
+      {
+        items: [{ ...activeRow, status: "unknown" }],
+        total: 1,
+      },
+      { activeOnly: true },
+    );
+
+    expect(options).toHaveLength(1);
+    expect(options[0]?.employee_id).toBe(138);
   });
 
   it("returns empty list for empty items", () => {
@@ -65,12 +105,18 @@ describe("mapEmployeesResponseToSearchOptions", () => {
 });
 
 describe("requireEmployeeIdForItemType", () => {
-  it("requires employee for HIRE", () => {
-    expect(requireEmployeeIdForItemType("HIRE", "")).toMatch(/сотрудника/i);
-    expect(requireEmployeeIdForItemType("HIRE", "138")).toBeNull();
+  it("requires employee for TRANSFER and TERMINATION", () => {
+    expect(requireEmployeeIdForItemType("TRANSFER", "")).toMatch(/сотрудника/i);
+    expect(requireEmployeeIdForItemType("TERMINATION", "")).toMatch(/сотрудника/i);
+    expect(requireEmployeeIdForItemType("TRANSFER", "138")).toBeNull();
   });
 
-  it("does not require employee for non-HIRE in this helper", () => {
-    expect(requireEmployeeIdForItemType("TRANSFER", "")).toBeNull();
+  it("requires employee for RATE_CHANGE", () => {
+    expect(requireEmployeeIdForItemType("RATE_CHANGE", "")).toMatch(/сотрудника/i);
+    expect(requireEmployeeIdForItemType("RATE_CHANGE", "42")).toBeNull();
+  });
+
+  it("does not require employee for legacy HIRE", () => {
+    expect(requireEmployeeIdForItemType("HIRE", "")).toBeNull();
   });
 });

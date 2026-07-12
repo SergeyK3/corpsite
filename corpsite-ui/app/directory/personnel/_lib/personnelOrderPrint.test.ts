@@ -18,6 +18,10 @@ import {
 import { resolveLocalizedLines, resolveLocalizedText } from "./personnelOrderPrintLocalized";
 import { renderPersonnelOrderPrintItemText } from "./personnelOrderPrintItemText";
 import {
+  buildPersonnelOrderPrintDocumentHtml,
+  preambleIncludesOrderVerb,
+} from "./personnelOrderPrintDocumentHtml";
+import {
   buildPersonnelOrderPrintViewModel,
   type PersonnelOrderPrintViewModel,
 } from "./personnelOrderPrintViewModel";
@@ -323,6 +327,132 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     const model = buildPersonnelOrderPrintViewModel(sampleDetail(), {});
     expect(model.title.ru).toBe("О приёме на работу");
     expect(model.items[0]?.body).toBeNull();
+    expect(model.closing).toBeNull();
+  });
+
+  it("maps editorial closing effective text into the view model", () => {
+    const model = buildPersonnelOrderPrintViewModel(sampleDetail(), {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 50,
+            scope: "order",
+            locale: "ru",
+            block_type: "closing",
+            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+          {
+            block_id: 51,
+            scope: "order",
+            locale: "kk",
+            block_type: "closing",
+            effective_text: "Бұйрықты орындалу бақылауын өзімде қалдырамын.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    expect(model.closing?.ru).toContain("Контроль за исполнением");
+    expect(model.closing?.kk).toContain("бақылауын");
+  });
+
+  it("renders closing in shared HTML and omits empty closing", () => {
+    const withClosing = buildPersonnelOrderPrintViewModel(sampleDetail(), {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 50,
+            scope: "order",
+            locale: "ru",
+            block_type: "closing",
+            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    const html = buildPersonnelOrderPrintDocumentHtml(withClosing, "ru");
+    expect(html).toContain('data-testid="personnel-order-print-closing"');
+    expect(html).toContain("Контроль за исполнением приказа оставляю за собой.");
+
+    const withoutClosing = buildPersonnelOrderPrintViewModel(sampleDetail(), {});
+    const htmlEmpty = buildPersonnelOrderPrintDocumentHtml(withoutClosing, "ru");
+    expect(htmlEmpty).not.toContain('data-testid="personnel-order-print-closing"');
+  });
+
+  it("detects embedded order verb in editorial preamble to avoid duplication", () => {
+    const preamble = {
+      ru: "В соответствии с Трудовым кодексом Республики Казахстан ПРИКАЗЫВАЮ:",
+      kk: null,
+    };
+    expect(preambleIncludesOrderVerb(preamble, "ru")).toBe(true);
+
+    const custom = { ru: "Редакционная преамбула без глагола.", kk: null };
+    expect(preambleIncludesOrderVerb(custom, "ru")).toBe(false);
+
+    const model = buildPersonnelOrderPrintViewModel(sampleDetail(), {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 2,
+            scope: "order",
+            locale: "ru",
+            block_type: "preamble",
+            effective_text: preamble.ru,
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+    const verbMatches = html.match(/personnel-order-print-order-verb/g) ?? [];
+    expect(verbMatches).toHaveLength(0);
+  });
+
+  it("preserves item numbering for many active items", () => {
+    const manyItems = Array.from({ length: 12 }, (_, index) => ({
+      item_id: index + 1,
+      order_id: 42,
+      item_number: index + 1,
+      item_type_code: "HIRE",
+      item_status: "ACTIVE",
+      employee_id: 100 + index,
+      employee_name: `Сотрудник ${index + 1}`,
+      effective_date: "2026-07-15",
+      payload: {},
+    }));
+    const model = buildPersonnelOrderPrintViewModel(
+      { ...sampleDetail(), items: manyItems },
+      {},
+    );
+    expect(model.items).toHaveLength(12);
+    expect(model.items.map((item) => item.itemNumber)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+    expect(html).toContain('12.');
+    expect(html).toContain("Сотрудник 12");
   });
 });
 

@@ -97,8 +97,9 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 |---|---|---|
 | WP-PO-EDIT-001 | **Ratified** | Editorial architecture + spike (non-prod) |
 | WP-PO-EDIT-002 | **Implemented** | Normalized block persistence; generate API; DRAFT-only writes; READY gate; ViewModel |
-| WP-PO-EDIT-003 | **Implemented (Kazakh-first)** | DRAFT-only block editor UI shows `kk`; generate persists `kk`+`ru`; Russian editor UI later |
-| WP-PO-EDIT-004 | Planned | Versioned DB clause/template library |
-| WP-PO-EDIT-005 | Planned | return-to-DRAFT; audit polish; optional FIO forms |
+| WP-PO-EDIT-003 | **Implemented (Kazakh-first)** | DRAFT block editor UI; default tab `kk` |
+| WP-PO-EDIT-004 | **Implemented (bilingual UI)** | Russian editor tab; full kk+ru generate; READY gate unchanged |
+| WP-PO-DOC-001 | **Implemented** | Official print/PDF: closing, preamble dedup, layout polish |
+| WP-PO-EDIT-005 | Planned | Editorial approval workflow; return-to-DRAFT; audit polish |
 | WP-PO-LEAVE-001 | Planned | Annual leave structured item model (periods/days/dates/allowance; no balance/payroll) |
 | Later | Planned | localized_texts cleanup WP; immutable PDF snapshot |

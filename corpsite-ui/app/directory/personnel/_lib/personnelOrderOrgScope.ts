@@ -1,8 +1,23 @@
 import type { ItemPayloadDraft } from "./personnelOrderPayload";
+import {
+  isHirePlacementFormType,
+  isTargetOrgScopedFormType,
+} from "./personnelOrderItemFormRegistry";
 
 export function isOrgScopedItemType(itemTypeCode: string | null | undefined): boolean {
-  const type = String(itemTypeCode || "").trim().toUpperCase();
-  return type === "HIRE" || type === "TRANSFER";
+  return (
+    isTargetOrgScopedFormType(itemTypeCode) || isHirePlacementFormType(itemTypeCode)
+  );
+}
+
+/** Clear TRANSFER / RATE_CHANGE target fields when the selected employee changes. */
+export function clearTransferTargetFields(draft: ItemPayloadDraft): ItemPayloadDraft {
+  return {
+    ...draft,
+    to_org_unit_id: "",
+    to_position_id: "",
+    to_rate: "",
+  };
 }
 
 export function selectedOrgUnitIdFromDraft(
@@ -10,7 +25,10 @@ export function selectedOrgUnitIdFromDraft(
   itemTypeCode: string | null | undefined,
 ): number | null {
   const type = String(itemTypeCode || "").trim().toUpperCase();
-  const raw = type === "TRANSFER" ? draft.to_org_unit_id : draft.org_unit_id;
+  const raw =
+    type === "TRANSFER" || type === "RATE_CHANGE"
+      ? draft.to_org_unit_id
+      : draft.org_unit_id;
   const unitId = Number(raw || 0);
   return Number.isFinite(unitId) && unitId > 0 ? Math.trunc(unitId) : null;
 }
@@ -24,7 +42,7 @@ export function clearOrgDependentFields(
   if (type === "HIRE") {
     return { ...draft, org_unit_id: "", position_id: "" };
   }
-  if (type === "TRANSFER") {
+  if (type === "TRANSFER" || type === "RATE_CHANGE") {
     return { ...draft, to_org_unit_id: "", to_position_id: "" };
   }
   return draft;
@@ -41,7 +59,7 @@ export function setOrgUnitAndClearPosition(
   if (type === "HIRE") {
     return { ...draft, org_unit_id: value, position_id: "" };
   }
-  if (type === "TRANSFER") {
+  if (type === "TRANSFER" || type === "RATE_CHANGE") {
     return { ...draft, to_org_unit_id: value, to_position_id: "" };
   }
   return draft;
@@ -52,7 +70,9 @@ export function selectedPositionIdFromDraft(
   itemTypeCode: string | null | undefined,
 ): string {
   const type = String(itemTypeCode || "").trim().toUpperCase();
-  return type === "TRANSFER" ? String(draft.to_position_id || "") : String(draft.position_id || "");
+  return type === "TRANSFER" || type === "RATE_CHANGE"
+    ? String(draft.to_position_id || "")
+    : String(draft.position_id || "");
 }
 
 export function setPositionId(
@@ -64,7 +84,7 @@ export function setPositionId(
   if (type === "HIRE") {
     return { ...draft, position_id: positionId };
   }
-  if (type === "TRANSFER") {
+  if (type === "TRANSFER" || type === "RATE_CHANGE") {
     return { ...draft, to_position_id: positionId };
   }
   return draft;

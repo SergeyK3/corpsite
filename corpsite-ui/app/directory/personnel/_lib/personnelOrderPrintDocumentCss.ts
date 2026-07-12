@@ -137,6 +137,13 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_CSS = `
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
+  orphans: 2;
+  widows: 2;
+}
+
+.personnel-order-print-document .personnel-order-print-item-body p {
+  orphans: 2;
+  widows: 2;
 }
 
 .personnel-order-print-document .m-0 {
@@ -166,9 +173,25 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_CSS = `
   margin-top: 0.25rem;
 }
 
+.personnel-order-print-document .personnel-order-print-closing {
+  margin-top: 1.5rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.personnel-order-print-document .personnel-order-print-tail {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 .personnel-order-print-document .personnel-order-print-signature,
 .personnel-order-print-document .personnel-order-print-acknowledgement {
-  margin-top: 3rem;
+  margin-top: 0;
 }
 
 .personnel-order-print-document .personnel-order-print-signature-grid {
@@ -253,7 +276,8 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_CSS = `
 .personnel-order-print-document .personnel-order-print-block,
 .personnel-order-print-document .personnel-order-print-item,
 .personnel-order-print-document .personnel-order-print-ack-row,
-.personnel-order-print-document .personnel-order-print-signature {
+.personnel-order-print-document .personnel-order-print-signature,
+.personnel-order-print-document .personnel-order-print-closing {
   break-inside: avoid;
   page-break-inside: avoid;
 }

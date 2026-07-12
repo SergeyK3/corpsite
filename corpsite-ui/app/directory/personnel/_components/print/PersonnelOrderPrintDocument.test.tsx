@@ -263,4 +263,61 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(screen.getByTestId("personnel-order-print-signature")).not.toHaveTextContent("Руководитель");
     expect(screen.getByTestId("personnel-order-print-signature")).not.toHaveTextContent("Қолы");
   });
+
+  it("renders editorial closing before signature block", () => {
+    const model = buildPersonnelOrderPrintViewModel(detail, {
+      organizationName: "ММЦ",
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 50,
+            scope: "order",
+            locale: "ru",
+            block_type: "closing",
+            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    render(<PersonnelOrderPrintDocument model={model} language="ru" />);
+    expect(screen.getByTestId("personnel-order-print-closing")).toHaveTextContent(
+      "Контроль за исполнением приказа оставляю за собой.",
+    );
+  });
+
+  it("does not duplicate ПРИКАЗЫВАЮ when editorial preamble already includes it", () => {
+    const model = buildPersonnelOrderPrintViewModel(detail, {
+      organizationName: "ММЦ",
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 2,
+            scope: "order",
+            locale: "ru",
+            block_type: "preamble",
+            effective_text:
+              "В соответствии с Трудовым кодексом Республики Казахстан ПРИКАЗЫВАЮ:",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    render(<PersonnelOrderPrintDocument model={model} language="ru" />);
+    const items = screen.getByTestId("personnel-order-print-items");
+    expect(items).toHaveTextContent("ПРИКАЗЫВАЮ");
+    expect(items.querySelectorAll(".personnel-order-print-order-verb")).toHaveLength(0);
+  });
 });

@@ -36,6 +36,8 @@ export type PersonnelOrderPrintViewModel = {
   organization: LocalizedText;
   title: LocalizedText;
   preamble: LocalizedText | null;
+  /** Order-level closing (editorial effective); omitted from print when empty. */
+  closing: LocalizedText | null;
   documentTypeCode: string;
   placeOfIssue: LocalizedText;
   items: PersonnelOrderPrintItemViewModel[];
@@ -157,9 +159,11 @@ function pickLocalizedTexts(
 ): {
   title: LocalizedText;
   preamble: LocalizedText | null;
+  closing: LocalizedText | null;
 } {
   const editorialTitle = pickEffectiveByLocale(editorial?.order_blocks, "title");
   const editorialPreamble = pickEffectiveByLocale(editorial?.order_blocks, "preamble");
+  const editorialClosing = pickEffectiveByLocale(editorial?.order_blocks, "closing");
 
   const rows = detail.localized_texts || [];
   const kk = rows.find((row) => String(row.locale).toLowerCase() === "kk");
@@ -181,7 +185,12 @@ function pickLocalizedTexts(
     editorialPreamble?.ru || legacyPreamble.ru,
   );
   const hasPreamble = Boolean(preambleMerged.kk || preambleMerged.ru);
-  return { title, preamble: hasPreamble ? preambleMerged : null };
+  const hasClosing = Boolean(editorialClosing?.kk || editorialClosing?.ru);
+  return {
+    title,
+    preamble: hasPreamble ? preambleMerged : null,
+    closing: hasClosing ? editorialClosing : null,
+  };
 }
 
 function resolveSignatoryPosition(
@@ -252,7 +261,7 @@ export function buildPersonnelOrderPrintViewModel(
 ): PersonnelOrderPrintViewModel {
   const order = detail.order;
   const editorial = maps.editorial ?? null;
-  const { title, preamble } = pickLocalizedTexts(detail, editorial);
+  const { title, preamble, closing } = pickLocalizedTexts(detail, editorial);
 
   const basis: LocalizedText[] = [];
   const legal = optionalString(order.legal_basis_article);
@@ -315,6 +324,7 @@ export function buildPersonnelOrderPrintViewModel(
     organization: localizedText(maps.organizationNameKk, maps.organizationName),
     title,
     preamble,
+    closing,
     documentTypeCode: order.order_type_code,
     placeOfIssue: localizedText(
       "Астана қ.",

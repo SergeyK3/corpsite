@@ -77,6 +77,42 @@ function sampleState(overrides?: Partial<PersonnelOrderEditorialState>): Personn
         editable: true,
         revision: 1,
       },
+      {
+        block_id: 101,
+        scope: "order",
+        locale: "ru",
+        block_type: "title",
+        generated_text: "О приёме на работу",
+        override_text: null,
+        effective_text: "О приёме на работу",
+        review_status: "CURRENT",
+        editable: true,
+        revision: 1,
+      },
+      {
+        block_id: 102,
+        scope: "order",
+        locale: "ru",
+        block_type: "preamble",
+        generated_text: "В соответствии с ТК РК",
+        override_text: null,
+        effective_text: "В соответствии с ТК РК",
+        review_status: "CURRENT",
+        editable: true,
+        revision: 1,
+      },
+      {
+        block_id: 103,
+        scope: "order",
+        locale: "ru",
+        block_type: "closing",
+        generated_text: "",
+        override_text: null,
+        effective_text: "",
+        review_status: "CURRENT",
+        editable: true,
+        revision: 1,
+      },
     ],
     items: [
       {
@@ -111,6 +147,32 @@ function sampleState(overrides?: Partial<PersonnelOrderEditorialState>): Personn
             editable: true,
             revision: 1,
           },
+          {
+            block_id: 111,
+            scope: "item",
+            order_item_id: 10,
+            locale: "ru",
+            block_type: "body",
+            generated_text: "Принять Петрову Анну",
+            override_text: null,
+            effective_text: "Принять Петрову Анну",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+          {
+            block_id: 112,
+            scope: "item",
+            order_item_id: 10,
+            locale: "ru",
+            block_type: "basis",
+            generated_text: "Основание: личное заявление.",
+            override_text: null,
+            effective_text: "Основание: личное заявление.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
         ],
       },
     ],
@@ -135,10 +197,14 @@ describe("PersonnelOrderEditorialTextEditor", () => {
 
     expect(screen.getByText("Текст приказа")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Редактирование казахского текста приказа. Русский язык будет доступен на следующем этапе.",
-      ),
+      screen.getByText(/Редактирование казахского текста приказа/),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-editorial-locale-tabs")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-editorial-locale-kk")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-editorial-locale-ru")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Русский язык будет доступен на следующем этапе/i),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Заголовок")).toBeInTheDocument();
     expect(screen.getByText("Преамбула")).toBeInTheDocument();
     expect(screen.getByText("Пункт №1")).toBeInTheDocument();
@@ -152,7 +218,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getAllByText("Generated").length).toBeGreaterThan(0);
   });
 
-  it("auto-generates full editorial state (both locales) when no kk blocks exist in DRAFT", async () => {
+  it("auto-generates full editorial state when required locales are missing in DRAFT", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue({
       order_id: 42,
       order_status: "DRAFT",
@@ -172,7 +238,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     });
   });
 
-  it("does not auto-generate again when kk blocks already exist", async () => {
+  it("does not auto-generate again when both locales already exist", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
     render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
@@ -208,24 +274,8 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     });
   });
 
-  it("shows only kk blocks even when ru blocks are present in state", async () => {
-    const withBoth = sampleState();
-    withBoth.order_blocks = [
-      ...withBoth.order_blocks,
-      {
-        block_id: 101,
-        scope: "order",
-        locale: "ru",
-        block_type: "title",
-        generated_text: "О приёме на работу",
-        override_text: null,
-        effective_text: "О приёме на работу",
-        review_status: "CURRENT",
-        editable: true,
-        revision: 1,
-      },
-    ];
-    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(withBoth);
+  it("shows only kk blocks on kk tab even when ru blocks are present in state", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
     render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
 
@@ -233,6 +283,99 @@ describe("PersonnelOrderEditorialTextEditor", () => {
       expect(screen.getByText("Жұмысқа қабылдау туралы")).toBeInTheDocument();
     });
     expect(screen.queryByText("О приёме на работу")).not.toBeInTheDocument();
+  });
+
+  it("shows ru blocks when Russian tab is selected", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-editorial-locale-ru")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+
+    await waitFor(() => {
+      expect(screen.getByText("О приёме на работу")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Жұмысқа қабылдау туралы")).not.toBeInTheDocument();
+  });
+
+  it("saves Russian override with expected revision", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    const afterSave = sampleState();
+    afterSave.order_blocks = afterSave.order_blocks.map((b) =>
+      b.block_id === 101
+        ? {
+            ...b,
+            override_text: "Новый заголовок",
+            effective_text: "Новый заголовок",
+            revision: 2,
+            review_status: "CURRENT",
+          }
+        : b,
+    );
+    vi.mocked(patchPersonnelOrderEditorialBlock).mockResolvedValue(afterSave);
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-editorial-locale-ru")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+
+    await waitFor(() => {
+      expect(screen.getByText("О приёме на работу")).toBeInTheDocument();
+    });
+
+    const titleSection = screen.getByTestId("personnel-order-editorial-block-Заголовок");
+    fireEvent.click(titleSection.querySelector('[data-testid="personnel-order-editorial-edit"]')!);
+
+    const textarea = screen.getByTestId("personnel-order-editorial-textarea");
+    fireEvent.change(textarea, { target: { value: "Новый заголовок" } });
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-save"));
+
+    await waitFor(() => {
+      expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledWith(42, 101, {
+        override_text: "Новый заголовок",
+        expected_revision: 1,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Новый заголовок")).toBeInTheDocument();
+      expect(screen.getByText("Edited")).toBeInTheDocument();
+    });
+  });
+
+  it("auto-generates when only one locale is present", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue({
+      order_id: 42,
+      order_status: "DRAFT",
+      editable: true,
+      order_blocks: [
+        {
+          block_id: 1,
+          scope: "order",
+          locale: "kk",
+          block_type: "title",
+          generated_text: "Жұмысқа қабылдау туралы",
+          override_text: null,
+          effective_text: "Жұмысқа қабылдау туралы",
+          review_status: "CURRENT",
+          editable: true,
+          revision: 1,
+        },
+      ],
+      items: [],
+    });
+    vi.mocked(generatePersonnelOrderEditorial).mockResolvedValue(sampleState());
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+
+    await waitFor(() => {
+      expect(generatePersonnelOrderEditorial).toHaveBeenCalledWith(42);
+    });
   });
 
   it("skips generate when user declines confirmation", async () => {

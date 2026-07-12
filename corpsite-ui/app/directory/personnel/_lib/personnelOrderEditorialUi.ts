@@ -1,6 +1,6 @@
 /**
- * WP-PO-EDIT-003 — Kazakh-first editorial UI helpers.
- * UI works with locale=kk only; generate may persist both kk and ru.
+ * WP-PO-EDIT-003/004 — Bilingual editorial UI helpers (Kazakh-first default).
+ * Persistence stores kk + ru per block; UI shows one active locale at a time.
  * Human labels only; no internal enum/fingerprint exposure in the UI layer.
  */
 
@@ -11,7 +11,17 @@ import type {
   PersonnelOrderItem,
 } from "./personnelOrdersApi.client";
 
-export const PERSONNEL_ORDER_EDITORIAL_UI_LOCALE = "kk" as const;
+export const PERSONNEL_ORDER_EDITORIAL_UI_LOCALES = ["kk", "ru"] as const;
+
+export type PersonnelOrderEditorialUiLocale = (typeof PERSONNEL_ORDER_EDITORIAL_UI_LOCALES)[number];
+
+/** Default working locale (Kazakh-first workflow). */
+export const PERSONNEL_ORDER_EDITORIAL_UI_LOCALE: PersonnelOrderEditorialUiLocale = "kk";
+
+export const PERSONNEL_ORDER_EDITORIAL_LOCALE_LABELS: Record<PersonnelOrderEditorialUiLocale, string> = {
+  kk: "Қазақша",
+  ru: "Русский",
+};
 
 export type PersonnelOrderEditorialUiStatus = "generated" | "edited" | "requires_review";
 
@@ -23,6 +33,13 @@ export const PERSONNEL_ORDER_EDITORIAL_UI_STATUS_LABELS: Record<
   edited: "Edited",
   requires_review: "Requires review",
 };
+
+export function editorialLocaleHint(locale: PersonnelOrderEditorialUiLocale): string {
+  if (locale === "kk") {
+    return "Редактирование казахского текста приказа. Переключитесь на «Русский» для русской версии.";
+  }
+  return "Редактирование русского текста приказа. Переключитесь на «Қазақша» для казахской версии.";
+}
 
 export function resolvePersonnelOrderEditorialUiStatus(
   block: PersonnelOrderEditorialBlock | null | undefined,
@@ -61,18 +78,28 @@ export function pickEditorialBlockByType(
   return found ?? null;
 }
 
-/** True when the editor's working locale already has at least one stored block. */
+/** True when the given locale already has at least one stored block. */
 export function hasEditorialUiLocaleBlocks(
   state: PersonnelOrderEditorialState | null | undefined,
+  locale: string = PERSONNEL_ORDER_EDITORIAL_UI_LOCALE,
 ): boolean {
   if (!state) return false;
-  const locale = PERSONNEL_ORDER_EDITORIAL_UI_LOCALE;
+  const normalized = String(locale).toLowerCase();
   const orderHas = (state.order_blocks || []).some(
-    (b) => String(b.locale).toLowerCase() === locale,
+    (b) => String(b.locale).toLowerCase() === normalized,
   );
   if (orderHas) return true;
   return (state.items || []).some((group) =>
-    (group.blocks || []).some((b) => String(b.locale).toLowerCase() === locale),
+    (group.blocks || []).some((b) => String(b.locale).toLowerCase() === normalized),
+  );
+}
+
+/** True when both required editorial locales have at least one block (READY gate precondition). */
+export function hasRequiredEditorialLocales(
+  state: PersonnelOrderEditorialState | null | undefined,
+): boolean {
+  return PERSONNEL_ORDER_EDITORIAL_UI_LOCALES.every((locale) =>
+    hasEditorialUiLocaleBlocks(state, locale),
   );
 }
 
@@ -98,21 +125,22 @@ export type EditorialDocumentSection =
 export function buildEditorialDocumentSections(
   state: PersonnelOrderEditorialState | null | undefined,
   items: PersonnelOrderItem[],
+  locale: string = PERSONNEL_ORDER_EDITORIAL_UI_LOCALE,
 ): EditorialDocumentSection[] {
   const sections: EditorialDocumentSection[] = [];
   sections.push({
     kind: "order",
-    key: "title",
+    key: `${locale}-title`,
     title: "Заголовок",
     blockType: "title",
-    block: pickEditorialBlockByType(state?.order_blocks, "title"),
+    block: pickEditorialBlockByType(state?.order_blocks, "title", locale),
   });
   sections.push({
     kind: "order",
-    key: "preamble",
+    key: `${locale}-preamble`,
     title: "Преамбула",
     blockType: "preamble",
-    block: pickEditorialBlockByType(state?.order_blocks, "preamble"),
+    block: pickEditorialBlockByType(state?.order_blocks, "preamble", locale),
   });
 
   const groupsByItem = new Map<number, PersonnelOrderEditorialItemGroup>();
@@ -129,22 +157,22 @@ export function buildEditorialDocumentSections(
     const group = groupsByItem.get(item.item_id);
     sections.push({
       kind: "item",
-      key: `item-${item.item_id}`,
+      key: `${locale}-item-${item.item_id}`,
       itemNumber: item.item_number,
       employeeName: item.employee_name ?? null,
       orderItemId: item.item_id,
-      body: pickEditorialBlockByType(group?.blocks, "body"),
-      basis: pickEditorialBlockByType(group?.blocks, "basis"),
+      body: pickEditorialBlockByType(group?.blocks, "body", locale),
+      basis: pickEditorialBlockByType(group?.blocks, "basis", locale),
       basisRequired: Boolean(group?.basis_required ?? true),
     });
   }
 
   sections.push({
     kind: "order",
-    key: "closing",
+    key: `${locale}-closing`,
     title: "Заключительная часть",
     blockType: "closing",
-    block: pickEditorialBlockByType(state?.order_blocks, "closing"),
+    block: pickEditorialBlockByType(state?.order_blocks, "closing", locale),
   });
 
   return sections;

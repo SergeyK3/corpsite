@@ -240,8 +240,10 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_CLOSING:
-        # Minimal closing is acceptable for MVP.
-        text = ""
+        if lang == "kk":
+            text = "Бұйрықты орындалу бақылауын өзімде қалдырамын."
+        else:
+            text = "Контроль за исполнением приказа оставляю за собой."
         return _result(
             generated_text=text,
             generator_key=GENERATOR_KEY_ORDER_CLOSING,

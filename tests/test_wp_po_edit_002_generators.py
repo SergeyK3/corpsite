@@ -71,7 +71,11 @@ def test_missing_employee_uses_dash() -> None:
     assert "Уволить" in ru["generated_text"]
 
 
-def test_closing_may_be_empty() -> None:
-    out = generate_order_block("closing", "kk", {"order_type_code": "HIRE"})
-    assert out["generated_text"] == ""
-    assert out["source_fingerprint"]
+def test_closing_has_default_responsibility_text() -> None:
+    kk = generate_order_block("closing", "kk", {"order_type_code": "HIRE"})
+    ru = generate_order_block("closing", "ru", {"order_type_code": "HIRE"})
+    assert kk["generated_text"]
+    assert ru["generated_text"]
+    assert "бақылау" in kk["generated_text"]
+    assert "Контроль" in ru["generated_text"]
+    assert kk["source_fingerprint"]

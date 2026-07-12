@@ -13,12 +13,16 @@ import {
   type PersonnelOrderItem,
 } from "../_lib/personnelOrdersApi.client";
 import {
+  PERSONNEL_ORDER_EDITORIAL_LOCALE_LABELS,
+  PERSONNEL_ORDER_EDITORIAL_UI_LOCALES,
   PERSONNEL_ORDER_EDITORIAL_UI_STATUS_LABELS,
   buildEditorialDocumentSections,
   displayPersonnelOrderEditorialBlockText,
-  hasEditorialUiLocaleBlocks,
+  editorialLocaleHint,
+  hasRequiredEditorialLocales,
   mapEditorialConflictMessage,
   resolvePersonnelOrderEditorialUiStatus,
+  type PersonnelOrderEditorialUiLocale,
   type PersonnelOrderEditorialUiStatus,
 } from "../_lib/personnelOrderEditorialUi";
 
@@ -213,6 +217,7 @@ function BlockEditor({
 
 export default function PersonnelOrderEditorialTextEditor({ orderId, items, editable }: Props) {
   const [state, setState] = React.useState<PersonnelOrderEditorialState | null>(null);
+  const [activeLocale, setActiveLocale] = React.useState<PersonnelOrderEditorialUiLocale>("kk");
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -223,8 +228,8 @@ export default function PersonnelOrderEditorialTextEditor({ orderId, items, edit
     setError(null);
     try {
       let next = await getPersonnelOrderEditorial(orderId);
-      if (editable && !hasEditorialUiLocaleBlocks(next)) {
-        // Full generate (kk + ru) so READY gate remains satisfiable; UI still shows kk only.
+      if (editable && !hasRequiredEditorialLocales(next)) {
+        // Full generate (kk + ru) so READY gate remains satisfiable.
         next = await generatePersonnelOrderEditorial(orderId);
       }
       setState(next);
@@ -287,17 +292,14 @@ export default function PersonnelOrderEditorialTextEditor({ orderId, items, edit
     }
   }
 
-  const sections = buildEditorialDocumentSections(state, items);
+  const sections = buildEditorialDocumentSections(state, items, activeLocale);
 
   return (
     <section data-testid="personnel-order-editorial-editor" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Текст приказа</h3>
-          <p className="mt-1 text-xs text-zinc-500">
-            Редактирование казахского текста приказа. Русский язык будет доступен на следующем
-            этапе.
-          </p>
+          <p className="mt-1 text-xs text-zinc-500">{editorialLocaleHint(activeLocale)}</p>
         </div>
         {canWrite ? (
           <button
@@ -310,6 +312,34 @@ export default function PersonnelOrderEditorialTextEditor({ orderId, items, edit
             {busy ? "Формирование…" : "Сформировать / обновить текст"}
           </button>
         ) : null}
+      </div>
+
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label="Язык редакции приказа"
+        data-testid="personnel-order-editorial-locale-tabs"
+      >
+        {PERSONNEL_ORDER_EDITORIAL_UI_LOCALES.map((locale) => {
+          const selected = activeLocale === locale;
+          return (
+            <button
+              key={locale}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              data-testid={`personnel-order-editorial-locale-${locale}`}
+              onClick={() => setActiveLocale(locale)}
+              className={
+                selected
+                  ? "rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+              }
+            >
+              {PERSONNEL_ORDER_EDITORIAL_LOCALE_LABELS[locale]}
+            </button>
+          );
+        })}
       </div>
 
       {!editable ? (

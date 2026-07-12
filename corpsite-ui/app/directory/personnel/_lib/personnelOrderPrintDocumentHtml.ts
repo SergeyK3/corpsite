@@ -7,6 +7,7 @@ import {
   statusMarkLinesForLanguage,
 } from "./personnelOrderPrintLocale";
 import { resolveLocalizedLines } from "./personnelOrderPrintLocalized";
+import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import type {
   PersonnelOrderPrintItemViewModel,
   PersonnelOrderPrintViewModel,
@@ -29,6 +30,18 @@ function linesHtml(lines: string[], className?: string): string {
       return `<div${cls}>${escapePersonnelOrderPrintHtml(line)}</div>`;
     })
     .join("");
+}
+
+/** Editorial preamble often embeds the order verb; avoid duplicating the centered verb block. */
+export function preambleIncludesOrderVerb(
+  preamble: LocalizedText,
+  language: PersonnelOrderPrintLanguage,
+): boolean {
+  const lines = resolveLocalizedLines(preamble, language);
+  const joined = lines.join(" ").toUpperCase();
+  if (language === "kk") return joined.includes("БҰЙЫРАМЫН");
+  if (language === "ru") return joined.includes("ПРИКАЗЫВАЮ");
+  return joined.includes("ПРИКАЗЫВАЮ") || joined.includes("БҰЙЫРАМЫН");
 }
 
 function renderStatusMark(
@@ -111,9 +124,13 @@ function renderItems(
           .join("")}</div>`
       : "";
 
-  const verb = `<div class="personnel-order-print-block personnel-order-print-order-verb">${dictionaries
-    .map((dict) => `<div>${escapePersonnelOrderPrintHtml(dict.orderVerb)}</div>`)
-    .join("")}</div>`;
+  const showOrderVerb =
+    !model.preamble || !preambleIncludesOrderVerb(model.preamble, language);
+  const verb = showOrderVerb
+    ? `<div class="personnel-order-print-block personnel-order-print-order-verb">${dictionaries
+        .map((dict) => `<div>${escapePersonnelOrderPrintHtml(dict.orderVerb)}</div>`)
+        .join("")}</div>`
+    : "";
 
   const items =
     model.items.length === 0
@@ -145,6 +162,19 @@ function renderBasis(
   <div class="personnel-order-print-basis-heading">${headings}</div>
   <ul class="personnel-order-print-basis-list">${list}</ul>
 </section>`;
+}
+
+function renderClosing(
+  model: PersonnelOrderPrintViewModel,
+  language: PersonnelOrderPrintLanguage,
+): string {
+  if (!model.closing) return "";
+  const lines = resolveLocalizedLines(model.closing, language);
+  if (!lines.length) return "";
+  const body = lines
+    .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
+    .join("");
+  return `<section class="personnel-order-print-block personnel-order-print-closing" data-testid="personnel-order-print-closing">${body}</section>`;
 }
 
 function renderSignature(
@@ -220,8 +250,11 @@ export function buildPersonnelOrderPrintDocumentHtml(
     ${renderHeader(model, language)}
     ${renderItems(model, language)}
     ${renderBasis(model, language)}
-    ${renderSignature(model, language)}
-    ${renderAcknowledgement(model, language)}
+    ${renderClosing(model, language)}
+    <div class="personnel-order-print-tail">
+      ${renderSignature(model, language)}
+      ${renderAcknowledgement(model, language)}
+    </div>
   </div>
 </article>`;
 }

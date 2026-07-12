@@ -53,6 +53,7 @@ export default function OrgUnitScopeFilter({
     let cancelled = false;
 
     (async () => {
+      setOptions([]);
       setLoading(true);
       setError(null);
 
