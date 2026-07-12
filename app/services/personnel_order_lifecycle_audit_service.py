@@ -180,6 +180,33 @@ def append_void_order_audit(
     )
 
 
+def append_cancel_order_audit(
+    conn: Connection,
+    *,
+    order_id: int,
+    previous_status: str,
+    previous_void_kind: Optional[str],
+    reason_code: str,
+    reason_text: str,
+    void_reason: str,
+    actor_user_id: int,
+    metadata_json: Optional[Dict[str, Any]] = None,
+) -> Optional[int]:
+    return append_personnel_order_lifecycle_audit(
+        conn,
+        order_id=int(order_id),
+        action=VOID_KIND_CANCEL,
+        previous_status=str(previous_status),
+        new_status=ORDER_STATUS_VOIDED,
+        previous_void_kind=previous_void_kind,
+        new_void_kind=VOID_KIND_CANCEL,
+        actor_user_id=int(actor_user_id),
+        reason_code=str(reason_code).strip().lower(),
+        reason_text=str(reason_text).strip(),
+        metadata_json=metadata_json or {"void_reason": str(void_reason).strip()},
+    )
+
+
 def _serialize_audit_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     created_at = row.get("created_at")
     return {

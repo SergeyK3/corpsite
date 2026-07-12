@@ -205,6 +205,21 @@ class PersonnelOrderVoidIn(BaseModel):
     void_reason: str = Field(..., min_length=1, max_length=2000)
 
 
+PersonnelOrderCancelReasonCode = Literal[
+    "duplicate",
+    "created_by_mistake",
+    "no_longer_required",
+    "replaced_before_registration",
+    "test_record",
+    "other",
+]
+
+
+class PersonnelOrderCancelIn(BaseModel):
+    reason_code: PersonnelOrderCancelReasonCode
+    reason_text: Optional[str] = Field(default=None, max_length=2000)
+
+
 class EditorialBlockOut(BaseModel):
     block_id: int
     scope: str

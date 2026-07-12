@@ -13,6 +13,7 @@ from app.directory.personnel_orders_schemas import (
     EditorialBlockPatchIn,
     EditorialGenerateIn,
     EditorialStateResponse,
+    PersonnelOrderCancelIn,
     PersonnelOrderCreateIn,
     PersonnelOrderDetailResponse,
     PersonnelOrderItemCreateIn,
@@ -28,6 +29,10 @@ from app.directory.rbac import require_personnel_admin_or_403
 from app.services.personnel_orders_apply_service import (
     PersonnelOrderAlreadyAppliedError,
     apply_personnel_order,
+)
+from app.services.personnel_orders_cancel_service import (
+    PersonnelOrderCancelError,
+    cancel_personnel_order,
 )
 from app.services.personnel_orders_void_service import (
     PersonnelOrderAlreadyVoidedError,
@@ -79,6 +84,21 @@ def _require_user_id(user: Dict[str, Any]) -> int:
 
 def _conflict_http409(exc: PersonnelOrderConflictError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
+
+
+def _cancel_error_http(exc: PersonnelOrderCancelError) -> HTTPException:
+    status_by_code = {
+        "ORDER_NOT_CANCELLABLE": 409,
+        "ORDER_ALREADY_VOIDED": 409,
+        "ORDER_ALREADY_APPLIED": 409,
+        "CANCEL_PERMISSION_DENIED": 403,
+        "CANCEL_SCOPE_DENIED": 403,
+        "INVALID_CANCEL_REASON": 422,
+    }
+    return HTTPException(
+        status_code=status_by_code.get(exc.code, 409),
+        detail={"code": exc.code, "message": str(exc)},
+    )
 
 
 @router.get("/personnel-orders", response_model=PersonnelOrderListResponse)
@@ -545,6 +565,38 @@ def list_personnel_order_lifecycle_audit_route(
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post("/personnel-orders/{order_id}/cancel", response_model=PersonnelOrderDetailResponse)
+def cancel_personnel_order_route(
+    payload: PersonnelOrderCancelIn,
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Cancel an unregistered DRAFT/READY personnel order (WP-PO-LC-DEL-004)."""
+    try:
+        return call_service(
+            cancel_personnel_order,
+            order_id=order_id,
+            reason_code=payload.reason_code,
+            reason_text=payload.reason_text,
+            actor_user_id=_require_user_id(user),
+        )
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": str(exc)})
+    except PersonnelOrderAlreadyVoidedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_ALREADY_VOIDED", "message": str(exc)},
+        )
+    except PersonnelOrderCancelError as exc:
+        raise _cancel_error_http(exc)
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
     except HTTPException:
         raise
     except Exception as exc:
