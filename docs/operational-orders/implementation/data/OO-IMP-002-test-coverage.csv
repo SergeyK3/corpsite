@@ -1,0 +1,6 @@
+test_file,area,coverage
+test_translation_assignment.py,Translation assignment lifecycle,RU-only KK-only RU+KK lifecycle stale source duplicate active cancel
+test_content_confirmations.py,Content confirmation,author translator party stale supersede idempotency
+test_bilingual_reconciliation.py,Reconciliation,pair reconcile missing confirmation invalidate cross-workspace
+test_editorial_package_gate.py,Editorial gate,missing locale translation confirmation reconciliation idempotent ready
+test_editorial_authorization.py,Authorization,read-only translator scope content author impersonation

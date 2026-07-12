@@ -1,0 +1,4 @@
+entity,table,purpose,key_fields
+OperationalOrderTranslationAssignment,operational_order_translation_assignments,Human translation work unit,"id, workspace_id, target_locale, status"
+OperationalOrderContentConfirmation,operational_order_content_confirmations,Role-bound text confirmation,"id, workspace_id, block_id, confirmation_role, status"
+OperationalOrderBilingualReconciliation,operational_order_bilingual_reconciliations,RU/KK semantic alignment,"id, workspace_id, ru_block_id, kk_block_id, status"

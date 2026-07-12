@@ -2,7 +2,7 @@
 
 Исследовательская и архитектурная зона для корпуса **производственных приказов** (не кадровых).
 
-**Implementation status:** OO-IMP-001 complete (local) — submitted-text intake MVP.
+**Implementation status:** OO-IMP-001 complete (local); OO-IMP-002 complete (local) — content confirmation and translation workflow.
 
 ---
 
@@ -11,13 +11,15 @@
 | WP | Title | Status |
 |---|---|---|
 | **OO-IMP-001** | **Submitted-text Intake MVP** | **Complete (local)** |
-| OO-IMP-002 | Content Confirmation and Translation Workflow | Next |
+| **OO-IMP-002** | **Content Confirmation and Translation Workflow** | **Complete (local)** |
 
-Record: [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
+Records:
+- [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
+- [`implementation/OO-IMP-002-content-confirmation-translation-workflow.md`](implementation/OO-IMP-002-content-confirmation-translation-workflow.md)
 
 Runtime package: `app/operational_orders/`  
 API: `/api/operational-orders/draft-workspaces`  
-Migration: `w7x8y9z0a1b2`
+Migration head: `x8y9z0a1b2c3` (down: `w7x8y9z0a1b2`)
 
 First native Shared UDE consumer — uses contracts/value objects only; persistence belongs to OO module.
 

@@ -8,7 +8,7 @@ from app.db.engine import engine
 from app.operational_orders.repository import OO_TABLES, operational_orders_available
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
-DDL_REVISION = "w7x8y9z0a1b2"
+DDL_REVISION = "x8y9z0a1b2c3"
 
 
 def _schema_available() -> bool:
@@ -18,13 +18,27 @@ def _schema_available() -> bool:
 def _require_schema() -> None:
     if not _schema_available():
         pytest.skip(
-            f"OO-IMP-001 schema missing — run: alembic upgrade head (revision {DDL_REVISION})"
+            f"OO schema missing — run: alembic upgrade head (revision {DDL_REVISION})"
         )
 
 
 @pytest.fixture(scope="session")
 def _require_oo_schema_fixture():
     _require_schema()
+
+
+def revoke_user_access_grants(conn, user_id: int) -> None:
+    """Remove grants created by OO tests before seed teardown deletes users."""
+    conn.execute(
+        text(
+            """
+            DELETE FROM public.access_grants
+            WHERE (target_type = 'USER' AND target_id = :user_id)
+               OR granted_by_user_id = :user_id
+            """
+        ),
+        {"user_id": int(user_id)},
+    )
 
 
 def _grant_user_permission(conn, user_id: int, permission_code: str) -> None:
@@ -74,15 +88,56 @@ def oo_intake_headers(seed, monkeypatch):
 
 @pytest.fixture
 def oo_regular_headers(seed):
+    user_id = int(seed["executor_user_id"])
     with engine.begin() as conn:
-        _grant_user_permission(conn, int(seed["executor_user_id"]), "OPERATIONAL_ORDERS_INTAKE_CREATE")
-        _grant_user_permission(conn, int(seed["executor_user_id"]), "OPERATIONAL_ORDERS_INTAKE_READ")
-        _grant_user_permission(conn, int(seed["executor_user_id"]), "OPERATIONAL_ORDERS_INTAKE_OPERATE")
-    return auth_headers(seed["executor_user_id"])
+        _grant_user_permission(conn, user_id, "OPERATIONAL_ORDERS_INTAKE_CREATE")
+        _grant_user_permission(conn, user_id, "OPERATIONAL_ORDERS_INTAKE_READ")
+        _grant_user_permission(conn, user_id, "OPERATIONAL_ORDERS_INTAKE_OPERATE")
+    try:
+        yield auth_headers(user_id)
+    finally:
+        with engine.begin() as conn:
+            revoke_user_access_grants(conn, user_id)
+
+
+@pytest.fixture
+def oo_editorial_headers(seed):
+    user_id = int(seed["executor_user_id"])
+    perms = (
+        "OPERATIONAL_ORDERS_INTAKE_CREATE",
+        "OPERATIONAL_ORDERS_INTAKE_READ",
+        "OPERATIONAL_ORDERS_INTAKE_OPERATE",
+        "OPERATIONAL_ORDERS_TRANSLATION_ASSIGN",
+        "OPERATIONAL_ORDERS_TRANSLATION_WORK",
+        "OPERATIONAL_ORDERS_CONTENT_CONFIRM",
+        "OPERATIONAL_ORDERS_RECONCILE",
+        "OPERATIONAL_ORDERS_EDITORIAL_READY",
+    )
+    with engine.begin() as conn:
+        for perm in perms:
+            _grant_user_permission(conn, user_id, perm)
+    try:
+        yield auth_headers(user_id)
+    finally:
+        with engine.begin() as conn:
+            revoke_user_access_grants(conn, user_id)
+
+
+# Child tables first — safe DELETE ... WHERE workspace_id (see OO FK graph).
+OO_CLEANUP_TABLES = (
+    "operational_order_bilingual_reconciliations",
+    "operational_order_content_confirmations",
+    "operational_order_translation_assignments",
+    "operational_order_draft_audit",
+    "operational_order_clarifications",
+    "operational_order_text_provenance",
+    "operational_order_draft_blocks",
+    "operational_order_draft_workspaces",
+)
 
 
 def cleanup_workspace(conn, workspace_id: int) -> None:
-    for table in reversed(OO_TABLES):
+    for table in OO_CLEANUP_TABLES:
         if table_exists(conn, table):
             conn.execute(
                 text(f"DELETE FROM public.{table} WHERE workspace_id = :workspace_id"),

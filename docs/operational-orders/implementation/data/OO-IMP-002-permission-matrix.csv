@@ -1,0 +1,7 @@
+permission,scope,notes
+OPERATIONAL_ORDERS_TRANSLATION_ASSIGN,workspace org scope,Create and cancel translation assignments
+OPERATIONAL_ORDERS_TRANSLATION_WORK,workspace org scope + assigned party,Accept start complete translation
+OPERATIONAL_ORDERS_CONTENT_CONFIRM,workspace org scope + party identity,Content author and translator confirmations
+OPERATIONAL_ORDERS_RECONCILE,workspace org scope,Bilingual reconciliation create invalidate
+OPERATIONAL_ORDERS_EDITORIAL_READY,workspace org scope,Validate and mark editorial package ready
+privileged bypass,global,Full access via DIRECTORY_PRIVILEGED_USER_IDS

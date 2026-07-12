@@ -16,6 +16,11 @@ from app.operational_orders.schemas.draft_workspace import (
     ValidationIssueOut,
     ValidationResultOut,
 )
+from app.operational_orders.schemas.editorial_workflow import (
+    BilingualReconciliationOut,
+    ContentConfirmationOut,
+    TranslationAssignmentOut,
+)
 
 
 def _validation_out(result: ValidationResult) -> ValidationResultOut:
@@ -70,6 +75,19 @@ def to_detail_out(detail: dict[str, Any]) -> DraftWorkspaceDetailOut:
         validation=_validation_out(validation),
         locale_completeness=LocaleCompletenessOut.model_validate(detail["locale_completeness"]),
         readiness_for_editorial=bool(detail["readiness_for_editorial"]),
+        readiness_for_editorial_package=bool(detail.get("readiness_for_editorial_package")),
+        translation_assignments=[
+            TranslationAssignmentOut.model_validate(item).model_dump()
+            for item in detail.get("translation_assignments", [])
+        ],
+        content_confirmations=[
+            ContentConfirmationOut.model_validate(item).model_dump()
+            for item in detail.get("content_confirmations", [])
+        ],
+        bilingual_reconciliations=[
+            BilingualReconciliationOut.model_validate(item).model_dump()
+            for item in detail.get("bilingual_reconciliations", [])
+        ],
     )
 
 

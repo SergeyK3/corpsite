@@ -1,0 +1,15 @@
+method,path,service_function,auth
+POST,/draft-workspaces/{workspace_id}/translation-assignments,create_translation_assignment,TRANSLATION_ASSIGN
+GET,/draft-workspaces/{workspace_id}/translation-assignments,list_translation_assignments,INTAKE_READ
+POST,/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/accept,accept_translation_assignment,TRANSLATION_WORK
+POST,/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/start,start_translation_assignment,TRANSLATION_WORK
+POST,/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/complete,complete_translation_assignment,TRANSLATION_WORK
+POST,/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/cancel,cancel_translation_assignment,TRANSLATION_ASSIGN
+GET,/draft-workspaces/{workspace_id}/confirmations,list_content_confirmations,INTAKE_READ
+POST,/draft-workspaces/{workspace_id}/confirmations,create_content_confirmation,CONTENT_CONFIRM
+POST,/draft-workspaces/{workspace_id}/confirmations/{confirmation_id}/revoke,revoke_content_confirmation,CONTENT_CONFIRM
+GET,/draft-workspaces/{workspace_id}/reconciliations,list_bilingual_reconciliations,INTAKE_READ
+POST,/draft-workspaces/{workspace_id}/reconciliations,create_bilingual_reconciliation,RECONCILE
+POST,/draft-workspaces/{workspace_id}/reconciliations/{reconciliation_id}/invalidate,invalidate_bilingual_reconciliation,RECONCILE
+POST,/draft-workspaces/{workspace_id}/validate-editorial-package,validate_editorial_package,INTAKE_READ
+POST,/draft-workspaces/{workspace_id}/editorial-package-ready,mark_editorial_package_ready,EDITORIAL_READY

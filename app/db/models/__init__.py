@@ -60,11 +60,14 @@ from app.db.models.personnel_orders import (
     PersonnelOrderPrint,
 )
 from app.db.models.operational_orders import (
+    OperationalOrderBilingualReconciliation,
     OperationalOrderClarification,
+    OperationalOrderContentConfirmation,
     OperationalOrderDraftAudit,
     OperationalOrderDraftBlock,
     OperationalOrderDraftWorkspace,
     OperationalOrderTextProvenance,
+    OperationalOrderTranslationAssignment,
 )
 from app.db.models.personnel_migration import (
     DOMAIN_CODE_EDUCATION,
@@ -194,11 +197,14 @@ __all__ = [
     "HrImportRow",
     "IDENTITY_TYPE_IIN",
     "OrgUnitAlias",
+    "OperationalOrderBilingualReconciliation",
     "OperationalOrderClarification",
+    "OperationalOrderContentConfirmation",
     "OperationalOrderDraftAudit",
     "OperationalOrderDraftBlock",
     "OperationalOrderDraftWorkspace",
     "OperationalOrderTextProvenance",
+    "OperationalOrderTranslationAssignment",
     "PositionAlias",
     "SOURCE_TYPE_HR_CONTROL_LIST",
     "BATCH_STATUS_UPLOADED",

@@ -10,13 +10,32 @@ from app.directory.common import as_http500, call_service
 from app.operational_orders.errors import (
     OperationalOrderBlockNotFoundError,
     OperationalOrderClarificationNotFoundError,
+    OperationalOrderConfirmationConflictError,
+    OperationalOrderConfirmationNotFoundError,
+    OperationalOrderConfirmationPartyMismatchError,
+    OperationalOrderConfirmationStaleTextError,
+    OperationalOrderEditorialPackageNotReadyError,
     OperationalOrderForbiddenError,
     OperationalOrderInvalidWorkspaceStageError,
+    OperationalOrderReconciliationNotFoundError,
+    OperationalOrderReconciliationStaleError,
     OperationalOrderSubmittedTextImmutableError,
+    OperationalOrderTranslationAssignmentConflictError,
+    OperationalOrderTranslationAssignmentNotFoundError,
+    OperationalOrderTranslationSourceStaleError,
     OperationalOrderValidationBlockedError,
     OperationalOrderValidationError,
     OperationalOrderVersionConflictError,
     OperationalOrderWorkspaceNotFoundError,
+)
+from app.operational_orders.editorial_permissions import (
+    can_assign_translation,
+    can_confirm_as_content_author,
+    can_confirm_content,
+    can_mark_editorial_ready,
+    can_read_editorial,
+    can_reconcile,
+    can_work_translation,
 )
 from app.operational_orders.permissions import (
     PERMISSION_INTAKE_OPERATE,
@@ -36,7 +55,21 @@ from app.operational_orders.schemas.draft_workspace import (
     DraftWorkspaceListOut,
     VersionedActionIn,
 )
+from app.operational_orders.schemas.editorial_workflow import (
+    BilingualReconciliationCreateIn,
+    BilingualReconciliationInvalidateIn,
+    BilingualReconciliationListOut,
+    ContentConfirmationCreateIn,
+    ContentConfirmationListOut,
+    ContentConfirmationRevokeIn,
+    EditorialPackageValidationOut,
+    TranslationAssignmentActionIn,
+    TranslationAssignmentCompleteIn,
+    TranslationAssignmentCreateIn,
+    TranslationAssignmentListOut,
+)
 from app.operational_orders.services import draft_intake_service as svc
+from app.operational_orders.services import editorial_workflow_service as editorial_svc
 from app.operational_orders.schemas import mappers
 
 router = APIRouter(prefix="/api/operational-orders", tags=["operational-orders"])
@@ -57,11 +90,30 @@ def _domain_http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderClarificationNotFoundError):
         return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderTranslationAssignmentNotFoundError):
+        return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderConfirmationNotFoundError):
+        return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderReconciliationNotFoundError):
+        return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderForbiddenError):
         return HTTPException(status_code=403, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderVersionConflictError):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
-    if isinstance(exc, (OperationalOrderSubmittedTextImmutableError, OperationalOrderInvalidWorkspaceStageError)):
+    if isinstance(
+        exc,
+        (
+            OperationalOrderSubmittedTextImmutableError,
+            OperationalOrderInvalidWorkspaceStageError,
+            OperationalOrderTranslationAssignmentConflictError,
+            OperationalOrderTranslationSourceStaleError,
+            OperationalOrderConfirmationPartyMismatchError,
+            OperationalOrderConfirmationStaleTextError,
+            OperationalOrderConfirmationConflictError,
+            OperationalOrderReconciliationStaleError,
+            OperationalOrderEditorialPackageNotReadyError,
+        ),
+    ):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
     if isinstance(exc, (OperationalOrderValidationBlockedError, OperationalOrderValidationError)):
         status = 422 if isinstance(exc, OperationalOrderValidationError) else 409
@@ -277,6 +329,366 @@ def ready_for_editorial(
             raise OperationalOrderForbiddenError("Access denied.")
         detail = call_service(
             svc.mark_ready_for_editorial,
+            workspace_id=workspace_id,
+            actor_user_id=_require_user_id(user),
+            expected_version=body.expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/draft-workspaces/{workspace_id}/translation-assignments", response_model=DraftWorkspaceDetailOut)
+def create_translation_assignment(
+    workspace_id: int,
+    body: TranslationAssignmentCreateIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_assign_translation(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.create_translation_assignment,
+            workspace_id=workspace_id,
+            target_locale=body.target_locale,
+            assigned_to_type=body.assigned_to.reference_type,
+            assigned_to_reference=body.assigned_to.reference,
+            assigned_to_display_name=body.assigned_to.display_name,
+            assigned_by_user_id=_require_user_id(user),
+            due_at=body.due_at,
+            notes=body.notes,
+            expected_version=body.expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get(
+    "/draft-workspaces/{workspace_id}/translation-assignments",
+    response_model=TranslationAssignmentListOut,
+)
+def list_translation_assignments(
+    workspace_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_read_editorial(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(editorial_svc.list_translation_assignments, workspace_id=workspace_id)
+        return TranslationAssignmentListOut.model_validate(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/accept",
+    response_model=DraftWorkspaceDetailOut,
+)
+def accept_translation_assignment(
+    workspace_id: int,
+    assignment_id: int,
+    body: TranslationAssignmentActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        assignments = detail.get("translation_assignments", [])
+        assignment = next((a for a in assignments if int(a["id"]) == int(assignment_id)), None)
+        if not can_work_translation(user, detail["workspace"], assignment):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.accept_translation_assignment,
+            workspace_id=workspace_id,
+            assignment_id=assignment_id,
+            actor_user_id=_require_user_id(user),
+            expected_version=body.expected_version,
+            assignment_expected_version=body.assignment_expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/start",
+    response_model=DraftWorkspaceDetailOut,
+)
+def start_translation_assignment(
+    workspace_id: int,
+    assignment_id: int,
+    body: TranslationAssignmentActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        assignments = detail.get("translation_assignments", [])
+        assignment = next((a for a in assignments if int(a["id"]) == int(assignment_id)), None)
+        if not can_work_translation(user, detail["workspace"], assignment):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.start_translation_assignment,
+            workspace_id=workspace_id,
+            assignment_id=assignment_id,
+            actor_user_id=_require_user_id(user),
+            expected_version=body.expected_version,
+            assignment_expected_version=body.assignment_expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/complete",
+    response_model=DraftWorkspaceDetailOut,
+)
+def complete_translation_assignment(
+    workspace_id: int,
+    assignment_id: int,
+    body: TranslationAssignmentCompleteIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        assignments = detail.get("translation_assignments", [])
+        assignment = next((a for a in assignments if int(a["id"]) == int(assignment_id)), None)
+        if not can_work_translation(user, detail["workspace"], assignment):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.complete_translation_assignment,
+            workspace_id=workspace_id,
+            assignment_id=assignment_id,
+            actor_user_id=_require_user_id(user),
+            target_block_id=body.target_block_id,
+            expected_version=body.expected_version,
+            assignment_expected_version=body.assignment_expected_version,
+            block_expected_version=body.block_expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/translation-assignments/{assignment_id}/cancel",
+    response_model=DraftWorkspaceDetailOut,
+)
+def cancel_translation_assignment(
+    workspace_id: int,
+    assignment_id: int,
+    body: TranslationAssignmentActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_assign_translation(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.cancel_translation_assignment,
+            workspace_id=workspace_id,
+            assignment_id=assignment_id,
+            actor_user_id=_require_user_id(user),
+            expected_version=body.expected_version,
+            assignment_expected_version=body.assignment_expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get(
+    "/draft-workspaces/{workspace_id}/confirmations",
+    response_model=ContentConfirmationListOut,
+)
+def list_content_confirmations(
+    workspace_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_read_editorial(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(editorial_svc.list_content_confirmations, workspace_id=workspace_id)
+        return ContentConfirmationListOut.model_validate(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/draft-workspaces/{workspace_id}/confirmations", response_model=DraftWorkspaceDetailOut)
+def create_content_confirmation(
+    workspace_id: int,
+    body: ContentConfirmationCreateIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if body.confirmation_role == "CONTENT_AUTHOR":
+            if not can_confirm_as_content_author(user, detail["workspace"]) and not (
+                body.operator_recorded and can_confirm_content(user, detail["workspace"])
+            ):
+                raise OperationalOrderForbiddenError("Access denied.")
+        elif not can_confirm_content(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.create_content_confirmation,
+            workspace_id=workspace_id,
+            block_id=body.block_id,
+            confirmation_role=body.confirmation_role,
+            confirmer_party_type=body.confirmer.reference_type,
+            confirmer_party_reference=body.confirmer.reference,
+            confirmer_display_name=body.confirmer.display_name,
+            confirmer_user_id=_require_user_id(user),
+            block_expected_version=body.block_expected_version,
+            expected_version=body.expected_version,
+            operator_recorded=body.operator_recorded,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/confirmations/{confirmation_id}/revoke",
+    response_model=DraftWorkspaceDetailOut,
+)
+def revoke_content_confirmation(
+    workspace_id: int,
+    confirmation_id: int,
+    body: ContentConfirmationRevokeIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_confirm_content(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.revoke_content_confirmation,
+            workspace_id=workspace_id,
+            confirmation_id=confirmation_id,
+            actor_user_id=_require_user_id(user),
+            revocation_reason=body.revocation_reason,
+            expected_version=body.expected_version,
+            confirmation_expected_version=body.confirmation_expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get(
+    "/draft-workspaces/{workspace_id}/reconciliations",
+    response_model=BilingualReconciliationListOut,
+)
+def list_bilingual_reconciliations(
+    workspace_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_read_editorial(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(editorial_svc.list_bilingual_reconciliations, workspace_id=workspace_id)
+        return BilingualReconciliationListOut.model_validate(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/draft-workspaces/{workspace_id}/reconciliations", response_model=DraftWorkspaceDetailOut)
+def create_bilingual_reconciliation(
+    workspace_id: int,
+    body: BilingualReconciliationCreateIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_reconcile(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.create_bilingual_reconciliation,
+            workspace_id=workspace_id,
+            ru_block_id=body.ru_block_id,
+            kk_block_id=body.kk_block_id,
+            reconciled_by_user_id=_require_user_id(user),
+            notes=body.notes,
+            ru_block_expected_version=body.ru_block_expected_version,
+            kk_block_expected_version=body.kk_block_expected_version,
+            expected_version=body.expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/reconciliations/{reconciliation_id}/invalidate",
+    response_model=DraftWorkspaceDetailOut,
+)
+def invalidate_bilingual_reconciliation(
+    workspace_id: int,
+    reconciliation_id: int,
+    body: BilingualReconciliationInvalidateIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_reconcile(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.invalidate_bilingual_reconciliation,
+            workspace_id=workspace_id,
+            reconciliation_id=reconciliation_id,
+            actor_user_id=_require_user_id(user),
+            invalidation_reason=body.invalidation_reason,
+            expected_version=body.expected_version,
+            reconciliation_expected_version=body.reconciliation_expected_version,
+        )
+        return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post(
+    "/draft-workspaces/{workspace_id}/validate-editorial-package",
+    response_model=EditorialPackageValidationOut,
+)
+def validate_editorial_package_endpoint(
+    workspace_id: int,
+    body: VersionedActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_read_editorial(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            editorial_svc.validate_editorial_package_command,
+            workspace_id=workspace_id,
+            expected_version=body.expected_version,
+        )
+        validation = result["validation"]
+        return EditorialPackageValidationOut(
+            workspace_id=int(result["workspace_id"]),
+            validation=mappers._validation_out(validation),
+        )
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/draft-workspaces/{workspace_id}/editorial-package-ready", response_model=DraftWorkspaceDetailOut)
+def editorial_package_ready(
+    workspace_id: int,
+    body: VersionedActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_mark_editorial_ready(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        detail = call_service(
+            editorial_svc.mark_editorial_package_ready,
             workspace_id=workspace_id,
             actor_user_id=_require_user_id(user),
             expected_version=body.expected_version,

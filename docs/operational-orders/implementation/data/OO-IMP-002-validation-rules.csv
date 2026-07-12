@@ -1,0 +1,14 @@
+code,category,severity,message
+OO201,Localization,ERROR,Russian effective text missing
+OO202,Localization,ERROR,Kazakh effective text missing
+OO203,Translation,ERROR,Active translation assignment required
+OO204,Translation,ERROR,Translation assignment incomplete
+OO205,Confirmation,ERROR,Russian content author confirmation missing
+OO206,Confirmation,ERROR,Kazakh content author confirmation missing
+OO207,Confirmation,ERROR,Translator confirmation missing
+OO208,Reconciliation,ERROR,Bilingual reconciliation missing
+OO209,Reconciliation,ERROR,Bilingual reconciliation stale
+OO210,Clarification,ERROR,Blocking clarification open
+OO211,Version,ERROR,Block version mismatch
+OO212,Fingerprint,ERROR,Content fingerprint mismatch
+OO213,Concurrency,ERROR,Workspace version conflict

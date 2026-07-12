@@ -163,6 +163,7 @@ UDE-007 through UDE-012 deliver the full Shared Runtime stack:
 | Lifecycle (UDE-011) | `DocumentEngineLifecycleFacade` |
 | Write (UDE-012) | `DocumentEngineWriteFacade` |
 | **OO Intake (OO-IMP-001)** | **First native consumer — contracts only; no write facade** |
+| **OO Editorial (OO-IMP-002)** | **Translation, confirmation, reconciliation; still no Document Aggregate** |
 
 ## OO-IMP-001 Complete
 
@@ -174,18 +175,24 @@ UDE-007 through UDE-012 deliver the full Shared Runtime stack:
 - `DocumentEngineWriteFacade` **not** invoked at intake stage
 - Personnel Orders behavior unchanged
 
-**Next:** OO-IMP-002 — Content Confirmation and Translation Workflow
-
----
-
-## Next: OO-IMP-002
+## OO-IMP-002 Complete
 
 **OO-IMP-002 — Content Confirmation and Translation Workflow**
 
-- Content confirmation extension point
-- KK translation/review workflow
-- OO read adapter (UDE-008 pattern)
-- Editorial runtime handoff from READY_FOR_EDITORIAL
+- Translation assignment lifecycle (RU-only / KK-only paths)
+- Per-block content confirmation with fingerprint binding
+- Bilingual reconciliation and `EDITORIAL_PACKAGE_READY` gate
+- Uses UDE `ValidationResult` for OO201–OO213 rule codes
+- Still no `DocumentId` / Document Aggregate / write facade
+- Personnel Orders behavior unchanged
+
+Record: [`../operational-orders/implementation/OO-IMP-002-content-confirmation-translation-workflow.md`](../operational-orders/implementation/OO-IMP-002-content-confirmation-translation-workflow.md)
+
+---
+
+## Next WP
+
+Editorial runtime handoff / official draft package preparation (UDE-003 continuation beyond OO draft workspace).
 
 ---
 

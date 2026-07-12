@@ -14,6 +14,9 @@ OO_TABLES = (
     "operational_order_text_provenance",
     "operational_order_clarifications",
     "operational_order_draft_audit",
+    "operational_order_translation_assignments",
+    "operational_order_content_confirmations",
+    "operational_order_bilingual_reconciliations",
 )
 
 

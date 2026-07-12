@@ -221,7 +221,7 @@ def test_validation_findings_for_missing_locales(seed_unit, creator_id):
             cleanup_workspace(conn, workspace_id)
 
 
-def test_ready_for_editorial_gate_blocks_missing_kk(seed_unit, creator_id):
+def test_ready_for_editorial_allows_ru_only_for_translation_path(seed_unit, creator_id):
     detail = svc.create_submission(
         initiator_type="PERSON",
         initiator_reference="init",
@@ -237,8 +237,9 @@ def test_ready_for_editorial_gate_blocks_missing_kk(seed_unit, creator_id):
     workspace_id = detail["workspace"]["workspace_id"]
     try:
         svc.accept_submission(workspace_id=workspace_id, actor_user_id=creator_id)
-        with pytest.raises(OperationalOrderValidationBlockedError):
-            svc.mark_ready_for_editorial(workspace_id=workspace_id, actor_user_id=creator_id)
+        detail = svc.mark_ready_for_editorial(workspace_id=workspace_id, actor_user_id=creator_id)
+        assert detail["workspace"]["stage"] == "READY_FOR_EDITORIAL"
+        assert any(issue.code == "OI010" for issue in detail["validation"].issues)
     finally:
         with engine.begin() as conn:
             cleanup_workspace(conn, workspace_id)

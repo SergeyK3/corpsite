@@ -37,6 +37,11 @@ from app.db.models.operational_orders import (
     WORKSPACE_STAGE_INTAKE_REVIEW,
     WORKSPACE_STAGE_READY_FOR_EDITORIAL,
     WORKSPACE_STAGE_SUBMITTED,
+    WORKSPACE_STAGE_TRANSLATION_IN_PROGRESS,
+    WORKSPACE_STAGE_TRANSLATION_REQUIRED,
+    WORKSPACE_STAGE_CONTENT_CONFIRMATION_REQUIRED,
+    WORKSPACE_STAGE_BILINGUAL_RECONCILIATION,
+    WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY,
 )
 from app.document_engine import DraftingPath, DocumentKind, TextSourceType
 from app.operational_orders.domain import (
@@ -264,6 +269,9 @@ def _build_detail(conn, workspace_id: int) -> dict[str, Any]:
         provenance_count=len(provenance),
     )
     locales_present = sorted({str(b["locale"]) for b in blocks})
+    from app.operational_orders.services import editorial_workflow_service as editorial_svc
+
+    editorial = editorial_svc.fetch_editorial_entities(conn, workspace_id)
     return {
         "workspace": workspace,
         "blocks": blocks,
@@ -277,6 +285,8 @@ def _build_detail(conn, workspace_id: int) -> dict[str, Any]:
             "locales_present": locales_present,
         },
         "readiness_for_editorial": workspace.get("stage") == WORKSPACE_STAGE_READY_FOR_EDITORIAL,
+        "readiness_for_editorial_package": workspace.get("stage") == "EDITORIAL_PACKAGE_READY",
+        **editorial,
     }
 
 
@@ -660,8 +670,10 @@ def add_draft_block(
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
         _assert_version(workspace, expected_version)
-        if workspace["stage"] == WORKSPACE_STAGE_READY_FOR_EDITORIAL:
-            raise OperationalOrderInvalidWorkspaceStageError("Cannot add blocks after READY_FOR_EDITORIAL.")
+        if workspace["stage"] == WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY:
+            raise OperationalOrderInvalidWorkspaceStageError(
+                "Cannot add blocks after EDITORIAL_PACKAGE_READY."
+            )
 
         block_row = conn.execute(
             text(
@@ -824,6 +836,15 @@ def update_workspace_effective_text(
             action=AUDIT_ACTION_EFFECTIVE_TEXT_CHANGED,
             actor_user_id=actor_user_id,
             metadata={"block_id": int(block_id)},
+        )
+        from app.operational_orders.services import editorial_workflow_service as editorial_svc
+
+        editorial_svc.on_block_text_changed(
+            conn,
+            workspace_id=workspace_id,
+            block_id=int(block_id),
+            locale=str(block_dict["locale"]),
+            actor_user_id=actor_user_id,
         )
         return _build_detail(conn, workspace_id)
 

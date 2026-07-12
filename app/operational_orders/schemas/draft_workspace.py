@@ -157,6 +157,10 @@ class DraftWorkspaceDetailOut(BaseModel):
     validation: ValidationResultOut
     locale_completeness: LocaleCompletenessOut
     readiness_for_editorial: bool
+    readiness_for_editorial_package: bool = False
+    translation_assignments: list[dict] = Field(default_factory=list)
+    content_confirmations: list[dict] = Field(default_factory=list)
+    bilingual_reconciliations: list[dict] = Field(default_factory=list)
 
 
 class DraftWorkspaceListOut(BaseModel):

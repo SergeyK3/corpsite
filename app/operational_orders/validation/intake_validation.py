@@ -153,7 +153,10 @@ def validate_intake_workspace(
         )
 
     if LOCALE_RU not in locales_present:
-        severity = ValidationSeverity.ERROR if for_ready_for_editorial else ValidationSeverity.WARNING
+        if for_ready_for_editorial and LOCALE_KK in locales_present:
+            severity = ValidationSeverity.WARNING
+        else:
+            severity = ValidationSeverity.ERROR if for_ready_for_editorial else ValidationSeverity.WARNING
         issues.append(
             ValidationIssue(
                 code="OI009",
@@ -163,7 +166,10 @@ def validate_intake_workspace(
             )
         )
     if LOCALE_KK not in locales_present:
-        severity = ValidationSeverity.ERROR if for_ready_for_editorial else ValidationSeverity.WARNING
+        if for_ready_for_editorial and LOCALE_RU in locales_present:
+            severity = ValidationSeverity.WARNING
+        else:
+            severity = ValidationSeverity.ERROR if for_ready_for_editorial else ValidationSeverity.WARNING
         issues.append(
             ValidationIssue(
                 code="OI010",

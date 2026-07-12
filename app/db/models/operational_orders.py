@@ -1,7 +1,8 @@
-"""Operational orders ORM models (OO-IMP-001 submitted-text intake MVP).
+"""Operational orders ORM models (OO-IMP-001 intake + OO-IMP-002 editorial workflow).
 
 Draft workspace aggregate — separate from official Document Aggregate.
-See docs/operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md.
+See docs/operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md
+and docs/operational-orders/implementation/OO-IMP-002-content-confirmation-translation-workflow.md.
 """
 from __future__ import annotations
 
@@ -30,6 +31,11 @@ WORKSPACE_STAGE_ACCEPTED = "ACCEPTED"
 WORKSPACE_STAGE_INTAKE_REVIEW = "INTAKE_REVIEW"
 WORKSPACE_STAGE_CLARIFICATION_REQUIRED = "CLARIFICATION_REQUIRED"
 WORKSPACE_STAGE_READY_FOR_EDITORIAL = "READY_FOR_EDITORIAL"
+WORKSPACE_STAGE_TRANSLATION_REQUIRED = "TRANSLATION_REQUIRED"
+WORKSPACE_STAGE_TRANSLATION_IN_PROGRESS = "TRANSLATION_IN_PROGRESS"
+WORKSPACE_STAGE_CONTENT_CONFIRMATION_REQUIRED = "CONTENT_CONFIRMATION_REQUIRED"
+WORKSPACE_STAGE_BILINGUAL_RECONCILIATION = "BILINGUAL_RECONCILIATION"
+WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY = "EDITORIAL_PACKAGE_READY"
 
 WORKSPACE_STAGES = (
     WORKSPACE_STAGE_SUBMITTED,
@@ -37,6 +43,11 @@ WORKSPACE_STAGES = (
     WORKSPACE_STAGE_INTAKE_REVIEW,
     WORKSPACE_STAGE_CLARIFICATION_REQUIRED,
     WORKSPACE_STAGE_READY_FOR_EDITORIAL,
+    WORKSPACE_STAGE_TRANSLATION_REQUIRED,
+    WORKSPACE_STAGE_TRANSLATION_IN_PROGRESS,
+    WORKSPACE_STAGE_CONTENT_CONFIRMATION_REQUIRED,
+    WORKSPACE_STAGE_BILINGUAL_RECONCILIATION,
+    WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY,
 )
 
 BLOCK_TYPE_TITLE = "TITLE"
@@ -89,12 +100,14 @@ PROVENANCE_ACTION_SUBMISSION = "SUBMISSION"
 PROVENANCE_ACTION_ACCEPTANCE = "ACCEPTANCE"
 PROVENANCE_ACTION_EFFECTIVE_EDIT = "EFFECTIVE_EDIT"
 PROVENANCE_ACTION_BLOCK_ADD = "BLOCK_ADD"
+PROVENANCE_ACTION_TRANSLATION = "TRANSLATION"
 
 PROVENANCE_ACTIONS = (
     PROVENANCE_ACTION_SUBMISSION,
     PROVENANCE_ACTION_ACCEPTANCE,
     PROVENANCE_ACTION_EFFECTIVE_EDIT,
     PROVENANCE_ACTION_BLOCK_ADD,
+    PROVENANCE_ACTION_TRANSLATION,
 )
 
 CLARIFICATION_STATUS_OPEN = "OPEN"
@@ -136,6 +149,19 @@ AUDIT_ACTION_VALIDATION_EXECUTED = "VALIDATION_EXECUTED"
 AUDIT_ACTION_CLARIFICATION_OPENED = "CLARIFICATION_OPENED"
 AUDIT_ACTION_CLARIFICATION_RESOLVED = "CLARIFICATION_RESOLVED"
 AUDIT_ACTION_READY_FOR_EDITORIAL = "READY_FOR_EDITORIAL"
+AUDIT_ACTION_TRANSLATION_REQUESTED = "TRANSLATION_REQUESTED"
+AUDIT_ACTION_TRANSLATOR_ASSIGNED = "TRANSLATOR_ASSIGNED"
+AUDIT_ACTION_ASSIGNMENT_ACCEPTED = "ASSIGNMENT_ACCEPTED"
+AUDIT_ACTION_TRANSLATION_STARTED = "TRANSLATION_STARTED"
+AUDIT_ACTION_TRANSLATION_COMPLETED = "TRANSLATION_COMPLETED"
+AUDIT_ACTION_CONFIRMATION_CREATED = "CONFIRMATION_CREATED"
+AUDIT_ACTION_CONFIRMATION_REVOKED = "CONFIRMATION_REVOKED"
+AUDIT_ACTION_CONFIRMATION_SUPERSEDED = "CONFIRMATION_SUPERSEDED"
+AUDIT_ACTION_RECONCILIATION_CREATED = "RECONCILIATION_CREATED"
+AUDIT_ACTION_RECONCILIATION_INVALIDATED = "RECONCILIATION_INVALIDATED"
+AUDIT_ACTION_WORKSPACE_STAGE_CHANGED = "WORKSPACE_STAGE_CHANGED"
+AUDIT_ACTION_EDITORIAL_PACKAGE_READY = "EDITORIAL_PACKAGE_READY"
+AUDIT_ACTION_EDITORIAL_PACKAGE_VALIDATION_FAILED = "EDITORIAL_PACKAGE_VALIDATION_FAILED"
 
 DRAFT_AUDIT_ACTIONS = (
     AUDIT_ACTION_SUBMISSION_CREATED,
@@ -147,6 +173,73 @@ DRAFT_AUDIT_ACTIONS = (
     AUDIT_ACTION_CLARIFICATION_OPENED,
     AUDIT_ACTION_CLARIFICATION_RESOLVED,
     AUDIT_ACTION_READY_FOR_EDITORIAL,
+    AUDIT_ACTION_TRANSLATION_REQUESTED,
+    AUDIT_ACTION_TRANSLATOR_ASSIGNED,
+    AUDIT_ACTION_ASSIGNMENT_ACCEPTED,
+    AUDIT_ACTION_TRANSLATION_STARTED,
+    AUDIT_ACTION_TRANSLATION_COMPLETED,
+    AUDIT_ACTION_CONFIRMATION_CREATED,
+    AUDIT_ACTION_CONFIRMATION_REVOKED,
+    AUDIT_ACTION_CONFIRMATION_SUPERSEDED,
+    AUDIT_ACTION_RECONCILIATION_CREATED,
+    AUDIT_ACTION_RECONCILIATION_INVALIDATED,
+    AUDIT_ACTION_WORKSPACE_STAGE_CHANGED,
+    AUDIT_ACTION_EDITORIAL_PACKAGE_READY,
+    AUDIT_ACTION_EDITORIAL_PACKAGE_VALIDATION_FAILED,
+)
+
+ASSIGNMENT_STATUS_REQUESTED = "REQUESTED"
+ASSIGNMENT_STATUS_ACCEPTED = "ACCEPTED"
+ASSIGNMENT_STATUS_IN_PROGRESS = "IN_PROGRESS"
+ASSIGNMENT_STATUS_COMPLETED = "COMPLETED"
+ASSIGNMENT_STATUS_CANCELLED = "CANCELLED"
+ASSIGNMENT_STATUS_SUPERSEDED = "SUPERSEDED"
+
+ASSIGNMENT_STATUSES = (
+    ASSIGNMENT_STATUS_REQUESTED,
+    ASSIGNMENT_STATUS_ACCEPTED,
+    ASSIGNMENT_STATUS_IN_PROGRESS,
+    ASSIGNMENT_STATUS_COMPLETED,
+    ASSIGNMENT_STATUS_CANCELLED,
+    ASSIGNMENT_STATUS_SUPERSEDED,
+)
+
+ASSIGNMENT_ACTIVE_STATUSES = (
+    ASSIGNMENT_STATUS_REQUESTED,
+    ASSIGNMENT_STATUS_ACCEPTED,
+    ASSIGNMENT_STATUS_IN_PROGRESS,
+)
+
+CONFIRMATION_ROLE_CONTENT_AUTHOR = "CONTENT_AUTHOR"
+CONFIRMATION_ROLE_TRANSLATOR = "TRANSLATOR"
+CONFIRMATION_ROLE_DOCUMENT_OPERATOR = "DOCUMENT_OPERATOR"
+
+CONFIRMATION_ROLES = (
+    CONFIRMATION_ROLE_CONTENT_AUTHOR,
+    CONFIRMATION_ROLE_TRANSLATOR,
+    CONFIRMATION_ROLE_DOCUMENT_OPERATOR,
+)
+
+CONFIRMATION_STATUS_CONFIRMED = "CONFIRMED"
+CONFIRMATION_STATUS_REVOKED = "REVOKED"
+CONFIRMATION_STATUS_SUPERSEDED = "SUPERSEDED"
+
+CONFIRMATION_STATUSES = (
+    CONFIRMATION_STATUS_CONFIRMED,
+    CONFIRMATION_STATUS_REVOKED,
+    CONFIRMATION_STATUS_SUPERSEDED,
+)
+
+RECONCILIATION_STATUS_PENDING = "PENDING"
+RECONCILIATION_STATUS_RECONCILED = "RECONCILED"
+RECONCILIATION_STATUS_INVALIDATED = "INVALIDATED"
+RECONCILIATION_STATUS_SUPERSEDED = "SUPERSEDED"
+
+RECONCILIATION_STATUSES = (
+    RECONCILIATION_STATUS_PENDING,
+    RECONCILIATION_STATUS_RECONCILED,
+    RECONCILIATION_STATUS_INVALIDATED,
+    RECONCILIATION_STATUS_SUPERSEDED,
 )
 
 
@@ -308,4 +401,123 @@ class OperationalOrderDraftAudit(Base):
         BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
     )
     metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderTranslationAssignment(Base):
+    """Human translation assignment within a draft workspace."""
+
+    __tablename__ = "operational_order_translation_assignments"
+    __table_args__ = (
+        Index("ix_oo_translation_assignments_workspace", "workspace_id"),
+        Index("ix_oo_translation_assignments_status", "workspace_id", "status"),
+        Index("ix_oo_translation_assignments_target_locale", "workspace_id", "target_locale"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_locale: Mapped[str] = mapped_column(Text, nullable=False)
+    target_locale: Mapped[str] = mapped_column(Text, nullable=False)
+    assigned_to_type: Mapped[str] = mapped_column(Text, nullable=False)
+    assigned_to_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    assigned_to_display_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=ASSIGNMENT_STATUS_REQUESTED)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_block_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_block_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    source_content_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    produced_content_fingerprint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OperationalOrderContentConfirmation(Base):
+    """Role-bound confirmation of a specific block text version."""
+
+    __tablename__ = "operational_order_content_confirmations"
+    __table_args__ = (
+        Index("ix_oo_content_confirmations_workspace", "workspace_id"),
+        Index("ix_oo_content_confirmations_block", "block_id"),
+        Index("ix_oo_content_confirmations_locale", "workspace_id", "locale"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    locale: Mapped[str] = mapped_column(Text, nullable=False)
+    block_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_blocks.block_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    block_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmer_party_type: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmer_party_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmer_display_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confirmer_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    confirmation_role: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=CONFIRMATION_STATUS_CONFIRMED)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderBilingualReconciliation(Base):
+    """Semantic alignment record for an RU/KK block pair."""
+
+    __tablename__ = "operational_order_bilingual_reconciliations"
+    __table_args__ = (Index("ix_oo_bilingual_reconciliations_workspace", "workspace_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ru_block_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_blocks.block_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ru_block_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    ru_content_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    kk_block_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_blocks.block_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kk_block_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    kk_content_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=RECONCILIATION_STATUS_PENDING)
+    reconciled_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    reconciled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    invalidated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
