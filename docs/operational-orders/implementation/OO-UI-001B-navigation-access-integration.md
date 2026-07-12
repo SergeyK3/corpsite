@@ -40,7 +40,7 @@ Frontend `canSeeOperationalOrdersNav` now trusts **only** `has_operational_order
 
 | Permission | Backend | Frontend nav | Frontend actions | Comment |
 |---|---|---|---|---|
-| `OPERATIONAL_ORDERS_INTAKE_READ` | list/read workspace & document | via projection | list views | **Minimum recommended for section access** |
+| `OPERATIONAL_ORDERS_INTAKE_READ` | list/read workspace & document | via projection | list views | **OO-SEC-001 leadership workspace read** — preparation contour only; not org-wide official read (OO-SEC-002) |
 | `OPERATIONAL_ORDERS_INTAKE_CREATE` | create workspace | — | — | Not required for nav |
 | `OPERATIONAL_ORDERS_INTAKE_OPERATE` | mutate intake | via projection | edit blocks, clarifications | Also grants nav read projection |
 | `OPERATIONAL_ORDERS_TRANSLATION_ASSIGN` | assign/cancel | — | translation assign | Action only |
@@ -56,23 +56,26 @@ Frontend `canSeeOperationalOrdersNav` now trusts **only** `has_operational_order
 
 **Projection `has_operational_orders_read`** is true when any of: intake_read, intake_operate, promote, signature_readiness_read.
 
-## Minimum access policy (implemented)
+## Section access policy (preparation contour)
 
-To **see** the section: `has_operational_orders_read === true` (typically grant `OPERATIONAL_ORDERS_INTAKE_READ`).
+To **see** the preparation section: `has_operational_orders_read === true`.
+
+For **leadership**, OO-SEC-001 grants `OPERATIONAL_ORDERS_INTAKE_READ` via ROLE-targeted `access_grants`.
+
+**Not the same as organization-wide official read** (OO-SEC-002): all-employee access to published orders requires a separate permission and publication boundary.
 
 Not required for nav: promote, operate, signing, editorial, translation.
 
-## HR access recommendation (not auto-applied)
+## HR access (superseded by OO-SEC-001 for `HR_HEAD`)
 
-For **Руководитель отдела кадров** (HR head / `has_personnel_admin`):
+OO-SEC-001 now provisions `OPERATIONAL_ORDERS_INTAKE_READ` for `HR_HEAD` (and other approved leadership roles) via migration `b2c3d4e5f6a7`.
+
+For other HR roles without OO-SEC-001 grant, the prior recommendation still applies:
 
 **Recommend granting:**
-- `OPERATIONAL_ORDERS_INTAKE_READ` — view workspaces and documents
-- optionally `OPERATIONAL_ORDERS_SIGNATURE_READINESS_READ` — view readiness state on documents
+- `OPERATIONAL_ORDERS_INTAKE_READ` — workspace preparation read (not official read for all staff)
 
 **Do not grant by default:** translation, promote, ready-for-signature, signing authority, editorial mutations.
-
-This WP does **not** change production role grants — only documents the recommendation.
 
 ## Developer diagnostics
 

@@ -2,7 +2,7 @@
 
 Исследовательская и архитектурная зона для корпуса **производственных приказов** (не кадровых).
 
-**Implementation status:** OO-IMP-001–004 complete — document lifecycle ready for signature queue (migration head `a1b2c3d4e5f6`).
+**Implementation status:** OO-IMP-001–004 complete; OO-SEC-001 approved — migration head `b2c3d4e5f6a7`.
 
 ---
 
@@ -20,6 +20,8 @@
 | **OO-UI-001** | **Developer / Tester UI** | **Complete (local, uncommitted)** |
 | **OO-UI-001A** | **Workspace Experience Polish** | **Complete (local, uncommitted)** |
 | **OO-UI-001B** | **Navigation & Access Integration** | **Complete (local, uncommitted)** |
+| **OO-SEC-001** | **Leadership Workspace Read Policy** | **Approved (local, uncommitted)** |
+| **OO-SEC-002** | **Organization-Wide Official Orders Read Policy** | **Proposed** |
 
 Records:
 - [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
@@ -31,11 +33,13 @@ Records:
 - [`implementation/OO-UI-001-developer-tester-ui.md`](implementation/OO-UI-001-developer-tester-ui.md)
 - [`implementation/OO-UI-001A-workspace-experience-polish.md`](implementation/OO-UI-001A-workspace-experience-polish.md)
 - [`implementation/OO-UI-001B-navigation-access-integration.md`](implementation/OO-UI-001B-navigation-access-integration.md)
+- [`implementation/OO-SEC-001-leadership-workspace-read-policy.md`](implementation/OO-SEC-001-leadership-workspace-read-policy.md)
+- [`implementation/OO-SEC-002-organization-wide-official-read-policy.md`](implementation/OO-SEC-002-organization-wide-official-read-policy.md)
 
 Runtime package: `app/operational_orders/`  
 API: `/api/operational-orders/draft-workspaces`, `/api/operational-orders/workspaces/{id}/promote`, `/api/operational-orders/documents`, lifecycle endpoints under `/documents/{id}/`  
 Frontend: `/directory/operational-orders` (corpsite-ui)
-Migration head: `a1b2c3d4e5f6` (down: `z0a1b2c3d4e5`)
+Migration head: `b2c3d4e5f6a7` (down: `a1b2c3d4e5f6`)
 
 First native Shared UDE consumer — uses contracts/value objects only; persistence belongs to OO module.
 

@@ -53,10 +53,11 @@ def build_operational_orders_permissions(user: dict[str, Any]) -> dict[str, bool
 
 
 def has_any_operational_orders_read(user: dict[str, Any]) -> bool:
-    """Navigation/read projection — true when user can open the OO section (OO-UI-001B).
+    """Navigation projection — true when user can open the OO preparation section (OO-UI-001B).
 
-    Minimum recommended grant: OPERATIONAL_ORDERS_INTAKE_READ.
-    Also true for operate, promote, or signature-readiness read (broader read family).
+    Gates the workspace preparation contour (intake/editorial), not organization-wide
+    official document read (OO-SEC-002). Typical leadership grant: OPERATIONAL_ORDERS_INTAKE_READ.
+    Also true for operate, promote, or signature-readiness read (broader preparation read family).
     """
     perms = build_operational_orders_permissions(user)
     return any(
