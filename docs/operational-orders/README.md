@@ -2,7 +2,7 @@
 
 Исследовательская и архитектурная зона для корпуса **производственных приказов** (не кадровых).
 
-**Implementation status:** OO-IMP-001 complete (local); OO-IMP-002 complete (local) — content confirmation and translation workflow.
+**Implementation status:** OO-IMP-001–003B complete — document aggregate architecture ready for production (migration head `z0a1b2c3d4e5`).
 
 ---
 
@@ -12,14 +12,21 @@
 |---|---|---|
 | **OO-IMP-001** | **Submitted-text Intake MVP** | **Complete (local)** |
 | **OO-IMP-002** | **Content Confirmation and Translation Workflow** | **Complete (local)** |
+| **OO-IMP-003** | **Official Draft Package and Document Aggregate** | **Complete (local)** |
+| **OO-IMP-003A** | **Promotion Identity & Revision Architecture Review** | **Complete (ratified)** |
+| **OO-IMP-003B** | **Workspace Freeze, Drift Detection & Revision Advisory** | **Complete** |
+| **OO-IMP-003B-R1** | **Migration Backfill Safety Review** | **Complete** |
 
 Records:
 - [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
 - [`implementation/OO-IMP-002-content-confirmation-translation-workflow.md`](implementation/OO-IMP-002-content-confirmation-translation-workflow.md)
+- [`implementation/OO-IMP-003-official-draft-package.md`](implementation/OO-IMP-003-official-draft-package.md)
+- [`architecture/OO-IMP-003A-document-identity-ratification.md`](architecture/OO-IMP-003A-document-identity-ratification.md)
+- [`implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md`](implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md)
 
 Runtime package: `app/operational_orders/`  
-API: `/api/operational-orders/draft-workspaces`  
-Migration head: `x8y9z0a1b2c3` (down: `w7x8y9z0a1b2`)
+API: `/api/operational-orders/draft-workspaces`, `/api/operational-orders/workspaces/{id}/promote`, `/api/operational-orders/documents`  
+Migration head: `z0a1b2c3d4e5` (down: `y9z0a1b2c3d4`)
 
 First native Shared UDE consumer — uses contracts/value objects only; persistence belongs to OO module.
 

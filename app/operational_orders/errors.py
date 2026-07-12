@@ -93,3 +93,27 @@ class OperationalOrderReconciliationStaleError(OperationalOrderError):
 
 class OperationalOrderEditorialPackageNotReadyError(OperationalOrderError):
     code = "OO_EDITORIAL_PACKAGE_NOT_READY"
+
+
+class OperationalOrderDocumentNotFoundError(LookupError):
+    code = "OO_DOCUMENT_NOT_FOUND"
+
+
+class OperationalOrderDocumentVersionNotFoundError(LookupError):
+    code = "OO_DOCUMENT_VERSION_NOT_FOUND"
+
+
+class OperationalOrderPromotionNotReadyError(OperationalOrderError):
+    code = "OO_PROMOTION_NOT_READY"
+
+
+class OperationalOrderPromotionAlreadyExistsError(OperationalOrderError):
+    code = "OO_PROMOTION_ALREADY_EXISTS"
+
+
+class OperationalOrderPromotionVersionConflictError(OperationalOrderError):
+    code = "OO_PROMOTION_VERSION_CONFLICT"
+
+
+class OperationalOrderWorkspaceFrozenError(OperationalOrderError):
+    code = "OO_WORKSPACE_FROZEN"

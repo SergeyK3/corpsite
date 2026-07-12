@@ -14,9 +14,13 @@ from app.operational_orders.errors import (
     OperationalOrderConfirmationNotFoundError,
     OperationalOrderConfirmationPartyMismatchError,
     OperationalOrderConfirmationStaleTextError,
+    OperationalOrderDocumentNotFoundError,
+    OperationalOrderDocumentVersionNotFoundError,
     OperationalOrderEditorialPackageNotReadyError,
     OperationalOrderForbiddenError,
     OperationalOrderInvalidWorkspaceStageError,
+    OperationalOrderPromotionNotReadyError,
+    OperationalOrderPromotionVersionConflictError,
     OperationalOrderReconciliationNotFoundError,
     OperationalOrderReconciliationStaleError,
     OperationalOrderSubmittedTextImmutableError,
@@ -26,6 +30,7 @@ from app.operational_orders.errors import (
     OperationalOrderValidationBlockedError,
     OperationalOrderValidationError,
     OperationalOrderVersionConflictError,
+    OperationalOrderWorkspaceFrozenError,
     OperationalOrderWorkspaceNotFoundError,
 )
 from app.operational_orders.editorial_permissions import (
@@ -43,7 +48,17 @@ from app.operational_orders.permissions import (
     can_operate_intake,
     can_read_workspace,
 )
-from app.operational_orders.scope import assert_submitting_unit_in_scope, resolve_user_scope_unit_ids
+from app.operational_orders.promotion_permissions import (
+    PERMISSION_PROMOTE,
+    can_promote_workspace,
+    can_read_document,
+)
+from app.operational_orders.scope import (
+    assert_document_in_scope,
+    assert_submitting_unit_in_scope,
+    assert_workspace_matches_document,
+    resolve_user_scope_unit_ids,
+)
 from app.security.admin_permissions import has_admin_permission
 from app.security.directory_scope import is_privileged
 from app.operational_orders.schemas.draft_workspace import (
@@ -54,6 +69,13 @@ from app.operational_orders.schemas.draft_workspace import (
     DraftWorkspaceDetailOut,
     DraftWorkspaceListOut,
     VersionedActionIn,
+)
+from app.operational_orders.schemas.document_aggregate import (
+    DocumentDetailOut,
+    DocumentLocalizationListOut,
+    DocumentVersionDetailOut,
+    PromotionIn,
+    PromotionResultOut,
 )
 from app.operational_orders.schemas.editorial_workflow import (
     BilingualReconciliationCreateIn,
@@ -70,6 +92,7 @@ from app.operational_orders.schemas.editorial_workflow import (
 )
 from app.operational_orders.services import draft_intake_service as svc
 from app.operational_orders.services import editorial_workflow_service as editorial_svc
+from app.operational_orders.services import promotion_service as promotion_svc
 from app.operational_orders.schemas import mappers
 
 router = APIRouter(prefix="/api/operational-orders", tags=["operational-orders"])
@@ -86,6 +109,8 @@ def _domain_http(exc: Exception) -> HTTPException:
     code = getattr(exc, "code", "OO_ERROR")
     if isinstance(exc, OperationalOrderWorkspaceNotFoundError):
         return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, (OperationalOrderDocumentNotFoundError, OperationalOrderDocumentVersionNotFoundError)):
+        return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderBlockNotFoundError):
         return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderClarificationNotFoundError):
@@ -100,6 +125,8 @@ def _domain_http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=403, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderVersionConflictError):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderPromotionVersionConflictError):
+        return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
     if isinstance(
         exc,
         (
@@ -112,6 +139,8 @@ def _domain_http(exc: Exception) -> HTTPException:
             OperationalOrderConfirmationConflictError,
             OperationalOrderReconciliationStaleError,
             OperationalOrderEditorialPackageNotReadyError,
+            OperationalOrderPromotionNotReadyError,
+            OperationalOrderWorkspaceFrozenError,
         ),
     ):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
@@ -694,5 +723,93 @@ def editorial_package_ready(
             expected_version=body.expected_version,
         )
         return mappers.to_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/workspaces/{workspace_id}/promote", response_model=PromotionResultOut)
+def promote_workspace_endpoint(
+    workspace_id: int,
+    body: PromotionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(svc.get_workspace, workspace_id=workspace_id)
+        if not can_promote_workspace(user, detail["workspace"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            promotion_svc.promote_workspace,
+            workspace_id=workspace_id,
+            actor_user_id=_require_user_id(user),
+            expected_workspace_version=body.expected_workspace_version,
+        )
+        return mappers.to_promotion_result_out(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents/{document_id}", response_model=DocumentDetailOut)
+def get_document_endpoint(
+    document_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_read_document(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        return mappers.to_document_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents/{document_id}/versions")
+def list_document_versions_endpoint(
+    document_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        result = call_service(promotion_svc.list_document_versions, document_id=document_id)
+        if not can_read_document(user, result["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        return result
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents/{document_id}/versions/{version_number}", response_model=DocumentVersionDetailOut)
+def get_document_version_endpoint(
+    document_id: int,
+    version_number: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        result = call_service(
+            promotion_svc.get_document_version,
+            document_id=document_id,
+            version_number=version_number,
+        )
+        if not can_read_document(user, result["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        return DocumentVersionDetailOut.model_validate(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents/{document_id}/localizations", response_model=DocumentLocalizationListOut)
+def list_document_localizations_endpoint(
+    document_id: int,
+    version_number: int | None = Query(default=None),
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_read_document(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            promotion_svc.list_document_localizations,
+            document_id=document_id,
+            version_number=version_number,
+        )
+        return DocumentLocalizationListOut.model_validate(result)
     except Exception as exc:
         raise _domain_http(exc) from exc

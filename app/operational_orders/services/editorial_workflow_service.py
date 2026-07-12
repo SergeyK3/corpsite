@@ -70,6 +70,7 @@ from app.operational_orders.errors import (
 )
 from app.operational_orders.repository import fetch_workspace_row, operational_orders_available
 from app.operational_orders.services import draft_intake_service as intake_svc
+from app.operational_orders.workspace_freeze import assert_workspace_not_frozen
 from app.operational_orders.validation.editorial_validation import (
     block_effective_text,
     block_pair_key,
@@ -428,6 +429,14 @@ def on_block_text_changed(
                 )
 
 
+def _require_mutable_workspace(conn, workspace_id: int) -> dict[str, Any]:
+    workspace = fetch_workspace_row(conn, workspace_id)
+    if workspace is None:
+        raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+    assert_workspace_not_frozen(workspace)
+    return workspace
+
+
 def _ensure_editorial_entry(workspace: dict[str, Any]) -> None:
     if workspace["stage"] not in EDITORIAL_ENTRY_STAGES:
         raise OperationalOrderInvalidWorkspaceStageError(
@@ -436,9 +445,7 @@ def _ensure_editorial_entry(workspace: dict[str, Any]) -> None:
 
 
 def _bump_workspace(conn, workspace_id: int, *, expected_version: int | None = None) -> None:
-    workspace = fetch_workspace_row(conn, workspace_id)
-    if workspace is None:
-        raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+    workspace = _require_mutable_workspace(conn, workspace_id)
     _assert_version(workspace, expected_version, label="Workspace")
     updated = conn.execute(
         text(
@@ -478,9 +485,7 @@ def create_translation_assignment(
         raise OperationalOrderValidationError(f"Invalid target locale: {target_locale}")
 
     with engine.begin() as conn:
-        workspace = fetch_workspace_row(conn, workspace_id)
-        if not workspace:
-            raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        workspace = _require_mutable_workspace(conn, workspace_id)
         _ensure_editorial_entry(workspace)
         blocks = intake_svc._fetch_blocks(conn, workspace_id)
         pair = _source_and_target_locales(blocks)
@@ -622,9 +627,7 @@ def accept_translation_assignment(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
-        workspace = fetch_workspace_row(conn, workspace_id)
-        if not workspace:
-            raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        workspace = _require_mutable_workspace(conn, workspace_id)
         _ensure_editorial_entry(workspace)
         assignment = _fetch_assignment(conn, workspace_id, assignment_id)
         if not assignment:
@@ -694,6 +697,7 @@ def start_translation_assignment(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
+        _require_mutable_workspace(conn, workspace_id)
         assignment = _fetch_assignment(conn, workspace_id, assignment_id)
         if not assignment:
             raise OperationalOrderTranslationAssignmentNotFoundError(
@@ -754,9 +758,7 @@ def complete_translation_assignment(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
-        workspace = fetch_workspace_row(conn, workspace_id)
-        if not workspace:
-            raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        workspace = _require_mutable_workspace(conn, workspace_id)
         assignment = _fetch_assignment(conn, workspace_id, assignment_id)
         if not assignment:
             raise OperationalOrderTranslationAssignmentNotFoundError(
@@ -873,6 +875,7 @@ def cancel_translation_assignment(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
+        _require_mutable_workspace(conn, workspace_id)
         assignment = _fetch_assignment(conn, workspace_id, assignment_id)
         if not assignment:
             raise OperationalOrderTranslationAssignmentNotFoundError(
@@ -929,9 +932,7 @@ def create_content_confirmation(
     _require_available()
     role = str(confirmation_role).strip().upper()
     with engine.begin() as conn:
-        workspace = fetch_workspace_row(conn, workspace_id)
-        if not workspace:
-            raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        workspace = _require_mutable_workspace(conn, workspace_id)
         _ensure_editorial_entry(workspace)
 
         block = conn.execute(
@@ -1094,6 +1095,7 @@ def revoke_content_confirmation(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
+        _require_mutable_workspace(conn, workspace_id)
         confirmation = _fetch_confirmation(conn, workspace_id, confirmation_id)
         if not confirmation:
             raise OperationalOrderConfirmationNotFoundError(
@@ -1161,9 +1163,7 @@ def create_bilingual_reconciliation(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
-        workspace = fetch_workspace_row(conn, workspace_id)
-        if not workspace:
-            raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        workspace = _require_mutable_workspace(conn, workspace_id)
         _ensure_editorial_entry(workspace)
         blocks = intake_svc._fetch_blocks(conn, workspace_id)
         confirmations = _fetch_confirmations(conn, workspace_id)
@@ -1310,6 +1310,7 @@ def invalidate_bilingual_reconciliation(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
+        _require_mutable_workspace(conn, workspace_id)
         reconciliation = _fetch_reconciliation(conn, workspace_id, reconciliation_id)
         if not reconciliation:
             raise OperationalOrderReconciliationNotFoundError(
@@ -1391,9 +1392,7 @@ def mark_editorial_package_ready(
 ) -> dict[str, Any]:
     _require_available()
     with engine.begin() as conn:
-        workspace = fetch_workspace_row(conn, workspace_id)
-        if not workspace:
-            raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        workspace = _require_mutable_workspace(conn, workspace_id)
         if str(workspace["stage"]) == WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY:
             return _return_detail(conn, workspace_id)
 

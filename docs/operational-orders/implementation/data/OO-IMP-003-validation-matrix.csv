@@ -1,0 +1,11 @@
+code,severity,message,field_path,http_status
+OO301,ERROR,Workspace not editorial package ready,workspace.stage,409
+OO302,ERROR,Missing localization,blocks.ru|blocks.kk,409
+OO303,ERROR,Missing confirmation,blocks.*.confirmations.*,409
+OO304,ERROR,Missing reconciliation,reconciliations.*,409
+OO305,ERROR,Workspace version conflict,workspace.version,409
+OO306,INFO,Promotion already exists (idempotent replay),workspace_id,200
+OO307,ERROR,Snapshot fingerprint mismatch,snapshot.fingerprint,409
+OO308,ERROR,Active translation exists,translation_assignments.*,409
+OO309,ERROR,Open clarification exists,clarifications.*,409
+OO310,ERROR,Stale workspace state,blocks.*|reconciliations.*,409

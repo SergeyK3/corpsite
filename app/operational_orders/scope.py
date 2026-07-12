@@ -37,3 +37,25 @@ def workspace_in_user_scope(user: dict[str, Any], workspace: dict[str, Any]) -> 
         return True
     submitting_unit_id = int(workspace.get("submitting_org_unit_id") or 0)
     return submitting_unit_id in scope
+
+
+def document_in_user_scope(user: dict[str, Any], document: dict[str, Any]) -> bool:
+    scope = resolve_user_scope_unit_ids(user)
+    if scope is None:
+        return True
+    submitting_unit_id = int(document.get("submitting_org_unit_id") or 0)
+    return submitting_unit_id in scope
+
+
+def assert_document_in_scope(user: dict[str, Any], document: dict[str, Any]) -> None:
+    if not document_in_user_scope(user, document):
+        raise OperationalOrderForbiddenError("Document is outside permitted org scope.")
+
+
+def assert_workspace_matches_document(
+    *,
+    workspace_id: int,
+    document: dict[str, Any],
+) -> None:
+    if int(document.get("workspace_id") or 0) != int(workspace_id):
+        raise OperationalOrderForbiddenError("Document does not belong to workspace.")

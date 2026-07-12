@@ -16,6 +16,15 @@ from app.operational_orders.schemas.draft_workspace import (
     ValidationIssueOut,
     ValidationResultOut,
 )
+from app.operational_orders.schemas.document_aggregate import (
+    DocumentDetailOut,
+    DocumentLocalizationListOut,
+    DocumentSummaryOut,
+    DocumentVersionDetailOut,
+    DocumentVersionOut,
+    PromotionResultOut,
+    PromotionSummaryOut,
+)
 from app.operational_orders.schemas.editorial_workflow import (
     BilingualReconciliationOut,
     ContentConfirmationOut,
@@ -97,4 +106,31 @@ def to_list_out(result: dict[str, Any]) -> DraftWorkspaceListOut:
         total=int(result["total"]),
         limit=int(result["limit"]),
         offset=int(result["offset"]),
+    )
+
+
+def to_document_detail_out(detail: dict[str, Any]) -> DocumentDetailOut:
+    current_version = detail.get("current_version")
+    promotion = detail.get("promotion")
+    return DocumentDetailOut(
+        document=DocumentSummaryOut.model_validate(detail["document"]),
+        current_version=DocumentVersionOut.model_validate(current_version) if current_version else None,
+        promotion=PromotionSummaryOut.model_validate(promotion) if promotion else None,
+    )
+
+
+def to_promotion_result_out(result: dict[str, Any]) -> PromotionResultOut:
+    validation = result["validation"]
+    if not isinstance(validation, ValidationResult):
+        validation = ValidationResult.from_issues([])
+    return PromotionResultOut(
+        workspace_id=int(result["workspace_id"]),
+        document=to_document_detail_out(result["document"]),
+        validation=_validation_out(validation),
+        idempotent_replay=bool(result.get("idempotent_replay")),
+        workspace_frozen=bool(result.get("workspace_frozen")),
+        workspace_drift_detected=bool(result.get("workspace_drift_detected")),
+        revision_recommended=bool(result.get("revision_recommended")),
+        document_id=int(result["document_id"]) if result.get("document_id") is not None else None,
+        promotion_id=int(result["promotion_id"]) if result.get("promotion_id") is not None else None,
     )

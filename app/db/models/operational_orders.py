@@ -1,8 +1,9 @@
-"""Operational orders ORM models (OO-IMP-001 intake + OO-IMP-002 editorial workflow).
+"""Operational orders ORM models (OO-IMP-001 intake + OO-IMP-002 editorial + OO-IMP-003 document aggregate).
 
 Draft workspace aggregate — separate from official Document Aggregate.
-See docs/operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md
-and docs/operational-orders/implementation/OO-IMP-002-content-confirmation-translation-workflow.md.
+See docs/operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md,
+OO-IMP-002-content-confirmation-translation-workflow.md, and
+OO-IMP-003-official-draft-package.md.
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from typing import Any, Optional
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -36,6 +38,7 @@ WORKSPACE_STAGE_TRANSLATION_IN_PROGRESS = "TRANSLATION_IN_PROGRESS"
 WORKSPACE_STAGE_CONTENT_CONFIRMATION_REQUIRED = "CONTENT_CONFIRMATION_REQUIRED"
 WORKSPACE_STAGE_BILINGUAL_RECONCILIATION = "BILINGUAL_RECONCILIATION"
 WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY = "EDITORIAL_PACKAGE_READY"
+WORKSPACE_STAGE_DOCUMENT_PROMOTED = "DOCUMENT_PROMOTED"
 
 WORKSPACE_STAGES = (
     WORKSPACE_STAGE_SUBMITTED,
@@ -48,6 +51,7 @@ WORKSPACE_STAGES = (
     WORKSPACE_STAGE_CONTENT_CONFIRMATION_REQUIRED,
     WORKSPACE_STAGE_BILINGUAL_RECONCILIATION,
     WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY,
+    WORKSPACE_STAGE_DOCUMENT_PROMOTED,
 )
 
 BLOCK_TYPE_TITLE = "TITLE"
@@ -101,6 +105,13 @@ PROVENANCE_ACTION_ACCEPTANCE = "ACCEPTANCE"
 PROVENANCE_ACTION_EFFECTIVE_EDIT = "EFFECTIVE_EDIT"
 PROVENANCE_ACTION_BLOCK_ADD = "BLOCK_ADD"
 PROVENANCE_ACTION_TRANSLATION = "TRANSLATION"
+PROVENANCE_ACTION_PROMOTED_FROM_WORKSPACE = "PROMOTED_FROM_WORKSPACE"
+PROVENANCE_ACTION_SNAPSHOT_CREATED = "SNAPSHOT_CREATED"
+PROVENANCE_ACTION_DOCUMENT_VERSION_CREATED = "DOCUMENT_VERSION_CREATED"
+PROVENANCE_ACTION_WORKSPACE_PROMOTED = "WORKSPACE_PROMOTED"
+PROVENANCE_ACTION_WORKSPACE_FROZEN = "WORKSPACE_FROZEN"
+PROVENANCE_ACTION_PROMOTION_REPLAY = "PROMOTION_REPLAY"
+PROVENANCE_ACTION_WORKSPACE_DRIFT_DETECTED = "WORKSPACE_DRIFT_DETECTED"
 
 PROVENANCE_ACTIONS = (
     PROVENANCE_ACTION_SUBMISSION,
@@ -108,6 +119,13 @@ PROVENANCE_ACTIONS = (
     PROVENANCE_ACTION_EFFECTIVE_EDIT,
     PROVENANCE_ACTION_BLOCK_ADD,
     PROVENANCE_ACTION_TRANSLATION,
+    PROVENANCE_ACTION_PROMOTED_FROM_WORKSPACE,
+    PROVENANCE_ACTION_SNAPSHOT_CREATED,
+    PROVENANCE_ACTION_DOCUMENT_VERSION_CREATED,
+    PROVENANCE_ACTION_WORKSPACE_PROMOTED,
+    PROVENANCE_ACTION_WORKSPACE_FROZEN,
+    PROVENANCE_ACTION_PROMOTION_REPLAY,
+    PROVENANCE_ACTION_WORKSPACE_DRIFT_DETECTED,
 )
 
 CLARIFICATION_STATUS_OPEN = "OPEN"
@@ -162,6 +180,9 @@ AUDIT_ACTION_RECONCILIATION_INVALIDATED = "RECONCILIATION_INVALIDATED"
 AUDIT_ACTION_WORKSPACE_STAGE_CHANGED = "WORKSPACE_STAGE_CHANGED"
 AUDIT_ACTION_EDITORIAL_PACKAGE_READY = "EDITORIAL_PACKAGE_READY"
 AUDIT_ACTION_EDITORIAL_PACKAGE_VALIDATION_FAILED = "EDITORIAL_PACKAGE_VALIDATION_FAILED"
+AUDIT_ACTION_WORKSPACE_FROZEN = "WORKSPACE_FROZEN"
+AUDIT_ACTION_PROMOTION_REPLAY = "PROMOTION_REPLAY"
+AUDIT_ACTION_REVISION_ADVISORY_RETURNED = "REVISION_ADVISORY_RETURNED"
 
 DRAFT_AUDIT_ACTIONS = (
     AUDIT_ACTION_SUBMISSION_CREATED,
@@ -186,6 +207,9 @@ DRAFT_AUDIT_ACTIONS = (
     AUDIT_ACTION_WORKSPACE_STAGE_CHANGED,
     AUDIT_ACTION_EDITORIAL_PACKAGE_READY,
     AUDIT_ACTION_EDITORIAL_PACKAGE_VALIDATION_FAILED,
+    AUDIT_ACTION_WORKSPACE_FROZEN,
+    AUDIT_ACTION_PROMOTION_REPLAY,
+    AUDIT_ACTION_REVISION_ADVISORY_RETURNED,
 )
 
 ASSIGNMENT_STATUS_REQUESTED = "REQUESTED"
@@ -240,6 +264,54 @@ RECONCILIATION_STATUSES = (
     RECONCILIATION_STATUS_RECONCILED,
     RECONCILIATION_STATUS_INVALIDATED,
     RECONCILIATION_STATUS_SUPERSEDED,
+)
+
+DOCUMENT_KIND_OPERATIONAL_ORDER = "OPERATIONAL_ORDER"
+
+DOCUMENT_STATUS_CREATED = "CREATED"
+DOCUMENT_STATUS_READY_FOR_SIGNATURE = "READY_FOR_SIGNATURE"
+DOCUMENT_STATUS_SIGNED = "SIGNED"
+DOCUMENT_STATUS_REGISTERED = "REGISTERED"
+DOCUMENT_STATUS_VOIDED = "VOIDED"
+
+DOCUMENT_STATUSES = (
+    DOCUMENT_STATUS_CREATED,
+    DOCUMENT_STATUS_READY_FOR_SIGNATURE,
+    DOCUMENT_STATUS_SIGNED,
+    DOCUMENT_STATUS_REGISTERED,
+    DOCUMENT_STATUS_VOIDED,
+)
+
+PROMOTION_STATUS_STARTED = "STARTED"
+PROMOTION_STATUS_COMPLETED = "COMPLETED"
+PROMOTION_STATUS_FAILED = "FAILED"
+
+PROMOTION_STATUSES = (
+    PROMOTION_STATUS_STARTED,
+    PROMOTION_STATUS_COMPLETED,
+    PROMOTION_STATUS_FAILED,
+)
+
+PROMOTION_AUDIT_ACTION_STARTED = "PROMOTION_STARTED"
+PROMOTION_AUDIT_ACTION_COMPLETED = "PROMOTION_COMPLETED"
+PROMOTION_AUDIT_ACTION_FAILED = "PROMOTION_FAILED"
+PROMOTION_AUDIT_ACTION_DOCUMENT_CREATED = "DOCUMENT_CREATED"
+PROMOTION_AUDIT_ACTION_VERSION_CREATED = "VERSION_CREATED"
+PROMOTION_AUDIT_ACTION_LOCALIZATION_SNAPSHOTTED = "LOCALIZATION_SNAPSHOTTED"
+PROMOTION_AUDIT_ACTION_WORKSPACE_FROZEN = "WORKSPACE_FROZEN"
+PROMOTION_AUDIT_ACTION_PROMOTION_REPLAY = "PROMOTION_REPLAY"
+PROMOTION_AUDIT_ACTION_REVISION_ADVISORY_RETURNED = "REVISION_ADVISORY_RETURNED"
+
+PROMOTION_AUDIT_ACTIONS = (
+    PROMOTION_AUDIT_ACTION_STARTED,
+    PROMOTION_AUDIT_ACTION_COMPLETED,
+    PROMOTION_AUDIT_ACTION_FAILED,
+    PROMOTION_AUDIT_ACTION_DOCUMENT_CREATED,
+    PROMOTION_AUDIT_ACTION_VERSION_CREATED,
+    PROMOTION_AUDIT_ACTION_LOCALIZATION_SNAPSHOTTED,
+    PROMOTION_AUDIT_ACTION_WORKSPACE_FROZEN,
+    PROMOTION_AUDIT_ACTION_PROMOTION_REPLAY,
+    PROMOTION_AUDIT_ACTION_REVISION_ADVISORY_RETURNED,
 )
 
 
@@ -520,4 +592,150 @@ class OperationalOrderBilingualReconciliation(Base):
     invalidated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     invalidation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderDocument(Base):
+    """Official document aggregate root — immutable snapshot after promotion."""
+
+    __tablename__ = "operational_order_documents"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", name="uq_oo_documents_workspace"),
+        Index("ix_oo_documents_workspace", "workspace_id"),
+        Index("ix_oo_documents_status", "status"),
+        Index("ix_oo_documents_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    document_kind: Mapped[str] = mapped_column(Text, nullable=False, default=DOCUMENT_KIND_OPERATIONAL_ORDER)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=DOCUMENT_STATUS_CREATED)
+    created_from_workspace_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_from_workspace_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    promotion_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_promotions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class OperationalOrderDocumentVersion(Base):
+    """Immutable document version snapshot."""
+
+    __tablename__ = "operational_order_document_versions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "version_number", name="uq_oo_document_versions_number"),
+        Index("ix_oo_document_versions_document", "document_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    workspace_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    promotion_snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    snapshot_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+
+
+class OperationalOrderDocumentLocalization(Base):
+    """Immutable per-locale block snapshot within a document version."""
+
+    __tablename__ = "operational_order_document_localizations"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_version_id",
+            "locale",
+            "block_type",
+            "sequence",
+            name="uq_oo_document_localizations_seq",
+        ),
+        Index("ix_oo_document_localizations_version", "document_version_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    document_version_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    locale: Mapped[str] = mapped_column(Text, nullable=False)
+    block_type: Mapped[str] = mapped_column(Text, nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    official_text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    source_workspace_block_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_confirmation_ids: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=list)
+    source_reconciliation_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderPromotion(Base):
+    """Document aggregate factory record — one completed promotion per workspace."""
+
+    __tablename__ = "operational_order_promotions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", name="uq_oo_promotions_workspace"),
+        Index("ix_oo_promotions_workspace", "workspace_id"),
+        Index("ix_oo_promotions_document", "document_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_draft_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    document_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=PROMOTION_STATUS_STARTED)
+    workspace_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    workspace_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_fingerprint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    promoted_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    promoted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderPromotionAudit(Base):
+    """Append-only promotion audit trail."""
+
+    __tablename__ = "operational_order_promotion_audit"
+    __table_args__ = (Index("ix_oo_promotion_audit_promotion", "promotion_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    promotion_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_promotions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

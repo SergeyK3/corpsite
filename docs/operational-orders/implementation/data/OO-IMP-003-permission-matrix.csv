@@ -1,0 +1,5 @@
+permission_code,action,scope,stage_requirement,privileged_bypass
+OPERATIONAL_ORDERS_PROMOTE,promote workspace to document,submitting org unit,EDITORIAL_PACKAGE_READY,yes
+OPERATIONAL_ORDERS_PROMOTE,read document,document org unit,,yes
+OPERATIONAL_ORDERS_INTAKE_READ,read document,document org unit,,yes
+OPERATIONAL_ORDERS_INTAKE_OPERATE,read document,document org unit,,yes

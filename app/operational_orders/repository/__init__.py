@@ -19,6 +19,14 @@ OO_TABLES = (
     "operational_order_bilingual_reconciliations",
 )
 
+OO_DOCUMENT_TABLES = (
+    "operational_order_promotions",
+    "operational_order_documents",
+    "operational_order_document_versions",
+    "operational_order_document_localizations",
+    "operational_order_promotion_audit",
+)
+
 
 def _table_exists(conn, table: str) -> bool:
     row = conn.execute(
@@ -38,6 +46,13 @@ def _table_exists(conn, table: str) -> bool:
 def operational_orders_available() -> bool:
     with engine.connect() as conn:
         return all(_table_exists(conn, table) for table in OO_TABLES)
+
+
+def document_aggregate_available() -> bool:
+    with engine.connect() as conn:
+        return operational_orders_available() and all(
+            _table_exists(conn, table) for table in OO_DOCUMENT_TABLES
+        )
 
 
 def dumps_json(value: Any) -> str:

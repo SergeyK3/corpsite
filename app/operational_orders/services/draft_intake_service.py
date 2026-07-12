@@ -67,6 +67,7 @@ from app.operational_orders.repository import (
     fetch_workspace_row,
     operational_orders_available,
 )
+from app.operational_orders.workspace_freeze import assert_workspace_not_frozen
 from app.operational_orders.validation.intake_validation import validate_intake_workspace
 
 ACTIVE_INTAKE_STAGES = {
@@ -518,6 +519,7 @@ def accept_submission(
         workspace = fetch_workspace_row(conn, workspace_id)
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        assert_workspace_not_frozen(workspace)
         _assert_version(workspace, expected_version)
         if workspace["stage"] != WORKSPACE_STAGE_SUBMITTED:
             raise OperationalOrderInvalidWorkspaceStageError(
@@ -669,11 +671,8 @@ def add_draft_block(
         workspace = fetch_workspace_row(conn, workspace_id)
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        assert_workspace_not_frozen(workspace)
         _assert_version(workspace, expected_version)
-        if workspace["stage"] == WORKSPACE_STAGE_EDITORIAL_PACKAGE_READY:
-            raise OperationalOrderInvalidWorkspaceStageError(
-                "Cannot add blocks after EDITORIAL_PACKAGE_READY."
-            )
 
         block_row = conn.execute(
             text(
@@ -739,6 +738,7 @@ def update_workspace_effective_text(
         workspace = fetch_workspace_row(conn, workspace_id)
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        assert_workspace_not_frozen(workspace)
         _assert_version(workspace, expected_version)
 
         block = conn.execute(
@@ -866,6 +866,7 @@ def run_intake_validation(
         workspace = fetch_workspace_row(conn, workspace_id)
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        assert_workspace_not_frozen(workspace)
         _assert_version(workspace, expected_version)
         blocks = _fetch_blocks(conn, workspace_id)
         clarifications = _fetch_clarifications(conn, workspace_id)
@@ -988,6 +989,7 @@ def resolve_clarification(
         workspace = fetch_workspace_row(conn, workspace_id)
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        assert_workspace_not_frozen(workspace)
         _assert_version(workspace, expected_version)
 
         updated = conn.execute(
@@ -1049,6 +1051,7 @@ def mark_ready_for_editorial(
         workspace = fetch_workspace_row(conn, workspace_id)
         if not workspace:
             raise OperationalOrderWorkspaceNotFoundError(f"Workspace {workspace_id} not found.")
+        assert_workspace_not_frozen(workspace)
         _assert_version(workspace, expected_version)
         blocks = _fetch_blocks(conn, workspace_id)
         clarifications = _fetch_clarifications(conn, workspace_id)

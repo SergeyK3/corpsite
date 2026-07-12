@@ -5,14 +5,20 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.operational_orders.repository import OO_TABLES, operational_orders_available
+from app.operational_orders.repository import OO_DOCUMENT_TABLES, OO_TABLES, operational_orders_available
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
-DDL_REVISION = "x8y9z0a1b2c3"
+DDL_REVISION = "z0a1b2c3d4e5"
 
 
 def _schema_available() -> bool:
     return operational_orders_available()
+
+
+def _document_schema_available() -> bool:
+    from app.operational_orders.repository import document_aggregate_available
+
+    return document_aggregate_available()
 
 
 def _require_schema() -> None:
@@ -27,6 +33,14 @@ def _require_oo_schema_fixture():
     _require_schema()
 
 
+@pytest.fixture(scope="session")
+def _require_oo_document_schema_fixture():
+    if not _document_schema_available():
+        pytest.skip(
+            f"OO document schema missing — run: alembic upgrade head (revision {DDL_REVISION})"
+        )
+
+
 def revoke_user_access_grants(conn, user_id: int) -> None:
     """Remove grants created by OO tests before seed teardown deletes users."""
     conn.execute(
@@ -38,6 +52,22 @@ def revoke_user_access_grants(conn, user_id: int) -> None:
             """
         ),
         {"user_id": int(user_id)},
+    )
+
+
+def revoke_user_permission(conn, user_id: int, permission_code: str) -> None:
+    conn.execute(
+        text(
+            """
+            DELETE FROM public.access_grants g
+            USING public.access_roles ar
+            WHERE g.access_role_id = ar.access_role_id
+              AND ar.code = :code
+              AND g.target_type = 'USER'
+              AND g.target_id = :user_id
+            """
+        ),
+        {"code": permission_code, "user_id": int(user_id)},
     )
 
 
@@ -112,6 +142,7 @@ def oo_editorial_headers(seed):
         "OPERATIONAL_ORDERS_CONTENT_CONFIRM",
         "OPERATIONAL_ORDERS_RECONCILE",
         "OPERATIONAL_ORDERS_EDITORIAL_READY",
+        "OPERATIONAL_ORDERS_PROMOTE",
     )
     with engine.begin() as conn:
         for perm in perms:
@@ -137,6 +168,47 @@ OO_CLEANUP_TABLES = (
 
 
 def cleanup_workspace(conn, workspace_id: int) -> None:
+    document_ids = conn.execute(
+        text(
+            """
+            SELECT id FROM public.operational_order_documents
+            WHERE workspace_id = :workspace_id
+            """
+        ),
+        {"workspace_id": int(workspace_id)},
+    ).fetchall()
+    for (document_id,) in document_ids:
+        conn.execute(
+            text(
+                """
+                DELETE FROM public.operational_order_document_localizations
+                WHERE document_version_id IN (
+                    SELECT id FROM public.operational_order_document_versions
+                    WHERE document_id = :document_id
+                )
+                """
+            ),
+            {"document_id": int(document_id)},
+        )
+        conn.execute(
+            text(
+                """
+                DELETE FROM public.operational_order_document_versions
+                WHERE document_id = :document_id
+                """
+            ),
+            {"document_id": int(document_id)},
+        )
+    if table_exists(conn, "operational_order_documents"):
+        conn.execute(
+            text("DELETE FROM public.operational_order_documents WHERE workspace_id = :workspace_id"),
+            {"workspace_id": int(workspace_id)},
+        )
+    if table_exists(conn, "operational_order_promotions"):
+        conn.execute(
+            text("DELETE FROM public.operational_order_promotions WHERE workspace_id = :workspace_id"),
+            {"workspace_id": int(workspace_id)},
+        )
     for table in OO_CLEANUP_TABLES:
         if table_exists(conn, table):
             conn.execute(

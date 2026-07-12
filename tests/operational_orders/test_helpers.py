@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 BASE = "/api/operational-orders/draft-workspaces"
+WORKSPACES_BASE = "/api/operational-orders/workspaces"
+DOCUMENTS_BASE = "/api/operational-orders/documents"
 
 
 def workspace_payload(
@@ -60,3 +62,47 @@ def confirm_block(client, headers, workspace_id, block, *, role: str, confirmer_
     if version is not None:
         body["expected_version"] = version
     return client.post(f"{BASE}/{workspace_id}/confirmations", json=body, headers=headers)
+
+
+def create_editorial_ready_workspace(client, headers, seed, *, author_ref: str, locales: tuple[str, ...] = ("ru", "kk")):
+    workspace_id, detail = create_ready_workspace(
+        client, headers, seed, author_ref=author_ref, locales=locales
+    )
+    for block in detail["blocks"]:
+        confirm_block(
+            client,
+            headers,
+            workspace_id,
+            block,
+            role="CONTENT_AUTHOR",
+            confirmer_ref=author_ref,
+        )
+    fresh = client.get(f"{BASE}/{workspace_id}", headers=headers).json()
+    for ru_block in [b for b in fresh["blocks"] if b["locale"] == "ru"]:
+        kk_block = next(
+            b
+            for b in fresh["blocks"]
+            if b["locale"] == "kk"
+            and b["block_type"] == ru_block["block_type"]
+            and b["sequence"] == ru_block["sequence"]
+        )
+        client.post(
+            f"{BASE}/{workspace_id}/reconciliations",
+            json={"ru_block_id": ru_block["block_id"], "kk_block_id": kk_block["block_id"]},
+            headers=headers,
+        )
+    ready_detail = client.get(f"{BASE}/{workspace_id}", headers=headers).json()
+    ready_resp = client.post(
+        f"{BASE}/{workspace_id}/editorial-package-ready",
+        json={"expected_version": ready_detail["workspace"]["version"]},
+        headers=headers,
+    )
+    assert ready_resp.status_code == 200, ready_resp.text
+    return workspace_id, ready_resp.json()
+
+
+def promote_workspace(client, headers, workspace_id, *, expected_version: int | None = None):
+    body = {}
+    if expected_version is not None:
+        body["expected_version"] = expected_version
+    return client.post(f"{WORKSPACES_BASE}/{workspace_id}/promote", json=body, headers=headers)

@@ -20,6 +20,11 @@ OO_TABLES = (
     "operational_order_translation_assignments",
     "operational_order_content_confirmations",
     "operational_order_bilingual_reconciliations",
+    "operational_order_promotions",
+    "operational_order_documents",
+    "operational_order_document_versions",
+    "operational_order_document_localizations",
+    "operational_order_promotion_audit",
 )
 
 

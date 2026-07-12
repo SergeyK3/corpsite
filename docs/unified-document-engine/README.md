@@ -92,6 +92,8 @@ WP series defining the **Unified Document Engine (UDE)** shared architecture for
 | **UDE-011** | **Shared Activation & Lifecycle Runtime** | **Complete (local)** | [UDE-011-shared-activation-and-lifecycle-runtime.md](./UDE-011-shared-activation-and-lifecycle-runtime.md) |
 | **UDE-012** | **Shared Write Runtime and Document Aggregate Foundation** | **Complete (local)** | [UDE-012-shared-write-runtime.md](./UDE-012-shared-write-runtime.md) |
 | — | **OO-IMP-001 Operational Orders Intake (first UDE consumer)** | **Complete (local)** | [`../operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md`](../operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md) |
+| — | **OO-IMP-003 Document Aggregate & Promotion** | **Complete (local)** | [`../operational-orders/implementation/OO-IMP-003-official-draft-package.md`](../operational-orders/implementation/OO-IMP-003-official-draft-package.md) |
+| — | **OO-IMP-003B Workspace Freeze & Drift Advisory** | **Complete (local)** | [`../operational-orders/implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md`](../operational-orders/implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md) |
 
 ---
 
@@ -188,11 +190,29 @@ UDE-007 through UDE-012 deliver the full Shared Runtime stack:
 
 Record: [`../operational-orders/implementation/OO-IMP-002-content-confirmation-translation-workflow.md`](../operational-orders/implementation/OO-IMP-002-content-confirmation-translation-workflow.md)
 
+## OO-IMP-003 / 003B Complete
+
+**OO-IMP-003** introduced `DocumentId`, Version 1 snapshot, and idempotent promotion birth event (UDE-004 alignment).
+
+**OO-IMP-003B** closes ratified gaps from OO-IMP-003A:
+
+- Workspace freezes to `DOCUMENT_PROMOTED` after promotion (UDE-004 workspace post-promotion model)
+- Mutating workspace commands blocked with `OO_WORKSPACE_FROZEN`
+- Re-promote compares workspace fingerprint vs promotion snapshot; returns revision advisory on drift (HTTP 200)
+- No Version 2, no Revision Command in this WP
+
+Records:
+- [`../operational-orders/implementation/OO-IMP-003-official-draft-package.md`](../operational-orders/implementation/OO-IMP-003-official-draft-package.md)
+- [`../operational-orders/architecture/OO-IMP-003A-document-identity-ratification.md`](../operational-orders/architecture/OO-IMP-003A-document-identity-ratification.md)
+- [`../operational-orders/implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md`](../operational-orders/implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md)
+
+Personnel Orders behavior unchanged.
+
 ---
 
 ## Next WP
 
-Editorial runtime handoff / official draft package preparation (UDE-003 continuation beyond OO draft workspace).
+**OO-IMP-004** — Revision Command and Version 2+ (separate from re-promote; builds on frozen workspace + drift advisory model).
 
 ---
 

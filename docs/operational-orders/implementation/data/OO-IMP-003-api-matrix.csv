@@ -1,0 +1,6 @@
+endpoint,method,permission,scope_check,stage_gate,response_model
+/api/operational-orders/workspaces/{workspace_id}/promote,POST,OPERATIONAL_ORDERS_PROMOTE,workspace submitting unit,EDITORIAL_PACKAGE_READY,PromotionResultOut
+/api/operational-orders/documents/{document_id},GET,"PROMOTE|INTAKE_READ|INTAKE_OPERATE",document org unit,,DocumentDetailOut
+/api/operational-orders/documents/{document_id}/versions,GET,"PROMOTE|INTAKE_READ|INTAKE_OPERATE",document org unit,,json
+/api/operational-orders/documents/{document_id}/versions/{version_number},GET,"PROMOTE|INTAKE_READ|INTAKE_OPERATE",document org unit,,DocumentVersionDetailOut
+/api/operational-orders/documents/{document_id}/localizations,GET,"PROMOTE|INTAKE_READ|INTAKE_OPERATE",document org unit,,DocumentLocalizationListOut
