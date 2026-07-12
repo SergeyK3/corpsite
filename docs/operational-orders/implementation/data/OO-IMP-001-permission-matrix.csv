@@ -1,0 +1,6 @@
+permission,scope,notes
+OPERATIONAL_ORDERS_INTAKE_CREATE,authenticated + grant or privileged,Create draft submissions
+OPERATIONAL_ORDERS_INTAKE_READ,authenticated + grant or creator,Read workspace detail/list
+OPERATIONAL_ORDERS_INTAKE_OPERATE,authenticated + grant or privileged,Accept validate edit ready
+privileged bypass,DIRECTORY_PRIVILEGED_USER_IDS,Full intake access bootstrap
+record_creator,workspace.record_creator_user_id,Creator can operate own workspace

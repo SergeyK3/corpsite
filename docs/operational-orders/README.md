@@ -1,8 +1,25 @@
-# Operational Orders — Research & Architecture
+# Operational Orders — Research, Architecture & Implementation
 
 Исследовательская и архитектурная зона для корпуса **производственных приказов** (не кадровых).
 
-Runtime-код, миграции и production storage здесь **не размещаются** (кроме read-only анализа Personnel Orders для OP-RES-006).
+**Implementation status:** OO-IMP-001 complete (local) — submitted-text intake MVP.
+
+---
+
+## Implementation Program Status
+
+| WP | Title | Status |
+|---|---|---|
+| **OO-IMP-001** | **Submitted-text Intake MVP** | **Complete (local)** |
+| OO-IMP-002 | Content Confirmation and Translation Workflow | Next |
+
+Record: [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
+
+Runtime package: `app/operational_orders/`  
+API: `/api/operational-orders/draft-workspaces`  
+Migration: `w7x8y9z0a1b2`
+
+First native Shared UDE consumer — uses contracts/value objects only; persistence belongs to OO module.
 
 ---
 

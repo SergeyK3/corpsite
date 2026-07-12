@@ -38,6 +38,7 @@ from app.api.regular_tasks import router as regular_tasks_router  # /regular-tas
 from app.api.admin_router import router as admin_router
 from app.api.personnel_admin_router import router as personnel_admin_router
 from app.api.personnel_migration_router import router as personnel_migration_router
+from app.operational_orders.router import router as operational_orders_router
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -118,6 +119,7 @@ app.include_router(admin_router)
 app.include_router(personnel_admin_router)
 # PMF-3A — personnel migration draft API
 app.include_router(personnel_migration_router)
+app.include_router(operational_orders_router)
 
 # -----------------------
 # Routers (internal)

@@ -11,6 +11,7 @@ from app.document_engine.value_objects.lifecycle import (
     DocumentLifecycleState,
     VoidKind,
 )
+from app.document_engine.value_objects.drafting import DraftingPath
 from app.document_engine.value_objects.localization import LocaleCode, StalenessState
 from app.document_engine.value_objects.provenance import TextSourceType
 
@@ -20,6 +21,7 @@ __all__ = [
     "DocumentKind",
     "DocumentLifecycleState",
     "DocumentSpecialization",
+    "DraftingPath",
     "LocaleCode",
     "StalenessState",
     "TextSourceType",

@@ -1,0 +1,7 @@
+test_file,area,coverage
+tests/operational_orders/test_oo_imp_001_schema.py,migration,tables indexes PO unchanged
+tests/operational_orders/test_draft_intake_service.py,service,RU/KK paths author immutability provenance validation gate
+tests/operational_orders/test_draft_intake_api.py,api,CRUD accept blocks effective validate ready auth errors
+tests/document_engine/test_value_objects.py,ude,DraftingPath enum
+tests/document_engine/*,regression,147 UDE tests
+tests/personnel_orders/characterization/*,regression,42 PO characterization tests

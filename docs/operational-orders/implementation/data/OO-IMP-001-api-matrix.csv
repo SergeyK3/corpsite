@@ -1,0 +1,10 @@
+method,path,service_function,auth
+POST,/api/operational-orders/draft-workspaces,create_submission,INTAKE_CREATE or privileged
+GET,/api/operational-orders/draft-workspaces,list_workspaces,creator scope or INTAKE_OPERATE
+GET,/api/operational-orders/draft-workspaces/{id},get_workspace,read access
+POST,/api/operational-orders/draft-workspaces/{id}/accept,accept_submission,operate access
+POST,/api/operational-orders/draft-workspaces/{id}/blocks,add_draft_block,operate access
+PATCH,/api/operational-orders/draft-workspaces/{id}/blocks/{block_id},update_workspace_effective_text,operate access
+POST,/api/operational-orders/draft-workspaces/{id}/validate,run_intake_validation,read access
+POST,/api/operational-orders/draft-workspaces/{id}/clarifications/{id}/resolve,resolve_clarification,operate access
+POST,/api/operational-orders/draft-workspaces/{id}/ready-for-editorial,mark_ready_for_editorial,operate access

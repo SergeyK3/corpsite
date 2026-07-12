@@ -91,6 +91,7 @@ WP series defining the **Unified Document Engine (UDE)** shared architecture for
 | **UDE-010** | **Shared Editorial & Localization Runtime** | **Complete (local)** | [UDE-010-shared-editorial-runtime.md](./UDE-010-shared-editorial-runtime.md) |
 | **UDE-011** | **Shared Activation & Lifecycle Runtime** | **Complete (local)** | [UDE-011-shared-activation-and-lifecycle-runtime.md](./UDE-011-shared-activation-and-lifecycle-runtime.md) |
 | **UDE-012** | **Shared Write Runtime and Document Aggregate Foundation** | **Complete (local)** | [UDE-012-shared-write-runtime.md](./UDE-012-shared-write-runtime.md) |
+| — | **OO-IMP-001 Operational Orders Intake (first UDE consumer)** | **Complete (local)** | [`../operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md`](../operational-orders/implementation/OO-IMP-001-submitted-text-intake-mvp.md) |
 
 ---
 
@@ -161,14 +162,30 @@ UDE-007 through UDE-012 deliver the full Shared Runtime stack:
 | Editorial (UDE-010) | `DocumentEngineEditorialFacade` |
 | Lifecycle (UDE-011) | `DocumentEngineLifecycleFacade` |
 | Write (UDE-012) | `DocumentEngineWriteFacade` |
+| **OO Intake (OO-IMP-001)** | **First native consumer — contracts only; no write facade** |
 
-## Next: OO-IMP-001
+## OO-IMP-001 Complete
 
-**OO-IMP-001 — Operational Orders Implementation**
+**OO-IMP-001 — Submitted-text Intake MVP**
 
-- Wire `DocumentEngineWriteFacade` as OO consumer entry
-- Add persistence and API in OO scope — not Shared Runtime
-- No additional Shared Runtime WPs required
+- First Operational Orders production WP
+- First native Shared UDE consumer (`LocaleCode`, `TextSourceType`, `ValidationResult`, `PartyReference`, `DraftingPath`)
+- OO-scoped persistence and API — not in Shared Runtime
+- `DocumentEngineWriteFacade` **not** invoked at intake stage
+- Personnel Orders behavior unchanged
+
+**Next:** OO-IMP-002 — Content Confirmation and Translation Workflow
+
+---
+
+## Next: OO-IMP-002
+
+**OO-IMP-002 — Content Confirmation and Translation Workflow**
+
+- Content confirmation extension point
+- KK translation/review workflow
+- OO read adapter (UDE-008 pattern)
+- Editorial runtime handoff from READY_FOR_EDITORIAL
 
 ---
 

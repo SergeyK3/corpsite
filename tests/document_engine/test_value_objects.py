@@ -17,6 +17,7 @@ from app.document_engine.value_objects.lifecycle import (
     DocumentLifecycleState,
     VoidKind,
 )
+from app.document_engine.value_objects.drafting import DraftingPath
 from app.document_engine.value_objects.localization import LocaleCode, StalenessState
 from app.document_engine.value_objects.provenance import TextSourceType
 
@@ -69,6 +70,7 @@ def test_document_id_is_immutable() -> None:
             ),
         ),
         (TextSourceType, ("GENERATED", "OVERRIDE", "SUBMITTED", "IMPORTED")),
+        (DraftingPath, ("SUBMITTED_TEXT", "OPERATOR_COMPOSED", "IMPORTED")),
     ],
 )
 def test_enum_members_are_str_enums(enum_cls, members) -> None:

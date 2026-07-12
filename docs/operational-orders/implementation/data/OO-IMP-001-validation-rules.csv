@@ -1,0 +1,16 @@
+code,category,severity_intake,severity_ready_gate,message
+OI001,Metadata,ERROR,ERROR,Initiator required
+OI002,Metadata,ERROR,ERROR,Content author required
+OI003,Metadata,ERROR,ERROR,Submitting unit required
+OI004,Structure,ERROR,ERROR,At least one submitted text block required
+OI005,Structure,ERROR,ERROR,Locale required for text block
+OI006,Provenance,ERROR,ERROR,Source type required
+OI007,Ownership,ERROR,ERROR,Record creator required
+OI008,Metadata,WARNING,WARNING,Title missing
+OI009,Localization,WARNING,ERROR,Russian locale missing
+OI010,Localization,WARNING,ERROR,Kazakh locale missing
+OI011,Provenance,WARNING,ERROR,Provenance incomplete
+OI012,Structure,ERROR,ERROR,Duplicate block sequence
+OI013,Structure,ERROR,ERROR,Empty submitted text
+OI014,Clarification,ERROR,ERROR,Unresolved blocking clarification
+OI015,Concurrency,ERROR,ERROR,Workspace version conflict
