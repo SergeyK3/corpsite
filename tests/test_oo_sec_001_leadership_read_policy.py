@@ -121,7 +121,6 @@ def _ensure_oo_sec_001_role_grants() -> None:
                 CROSS JOIN public.roles r
                 WHERE ar.code = '{_OO_READ_PERMISSION}'
                   AND ar.is_active = TRUE
-                  AND COALESCE(r.is_active, TRUE) = TRUE
                   AND r.code IN ({codes_sql})
                   AND NOT EXISTS (
                       SELECT 1
