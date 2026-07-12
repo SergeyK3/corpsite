@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { MeInfo } from "./types";
 import { canSeeSysadminCabinetNav } from "./adminNav";
 import {
+  buildDirectorySidebarNavItems,
   buildPersonnelSidebarNavItems,
   buildVisibilityDirectoryNavItems,
   canSeeHrProcessesNav,
@@ -124,6 +125,36 @@ describe("personnelNav", () => {
     it("HR head visibility shell matches sysadmin personnel split without directory extras", () => {
       const items = buildVisibilityDirectoryNavItems(hrManager);
       expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы"]);
+    });
+
+    it("Operational Orders is a sibling node, not nested under HR personnel items", () => {
+      const personnelOnly = buildPersonnelSidebarNavItems(hrManager);
+      expect(personnelOnly.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы"]);
+      expect(personnelOnly.some((item) => item.title === "Производственные приказы")).toBe(false);
+
+      const withOo = buildDirectorySidebarNavItems({
+        ...hrManager,
+        has_operational_orders_read: true,
+      });
+      expect(withOo.map((item) => item.title)).toEqual([
+        "Персонал",
+        "Кадровые процессы",
+        "Производственные приказы",
+      ]);
+      expect(withOo[2]?.iconId).toBe("operational-orders");
+    });
+
+    it("visibility user with OO read sees OO after personnel and before contacts", () => {
+      const items = buildVisibilityDirectoryNavItems({
+        ...headWithVisibility,
+        has_operational_orders_read: true,
+      });
+      expect(items.map((item) => item.title)).toEqual([
+        "Персонал",
+        "Производственные приказы",
+        "Контакты",
+        "Должности",
+      ]);
     });
 
     it("nav item constants are not cross-wired", () => {

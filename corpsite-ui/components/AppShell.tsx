@@ -21,8 +21,9 @@ import {
   hasPersonnelVisibility,
   shouldShowOrgUnitsPanel,
 } from "@/lib/visibilityNav";
+import OperationalOrdersNavIcon from "./OperationalOrdersNavIcon";
 import {
-  buildPersonnelSidebarNavItems,
+  buildDirectorySidebarNavItems,
   buildVisibilityDirectoryNavItems,
   HR_PROCESSES_NAV_ITEM,
   isHrProcessesRoute,
@@ -32,6 +33,7 @@ import {
   shouldShowPrimaryAdminNavItem,
 } from "@/lib/personnelNav";
 import {
+  isOperationalOrdersRoute,
   OPERATIONAL_ORDERS_NAV_ITEM,
 } from "@/lib/operationalOrdersNav";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
@@ -50,7 +52,13 @@ type NavItem = {
   href: string;
   title: string;
   matchPrefixes?: string[];
+  iconId?: "operational-orders";
 };
+
+function renderNavIcon(iconId: NavItem["iconId"]) {
+  if (iconId === "operational-orders") return <OperationalOrdersNavIcon className="h-4 w-4 shrink-0 opacity-80" />;
+  return null;
+}
 
 const PRIMARY_ADMIN_NAV: NavItem[] = [
   {
@@ -165,13 +173,14 @@ function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] })
             key={`${it.href}::${it.title}`}
             href={it.href}
             className={[
-              "block rounded-lg border px-2.5 py-1 text-sm leading-tight transition",
+              "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-sm leading-tight transition",
               active
                 ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
                 : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700",
             ].join(" ")}
           >
-            {it.title}
+            {renderNavIcon(it.iconId)}
+            <span>{it.title}</span>
           </Link>
         );
       })}
@@ -300,13 +309,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }, [isAdmin, me, showPersonnelIdentityOperationsNav, showPersonnelLifecycleNav, showSysadminNav]);
 
+  const directoryNavItems = useMemo(() => {
+    return buildDirectorySidebarNavItems(me, {
+      includeTasksReadOnly: canViewPersonnelTasksReadOnly(me),
+      includeVisibilityExtras: showPersonnelVisibility,
+    });
+  }, [me, showPersonnelVisibility]);
+
   const visibilityNavItems = useMemo(() => {
     return buildVisibilityDirectoryNavItems(me, {
       includeTasksReadOnly: canViewPersonnelTasksReadOnly(me),
     });
   }, [me]);
 
-  const hrDirectoryNavItems = useMemo(() => buildPersonnelSidebarNavItems(me), [me]);
+  const showDirectoryOnlySidebar =
+    !isAdmin &&
+    !showPersonnelVisibility &&
+    directoryNavItems.length > 0 &&
+    (isHrProcessesRoute(pathname) || isPersonnelDirectoryRoute(pathname) || isOperationalOrdersRoute(pathname));
 
   const forbiddenNonAdminRoute =
     !loading && !!me && !canAccessDirectoryRoute(pathname, me) && isForbiddenAdminRoute(pathname, me);
@@ -324,11 +344,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     showPersonnelLifecycleNav &&
     (isPersonnelLifecycleRoute(pathname) || isPersonnelIdentityOperationsRoute(pathname));
 
-  const showHrDirectoryOnly =
-    !isAdmin &&
-    !showPersonnelVisibility &&
-    hrDirectoryNavItems.length > 0 &&
-    (isHrProcessesRoute(pathname) || isPersonnelDirectoryRoute(pathname));
+  const showHrDirectoryOnly = showDirectoryOnlySidebar;
 
   useEffect(() => {
     if (isLogin || loading || isPrintPage) return;
@@ -458,7 +474,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <aside className="space-y-2.5">
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 <div className="space-y-1">
-                  <SidebarNav pathname={pathname} items={hrDirectoryNavItems} />
+                  <SidebarNav pathname={pathname} items={directoryNavItems} />
                 </div>
               </div>
             </aside>

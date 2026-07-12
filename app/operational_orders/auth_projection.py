@@ -53,6 +53,11 @@ def build_operational_orders_permissions(user: dict[str, Any]) -> dict[str, bool
 
 
 def has_any_operational_orders_read(user: dict[str, Any]) -> bool:
+    """Navigation/read projection — true when user can open the OO section (OO-UI-001B).
+
+    Minimum recommended grant: OPERATIONAL_ORDERS_INTAKE_READ.
+    Also true for operate, promote, or signature-readiness read (broader read family).
+    """
     perms = build_operational_orders_permissions(user)
     return any(
         perms.get(key)

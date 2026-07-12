@@ -8,12 +8,15 @@ export type OperationalOrdersNavItem = {
   href: string;
   title: string;
   matchPrefixes: string[];
+  /** Sidebar icon id — rendered by AppShell. */
+  iconId?: "operational-orders";
 };
 
 export const OPERATIONAL_ORDERS_NAV_ITEM: OperationalOrdersNavItem = {
   href: OPERATIONAL_ORDERS_NAV_HREF,
   title: "Производственные приказы",
   matchPrefixes: ["/directory/operational-orders"],
+  iconId: "operational-orders",
 };
 
 export function isOperationalOrdersRoute(pathname: string): boolean {

@@ -19,6 +19,7 @@ import { WORKSPACE_STAGE_FILTER_OPTIONS, DOCUMENT_STATUS_FILTER_OPTIONS } from "
 import { canSeeOperationalOrdersNav } from "../_lib/permissions";
 import WorkspacesTable from "./WorkspacesTable";
 import DocumentsTable from "./DocumentsTable";
+import AccessDeniedPanel from "./AccessDeniedPanel";
 
 type TabKey = "workspaces" | "documents";
 
@@ -104,11 +105,7 @@ export default function OperationalOrdersPageClient() {
   }
 
   if (me && !canSeeOperationalOrdersNav(me)) {
-    return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-800">
-        Нет доступа к разделу «Производственные приказы».
-      </div>
-    );
+    return <AccessDeniedPanel me={me} />;
   }
 
   return (

@@ -19,6 +19,7 @@
 | **OO-IMP-004** | **Document Lifecycle: CREATED → READY_FOR_SIGNATURE** | **Complete (local)** |
 | **OO-UI-001** | **Developer / Tester UI** | **Complete (local, uncommitted)** |
 | **OO-UI-001A** | **Workspace Experience Polish** | **Complete (local, uncommitted)** |
+| **OO-UI-001B** | **Navigation & Access Integration** | **Complete (local, uncommitted)** |
 
 Records:
 - [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
@@ -29,6 +30,7 @@ Records:
 - [`implementation/OO-IMP-004-ready-for-signature.md`](implementation/OO-IMP-004-ready-for-signature.md)
 - [`implementation/OO-UI-001-developer-tester-ui.md`](implementation/OO-UI-001-developer-tester-ui.md)
 - [`implementation/OO-UI-001A-workspace-experience-polish.md`](implementation/OO-UI-001A-workspace-experience-polish.md)
+- [`implementation/OO-UI-001B-navigation-access-integration.md`](implementation/OO-UI-001B-navigation-access-integration.md)
 
 Runtime package: `app/operational_orders/`  
 API: `/api/operational-orders/draft-workspaces`, `/api/operational-orders/workspaces/{id}/promote`, `/api/operational-orders/documents`, lifecycle endpoints under `/documents/{id}/`  

@@ -31,15 +31,7 @@ export function getOperationalOrdersPermissions(
 
 export function canSeeOperationalOrdersNav(me: MeInfo | null | undefined): boolean {
   if (me?.is_privileged) return true;
-  if (me?.has_operational_orders_read) return true;
-  const perms = me?.operational_orders_permissions;
-  if (!perms) return false;
-  return Boolean(
-    perms.intake_read ||
-      perms.intake_operate ||
-      perms.promote ||
-      perms.signature_readiness_read,
-  );
+  return me?.has_operational_orders_read === true;
 }
 
 export function canOperateWorkspace(

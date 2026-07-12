@@ -41,6 +41,7 @@ export type PersonnelNavItem = {
   href: string;
   title: string;
   matchPrefixes: string[];
+  iconId?: "operational-orders";
 };
 
 /** Read-only «Персонал» sidebar item (ADR-045). */
@@ -69,12 +70,43 @@ export function isHrProcessesNavItem(item: Pick<PersonnelNavItem, "href" | "titl
   );
 }
 
-/** Personnel + HR items for any shell that needs ADR-045 directory split. */
+/** Personnel + HR items only — Operational Orders is a separate document domain (OO-UI-001B). */
 export function buildPersonnelSidebarNavItems(me: MeInfo | null | undefined): PersonnelNavItem[] {
   const items: PersonnelNavItem[] = [];
   if (canSeePersonnelDirectoryNav(me)) items.push(PERSONNEL_DIRECTORY_NAV_ITEM);
   if (canSeeHrProcessesNav(me)) items.push(HR_PROCESSES_NAV_ITEM);
-  if (canSeeOperationalOrdersNav(me)) items.push(OPERATIONAL_ORDERS_NAV_ITEM);
+  return items;
+}
+
+export function isOperationalOrdersNavItem(item: Pick<PersonnelNavItem, "href">): boolean {
+  return item.href === OPERATIONAL_ORDERS_NAV_ITEM.href;
+}
+
+/**
+ * Directory sidebar: Персонал → Кадровые процессы → Производственные приказы → Контакты → Должности.
+ * Operational Orders is a sibling top-level node, not nested under HR.
+ */
+export function buildDirectorySidebarNavItems(
+  me: MeInfo | null | undefined,
+  opts?: { includeTasksReadOnly?: boolean; includeVisibilityExtras?: boolean },
+): VisibilityDirectoryNavItem[] {
+  const items: VisibilityDirectoryNavItem[] = [];
+  if (opts?.includeTasksReadOnly) {
+    items.push({
+      href: "/tasks",
+      title: "Задачи (просмотр)",
+      matchPrefixes: ["/tasks"],
+    });
+  }
+  items.push(...buildPersonnelSidebarNavItems(me));
+  if (canSeeOperationalOrdersNav(me)) {
+    items.push(OPERATIONAL_ORDERS_NAV_ITEM);
+  }
+  if (opts?.includeVisibilityExtras !== false) {
+    if (me?.show_org_sidebar === true || me?.has_personnel_visibility === true) {
+      items.push(...VISIBILITY_DIRECTORY_EXTRAS);
+    }
+  }
   return items;
 }
 
@@ -97,20 +129,10 @@ export function buildVisibilityDirectoryNavItems(
   me: MeInfo | null | undefined,
   opts?: { includeTasksReadOnly?: boolean },
 ): VisibilityDirectoryNavItem[] {
-  const items: VisibilityDirectoryNavItem[] = [];
-  if (opts?.includeTasksReadOnly) {
-    items.push({
-      href: "/tasks",
-      title: "Задачи (просмотр)",
-      matchPrefixes: ["/tasks"],
-    });
-  }
-  items.push(...buildPersonnelSidebarNavItems(me));
-  // E1 visibility users keep read-only directory extras; HR operational contour does not.
-  if (me?.show_org_sidebar === true || me?.has_personnel_visibility === true) {
-    items.push(...VISIBILITY_DIRECTORY_EXTRAS);
-  }
-  return items;
+  return buildDirectorySidebarNavItems(me, {
+    includeTasksReadOnly: opts?.includeTasksReadOnly,
+    includeVisibilityExtras: true,
+  });
 }
 
 export function shouldShowPrimaryAdminNavItem(
@@ -125,7 +147,7 @@ export function shouldShowPrimaryAdminNavItem(
   if (item.href === "/admin/system") return opts.showSysadminNav;
   if (isPersonnelDirectoryNavItem(item)) return canSeePersonnelDirectoryNav(me);
   if (isHrProcessesNavItem(item)) return canSeeHrProcessesNav(me);
-  if (item.href === OPERATIONAL_ORDERS_NAV_ITEM.href) return canSeeOperationalOrdersNav(me);
+  if (isOperationalOrdersNavItem(item)) return canSeeOperationalOrdersNav(me);
   return opts.isAdmin;
 }
 

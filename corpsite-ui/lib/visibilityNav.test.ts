@@ -8,6 +8,7 @@ import {
   hasPersonnelVisibility,
   shouldShowOrgUnitsPanel,
 } from "./visibilityNav";
+import { canSeeOperationalOrdersNav, isOperationalOrdersRoute } from "./operationalOrdersNav";
 import { buildVisibilityDirectoryNavItems } from "./personnelNav";
 
 describe("visibilityNav", () => {
@@ -62,5 +63,17 @@ describe("visibilityNav", () => {
     expect(canAccessDirectoryRoute("/dashboards", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/education", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/dashboards", observerPlain)).toBe(true);
+  });
+
+  it("canAccessDirectoryRoute gates operational orders by OO projection, not HR", () => {
+    expect(canAccessDirectoryRoute("/directory/operational-orders", hrHead)).toBe(false);
+    expect(
+      canAccessDirectoryRoute("/directory/operational-orders/workspaces/1", {
+        ...hrHead,
+        has_operational_orders_read: true,
+      }),
+    ).toBe(true);
+    expect(isOperationalOrdersRoute("/directory/operational-orders")).toBe(true);
+    expect(canSeeOperationalOrdersNav(hrHead)).toBe(false);
   });
 });
