@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
-import { createPersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
+import { createPersonnelOrderItem, updatePersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
 import { loadScopedPositionOptions } from "@/lib/taskOrgFilters";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
@@ -155,6 +155,21 @@ beforeEach(() => {
     prints: [],
     events: [],
   });
+  vi.mocked(updatePersonnelOrderItem).mockResolvedValue({
+    order: {
+      order_id: 1,
+      order_type_code: "HIRE",
+      order_class: "SIMPLE",
+      status: "DRAFT",
+      source_mode: "PAPER",
+      created_by: 1,
+    },
+    items: [],
+    localized_texts: [],
+    attachments: [],
+    prints: [],
+    events: [],
+  });
 });
 
 async function selectEmployeeFromSearch() {
@@ -225,15 +240,15 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
     expect(screen.getByTestId("personnel-order-current-placement")).toBeInTheDocument();
     expect(screen.getByTestId("personnel-order-target-placement")).toBeInTheDocument();
     expect(screen.getByText("Новое назначение")).toBeInTheDocument();
-    expect(screen.getByLabelText("Новое подразделение")).toBeInTheDocument();
-    expect(screen.getByText("Новая должность")).toBeInTheDocument();
+    expect(screen.getByLabelText("Подразделение")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-position-select")).toBeInTheDocument();
   });
 
   it("clears target fields when employee changes", async () => {
     render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
     await selectEmployeeFromSearch();
 
-    fireEvent.change(screen.getByTestId("mock-org-unit-Новое подразделение"), {
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
       target: { value: "10" },
     });
     await waitFor(() => {
@@ -263,7 +278,7 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
     fireEvent.click(await screen.findByTestId("personnel-order-employee-option-200"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("mock-org-unit-Новое подразделение")).toHaveValue("");
+      expect(screen.getByTestId("mock-org-unit-Подразделение")).toHaveValue("");
       expect(screen.getByTestId("personnel-order-position-select")).toHaveValue("");
       expect(screen.getByTestId("personnel-order-target-rate-input")).toHaveValue("");
       expect(screen.getByTestId("personnel-order-current-org-unit")).toHaveTextContent("Отделение B");
@@ -276,7 +291,7 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
     fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
       target: { value: "1" },
     });
-    fireEvent.change(screen.getByTestId("mock-org-unit-Новое подразделение"), {
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
       target: { value: "10" },
     });
 
@@ -352,25 +367,39 @@ describe("PersonnelOrderItemEditor RATE_CHANGE", () => {
   });
 });
 
-describe("PersonnelOrderItemEditor HIRE legacy", () => {
-  it("renders legacy hire placement when HIRE is selected", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+describe("PersonnelOrderItemEditor HIRE", () => {
+  it("renders hire placement with new-employee option when HIRE is selected", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
 
-    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
-      target: { value: "HIRE" },
-    });
-
+    expect(screen.getByTestId("personnel-order-item-type-select")).toHaveValue("HIRE");
     expect(screen.getByTestId("personnel-order-hire-legacy")).toBeInTheDocument();
-    expect(screen.getByTestId("personnel-order-hire-legacy")).toHaveTextContent(/WP-PO-HIRE-001/);
+    expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeEnabled();
     expect(screen.queryByTestId("personnel-order-current-placement")).not.toBeInTheDocument();
   });
 
-  it("uses status=all for HIRE employee search", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+  it("allows saving hire item without employee when pending new employee is checked", async () => {
+    const onChanged = vi.fn();
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={onChanged} />);
 
-    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
-      target: { value: "HIRE" },
+    fireEvent.click(screen.getByTestId("personnel-order-pending-new-employee"));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить пункт" }));
+
+    await waitFor(() => {
+      expect(createPersonnelOrderItem).toHaveBeenCalled();
     });
+
+    const body = vi.mocked(createPersonnelOrderItem).mock.calls[0]?.[1] as {
+      item_type_code: string;
+      employee_id: number | null;
+    };
+    expect(body.item_type_code).toBe("HIRE");
+    expect(body.employee_id).toBeNull();
+  });
+
+  it("uses status=all for HIRE employee search", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+
     fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), {
       target: { value: "Ива" },
     });
@@ -385,6 +414,165 @@ describe("PersonnelOrderItemEditor HIRE legacy", () => {
       },
       { timeout: 2000 },
     );
+  });
+
+  it("disables pending-new-employee checkbox when editing saved HIRE with employee_id", async () => {
+    render(
+      <PersonnelOrderItemEditor
+        orderId={1}
+        orderTypeCode="HIRE"
+        items={[
+          {
+            item_id: 21,
+            item_number: 1,
+            item_type_code: "HIRE",
+            item_status: "ACTIVE",
+            employee_id: 138,
+            employee_name: "Макибаева Акмарал Сабитовна",
+            effective_date: "2026-03-01",
+            payload: { org_unit_id: 10, position_id: 77, employment_rate: 1 },
+          },
+        ]}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Изменить" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeDisabled();
+    });
+    expect(screen.getByTestId("personnel-order-pending-new-employee-reset-blocked")).toHaveTextContent(
+      "Сброс сотрудника в сохранённом пункте пока не поддерживается.",
+    );
+    expect(screen.getByTestId("personnel-order-pending-new-employee")).not.toBeChecked();
+    expect(screen.getByTestId("personnel-order-employee-id-input")).toHaveValue("138");
+
+    fireEvent.click(screen.getByTestId("personnel-order-pending-new-employee"));
+    fireEvent.change(screen.getByTestId("personnel-order-employee-id-input"), { target: { value: "" } });
+    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), {
+      target: { value: "" },
+    });
+
+    expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeDisabled();
+    expect(screen.getByTestId("personnel-order-pending-new-employee")).not.toBeChecked();
+  });
+
+  it("allows assigning employee when editing saved HIRE without employee_id", async () => {
+    const onChanged = vi.fn();
+    render(
+      <PersonnelOrderItemEditor
+        orderId={1}
+        orderTypeCode="HIRE"
+        items={[
+          {
+            item_id: 22,
+            item_number: 1,
+            item_type_code: "HIRE",
+            item_status: "ACTIVE",
+            employee_id: null,
+            employee_name: null,
+            effective_date: "2026-03-01",
+            payload: { org_unit_id: 10, position_id: 77, employment_rate: 1 },
+          },
+        ]}
+        onChanged={onChanged}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Изменить" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeEnabled();
+      expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeChecked();
+    });
+
+    fireEvent.click(screen.getByTestId("personnel-order-pending-new-employee"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-pending-new-employee")).not.toBeChecked();
+      expect(screen.getByTestId("personnel-order-employee-search-input")).toBeInTheDocument();
+    });
+
+    vi.mocked(getEmployees).mockResolvedValue({
+      items: [activeEmployee],
+      total: 1,
+    });
+    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), {
+      target: { value: "Маки" },
+    });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-138"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-pending-new-employee")).not.toBeChecked();
+      expect(screen.getByTestId("personnel-order-employee-id-input")).toHaveValue("138");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+
+    await waitFor(() => {
+      expect(updatePersonnelOrderItem).toHaveBeenCalledWith(1, 22, expect.any(Object));
+    });
+
+    const body = vi.mocked(updatePersonnelOrderItem).mock.calls[0]?.[2] as {
+      employee_id: number | null;
+    };
+    expect(body.employee_id).toBe(138);
+  });
+
+  it("keeps pending-new-employee disabled when item type changes to HIRE on saved employee", async () => {
+    render(
+      <PersonnelOrderItemEditor
+        orderId={1}
+        orderTypeCode="COMPOSITE"
+        items={[
+          {
+            item_id: 23,
+            item_number: 1,
+            item_type_code: "TRANSFER",
+            item_status: "ACTIVE",
+            employee_id: 138,
+            employee_name: "Макибаева Акмарал Сабитовна",
+            effective_date: "2026-01-01",
+            payload: { to_org_unit_id: 73, to_position_id: 86, to_rate: 1 },
+          },
+        ]}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Изменить" }));
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
+      target: { value: "HIRE" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeDisabled();
+    });
+    expect(screen.getByTestId("personnel-order-pending-new-employee-reset-blocked")).toBeInTheDocument();
+  });
+});
+
+describe("PersonnelOrderItemEditor non-HIRE pending guard", () => {
+  it("does not show pending-new-employee checkbox for TRANSFER", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    expect(screen.queryByTestId("personnel-order-pending-new-employee")).not.toBeInTheDocument();
+  });
+
+  it("does not show pending-new-employee checkbox for TERMINATION", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
+      target: { value: "TERMINATION" },
+    });
+    expect(screen.queryByTestId("personnel-order-pending-new-employee")).not.toBeInTheDocument();
+  });
+
+  it("does not show pending-new-employee checkbox for RATE_CHANGE", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
+      target: { value: "RATE_CHANGE" },
+    });
+    expect(screen.queryByTestId("personnel-order-pending-new-employee")).not.toBeInTheDocument();
   });
 });
 

@@ -9,6 +9,12 @@ import {
   type PersonnelOrderDetailResponse,
   type PersonnelOrderHeader,
 } from "../_lib/personnelOrdersApi.client";
+import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
+import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
+
+const FIELD_LABEL_CLASS = "mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200";
+const FIELD_INPUT_CLASS =
+  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950";
 
 type Props = {
   order: PersonnelOrderHeader;
@@ -62,41 +68,31 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
   }
 
   return (
-    <form className="space-y-3" onSubmit={handleSave} data-testid="personnel-order-header-editor">
-      <div className="grid gap-3 sm:grid-cols-2">
+    <form className="space-y-4" onSubmit={handleSave} data-testid="personnel-order-header-editor">
+      <div
+        className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/30"
+        data-testid="personnel-order-type-block"
+      >
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            № приказа (из журнала)
-          </label>
-          <input
-            value={orderNumber}
-            onChange={(e) => setOrderNumber(e.target.value)}
-            disabled={disabled}
-            placeholder="Заполнить перед регистрацией"
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950"
-          />
+          <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Тип приказа</div>
+          <p className="mt-1 text-xs text-zinc-500">
+            Классификация приказа в журнале. Тип пункта задаётся отдельно для каждой строки ниже.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <PersonnelOrderTypeBadge typeCode={orderTypeCode} />
+          <span className="text-sm text-zinc-600 dark:text-zinc-400">
+            {personnelOrderTypeLabel(orderTypeCode)}
+          </span>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Дата приказа
-          </label>
-          <input
-            type="date"
-            value={orderDate}
-            onChange={(e) => setOrderDate(e.target.value)}
-            disabled={disabled}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Тип
-          </label>
+          <label className={FIELD_LABEL_CLASS}>Изменить тип приказа</label>
           <select
             value={orderTypeCode}
             onChange={(e) => setOrderTypeCode(e.target.value)}
             disabled={disabled}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950"
+            data-testid="personnel-order-type-select"
+            className={FIELD_INPUT_CLASS}
           >
             {PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -108,29 +104,51 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
             ) : null}
           </select>
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Реквизиты</div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={FIELD_LABEL_CLASS}>№ приказа (из журнала)</label>
+            <input
+              value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)}
+              disabled={disabled}
+              placeholder="Заполнить перед регистрацией"
+              className={FIELD_INPUT_CLASS}
+            />
+          </div>
+          <div>
+            <label className={FIELD_LABEL_CLASS}>Дата приказа</label>
+            <input
+              type="date"
+              value={orderDate}
+              onChange={(e) => setOrderDate(e.target.value)}
+              disabled={disabled}
+              className={FIELD_INPUT_CLASS}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={FIELD_LABEL_CLASS}>Основание</label>
+            <input
+              value={basisSummary}
+              onChange={(e) => setBasisSummary(e.target.value)}
+              disabled={disabled}
+              className={FIELD_INPUT_CLASS}
+            />
+          </div>
+        </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Основание
-          </label>
-          <input
-            value={basisSummary}
-            onChange={(e) => setBasisSummary(e.target.value)}
+          <label className={FIELD_LABEL_CLASS}>Комментарий</label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
             disabled={disabled}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950"
+            rows={2}
+            className={FIELD_INPUT_CLASS}
           />
         </div>
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Комментарий
-        </label>
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          disabled={disabled}
-          rows={2}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950"
-        />
       </div>
 
       {error ? (

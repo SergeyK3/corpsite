@@ -1,6 +1,6 @@
 import type { EmployeeDTO, EmployeesResponse } from "@/app/directory/employees/_lib/types";
 
-import { requiresEmployeeForFormType } from "./personnelOrderItemFormRegistry";
+import { requiresEmployeeForFormType, allowsPendingNewEmployee } from "./personnelOrderItemFormRegistry";
 
 export type EmployeeSearchOption = {
   employee_id: number;
@@ -68,7 +68,9 @@ export function mapEmployeesResponseToSearchOptions(
 export function requireEmployeeIdForItemType(
   itemTypeCode: string,
   employeeId: string | number | null | undefined,
+  options?: { pendingNewEmployee?: boolean },
 ): string | null {
+  if (allowsPendingNewEmployee(itemTypeCode) && options?.pendingNewEmployee) return null;
   if (!requiresEmployeeForFormType(itemTypeCode)) return null;
   const numeric = Number(employeeId);
   if (Number.isFinite(numeric) && numeric > 0) return null;

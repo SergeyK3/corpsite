@@ -226,15 +226,21 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
 
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Заголовок</h3>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <PersonnelOrderTypeBadge typeCode={order.order_type_code} />
-                  <PersonnelOrderStatusBadge status={order.status} />
-                  {applied ? <PersonnelOrderAppliedBadge /> : null}
-                </div>
                 {editable ? (
                   <PersonnelOrderHeaderEditor order={order} onSaved={handleChanged} />
                 ) : (
-                  <dl className="grid gap-3 sm:grid-cols-2">
+                  <>
+                    <div className="mb-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Тип приказа
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <PersonnelOrderTypeBadge typeCode={order.order_type_code} />
+                        <PersonnelOrderStatusBadge status={order.status} />
+                        {applied ? <PersonnelOrderAppliedBadge /> : null}
+                      </div>
+                    </div>
+                    <dl className="grid gap-3 sm:grid-cols-2">
                     <Field label="№ приказа" value={formatPersonnelOrderNumber(order.order_number)} />
                     <Field label="Дата приказа" value={formatPersonnelOrderDate(order.order_date)} />
                     <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
@@ -248,13 +254,18 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
                       </>
                     ) : null}
                   </dl>
+                  </>
                 )}
               </section>
 
               <section>
-                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Пункты</h3>
+                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Пункты приказа</h3>
+                <p className="mb-3 text-xs text-zinc-500">
+                  Каждый пункт имеет собственный тип. Тип пункта не дублирует тип приказа в заголовке.
+                </p>
                 <PersonnelOrderItemEditor
                   orderId={order.order_id}
+                  orderTypeCode={order.order_type_code}
                   items={detail?.items || []}
                   disabled={!editable}
                   onChanged={handleChanged}

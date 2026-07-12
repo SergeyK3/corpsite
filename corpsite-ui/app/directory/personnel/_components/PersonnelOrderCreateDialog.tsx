@@ -60,10 +60,13 @@ export default function PersonnelOrderCreateDialog({ open, onClose, onCreated }:
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/30">
+            <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Тип приказа
             </label>
+            <p className="mb-2 text-xs text-zinc-500">
+              Определяет назначение приказа. Типы пунктов настраиваются после создания черновика.
+            </p>
             <select
               value={orderTypeCode}
               onChange={(e) => setOrderTypeCode(e.target.value)}
@@ -79,7 +82,7 @@ export default function PersonnelOrderCreateDialog({ open, onClose, onCreated }:
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Комментарий
             </label>
             <textarea

@@ -29,11 +29,17 @@ import {
   type EmployeeSearchOption,
 } from "../_lib/personnelOrderEmployeeSearch";
 import {
+  allowsPendingNewEmployee,
   detectUiItemTypeFromRecord,
   getItemFormRegistry,
   itemFormTypeLabel,
-  PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS,
+  itemFormTypeOptionsForOrder,
+  normalizeItemFormType,
+  orderTypeLabelForItemHint,
+  resolveDefaultItemFormTypeForOrder,
   resolveBackendItemTypeCode,
+  type ItemFormSection,
+  type PersonnelOrderItemFormType,
   usesActiveEmployeeSearch,
 } from "../_lib/personnelOrderItemFormRegistry";
 import {
@@ -54,6 +60,7 @@ import {
 
 type Props = {
   orderId: number;
+  orderTypeCode?: string | null;
   items: PersonnelOrderItem[];
   disabled?: boolean;
   onChanged: (detail: PersonnelOrderDetailResponse) => void;
@@ -61,15 +68,44 @@ type Props = {
 
 const ORG_SCOPE_BASE_PATH = "/directory/personnel/orders";
 
+const FIELD_LABEL_CLASS = "mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200";
+const FIELD_INPUT_CLASS =
+  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950";
+const FIELD_HINT_CLASS = "mt-1 text-xs text-zinc-500 dark:text-zinc-400";
+
 function placementValue(value: string | null | undefined): string {
   const text = String(value ?? "").trim();
   return text || "—";
 }
 
+function FormField({
+  label,
+  htmlFor,
+  hint,
+  children,
+  className = "",
+}: {
+  label: string;
+  htmlFor?: string;
+  hint?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label htmlFor={htmlFor} className={FIELD_LABEL_CLASS}>
+        {label}
+      </label>
+      {children}
+      {hint ? <p className={FIELD_HINT_CLASS}>{hint}</p> : null}
+    </div>
+  );
+}
+
 function CurrentPlacementPanel({ placement }: { placement: CurrentPlacementView }) {
   return (
     <div
-      className="sm:col-span-2 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40"
+      className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40"
       data-testid="personnel-order-current-placement"
     >
       <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -105,14 +141,24 @@ function CurrentPlacementPanel({ placement }: { placement: CurrentPlacementView 
 
 export default function PersonnelOrderItemEditor({
   orderId,
+  orderTypeCode = null,
   items,
   disabled = false,
   onChanged,
 }: Props) {
+  const defaultItemType = resolveDefaultItemFormTypeForOrder(orderTypeCode);
+  const itemTypeOptions = itemFormTypeOptionsForOrder(orderTypeCode);
+  const orderTypeHint = orderTypeLabelForItemHint(orderTypeCode);
+
   const [editingItemId, setEditingItemId] = React.useState<number | null>(null);
-  const [itemTypeCode, setItemTypeCode] = React.useState("TRANSFER");
+  /** Saved employee_id when edit started; independent of current form fields (WP-PO-UX-001A). */
+  const [editingItemSavedEmployeeId, setEditingItemSavedEmployeeId] = React.useState<number | null>(
+    null,
+  );
+  const [itemTypeCode, setItemTypeCode] = React.useState<PersonnelOrderItemFormType>(defaultItemType);
   const [employeeId, setEmployeeId] = React.useState("");
   const [employeeQuery, setEmployeeQuery] = React.useState("");
+  const [pendingNewEmployee, setPendingNewEmployee] = React.useState(false);
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
   const [currentPlacement, setCurrentPlacement] = React.useState<CurrentPlacementView | null>(null);
   const [effectiveDate, setEffectiveDate] = React.useState("");
@@ -129,12 +175,25 @@ export default function PersonnelOrderItemEditor({
   const orgScoped = isOrgScopedItemType(itemTypeCode);
   const activeOrgGroupId = formConfig?.showHirePlacement ? hireOrgGroupId : targetOrgGroupId;
   const selectedOrgUnitId = selectedOrgUnitIdFromDraft(payloadDraft, itemTypeCode);
-  const selectedPositionValue = selectedPositionIdFromDraft(payloadDraft, itemTypeCode);
   const effectiveDateLabel =
-    itemTypeCode.toUpperCase() === "TERMINATION" ? "Дата увольнения" : "Дата вступления";
+    itemTypeCode.toUpperCase() === "TERMINATION" ? "Дата увольнения" : "Дата вступления в силу";
+  const savedEmployeeIdBlocksPendingReset =
+    editingItemId != null &&
+    editingItemSavedEmployeeId != null &&
+    Number.isFinite(editingItemSavedEmployeeId) &&
+    editingItemSavedEmployeeId > 0;
+  const pendingNewEmployeeAllowed =
+    allowsPendingNewEmployee(itemTypeCode) && !savedEmployeeIdBlocksPendingReset;
+  const showEmployeePicker =
+    formConfig?.employeePicker && !(pendingNewEmployee && pendingNewEmployeeAllowed);
 
   React.useEffect(() => {
-    if (!formConfig?.employeePicker) {
+    if (editingItemId != null) return;
+    setItemTypeCode(defaultItemType);
+  }, [defaultItemType, editingItemId]);
+
+  React.useEffect(() => {
+    if (!formConfig?.employeePicker || pendingNewEmployee) {
       setEmployeeOptions([]);
       setEmployeeSearchError(null);
       return;
@@ -170,7 +229,7 @@ export default function PersonnelOrderItemEditor({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [employeeQuery, formConfig?.employeePicker, itemTypeCode]);
+  }, [employeeQuery, formConfig?.employeePicker, itemTypeCode, pendingNewEmployee]);
 
   React.useEffect(() => {
     if (!orgScoped || selectedOrgUnitId == null) {
@@ -200,11 +259,13 @@ export default function PersonnelOrderItemEditor({
     };
   }, [orgScoped, activeOrgGroupId, selectedOrgUnitId]);
 
-  function resetForm(typeCode = "TRANSFER") {
+  function resetForm(typeCode: PersonnelOrderItemFormType = defaultItemType) {
     setEditingItemId(null);
+    setEditingItemSavedEmployeeId(null);
     setItemTypeCode(typeCode);
     setEmployeeId("");
     setEmployeeQuery("");
+    setPendingNewEmployee(false);
     setCurrentPlacement(null);
     setEffectiveDate("");
     setPayloadDraft(emptyItemPayloadDraft());
@@ -215,6 +276,7 @@ export default function PersonnelOrderItemEditor({
   }
 
   async function applyEmployeeSelection(option: EmployeeSearchOption) {
+    setPendingNewEmployee(false);
     setEmployeeId(String(option.employee_id));
     setEmployeeQuery(option.full_name);
     setEmployeeOptions([]);
@@ -250,22 +312,29 @@ export default function PersonnelOrderItemEditor({
 
   async function startEdit(item: PersonnelOrderItem) {
     const uiType = detectUiItemTypeFromRecord(item);
+    const normalizedUiType = normalizeItemFormType(uiType) ?? defaultItemType;
     const draft = itemPayloadDraftFromRecord(item.payload);
+    const savedEmployeeId =
+      item.employee_id != null && Number(item.employee_id) > 0 ? Number(item.employee_id) : null;
     setEditingItemId(item.item_id);
-    setItemTypeCode(uiType);
+    setEditingItemSavedEmployeeId(savedEmployeeId);
+    setItemTypeCode(normalizedUiType);
     setEmployeeId(item.employee_id ? String(item.employee_id) : "");
     setEmployeeQuery(item.employee_name || "");
+    setPendingNewEmployee(
+      savedEmployeeId == null && allowsPendingNewEmployee(normalizedUiType),
+    );
     setEffectiveDate(item.effective_date || "");
     setPayloadDraft(draft);
     setError(null);
     setCurrentPlacement(null);
 
-    const config = getItemFormRegistry(uiType);
+    const config = getItemFormRegistry(normalizedUiType);
     if (item.employee_id && config?.showCurrentPlacement) {
       void loadCurrentPlacementByEmployeeId(item.employee_id, item.employee_name);
     }
 
-    const unitId = selectedOrgUnitIdFromDraft(draft, uiType);
+    const unitId = selectedOrgUnitIdFromDraft(draft, normalizedUiType);
     if (unitId == null) {
       setTargetOrgGroupId(null);
       setHireOrgGroupId(null);
@@ -284,14 +353,30 @@ export default function PersonnelOrderItemEditor({
     }
   }
 
-  function handleItemTypeChange(nextType: string) {
+  function handleItemTypeChange(nextType: PersonnelOrderItemFormType) {
     setItemTypeCode(nextType);
     setPayloadDraft(emptyItemPayloadDraft());
     setTargetOrgGroupId(null);
     setHireOrgGroupId(null);
     setPositions([]);
+    setPendingNewEmployee(
+      editingItemId != null &&
+        editingItemSavedEmployeeId == null &&
+        allowsPendingNewEmployee(nextType),
+    );
     setError(null);
     if (!getItemFormRegistry(nextType)?.showCurrentPlacement) {
+      setCurrentPlacement(null);
+    }
+  }
+
+  function handlePendingNewEmployeeChange(checked: boolean) {
+    if (savedEmployeeIdBlocksPendingReset) return;
+    setPendingNewEmployee(checked);
+    if (checked) {
+      setEmployeeId("");
+      setEmployeeQuery("");
+      setEmployeeOptions([]);
       setCurrentPlacement(null);
     }
   }
@@ -323,7 +408,9 @@ export default function PersonnelOrderItemEditor({
     if (disabled) return;
     setError(null);
 
-    const employeeRequiredMessage = requireEmployeeIdForItemType(itemTypeCode, employeeId);
+    const employeeRequiredMessage = requireEmployeeIdForItemType(itemTypeCode, employeeId, {
+      pendingNewEmployee: pendingNewEmployee && pendingNewEmployeeAllowed,
+    });
     if (employeeRequiredMessage) {
       setError(employeeRequiredMessage);
       return;
@@ -333,9 +420,14 @@ export default function PersonnelOrderItemEditor({
     try {
       const backendType = resolveBackendItemTypeCode(itemTypeCode);
       const employeeNumeric = Number(employeeId);
+      let resolvedEmployeeId =
+        Number.isFinite(employeeNumeric) && employeeNumeric > 0 ? employeeNumeric : null;
+      if (savedEmployeeIdBlocksPendingReset && resolvedEmployeeId == null) {
+        resolvedEmployeeId = editingItemSavedEmployeeId;
+      }
       const body = {
         item_type_code: backendType,
-        employee_id: Number.isFinite(employeeNumeric) && employeeNumeric > 0 ? employeeNumeric : null,
+        employee_id: resolvedEmployeeId,
         effective_date: effectiveDate || null,
         payload: buildItemPayload(backendType, payloadDraft),
       };
@@ -352,49 +444,61 @@ export default function PersonnelOrderItemEditor({
     }
   }
 
-  function renderTargetOrgScopeCascade(labels: {
-    unit: string;
-    position: string;
-    unitEmpty: string;
+  function renderOrgPlacementCascade(options: {
     sectionTitle: string;
+    orgGroupId: number | null;
+    onOrgGroupChange: (id: number | null) => void;
+    unitLabel: string;
+    positionLabel: string;
+    unitEmptyLabel: string;
+    testId?: string;
   }) {
+    const cascadeType = formConfig?.showHirePlacement ? "HIRE" : itemTypeCode;
     return (
-      <div
-        className="sm:col-span-2 space-y-3"
-        data-testid="personnel-order-target-placement"
-      >
+      <div className="space-y-3" data-testid={options.testId ?? "personnel-order-org-placement"}>
         <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          {labels.sectionTitle}
+          {options.sectionTitle}
         </div>
         <div data-testid="personnel-order-org-scope-cascade">
           <OrgScopeFilter
             basePath={ORG_SCOPE_BASE_PATH}
             label="Группа отделений"
-            value={targetOrgGroupId}
-            onChange={handleTargetOrgGroupChange}
+            value={options.orgGroupId}
+            onChange={options.onOrgGroupChange}
           />
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <OrgUnitScopeFilter
               basePath={ORG_SCOPE_BASE_PATH}
-              label={labels.unit}
-              allLabel={labels.unitEmpty}
-              orgGroupId={targetOrgGroupId}
-              value={selectedOrgUnitId}
-              onChange={handleOrgUnitChange}
+              label={options.unitLabel}
+              allLabel={options.unitEmptyLabel}
+              orgGroupId={options.orgGroupId}
+              value={selectedOrgUnitIdFromDraft(payloadDraft, cascadeType)}
+              onChange={(unitId) => {
+                if (formConfig?.showHirePlacement) {
+                  setPayloadDraft((prev) => setOrgUnitAndClearPosition(prev, "HIRE", unitId));
+                } else {
+                  handleOrgUnitChange(unitId);
+                }
+              }}
             />
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                {labels.position}
-              </label>
+            <FormField label={options.positionLabel}>
               <select
                 data-testid="personnel-order-position-select"
-                value={selectedPositionValue}
-                onChange={(e) => handlePositionChange(e.target.value)}
-                disabled={selectedOrgUnitId == null || positionsLoading}
-                className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+                value={selectedPositionIdFromDraft(payloadDraft, cascadeType)}
+                onChange={(e) => {
+                  if (formConfig?.showHirePlacement) {
+                    setPayloadDraft((prev) => setPositionId(prev, "HIRE", e.target.value));
+                  } else {
+                    handlePositionChange(e.target.value);
+                  }
+                }}
+                disabled={
+                  selectedOrgUnitIdFromDraft(payloadDraft, cascadeType) == null || positionsLoading
+                }
+                className={FIELD_INPUT_CLASS}
               >
                 <option value="">
-                  {selectedOrgUnitId == null
+                  {selectedOrgUnitIdFromDraft(payloadDraft, cascadeType) == null
                     ? "Сначала выберите подразделение"
                     : positionsLoading
                       ? "Загрузка…"
@@ -406,80 +510,300 @@ export default function PersonnelOrderItemEditor({
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
           </div>
         </div>
       </div>
     );
   }
 
-  function renderHireLegacyPlacement() {
+  function renderItemTypeSection() {
     return (
-      <div className="sm:col-span-2 space-y-3" data-testid="personnel-order-hire-legacy">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-          Приём на работу будет переработан в WP-PO-HIRE-001. Текущая форма сохранена без
-          изменений backend-контракта.
-        </div>
-        <div data-testid="personnel-order-org-scope-cascade">
-          <OrgScopeFilter
-            basePath={ORG_SCOPE_BASE_PATH}
-            label="Группа отделений"
-            value={hireOrgGroupId}
-            onChange={handleHireOrgGroupChange}
-          />
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <OrgUnitScopeFilter
-              basePath={ORG_SCOPE_BASE_PATH}
-              label="Подразделение"
-              allLabel="Выберите подразделение"
-              orgGroupId={hireOrgGroupId}
-              value={selectedOrgUnitIdFromDraft(payloadDraft, "HIRE")}
-              onChange={(unitId) =>
-                setPayloadDraft((prev) => setOrgUnitAndClearPosition(prev, "HIRE", unitId))
-              }
-            />
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                Должность
-              </label>
-              <select
-                data-testid="personnel-order-position-select"
-                value={selectedPositionIdFromDraft(payloadDraft, "HIRE")}
-                onChange={(e) =>
-                  setPayloadDraft((prev) => setPositionId(prev, "HIRE", e.target.value))
-                }
-                disabled={
-                  selectedOrgUnitIdFromDraft(payloadDraft, "HIRE") == null || positionsLoading
-                }
-                className="w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 outline-none disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
-              >
-                <option value="">
-                  {selectedOrgUnitIdFromDraft(payloadDraft, "HIRE") == null
-                    ? "Сначала выберите подразделение"
-                    : positionsLoading
-                      ? "Загрузка…"
-                      : "—"}
-                </option>
-                {positions.map((position) => (
-                  <option key={position.id} value={String(position.id)}>
-                    {position.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <FormField
+        label="Тип пункта"
+        hint={
+          orderTypeHint
+            ? `Тип конкретной строки приказа. Тип приказа «${orderTypeHint}» задаётся в заголовке.`
+            : "Тип конкретной строки приказа (в составных приказах пункты могут отличаться)."
+        }
+      >
+        <select
+          data-testid="personnel-order-item-type-select"
+          value={itemTypeCode}
+          onChange={(e) => handleItemTypeChange(e.target.value as PersonnelOrderItemFormType)}
+          className={FIELD_INPUT_CLASS}
+        >
+          {itemTypeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </FormField>
+    );
+  }
+
+  function renderEmployeeSection() {
+    if (!formConfig?.employeePicker) return null;
+
+    const pendingAllowed = allowsPendingNewEmployee(itemTypeCode);
+
+    return (
+      <div className="space-y-3" data-testid="personnel-order-employee-section">
+        {pendingAllowed ? (
+          <div className="space-y-1">
+            <label
+              className={`flex items-start gap-2 text-sm ${
+                pendingNewEmployeeAllowed
+                  ? "text-zinc-700 dark:text-zinc-300"
+                  : "text-zinc-500 dark:text-zinc-500"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={pendingNewEmployee}
+                disabled={!pendingNewEmployeeAllowed}
+                onChange={(e) => handlePendingNewEmployeeChange(e.target.checked)}
+                data-testid="personnel-order-pending-new-employee"
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">Новый сотрудник</span>
+                <span
+                  className="mt-0.5 block text-xs text-zinc-500"
+                  data-testid={
+                    savedEmployeeIdBlocksPendingReset
+                      ? "personnel-order-pending-new-employee-reset-blocked"
+                      : undefined
+                  }
+                >
+                  {pendingNewEmployeeAllowed
+                    ? "Карточка сотрудника будет создана позже. Пункт сохранится без привязки к employee_id."
+                    : "Сброс сотрудника в сохранённом пункте пока не поддерживается."}
+                </span>
+              </span>
+            </label>
           </div>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Ставка</label>
-          <input
-            value={payloadDraft.employment_rate || ""}
-            onChange={(e) => updatePayloadField("employment_rate", e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-        </div>
+        ) : null}
+
+        {showEmployeePicker ? (
+          <FormField
+            label="Сотрудник"
+            hint={
+              pendingAllowed && pendingNewEmployeeAllowed
+                ? "Необязательно для приёма. Можно указать существующего сотрудника или оставить пустым."
+                : "Выберите действующего сотрудника из результатов поиска."
+            }
+          >
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={employeeQuery}
+                onChange={(e) => setEmployeeQuery(e.target.value)}
+                placeholder="Поиск по ФИО…"
+                autoComplete="off"
+                data-testid="personnel-order-employee-search-input"
+                className={`min-w-[12rem] flex-1 ${FIELD_INPUT_CLASS}`}
+              />
+              <input
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                placeholder="ID"
+                aria-label="Идентификатор сотрудника"
+                data-testid="personnel-order-employee-id-input"
+                className={`w-24 ${FIELD_INPUT_CLASS}`}
+              />
+            </div>
+            {employeeSearchError ? (
+              <p
+                className="mt-1 text-xs text-red-600 dark:text-red-400"
+                data-testid="personnel-order-employee-search-error"
+              >
+                {employeeSearchError}
+              </p>
+            ) : null}
+            {employeeOptions.length > 0 ? (
+              <div
+                className="mt-1 max-h-32 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800"
+                data-testid="personnel-order-employee-search-results"
+              >
+                {employeeOptions.map((option) => (
+                  <button
+                    key={option.employee_id}
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                    data-testid={`personnel-order-employee-option-${option.employee_id}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => void applyEmployeeSelection(option)}
+                  >
+                    {option.full_name} · #{option.employee_id}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </FormField>
+        ) : pendingNewEmployee ? (
+          <p
+            className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+            data-testid="personnel-order-pending-new-employee-hint"
+          >
+            Сотрудник не выбран. Сохранение возможно без employee_id.
+          </p>
+        ) : null}
       </div>
     );
   }
+
+  function renderEffectiveDateSection() {
+    return (
+      <FormField label={effectiveDateLabel}>
+        <input
+          type="date"
+          value={effectiveDate}
+          onChange={(e) => setEffectiveDate(e.target.value)}
+          className={FIELD_INPUT_CLASS}
+        />
+      </FormField>
+    );
+  }
+
+  function renderOrgPlacementSection() {
+    if (formConfig?.showTargetPlacement) {
+      return renderOrgPlacementCascade({
+        sectionTitle: formConfig.orgPlacementSectionTitle,
+        orgGroupId: targetOrgGroupId,
+        onOrgGroupChange: handleTargetOrgGroupChange,
+        unitLabel: "Подразделение",
+        positionLabel: "Должность",
+        unitEmptyLabel: "без изменения",
+        testId: "personnel-order-target-placement",
+      });
+    }
+    if (formConfig?.showHirePlacement) {
+      return renderOrgPlacementCascade({
+        sectionTitle: formConfig.orgPlacementSectionTitle,
+        orgGroupId: hireOrgGroupId,
+        onOrgGroupChange: handleHireOrgGroupChange,
+        unitLabel: "Подразделение",
+        positionLabel: "Должность",
+        unitEmptyLabel: "Выберите подразделение",
+        testId: "personnel-order-hire-legacy",
+      });
+    }
+    return null;
+  }
+
+  function renderAdditionalSection() {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {formConfig?.showTargetRate && formConfig.showTargetPlacement ? (
+          <FormField label="Новая ставка">
+            <input
+              data-testid="personnel-order-target-rate-input"
+              value={payloadDraft.to_rate || ""}
+              onChange={(e) => updatePayloadField("to_rate", e.target.value)}
+              className={FIELD_INPUT_CLASS}
+            />
+          </FormField>
+        ) : null}
+
+        {formConfig?.showTargetRate && !formConfig.showTargetPlacement ? (
+          <FormField label="Новая ставка" className="sm:col-span-2">
+            <input
+              data-testid="personnel-order-new-rate-input"
+              value={payloadDraft.to_rate || ""}
+              onChange={(e) => updatePayloadField("to_rate", e.target.value)}
+              className={FIELD_INPUT_CLASS}
+            />
+          </FormField>
+        ) : null}
+
+        {formConfig?.showHirePlacement ? (
+          <FormField label="Ставка" className="sm:col-span-2">
+            <input
+              data-testid="personnel-order-hire-rate-input"
+              value={payloadDraft.employment_rate || ""}
+              onChange={(e) => updatePayloadField("employment_rate", e.target.value)}
+              className={FIELD_INPUT_CLASS}
+            />
+          </FormField>
+        ) : null}
+
+        {formConfig?.showTerminationReason ? (
+          <FormField label="Причина увольнения" className="sm:col-span-2">
+            <input
+              data-testid="personnel-order-termination-reason-input"
+              value={payloadDraft.termination_reason || ""}
+              onChange={(e) => updatePayloadField("termination_reason", e.target.value)}
+              className={FIELD_INPUT_CLASS}
+            />
+          </FormField>
+        ) : null}
+
+        {formConfig?.showConcurrentDutyStartFields ? (
+          <>
+            <FormField label="Ставка совмещения">
+              <input
+                value={payloadDraft.concurrent_rate || ""}
+                onChange={(e) => updatePayloadField("concurrent_rate", e.target.value)}
+                className={FIELD_INPUT_CLASS}
+              />
+            </FormField>
+            <FormField label="Итоговая ставка">
+              <input
+                value={payloadDraft.total_rate || ""}
+                onChange={(e) => updatePayloadField("total_rate", e.target.value)}
+                className={FIELD_INPUT_CLASS}
+              />
+            </FormField>
+          </>
+        ) : null}
+
+        {formConfig?.showConcurrentDutyEndFields ? (
+          <>
+            <FormField label="Остающаяся ставка">
+              <input
+                value={payloadDraft.remaining_rate || ""}
+                onChange={(e) => updatePayloadField("remaining_rate", e.target.value)}
+                className={FIELD_INPUT_CLASS}
+              />
+            </FormField>
+            <FormField label="Снимаемая ставка">
+              <input
+                value={payloadDraft.concurrent_rate || ""}
+                onChange={(e) => updatePayloadField("concurrent_rate", e.target.value)}
+                className={FIELD_INPUT_CLASS}
+              />
+            </FormField>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderFormSection(section: ItemFormSection) {
+    switch (section) {
+      case "item_type":
+        return <React.Fragment key={section}>{renderItemTypeSection()}</React.Fragment>;
+      case "employee":
+        return <React.Fragment key={section}>{renderEmployeeSection()}</React.Fragment>;
+      case "current_placement":
+        return formConfig?.showCurrentPlacement && currentPlacement ? (
+          <CurrentPlacementPanel key={section} placement={currentPlacement} />
+        ) : null;
+      case "org_placement":
+        return <React.Fragment key={section}>{renderOrgPlacementSection()}</React.Fragment>;
+      case "effective_date":
+        return <React.Fragment key={section}>{renderEffectiveDateSection()}</React.Fragment>;
+      case "additional": {
+        const additional = renderAdditionalSection();
+        return additional ? <React.Fragment key={section}>{additional}</React.Fragment> : null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  const sectionOrder = formConfig?.fieldSectionOrder ?? [];
 
   return (
     <div className="space-y-4" data-testid="personnel-order-item-editor">
@@ -487,7 +811,7 @@ export default function PersonnelOrderItemEditor({
         <table className="min-w-full text-sm">
           <thead className="bg-zinc-50 dark:bg-zinc-900/50">
             <tr>
-              {["№", "Тип", "Сотрудник", "Дата", "Статус", ""].map((h) => (
+              {["№", "Тип пункта", "Сотрудник", "Дата", "Статус", ""].map((h) => (
                 <th
                   key={h || "actions"}
                   className="px-3 py-2 text-left text-[11px] font-semibold uppercase text-zinc-500"
@@ -512,7 +836,8 @@ export default function PersonnelOrderItemEditor({
                     {itemFormTypeLabel(detectUiItemTypeFromRecord(item))}
                   </td>
                   <td className="px-3 py-2">
-                    {item.employee_name || (item.employee_id ? `#${item.employee_id}` : "—")}
+                    {item.employee_name ||
+                      (item.employee_id ? `#${item.employee_id}` : "Новый сотрудник")}
                   </td>
                   <td className="px-3 py-2">{item.effective_date || "—"}</td>
                   <td className="px-3 py-2">{item.item_status}</td>
@@ -536,192 +861,20 @@ export default function PersonnelOrderItemEditor({
 
       {!disabled ? (
         <form
-          className="space-y-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800"
+          className="space-y-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
           onSubmit={handleSubmit}
         >
-          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            {editingItemId != null ? `Редактирование пункта #${editingItemId}` : "Добавить пункт"}
+          <div>
+            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {editingItemId != null ? `Редактирование пункта #${editingItemId}` : "Добавить пункт"}
+            </div>
+            <p className="mt-1 text-xs text-zinc-500">
+              Заполните поля пункта в указанном порядке. Тип пункта не заменяет тип приказа.
+            </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-zinc-600">Тип пункта</label>
-              <select
-                data-testid="personnel-order-item-type-select"
-                value={itemTypeCode}
-                onChange={(e) => handleItemTypeChange(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              >
-                {PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-zinc-600">
-                {effectiveDateLabel}
-              </label>
-              <input
-                type="date"
-                value={effectiveDate}
-                onChange={(e) => setEffectiveDate(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              />
-            </div>
 
-            {formConfig?.employeePicker ? (
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Сотрудник</label>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    value={employeeQuery}
-                    onChange={(e) => setEmployeeQuery(e.target.value)}
-                    placeholder="Поиск ФИО…"
-                    autoComplete="off"
-                    data-testid="personnel-order-employee-search-input"
-                    className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                  <input
-                    value={employeeId}
-                    onChange={(e) => setEmployeeId(e.target.value)}
-                    placeholder="employee_id"
-                    data-testid="personnel-order-employee-id-input"
-                    className="w-28 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-                {employeeSearchError ? (
-                  <p
-                    className="mt-1 text-xs text-red-600 dark:text-red-400"
-                    data-testid="personnel-order-employee-search-error"
-                  >
-                    {employeeSearchError}
-                  </p>
-                ) : null}
-                {employeeOptions.length > 0 ? (
-                  <div
-                    className="mt-1 max-h-32 overflow-auto rounded border border-zinc-200 dark:border-zinc-800"
-                    data-testid="personnel-order-employee-search-results"
-                  >
-                    {employeeOptions.map((option) => (
-                      <button
-                        key={option.employee_id}
-                        type="button"
-                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                        data-testid={`personnel-order-employee-option-${option.employee_id}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => void applyEmployeeSelection(option)}
-                      >
-                        {option.full_name} · #{option.employee_id}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {formConfig?.showCurrentPlacement && currentPlacement ? (
-              <CurrentPlacementPanel placement={currentPlacement} />
-            ) : null}
-
-            {formConfig?.showTargetPlacement
-              ? renderTargetOrgScopeCascade({
-                  sectionTitle: "Новое назначение",
-                  unit: "Новое подразделение",
-                  position: "Новая должность",
-                  unitEmpty: "без изменения",
-                })
-              : null}
-
-            {formConfig?.showTargetRate && formConfig.showTargetPlacement ? (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Новая ставка</label>
-                <input
-                  data-testid="personnel-order-target-rate-input"
-                  value={payloadDraft.to_rate || ""}
-                  onChange={(e) => updatePayloadField("to_rate", e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                />
-              </div>
-            ) : null}
-
-            {formConfig?.showTargetRate && !formConfig.showTargetPlacement ? (
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Новая ставка</label>
-                <input
-                  data-testid="personnel-order-new-rate-input"
-                  value={payloadDraft.to_rate || ""}
-                  onChange={(e) => updatePayloadField("to_rate", e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                />
-              </div>
-            ) : null}
-
-            {formConfig?.showTerminationReason ? (
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-zinc-600">
-                  Причина увольнения
-                </label>
-                <input
-                  data-testid="personnel-order-termination-reason-input"
-                  value={payloadDraft.termination_reason || ""}
-                  onChange={(e) => updatePayloadField("termination_reason", e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                />
-              </div>
-            ) : null}
-
-            {formConfig?.showConcurrentDutyStartFields ? (
-              <>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">
-                    Ставка совмещения
-                  </label>
-                  <input
-                    value={payloadDraft.concurrent_rate || ""}
-                    onChange={(e) => updatePayloadField("concurrent_rate", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">
-                    Итоговая ставка
-                  </label>
-                  <input
-                    value={payloadDraft.total_rate || ""}
-                    onChange={(e) => updatePayloadField("total_rate", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-              </>
-            ) : null}
-
-            {formConfig?.showConcurrentDutyEndFields ? (
-              <>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">
-                    Остающаяся ставка
-                  </label>
-                  <input
-                    value={payloadDraft.remaining_rate || ""}
-                    onChange={(e) => updatePayloadField("remaining_rate", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">
-                    Снимаемая ставка
-                  </label>
-                  <input
-                    value={payloadDraft.concurrent_rate || ""}
-                    onChange={(e) => updatePayloadField("concurrent_rate", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-              </>
-            ) : null}
-
-            {formConfig?.showHirePlacement ? renderHireLegacyPlacement() : null}
+          <div className="space-y-4">
+            {sectionOrder.map((section) => renderFormSection(section))}
           </div>
 
           {error ? (
@@ -741,7 +894,7 @@ export default function PersonnelOrderItemEditor({
             {editingItemId != null ? (
               <button
                 type="button"
-                onClick={() => resetForm(itemTypeCode)}
+                onClick={() => resetForm(defaultItemType)}
                 className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
               >
                 Отмена

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   detectUiItemTypeFromRecord,
   getItemFormRegistry,
+  itemFormTypeOptionsForOrder,
   requiresEmployeeForFormType,
   resolveBackendItemTypeCode,
+  resolveDefaultItemFormTypeForOrder,
   usesActiveEmployeeSearch,
 } from "./personnelOrderItemFormRegistry";
 
@@ -67,5 +69,28 @@ describe("personnelOrderItemFormRegistry", () => {
         payload: { to_org_unit_id: 10, to_rate: 1 },
       }),
     ).toBe("TRANSFER");
+  });
+
+  it("defaults item type from order type", () => {
+    expect(resolveDefaultItemFormTypeForOrder("HIRE")).toBe("HIRE");
+    expect(resolveDefaultItemFormTypeForOrder("COMPOSITE")).toBe("TRANSFER");
+  });
+
+  it("limits item type options for simple orders", () => {
+    const hireOptions = itemFormTypeOptionsForOrder("HIRE");
+    expect(hireOptions.map((row) => row.value)).toEqual(["HIRE"]);
+    const transferOptions = itemFormTypeOptionsForOrder("TRANSFER");
+    expect(transferOptions.map((row) => row.value)).toEqual(["TRANSFER", "RATE_CHANGE"]);
+  });
+
+  it("uses HR-friendly field order for HIRE", () => {
+    const config = getItemFormRegistry("HIRE");
+    expect(config?.fieldSectionOrder).toEqual([
+      "item_type",
+      "org_placement",
+      "effective_date",
+      "employee",
+      "additional",
+    ]);
   });
 });
