@@ -27,6 +27,11 @@ OO_DOCUMENT_TABLES = (
     "operational_order_promotion_audit",
 )
 
+OO_LIFECYCLE_TABLES = (
+    "operational_order_signing_authority",
+    "operational_order_lifecycle_audit",
+)
+
 
 def _table_exists(conn, table: str) -> bool:
     row = conn.execute(
@@ -52,6 +57,13 @@ def document_aggregate_available() -> bool:
     with engine.connect() as conn:
         return operational_orders_available() and all(
             _table_exists(conn, table) for table in OO_DOCUMENT_TABLES
+        )
+
+
+def lifecycle_available() -> bool:
+    with engine.connect() as conn:
+        return document_aggregate_available() and all(
+            _table_exists(conn, table) for table in OO_LIFECYCLE_TABLES
         )
 
 

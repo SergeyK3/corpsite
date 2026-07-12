@@ -15,14 +15,24 @@ from app.operational_orders.errors import (
     OperationalOrderConfirmationPartyMismatchError,
     OperationalOrderConfirmationStaleTextError,
     OperationalOrderDocumentNotFoundError,
+    OperationalOrderDocumentVersionConflictError,
     OperationalOrderDocumentVersionNotFoundError,
+    OperationalOrderDocumentAlreadyReadyError,
+    OperationalOrderDocumentNotReadyError,
+    OperationalOrderDocumentStatusConflictError,
     OperationalOrderEditorialPackageNotReadyError,
     OperationalOrderForbiddenError,
     OperationalOrderInvalidWorkspaceStageError,
+    OperationalOrderLifecycleTransitionForbiddenError,
     OperationalOrderPromotionNotReadyError,
     OperationalOrderPromotionVersionConflictError,
+    OperationalOrderRevisionRequiredError,
     OperationalOrderReconciliationNotFoundError,
     OperationalOrderReconciliationStaleError,
+    OperationalOrderSigningAuthorityConflictError,
+    OperationalOrderSigningAuthorityInvalidError,
+    OperationalOrderSigningAuthorityNotFoundError,
+    OperationalOrderSnapshotIntegrityError,
     OperationalOrderSubmittedTextImmutableError,
     OperationalOrderTranslationAssignmentConflictError,
     OperationalOrderTranslationAssignmentNotFoundError,
@@ -53,6 +63,12 @@ from app.operational_orders.promotion_permissions import (
     can_promote_workspace,
     can_read_document,
 )
+from app.operational_orders.lifecycle_permissions import (
+    can_assign_signing_authority,
+    can_mark_ready_for_signature,
+    can_read_signature_readiness,
+    can_return_from_signature,
+)
 from app.operational_orders.scope import (
     assert_document_in_scope,
     assert_submitting_unit_in_scope,
@@ -76,6 +92,13 @@ from app.operational_orders.schemas.document_aggregate import (
     DocumentVersionDetailOut,
     PromotionIn,
     PromotionResultOut,
+    ReadyForSignatureResultOut,
+    ReturnToCreatedIn,
+    ReturnToCreatedResultOut,
+    SignatureReadinessOut,
+    SigningAuthorityAssignIn,
+    SigningAuthorityResultOut,
+    VersionedDocumentActionIn,
 )
 from app.operational_orders.schemas.editorial_workflow import (
     BilingualReconciliationCreateIn,
@@ -93,6 +116,8 @@ from app.operational_orders.schemas.editorial_workflow import (
 from app.operational_orders.services import draft_intake_service as svc
 from app.operational_orders.services import editorial_workflow_service as editorial_svc
 from app.operational_orders.services import promotion_service as promotion_svc
+from app.operational_orders.services import lifecycle_service as lifecycle_svc
+from app.operational_orders.repository import lifecycle_available
 from app.operational_orders.schemas import mappers
 
 router = APIRouter(prefix="/api/operational-orders", tags=["operational-orders"])
@@ -125,6 +150,8 @@ def _domain_http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=403, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderVersionConflictError):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderDocumentVersionConflictError):
+        return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderPromotionVersionConflictError):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
     if isinstance(
@@ -141,9 +168,20 @@ def _domain_http(exc: Exception) -> HTTPException:
             OperationalOrderEditorialPackageNotReadyError,
             OperationalOrderPromotionNotReadyError,
             OperationalOrderWorkspaceFrozenError,
+            OperationalOrderDocumentAlreadyReadyError,
+            OperationalOrderDocumentStatusConflictError,
+            OperationalOrderSigningAuthorityConflictError,
+            OperationalOrderSigningAuthorityInvalidError,
+            OperationalOrderSnapshotIntegrityError,
+            OperationalOrderRevisionRequiredError,
+            OperationalOrderLifecycleTransitionForbiddenError,
         ),
     ):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderDocumentNotReadyError):
+        return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderSigningAuthorityNotFoundError):
+        return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, (OperationalOrderValidationBlockedError, OperationalOrderValidationError)):
         status = 422 if isinstance(exc, OperationalOrderValidationError) else 409
         return HTTPException(status_code=status, detail={"code": code, "message": str(exc)})
@@ -754,10 +792,150 @@ def get_document_endpoint(
     user: dict[str, Any] = Depends(get_current_user),
 ):
     try:
-        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if lifecycle_available():
+            detail = call_service(lifecycle_svc.get_document_detail, document_id=document_id)
+        else:
+            detail = call_service(promotion_svc.get_document, document_id=document_id)
         if not can_read_document(user, detail["document"]):
             raise OperationalOrderForbiddenError("Access denied.")
         return mappers.to_document_detail_out(detail)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents/{document_id}/signature-readiness", response_model=SignatureReadinessOut)
+def get_signature_readiness_endpoint(
+    document_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_read_signature_readiness(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(lifecycle_svc.get_signature_readiness, document_id=document_id)
+        return mappers.to_signature_readiness_out(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/documents/{document_id}/signing-authority", response_model=SigningAuthorityResultOut)
+def get_signing_authority_endpoint(
+    document_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_read_signature_readiness(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(lifecycle_svc.get_signing_authority, document_id=document_id)
+        return SigningAuthorityResultOut(
+            document_id=int(result["document_id"]),
+            signing_authority=mappers.to_signing_authority_result_out(
+                {"document_id": result["document_id"], "signing_authority": result.get("signing_authority")}
+            ).signing_authority,
+        )
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/documents/{document_id}/signing-authority", response_model=SigningAuthorityResultOut)
+def assign_signing_authority_endpoint(
+    document_id: int,
+    body: SigningAuthorityAssignIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_assign_signing_authority(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        scope_unit_ids = resolve_user_scope_unit_ids(user)
+        result = call_service(
+            lifecycle_svc.assign_signing_authority,
+            document_id=document_id,
+            authority_party_type=body.authority.reference_type,
+            authority_party_reference=body.authority.reference,
+            authority_display_name=body.authority.display_name,
+            authority_position_id=body.authority_position_id,
+            authority_org_unit_id=body.authority_org_unit_id,
+            authority_basis=body.authority_basis,
+            assigned_by_user_id=_require_user_id(user),
+            expected_document_version=body.expected_document_version,
+            scope_unit_ids=scope_unit_ids,
+        )
+        return mappers.to_signing_authority_result_out(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/documents/{document_id}/validate-ready-for-signature", response_model=SignatureReadinessOut)
+def validate_ready_for_signature_endpoint(
+    document_id: int,
+    body: VersionedDocumentActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_read_signature_readiness(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            lifecycle_svc.validate_ready_for_signature_command,
+            document_id=document_id,
+            expected_document_version=body.expected_document_version,
+            actor_user_id=_require_user_id(user),
+            record_audit=False,
+        )
+        return SignatureReadinessOut(
+            document_id=int(result["document_id"]),
+            status=str(result["status"]),
+            aggregate_version=int(result["aggregate_version"]),
+            signing_authority=mappers.to_signing_authority_result_out(
+                {"document_id": result["document_id"], "signing_authority": result.get("signing_authority")}
+            ).signing_authority,
+            readiness_validation=mappers._validation_out(result["validation"]),
+        )
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/documents/{document_id}/ready-for-signature", response_model=ReadyForSignatureResultOut)
+def mark_ready_for_signature_endpoint(
+    document_id: int,
+    body: VersionedDocumentActionIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_mark_ready_for_signature(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            lifecycle_svc.mark_ready_for_signature,
+            document_id=document_id,
+            actor_user_id=_require_user_id(user),
+            expected_document_version=body.expected_document_version,
+        )
+        return mappers.to_ready_for_signature_result_out(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/documents/{document_id}/return-to-created", response_model=ReturnToCreatedResultOut)
+def return_to_created_endpoint(
+    document_id: int,
+    body: ReturnToCreatedIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_return_from_signature(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            lifecycle_svc.return_to_created,
+            document_id=document_id,
+            actor_user_id=_require_user_id(user),
+            reason=body.reason,
+            expected_document_version=body.expected_document_version,
+        )
+        return mappers.to_return_to_created_result_out(result)
     except Exception as exc:
         raise _domain_http(exc) from exc
 

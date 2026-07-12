@@ -22,8 +22,15 @@ from app.operational_orders.schemas.document_aggregate import (
     DocumentSummaryOut,
     DocumentVersionDetailOut,
     DocumentVersionOut,
+    LifecycleAuditOut,
+    OrgScopeSourceOut,
     PromotionResultOut,
     PromotionSummaryOut,
+    ReadyForSignatureResultOut,
+    ReturnToCreatedResultOut,
+    SignatureReadinessOut,
+    SigningAuthorityOut,
+    SigningAuthorityResultOut,
 )
 from app.operational_orders.schemas.editorial_workflow import (
     BilingualReconciliationOut,
@@ -112,10 +119,73 @@ def to_list_out(result: dict[str, Any]) -> DraftWorkspaceListOut:
 def to_document_detail_out(detail: dict[str, Any]) -> DocumentDetailOut:
     current_version = detail.get("current_version")
     promotion = detail.get("promotion")
+    validation = detail.get("readiness_validation")
+    if validation is not None and not isinstance(validation, ValidationResult):
+        validation = ValidationResult.from_issues([])
     return DocumentDetailOut(
         document=DocumentSummaryOut.model_validate(detail["document"]),
         current_version=DocumentVersionOut.model_validate(current_version) if current_version else None,
         promotion=PromotionSummaryOut.model_validate(promotion) if promotion else None,
+        signing_authority=SigningAuthorityOut.model_validate(detail["signing_authority"])
+        if detail.get("signing_authority")
+        else None,
+        readiness_validation=_validation_out(validation) if validation is not None else None,
+        latest_lifecycle_transition=LifecycleAuditOut.model_validate(detail["latest_lifecycle_transition"])
+        if detail.get("latest_lifecycle_transition")
+        else None,
+        org_scope_source=OrgScopeSourceOut.model_validate(detail["org_scope_source"])
+        if detail.get("org_scope_source")
+        else None,
+        workspace_drift_detected=bool(detail.get("workspace_drift_detected")),
+        revision_recommended=bool(detail.get("revision_recommended")),
+    )
+
+
+def to_signature_readiness_out(result: dict[str, Any]) -> SignatureReadinessOut:
+    validation = result["readiness_validation"]
+    if not isinstance(validation, ValidationResult):
+        validation = ValidationResult.from_issues([])
+    return SignatureReadinessOut(
+        document_id=int(result["document_id"]),
+        status=str(result["status"]),
+        aggregate_version=int(result["aggregate_version"]),
+        signing_authority=SigningAuthorityOut.model_validate(result["signing_authority"])
+        if result.get("signing_authority")
+        else None,
+        readiness_validation=_validation_out(validation),
+        workspace_drift_detected=bool(result.get("workspace_drift_detected")),
+        revision_recommended=bool(result.get("revision_recommended")),
+    )
+
+
+def to_signing_authority_result_out(result: dict[str, Any]) -> SigningAuthorityResultOut:
+    return SigningAuthorityResultOut(
+        document_id=int(result["document_id"]),
+        signing_authority=SigningAuthorityOut.model_validate(result["signing_authority"])
+        if result.get("signing_authority")
+        else None,
+        document=DocumentSummaryOut.model_validate(result["document"])
+        if result.get("document")
+        else None,
+        idempotent_replay=bool(result.get("idempotent_replay")),
+    )
+
+
+def to_ready_for_signature_result_out(result: dict[str, Any]) -> ReadyForSignatureResultOut:
+    validation = result["validation"]
+    if not isinstance(validation, ValidationResult):
+        validation = ValidationResult.from_issues([])
+    return ReadyForSignatureResultOut(
+        document=to_document_detail_out(result["document"]),
+        validation=_validation_out(validation),
+        idempotent_replay=bool(result.get("idempotent_replay")),
+    )
+
+
+def to_return_to_created_result_out(result: dict[str, Any]) -> ReturnToCreatedResultOut:
+    return ReturnToCreatedResultOut(
+        document=to_document_detail_out(result["document"]),
+        idempotent_replay=bool(result.get("idempotent_replay")),
     )
 
 

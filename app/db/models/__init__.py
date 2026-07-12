@@ -69,8 +69,10 @@ from app.db.models.operational_orders import (
     OperationalOrderDraftAudit,
     OperationalOrderDraftBlock,
     OperationalOrderDraftWorkspace,
+    OperationalOrderLifecycleAudit,
     OperationalOrderPromotion,
     OperationalOrderPromotionAudit,
+    OperationalOrderSigningAuthority,
     OperationalOrderTextProvenance,
     OperationalOrderTranslationAssignment,
 )

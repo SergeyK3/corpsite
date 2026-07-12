@@ -14,6 +14,8 @@ OO_TABLES = (
     "operational_order_text_provenance",
     "operational_order_clarifications",
     "operational_order_draft_audit",
+    "operational_order_signing_authority",
+    "operational_order_lifecycle_audit",
 )
 
 
@@ -43,6 +45,8 @@ def test_model_classes_map_to_expected_tables() -> None:
         OperationalOrderDraftAudit,
         OperationalOrderDraftBlock,
         OperationalOrderDraftWorkspace,
+        OperationalOrderLifecycleAudit,
+        OperationalOrderSigningAuthority,
         OperationalOrderTextProvenance,
     )
 
@@ -51,3 +55,5 @@ def test_model_classes_map_to_expected_tables() -> None:
     assert OperationalOrderTextProvenance.__tablename__ == "operational_order_text_provenance"
     assert OperationalOrderClarification.__tablename__ == "operational_order_clarifications"
     assert OperationalOrderDraftAudit.__tablename__ == "operational_order_draft_audit"
+    assert OperationalOrderSigningAuthority.__tablename__ == "operational_order_signing_authority"
+    assert OperationalOrderLifecycleAudit.__tablename__ == "operational_order_lifecycle_audit"

@@ -312,6 +312,8 @@ def _document_summary(document: dict[str, Any]) -> dict[str, Any]:
         "created_by_user_id": int(document["created_by_user_id"]),
         "version": int(document["version"]),
         "submitting_org_unit_id": int(document.get("submitting_org_unit_id") or 0) or None,
+        "ready_for_signature_at": document.get("ready_for_signature_at"),
+        "ready_for_signature_by_user_id": document.get("ready_for_signature_by_user_id"),
     }
 
 

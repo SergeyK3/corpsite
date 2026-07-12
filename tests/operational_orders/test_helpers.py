@@ -106,3 +106,49 @@ def promote_workspace(client, headers, workspace_id, *, expected_version: int | 
     if expected_version is not None:
         body["expected_version"] = expected_version
     return client.post(f"{WORKSPACES_BASE}/{workspace_id}/promote", json=body, headers=headers)
+
+
+def create_promoted_document(client, headers, seed, *, author_ref: str | None = None):
+    author = author_ref or str(seed["executor_user_id"])
+    workspace_id, _ = create_editorial_ready_workspace(client, headers, seed, author_ref=author)
+    promoted = promote_workspace(client, headers, workspace_id)
+    assert promoted.status_code == 200, promoted.text
+    document_id = promoted.json()["document"]["document"]["document_id"]
+    return workspace_id, document_id, promoted.json()
+
+
+def assign_signing_authority(
+    client,
+    headers,
+    document_id,
+    *,
+    reference: str,
+    expected_version: int | None = None,
+    org_unit_id: int | None = None,
+):
+    body = {
+        "authority": {
+            "reference_type": "PERSON",
+            "reference": reference,
+            "display_name": "Signer",
+        }
+    }
+    if expected_version is not None:
+        body["expected_version"] = expected_version
+    if org_unit_id is not None:
+        body["authority_org_unit_id"] = org_unit_id
+    return client.post(f"{DOCUMENTS_BASE}/{document_id}/signing-authority", json=body, headers=headers)
+
+
+def mark_ready_for_signature(client, headers, document_id, *, expected_version: int | None = None):
+    body = {}
+    if expected_version is not None:
+        body["expected_version"] = expected_version
+    return client.post(f"{DOCUMENTS_BASE}/{document_id}/ready-for-signature", json=body, headers=headers)
+
+
+def return_to_created(client, headers, document_id, *, reason: str, expected_version: int | None = None):
+    body = {"reason": reason}
+    if expected_version is not None:
+        body["expected_version"] = expected_version
+    return client.post(f"{DOCUMENTS_BASE}/{document_id}/return-to-created", json=body, headers=headers)

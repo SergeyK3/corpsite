@@ -1,0 +1,17 @@
+code,severity,field_path,message
+OO401,ERROR,document.status,Document not in CREATED status for mark-ready
+OO402,ERROR,document.current_version,Current document version missing
+OO403,ERROR,document.current_version,Current document version ambiguous
+OO404,ERROR,localizations.ru,Russian localization missing
+OO405,ERROR,localizations.kk,Kazakh localization missing
+OO406,ERROR,localizations.*,Localization fingerprint mismatch
+OO407,ERROR,document.current_version.snapshot_fingerprint,Document snapshot integrity failed
+OO408,ERROR,signing_authority,Signing authority missing
+OO409,ERROR,signing_authority,Signing authority invalid or mismatched
+OO410,ERROR,document.version,Document aggregate version stale
+OO411,ERROR,document.status,Document already ready for signature
+OO412,ERROR,document.status,Document status conflict
+OO413,ERROR,document.current_version.document_id,Document version conflict
+OO414,ERROR,promotion.status,Promotion incomplete or inconsistent
+OO415,ERROR,workspace.stage,Workspace document link inconsistent
+OO416,ERROR,workspace.drift,Workspace drift detected; revision required

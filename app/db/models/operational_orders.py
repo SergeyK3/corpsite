@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -312,6 +313,34 @@ PROMOTION_AUDIT_ACTIONS = (
     PROMOTION_AUDIT_ACTION_WORKSPACE_FROZEN,
     PROMOTION_AUDIT_ACTION_PROMOTION_REPLAY,
     PROMOTION_AUDIT_ACTION_REVISION_ADVISORY_RETURNED,
+)
+
+SIGNING_AUTHORITY_STATUS_ACTIVE = "ACTIVE"
+SIGNING_AUTHORITY_STATUS_SUPERSEDED = "SUPERSEDED"
+SIGNING_AUTHORITY_STATUS_REVOKED = "REVOKED"
+
+SIGNING_AUTHORITY_STATUSES = (
+    SIGNING_AUTHORITY_STATUS_ACTIVE,
+    SIGNING_AUTHORITY_STATUS_SUPERSEDED,
+    SIGNING_AUTHORITY_STATUS_REVOKED,
+)
+
+LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_ASSIGNED = "SIGNING_AUTHORITY_ASSIGNED"
+LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_SUPERSEDED = "SIGNING_AUTHORITY_SUPERSEDED"
+LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_VALIDATED = "SIGNATURE_READINESS_VALIDATED"
+LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_FAILED = "SIGNATURE_READINESS_FAILED"
+LIFECYCLE_AUDIT_ACTION_DOCUMENT_READY_FOR_SIGNATURE = "DOCUMENT_READY_FOR_SIGNATURE"
+LIFECYCLE_AUDIT_ACTION_READY_FOR_SIGNATURE_REPLAY = "READY_FOR_SIGNATURE_REPLAY"
+LIFECYCLE_AUDIT_ACTION_DOCUMENT_RETURNED_TO_CREATED = "DOCUMENT_RETURNED_TO_CREATED"
+
+LIFECYCLE_AUDIT_ACTIONS = (
+    LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_ASSIGNED,
+    LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_SUPERSEDED,
+    LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_VALIDATED,
+    LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_FAILED,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_READY_FOR_SIGNATURE,
+    LIFECYCLE_AUDIT_ACTION_READY_FOR_SIGNATURE_REPLAY,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_RETURNED_TO_CREATED,
 )
 
 
@@ -626,6 +655,12 @@ class OperationalOrderDocument(Base):
         BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    ready_for_signature_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ready_for_signature_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class OperationalOrderDocumentVersion(Base):
@@ -739,3 +774,79 @@ class OperationalOrderPromotionAudit(Base):
     )
     metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderSigningAuthority(Base):
+    """Historical signing authority assignment for a document version."""
+
+    __tablename__ = "operational_order_signing_authority"
+    __table_args__ = (
+        Index("ix_oo_signing_authority_document", "document_id"),
+        Index("ix_oo_signing_authority_version", "document_version_id"),
+        Index(
+            "uq_oo_signing_authority_active_document",
+            "document_id",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_version_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    authority_party_type: Mapped[str] = mapped_column(Text, nullable=False)
+    authority_party_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    authority_display_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    authority_position_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    authority_org_unit_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("org_units.unit_id", ondelete="SET NULL"), nullable=True
+    )
+    authority_basis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=SIGNING_AUTHORITY_STATUS_ACTIVE)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    superseded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class OperationalOrderLifecycleAudit(Base):
+    """Append-only document lifecycle audit trail."""
+
+    __tablename__ = "operational_order_lifecycle_audit"
+    __table_args__ = (Index("ix_oo_lifecycle_audit_document", "document_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_version_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_document_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    transition_from: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    transition_to: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    actor_party_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    actor_party_reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    document_version_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    document_version_after: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

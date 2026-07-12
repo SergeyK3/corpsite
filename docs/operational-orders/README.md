@@ -2,7 +2,7 @@
 
 Исследовательская и архитектурная зона для корпуса **производственных приказов** (не кадровых).
 
-**Implementation status:** OO-IMP-001–003B complete — document aggregate architecture ready for production (migration head `z0a1b2c3d4e5`).
+**Implementation status:** OO-IMP-001–004 complete — document lifecycle ready for signature queue (migration head `a1b2c3d4e5f6`).
 
 ---
 
@@ -16,6 +16,7 @@
 | **OO-IMP-003A** | **Promotion Identity & Revision Architecture Review** | **Complete (ratified)** |
 | **OO-IMP-003B** | **Workspace Freeze, Drift Detection & Revision Advisory** | **Complete** |
 | **OO-IMP-003B-R1** | **Migration Backfill Safety Review** | **Complete** |
+| **OO-IMP-004** | **Document Lifecycle: CREATED → READY_FOR_SIGNATURE** | **Complete (local)** |
 
 Records:
 - [`implementation/OO-IMP-001-submitted-text-intake-mvp.md`](implementation/OO-IMP-001-submitted-text-intake-mvp.md)
@@ -23,10 +24,11 @@ Records:
 - [`implementation/OO-IMP-003-official-draft-package.md`](implementation/OO-IMP-003-official-draft-package.md)
 - [`architecture/OO-IMP-003A-document-identity-ratification.md`](architecture/OO-IMP-003A-document-identity-ratification.md)
 - [`implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md`](implementation/OO-IMP-003B-workspace-freeze-drift-advisory.md)
+- [`implementation/OO-IMP-004-ready-for-signature.md`](implementation/OO-IMP-004-ready-for-signature.md)
 
 Runtime package: `app/operational_orders/`  
-API: `/api/operational-orders/draft-workspaces`, `/api/operational-orders/workspaces/{id}/promote`, `/api/operational-orders/documents`  
-Migration head: `z0a1b2c3d4e5` (down: `y9z0a1b2c3d4`)
+API: `/api/operational-orders/draft-workspaces`, `/api/operational-orders/workspaces/{id}/promote`, `/api/operational-orders/documents`, lifecycle endpoints under `/documents/{id}/`  
+Migration head: `a1b2c3d4e5f6` (down: `z0a1b2c3d4e5`)
 
 First native Shared UDE consumer — uses contracts/value objects only; persistence belongs to OO module.
 

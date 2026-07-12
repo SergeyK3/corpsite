@@ -117,3 +117,47 @@ class OperationalOrderPromotionVersionConflictError(OperationalOrderError):
 
 class OperationalOrderWorkspaceFrozenError(OperationalOrderError):
     code = "OO_WORKSPACE_FROZEN"
+
+
+class OperationalOrderDocumentVersionConflictError(OperationalOrderError):
+    code = "OO_DOCUMENT_VERSION_CONFLICT"
+
+
+class OperationalOrderDocumentStatusConflictError(OperationalOrderError):
+    code = "OO_DOCUMENT_STATUS_CONFLICT"
+
+
+class OperationalOrderDocumentAlreadyReadyError(OperationalOrderError):
+    code = "OO_DOCUMENT_ALREADY_READY_FOR_SIGNATURE"
+
+
+class OperationalOrderDocumentNotReadyError(OperationalOrderError):
+    code = "OO_DOCUMENT_NOT_READY_FOR_SIGNATURE"
+
+
+class OperationalOrderSigningAuthorityNotFoundError(LookupError):
+    code = "OO_SIGNING_AUTHORITY_NOT_FOUND"
+
+
+class OperationalOrderSigningAuthorityInvalidError(OperationalOrderError):
+    code = "OO_SIGNING_AUTHORITY_INVALID"
+
+
+class OperationalOrderSigningAuthorityConflictError(OperationalOrderError):
+    code = "OO_SIGNING_AUTHORITY_CONFLICT"
+
+
+class OperationalOrderSnapshotIntegrityError(OperationalOrderError):
+    code = "OO_SNAPSHOT_INTEGRITY_FAILED"
+
+
+class OperationalOrderRevisionRequiredError(OperationalOrderError):
+    code = "OO_REVISION_REQUIRED"
+
+
+class OperationalOrderLifecycleTransitionForbiddenError(OperationalOrderError):
+    code = "OO_LIFECYCLE_TRANSITION_FORBIDDEN"
+
+
+class OperationalOrderDocumentScopeForbiddenError(PermissionError):
+    code = "OO_DOCUMENT_SCOPE_FORBIDDEN"

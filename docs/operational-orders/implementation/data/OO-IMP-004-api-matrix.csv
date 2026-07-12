@@ -1,0 +1,8 @@
+method,path,permission,request_body,response
+GET,/api/operational-orders/documents/{document_id},document read,,DocumentDetailOut with lifecycle fields
+GET,/api/operational-orders/documents/{document_id}/signature-readiness,OPERATIONAL_ORDERS_SIGNATURE_READINESS_READ,,SignatureReadinessOut
+GET,/api/operational-orders/documents/{document_id}/signing-authority,OPERATIONAL_ORDERS_SIGNATURE_READINESS_READ,,SigningAuthorityResultOut
+POST,/api/operational-orders/documents/{document_id}/signing-authority,OPERATIONAL_ORDERS_ASSIGN_SIGNING_AUTHORITY,SigningAuthorityAssignIn,SigningAuthorityResultOut
+POST,/api/operational-orders/documents/{document_id}/validate-ready-for-signature,OPERATIONAL_ORDERS_SIGNATURE_READINESS_READ,VersionedDocumentActionIn,SignatureReadinessOut
+POST,/api/operational-orders/documents/{document_id}/ready-for-signature,OPERATIONAL_ORDERS_MARK_READY_FOR_SIGNATURE,VersionedDocumentActionIn,ReadyForSignatureResultOut
+POST,/api/operational-orders/documents/{document_id}/return-to-created,OPERATIONAL_ORDERS_RETURN_FROM_SIGNATURE,ReturnToCreatedIn,ReturnToCreatedResultOut

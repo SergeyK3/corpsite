@@ -1,0 +1,5 @@
+from_state,to_state,gate,endpoint,notes
+CREATED,READY_FOR_SIGNATURE,MARK_READY,POST /documents/{id}/ready-for-signature,Requires signing authority and snapshot integrity
+READY_FOR_SIGNATURE,READY_FOR_SIGNATURE,IDEMPOTENT_REPLAY,POST /documents/{id}/ready-for-signature,HTTP 200 when validation passes
+READY_FOR_SIGNATURE,CREATED,RETURN_TO_DRAFT,POST /documents/{id}/return-to-created,Reason required; workspace stays frozen
+CREATED,CREATED,IDEMPOTENT,POST /documents/{id}/return-to-created,HTTP 200 idempotent_replay
