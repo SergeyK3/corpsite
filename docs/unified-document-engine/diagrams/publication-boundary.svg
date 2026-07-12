@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.hid{fill:#fef2f2;stroke:#dc2626;rx:6}.vis{fill:#ecfdf5;stroke:#059669;rx:6}.reg{fill:#eff6ff;stroke:#2563eb;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="375" y="22" text-anchor="middle" class="t">Publication Boundary (UDE-004)</text>
+  <rect x="50" y="55" width="200" height="80" class="hid"/><text x="150" y="78" text-anchor="middle" class="l">Pre-Activation</text><text x="60" y="98" class="m">Not in journal</text><text x="60" y="114" class="m">Workspace only</text>
+  <rect x="275" y="45" width="200" height="100" class="vis"/><text x="375" y="68" text-anchor="middle" class="l">PublicationReady</text><text x="285" y="88" class="m">DocumentId exists</text><text x="285" y="104" class="m">Journal list visible</text><text x="285" y="120" class="m">Open + DRAFT edit</text>
+  <rect x="500" y="55" width="200" height="80" class="reg"/><text x="600" y="78" text-anchor="middle" class="l">REGISTERED</text><text x="510" y="98" class="m">Official number</text><text x="510" y="114" class="m">UDE-005 transition</text>
+  <line x1="250" y1="95" x2="275" y2="95" stroke="#059669" stroke-width="2"/><line x1="475" y1="95" x2="500" y2="95" stroke="#2563eb" stroke-dasharray="4,3"/>
+  <rect x="100" y="170" width="550" height="160" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="375" y="192" text-anchor="middle" class="l">At Activation (PublicationReady)</text>
+  <text x="110" y="215" class="m"> DocumentId lookup   Detail view   Default journal   Lifecycle eligible (DRAFT)</text>
+  <text x="110" y="235" class="m"> Registry entry   Editorial Core write (DRAFT)</text>
+  <text x="110" y="260" class="m"> Official reg number (default)   Execution projection   Immutable signed snapshot</text>
+  <text x="375" y="350" text-anchor="middle" class="m">Activation = system visibility | REGISTERED = legal journal number (UDE-005)</text>
+</svg>

@@ -1,0 +1,22 @@
+component,readiness,findings,blocking_for,notes
+Editorial Core Domain,Ready,,UDE-004 OO-IMP,Shared orchestration
+Localization Core,Ready,,UDE-004,No machine translation
+Official Draft Package,Ready,,Promotion UDE-004,Editorial snapshot
+Editorial Model text layers,Ready,,Implementation,6 layers defined
+Locale Representation,Ready,,Implementation,Per block per locale
+Generated Effective Model,Ready,,PO convergence,Aligned PO-EDIT
+Manual Override,Ready,,Implementation,Block level default
+Regeneration Rules,Ready,,Implementation,Item scope default
+Editorial Sections,Ready,,Section registry,16 section types
+Section Registry,Ready,,OO-IMP-003,Conceptual only
+Bilingual Consistency,Ready,,UDE-005,BC catalog referenced
+Staleness Model,Ready,,Implementation,4 states
+Editorial Validation E-series,Ready,,Promotion,15 checks
+Promotion Boundary,Ready,,UDE-004,Transfer rules
+Editorial Audit,Ready,,Implementation,3 audit types
+ContentConfirmationPolicy,Needs clarification,OQ-04,OO-IMP-002,Default in E113
+Lifecycle READY orchestration,Deferred,UDE-004,UDE-004,Not UDE-003
+Renderer implementation,Deferred,OO-IMP-003,OO-IMP-003,Registry only
+PO code extraction,Deferred,UDE-006,UDE-006,Analysis only
+PDF export,Rejected,—,—,Outside editorial core
+NLP generation,Rejected,—,—,Explicit non-goal

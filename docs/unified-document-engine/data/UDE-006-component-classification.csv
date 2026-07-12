@@ -1,0 +1,31 @@
+component_id,component_name,location,classification,reuse_verdict,shared_target,notes
+C001,status_enum,personnel_orders.py ORDER_STATUSES,A,reusable_foundation,DocumentLifecycleState,Exact match UDE T022
+C002,void_kind,personnel_order_lifecycle_audit_service,A,reusable_foundation,VoidKind,CANCEL ANNUL production-proven
+C003,lifecycle_audit_table,personnel_order_lifecycle_audit,A,reusable_foundation,LifecycleAudit,Append-only WP-PO-LC-DEL-003
+C004,archive_guard,personnel_order_archive_guard,A,reusable_foundation,ArchiveGuard,assert_order_not_archived
+C005,cancel_annul_split,cancel_service + void_service,A,reusable_foundation,CancelAnnulCommands,Separate endpoints
+C006,lifecycle_command_services,multiple services,B,extract_refactor_later,LifecycleOrchestrator,Split across 4 services
+C007,register_shortcut,personnel_orders_command_service,B,extract_refactor_later,RegistrationAdapter,DRAFT/READY to SIGNED/REGISTERED
+C008,journal_filter,personnel_orders_query_service,B,extract_refactor_later,JournalPolicy,include_closed WP-PO-LC-006
+C009,print_view_model,personnelOrderPrintViewModel.ts,B,extract_refactor_later,PrintViewModel,PO-specific VM shape
+C010,activation_adapter,not_implemented,B,extract_refactor_later,PersonnelActivationAdapter,Synthetic activation for legacy
+C011,employee_events_apply,personnel_orders_apply_service,C,personnel_specific,ExecutionProjection,Not document core
+C012,void_chain_ADR035,personnel_orders_void_service,C,personnel_specific,AnnulPolicy,Employee event rollback
+C013,cancel_scope,personnel_order_cancel_scope_service,C,personnel_specific,CancelPolicy,Org subtree evaluation
+C014,item_semantics,personnel_order_items + payload,C,personnel_specific,PersonnelItemPayload,employee_id driven
+C015,basis_policy,personnel_order_item_bases,C,personnel_specific,BasisPolicy,HR basis types
+C016,READY_doc_drift,PO-EDIT docs vs backend,D,do_not_migrate,WriteLockPolicy,Backend DRAFT-only edit
+C017,incomplete_lifecycle_audit,mark_ready register,D,do_not_migrate,LifecycleAudit,Missing audit rows
+C018,UI_annul_label,PersonnelOrderVoidDialog,D,do_not_migrate,VoidPolicy,Annul label for cancel path
+C019,broad_admin_lifecycle,require_personnel_admin_or_403,D,do_not_migrate,AuthorityBoundary,Except cancel granular
+C020,signed_snapshot,not_implemented,E,missing,SignedSnapshot,No immutable snapshot at sign
+C021,return_to_draft,not_implemented,E,missing,ReturnToDraftCommand,Designed not built
+C022,explicit_activation,early PO create,E,missing,ActivationEvent,Synthetic adapter only
+C023,editorial_core,PO-EDIT tables,B,extract_refactor_later,EditorialCore,Partial UDE-003 match
+C024,locale_effective_text,personnel_order_localized_texts + editorial,B,adapter_required,LocaleRepresentation,RU/KK independent
+C025,pdf_playwright,personnelOrderPdfRenderer,C,personnel_specific,RendererContour,Unchanged per constraint
+C026,html_preview,personnelOrderPdfHtml.ts,B,adapter_required,HtmlRenderer,Effective text driven
+C027,type_registry,MVP_ORDER_TYPE_CODES,C,personnel_specific,PersonnelItemRegistry,HIRE TRANSFER etc
+C028,ownership_created_by,personnel_orders.created_by,B,adapter_required,OwnershipContext,Cancel uses ownership
+C029,registration_number,order_number at register,C,personnel_specific,RegistrationPolicy,Nullable until register
+C030,item_generator,personnel_orders_editorial/generation_service,C,personnel_specific,ItemGeneratorRegistry,Type-aware generation

@@ -1,0 +1,22 @@
+po_component,classification,reuse_verdict,shared_target,notes
+status_enum_DRAFT_to_VOIDED,A,reusable_foundation,DocumentLifecycleState,Five states match UDE T022
+void_kind_CANCEL_ANNUL,A,reusable_foundation,VoidKind,resolve_void_kind pattern production-proven
+lifecycle_audit_append_only,A,reusable_foundation,LifecycleAudit,WP-PO-LC-DEL-003 table and service
+archive_orthogonal_archived_at,A,reusable_foundation,ArchiveState,WP-PO-LC-DEL-005
+archive_immutability_guard,A,reusable_foundation,ArchiveGuard,assert_order_not_archived
+cancel_service_scoped,B,extract_refactor_later,CancelDocumentCommand,Granular permissions PO-specific surface
+void_service_cascade,B,extract_refactor_later,AnnulDocumentCommand,Employee event rollback is PO specialization hook
+mark_ready_gate,B,extract_refactor_later,MarkReadyCommand,Editorial ready gate coupled to PO tables
+register_combined_sign,B,extract_refactor_later,RegistrationAdapter,Skips separate SIGNED transition
+return_to_draft,E,missing_for_shared_core,ReturnToDraftCommand,Designed PO-EDIT not implemented
+signed_snapshot_creation,E,missing_for_shared_core,SignedSnapshot,No immutable snapshot at sign in PO MVP
+registration_number_generator,C,personnel_specific,RegistrationPolicy,PO assigns at register; no shared numbering service
+employee_events_apply,C,personnel_specific,ExecutionProjection,Apply is PO execution not lifecycle
+void_chain_ADR035,C,personnel_specific,AnnulPolicy,L024 specialization check
+cancel_scope_service,C,personnel_specific,CancelPolicy,Org subtree scope evaluation
+journal_closed_filter,B,extract_refactor_later,JournalPolicy,UX filter exists; not lifecycle core
+READY_editability_drift,D,implementation_debt,WriteLockPolicy,Docs mention READY edit; code blocks all edits
+UI_annul_label_for_cancel,D,implementation_debt,VoidPolicy,UI says Annul for all void paths
+no_lifecycle_audit_on_mark_ready,D,implementation_debt,LifecycleAudit,mark_ready does not write audit row yet
+ownership_on_lifecycle_endpoints,D,implementation_debt,AuthorityBoundary,Cancel has ownership; other transitions use admin only
+status_transitions_core,A,reusable_foundation,TransitionMatrix,DRAFT READY SIGNED REGISTERED VOIDED transitions proven

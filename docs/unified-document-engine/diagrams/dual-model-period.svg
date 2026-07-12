@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 360" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.po{fill:#fef3c7;stroke:#d97706;rx:10}.oo{fill:#e0e7ff;stroke:#4f46e5;rx:10}.sh{fill:#ecfdf5;stroke:#059669;rx:10}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Controlled Dual Model Period</text>
+  <rect x="60" y="60" width="250" height="220" class="po"/>
+  <text x="185" y="82" text-anchor="middle" class="l">PO Legacy-Native</text>
+  <text x="80" y="105" class="m">personnel_orders tables</text>
+  <text x="80" y="121" class="m">existing API unchanged</text>
+  <text x="80" y="137" class="m">Playwright PDF unchanged</text>
+  <text x="80" y="153" class="m">employee_events apply</text>
+  <text x="80" y="180" class="m">Phases A-E: no write convergence</text>
+  <rect x="390" y="60" width="250" height="220" class="oo"/>
+  <text x="515" y="82" text-anchor="middle" class="l">OO Shared-Native</text>
+  <text x="410" y="105" class="m">separate OO persistence</text>
+  <text x="410" y="121" class="m">full Workspace to Activation path</text>
+  <text x="410" y="137" class="m">UDE-005 lifecycle native</text>
+  <text x="410" y="153" class="m">OO-IMP-001 through 005</text>
+  <text x="410" y="180" class="m">does not wait for PO refactor</text>
+  <rect x="180" y="300" width="340" height="45" class="sh"/>
+  <text x="350" y="322" text-anchor="middle" class="l">Shared Read Contracts + Adapters</text>
+  <text x="200" y="338" class="m">Expected stage  not architectural error (ADR-UDE-018)</text>
+  <line x1="185" y1="280" x2="280" y2="300" stroke="#64748b"/><line x1="515" y1="280" x2="420" y2="300" stroke="#64748b"/>
+</svg>

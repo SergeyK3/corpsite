@@ -1,0 +1,59 @@
+artifact_type,artifact_name,readiness,findings,blocking_for,owner_wp
+contract,Document,Ready,,UDE-002 UDE-003,UDE-001
+contract,DocumentMetadata,Ready,,UDE-002 UDE-003,UDE-001
+contract,DocumentStructure,Ready,,UDE-003,UDE-001
+contract,DocumentSection,Ready,,UDE-003,UDE-001
+contract,OrderItem,Ready,,UDE-002 UDE-003,UDE-001
+contract,OrderItemSequence,Ready,,UDE-003,UDE-001
+contract,BusinessIntent,Ready,,OO-IMP-003,UDE-001
+contract,ExecutionObligation,Ready,,OO-IMP-005,UDE-001
+contract,ControlObligation,Ready,,OO-IMP-003,UDE-001
+contract,ManagedObject,Ready,,OO-IMP-003,UDE-001
+contract,PartyReference,Ready,,UDE-002 UDE-003,UDE-001
+contract,Deadline,Ready,,OO-IMP-003,UDE-001
+contract,ExpectedResult,Ready,,OO-IMP-003,UDE-001
+contract,EvidenceExpectation,Ready,,OO-IMP-005,UDE-001
+contract,AttachmentReference,Ready,,UDE-002 OO-IMP-001,UDE-001
+contract,LocaleRepresentation,Ready,,UDE-002 UDE-003,UDE-001
+contract,GeneratedText,Ready,,UDE-003,UDE-001
+contract,EffectiveText,Ready,,UDE-002 UDE-003,UDE-001
+contract,SubmittedText,Ready,,UDE-002,UDE-001
+contract,TextProvenance,Ready,,UDE-002,UDE-001
+contract,ContentConfirmation,Needs clarification,Interview gate for mandatory policy per change class OQ-04,OO-IMP-002,UDE-002
+contract,ExecutionProjectionDescriptor,Ready,,OO-IMP-005,UDE-001
+contract,ValidationResult,Ready,,UDE-005,UDE-001
+contract,DocumentAuditEvent,Ready,,UDE-003,UDE-001
+contract,DocumentLifecycleState,Ready,,UDE-003,UDE-001
+contract,LocalizationLifecycleState,Ready,,UDE-003,UDE-001
+contract,ExecutionLifecycleState,Ready,,OO-IMP-005,UDE-001
+interface,DocumentContract,Ready,,UDE-003,UDE-001
+interface,OrderItemContract,Ready,,UDE-003,UDE-001
+interface,GenerationContract,Deferred,Implementation after editorial core,OO-IMP-003,UDE-005
+interface,LocalizationContract,Ready,,UDE-002 UDE-003,UDE-001
+interface,LifecycleContract,Ready,,UDE-003,UDE-001
+interface,ValidationContract,Deferred,Rule catalog in UDE-005,UDE-005,UDE-005
+interface,RendererContract,Deferred,Template binding in OO-IMP-003,OO-IMP-003,UDE-003
+interface,ProjectionContract,Ready,,OO-IMP-005,UDE-001
+interface,AttachmentContract,Ready,,UDE-002,UDE-001
+interface,ScenarioContract,Deferred,P2 scenario track,OO-IMP-003,UDE-005
+policy,GenerationPolicy,Deferred,OO-IMP-003,OO-IMP-003,UDE-005
+policy,LocalizationPolicy,Ready,,UDE-002 UDE-003,UDE-001
+policy,ValidationPolicy,Deferred,UDE-005,UDE-005,UDE-005
+policy,LifecyclePolicy,Ready,,UDE-003 OO-IMP-004,UDE-001
+policy,ProjectionPolicy,Ready,,OO-IMP-005,UDE-001
+policy,AttachmentPolicy,Ready,,UDE-002,UDE-001
+policy,ArchivePolicy,Ready,,UDE-003,UDE-001
+policy,AuditPolicy,Ready,,UDE-003,UDE-001
+policy,ContentConfirmationPolicy,Needs clarification,OQ-04 interview,OO-IMP-002,UDE-002
+policy,TranslationPolicy,Ready,,UDE-003 OO-IMP-002,UDE-001
+extension_point,Localization Registry,Ready,,UDE-002,UDE-001
+extension_point,Document Kind Registry,Ready,,UDE-003,UDE-001
+extension_point,Lifecycle Registry,Ready,,UDE-002,UDE-001
+extension_point,Attachment Registry,Ready,,OO-IMP-001,UDE-001
+extension_point,Party Resolution Registry,Ready,,UDE-003,UDE-001
+extension_point,Item Type Registry,Ready,,OO-IMP-003,UDE-001
+extension_point,Renderer Registry,Deferred,OO-IMP-003,OO-IMP-003,UDE-003
+extension_point,Scenario Registry,Deferred,OO-IMP-003 P2,OO-IMP-003,UDE-005
+extension_point,Validation Registry,Deferred,UDE-005,UDE-005,UDE-005
+extension_point,Projection Registry,Ready,,OO-IMP-005,UDE-001
+glossary,T001-T034,Ready,Frozen UDE-000,All UDE WPs,UDE-001

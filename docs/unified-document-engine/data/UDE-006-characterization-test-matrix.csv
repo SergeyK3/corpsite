@@ -1,0 +1,19 @@
+test_id,category,scope,minimum_before_refactor,priority,existing_coverage,notes
+T001,api_contract,All PO lifecycle endpoints,yes,critical,partial,Extend existing WP-PO-LC tests
+T002,lifecycle_transition,DRAFT READY SIGNED REGISTERED VOIDED,yes,critical,good,test_wp_po_* suite
+T003,authority_scope,Cancel own scope archive restore,yes,critical,good,WP-PO-LC-DEL-004/005
+T004,archive_immutability,Archived write rejection,yes,critical,good,WP-PO-LC-DEL-005A
+T005,cancel_annul,void_kind semantics,yes,critical,good,Cancel vs void paths
+T006,locale_editing,RU KK independent effective,yes,critical,partial,PO-EDIT tests
+T007,regeneration_override,Generated vs effective,yes,high,partial,editorial API tests
+T008,html_snapshot,Print VM HTML output,yes,high,sparse,UDE-007 must add
+T009,pdf_semantic,PDF structure not bytes,yes,high,sparse,Semantic golden not pixel
+T010,journal_filter,include_closed default,yes,critical,partial,API + UI tests
+T011,audit_append_only,Lifecycle audit immutability,yes,high,good,Audit list tests
+T012,employee_event,Apply void chain ADR-035,yes,high,good,E2E validation
+T013,register_shortcut,DRAFT READY to REGISTERED,yes,high,partial,004B tests
+T014,ready_gate,Editorial blocking READY,yes,high,partial,ready_gate tests
+T015,print_language,kk ru modes,yes,medium,partial,print tests
+T016,applied_badge,Derived not status,yes,medium,partial,Drawer tests
+T017,synthetic_activation,Adapter view metadata,no,medium,none,UDE-007 new
+T018,adapter_parity,Legacy vs adapter view,no,critical,none,UDE-007 harness

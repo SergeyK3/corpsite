@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.po{fill:#fef3c7;stroke:#d97706;rx:8}.ude{fill:#ecfdf5;stroke:#059669;rx:8}.gap{fill:#fee2e2;stroke:#dc2626;rx:6}.ok{fill:#d1fae5;stroke:#059669;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Personnel Lifecycle Compatibility</text>
+  <rect x="40" y="50" width="300" height="160" class="po"/>
+  <text x="190" y="72" text-anchor="middle" class="l">PO Production</text>
+  <text x="60" y="95" class="m">DRAFT READY SIGNED REGISTERED VOIDED</text>
+  <text x="60" y="111" class="m">register from DRAFT/READY (shortcut)</text>
+  <text x="60" y="127" class="m">void_kind CANCEL | ANNUL</text>
+  <text x="60" y="143" class="m">archive REGISTERED | VOIDED</text>
+  <text x="60" y="159" class="m">no ReturnToDraft | no signed snapshot table</text>
+  <rect x="360" y="50" width="300" height="160" class="ude"/>
+  <text x="510" y="72" text-anchor="middle" class="l">UDE-005 Target</text>
+  <text x="380" y="95" class="m">same five states + archive orthogonal</text>
+  <text x="380" y="111" class="m">Sign then Register (separate)</text>
+  <text x="380" y="127" class="m">signed snapshot at SIGNED</text>
+  <text x="380" y="143" class="m">ReturnToDraft from READY</text>
+  <text x="380" y="159" class="m">full lifecycle audit on all transitions</text>
+  <rect x="60" y="230" width="580" height="150" fill="#f8fafc" stroke="#64748b" rx="6"/>
+  <text x="350" y="252" text-anchor="middle" class="l">UDE-006 Strategy</text>
+  <rect x="80" y="265" width="10" height="10" class="ok"/><text x="100" y="275" class="m">Preserve: status void_kind archive cancel/annul register shortcut</text>
+  <rect x="80" y="285" width="10" height="10" class="gap"/><text x="100" y="295" class="m">Defer: ReturnToDraft signed snapshot full audit (PO-CONV Phase F)</text>
+  <rect x="80" y="305" width="10" height="10" class="ok"/><text x="100" y="315" class="m">OO: use UDE target from start (no PO shortcuts)</text>
+  <rect x="80" y="325" width="10" height="10" class="ok"/><text x="100" y="335" class="m">Adapter: PersonnelLifecycleAdapter read-only projection</text>
+  <text x="350" y="370" text-anchor="middle" class="m">No PO behavior change in UDE-006 or UDE-007</text>
+</svg>

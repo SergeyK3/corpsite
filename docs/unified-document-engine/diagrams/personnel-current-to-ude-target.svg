@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.po{fill:#fef3c7;stroke:#d97706;rx:10}.ude{fill:#ecfdf5;stroke:#059669;rx:10}.ad{fill:#dbeafe;stroke:#2563eb;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="360" y="22" text-anchor="middle" class="t">Personnel Orders to UDE Target Mapping</text>
+  <rect x="40" y="50" width="280" height="320" class="po"/>
+  <text x="180" y="72" text-anchor="middle" class="l">PO Persistence</text>
+  <text x="60" y="95" class="m">personnel_orders</text>
+  <text x="60" y="111" class="m">personnel_order_items</text>
+  <text x="60" y="127" class="m">localized_texts + editorial</text>
+  <text x="60" y="143" class="m">lifecycle_audit</text>
+  <text x="60" y="159" class="m">employee_events</text>
+  <text x="60" y="175" class="m">prints / PDF</text>
+  <rect x="360" y="120" width="120" height="50" class="ad"/>
+  <text x="420" y="142" text-anchor="middle" class="l">Adapters</text>
+  <text x="420" y="158" text-anchor="middle" class="m">read-first</text>
+  <rect x="520" y="50" width="180" height="320" class="ude"/>
+  <text x="610" y="72" text-anchor="middle" class="l">UDE Contracts</text>
+  <text x="540" y="95" class="m">Document Aggregate</text>
+  <text x="540" y="111" class="m">OrderItem</text>
+  <text x="540" y="127" class="m">LocaleRepresentation</text>
+  <text x="540" y="143" class="m">DocumentLifecycleState</text>
+  <text x="540" y="159" class="m">LifecycleAudit</text>
+  <text x="540" y="175" class="m">ExecutionProjection (ext)</text>
+  <text x="540" y="191" class="m">PrintViewModel</text>
+  <line x1="320" y1="100" x2="360" y2="140" stroke="#2563eb"/><line x1="480" y1="145" x2="520" y2="120" stroke="#059669"/>
+  <text x="360" y="220" class="m">exact: status void_kind archive</text>
+  <text x="360" y="236" class="m">partial: document locale items audit</text>
+  <text x="360" y="252" class="m">specialization: employee_events apply PDF</text>
+  <text x="360" y="380" text-anchor="middle" class="m">PO persistence authoritative  no immediate migration</text>
+</svg>

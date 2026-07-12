@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.reg{fill:#fef3c7;stroke:#d97706;rx:6}.r{fill:#dbeafe;stroke:#2563eb;rx:4}.v{fill:#f3e8ff;stroke:#7c3aed;rx:4}.o{fill:#ecfdf5;stroke:#059669;rx:4}.l{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="375" y="22" text-anchor="middle" class="t">Section Registry (UDE-003)</text>
+  <rect x="280" y="45" width="190" height="40" class="reg"/><text x="375" y="70" text-anchor="middle" class="l">Section Type Registry</text>
+  <rect x="80" y="120" width="110" height="36" class="r"/><text x="135" y="142" text-anchor="middle" class="l">Renderer</text>
+  <rect x="220" y="120" width="110" height="36" class="v"/><text x="275" y="142" text-anchor="middle" class="l">Validation</text>
+  <rect x="360" y="120" width="110" height="36" class="o"/><text x="415" y="142" text-anchor="middle" class="l">Ordering</text>
+  <rect x="500" y="120" width="110" height="36" class="r"/><text x="555" y="142" text-anchor="middle" class="l">Localization</text>
+  <line x1="375" y1="85" x2="135" y2="120" stroke="#334155"/><line x1="375" y1="85" x2="275" y2="120" stroke="#334155"/><line x1="375" y1="85" x2="415" y2="120" stroke="#334155"/><line x1="375" y1="85" x2="555" y2="120" stroke="#334155"/>
+  <rect x="60" y="200" width="630" height="160" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="375" y="222" text-anchor="middle" class="l">Universal Section Types</text>
+  <text x="70" y="242" class="m">HEADER | TITLE | PREAMBLE | BASIS | OPERATIVE_FORMULA | BODY | ORDER_ITEMS</text>
+  <text x="70" y="260" class="m">ITEM_BODY | ITEM_BASIS | CONTROL_BLOCK | EFFECTIVE_CLAUSE | ATTACHMENTS</text>
+  <text x="70" y="278" class="m">SIGNATURE | AGREEMENT | ACKNOWLEDGEMENT | FOOTER</text>
+  <text x="70" y="300" class="m">Mandatory: TITLE PREAMBLE FORMULA ORDER_ITEMS SIGNATURE (per kind policy)</text>
+  <text x="70" y="318" class="m">Specialization hooks: ITEM_BODY renderer per ItemType; CONTROL_BLOCK OO-only default</text>
+  <text x="70" y="340" class="m">Composition not inheritance  plugins registered per DocumentKind</text>
+  <text x="375" y="385" text-anchor="middle" class="m">No implementation in UDE-003  registry contract only</text>
+</svg>

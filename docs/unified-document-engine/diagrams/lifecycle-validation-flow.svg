@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.b{fill:#dbeafe;stroke:#2563eb;rx:8}.g{fill:#ecfdf5;stroke:#059669;rx:8}.r{fill:#fee2e2;stroke:#dc2626;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Lifecycle Validation Flow (L-series)</text>
+  <rect x="250" y="45" width="200" height="36" class="b"/><text x="350" y="68" text-anchor="middle" class="l">Lifecycle Command</text>
+  <rect x="50" y="110" width="600" height="200" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="350" y="132" text-anchor="middle" class="l">Validation chain</text>
+  <rect x="70" y="145" width="100" height="30" class="g"/><text x="120" y="165" text-anchor="middle" class="m">L001 state</text>
+  <rect x="180" y="145" width="100" height="30" class="g"/><text x="230" y="165" text-anchor="middle" class="m">L002 transition</text>
+  <rect x="290" y="145" width="100" height="30" class="g"/><text x="340" y="165" text-anchor="middle" class="m">L003 authority</text>
+  <rect x="400" y="145" width="100" height="30" class="g"/><text x="450" y="165" text-anchor="middle" class="m">L004 archive</text>
+  <rect x="510" y="145" width="120" height="30" class="g"/><text x="570" y="165" text-anchor="middle" class="m">L013 version</text>
+  <rect x="120" y="190" width="120" height="30" class="g"/><text x="180" y="210" text-anchor="middle" class="m">L005 localization</text>
+  <rect x="260" y="190" width="120" height="30" class="g"/><text x="320" y="210" text-anchor="middle" class="m">L006 editorial</text>
+  <rect x="400" y="190" width="120" height="30" class="g"/><text x="460" y="210" text-anchor="middle" class="m">L007-L012 specific</text>
+  <rect x="120" y="235" width="140" height="30" fill="#fef3c7" stroke="#d97706" rx="6"/><text x="190" y="255" text-anchor="middle" class="m">L021-L025 specialization</text>
+  <rect x="300" y="235" width="100" height="30" class="g"/><text x="350" y="255" text-anchor="middle" class="m">L015 idempotency</text>
+  <rect x="200" y="330" width="140" height="40" class="g"/><text x="270" y="352" text-anchor="middle" class="l">Commit</text>
+  <rect x="360" y="330" width="140" height="40" class="r"/><text x="430" y="352" text-anchor="middle" class="l">Reject</text>
+  <line x1="350" y1="81" x2="350" y2="110" stroke="#2563eb"/><line x1="350" y1="310" x2="270" y2="330" stroke="#059669"/>
+  <line x1="350" y1="310" x2="430" y2="330" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <text x="350" y="390" text-anchor="middle" class="m">E* (UDE-003) before package | P* (UDE-004) at activation | L* (UDE-005) at lifecycle commands</text>
+</svg>

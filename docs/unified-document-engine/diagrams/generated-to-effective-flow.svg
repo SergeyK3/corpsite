@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 450" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.n{fill:#fff;stroke:#94a3b8;rx:6}.sem{fill:#d1fae5;stroke:#059669;rx:6}.gen{fill:#dbeafe;stroke:#2563eb;rx:6}.man{fill:#fef3c7;stroke:#d97706;rx:6}.eff{fill:#e0e7ff;stroke:#4f46e5;rx:6}.off{fill:#f3e8ff;stroke:#7c3aed;rx:6}.sig{fill:#fce7f3;stroke:#db2777;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="325" y="22" text-anchor="middle" class="t">Generated to Effective Flow (UDE-003)</text>
+  <rect x="240" y="45" width="170" height="36" class="sem"/><text x="325" y="68" text-anchor="middle" class="l">Semantic Model</text>
+  <rect x="240" y="100" width="170" height="36" class="gen"/><text x="325" y="123" text-anchor="middle" class="l">Generated Text</text>
+  <rect x="240" y="155" width="170" height="36" class="man"/><text x="325" y="178" text-anchor="middle" class="l">Manual Override</text>
+  <rect x="240" y="210" width="170" height="36" class="eff"/><text x="325" y="233" text-anchor="middle" class="l">Effective Text</text>
+  <rect x="240" y="265" width="170" height="36" class="off"/><text x="325" y="288" text-anchor="middle" class="l">Official Text</text>
+  <rect x="240" y="320" width="170" height="36" class="sig"/><text x="325" y="343" text-anchor="middle" class="l">Signed Snapshot</text>
+  <line x1="325" y1="81" x2="325" y2="100" stroke="#334155"/><line x1="325" y1="136" x2="325" y2="155" stroke="#334155"/><line x1="325" y1="191" x2="325" y2="210" stroke="#334155"/><line x1="325" y1="246" x2="325" y2="265" stroke="#334155"/><line x1="325" y1="301" x2="325" y2="320" stroke="#334155"/>
+  <text x="430" y="123" class="m">fingerprint at generation</text>
+  <text x="430" y="178" class="m">optional; preserved on regen</text>
+  <text x="430" y="233" class="m">override ?? generated</text>
+  <text x="430" y="288" class="m">frozen at OFFICIAL_DRAFT_READY</text>
+  <text x="80" y="210" class="m">STALE if override + fingerprint mismatch</text>
+  <path d="M180 130 L220 130 L220 100 L240 118" stroke="#2563eb" fill="none" stroke-dasharray="4,3"/>
+  <text x="60" y="145" class="m">regenerate</text>
+  <rect x="40" y="380" width="570" height="50" rx="4" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="325" y="400" text-anchor="middle" class="m">Submitted Text (left) = history only  never in this chain as authority</text>
+  <text x="325" y="418" text-anchor="middle" class="m">REVIEW_REQUIRED after regen with override kept</text>
+</svg>

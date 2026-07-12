@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 360" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.po{fill:#fef3c7;stroke:#d97706;rx:8}.ude{fill:#ecfdf5;stroke:#059669;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Locale Compatibility Model</text>
+  <rect x="40" y="50" width="280" height="120" class="po"/>
+  <text x="180" y="72" text-anchor="middle" class="l">PO Storage</text>
+  <text x="60" y="95" class="m">generated_ru / generated_kk</text>
+  <text x="60" y="111" class="m">effective_ru / effective_kk</text>
+  <text x="60" y="127" class="m">editorial_blocks + review_status</text>
+  <text x="60" y="143" class="m">RU and KK independent</text>
+  <rect x="380" y="50" width="280" height="120" class="ude"/>
+  <text x="520" y="72" text-anchor="middle" class="l">UDE-003 Target</text>
+  <text x="400" y="95" class="m">LocaleRepresentation per locale</text>
+  <text x="400" y="111" class="m">Generated Text + Effective Text</text>
+  <text x="400" y="127" class="m">LocalizationLifecycleState</text>
+  <text x="400" y="143" class="m">fingerprint / staleness</text>
+  <rect x="80" y="200" width="540" height="140" fill="#f8fafc" stroke="#64748b" rx="6"/>
+  <text x="350" y="222" text-anchor="middle" class="l">Compatibility Rules (ADR-UDE-019)</text>
+  <text x="100" y="245" class="m">Legacy effective text = AUTHORITY  no silent regeneration on adapter read</text>
+  <text x="100" y="265" class="m">Missing generated: adapter uses effective-only view</text>
+  <text x="100" y="285" class="m">STALE / REVIEW_REQUIRED: preserved from stored review_status</text>
+  <text x="100" y="305" class="m">Fingerprint: optional deferred; do not block adapter Phase C</text>
+  <text x="350" y="340" text-anchor="middle" class="m">PersonnelLocaleAdapter  read-only projection</text>
+  <line x1="320" y1="110" x2="380" y2="110" stroke="#2563eb"/>
+</svg>

@@ -1,0 +1,20 @@
+component,readiness,findings,blocking_for,notes
+Activation Domain,Ready,,UDE-005,Boundary defined
+Promotion Model,Ready,,Implementation,App service pipeline
+Document Activation,Ready,,Implementation,Business event
+Promotion Preconditions P-series,Ready,,OO-IMP-001,P108 OO default
+Promotion Outputs,Ready,,Implementation,Document v1 DRAFT
+Lifecycle Bootstrap,Ready,,UDE-005,DRAFT only at birth
+Initial Audit,Ready,,Implementation,Three streams separated
+Immutable Snapshot at activation,Ready,Mutable baseline v1 not legal immutable,UDE-005,Signed immutability deferred
+Document Version 1,Ready,,UDE-005,Distinct from draft versions
+Activation Events,Ready,,Implementation,No event bus
+Publication Boundary,Ready,,Journal visibility,Number at REGISTERED default
+Activation Validation,Ready,,Implementation,P vs E vs L separated
+Activation Policy,Ready,,Implementation,Blocking rules defined
+Activation Audit,Ready,,Implementation,Separate stream
+PO early-creation adapter,Deferred,UDE-006,UDE-006,PO creates before workspace
+Registration number at activation,Deferred,Kind policy,UDE-005,Default deferred
+Signed snapshot creation,Deferred,UDE-005 SIGNED,UDE-005,Not activation
+Execution projection at activation,Rejected,—,—,REGISTERED only
+Event bus infrastructure,Rejected,—,—,Conceptual events only

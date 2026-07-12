@@ -1,0 +1,22 @@
+value_object,definition,valid_states,application_scope,why_value_object,shared_concept,po_values,oo_values,architecture_level,implementation_level
+DocumentId,Opaque unique document identifier,non-empty immutable,All documents,Identity without persistence exposure,yes,same,same,yes,deferred
+DocumentNumber,Official registration number string,unassigned provisional registered,Document Core,Formatting varies not entity,yes,same,same,yes,yes
+DocumentKind,Classification selecting specialization,registry-defined kinds,Document Core registry,Small discriminator key,yes,PersonnelOrder,OperationalOrder,yes,yes
+ScenarioId,Blueprint identifier,registry-defined,Generation,Lookup not aggregate,partial,optional,21 scenarios,no,yes
+ScenarioCode,Human-stable scenario code,registry-defined,Generation,Stable reference in contracts,partial,item-first,S_TRAVEL etc,no,yes
+ItemType,Semantic family tag for render validation,registry per kind,OrderItem,Immutable per-item tag,partial,HIRE TRANSFER etc,DIRECT CONTROL etc,yes,yes
+LocaleCode,Locale tag ru kk,org-mandated set,LocaleRepresentation,Compared by value,yes,ru kk,ru kk,yes,yes
+LanguageCode,Editorial language attribute,org languages,LocaleRepresentation,No lifecycle,yes,ru kk,ru kk,yes,yes
+PartyId,Resolved party snapshot identity,resolved at date,PartyReference obligations,Immutable snapshot,yes,same,same,yes,yes
+RoleReference,Organizational role pointer,position org unit role,PartyReference,Role-first without person,yes,same,same,yes,yes
+ManagedObjectType,Governed entity category tag,registry taxonomy,ManagedObject,Discriminator,partial,employee position,process commission document,yes,yes
+DeadlineType,Temporal semantics discriminator,FIXED_DATE DURATION BY_EVENT CONTINUOUS PERMANENT,Deadline,Pairs with value fields,yes,partial,rich,yes,yes
+ValidationCode,Stable check identifier,V001-V016 BC001-BC025 W001-W010,ValidationResult,Loggable waiver-targetable,yes,shared+po hooks,shared+oo hooks,yes,yes
+EvidenceType,Proof category,REPORT ACKNOWLEDGMENT ATTACHMENT SIGNATURE CUSTOM,EvidenceExpectation,Classification,yes,rare,common,yes,yes
+LifecycleTransition,Named state change,valid per policy,Document Localization,Immutable event descriptor,yes,same,same,yes,yes
+ArchiveState,Orthogonal archive flag bundle,active archived,Document Core,Not lifecycle enum member,yes,same,same,yes,yes
+TranslationState,Localization process stage,generated translated reviewed reconciled waived,LocaleRepresentation,Process descriptor,yes,extends PO,full OO,yes,yes
+StalenessState,Staleness reason descriptor,semantic_change ru_change_after_kk fingerprint_mismatch,LocaleRepresentation,Derived immutable,yes,same,same,yes,yes
+SourceOfTruth,Phase authority marker,INTAKE EDITORIAL READY SIGNED,Document editing,Policy discriminator ADR-016,yes,same,same,yes,no
+DraftingPath,Editorial workflow mode,SYMMETRIC RU_FIRST_TRANSLATION KK_FIRST SUBMITTED_INTAKE,LocaleRepresentation,Maps Models A B C,yes,symmetric ru_first,submitted_intake P0,yes,yes
+TextSourceType,Provenance discriminator,SUBMITTED GENERATED TRANSLATED MANUALLY_* IMPORTED_LEGACY,TextProvenance,Drives promotion staleness,yes,same,same,yes,yes

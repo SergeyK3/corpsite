@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.a{fill:#fee2e2;stroke:#dc2626;rx:8}.c{fill:#ecfdf5;stroke:#059669;rx:8}.b{fill:#dbeafe;stroke:#2563eb;rx:8}.l{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Lifecycle Authority Boundary</text>
+  <rect x="250" y="45" width="200" height="40" class="b"/><text x="350" y="70" text-anchor="middle" class="l">Authority check BEFORE mutation</text>
+  <rect x="40" y="110" width="150" height="220" class="c"/>
+  <text x="115" y="130" text-anchor="middle" class="l">Capabilities</text>
+  <text x="55" y="152" class="m">mark_ready</text>
+  <text x="55" y="168" class="m">return_to_draft</text>
+  <text x="55" y="184" class="m">sign</text>
+  <text x="55" y="200" class="m">register</text>
+  <text x="55" y="216" class="m">cancel_own / scope</text>
+  <text x="55" y="232" class="m">annul</text>
+  <text x="55" y="248" class="m">archive / restore</text>
+  <text x="55" y="264" class="m">issue_waiver</text>
+  <text x="55" y="280" class="m">view_audit</text>
+  <rect x="220" y="110" width="200" height="220" class="b"/>
+  <text x="320" y="130" text-anchor="middle" class="l">Context factors</text>
+  <text x="235" y="152" class="m">ownership (created_by)</text>
+  <text x="235" y="168" class="m">org scope / subtree</text>
+  <text x="235" y="184" class="m">role / grant</text>
+  <text x="235" y="200" class="m">HR_HEAD</text>
+  <text x="235" y="216" class="m">document specialization</text>
+  <text x="235" y="232" class="m">state-dependent rules</text>
+  <text x="235" y="260" class="m">L003 validation gate</text>
+  <rect x="450" y="110" width="210" height="220" class="a"/>
+  <text x="555" y="130" text-anchor="middle" class="l">Not in UDE-005</text>
+  <text x="465" y="152" class="m">Permission implementation</text>
+  <text x="465" y="168" class="m">HTTP 403 mapping</text>
+  <text x="465" y="184" class="m">UI button visibility</text>
+  <text x="465" y="200" class="m">ACCESS-002 integration</text>
+  <text x="465" y="230" class="m">PO: cancel has granular</text>
+  <text x="465" y="246" class="m">permissions; other paths</text>
+  <text x="465" y="262" class="m">use broad admin (debt)</text>
+  <line x1="190" y1="220" x2="220" y2="220" stroke="#64748b"/><line x1="420" y1="220" x2="450" y2="220" stroke="#64748b"/>
+  <text x="350" y="360" text-anchor="middle" class="m">Decision recorded in lifecycle audit metadata (permission_used, scope_rule)</text>
+  <text x="350" y="378" text-anchor="middle" class="m">PO reference: PERSONNEL_ORDERS_CANCEL_OWN | CANCEL_SCOPE | ARCHIVE | RESTORE</text>
+</svg>

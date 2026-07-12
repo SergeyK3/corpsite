@@ -1,0 +1,24 @@
+source_layer,target_layer,allowed,forbidden,rationale,enforcement
+shared,Personnel Orders module,yes via adapter,no direct import,Specialization plugs into core not vice versa,Package structure
+shared,Operational Orders module,yes via adapter,no direct import,Same composition model,Package structure
+shared,Task Engine / Execution runtime,no,no,Execution downstream ADR-008,Dependency rules
+shared,HR employee_events,no,no,PO apply is specialization adapter,Projection registry
+shared,Organization context,yes read-only,yes write,Party resolution reads org,ADR-007
+Generation,Task Engine,no,no,Generation ends at export ADR-008,Component matrix
+Generation,Execution Projection orchestration,yes emit only,no task CRUD,Descriptor handoff only,Boundary diagram
+Localization,Execution,no,no,Independent lifecycles ADR-004,Lifecycle matrix
+Localization,HR apply,no,no,Locale not HR-specific,Core vs spec matrix
+Execution Projection,Rendering,no,no,Projection uses semantic snapshot not render pipeline,DR-13
+Execution Projection,Document editing,no,no,Downstream read-only after REGISTERED,Aggregate boundary
+Renderer,Semantic mutation,no,no,Renderer consumes state,DR-12
+Validation,Direct DB mutation,no,no,Validation returns results only,Component matrix
+Document Core,Scenario semantics,no,yes,Structure independent of scenario,OP-RES-006
+Editorial Core,Task statuses,no,no,Editorial not execution,Component matrix
+Lifecycle Service,Generation internals,no,no,Lifecycle guards via validation not generation coupling,Component matrix
+Audit,Mutable history,no,no,Append-only DR-14,Design rules
+Attachment,Execution tracking,no,no,Attachment refs only,Component matrix
+Specialization Registry,Concrete generators in core,no,no,Registry resolves plugins,ADR-002
+PO module,OO scenario logic,no,no,No cross-specialization leakage,Independence check
+OO module,employee_events apply,no,no,No HR in OO,Independence check
+Draft Intake,auto READY promotion,no,no,Intake does not bypass validation,ADR-012
+Content Confirmation,access permissions,no,no,Process gate not RBAC,OP-RES-006A

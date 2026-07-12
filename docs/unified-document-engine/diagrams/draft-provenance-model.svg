@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.sub{fill:#fef3c7;stroke:#d97706;rx:4}.ws{fill:#dbeafe;stroke:#2563eb;rx:4}.gen{fill:#d1fae5;stroke:#059669;rx:4}.eff{fill:#e0e7ff;stroke:#4f46e5;rx:4}.l{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="375" y="22" text-anchor="middle" class="t">Draft Provenance Model (UDE-002)</text>
+  <rect x="40" y="50" width="670" height="70" class="ws"/>
+  <text x="375" y="72" text-anchor="middle" class="l">DraftBlock (per locale section/item)</text>
+  <rect x="60" y="85" width="120" height="28" class="sub"/><text x="120" y="103" text-anchor="middle" class="m">SubmittedText</text>
+  <rect x="200" y="85" width="140" height="28" class="ws"/><text x="270" y="103" text-anchor="middle" class="m">WorkspaceEffective</text>
+  <rect x="360" y="85" width="100" height="28" class="gen"/><text x="410" y="103" text-anchor="middle" class="m">Generated</text>
+  <rect x="480" y="85" width="100" height="28" class="eff"/><text x="530" y="103" text-anchor="middle" class="m">Translated</text>
+  <rect x="200" y="150" width="350" height="100" class="ws" rx="6"/>
+  <text x="375" y="172" text-anchor="middle" class="l">TextProvenance (per block)</text>
+  <text x="210" y="192" class="m">source | author | organization | language | submitted_at</text>
+  <text x="210" y="208" class="m">derived_from | translation_origin | edited_by | confirmed_by</text>
+  <text x="210" y="224" class="m">edit_class: form_only | content | localization_only</text>
+  <path d="M120 113 L270 140" stroke="#d97706" stroke-dasharray="3,2"/><path d="M270 113 L375 150" stroke="#2563eb"/><path d="M410 113 L375 150" stroke="#059669"/><path d="M530 113 L375 150" stroke="#4f46e5"/>
+  <rect x="40" y="280" width="200" height="100" rx="6" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="140" y="302" text-anchor="middle" class="l">SUBMITTED</text><text x="50" y="322" class="m">author=ContentAuthor</text><text x="50" y="338" class="m">immutable</text>
+  <rect x="275" y="280" width="200" height="100" rx="6" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="375" y="302" text-anchor="middle" class="l">TRANSLATED</text><text x="285" y="322" class="m">translation_origin=RU@vN</text><text x="285" y="338" class="m">edited_by=Translator</text>
+  <rect x="510" y="280" width="200" height="100" rx="6" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="610" y="302" text-anchor="middle" class="l">MANUALLY_EDITED</text><text x="520" y="322" class="m">derived_from=prior version</text><text x="520" y="338" class="m">no silent overwrite</text>
+  <text x="375" y="400" text-anchor="middle" class="m">Provenance copied to Document LocaleRepresentation at promotion  submitted preserved in Workspace archive</text>
+</svg>

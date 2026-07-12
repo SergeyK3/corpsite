@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 360" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.d{fill:#ecfdf5;stroke:#059669;rx:25}.f{fill:#f1f5f9;stroke:#94a3b8;rx:25}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Lifecycle Bootstrap (UDE-004)</text>
+  <rect x="275" y="55" width="150" height="40" class="d"/><text x="350" y="80" text-anchor="middle" class="l">DRAFT</text>
+  <text x="350" y="115" text-anchor="middle" class="m">created at Activation  ONLY state at birth</text>
+  <rect x="80" y="160" width="130" height="36" class="f"/><text x="145" y="182" text-anchor="middle" class="m">READY</text>
+  <rect x="230" y="160" width="130" height="36" class="f"/><text x="295" y="182" text-anchor="middle" class="m">SIGNED</text>
+  <rect x="380" y="160" width="130" height="36" class="f"/><text x="445" y="182" text-anchor="middle" class="m">REGISTERED</text>
+  <rect x="530" y="160" width="130" height="36" class="f"/><text x="595" y="182" text-anchor="middle" class="m">VOIDED</text>
+  <line x1="350" y1="95" x2="145" y2="160" stroke="#94a3b8" stroke-dasharray="4,3"/><line x1="350" y1="95" x2="295" y2="160" stroke="#94a3b8" stroke-dasharray="4,3"/>
+  <text x="200" y="150" class="m">UDE-005</text>
+  <rect x="100" y="230" width="500" height="100" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="350" y="252" text-anchor="middle" class="l">Also at bootstrap</text>
+  <text x="110" y="272" class="m">Localization: CURRENT (mandatory) copied | Execution: not_created | Archive: null</text>
+  <text x="110" y="290" class="m">WriteLock: DRAFT editable | First audit: DOCUMENT_ACTIVATED</text>
+  <text x="350" y="340" text-anchor="middle" class="m">Gray states = UDE-005 Lifecycle Core  not created by Activation</text>
+</svg>

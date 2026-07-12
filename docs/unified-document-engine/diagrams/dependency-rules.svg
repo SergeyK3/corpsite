@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 500" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.ok{fill:#ecfdf5;stroke:#059669;rx:6}.no{fill:#fef2f2;stroke:#dc2626;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}.arr{stroke:#334155;fill:none}</style></defs>
+  <text x="410" y="22" text-anchor="middle" class="t">UDE Dependency Rules (UDE-001)</text>
+  <rect x="300" y="45" width="220" height="50" class="ok"/><text x="410" y="75" text-anchor="middle" class="l">shared/</text>
+  <rect x="40" y="140" width="150" height="45" class="ok"/><text x="115" y="167" text-anchor="middle" class="l">document/</text>
+  <rect x="210" y="140" width="150" height="45" class="ok"/><text x="285" y="167" text-anchor="middle" class="l">editorial/</text>
+  <rect x="380" y="140" width="150" height="45" class="ok"/><text x="455" y="167" text-anchor="middle" class="l">localization/</text>
+  <rect x="550" y="140" width="150" height="45" class="ok"/><text x="625" y="167" text-anchor="middle" class="l">lifecycle/</text>
+  <rect x="40" y="210" width="150" height="45" class="ok"/><text x="115" y="237" text-anchor="middle" class="l">generation/</text>
+  <rect x="210" y="210" width="150" height="45" class="ok"/><text x="285" y="237" text-anchor="middle" class="l">validation/</text>
+  <rect x="380" y="210" width="150" height="45" class="ok"/><text x="455" y="237" text-anchor="middle" class="l">projection/</text>
+  <rect x="550" y="210" width="150" height="45" class="ok"/><text x="625" y="237" text-anchor="middle" class="l">contracts/</text>
+  <rect x="100" y="310" width="170" height="50" class="ok"/><text x="185" y="340" text-anchor="middle" class="l">personnel/</text>
+  <rect x="550" y="310" width="170" height="50" class="ok"/><text x="635" y="340" text-anchor="middle" class="l">operational/</text>
+  <rect x="325" y="400" width="170" height="50" class="no"/><text x="410" y="430" text-anchor="middle" class="l">task-engine/</text>
+  <path d="M410 95 L115 140" class="arr"/><path d="M410 95 L285 140" class="arr"/><path d="M410 95 L455 140" class="arr"/><path d="M410 95 L625 140" class="arr"/>
+  <path d="M115 185 L285 210" class="arr"/><path d="M455 185 L285 210" class="arr"/>
+  <path d="M185 360 L410 95" class="arr" stroke="#059669"/><path d="M635 360 L410 95" class="arr" stroke="#059669"/>
+  <path d="M455 255 L410 430" class="arr" stroke="#dc2626" stroke-dasharray="5,3"/>
+  <path d="M285 255 L410 430" class="arr" stroke="#dc2626" stroke-dasharray="5,3"/>
+  <line x1="40" y1="95" x2="40" y2="95" stroke="#fff"/>
+  <text x="30" y="380" class="m" fill="#dc2626">FORBIDDEN</text>
+  <text x="500" y="380" class="m">generation ’ task-engine</text>
+  <text x="500" y="395" class="m">localization ’ execution</text>
+  <text x="500" y="410" class="m">projection ’ rendering</text>
+  <text x="500" y="425" class="m">shared ’ personnel|operational internals</text>
+  <text x="410" y="475" text-anchor="middle" class="m">Allowed: specialization ’ shared (adapter up). Forbidden: shared ’ specialization; core ’ task runtime</text>
+</svg>

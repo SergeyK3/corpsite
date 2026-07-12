@@ -1,0 +1,28 @@
+contract_name,purpose,scope,mandatory_properties,mandatory_links,in_contract,not_in_contract,uses_personnel_orders,uses_operational_orders,future_reuse,readiness,notes
+Document,Legal act aggregate root,Shared,DocumentId DocumentKind org ref lifecycle archive,Metadata Structure Items Audit,Aggregate boundary authority rules immutability,ORM API employee_events tasks,Uses specialization,Uses specialization,Protocols commissions directives,Ready,Aggregate root
+DocumentMetadata,Identity ownership status,Shared,kind number date lifecycle archive creator,Document content_author optional,Role separation content_author created_by,employee_id mandatory scenario_id,No,No,Yes,Ready,Shared
+DocumentStructure,Ordered structural shell,Shared,ordered sections block_kind,Header Preamble Formula Items Attachments Signature,Canonical sequence 97% corpus,HTML PDF layout,No,No,Yes,Ready,Shared
+DocumentSection,Single structural block,Shared,section_kind position mandatory flag,Structure LocaleRepresentations,block_kind mapping,DB column names,No,No,Yes,Ready,Shared
+OrderItem,Numbered generation editorial unit,Shared shell,ItemType sequence semantic_payload,Sequence Obligations LocaleRepresentations Validation,Item-level regen override chain,HR OO field names in shared mandatory,Payload specialized,Payload specialized,Yes,Ready,Shared contract specialized payload
+OrderItemSequence,Item ordering numbering,Shared,ordered refs numbering scheme,Structure OrderItems,BC001 hooks,Auto-renumber impl,No,No,Yes,Ready,Shared
+BusinessIntent,Management meaning,Specialization payload,intent classification,OrderItem Scenario optional,Orthogonal to ItemType where possible,PO event codes in shared enum,Implicit PO,Explicit OO,Partial,Ready,Shape shared values specialized
+ExecutionObligation,Executable management duty,Shared concept,ObligationType EXECUTION PartyReference assignee,OrderItem ManagedObject Deadline optional,0..N per item projection source,Task runtime employee_events table,Collapsed 1:1 MVP,Explicit 1..N,Yes,Ready,Shared
+ControlObligation,Supervision duty,Shared OO-primary,ObligationType CONTROL controller ref,OrderItem or meta-item,Never merge with execution,boolean controller field,None,Standard,Commissions,Ready,OO-primary shared shape
+ManagedObject,Governed entity,Shared concept,ManagedObjectType ref id,Obligation,Extensible type registry,employee_id as shared mandatory,Employee-centric,8 families,Yes,Ready,Concept shared
+PartyReference,Role-first party pointer,Shared,reference kind role or person,Optional resolution snapshot,Role-first frozen at sign,Access permissions,Yes,Yes,Yes,Ready,Shared
+Deadline,Temporal constraint,Shared,DeadlineType value or anchor,Obligation,Typed semantics,Cron expressions,Partial,Rich,Yes,Ready,Shared
+ExpectedResult,Declared outcome,Specialization optional,result descriptor,Obligation,Do not auto-add,—,Derived,Optional explicit,Partial,Ready,Optional
+EvidenceExpectation,Proof requirement,Specialization optional,EvidenceType,Obligation Attachment optional,Distinct from implicit ack,—,Rare,Common,Partial,Ready,Optional
+AttachmentReference,File structured artifact,Shared,AttachmentKind storage ref,Structure or Obligation,Scan roster plan roles,S3 API,Yes,Yes,Yes,Ready,Shared
+LocaleRepresentation,Per-locale block state,Shared,LocaleCode generated effective provenance loc lifecycle,Item or Section ContentConfirmation optional,Per-block mandatory locales,MT service,Yes,Yes,Yes,Ready,Shared
+GeneratedText,System-produced prose,Shared,content version ref,LocaleRepresentation Provenance GENERATED,Idempotent not signing authority alone,Template engine,Yes,Yes,Yes,Ready,Shared
+EffectiveText,Authoritative signing wording,Shared,content override flag fingerprint,LocaleRepresentation,override??generated frozen post-sign,Rich text widget,Yes,Yes,Yes,Ready,Shared
+SubmittedText,Intake-received text,Shared,content intake timestamp actor unit,LocaleRepresentation Provenance SUBMITTED,Never auto-effective,Email parser,Optional PO,P0 OO,Yes,Ready,Shared
+TextProvenance,Origin metadata,Shared,TextSourceType actor unit timestamp derived_from,LocaleRepresentation,Per-block minimum ADR-013,Git diff,Yes,Yes,Yes,Ready,Shared
+ContentConfirmation,Author meaning acknowledgment,Shared process,confirmed_by timestamp change class,Document or Locale Content Author,Gates READY on content change,E-signature,Optional PO,Default OO,Partial,Needs clarification,Interview gate OQ-04
+ExecutionProjectionDescriptor,Downstream handoff payload,Shared,obligation identity party deadline object snapshots,OrderItem Obligation Document,Outside aggregate idempotent,Task CRUD,PO adapter,OO adapter,Yes,Ready,Shared descriptor specialized adapter
+ValidationResult,Check outcome,Shared,ValidationCode severity scope,Document Item Locale,Errors block warnings waive,Specific impl,Yes,Yes,Yes,Ready,Shared
+DocumentAuditEvent,Append-only history,Shared,event kind actor timestamp,Document,Immutable,Event store tech,Yes,Yes,Yes,Ready,Shared
+DocumentLifecycleState,Document lifecycle position,Shared,DRAFT READY SIGNED REGISTERED VOIDED,Metadata Audit,Archive orthogonal void_kind,Workflow engine,Yes,Yes,Yes,Ready,Shared
+LocalizationLifecycleState,Per-locale alignment,Shared,CURRENT STALE REVIEW_REQUIRED,LocaleRepresentation,Mandatory stale blocks READY,Production enum file,Yes,Yes,Yes,Ready,Shared
+ExecutionLifecycleState,Downstream execution,Shared downstream,created waiting in_progress completed etc,Execution contour not Document,Independent of document status,Document table storage,Downstream,Downstream,Yes,Ready,Shared reference only

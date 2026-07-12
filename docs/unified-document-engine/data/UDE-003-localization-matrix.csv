@@ -1,0 +1,12 @@
+capability,editorial_core_role,localization_core_role,input,output,policy_hook,forbidden_dependency
+locale_lifecycle,Reads aggregate state,Owns CURRENT STALE REVIEW_REQUIRED,EditorialBlock changes,LocaleBundle.localization_state,mandatory_locales,task_engine
+translation_state,Triggers on translation request,Owns process stages,TRANSLATED blocks,translation_state reviewed,translation_policy,machine_translator
+bilingual_consistency,Coordinates validation,Owns BC check execution,LocaleBundle pair,BC ValidationResult,BC registry,execution
+locale_completeness,Gates promotion with E102,Owns per-locale required blocks,mandatory policy,completeness flag,localization_registry,hr_apply
+staleness_propagation,Regeneration trigger,Propagates RU to KK,RU effective change,KK STALE BC023,drafting_path,rendering
+mandatory_locales,Promotion gate E103,Defines ru kk required,org policy,blocker list,kind policy,api
+localization_review,Tracks reviewer,Owns localization_reviewed_by,review command,audit event,translation_policy,personnel_events
+drafting_path,Sets default mode,Influences translation workflow,intake metadata,SYMMETRIC RU_FIRST SUBMITTED,kind registry,sql
+source_language,Editorial primary,Derivation anchor,metadata,ru default probable,localization_registry,ui
+waiver_locale_blocker,Audit only,May waive non-mandatory,operator waiver,audit L7,policy,generation_internals
+semantic_locale_independence,Semantic SoT,Locales are projections,semantic model,per-locale blocks,shared,oo_scenario_runtime

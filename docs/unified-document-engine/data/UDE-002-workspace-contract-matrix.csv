@@ -1,0 +1,22 @@
+workspace_component,purpose,mandatory_properties,stored_in_workspace,promoted_to_document,not_stored,readiness,notes
+DraftWorkspace,Aggregate root pre-document,WorkspaceId WorkspaceState DraftMetadata,Yes,No,DocumentId lifecycle,Ready,Central UDE-002 deliverable
+WorkspaceId,Identity of workspace,opaque id,Yes,Reference link,—,Ready,Created at ACCEPTED
+WorkspaceState,Conceptual stage tracker,current stage derived,Yes,No,—,Ready,Not document lifecycle
+DraftMetadata,Pre-document metadata,author unit operator channel path,Yes,DocumentMetadata,Registration number,Ready,Extends UDE-001 metadata
+SubmittedDraftSnapshot,Frozen intake capture,SubmittedDraftId raw payloads,Yes,Provenance reference,—,Ready,Immutable
+DraftBlock,Text-bearing unit,block_kind locale,Yes,DocumentSection OrderItem,—,Ready,Per locale block
+SubmittedText,Author-origin text,content provenance SUBMITTED,Yes,Historical ref in provenance,—,Ready,Immutable
+WorkspaceEffectiveDraft,Editorial interim text,content provenance edits,Yes,EffectiveText,—,Ready,Stage 2 SoT
+TextProvenance,Per-block origin,source author org derived_from,Yes,LocaleRepresentation provenance,—,Ready,ADR-013
+SemanticEnrichmentState,Progressive semantic model,obligations parties objects partial flag,Yes,OrderItem semantic_payload,—,Ready,Partial OK until promotion
+LocalizationState,Per-locale process,translation review stale,Yes,LocalizationLifecycleState,—,Ready,Independent of doc lifecycle
+IntakeValidationState,I and W check results,findings severity,Yes,ValidationResult at promotion,—,Ready,No lifecycle
+ClarificationRequest,Open question cycle,question scope resolver,Yes,No,—,Ready,Not workflow engine
+ContentConfirmationState,Author acknowledgment,status confirmed_by,Yes,ContentConfirmation,—,Needs clarification,Policy OQ-04
+DraftAttachment,Pre-official files,kind storage ref role,Yes,AttachmentReference,—,Ready,Three kinds
+DraftAuditEvent,Workspace history,event actor timestamp,Yes,Summary at promotion,Full replay,Ready,Separate from lifecycle audit
+PromotionReadiness,Document creation gate,blockers cleared flag,Yes,No,—,Ready,Gates DOCUMENT_PROMOTED
+OfficialDraftPackage,Promotion payload,semantic + effective reconciled,Transient at promotion,Full Document aggregate,—,Ready,Stage 4 convergence
+DocumentId,Official document identity,—,No,Yes at promotion,In workspace,Ready,Only at DOCUMENT_PROMOTED
+DocumentLifecycleState,DRAFT READY etc,—,No,Yes at promotion,In workspace,Ready,Starts at promotion
+DocumentAuditEvent,Lifecycle audit,—,No,Yes at promotion,In workspace,Ready,Starts at promotion

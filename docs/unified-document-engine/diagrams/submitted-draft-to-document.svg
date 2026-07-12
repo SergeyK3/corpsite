@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.y{fill:#fef3c7;stroke:#d97706;rx:8}.g{fill:#ecfdf5;stroke:#059669;rx:8}.b{fill:#eff6ff;stroke:#2563eb;rx:8}.p{fill:#f3e8ff;stroke:#7c3aed;rx:8}.s{fill:#fce7f3;stroke:#db2777;rx:8}.l{font:600 12px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="22" text-anchor="middle" class="t">Submitted Draft to Signed Document (UDE-002)</text>
+  <rect x="40" y="55" width="130" height="55" class="y"/><text x="105" y="78" text-anchor="middle" class="l">Submitted Draft</text><text x="50" y="96" class="m">author origin</text>
+  <rect x="200" y="55" width="130" height="55" class="g"/><text x="265" y="78" text-anchor="middle" class="l">Draft Workspace</text><text x="210" y="96" class="m">enrichment + edit</text>
+  <rect x="360" y="55" width="130" height="55" class="g"/><text x="425" y="78" text-anchor="middle" class="l">Official Draft</text><text x="370" y="96" class="m">ready package</text>
+  <rect x="520" y="55" width="130" height="55" class="b"/><text x="585" y="78" text-anchor="middle" class="l">Document</text><text x="530" y="96" class="m">DocumentId + DRAFT</text>
+  <rect x="680" y="55" width="130" height="55" class="s"/><text x="745" y="78" text-anchor="middle" class="l">Signed Snapshot</text><text x="690" y="96" class="m">immutable</text>
+  <line x1="170" y1="82" x2="200" y2="82" stroke="#334155"/><line x1="330" y1="82" x2="360" y2="82" stroke="#334155"/><line x1="490" y1="82" x2="520" y2="82" stroke="#334155"/><line x1="650" y1="82" x2="680" y2="82" stroke="#334155"/>
+  <text x="185" y="72" class="m">intake</text><text x="345" y="72" class="m">promote</text><text x="505" y="72" class="m">sign</text>
+  <rect x="60" y="150" width="780" height="180" rx="6" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="450" y="175" text-anchor="middle" class="l">Identity and Audit Timeline</text>
+  <text x="80" y="200" class="m">SubmittedDraftId</text><text x="230" y="200" class="m">WorkspaceId</text><text x="400" y="200" class="m"></text><text x="530" y="200" class="m">DocumentId</text><text x="700" y="200" class="m">frozen snapshot</text>
+  <text x="80" y="230" class="m">Draft Audit starts</text><text x="230" y="230" class="m">Draft Audit</text><text x="400" y="230" class="m">Draft Audit ends</text><text x="530" y="230" class="m">Lifecycle Audit starts</text><text x="700" y="230" class="m">Lifecycle Audit</text>
+  <text x="80" y="260" class="m">No lifecycle</text><text x="230" y="260" class="m">No lifecycle</text><text x="400" y="260" class="m">No lifecycle</text><text x="530" y="260" class="m">DRAFT’READY’SIGNED</text><text x="700" y="260" class="m">REGISTERED</text>
+  <text x="80" y="290" class="m">SoT: Submitted</text><text x="230" y="290" class="m">SoT: Workspace+Semantic</text><text x="400" y="290" class="m">SoT: Official Effective</text><text x="530" y="290" class="m">SoT: Official Effective</text><text x="700" y="290" class="m">SoT: Signed</text>
+  <text x="450" y="350" text-anchor="middle" class="m">Projection appears only after REGISTERED  not in this diagram scope</text>
+</svg>

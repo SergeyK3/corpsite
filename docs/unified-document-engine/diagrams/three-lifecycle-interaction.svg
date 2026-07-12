@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.d{fill:#ecfdf5;stroke:#059669;rx:12}.l{fill:#dbeafe;stroke:#2563eb;rx:12}.e{fill:#fef3c7;stroke:#d97706;rx:12}.m{font:9px sans-serif;fill:#475569}.lb{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="360" y="22" text-anchor="middle" class="t">Three Lifecycle Interaction</text>
+  <rect x="40" y="55" width="200" height="280" class="d"/>
+  <text x="140" y="78" text-anchor="middle" class="lb">Document Lifecycle</text>
+  <text x="60" y="100" class="m">DRAFT ’ READY ’ SIGNED</text>
+  <text x="60" y="116" class="m">’ REGISTERED ’ VOIDED</text>
+  <text x="60" y="140" class="m">Archive orthogonal</text>
+  <text x="60" y="170" class="m">UDE-005 scope</text>
+  <rect x="260" y="55" width="200" height="280" class="l"/>
+  <text x="360" y="78" text-anchor="middle" class="lb">Localization Lifecycle</text>
+  <text x="280" y="100" class="m">CURRENT | STALE</text>
+  <text x="280" y="116" class="m">REVIEW_REQUIRED</text>
+  <text x="280" y="140" class="m">STALE blocks READY</text>
+  <text x="280" y="156" class="m">REVIEW blocks w/o waiver</text>
+  <text x="280" y="180" class="m">SIGNED freezes locales</text>
+  <text x="280" y="196" class="m">Independent per locale</text>
+  <rect x="480" y="55" width="200" height="280" class="e"/>
+  <text x="580" y="78" text-anchor="middle" class="lb">Execution Lifecycle</text>
+  <text x="500" y="100" class="m">not_created ’ projected</text>
+  <text x="500" y="116" class="m">’ active ’ completed</text>
+  <text x="500" y="140" class="m">After REGISTERED default</text>
+  <text x="500" y="156" class="m">VOIDED cascades void</text>
+  <text x="500" y="172" class="m">ARCHIVED: no auto-cancel</text>
+  <text x="500" y="188" class="m">Completion ` doc status</text>
+  <line x1="240" y1="180" x2="260" y2="180" stroke="#64748b"/><text x="245" y="172" class="m">gates</text>
+  <line x1="240" y1="220" x2="480" y2="160" stroke="#64748b" stroke-dasharray="4,3"/><text x="350" y="195" class="m">REGISTERED enables projection</text>
+  <line x1="140" y1="280" x2="580" y2="240" stroke="#dc2626" stroke-dasharray="4,3"/><text x="350" y="270" class="m">VOIDED ’ execution void/compensate</text>
+  <text x="360" y="380" text-anchor="middle" class="m">Lifecycles independent  influence via gates not merge</text>
+</svg>

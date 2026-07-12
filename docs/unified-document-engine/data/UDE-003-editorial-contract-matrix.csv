@@ -1,0 +1,20 @@
+contract_component,purpose,scope,in_editorial_core,in_localization_core,promoted_to_document,readiness,notes
+EditorialCore,Shared editorial orchestration,Pre and post promotion,Yes,Coordinates,No — services,Ready,Not an aggregate
+LocalizationCore,Per-locale state and BC checks,Pre and post promotion,Invoked by,Yes,No — services,Ready,No machine translation
+OfficialDraftPackage,Promotion handoff snapshot,Workspace boundary,Produces,Validates,Yes — consumed at promotion,Ready,Editorial snapshot not aggregate
+EditorialBlock,Per locale section/item text state,Workspace + Document,Yes,Yes,Yes,Ready,effective=override??generated
+LocaleBundle,Per-locale aggregate,Workspace + Document,Yes,Yes,Yes,Ready,mandatory locale policy
+LocaleRepresentation,UDE-001 contract target,Document,Yes,Yes,Yes,Ready,Post-promotion host
+GeneratedText,System prose snapshot,EditorialBlock,Yes,No,Yes,Ready,Regenerable
+EffectiveText,Authoritative wording,EditorialBlock,Yes,Yes,Yes,Ready,Signing prep
+ManualOverride,Operator edit layer,EditorialBlock,Yes,No,Yes as provenance,Ready,Preserves on regen
+SectionRegistry,Block kind plugins,Shared,Yes,Yes,No — registry,Ready,Extension point
+EditorialSection,Universal block kinds,Structure,Yes,Partial,Yes,Ready,Header to Footer
+SemanticModelSnapshot,Enrichment output,Package,Referenced,No,Yes,Ready,Language independent
+EditorialValidation,E-series checks,Pre-promotion,Yes,Yes,Result promoted,Ready,Distinct from I* and lifecycle
+PromotionBoundary,Transfer rules,Workspace→Document,Yes,Yes,N/A,Ready,UDE-004 executes
+EditorialAudit,Editorial event stream,Workspace + Document,Yes,Yes,Summary at promotion,Ready,Between draft and lifecycle audit
+StalenessState,CURRENT STALE REVIEW_REQUIRED,EditorialBlock,Yes,Yes,Yes,Ready,PO review_status aligned
+BilingualConsistency,BC checks,Localization,No,Yes,ValidationResult,Ready,OP-RES-005A
+RegenerationOrchestrator,Generate regen scope,Editorial,Yes,Triggers stale,No,Ready,Item default scope
+WriteLockPolicy,DRAFT-only edits,Document post-promotion,Yes,No,N/A,Ready,PO-EDIT R10

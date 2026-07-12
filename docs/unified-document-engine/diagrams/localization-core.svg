@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.core{fill:#ecfdf5;stroke:#059669;rx:8}.ru{fill:#dbeafe;stroke:#2563eb;rx:4}.kk{fill:#fef3c7;stroke:#d97706;rx:4}.bc{fill:#f3e8ff;stroke:#7c3aed;rx:4}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="400" y="22" text-anchor="middle" class="t">Localization Core (UDE-003)</text>
+  <rect x="250" y="45" width="300" height="70" class="core"/><text x="400" y="72" text-anchor="middle" class="l">Localization Core</text><text x="260" y="92" class="m">locale lifecycle | translation state | BC checks | staleness propagation</text>
+  <rect x="80" y="150" width="280" height="100" class="ru"/><text x="220" y="172" text-anchor="middle" class="l">Locale: ru</text><text x="90" y="192" class="m">editorial_blocks[] per section/item</text><text x="90" y="208" class="m">CURRENT | STALE | REVIEW_REQUIRED</text>
+  <rect x="440" y="150" width="280" height="100" class="kk"/><text x="580" y="172" text-anchor="middle" class="l">Locale: kk</text><text x="450" y="192" class="m">TRANSLATED from RU + provenance</text><text x="450" y="208" class="m">BC023 on RU change</text>
+  <rect x="150" y="280" width="500" height="50" class="bc"/><text x="400" y="302" text-anchor="middle" class="l">Bilingual Consistency Engine</text><text x="160" y="320" class="m">BC001 count | BC002 numbering | BC013-016 parity | BC019 completeness | BC020 placeholders</text>
+  <line x1="400" y1="115" x2="220" y2="150" stroke="#334155"/><line x1="400" y1="115" x2="580" y2="150" stroke="#334155"/>
+  <line x1="220" y1="250" x2="400" y2="280" stroke="#334155"/><line x1="580" y1="250" x2="400" y2="280" stroke="#334155"/>
+  <text x="400" y="365" text-anchor="middle" class="m">NOT: machine translation | task engine | lifecycle | PDF</text>
+  <text x="400" y="385" text-anchor="middle" class="m">Semantic model language-independent ’ independent RU/KK renderers</text>
+</svg>

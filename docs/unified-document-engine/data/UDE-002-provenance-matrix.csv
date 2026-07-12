@@ -1,0 +1,11 @@
+provenance_level,scope,minimum_attributes,mutable,equals_effective,carried_to_document,mvp_required,example
+draft_aggregate,Workspace document-level,bilingual_readiness drafting_path submission_channel,derived summary,No,Yes metadata summary,Yes,RU+KK completeness flag
+locale,Per LocaleCode in Workspace,language completeness translation_origin review_status,updates on locale events,No,Yes,Yes,KK declared missing
+section_block,DraftBlock section level,source author org language submitted_at,provenance append-only,No,Yes,Yes,preamble block
+item_block,DraftBlock item body,source derived_from edited_by confirmed_by,provenance append-only,Interim in workspace effective,Yes,Yes,item 1 body RU
+submitted_layer,SubmittedText immutable,source=SUBMITTED author org submitted_at,No,No,Yes reference,Yes,Dept head RU paste
+workspace_effective_layer,WorkspaceEffectiveDraft,source edited_by derived_from edit_class,Yes with chain,Interim authority,Yes as EffectiveText,Yes,HR numbered items
+translated_layer,TRANSLATED blocks,translation_origin derived_from edited_by,Yes with chain,No,Yes,Yes,KK from RU v3
+generated_layer,GENERATED from semantic,source=GENERATED semantic_version_ref,Regenerable,No,Yes,Yes parallel path,Scenario path
+confirmation,ContentConfirmation,confirmed_by timestamp scope,Resets on content change,No,Yes,Yes,Author ack after HR edit
+localization_review,Per locale,localization_reviewed_by timestamp,Resets on STALE,No,Yes,Yes,KK terminology pass

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.po{fill:#fef3c7;stroke:#d97706;rx:10}.sh{fill:#ecfdf5;stroke:#059669;rx:10}.ad{fill:#dbeafe;stroke:#2563eb;rx:10}.oo{fill:#e0e7ff;stroke:#4f46e5;rx:10}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}.a{fill:#d1fae5;stroke:#059669}.b{fill:#fef9c3;stroke:#ca8a04}.c{fill:#fecaca;stroke:#dc2626}.d{fill:#e2e8f0;stroke:#64748b}.e{fill:#fce7f3;stroke:#db2777}</style></defs>
+  <text x="360" y="22" text-anchor="middle" class="t">Personnel Orders to Shared Lifecycle</text>
+  <rect x="40" y="50" width="280" height="300" class="po"/>
+  <text x="180" y="72" text-anchor="middle" class="l">PO Runtime (unchanged)</text>
+  <text x="60" y="95" class="m">command_service | void_service</text>
+  <text x="60" y="111" class="m">cancel_service | archive_service</text>
+  <text x="60" y="127" class="m">lifecycle_audit_service</text>
+  <rect x="60" y="152" width="10" height="10" class="a"/><text x="80" y="162" class="m">A: status enum, void_kind, audit, archive</text>
+  <rect x="60" y="182" width="10" height="10" class="b"/><text x="80" y="192" class="m">B: services to adapter wrappers</text>
+  <rect x="60" y="212" width="10" height="10" class="c"/><text x="80" y="222" class="m">C: apply, void chain, cancel scope</text>
+  <rect x="60" y="242" width="10" height="10" class="d"/><text x="80" y="252" class="m">D: READY drift, UI annul label, audit gaps</text>
+  <rect x="60" y="272" width="10" height="10" class="e"/><text x="80" y="282" class="m">E: signed snapshot, return-to-draft</text>
+  <rect x="360" y="120" width="140" height="60" class="ad"/>
+  <text x="430" y="145" text-anchor="middle" class="l">PO Adapter</text>
+  <text x="430" y="162" text-anchor="middle" class="m">UDE-006 Phase C</text>
+  <rect x="530" y="50" width="160" height="300" class="sh"/>
+  <text x="610" y="72" text-anchor="middle" class="l">Shared Lifecycle Core</text>
+  <text x="545" y="95" class="m">LifecycleOrchestrator</text>
+  <text x="545" y="111" class="m">L-series validation</text>
+  <text x="545" y="127" class="m">Signed snapshot contract</text>
+  <text x="545" y="143" class="m">RegistrationPolicy</text>
+  <text x="545" y="170" class="m">Phases A-E extraction</text>
+  <text x="545" y="200" class="m">No big-bang refactor</text>
+  <rect x="360" y="280" width="140" height="60" class="oo"/>
+  <text x="430" y="305" text-anchor="middle" class="l">Operational Orders</text>
+  <text x="430" y="322" text-anchor="middle" class="m">Phase D: full shared path</text>
+  <line x1="320" y1="150" x2="360" y2="150" stroke="#2563eb"/><line x1="500" y1="150" x2="530" y2="150" stroke="#059669"/>
+  <line x1="430" y1="180" x2="430" y2="280" stroke="#4f46e5" stroke-dasharray="4,3"/>
+  <text x="360" y="400" text-anchor="middle" class="m">Compatibility: PO status/void_kind/archive/cancel scope preserved during migration</text>
+</svg>

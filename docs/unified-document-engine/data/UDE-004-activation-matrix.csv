@@ -1,0 +1,15 @@
+activation_component,purpose,owner,inputs,outputs,depends_on,forbidden,readiness
+Activation Layer,Orchestrate document birth,UDE platform,OfficialDraftPackage WorkspaceId,Document DRAFT,UDE-003 Editorial,execution tasks PDF,Ready
+PromotionService,Technical materialization,Application Service,OfficialDraftPackage,Document aggregate in memory,Activation Validation,semantic mutation,Ready
+Document Activation,Business event birth moment,Domain,Promotion success commit,DocumentId lifecycle audit,Promotion Pipeline,draft intake,Ready
+Activation Validation,P-series pre-checks,Activation Layer,Package + Workspace,P validation result,Editorial clearance,lifecycle transitions,Ready
+Lifecycle Bootstrap,Initialize DRAFT only,Activation Layer,New Document,LifecycleState DRAFT,LifecyclePolicy,READY SIGNED at birth,Ready
+Initial Version 1,First document version baseline,Activation Layer,Package content,Version 1 mutable,Promotion,signed immutability,Ready
+Initial Effective Baseline,Effective texts v1 at birth,Activation Layer,locale_bundle,LocaleRepresentation[],Package,immutable until sign,Ready
+Lifecycle Audit Init,First lifecycle audit entry,Activation Layer,Activation success,DOCUMENT_ACTIVATED,Commit,editorial events mixed,Ready
+Activation Audit,Promotion lifecycle events,Activation Layer,Pipeline steps,PROMOTION_* events,Separate from lifecycle,merge with draft audit,Ready
+Registry Publication,Document discoverable,Document Kind Registry,DocumentId kind,registry entry,Activation,HR apply,Ready
+Workspace Freeze,DOCUMENT_PROMOTED,Activation Layer,Success,Workspace read-only,Promotion,workspace mutation,Ready
+Publication Boundary,System visibility,Activation Layer,Activation,JournalEligible,Registry,registration number default,Ready
+Signed Immutable Snapshot,Legal freeze,ADR-UDE-009,SIGNED event,Not at activation,UDE-005,activation layer,Deferred UDE-005
+Execution Projection,Downstream handoff,Specialization adapter,REGISTERED,Not at activation,UDE-005,activation,Deferred

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.ed{fill:#fef3c7;stroke:#d97706;rx:8}.act{fill:#ecfdf5;stroke:#059669;rx:8}.doc{fill:#eff6ff;stroke:#2563eb;rx:8}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="22" text-anchor="middle" class="t">Activation Layer Overview (UDE-004)</text>
+  <rect x="40" y="55" width="200" height="120" class="ed"/><text x="140" y="78" text-anchor="middle" class="l">Editorial World</text><text x="50" y="98" class="m">Draft Workspace</text><text x="50" y="114" class="m">Official Draft Package</text><text x="50" y="130" class="m">E* + BC* cleared</text>
+  <rect x="320" y="45" width="260" height="140" class="act"/><text x="450" y="68" text-anchor="middle" class="l">Activation Layer</text><text x="330" y="88" class="m">P-series validation</text><text x="330" y="104" class="m">Promotion (technical)</text><text x="330" y="120" class="m">Document Activation (business)</text><text x="330" y="136" class="m">Lifecycle bootstrap DRAFT</text><text x="330" y="152" class="m">Version 1 + Audit + Registry</text>
+  <rect x="620" y="55" width="240" height="120" class="doc"/><text x="740" y="78" text-anchor="middle" class="l">Predmetny World</text><text x="630" y="98" class="m">Document Aggregate</text><text x="630" y="114" class="m">Lifecycle ’ Archive</text><text x="630" y="130" class="m">Execution Projection (later)</text>
+  <line x1="240" y1="115" x2="320" y2="115" stroke="#059669" stroke-width="2"/><line x1="580" y1="115" x2="620" y2="115" stroke="#2563eb" stroke-width="2"/>
+  <text x="280" y="108" class="m">activate</text>
+  <rect x="120" y="220" width="660" height="50" rx="6" fill="#f8fafc" stroke="#64748b"/><text x="450" y="242" text-anchor="middle" class="l">Activation IN: OfficialDraftPackage | OUT: intake editorial PDF render execution tasks</text>
+  <text x="450" y="350" text-anchor="middle" class="m">Promotion = technical materialization | Document Activation = business birth at DOCUMENT_ACTIVATED commit</text>
+</svg>

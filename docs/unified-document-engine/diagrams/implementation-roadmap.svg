@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 440" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.done{fill:#d1fae5;stroke:#059669;rx:8}.next{fill:#dbeafe;stroke:#2563eb;rx:8}.fut{fill:#f1f5f9;stroke:#64748b;rx:8}.oo{fill:#e0e7ff;stroke:#4f46e5;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 10px sans-serif;fill:#0f172a}</style></defs>
+  <text x="360" y="22" text-anchor="middle" class="t">Implementation Roadmap after UDE-006</text>
+  <rect x="40" y="45" width="200" height="50" class="done"/><text x="140" y="68" text-anchor="middle" class="l">UDE-000..006</text><text x="140" y="84" text-anchor="middle" class="m">Architecture complete</text>
+  <rect x="280" y="45" width="200" height="50" class="next"/><text x="380" y="68" text-anchor="middle" class="l">UDE-007</text><text x="380" y="84" text-anchor="middle" class="m">First code WP</text>
+  <rect x="40" y="120" width="160" height="45" class="fut"/><text x="120" y="142" text-anchor="middle" class="l">UDE-008</text><text x="120" y="156" text-anchor="middle" class="m">Read adapters</text>
+  <rect x="220" y="120" width="160" height="45" class="fut"/><text x="300" y="142" text-anchor="middle" class="l">UDE-009</text><text x="300" y="156" text-anchor="middle" class="m">Editorial runtime</text>
+  <rect x="400" y="120" width="280" height="45" class="oo"/><text x="540" y="142" text-anchor="middle" class="l">OO-IMP-001..005</text><text x="540" y="156" text-anchor="middle" class="m">OO native shared core</text>
+  <rect x="200" y="200" width="320" height="45" fill="#fce7f3" stroke="#db2777" rx="8"/>
+  <text x="360" y="222" text-anchor="middle" class="l">PO-CONV-001 (optional Phase F)</text>
+  <text x="360" y="236" text-anchor="middle" class="m">After harness proof</text>
+  <rect x="60" y="270" width="600" height="150" fill="#f8fafc" stroke="#64748b" rx="6"/>
+  <text x="360" y="292" text-anchor="middle" class="l">Parallel tracks</text>
+  <text x="80" y="315" class="m">Track 1: UDE-007 to 009  shared contracts and services (PO behavior unchanged)</text>
+  <text x="80" y="335" class="m">Track 2: OO-IMP after UDE-007  native UDE path on separate persistence</text>
+  <text x="80" y="355" class="m">Track 3: PO-CONV optional  only after C+D+E compatibility proof</text>
+  <text x="80" y="385" class="m">PO production: continues on legacy path through Tracks 1 and 2</text>
+  <line x1="140" y1="95" x2="380" y2="45" stroke="#059669"/><line x1="380" y1="95" x2="380" y2="120" stroke="#2563eb"/>
+  <line x1="380" y1="165" x2="540" y2="120" stroke="#4f46e5"/><line x1="300" y1="165" x2="360" y2="200" stroke="#db2777" stroke-dasharray="4,3"/>
+  <text x="360" y="425" text-anchor="middle" class="m">Selected next WP: UDE-007  contracts + characterization baseline</text>
+</svg>

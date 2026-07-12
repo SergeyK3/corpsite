@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.s{fill:#f8fafc;stroke:#64748b;rx:6}.h{fill:#dbeafe;stroke:#2563eb}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Lifecycle Audit Model (append-only)</text>
+  <rect x="80" y="45" width="540" height="55" class="s"/>
+  <text x="350" y="68" text-anchor="middle" class="l">Four audit streams (separated)</text>
+  <text x="100" y="88" class="m">Draft (UDE-002) | Editorial (UDE-003) | Activation (UDE-004) | Lifecycle (UDE-005)</text>
+  <rect x="100" y="120" width="500" height="200" class="h" rx="8"/>
+  <text x="350" y="142" text-anchor="middle" class="l">Lifecycle Audit Record</text>
+  <text x="120" y="165" class="m">document_id | action | previous_status ’ new_status</text>
+  <text x="120" y="182" class="m">archive_state_before / after | void_kind | reason_code | reason_text</text>
+  <text x="120" y="199" class="m">actor_user_id | authority_context | document_version</text>
+  <text x="120" y="216" class="m">snapshot_ref | correlation_id | metadata_json | created_at</text>
+  <text x="120" y="245" class="l">Action types:</text>
+  <text x="120" y="262" class="m">CANCEL | ANNUL | ARCHIVE | RESTORE | MARK_READY | SIGN | REGISTER | RETURN_TO_DRAFT</text>
+  <text x="120" y="290" class="m">Never mixed with Editorial Audit</text>
+  <text x="120" y="307" class="m">Archive: status unchanged; archive_state captured</text>
+  <text x="350" y="350" text-anchor="middle" class="m">PO foundation: personnel_order_lifecycle_audit (WP-PO-LC-DEL-003)</text>
+</svg>

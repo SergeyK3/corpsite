@@ -1,0 +1,36 @@
+component,readiness,findings,blocking_for,notes
+PO baseline documentation,Ready,,UDE-007,Read-only complete
+Current-to-target mapping,Ready,,UDE-007,Matrix complete
+Compatibility guarantees,Ready,,All implementation,G001-G024
+Adoption strategy,Ready,,Implementation,Contracts adapters OO converge
+Adapter model,Ready,,UDE-008,15 adapters defined
+Synthetic activation,Ready,,UDE-008,Derived view no fabrication
+Locale compatibility,Ready,,UDE-009,Effective authority rule
+Lifecycle compatibility,Ready,,UDE-007,Preserve PO shortcuts
+Signed snapshot strategy,Ready,,PO-CONV,Lazy on transition
+Rendering compatibility,Ready,,UDE-008,No Playwright change
+Authority compatibility,Ready,,UDE-007,Capability mapping
+Item compatibility,Ready,,UDE-008,F-003 resolved
+F-003 Party vs employee_id,Ready,,UDE-007,ADR-UDE-020
+Employee event boundary,Ready,,OO-IMP-005,Specialization only
+Journal compatibility,Ready,,OO-IMP,Separate journals first
+API compatibility,Ready,,Implementation,PO API authoritative
+Data migration strategy,Ready,,Implementation,No migration default
+Dual model period,Ready,,OO-IMP,Accepted stage
+Extraction units,Ready,,UDE-007,15 units ranked
+Extraction phases A-F,Ready,,Implementation,Exit criteria defined
+Characterization strategy,Ready,,UDE-007,18 test categories
+Compatibility harness,Ready,,UDE-007,Concept defined
+Rollback strategy,Ready,,Implementation,Per-phase boundaries
+Feature flags,Ready,,Implementation,Conceptual only
+Observability,Ready,,Implementation,Requirements listed
+OO independence,Ready,,OO-IMP-001,Confirmed
+Implementation roadmap,Ready,,Teams,UDE-007 first
+UDE-007 initiation package,Ready,,UDE-007,Full scope
+ADR addendum,Ready,,Ratification,8 ADRs proposed
+Risk analysis,Ready,,UDE-007,15 risks mitigated
+PO write-path convergence,Deferred,,PO-CONV-001,Phase F only
+Unified API,Deferred,,Future,Not MVP requirement
+Shared persistence migration,Rejected,,,Until proven need
+Historical audit backfill,Rejected,,,ADR-UDE-021
+Big-bang PO rewrite,Rejected,,,Explicitly forbidden

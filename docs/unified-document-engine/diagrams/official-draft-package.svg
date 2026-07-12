@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.ws{fill:#fef3c7;stroke:#d97706;rx:6}.pkg{fill:#e0e7ff;stroke:#4f46e5;rx:6}.doc{fill:#eff6ff;stroke:#2563eb;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="375" y="22" text-anchor="middle" class="t">Official Draft Package (UDE-003)</text>
+  <rect x="50" y="45" width="200" height="320" class="ws"/>
+  <text x="150" y="68" text-anchor="middle" class="l">DraftWorkspace</text>
+  <text x="60" y="90" class="m">SubmittedText (archive)</text>
+  <text x="60" y="106" class="m">DraftBlocks (working)</text>
+  <text x="60" y="122" class="m">SemanticEnrichment</text>
+  <text x="60" y="138" class="m">Draft Audit</text>
+  <rect x="80" y="160" width="140" height="180" class="pkg"/>
+  <text x="150" y="182" text-anchor="middle" class="l">OfficialDraftPackage</text>
+  <text x="90" y="202" class="m">structure</text>
+  <text x="90" y="218" class="m">locale_bundle</text>
+  <text x="90" y="234" class="m">effective + generated</text>
+  <text x="90" y="250" class="m">provenance</text>
+  <text x="90" y="266" class="m">semantic snapshot</text>
+  <text x="90" y="282" class="m">attachments</text>
+  <text x="90" y="298" class="m">validation clearance</text>
+  <text x="90" y="314" class="m">promotion_readiness</text>
+  <rect x="300" y="120" width="380" height="220" class="doc"/>
+  <text x="490" y="145" text-anchor="middle" class="l">Document Aggregate (after promotion)</text>
+  <text x="310" y="168" class="m">DocumentId + DRAFT lifecycle</text>
+  <text x="310" y="186" class="m">DocumentStructure ê package.structure</text>
+  <text x="310" y="204" class="m">OrderItem[] ê package.items + semantic</text>
+  <text x="310" y="222" class="m">LocaleRepresentation[] ê package.locale_bundle</text>
+  <text x="310" y="240" class="m">AttachmentReference[] ê package.attachments</text>
+  <text x="310" y="258" class="m">Lifecycle Audit begins</text>
+  <text x="310" y="290" class="m" fill="#dc2626">NOT transferred: raw submitted, clarifications, full draft audit</text>
+  <line x1="220" y1="250" x2="300" y2="230" stroke="#059669" stroke-width="2"/>
+  <text x="260" y="242" class="m">promotion</text>
+  <text x="375" y="380" text-anchor="middle" class="m">Package = editorial snapshot (NOT aggregate). Frozen at OFFICIAL_DRAFT_READY.</text>
+</svg>

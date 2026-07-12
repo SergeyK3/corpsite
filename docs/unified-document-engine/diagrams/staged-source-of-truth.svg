@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.s1{fill:#fef3c7;stroke:#d97706;rx:6}.s2{fill:#dbeafe;stroke:#2563eb;rx:6}.s3{fill:#d1fae5;stroke:#059669;rx:6}.s4{fill:#e0e7ff;stroke:#4f46e5;rx:6}.s5{fill:#fce7f3;stroke:#db2777;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Staged Source of Truth (UDE-002)</text>
+  <rect x="250" y="45" width="200" height="40" class="s1"/><text x="350" y="70" text-anchor="middle" class="l">Stage 1: Submitted Text</text>
+  <rect x="250" y="105" width="200" height="40" class="s2"/><text x="350" y="130" text-anchor="middle" class="l">Stage 2: Workspace Effective Draft</text>
+  <rect x="250" y="165" width="200" height="40" class="s3"/><text x="350" y="190" text-anchor="middle" class="l">Stage 3: Semantic Model</text>
+  <rect x="250" y="225" width="200" height="40" class="s4"/><text x="350" y="250" text-anchor="middle" class="l">Stage 4: Official Effective Draft</text>
+  <rect x="250" y="285" width="200" height="40" class="s5"/><text x="350" y="310" text-anchor="middle" class="l">Stage 5: Signed Snapshot</text>
+  <line x1="350" y1="85" x2="350" y2="105" stroke="#334155"/><line x1="350" y1="145" x2="350" y2="165" stroke="#334155"/><line x1="350" y1="205" x2="350" y2="225" stroke="#334155"/><line x1="350" y1="265" x2="350" y2="285" stroke="#334155"/>
+  <text x="470" y="70" class="m">Location: DraftBlock.submitted</text>
+  <text x="470" y="130" class="m">Location: DraftBlock.workspace_effective</text>
+  <text x="470" y="190" class="m">Location: SemanticEnrichmentState</text>
+  <text x="470" y="250" class="m">Workspace ’ Document LocaleRepresentation</text>
+  <text x="470" y="310" class="m">Document signed snapshot</text>
+  <text x="80" y="70" class="m">Immutable</text>
+  <text x="80" y="130" class="m">Editable</text>
+  <text x="80" y="190" class="m">Partial OK</text>
+  <text x="80" y="250" class="m">Promotion gate</text>
+  <text x="80" y="310" class="m">Frozen</text>
+  <text x="350" y="360" text-anchor="middle" class="m">Stages 1-3 overlap in Workspace. Stage 4 converges at OFFICIAL_DRAFT_READY.</text>
+  <text x="350" y="380" text-anchor="middle" class="m">ADR-UDE-016 | submitted ` effective | semantic authority pre-sign</text>
+</svg>

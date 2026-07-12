@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.b{fill:#dbeafe;stroke:#2563eb;rx:8}.p{fill:#fef3c7;stroke:#d97706;rx:8}.d{fill:#ecfdf5;stroke:#059669;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Lifecycle Orchestration (UDE-005)</text>
+  <rect x="250" y="45" width="200" height="40" class="b"/><text x="350" y="70" text-anchor="middle" class="l">LifecycleOrchestrator</text>
+  <text x="350" y="95" text-anchor="middle" class="m">Application Service</text>
+  <rect x="40" y="130" width="120" height="50" class="p"/><text x="100" y="152" text-anchor="middle" class="l">Authority</text><text x="100" y="168" text-anchor="middle" class="m">L003</text>
+  <rect x="190" y="130" width="120" height="50" class="p"/><text x="250" y="152" text-anchor="middle" class="l">L-series</text><text x="250" y="168" text-anchor="middle" class="m">Validation</text>
+  <rect x="340" y="130" width="120" height="50" class="p"/><text x="400" y="152" text-anchor="middle" class="l">Specialization</text><text x="400" y="168" text-anchor="middle" class="m">L021-L025</text>
+  <rect x="490" y="130" width="120" height="50" class="p"/><text x="550" y="152" text-anchor="middle" class="l">ArchiveGuard</text><text x="550" y="168" text-anchor="middle" class="m">L004</text>
+  <line x1="350" y1="85" x2="100" y2="130" stroke="#94a3b8"/><line x1="350" y1="85" x2="250" y2="130" stroke="#94a3b8"/>
+  <line x1="350" y1="85" x2="400" y2="130" stroke="#94a3b8"/><line x1="350" y1="85" x2="550" y2="130" stroke="#94a3b8"/>
+  <rect x="100" y="220" width="140" height="45" class="d"/><text x="170" y="242" text-anchor="middle" class="l">State Mutation</text><text x="170" y="256" text-anchor="middle" class="m">status / void_kind</text>
+  <rect x="280" y="220" width="140" height="45" class="d"/><text x="350" y="242" text-anchor="middle" class="l">Snapshot Op</text><text x="350" y="256" text-anchor="middle" class="m">signed at SIGNED</text>
+  <rect x="460" y="220" width="140" height="45" class="d"/><text x="530" y="242" text-anchor="middle" class="l">Lifecycle Audit</text><text x="530" y="256" text-anchor="middle" class="m">append-only</text>
+  <line x1="250" y1="180" x2="170" y2="220" stroke="#059669"/><line x1="350" y1="180" x2="350" y2="220" stroke="#059669"/>
+  <line x1="450" y1="180" x2="530" y2="220" stroke="#059669"/>
+  <rect x="150" y="310" width="400" height="90" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="350" y="332" text-anchor="middle" class="l">Atomic Transaction</text>
+  <text x="170" y="352" class="m">Commands: MarkReady | ReturnToDraft | Sign | Register | Cancel | Annul | Archive | Restore</text>
+  <text x="170" y="370" class="m">Failure: rollback all | Success: conceptual events (no event bus)</text>
+  <text x="170" y="388" class="m">expected_version optimistic concurrency (L013)</text>
+</svg>

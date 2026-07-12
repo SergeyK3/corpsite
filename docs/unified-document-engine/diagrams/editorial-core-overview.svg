@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.ws{fill:#fef3c7;stroke:#d97706;rx:8}.ed{fill:#eff6ff;stroke:#2563eb;rx:8}.loc{fill:#ecfdf5;stroke:#059669;rx:8}.val{fill:#f3e8ff;stroke:#7c3aed;rx:8}.pkg{fill:#e0e7ff;stroke:#4f46e5;rx:8}.doc{fill:#dbeafe;stroke:#1d4ed8;rx:8}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="22" text-anchor="middle" class="t">Editorial Core Overview (UDE-003)</text>
+  <rect x="40" y="50" width="150" height="55" class="ws"/><text x="115" y="72" text-anchor="middle" class="l">Draft Workspace</text><text x="50" y="90" class="m">aggregate root</text>
+  <rect x="220" y="45" width="170" height="65" class="ed"/><text x="305" y="68" text-anchor="middle" class="l">Editorial Core</text><text x="230" y="86" class="m">structure generated effective</text><text x="230" y="100" class="m">override regeneration sections</text>
+  <rect x="410" y="45" width="170" height="65" class="loc"/><text x="495" y="68" text-anchor="middle" class="l">Localization Core</text><text x="420" y="86" class="m">locale lifecycle BC checks</text><text x="420" y="100" class="m">staleness propagation</text>
+  <rect x="600" y="50" width="120" height="55" class="val"/><text x="660" y="72" text-anchor="middle" class="l">Validation</text><text x="610" y="90" class="m">E* + BC*</text>
+  <rect x="740" y="45" width="140" height="65" class="pkg"/><text x="810" y="68" text-anchor="middle" class="l">Official Draft</text><text x="750" y="86" class="m">Package snapshot</text>
+  <rect x="350" y="150" width="200" height="50" class="doc"/><text x="450" y="175" text-anchor="middle" class="l">Promotion ’ Document Aggregate</text>
+  <rect x="80" y="230" width="740" height="55" class="ed" rx="6"/><text x="450" y="252" text-anchor="middle" class="l">Editorial Core IN: structure shell generated effective override regen ordering locale sync bilingual prep</text>
+  <rect x="80" y="300" width="740" height="45" class="ws" rx="6" stroke="#dc2626"/><text x="450" y="322" text-anchor="middle" class="l">Editorial Core OUT: intake lifecycle sign register execution projection PDF rendering</text>
+  <line x1="190" y1="77" x2="220" y2="77" stroke="#334155"/><line x1="390" y1="77" x2="410" y2="77" stroke="#334155"/><line x1="580" y1="77" x2="600" y2="77" stroke="#334155"/><line x1="720" y1="77" x2="740" y2="77" stroke="#334155"/>
+  <line x1="810" y1="110" x2="450" y2="150" stroke="#059669"/>
+  <text x="450" y="375" text-anchor="middle" class="m">Shared core  same contracts pre-promotion (Workspace) and post-promotion (Document DRAFT)</text>
+</svg>

@@ -1,0 +1,11 @@
+registry,what_extends,owner,how_specialization_connects,po_usage,oo_usage,first_implementation_wp,required_at_mvp,priority
+Document Kind Registry,New document kinds and policy bundles,UDE platform,Register DocumentKind → all policies,PersonnelOrder,OperationalOrder,UDE-003,yes,2
+Scenario Registry,Business blueprints generation defaults,Per specialization,DocumentKind → scenario list → Generation,Optional item-first,21 scenarios P2,OO-IMP-003,no,8
+Item Type Registry,Semantic payload renderer validation binding,Per specialization,OrderItem → ItemType → renderer validator,5 MVP types,14 families,UDE-003 / OO-IMP-003,yes,6
+Renderer Registry,Locale prose templates per ItemType,Per specialization,Generation → Renderer per locale,HR generators,OO templates,UDE-003 / OO-IMP-003,yes,7
+Validation Registry,Semantic structural locale lifecycle rules,Shared framework + hooks,ValidationContract → rule sets,V* + basis_policy,V* + BC* + scenario,UDE-005,yes,9
+Projection Registry,Execution handoff adapters,Per specialization,REGISTERED → downstream contour,employee_events apply,task contour future,OO-IMP-005,po yes oo later,10
+Lifecycle Registry,Transition guards void confirmation gates,Shared + per-kind,LifecycleContract → policies,Cancel annul archive,Content confirmation READY,UDE-002 / OO-IMP-004,yes,3
+Attachment Registry,Attachment kinds obligation linkage,Shared + per-kind,AttachmentContract → kinds,Scans basis,Commission rosters,OO-IMP-001,yes,4
+Party Resolution Registry,Role to person resolution policies,Shared platform,PartyReference → snapshot,employee resolution,role-first resolution,UDE-003,yes,5
+Localization Registry,Mandatory locales drafting_path staleness,Shared + per-kind,DraftingPath → LocalizationPolicy,symmetric bilingual,submitted_intake defaults,UDE-002,yes,1

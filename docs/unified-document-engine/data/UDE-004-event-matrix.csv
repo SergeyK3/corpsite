@@ -1,0 +1,12 @@
+event_name,audit_stream,emitted_when,payload_summary,downstream_consumers,idempotent
+PROMOTION_STARTED,Activation Audit,Activation command received,workspace_id package_id actor,Activation orchestrator,Yes per attempt
+PROMOTION_FAILED,Activation Audit,P-series or materialization failure,error codes workspace unchanged,Operator UI,Yes
+PROMOTION_COMPLETED,Activation Audit,Aggregate materialized pre-commit,document_id pending,Internal,No
+DOCUMENT_ACTIVATED,Lifecycle Audit,Successful commit,birth instant document_id kind,Journal Registry UDE-005,No
+LIFECYCLE_STARTED,Lifecycle Audit,Same commit as activated,initial_state DRAFT,UDE-005,No
+DOCUMENT_CREATED,Lifecycle Audit,Alias semantic for activated,created_by operator,Audit reports,No
+INITIAL_VERSION_CREATED,Activation Audit,Version 1 baseline,version_number 1,Version history,No
+INITIAL_SNAPSHOT_CREATED,Activation Audit,Effective baseline v1,locale count block count,Editorial reference,No
+PUBLICATION_READY,Activation Audit,Registry published,journal_eligible true,Journal list,No
+WORKSPACE_PROMOTED,Activation Audit + Workspace,DOCUMENT_PROMOTED freeze,workspace_id document_id link,Workspace archive,No
+RECORD_CREATED,Lifecycle Audit,PO semantic mapping,operator metadata,PO adapter,No

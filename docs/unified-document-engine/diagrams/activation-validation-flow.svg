@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.e{fill:#fef3c7;stroke:#d97706;rx:4}.p{fill:#ecfdf5;stroke:#059669;rx:4}.ok{fill:#d1fae5;stroke:#059669;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 10px sans-serif;fill:#0f172a}</style></defs>
+  <text x="410" y="22" text-anchor="middle" class="t">Activation Validation Flow (UDE-004)</text>
+  <rect x="300" y="40" width="220" height="36" class="ok"/><text x="410" y="62" text-anchor="middle" class="l">OfficialDraftPackage Ready</text>
+  <rect x="80" y="100" width="200" height="50" class="e"/><text x="180" y="120" text-anchor="middle" class="l">Editorial E* (done)</text><text x="90" y="138" class="m">attached to package</text>
+  <rect x="310" y="100" width="200" height="50" class="p"/><text x="410" y="120" text-anchor="middle" class="l">Activation P*</text><text x="320" y="138" class="m">P101-P115 at command</text>
+  <rect x="540" y="100" width="200" height="50" class="m" fill="#f1f5f9" stroke="#94a3b8" rx="4"/><text x="640" y="120" text-anchor="middle" class="l">Lifecycle L*</text><text x="550" y="138" class="m">UDE-005 later</text>
+  <line x1="410" y1="76" x2="180" y2="100" stroke="#334155"/><line x1="410" y1="76" x2="410" y2="100" stroke="#059669"/><line x1="510" y1="125" x2="540" y2="125" stroke="#94a3b8" stroke-dasharray="4,3"/>
+  <rect x="250" y="190" width="320" height="45" class="ok"/><text x="410" y="212" text-anchor="middle" class="l">Promotion + Activation</text><text x="260" y="228" class="m">DocumentId + DRAFT + Version 1</text>
+  <rect x="100" y="280" width="140" height="28" class="p"/><text x="170" y="298" text-anchor="middle" class="m">P104 locale</text>
+  <rect x="260" y="280" width="140" height="28" class="p"/><text x="330" y="298" text-anchor="middle" class="m">P108 confirm</text>
+  <rect x="420" y="280" width="140" height="28" class="p"/><text x="490" y="298" text-anchor="middle" class="m">P109 idempotent</text>
+  <rect x="580" y="280" width="140" height="28" class="p"/><text x="650" y="298" text-anchor="middle" class="m">P112 kind hook</text>
+  <line x1="410" y1="150" x2="410" y2="190" stroke="#059669"/>
+  <text x="410" y="380" text-anchor="middle" class="m">Failure ’ PROMOTION_FAILED, Workspace unchanged</text>
+</svg>

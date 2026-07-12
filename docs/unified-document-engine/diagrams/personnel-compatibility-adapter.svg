@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.po{fill:#fef3c7;stroke:#d97706;rx:8}.ad{fill:#dbeafe;stroke:#2563eb;rx:8}.cv{fill:#ecfdf5;stroke:#059669;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Personnel Compatibility Adapter Layer</text>
+  <rect x="40" y="50" width="620" height="45" class="po"/>
+  <text x="350" y="78" text-anchor="middle" class="l">PO Persistence (authoritative)  personnel_orders*</text>
+  <rect x="80" y="120" width="540" height="130" class="ad"/>
+  <text x="350" y="142" text-anchor="middle" class="l">Adapter Layer (Phase C read-only)</text>
+  <text x="100" y="165" class="m">Document | Lifecycle | Locale | Item | Party</text>
+  <text x="100" y="181" class="m">Print | Authority | Audit | Activation (synthetic)</text>
+  <text x="100" y="197" class="m">Journal  no write side effects in Phase C</text>
+  <text x="100" y="220" class="m">Phase F optional: LifecycleWrite | Registration | Snapshot</text>
+  <rect x="120" y="270" width="460" height="90" class="cv"/>
+  <text x="350" y="292" text-anchor="middle" class="l">UDE Shared Contract Views</text>
+  <text x="140" y="312" class="m">Harness comparison | OO shared services | Reporting</text>
+  <text x="140" y="328" class="m">No persisted data mutation via adapters</text>
+  <text x="140" y="344" class="m">Effective text authority  no silent regeneration</text>
+  <line x1="350" y1="95" x2="350" y2="120" stroke="#d97706"/><line x1="350" y1="250" x2="350" y2="270" stroke="#2563eb"/>
+</svg>

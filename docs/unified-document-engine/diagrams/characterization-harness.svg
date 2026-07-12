@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.leg{fill:#fef3c7;stroke:#d97706;rx:10}.ad{fill:#dbeafe;stroke:#2563eb;rx:10}.cmp{fill:#ecfdf5;stroke:#059669;rx:8}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Characterization Compatibility Harness</text>
+  <rect x="60" y="55" width="240" height="120" class="leg"/>
+  <text x="180" y="78" text-anchor="middle" class="l">Legacy PO Path</text>
+  <text x="80" y="100" class="m">Production API + services</text>
+  <text x="80" y="116" class="m">Authoritative behavior</text>
+  <text x="80" y="132" class="m">Existing test suite</text>
+  <rect x="400" y="55" width="240" height="120" class="ad"/>
+  <text x="520" y="78" text-anchor="middle" class="l">Shared Adapter Path</text>
+  <text x="420" y="100" class="m">Read-only adapters</text>
+  <text x="420" y="116" class="m">Contract projections</text>
+  <text x="420" y="132" class="m">No write side effects Phase C</text>
+  <rect x="120" y="210" width="460" height="160" class="cmp"/>
+  <text x="350" y="232" text-anchor="middle" class="l">Compare Dimensions</text>
+  <text x="140" y="255" class="m">lifecycle view | effective text RU/KK | print VM structure</text>
+  <text x="140" y="275" class="m">audit representation | error codes | permission decisions</text>
+  <text x="140" y="300" class="l">Acceptance: same observable behavior</text>
+  <text x="140" y="320" class="m">Mismatch triggers alert  blocks Phase F convergence</text>
+  <text x="140" y="345" class="m">Introduced in UDE-008; baseline tests in UDE-007</text>
+  <line x1="300" y1="115" x2="400" y2="115" stroke="#64748b"/><line x1="180" y1="175" x2="280" y2="210" stroke="#059669"/>
+  <line x1="520" y1="175" x2="420" y2="210" stroke="#2563eb"/>
+</svg>

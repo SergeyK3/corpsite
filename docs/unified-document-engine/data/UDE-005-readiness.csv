@@ -1,0 +1,32 @@
+component,readiness,findings,blocking_for,notes
+Lifecycle Core Domain,Ready,,Implementation,Boundaries defined vs Editorial Execution
+State Model,Ready,,Implementation,Five states + archive orthogonal
+Transition Model,Ready,,Implementation,Matrix T001-T010
+Cancel vs Annul,Ready,,Implementation,void_kind ratified
+DRAFT rules,Ready,,Implementation,Baseline mutable per UDE-004
+READY rules,Ready,Return-to-draft and write-lock target defined,Implementation,PO READY drift documented
+SIGNED rules,Ready,Signed snapshot ADR-UDE-009,Implementation,PO gap E
+REGISTERED rules,Ready,,Implementation,Number at REGISTERED default
+VOIDED rules,Ready,,Implementation,Terminal non-delete
+Archive orthogonality,Ready,,Implementation,PO archive implemented
+Immutability Matrix,Ready,,Implementation,CSV complete
+Lifecycle Validation L-series,Ready,,Implementation,25 rules defined
+Lifecycle Orchestrator,Ready,,Implementation,Application Service verdict
+Transition Events,Ready,,Implementation,No event bus
+Lifecycle Audit,Ready,,Implementation,Append-only model
+Signed Snapshot,Ready,PDF separate artifact,Implementation,Reproducibility rules
+Registration Model,Ready,RegistrationPolicy extension,Implementation,No generator
+Three Lifecycle Interaction,Ready,,UDE-006,Execution projection handoff
+Specialization Policies,Ready,,Implementation,PO OO matrix
+Authority Boundary,Ready,,ACCESS integration,Capabilities not permissions
+Concurrency Idempotency,Ready,Deferred locking WP,Implementation,Conceptual only
+Error Model,Ready,,Implementation,Domain taxonomy
+PO Gap Analysis,Ready,,UDE-006,Read-only complete
+Extraction Strategy,Ready,,UDE-006,Phases A-E
+Handoff UDE-006,Ready,,UDE-006,Compatibility plan
+Event bus infrastructure,Rejected,,,Conceptual events only
+Runtime e-signature,Rejected,,,Out of scope
+Numbering service implementation,Deferred,,Future WP,Concept only
+Return-to-draft PO implementation,Deferred,,UDE-006,Architecture ready
+PO signed snapshot,Deferred,,UDE-006,Not in MVP
+Concurrent row locking,Deferred,,Future WP,Optimistic version only

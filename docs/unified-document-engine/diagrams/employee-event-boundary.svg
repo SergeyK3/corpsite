@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.doc{fill:#ecfdf5;stroke:#059669;rx:10}.exec{fill:#fef3c7;stroke:#d97706;rx:10}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Employee Event Boundary</text>
+  <rect x="80" y="55" width="540" height="100" class="doc"/>
+  <text x="350" y="78" text-anchor="middle" class="l">Shared Document Core (UDE)</text>
+  <text x="100" y="100" class="m">Lifecycle: DRAFT to REGISTERED to VOIDED</text>
+  <text x="100" y="116" class="m">Does NOT auto-create employee_events</text>
+  <text x="100" y="132" class="m">apply is NOT a document lifecycle transition</text>
+  <rect x="120" y="190" width="460" height="150" class="exec"/>
+  <text x="350" y="212" text-anchor="middle" class="l">PO Execution Specialization</text>
+  <text x="140" y="235" class="m">apply_personnel_order creates employee_events</text>
+  <text x="140" y="251" class="m">void cascades APPROVED events + ADR-035 chain</text>
+  <text x="140" y="267" class="m">Event Subject = employee_id (authoritative in PO)</text>
+  <text x="140" y="283" class="m">PersonnelExecutionAdapter  never merged into lifecycle core</text>
+  <text x="140" y="310" class="m">Future: ExecutionProjectionDescriptor handoff after REGISTERED</text>
+  <line x1="350" y1="155" x2="350" y2="190" stroke="#d97706" stroke-dasharray="4,3"/>
+  <text x="370" y="175" class="m">explicit apply command</text>
+  <text x="350" y="360" text-anchor="middle" class="m">Document lifecycle and execution lifecycle independent (UDE-005)</text>
+</svg>

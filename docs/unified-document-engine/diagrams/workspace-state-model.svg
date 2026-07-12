@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.st{fill:#eff6ff;stroke:#2563eb;rx:20}.cl{fill:#fef3c7;stroke:#d97706;rx:6}.l{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="400" y="22" text-anchor="middle" class="t">Workspace State Model (UDE-002)</text>
+  <text x="400" y="40" text-anchor="middle" class="m">Derived from validation + audit  not document lifecycle enum</text>
+  <rect x="30" y="60" width="120" height="32" class="st"/><text x="90" y="80" text-anchor="middle" class="l">intake_review</text>
+  <rect x="170" y="60" width="150" height="32" class="st"/><text x="245" y="80" text-anchor="middle" class="l">editorial_processing</text>
+  <rect x="340" y="60" width="140" height="32" class="st"/><text x="410" y="80" text-anchor="middle" class="l">translation_required</text>
+  <rect x="500" y="60" width="150" height="32" class="st"/><text x="575" y="80" text-anchor="middle" class="l">translation_in_progress</text>
+  <rect x="670" y="60" width="110" height="32" class="cl"/><text x="725" y="80" text-anchor="middle" class="l">clarification</text>
+  <rect x="80" y="120" width="180" height="32" class="st"/><text x="170" y="140" text-anchor="middle" class="l">content_confirmation_required</text>
+  <rect x="290" y="120" width="170" height="32" class="st"/><text x="375" y="140" text-anchor="middle" class="l">bilingual_reconciliation</text>
+  <rect x="490" y="120" width="150" height="32" class="st"/><text x="565" y="140" text-anchor="middle" class="l">ready_for_promotion</text>
+  <rect x="100" y="200" width="600" height="120" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="400" y="222" text-anchor="middle" class="l">Orthogonal Axes (independent)</text>
+  <text x="110" y="245" class="m">WorkspaceState (conceptual stage): EDITORIAL_PROCESSING ’ LOCALIZATION ’ OFFICIAL_DRAFT_READY</text>
+  <text x="110" y="265" class="m">Editorial Substate (T034 derived): intake_review, translation_required, etc.</text>
+  <text x="110" y="285" class="m">LocalizationState per locale: CURRENT | STALE | REVIEW_REQUIRED</text>
+  <text x="110" y="305" class="m">Document Lifecycle: does not exist until DOCUMENT_PROMOTED</text>
+  <text x="400" y="340" text-anchor="middle" class="m">Multiple substates may be active simultaneously (e.g. clarification + translation_required)</text>
+</svg>

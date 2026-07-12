@@ -1,0 +1,25 @@
+guarantee_id,category,guarantee,enforcement,violation_severity,verification_method
+G001,behavioral,Existing PO records remain readable,No destructive migration,critical,Read API characterization
+G002,data,No immediate data migration required,Lazy adapter only,critical,Schema unchanged
+G003,api,Existing PO API endpoints unchanged,Route preservation,critical,API contract tests
+G004,api,Frontend routes /directory/personnel/orders preserved,No route rename,critical,Route inventory
+G005,behavioral,Journal default hides VOIDED and archived,include_closed opt-in,critical,Journal filter tests
+G006,lifecycle,Lifecycle status semantics unchanged,Adapter preserves not mutates,critical,Lifecycle transition tests
+G007,lifecycle,void_kind CANCEL ANNUL preserved,No enum change,critical,Void/cancel tests
+G008,lifecycle,Archive restore orthogonality preserved,archived_at model,critical,Archive tests
+G009,authority,CANCEL_OWN CANCEL_SCOPE preserved,Permission codes unchanged,critical,Authority tests
+G010,authority,Ownership and org scope on cancel preserved,cancel_scope_service,critical,Scope tests
+G011,rendering,PDF output reproducible for legacy,No Playwright change,critical,PDF golden semantic tests
+G012,rendering,HTML preview reproducible,effective text authority,critical,HTML snapshot tests
+G013,data,RU/KK effective texts not lost,No silent regeneration,critical,Locale edit tests
+G014,data,Signed registered voided documents unchanged,No backfill without WP,high,Read-only verification
+G015,execution,Employee events not recreated,Apply idempotency,high,Apply/void chain tests
+G016,rendering,Legacy records remain printable,Print VM adapter,critical,Print VM tests
+G017,deployment,Production deploy independent of full UDE migration,Feature flags,critical,Deploy checklist
+G018,api,Legacy include_archived alias works,Query service alias,medium,API test
+G019,behavioral,Applied badge derived not status,linkedEventCount,medium,UX characterization
+G020,authority,ARCHIVE RESTORE permissions preserved,PERSONNEL_ORDERS_ARCHIVE,high,Permission tests
+G021,lifecycle,Register from DRAFT READY preserved,Compatibility adapter,high,Register tests
+G022,data,order_number uniqueness preserved,uq constraint,critical,DB constraint
+G023,audit,Lifecycle audit append-only preserved,No update delete,critical,Audit tests
+G024,behavioral,Archived immutability on writes,archive_guard,critical,Archived write rejection tests

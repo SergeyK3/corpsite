@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 480" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.s{fill:#fef3c7;stroke:#d97706;rx:20}.a{fill:#ecfdf5;stroke:#059669;rx:20}.b{fill:#eff6ff;stroke:#2563eb;rx:20}.e{fill:#f3e8ff;stroke:#7c3aed;rx:20}.x{fill:#fef2f2;stroke:#dc2626;rx:20}.l{font:600 10px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="410" y="22" text-anchor="middle" class="t">Draft Workspace Lifecycle (UDE-002)</text>
+  <rect x="30" y="60" width="110" height="36" class="s"/><text x="85" y="82" text-anchor="middle" class="l">SUBMITTED</text>
+  <rect x="160" y="60" width="100" height="36" class="a"/><text x="210" y="82" text-anchor="middle" class="l">ACCEPTED</text>
+  <rect x="280" y="60" width="150" height="36" class="a"/><text x="355" y="82" text-anchor="middle" class="l">WORKSPACE_CREATED</text>
+  <rect x="450" y="60" width="160" height="36" class="b"/><text x="530" y="82" text-anchor="middle" class="l">EDITORIAL_PROCESSING</text>
+  <rect x="630" y="60" width="160" height="36" class="b"/><text x="710" y="82" text-anchor="middle" class="l">SEMANTIC_ENRICHMENT</text>
+  <rect x="100" y="150" width="170" height="36" class="b"/><text x="185" y="172" text-anchor="middle" class="l">LOCALIZATION_PROCESSING</text>
+  <rect x="300" y="150" width="170" height="36" class="e"/><text x="385" y="172" text-anchor="middle" class="l">CONTENT_CONFIRMATION</text>
+  <rect x="500" y="150" width="170" height="36" class="a"/><text x="585" y="172" text-anchor="middle" class="l">OFFICIAL_DRAFT_READY</text>
+  <rect x="300" y="240" width="170" height="36" class="a"/><text x="385" y="262" text-anchor="middle" class="l">DOCUMENT_PROMOTED</text>
+  <rect x="30" y="240" width="120" height="36" class="x"/><text x="90" y="262" text-anchor="middle" class="l">ABANDONED</text>
+  <rect x="550" y="240" width="200" height="50" class="b"/><text x="650" y="262" text-anchor="middle" class="l">Document Lifecycle</text><text x="560" y="278" class="m">starts here: DRAFT</text>
+  <path d="M140 78 L160 78" stroke="#334155" fill="none"/><path d="M260 78 L280 78" stroke="#334155"/><path d="M430 78 L450 78" stroke="#334155"/><path d="M610 78 L710 78 L710 96" stroke="#334155"/>
+  <path d="M530 96 L530 120 L185 120 L185 150" stroke="#334155" fill="none"/>
+  <path d="M185 186 L385 186 L385 150" stroke="#334155" fill="none"/>
+  <path d="M385 186 L585 186 L585 150" stroke="#334155" fill="none"/>
+  <path d="M585 186 L385 210 L385 240" stroke="#059669" fill="none"/>
+  <path d="M85 96 L85 240" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <rect x="100" y="320" width="620" height="130" class="b" rx="6"/>
+  <text x="410" y="342" text-anchor="middle" class="l">Workspace Aggregate Contents</text>
+  <text x="110" y="362" class="m">SubmittedText (immutable) | WorkspaceEffectiveDraft | TextProvenance | SemanticEnrichmentState</text>
+  <text x="110" y="378" class="m">DraftAttachments | ClarificationRequests | ContentConfirmationState | DraftAuditEvent[]</text>
+  <text x="110" y="394" class="m">NOT: DocumentId | DocumentLifecycleState | Lifecycle Audit | Projection</text>
+  <text x="410" y="450" text-anchor="middle" class="m">Conceptual stages  not runtime enum. Derived from validation + audit.</text>
+</svg>

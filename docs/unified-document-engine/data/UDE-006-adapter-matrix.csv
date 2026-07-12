@@ -1,0 +1,16 @@
+adapter_id,adapter_name,source,target_contract,mapping_mode,read_write,side_effects_allowed,migration_phase,priority
+A001,PersonnelDocumentAdapter,personnel_orders row,DocumentAggregateView,read_only,read,no,Phase C,high
+A002,PersonnelLifecycleAdapter,status void_kind archived_at,DocumentLifecycleView,read_only,read,no,Phase C,high
+A003,PersonnelLocaleAdapter,localized_texts + editorial_blocks,LocaleRepresentation[],read_only,read,no,Phase C,high
+A004,PersonnelItemAdapter,personnel_order_items,OrderItemView + PersonnelPayload,read_only,read,no,Phase C,high
+A005,PersonnelPrintAdapter,print VM builder,SharedPrintViewModel,read_only,read,no,Phase C,medium
+A006,PersonnelAuthorityAdapter,permissions + scope,CapabilityDecisionView,read_only,read,no,Phase C,medium
+A007,PersonnelAuditAdapter,lifecycle_audit rows,LifecycleAuditEventView,read_only,read,no,Phase C,high
+A008,PersonnelActivationAdapter,created_at + first save,SyntheticActivationMetadata,derived,read,no,Phase C,high
+A009,PersonnelLifecycleWriteAdapter,lifecycle services,LifecycleOrchestrator facade,read_write,write,audit_only,Phase F,low
+A010,PersonnelRegistrationAdapter,register_personnel_order,RegisterDocument + shortcut,read_write,write,status_only,Phase F,low
+A011,PersonnelPartyAdapter,employee_id fields,PartyReference projection,read_only,read,no,Phase C,high
+A012,PersonnelJournalAdapter,list_personnel_orders,DocumentJournalEntryView,read_only,read,no,Phase C,medium
+A013,PersonnelSnapshotAdapter,effective texts + PDF,SignedSnapshotView lazy,derived,read,on_transition_only,Phase F,low
+A014,PersonnelEditorialAdapter,editorial service,EditorialCore facade,read_write,write,editorial_only,Phase E,medium
+A015,PersonnelExecutionAdapter,apply/void services,ExecutionProjectionAdapter,specialization,write,employee_events,never_shared,low

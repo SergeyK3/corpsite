@@ -1,0 +1,15 @@
+policy_area,shared_rule,personnel_orders_policy,operational_orders_policy,policy_contract
+lifecycle_states,five states DRAFT READY SIGNED REGISTERED VOIDED,same,same,LifecycleStateRegistry
+archive_orthogonality,ACTIVE ARCHIVED orthogonal to lifecycle,same; REGISTERED VOIDED archivable,same; REGISTERED VOIDED archivable,ArchivePolicy
+void_kind,CANCEL vs ANNUL by source state,same mapping,same mapping,VoidPolicy
+mark_ready,E* + L005 L006,same + L022 employee readiness,same + L021 content confirmation,ReadyPolicy
+return_to_draft,allowed from READY with authority,HR operator or head; not implemented yet,content author waiver path,ReturnToDraftPolicy
+sign,separate SignDocument command,PO adapter: combined register shortcut,full Sign then Register,SignPolicy
+register,after SIGNED; number assigned,number at REGISTERED; SIGNED without number allowed,number at REGISTERED default,RegistrationPolicy
+cancel,DRAFT READY only; scoped permissions,cancel_own cancel_scope permissions,operator + author scope,CancelPolicy
+annul,SIGNED REGISTERED; cascade projection,employee_events void + rollback ADR-035,execution projection void,AnnulPolicy
+archive,REGISTERED VOIDED default,implemented WP-PO-LC-DEL-005,same default,ArchivePolicy
+execution_projection,after REGISTERED default,apply creates employee_events not auto at register,commission tasks after REGISTERED,ProjectionPolicy
+journal_visibility,DRAFT visible; closed filter option,hide closed documents in journal,same,JournalPolicy
+signed_snapshot,at SIGNED ADR-UDE-009,not fully implemented; register locks status,full target model,SignedSnapshotPolicy
+waiver,L005 L006 L021,L022 non-waivable,L021 waivable with audit,WaiverPolicy

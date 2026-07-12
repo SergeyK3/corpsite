@@ -1,0 +1,16 @@
+precondition_id,name,severity,blocks_activation,shared,po,poo,source,notes
+P101,official_draft_package_present,error,Yes,Yes,Yes,Yes,UDE-004,Package attached to workspace
+P102,package_frozen_at_readiness,error,Yes,Yes,Yes,Yes,UDE-003,Not stale package
+P103,editorial_validation_clearance_attached,error,Yes,Yes,Yes,Yes,UDE-003,E-series result on package
+P104,localization_mandatory_current,error,Yes,Yes,Yes,Yes,UDE-003,E103 equivalent
+P105,no_blocking_editorial_errors,error,Yes,Yes,Yes,Yes,UDE-003,BC P0 clear
+P106,promotion_readiness_flag_true,error,Yes,Yes,Yes,Yes,UDE-003,OFFICIAL_DRAFT_READY
+P107,workspace_state_official_draft_ready,error,Yes,Yes,Yes,Yes,UDE-002,Workspace stage
+P108,content_confirmation_satisfied,error,Yes default OO,Optional,Required,OO-IMP-002,OQ-04
+P109,workspace_not_already_promoted,error,Yes,Yes,Yes,Yes,UDE-004,Idempotency
+P110,document_kind_policy_allows_activation,error,Yes,Yes,Yes,Yes,UDE-001,Kind registry
+P111,package_integrity_checksum,error,Yes,Yes,Yes,Yes,UDE-004,Tamper detection
+P112,specialization_preconditions,error,Yes,Hook,Hook,UDE-004,employee vs obligation refs
+P113,mandatory_sections_present,error,Yes,Yes,Yes,Yes,UDE-003,E101
+P114,promotion_lock_absent,error,Yes,Yes,Yes,Yes,UDE-004,Admin lock flag
+P115,draft_corruption_absent,error,Yes,Yes,Yes,Yes,UDE-004,Structural integrity

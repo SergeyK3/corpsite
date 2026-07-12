@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.s{fill:#ecfdf5;stroke:#059669;rx:20}.r{fill:#fef3c7;stroke:#d97706;rx:20}.g{fill:#fee2e2;stroke:#dc2626;rx:20}.v{fill:#f1f5f9;stroke:#64748b;rx:20}.a{fill:#e0e7ff;stroke:#4f46e5;rx:12}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="360" y="22" text-anchor="middle" class="t">Shared Document Lifecycle (UDE-005)</text>
+  <rect x="300" y="50" width="120" height="36" class="s"/><text x="360" y="72" text-anchor="middle" class="l">DRAFT</text>
+  <rect x="300" y="110" width="160" height="36" class="r"/><text x="380" y="132" text-anchor="middle" class="l">READY_FOR_SIGNATURE</text>
+  <rect x="300" y="170" width="120" height="36" class="s"/><text x="360" y="192" text-anchor="middle" class="l">SIGNED</text>
+  <rect x="300" y="230" width="130" height="36" class="s"/><text x="365" y="252" text-anchor="middle" class="l">REGISTERED</text>
+  <rect x="500" y="140" width="100" height="36" class="v"/><text x="550" y="162" text-anchor="middle" class="l">VOIDED</text>
+  <line x1="360" y1="86" x2="380" y2="110" stroke="#059669" marker-end="url(#a)"/><text x="400" y="100" class="m">MarkReady</text>
+  <line x1="380" y1="146" x2="360" y2="170" stroke="#059669"/><text x="400" y="165" class="m">Sign</text>
+  <line x1="365" y1="206" x2="365" y2="230" stroke="#059669"/><text x="400" y="222" class="m">Register</text>
+  <line x1="360" y1="68" x2="500" y2="150" stroke="#dc2626" stroke-dasharray="4,3"/><text x="430" y="100" class="m">Cancel</text>
+  <line x1="420" y1="128" x2="500" y2="150" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <line x1="360" y1="188" x2="500" y2="158" stroke="#dc2626" stroke-dasharray="4,3"/><text x="430" y="185" class="m">Annul</text>
+  <line x1="365" y1="248" x2="500" y2="168" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <rect x="80" y="300" width="560" height="80" class="a"/>
+  <text x="360" y="322" text-anchor="middle" class="l">ArchiveState (orthogonal)</text>
+  <text x="100" y="342" class="m">ACTIVE (default) | ARCHIVED  does not change lifecycle status</text>
+  <text x="100" y="360" class="m">Archived: view | print | audit | restore only</text>
+  <text x="360" y="390" text-anchor="middle" class="m">Three lifecycles independent: Document (this) | Localization | Execution</text>
+</svg>

@@ -1,0 +1,26 @@
+rule_id,layer,name,severity,waivable,blocks_transition,description,applies_to_transitions
+L001,lifecycle,valid_current_state,error,no,all,Document lifecycle state must be recognized and consistent with aggregate,L*
+L002,lifecycle,allowed_transition,error,no,all,Requested transition must be in allowed transition matrix,L*
+L003,lifecycle,actor_authority_present,error,no,all,Actor must hold required capability for command,L*
+L004,lifecycle,document_not_archived,error,no,all,Archived documents reject lifecycle mutations except restore,L*
+L005,lifecycle,no_blocking_localization_state,error,yes_mark_ready,MarkReady;SignDocument,Mandatory locales must be CURRENT; STALE blocks; REVIEW_REQUIRED blocks without waiver,MarkReady;SignDocument
+L006,lifecycle,no_blocking_editorial_validation,error,yes_policy,MarkReady;ReturnToDraft,No unresolved E-series blockers on attached validation result,MarkReady;ReturnToDraft
+L007,lifecycle,required_signer_present,error,no,SignDocument,Signer identity and authority must be resolvable,SignDocument
+L008,lifecycle,signed_snapshot_ready,error,no,SignDocument,Signed snapshot materialization preconditions satisfied,SignDocument
+L009,lifecycle,registration_metadata_valid,error,no,RegisterDocument,Registration date scope number policy fields valid,RegisterDocument
+L010,lifecycle,void_reason_present,error,no,CancelDocument;AnnulDocument,void_reason or reason_code+text required,Cancel;Annul
+L011,lifecycle,void_kind_applicable,error,no,CancelDocument;AnnulDocument,CANCEL only from DRAFT/READY; ANNUL only from SIGNED/REGISTERED,Cancel;Annul
+L012,lifecycle,attachments_consistent,error,yes_policy,MarkReady;SignDocument,Attachment manifest consistent with structure policy,MarkReady;SignDocument
+L013,lifecycle,document_version_current,error,no,all,expected_version matches aggregate version (optimistic concurrency),all
+L014,lifecycle,no_concurrent_transition,error,no,all,No overlapping lifecycle command in flight for document,all
+L015,lifecycle,transition_idempotency,error,no,all,Duplicate command with same intent returns consistent outcome or domain error,all
+L016,lifecycle,not_already_signed,error,no,SignDocument,Document not already SIGNED or beyond,SignDocument
+L017,lifecycle,not_already_registered,error,no,RegisterDocument,Document not already REGISTERED,RegisterDocument
+L018,lifecycle,registration_number_conflict,error,no,RegisterDocument,Assigned number unique within RegistrationPolicy scope,RegisterDocument
+L019,lifecycle,archive_reason_present,error,no,ArchiveDocument,archive reason_code required when policy demands,ArchiveDocument
+L020,lifecycle,archivable_lifecycle_state,error,no,ArchiveDocument,Lifecycle state in archivable set per policy,ArchiveDocument
+L021,specialization,content_confirmation_satisfied,error,yes_oo,MarkReady,OO: content author confirmation complete,MarkReady
+L022,specialization,employee_event_readiness,error,no,MarkReady,PO: items reference valid employees and dates,MarkReady
+L023,specialization,control_obligations_complete,warning,yes,MarkReady,OO: control block and commission completeness,MarkReady
+L024,specialization,void_chain_clear,error,no,AnnulDocument,PO: no newer APPROVED events block annul,AnnulDocument
+L025,specialization,projection_readiness,error,no,RegisterDocument,OO: execution projection descriptors valid when auto-emit policy,RegisterDocument

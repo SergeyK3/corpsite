@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 440" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.in{fill:#ecfdf5;stroke:#059669;rx:6}.out{fill:#fef2f2;stroke:#dc2626;rx:6}.mid{fill:#eff6ff;stroke:#2563eb;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="410" y="22" text-anchor="middle" class="t">Editorial Boundary (UDE-002)</text>
+  <rect x="200" y="45" width="420" height="200" class="in"/>
+  <text x="410" y="68" text-anchor="middle" class="l">Inside Editorial Boundary (Draft Workspace)</text>
+  <text x="210" y="90" class="m">structuring | numbering | form edits | content edits (with confirmation)</text>
+  <text x="210" y="106" class="m">mandatory blocks | semantic mapping | obligation extraction</text>
+  <text x="210" y="122" class="m">party resolution | RU/KK alignment | translation | attachment normalization</text>
+  <text x="210" y="138" class="m">content confirmation | official draft assembly</text>
+  <rect x="220" y="155" width="180" height="35" class="mid"/><text x="310" y="177" text-anchor="middle" class="l">Form-only edits</text>
+  <rect x="420" y="155" width="180" height="35" class="mid"/><text x="510" y="177" text-anchor="middle" class="l">Content edits</text>
+  <text x="230" y="210" class="m">No confirmation (default)</text>
+  <text x="430" y="210" class="m">Confirmation required (default)</text>
+  <rect x="40" y="280" width="200" height="120" class="out"/>
+  <text x="140" y="305" text-anchor="middle" class="l">Outside Boundary</text>
+  <text x="50" y="325" class="m">registration</text><text x="50" y="341" class="m">lifecycle transitions</text><text x="50" y="357" class="m">signing</text><text x="50" y="373" class="m">PDF / archive</text>
+  <rect x="580" y="280" width="200" height="120" class="out"/>
+  <text x="680" y="305" text-anchor="middle" class="l">Downstream</text>
+  <text x="590" y="325" class="m">execution projection</text><text x="590" y="341" class="m">task runtime</text><text x="590" y="357" class="m">employee_events apply</text>
+  <line x1="140" y1="280" x2="300" y2="245" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <line x1="680" y1="280" x2="520" y2="245" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <text x="410" y="420" text-anchor="middle" class="m">Editorial ends at OFFICIAL_DRAFT_READY ’ UDE-003 takes post-promotion editorial core</text>
+</svg>

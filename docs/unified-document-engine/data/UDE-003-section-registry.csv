@@ -1,0 +1,17 @@
+section_type,canonical_name,mandatory_default,optional_default,personnel_orders,operational_orders,specialization_hook,renderer_binding,validation_binding,ordering_weight,localization_required
+HEADER,Header chrome,Yes,No,Yes,Yes,shared,print_chrome,structure,10,No
+TITLE,Document title,Yes,No,Yes,Yes,shared,title_renderer,E102,20,Yes
+PREAMBLE,Preamble normative basis,Yes,No,Yes,Yes,shared,preamble_renderer,E101,30,Yes
+BASIS,Basis references structured,Conditional,No,item basis PO,OO preamble refs,partial,basis_renderer,E110,35,Yes
+OPERATIVE_FORMULA,ПРИКАЗЫВАЮ chrome,Yes,No,Yes,Yes,shared,formula_renderer,structure,40,Yes
+BODY,General body prose,Rare,Yes,closing,intro paragraphs,optional,body_renderer,editorial,45,Yes
+ORDER_ITEMS,Numbered directives,Yes,No,Yes,Yes,shared,item_renderer,E106,50,Yes
+ITEM_BODY,Item directive text,Yes,No,Yes,Yes,item_type_registry,item_body_renderer,E102,51,Yes
+ITEM_BASIS,Item basis clause,Conditional,No,basis_required PO,scenario,partial,basis_renderer,E110,52,Yes
+CONTROL_BLOCK,Control meta-item,No,OO default,No,Yes,oo_policy,control_renderer,E111,55,Yes
+EFFECTIVE_CLAUSE,Operative effective wording,Rare,Yes,derived,derived,optional,clause_renderer,editorial,48,Yes
+ATTACHMENTS,Attachment region,Conditional,Yes,scans,rosters,shared,attachment_renderer,E114,60,Partial
+SIGNATURE,Signatory block,Yes,No,Yes,Yes,shared,signature_renderer,structure,70,No
+AGREEMENT,Visa block,No,Yes,Rare,episodic,shared,agreement_renderer,warning,80,Yes
+ACKNOWLEDGEMENT,Distribution ack,No,Yes,Rare,common OO,shared,ack_renderer,warning,90,Yes
+FOOTER,Print footer chrome,No,Yes,Yes,Yes,shared,footer_renderer,info,100,No

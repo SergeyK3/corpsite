@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.pkg{fill:#e0e7ff;stroke:#4f46e5;rx:6}.prom{fill:#ecfdf5;stroke:#059669;rx:6}.doc{fill:#eff6ff;stroke:#2563eb;rx:6}.ws{fill:#fef3c7;stroke:#d97706;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="410" y="22" text-anchor="middle" class="t">Promotion Boundary (UDE-004)</text>
+  <rect x="50" y="50" width="180" height="250" class="ws"/><text x="140" y="72" text-anchor="middle" class="l">Workspace Archive</text><text x="60" y="95" class="m">SubmittedText</text><text x="60" y="111" class="m">Draft Audit</text><text x="60" y="127" class="m">Clarifications</text>
+  <rect x="280" y="80" width="200" height="100" class="pkg"/><text x="380" y="102" text-anchor="middle" class="l">OfficialDraftPackage</text><text x="290" y="122" class="m">input to Promotion</text>
+  <rect x="280" y="200" width="200" height="80" class="prom"/><text x="380" y="222" text-anchor="middle" class="l">Promotion Pipeline</text><text x="290" y="242" class="m">no semantic change</text>
+  <rect x="530" y="50" width="240" height="250" class="doc"/><text x="650" y="72" text-anchor="middle" class="l">Document Aggregate</text><text x="540" y="95" class="m">DocumentId NEW</text><text x="540" y="111" class="m">Structure Items Locales</text><text x="540" y="127" class="m">Metadata Provenance</text><text x="540" y="143" class="m">DRAFT lifecycle</text><text x="540" y="159" class="m">Version 1 baseline</text><text x="540" y="175" class="m">Lifecycle Audit start</text>
+  <line x1="480" y1="130" x2="530" y2="130" stroke="#059669" stroke-width="2"/><line x1="380" y1="180" x2="380" y2="200" stroke="#334155"/><line x1="480" y1="240" x2="530" y2="200" stroke="#059669"/>
+  <text x="410" y="330" text-anchor="middle" class="m">Application Service orchestrates Domain materialization — single transaction</text>
+</svg>

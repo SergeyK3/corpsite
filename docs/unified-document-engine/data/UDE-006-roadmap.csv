@@ -1,0 +1,11 @@
+wp_id,title,phase,type,prerequisite,blocks,status,notes
+UDE-007,Shared Runtime Contracts and PO Characterization Baseline,A-B,implementation,UDE-006,UDE-008 OO-IMP,planned,First code WP no behavior change
+UDE-008,Shared Read Adapters for Personnel Orders,C,implementation,UDE-007,PO-CONV,planned,Read-only adapters
+UDE-009,Shared Editorial Localization Runtime Foundation,E,implementation,UDE-007,OO-IMP-003,planned,Locale utilities
+OO-IMP-001,Operational Orders Submitted-text Intake MVP,D,implementation,UDE-007,OO-IMP-002,planned,Native OO persistence
+OO-IMP-002,Content Confirmation and Translation,D,implementation,OO-IMP-001,OO-IMP-003,planned,OO editorial path
+OO-IMP-003,Scenario-driven Generation,D,implementation,OO-IMP-002 OO-IMP-004,planned,OO generation
+OO-IMP-004,Lifecycle and Rendering,D,implementation,UDE-007 UDE-005,OO-IMP-005,planned,OO shared lifecycle native
+OO-IMP-005,Execution Projection,D,implementation,OO-IMP-004,planned,OO execution contour
+PO-CONV-001,Optional Personnel Write-path Convergence,F,implementation,UDE-008 + proof,planned,Separate ratified WP
+UDE-006,PO Compatibility and Extraction Plan,planning,architecture,UDE-005,UDE-007,complete,This WP

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.p{fill:#f1f5f9;stroke:#64748b;rx:6}.rb{fill:#fee2e2;stroke:#dc2626;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 10px sans-serif;fill:#0f172a}</style></defs>
+  <text x="360" y="22" text-anchor="middle" class="t">Rollback Boundaries per Phase</text>
+  <rect x="40" y="50" width="640" height="320" class="p"/>
+  <text x="80" y="78" class="l">A Baseline</text><text x="200" y="78" class="m">Rollback: N/A (documentation only)</text>
+  <text x="80" y="105" class="l">B Contracts (UDE-007)</text><text x="200" y="105" class="m">Rollback: delete app/ude modules; zero production impact</text>
+  <text x="80" y="132" class="l">C Read Adapters (UDE-008)</text><text x="200" y="132" class="m">Rollback: flag off ude_po_read_adapter; PO path only</text>
+  <text x="80" y="159" class="l">D OO Native (OO-IMP)</text><text x="200" y="159" class="m">Rollback: disable ude_oo_module; PO unaffected</text>
+  <text x="80" y="186" class="l">E Shared Services (UDE-009)</text><text x="200" y="186" class="m">Rollback: OO falls back to local copies</text>
+  <text x="80" y="213" class="l">F PO Convergence (PO-CONV)</text><text x="200" y="213" class="m">Rollback: revert to PO service delegation; harness must pass first</text>
+  <rect x="80" y="240" width="560" height="110" class="rb"/>
+  <text x="360" y="262" text-anchor="middle" class="l">Independent rollback per phase</text>
+  <text x="100" y="285" class="m">No schema migration in A-E  no migration rollback needed</text>
+  <text x="100" y="305" class="m">Dual-write rejected until proven  avoids complex rollback</text>
+  <text x="100" y="325" class="m">Each phase exit criteria includes rollback drill documentation</text>
+  <text x="360" y="385" text-anchor="middle" class="m">Principle: production deploy never depends on full migration completion</text>
+</svg>

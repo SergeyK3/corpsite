@@ -1,0 +1,20 @@
+component,readiness,findings,blocking_for,notes
+Draft Intake Domain,Ready,,OO-IMP-001,Boundary defined in UDE-002
+Draft Workspace,Ready,,UDE-003 OO-IMP-001,Central deliverable; own aggregate
+Submitted Draft,Ready,,OO-IMP-001,Minimum P0 defined
+Draft Submission Contract,Ready,,OO-IMP-001,Channels conceptual only
+Text Provenance Model,Ready,,UDE-003,Per-block minimum
+Draft Metadata,Ready,,OO-IMP-001,Pre-document fields
+Intake Validation,Ready,,OO-IMP-001,I001-I026 + W2xx
+Editorial Boundary,Ready,,UDE-003,Form vs content classification
+Semantic Enrichment,Ready,,OO-IMP-001,Progressive no NLP
+Clarification Model,Ready,,OO-IMP-001,Not workflow engine
+Draft Attachments,Ready,,OO-IMP-001,Three kinds
+Draft Audit,Ready,,UDE-003,Separate from lifecycle audit
+Source of Truth Stages,Ready,,UDE-003,Five stages
+Workspace to Document Transition,Ready,,UDE-003,Promotion rules
+ContentConfirmationPolicy,Needs clarification,OQ-04 interview,OO-IMP-002,Default policy defined form vs content
+Document Promotion Implementation,Deferred,UDE-003 editorial core,OO-IMP-001,Architecture only in UDE-002
+Upload/API channels,Deferred,OO-IMP-001,OO-IMP-001,Contract only
+PO Workspace adapter,Deferred,UDE-006,UDE-006,PO unchanged at runtime
+NLP obligation extraction,Rejected,—,—,Explicit non-goal

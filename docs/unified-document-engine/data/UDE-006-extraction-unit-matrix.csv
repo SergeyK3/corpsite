@@ -1,0 +1,16 @@
+unit_id,unit_name,source_location,dependencies,extraction_difficulty,risk,prerequisite,first_consumer,compatibility_test
+U001,shared_lifecycle_types,personnel_orders.py ORDER_STATUSES,UDE-001 contracts,low,low,UDE-007 contracts,OO lifecycle,enum parity test
+U002,lifecycle_validation_contracts,ready_gate + L-series spec,UDE-005 L rules,medium,low,UDE-007,OO MarkReady,validation parity
+U003,archive_guard,archive_guard.py,none,low,low,UDE-007,OO archive,archived write rejection
+U004,audit_record_contract,lifecycle_audit_service,audit table schema,low,medium,UDE-007,OO audit,append-only test
+U005,void_kind_resolver,resolve_void_kind,status enum,low,low,UDE-007,shared annul/cancel,void_kind mapping test
+U006,locale_effective_semantics,editorial + localized_texts,UDE-003,medium,medium,UDE-009,OO editorial,effective authority test
+U007,fingerprint_staleness_utils,editorial review_status,UDE-003 BC,medium,medium,UDE-009,OO localization,stale gate test
+U008,print_language_mode,personnelOrderPrintLanguage,print VM,medium,low,UDE-008,OO renderer,language mode test
+U009,document_identity_contract,order_id mapping,UDE-001 DocumentId,low,low,UDE-007,adapters,identity roundtrip
+U010,error_taxonomy,cancel/archive/void errors,HTTP mapping,medium,low,UDE-007,OO API,error code parity
+U011,cancel_scope_evaluator,cancel_scope_service,org tree,high,high,PO-CONV,lifecycle cancel,scope characterization
+U012,journal_filter_protocol,query_service closed filter,JournalPolicy,low,low,UDE-008,OO journal,filter test
+U013,registry_protocol,MVP_ORDER_TYPE_CODES,item generator,high,high,OO-IMP-003,OO only,not extracted from PO first
+U014,write_lock_policy,EDITABLE_ORDER_STATUSES,UDE-005 READY,low,low,UDE-007,lifecycle,DRAFT-only edit test
+U015,synthetic_activation_view,adapter only,UDE-004,low,low,UDE-008,reporting,derived metadata test

@@ -1,0 +1,17 @@
+from_stage,to_stage,trigger,preconditions,blocking_checks,side_effects,document_exists,lifecycle_active,audit_event
+SUBMITTED,ACCEPTED,intake_operator_accepts,I001-I004 I007 I010 I019-I020 I023-I026 pass,blockers none,WorkspaceId assigned,No,No,INTAKE_ACCEPTED
+ACCEPTED,WORKSPACE_CREATED,workspace_instantiated,acceptance recorded,DraftWorkspace aggregate created,SubmittedDraftSnapshot frozen,No,No,WORKSPACE_CREATED
+WORKSPACE_CREATED,EDITORIAL_PROCESSING,operator_starts_edit,workspace created,none,Editorial boundary entered,No,No,EDITORIAL_STARTED
+EDITORIAL_PROCESSING,SEMANTIC_ENRICHMENT,enrichment_begins,structure min satisfied,I008-I012 warnings waived or resolved,SemanticEnrichmentState initialized,No,No,ENRICHMENT_STARTED
+EDITORIAL_PROCESSING,LOCALIZATION_PROCESSING,translation_requested,KK missing or declared,I020 satisfied,Translation workflow,No,No,TRANSLATION_REQUESTED
+SEMANTIC_ENRICHMENT,LOCALIZATION_PROCESSING,translation_parallel,partial semantic OK,clarifications resolved or open,LocalizationState active,No,No,—
+LOCALIZATION_PROCESSING,CONTENT_CONFIRMATION,locales_ready,mandatory locales present,W202 CURRENT,Review complete,No,No,LOCALIZATION_REVIEWED
+EDITORIAL_PROCESSING,CONTENT_CONFIRMATION,content_edits_detected,content-class edits,W203 if policy,Confirmation requested,No,No,CONTENT_CONFIRMATION_REQUESTED
+CONTENT_CONFIRMATION,OFFICIAL_DRAFT_READY,author_confirms,W203 cleared,open clarifications none,PromotionReadiness true,No,No,CONTENT_CONFIRMED
+SEMANTIC_ENRICHMENT,OFFICIAL_DRAFT_READY,enrichment_complete,W201 pass,all gates,OfficialDraftPackage assembled,No,No,OFFICIAL_DRAFT_READY
+OFFICIAL_DRAFT_READY,DOCUMENT_PROMOTED,promotion_command,W201 W202 W203 W204 pass,UDE-003 handoff validation,DocumentId created Document aggregate DRAFT,Lifecycle audit begins,Yes,Yes,WORKSPACE_PROMOTED RECORD_CREATED
+DOCUMENT_PROMOTED,—,workspace_frozen,Document exists,—,Workspace read-only,Yes,Yes,—
+SUBMITTED,REJECTED,intake_rejected,blockers present,—,No workspace,No,No,INTAKE_REJECTED
+any,ABANDONED,withdraw_or_cancel,policy,—,No Document,No,No,WORKSPACE_ABANDONED
+WORKSPACE_CREATED,CLARIFICATION_OPEN,clarification_required,finding clarification severity,—,ClarificationRequest created,No,No,CLARIFICATION_REQUESTED
+CLARIFICATION_OPEN,EDITORIAL_PROCESSING,clarification_resolved,answer recorded,W204 cleared,Resume processing,No,No,CLARIFICATION_RESOLVED

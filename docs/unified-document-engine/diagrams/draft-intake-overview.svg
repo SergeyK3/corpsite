@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.b{fill:#eff6ff;stroke:#2563eb;rx:6}.g{fill:#ecfdf5;stroke:#059669;rx:6}.y{fill:#fef3c7;stroke:#d97706;rx:6}.r{fill:#fef2f2;stroke:#dc2626;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="22" text-anchor="middle" class="t">Draft Intake Overview (UDE-002)</text>
+  <rect x="30" y="50" width="140" height="50" class="y"/><text x="100" y="72" text-anchor="middle" class="l">Submitted Draft</text><text x="40" y="88" class="m">RU/KK/partial/Word</text>
+  <rect x="210" y="50" width="140" height="50" class="b"/><text x="280" y="72" text-anchor="middle" class="l">Draft Submission</text><text x="220" y="88" class="m">channel contract</text>
+  <rect x="390" y="40" width="160" height="70" class="g"/><text x="470" y="62" text-anchor="middle" class="l">Draft Intake</text><text x="400" y="80" class="m">authorship provenance</text><text x="400" y="94" class="m">I001-I026 validation</text>
+  <rect x="590" y="40" width="180" height="70" class="g"/><text x="680" y="62" text-anchor="middle" class="l">Draft Workspace</text><text x="600" y="80" class="m">aggregate root</text><text x="600" y="94" class="m">editorial + enrichment</text>
+  <rect x="200" y="150" width="500" height="55" class="b"/><text x="450" y="172" text-anchor="middle" class="l">Inside Draft Intake / Workspace</text><text x="210" y="190" class="m">provenance | metadata | validation | clarification | draft audit | attachments</text>
+  <rect x="200" y="230" width="500" height="45" class="r"/><text x="450" y="252" text-anchor="middle" class="l">Outside Draft Intake</text><text x="210" y="268" class="m">registration | lifecycle | sign | PDF | archive | execution projection</text>
+  <rect x="590" y="300" width="180" height="50" class="b"/><text x="680" y="322" text-anchor="middle" class="l">Document Aggregate</text><text x="600" y="338" class="m">at promotion only</text>
+  <line x1="170" y1="75" x2="210" y2="75" stroke="#334155" marker-end="url(#a)"/>
+  <line x1="350" y1="75" x2="390" y2="75" stroke="#334155"/>
+  <line x1="550" y1="75" x2="590" y2="75" stroke="#334155"/>
+  <line x1="680" y1="110" x2="680" y2="300" stroke="#059669" stroke-dasharray="4,3"/>
+  <text x="450" y="380" text-anchor="middle" class="m">Intake accepts ’ Workspace created ’ editorial work ’ promotion ’ DocumentId + lifecycle</text>
+  <text x="450" y="400" text-anchor="middle" class="m">Content author ` record creator | submitted ` effective | no auto-READY</text>
+</svg>

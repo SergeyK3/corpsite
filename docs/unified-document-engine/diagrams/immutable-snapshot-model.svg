@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.v1{fill:#dbeafe;stroke:#2563eb;rx:6}.mut{fill:#fef3c7;stroke:#d97706;rx:6}.imm{fill:#fce7f3;stroke:#db2777;rx:6}.m{font:9px sans-serif;fill:#475569}.l{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="375" y="22" text-anchor="middle" class="t">Immutable Snapshot Model (UDE-004)</text>
+  <rect x="80" y="55" width="180" height="70" class="v1"/><text x="170" y="78" text-anchor="middle" class="l">Activation</text><text x="90" y="98" class="m">Initial Effective Baseline v1</text><text x="90" y="114" class="m">MUTABLE in DRAFT</text>
+  <rect x="285" y="55" width="180" height="70" class="mut"/><text x="375" y="78" text-anchor="middle" class="l">DRAFT editing</text><text x="295" y="98" class="m">Effective may change</text><text x="295" y="114" class="m">Version N increments</text>
+  <rect x="490" y="55" width="180" height="70" class="imm"/><text x="580" y="78" text-anchor="middle" class="l">SIGNED</text><text x="500" y="98" class="m">Signed Immutable Snapshot</text><text x="500" y="114" class="m">FROZEN  ADR-UDE-009</text>
+  <line x1="260" y1="90" x2="285" y2="90" stroke="#334155"/><line x1="465" y1="90" x2="490" y2="90" stroke="#db2777" stroke-width="2"/>
+  <rect x="100" y="160" width="550" height="180" rx="6" fill="#f8fafc" stroke="#64748b"/>
+  <text x="375" y="182" text-anchor="middle" class="l">Snapshot Contents</text>
+  <text x="110" y="205" class="m">At Activation v1: effective + generated + provenance per locale block, semantic model, structure</text>
+  <text x="110" y="225" class="m">NOT at Activation: raw submitted, signatory frozen, registration number (default), PDF</text>
+  <text x="110" y="245" class="m">At SIGNED: effective bilingual snapshot + signatory metadata + registration metadata</text>
+  <text x="110" y="275" class="m">Relation: EffectiveText (DRAFT) ’ SignedSnapshot.effective (immutable)</text>
+  <text x="375" y="370" text-anchor="middle" class="m">Activation creates baseline  legal immutability only at SIGNED/REGISTERED</text>
+</svg>

@@ -1,0 +1,12 @@
+trigger_event,affected_scope,staleness_result,review_required,current_restored_by,propagates_to,blocks_promotion,personnel_po_mapping,notes
+semantic_fingerprint_change,item block STALE if override,STALE,No if no override,regenerate or clear override,other locales same item,No unless mandatory locale aggregate,PO-EDIT stale.py,Override kept
+semantic_fingerprint_change no override,item block,regenerate CURRENT,CURRENT,regenerate,N/A,No,PO generate,Effective updates
+regenerate with override kept,item block,REVIEW_REQUIRED,Yes,manual reconcile,TRANSLATED derived,Yes if mandatory,PO R9,Effective unchanged
+ru_effective_change,kk TRANSLATED blocks,STALE,N/A,retranslate or reconcile,BC023,Yes,OP-RES-005A,Standard case
+ru_generated_change,kk generated blocks,regenerate or STALE,Maybe,regenerate KK,BC001 parity,Maybe,BC023,
+translation_completed,kk block,CURRENT if reviewed,No,localization_reviewed_by,locale aggregate,No,OP-RES-006A,
+structural_drift detected,locale pair,REVIEW_REQUIRED,Yes,human review,BC024 warning,Yes,OP-RES-005A,
+legacy_import,all blocks,UNKNOWN,treat as REVIEW,editorial normalize,N/A,Yes,PO fallback,
+clear_override_command,block,CURRENT,No,override cleared,none,No,PO reset API,
+content_confirmation_reset,document scope,confirmation pending,N/A,re-confirm,N/A,Yes E113,OO policy,
+waived_stale_non_mandatory,optional locale,waived_STALE,No,audit waiver,promotion allowed,No,OP-RES-006 L7,

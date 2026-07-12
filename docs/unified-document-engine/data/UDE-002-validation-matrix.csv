@@ -1,0 +1,31 @@
+check_id,layer,name,severity,clarification,blocks_intake_acceptance,blocks_workspace_advancement,blocks_document_promotion,applies_to,source
+I001,metadata,initiator_declared,error,No,Yes,No,No,all_intake,OP-RES-006A
+I002,metadata,content_author_declared,error,No,Yes,No,No,all_intake,OP-RES-006A
+I003,metadata,submitting_unit_declared,error,No,Yes,No,No,oo_intake,OP-RES-006A
+I004,metadata,document_kind_identified,error,Yes,Yes,No,No,all_intake,OP-RES-006A
+I005,metadata,signatory_hint_present,warning,Yes,No,No,No,draft_intake,OP-RES-006A
+I006,metadata,basis_reference_present,warning,Yes,No,No,No,most_scenarios,OP-RES-006A
+I007,structural,title_present,error,No,Yes,No,No,text_intake,OP-RES-006A
+I008,structural,preamble_or_basis_detected,warning,Yes,No,Yes if unresolved,promotion,text_intake,OP-RES-006A
+I009,structural,operative_formula_detected,warning,Yes,No,Yes if unresolved,promotion,text_intake,OP-RES-006A
+I010,structural,numbered_items_present,error,No,Yes,No,No,text_intake,OP-RES-006A
+I011,structural,control_clause_detected,warning,Yes,No,No,No,oo_intake,OP-RES-006A
+I012,structural,signature_block_hint,warning,Yes,No,No,No,text_intake,OP-RES-006A
+I013,structural,attachment_refs_valid,error,Yes,Yes,No,Yes,attachment_driven,OP-RES-006A
+I014,semantic,executors_identifiable,warning,Yes,No,Yes if open,promotion,text_intake,OP-RES-006A
+I015,semantic,deadlines_identifiable,warning,Yes,No,Yes if open,promotion,deadline_scenarios,OP-RES-006A
+I016,semantic,managed_objects_identifiable,warning,Yes,No,Yes if open,promotion,text_intake,OP-RES-006A
+I017,semantic,controller_identifiable,warning,Yes,No,Yes if open,promotion,oo_intake,OP-RES-006A
+I018,semantic,internal_contradictions,error,No,Yes,Yes,Yes,text_intake,OP-RES-006A
+I019,localization,ru_present,error,No,Yes,No,No,bilingual_policy,OP-RES-006A
+I020,localization,kk_present_or_declared_missing,error,No,Yes,No,No,bilingual_policy,OP-RES-006A
+I021,localization,structural_parity_ru_kk,warning,Yes,No,Yes if unresolved,promotion,ru_kk_submitted,OP-RES-006A
+I022,localization,translation_quality_unknown,warning,Yes,No,Yes,promotion,kk_submitted_by_author,OP-RES-006A
+I023,provenance,submitter_recorded,error,No,Yes,No,No,all_intake,OP-RES-006A
+I024,provenance,content_author_recorded,error,No,Yes,No,No,all_intake,OP-RES-006A
+I025,provenance,translation_origin_recorded,warning,Yes,No,Yes,promotion,mixed_origin,OP-RES-006A
+I026,provenance,edit_chain_preserved,error,No,Yes,Yes,Yes,all_intake,OP-RES-006A
+W201,semantic,enrichment_complete,warning to error,No,No,Yes,Yes,workspace,UDE-002
+W202,localization,mandatory_locale_current,error,No,No,Yes,Yes,workspace,UDE-002
+W203,confirmation,content_confirmation_pending,error,No,No,Yes,Yes,workspace,UDE-002
+W204,clarification,open_clarifications,error,No,No,Yes,Yes,workspace,UDE-002

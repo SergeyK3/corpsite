@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 480" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.core{fill:#eff6ff;stroke:#2563eb;rx:8}.reg{fill:#fef3c7;stroke:#d97706;rx:6}.spec{fill:#ecfdf5;stroke:#059669;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="390" y="22" text-anchor="middle" class="t">Extension Point Model (UDE-001)</text>
+  <rect x="240" y="45" width="300" height="80" class="core"/>
+  <text x="390" y="72" text-anchor="middle" class="l">Shared Core</text>
+  <text x="250" y="92" class="m">DocumentContract | LifecycleContract | LocalizationContract</text>
+  <text x="250" y="108" class="m">Resolves DocumentKind ’ Policy Bundle</text>
+  <rect x="60" y="160" width="140" height="44" class="reg"/><text x="130" y="186" text-anchor="middle" class="l">Kind Registry</text>
+  <rect x="220" y="160" width="140" height="44" class="reg"/><text x="290" y="186" text-anchor="middle" class="l">Lifecycle Registry</text>
+  <rect x="380" y="160" width="140" height="44" class="reg"/><text x="450" y="186" text-anchor="middle" class="l">Localization Registry</text>
+  <rect x="540" y="160" width="140" height="44" class="reg"/><text x="610" y="186" text-anchor="middle" class="l">Party Resolution</text>
+  <rect x="60" y="230" width="120" height="44" class="reg"/><text x="120" y="256" text-anchor="middle" class="l">Scenario Reg.</text>
+  <rect x="195" y="230" width="120" height="44" class="reg"/><text x="255" y="256" text-anchor="middle" class="l">Item Type Reg.</text>
+  <rect x="330" y="230" width="120" height="44" class="reg"/><text x="390" y="256" text-anchor="middle" class="l">Renderer Reg.</text>
+  <rect x="465" y="230" width="120" height="44" class="reg"/><text x="525" y="256" text-anchor="middle" class="l">Validation Reg.</text>
+  <rect x="600" y="230" width="120" height="44" class="reg"/><text x="660" y="256" text-anchor="middle" class="l">Projection Reg.</text>
+  <rect x="100" y="320" width="200" height="55" class="spec"/><text x="200" y="345" text-anchor="middle" class="l">Personnel Specialization</text><text x="110" y="362" class="m">5 item types | apply adapter</text>
+  <rect x="480" y="320" width="200" height="55" class="spec"/><text x="580" y="345" text-anchor="middle" class="l">Operational Specialization</text><text x="490" y="362" class="m">14 types | intake P0 | control meta</text>
+  <line x1="390" y1="125" x2="130" y2="160" stroke="#334155"/>
+  <line x1="390" y1="125" x2="290" y2="160" stroke="#334155"/>
+  <line x1="390" y1="125" x2="450" y2="160" stroke="#334155"/>
+  <line x1="390" y1="125" x2="610" y2="160" stroke="#334155"/>
+  <line x1="200" y1="375" x2="255" y2="274" stroke="#059669"/>
+  <line x1="580" y1="375" x2="390" y2="274" stroke="#059669"/>
+  <line x1="580" y1="375" x2="525" y2="274" stroke="#059669"/>
+  <text x="390" y="410" text-anchor="middle" class="m">Specialization registers plugins  core never imports PO/OO internals</text>
+  <text x="390" y="430" text-anchor="middle" class="m">First implementation: Localization ’ Kind ’ Lifecycle ’ Attachment (UDE-002/003)</text>
+  <text x="390" y="460" text-anchor="middle" class="m">Composition + policy/registry (ADR-UDE-002)  no inheritance</text>
+</svg>

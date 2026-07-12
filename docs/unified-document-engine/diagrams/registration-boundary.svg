@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 340" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.s{fill:#ecfdf5;stroke:#059669;rx:15}.r{fill:#dbeafe;stroke:#2563eb;rx:15}.p{fill:#fef3c7;stroke:#d97706;rx:8}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Registration Boundary</text>
+  <rect x="280" y="55" width="140" height="40" class="s"/><text x="350" y="80" text-anchor="middle" class="l">SIGNED</text>
+  <line x1="350" y1="95" x2="350" y2="130" stroke="#059669" stroke-width="2"/><text x="370" y="118" class="m">RegisterDocument</text>
+  <rect x="260" y="130" width="180" height="50" class="r"/><text x="350" y="152" text-anchor="middle" class="l">REGISTERED</text><text x="350" y="168" text-anchor="middle" class="m">registration_number assigned</text>
+  <rect x="80" y="210" width="250" height="110" class="p"/>
+  <text x="205" y="232" text-anchor="middle" class="l">RegistrationPolicy (extension)</text>
+  <text x="100" y="252" class="m">numbering_scope | year sequence | reservation</text>
+  <text x="100" y="268" class="m">duplicate_prevention | historical immutability</text>
+  <text x="100" y="284" class="m">number NOT at Activation (UDE-004 default)</text>
+  <text x="100" y="300" class="m">SIGNED without REGISTERED: allowed</text>
+  <rect x="370" y="210" width="250" height="110" class="p"/>
+  <text x="495" y="232" text-anchor="middle" class="l">After REGISTERED</text>
+  <text x="390" y="252" class="m">registration fields immutable</text>
+  <text x="390" y="268" class="m">official journal entry</text>
+  <text x="390" y="284" class="m">Execution Projection default enabled</text>
+  <text x="390" y="300" class="m">VOIDED: number retained not reused</text>
+  <text x="350" y="330" text-anchor="middle" class="m">No numbering service / DB designed in UDE-005</text>
+</svg>

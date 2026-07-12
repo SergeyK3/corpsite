@@ -1,0 +1,16 @@
+risk_id,risk,likelihood,impact,mitigation,detection
+R001,Accidental PO behavior change,medium,critical,Characterization tests before any write-path change,CI regression suite
+R002,Hidden API dependency,medium,high,API inventory baseline G003,Contract tests
+R003,Legacy text loss,low,critical,Effective text authority rule,no silent regen monitor
+R004,Audit fabrication,medium,high,ADR-UDE-021 no historical fabrication,Audit row provenance review
+R005,Signed document regeneration,medium,critical,No mass backfill snapshot policy,PDF comparison harness
+R006,Employee event duplication,low,critical,Apply idempotency unchanged,Apply chain tests
+R007,Authorization regression,medium,high,Preserve permission codes,Authority characterization
+R008,Lifecycle mismatch,medium,high,Adapter parity harness,lifecycle view diff
+R009,PDF drift,medium,high,No Playwright change semantic golden,PDF semantic tests
+R010,Dual-model complexity,high,medium,Explicit phase boundaries,documentation + flags
+R011,Adapter permanent debt,medium,medium,Phase F convergence plan,adapter usage metrics
+R012,Premature persistence unification,medium,critical,No migration until proven,architecture review gate
+R013,Excessive shared abstraction,medium,medium,Extraction units minimal first,code review
+R014,OO blocked by PO migration,low,high,OO native path Phase D,independent OO WPs
+R015,Insufficient characterization,high,critical,UDE-007 baseline mandatory,test coverage gate

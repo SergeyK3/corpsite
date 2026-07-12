@@ -1,0 +1,15 @@
+lifecycle_element,at_activation_value,created_at_activation,owner_after_activation,notes
+DocumentLifecycleState,DRAFT,Yes,UDE-005,Only state at birth
+READY_FOR_SIGNATURE,—,No,UDE-005,Future transition
+SIGNED,—,No,UDE-005,Future transition
+REGISTERED,—,No,UDE-005,Future transition
+VOIDED,—,No,UDE-005,Future transition
+ArchiveState,active not archived,Yes orthogonal,UDE-005,archived_at null
+LocalizationLifecycleState,CURRENT mandatory,Copied from package,UDE-003/005,Independent
+ExecutionLifecycleState,not_created,No,Downstream,After REGISTERED projection
+WriteLockPolicy,DRAFT editable,Yes,UDE-005,PO-EDIT R10 aligned
+EditorialSubstate,none lifecycle enum,No,Derived,Not status enum
+LifecycleAuditStream,initiated,Yes first entry,UDE-005,DOCUMENT_ACTIVATED
+DocumentVersion,1,Yes,UDE-005,Mutable in DRAFT
+RegistrationNumber,null default,No,UDE-005,At REGISTERED unless policy
+ContentConfirmation,carried from package,Yes state,UDE-005,OO gate for READY

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.d{fill:#fef3c7;stroke:#d97706;rx:6}.e{fill:#eff6ff;stroke:#2563eb;rx:6}.a{fill:#ecfdf5;stroke:#059669;rx:6}.l{fill:#d1fae5;stroke:#059669;rx:6}.m{font:9px sans-serif;fill:#475569}.lb{font:600 11px sans-serif;fill:#0f172a}</style></defs>
+  <text x="400" y="22" text-anchor="middle" class="t">Activation Audit Model (UDE-004)</text>
+  <rect x="40" y="50" width="180" height="220" class="d"/><text x="130" y="72" text-anchor="middle" class="lb">Draft Audit</text><text x="50" y="92" class="m">intake clarifications</text><text x="50" y="140" class="m">frozen at promotion</text>
+  <rect x="240" y="50" width="200" height="220" class="e"/><text x="340" y="72" text-anchor="middle" class="lb">Editorial Audit</text><text x="250" y="92" class="m">edits regen translation</text><text x="250" y="140" class="m">ends at package freeze</text>
+  <rect x="460" y="50" width="140" height="220" class="a"/><text x="530" y="72" text-anchor="middle" class="lb">Activation Audit</text><text x="470" y="92" class="m">PROMOTION_STARTED</text><text x="470" y="108" class="m">PROMOTION_FAILED</text><text x="470" y="124" class="m">PROMOTION_COMPLETED</text><text x="470" y="140" class="m">INITIAL_VERSION_CREATED</text><text x="470" y="156" class="m">PUBLICATION_READY</text>
+  <rect x="620" y="50" width="160" height="220" class="l"/><text x="700" y="72" text-anchor="middle" class="lb">Lifecycle Audit</text><text x="630" y="92" class="m">DOCUMENT_ACTIVATED</text><text x="630" y="108" class="m">LIFECYCLE_STARTED</text><text x="630" y="124" class="m">RECORD_CREATED</text><text x="630" y="156" class="m">READY SIGNED...</text>
+  <line x1="440" y1="160" x2="460" y2="160" stroke="#059669"/><line x1="600" y1="160" x2="620" y2="160" stroke="#059669"/>
+  <text x="400" y="310" text-anchor="middle" class="m">Four streams  Activation Audit is NEW in UDE-004; Lifecycle Audit starts at DOCUMENT_ACTIVATED</text>
+  <text x="400" y="330" text-anchor="middle" class="m">Append-only; summary cross-links at promotion</text>
+</svg>

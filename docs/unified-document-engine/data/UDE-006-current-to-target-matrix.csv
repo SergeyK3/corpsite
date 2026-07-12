@@ -1,0 +1,30 @@
+po_concept,ude_target,mapping_type,adapter_required,refactor_required,specialization_only,notes
+PersonnelOrder,Document Aggregate + Personnel Specialization,partial_match,yes,no,yes,order_id maps to DocumentId adapter
+PersonnelOrderItem,OrderItem + personnel semantic payload,partial_match,yes,no,yes,employee_id in payload not PartyReference in DB
+personnel_order_localized_texts,LocaleRepresentation,partial_match,yes,no,no,Legacy generated/effective columns
+personnel_order_editorial_blocks,LocaleRepresentation + Editorial blocks,partial_match,yes,no,no,WP-PO-EDIT-002 alignment
+status,DocumentLifecycleState,exact_match,no,no,no,Five states identical
+void_kind,Void Model,exact_match,no,no,no,CANCEL ANNUL ratified
+archived_at,ArchiveState orthogonal,exact_match,no,no,no,is_archived derived
+personnel_order_lifecycle_audit,Shared Lifecycle Audit,partial_match,yes,no,no,Missing mark_ready register events
+print view model,Effective Localized Document / Print VM,partial_match,yes,no,yes,PO-specific VM fields
+employee_events,Personnel Execution Projection,specialization_only,no,no,yes,Outside document core
+basis policy / item_bases,Personnel Specialization Policy,specialization_only,no,no,yes,BASIS_TYPES enum
+item type registry,Personnel Item Registry,specialization_only,no,no,yes,MVP_ORDER_TYPE_CODES
+order_number,RegistrationPolicy surface,partial_match,yes,no,yes,Assigned at register
+created_at early create,Synthetic Activation,adapter_required,yes,no,no,No DOCUMENT_ACTIVATED event
+signed_by fields,Signer snapshot partial,partial_match,yes,no,no,No frozen signed snapshot
+personnel_order_prints,PDF artifact reference,partial_match,yes,no,yes,Playwright output storage
+review_status STALE,LocalizationLifecycleState,partial_match,yes,no,no,Maps to UDE-003 states
+apply endpoint,ExecutionProjection command,specialization_only,no,no,yes,Not lifecycle transition
+cancel endpoint,CancelDocument command,partial_match,yes,no,no,Granular permissions PO-specific
+void endpoint,AnnulDocument command,partial_match,yes,no,no,Cascade employee events
+archive endpoint,ArchiveDocument command,exact_match,no,no,no,REGISTERED VOIDED archivable
+register endpoint,RegisterDocument + shortcut,partial_match,yes,no,no,May skip separate SIGNED
+ready endpoint,MarkReady command,partial_match,yes,no,no,Ready gate editorial coupled
+PATCH order draft,Editorial + metadata edit,partial_match,yes,no,no,DRAFT only
+HTML preview route,Renderer preview,specialization_only,no,no,yes,PO route unchanged
+PDF route Playwright,Renderer PDF,specialization_only,no,no,yes,No change constraint
+journal list,Document Journal contract,partial_match,yes,no,no,Separate OO journal initially
+PartyReference generic,Adapter projection only,adapter_required,yes,no,yes,employee_id authoritative in persistence
+Execution lifecycle,ExecutionLifecycleState,independent,no,no,yes,Derived from employee_events

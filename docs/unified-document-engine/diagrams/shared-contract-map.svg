@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.c{fill:#f8fafc;stroke:#64748b;rx:6}.b{fill:#eff6ff;stroke:#2563eb;rx:6}.g{fill:#ecfdf5;stroke:#059669;rx:6}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="450" y="22" text-anchor="middle" class="t">Shared Contract Map (UDE-001)</text>
+  <rect x="30" y="40" width="130" height="55" class="b"/><text x="95" y="62" text-anchor="middle" class="l">DocumentContract</text><text x="40" y="78" class="m">aggregate root</text>
+  <rect x="180" y="40" width="130" height="55" class="b"/><text x="245" y="62" text-anchor="middle" class="l">OrderItemContract</text><text x="190" y="78" class="m">item + obligations</text>
+  <rect x="330" y="40" width="130" height="55" class="g"/><text x="395" y="62" text-anchor="middle" class="l">LocalizationContract</text><text x="340" y="78" class="m">locale + provenance</text>
+  <rect x="480" y="40" width="130" height="55" class="g"/><text x="545" y="62" text-anchor="middle" class="l">LifecycleContract</text><text x="490" y="78" class="m">transitions + audit</text>
+  <rect x="630" y="40" width="130" height="55" class="c"/><text x="695" y="62" text-anchor="middle" class="l">ValidationContract</text><text x="640" y="78" class="m">errors + warnings</text>
+  <rect x="780" y="40" width="100" height="55" class="c"/><text x="830" y="62" text-anchor="middle" class="l">RendererContract</text>
+  <rect x="105" y="130" width="130" height="55" class="g"/><text x="170" y="152" text-anchor="middle" class="l">GenerationContract</text><text x="115" y="168" class="m">scenario to text</text>
+  <rect x="255" y="130" width="130" height="55" class="c"/><text x="320" y="152" text-anchor="middle" class="l">AttachmentContract</text><text x="265" y="168" class="m">files + artifacts</text>
+  <rect x="405" y="130" width="130" height="55" class="c"/><text x="470" y="152" text-anchor="middle" class="l">ProjectionContract</text><text x="415" y="168" class="m">downstream handoff</text>
+  <rect x="555" y="130" width="130" height="55" class="c"/><text x="620" y="152" text-anchor="middle" class="l">ScenarioContract</text><text x="565" y="168" class="m">blueprint defaults</text>
+  <rect x="200" y="230" width="500" height="70" class="b"/>
+  <text x="450" y="255" text-anchor="middle" class="l">Shared Policies</text>
+  <text x="210" y="275" class="m">LocalizationPolicy | LifecyclePolicy | ArchivePolicy | AuditPolicy | AttachmentPolicy | TranslationPolicy | ContentConfirmationPolicy</text>
+  <rect x="100" y="330" width="180" height="60" class="g"/><text x="190" y="355" text-anchor="middle" class="l">Personnel Module</text><text x="110" y="375" class="m">item registry + apply adapter</text>
+  <rect x="360" y="330" width="180" height="60" class="g"/><text x="450" y="355" text-anchor="middle" class="l">Operational Module</text><text x="370" y="375" class="m">intake + scenario + control</text>
+  <rect x="620" y="330" width="180" height="60" class="c"/><text x="710" y="355" text-anchor="middle" class="l">Task Contour</text><text x="630" y="375" class="m">execution runtime</text>
+  <line x1="95" y1="95" x2="170" y2="130" stroke="#334155"/>
+  <line x1="245" y1="95" x2="320" y2="130" stroke="#334155"/>
+  <line x1="395" y1="95" x2="470" y2="130" stroke="#334155"/>
+  <line x1="545" y1="95" x2="620" y2="130" stroke="#334155"/>
+  <line x1="450" y1="300" x2="190" y2="330" stroke="#059669"/>
+  <line x1="450" y1="300" x2="450" y2="330" stroke="#059669"/>
+  <line x1="470" y1="185" x2="710" y2="330" stroke="#dc2626" stroke-dasharray="5,3"/>
+  <text x="580" y="270" class="m">Projection only to Task Contour</text>
+  <text x="450" y="430" text-anchor="middle" class="m">Blue = Ready for UDE-002/003 | Gray = Deferred to UDE-005 / OO-IMP-003</text>
+  <text x="450" y="510" text-anchor="middle" class="m">Contracts are conceptual interfaces  no runtime code in UDE-001</text>
+</svg>

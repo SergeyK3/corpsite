@@ -1,0 +1,17 @@
+data_group,recommended_mode,risk,reversible,auditability,production_complexity,notes
+identity,No migration,low,yes,n/a,none,order_id remains PO primary key
+lifecycle,Read-time projection,low,yes,high,low,Adapter maps status void_kind archive
+lifecycle_audit,Lazy adaptation,low,yes,high,low,No backfill of missing mark_ready events
+archive marker,No migration,low,yes,n/a,none,archived_at already orthogonal
+localized_text,Read-time projection,low,yes,high,low,Effective text is authority
+editorial_blocks,Read-time projection,medium,yes,high,low,Map to LocaleRepresentation
+items,No migration,low,yes,n/a,none,employee_id stays in persistence
+signed_snapshot,Lazy on next transition,medium,yes,required,medium,No mass backfill; optional on annul/register replay
+registration fields,No migration,low,yes,n/a,none,order_number already stored
+employee_events,No migration,high,no,required,none,Never recreate events
+pdf_artifacts,No migration,low,yes,n/a,none,Existing prints retained
+synthetic_activation,Derived view only,low,yes,medium,low,No fabricated audit rows
+workspace_link,Explicit migration deferred,medium,partial,required,high,Only when OO path needs link
+dual_write,Rejected until proven need,high,partial,required,high,Not recommended Phase B-E
+background_backfill,Deferred optional,medium,partial,required,medium,Only signed snapshot with explicit WP
+explicit_migration,Only future shared persistence,high,varies,required,high,Requires ratified WP

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs><style>.t{font:700 17px sans-serif;fill:#0f172a}.c{fill:#dbeafe;stroke:#2563eb;rx:15}.a{fill:#fee2e2;stroke:#dc2626;rx:15}.v{fill:#f1f5f9;stroke:#64748b;rx:15}.ar{fill:#e0e7ff;stroke:#4f46e5;rx:10}.l{font:600 11px sans-serif;fill:#0f172a}.m{font:9px sans-serif;fill:#475569}</style></defs>
+  <text x="350" y="22" text-anchor="middle" class="t">Cancel vs Annul vs Archive</text>
+  <rect x="60" y="55" width="260" height="100" class="c"/>
+  <text x="190" y="78" text-anchor="middle" class="l">CANCEL</text>
+  <text x="80" y="98" class="m">Source: DRAFT | READY_FOR_SIGNATURE</text>
+  <text x="80" y="114" class="m">Meaning: abandon unsigned project</text>
+  <text x="80" y="130" class="m">void_kind = CANCEL ’ status VOIDED</text>
+  <rect x="380" y="55" width="260" height="100" class="a"/>
+  <text x="510" y="78" text-anchor="middle" class="l">ANNUL</text>
+  <text x="400" y="98" class="m">Source: SIGNED | REGISTERED</text>
+  <text x="400" y="114" class="m">Meaning: invalidate official act</text>
+  <text x="400" y="130" class="m">void_kind = ANNUL ’ status VOIDED</text>
+  <rect x="200" y="180" width="300" height="70" class="v"/>
+  <text x="350" y="205" text-anchor="middle" class="l">VOIDED (terminal)</text>
+  <text x="220" y="225" class="m">Retains: void_kind, reason, actor, source_state, snapshot ref</text>
+  <text x="220" y="240" class="m">VOIDED ` deleted | registration number retained</text>
+  <line x1="190" y1="155" x2="280" y2="180" stroke="#64748b"/><line x1="510" y1="155" x2="420" y2="180" stroke="#64748b"/>
+  <rect x="120" y="280" width="460" height="80" class="ar"/>
+  <text x="350" y="302" text-anchor="middle" class="l">ARCHIVE (orthogonal  not lifecycle transition)</text>
+  <text x="140" y="322" class="m">ArchiveState: ACTIVE | ARCHIVED  lifecycle status unchanged</text>
+  <text x="140" y="338" class="m">After archive: view | print | audit | restore only  mutations ’ DOCUMENT_ARCHIVED</text>
+  <text x="140" y="354" class="m">Does not auto-cancel execution projection</text>
+</svg>
