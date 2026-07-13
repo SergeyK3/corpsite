@@ -152,3 +152,42 @@ def return_to_created(client, headers, document_id, *, reason: str, expected_ver
     if expected_version is not None:
         body["expected_version"] = expected_version
     return client.post(f"{DOCUMENTS_BASE}/{document_id}/return-to-created", json=body, headers=headers)
+
+
+def sign_document(
+    client,
+    headers,
+    document_id,
+    *,
+    idempotency_key: str,
+    override_reason: str | None = None,
+    expected_version: int | None = None,
+):
+    body = {"idempotency_key": idempotency_key}
+    if override_reason is not None:
+        body["override_reason"] = override_reason
+    if expected_version is not None:
+        body["expected_version"] = expected_version
+    return client.post(f"{DOCUMENTS_BASE}/{document_id}/sign", json=body, headers=headers)
+
+
+def create_ready_to_sign_document(client, headers, seed, *, authority_reference: str | None = None):
+    workspace_id, document_id, promoted = create_promoted_document(client, headers, seed)
+    doc_version = promoted["document"]["document"]["version"]
+    authority_ref = authority_reference or str(seed["executor_user_id"])
+    assign = assign_signing_authority(
+        client,
+        headers,
+        document_id,
+        reference=authority_ref,
+        expected_version=doc_version,
+    )
+    assert assign.status_code == 200, assign.text
+    ready = mark_ready_for_signature(
+        client,
+        headers,
+        document_id,
+        expected_version=assign.json()["document"]["version"],
+    )
+    assert ready.status_code == 200, ready.text
+    return workspace_id, document_id, ready.json()

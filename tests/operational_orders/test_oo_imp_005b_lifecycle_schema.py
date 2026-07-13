@@ -33,8 +33,8 @@ from app.operational_orders.validation.lifecycle_invariants import (
     validate_signed_metadata,
 )
 from tests.conftest import get_columns, table_exists
-from tests.operational_orders.conftest import DDL_REVISION
 
+DDL_REVISION_005B = "c3d4e5f6a7b8"
 DDL_REVISION_PREVIOUS = "b2c3d4e5f6a7"
 
 NEW_DOCUMENT_COLUMNS = (
@@ -78,7 +78,7 @@ def _schema_available() -> bool:
 def _require_schema() -> None:
     if not _schema_available():
         pytest.skip(
-            f"OO-IMP-005B schema missing — run: alembic upgrade head (revision {DDL_REVISION})"
+            f"OO-IMP-005B schema missing — run: alembic upgrade head (revision {DDL_REVISION_005B})"
         )
 
 
@@ -102,13 +102,22 @@ def _run_005b_downgrade_upgrade(conn) -> None:
     mod = _migration_module()
     with Operations.context(ctx):
         mod.downgrade()
+        conn.execute(
+            text(
+                """
+                UPDATE public.operational_order_documents
+                SET status = 'CREATED'
+                WHERE status IN ('SIGNED', 'REGISTERED', 'PUBLISHED')
+                """
+            )
+        )
         mod.upgrade()
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_migration_revision_chain() -> None:
     script = ScriptDirectory.from_config(_alembic_config())
-    rev = script.get_revision(DDL_REVISION)
+    rev = script.get_revision(DDL_REVISION_005B)
     assert rev is not None
     assert rev.down_revision == DDL_REVISION_PREVIOUS
 

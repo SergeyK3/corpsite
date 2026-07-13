@@ -12,6 +12,7 @@ PERMISSION_SIGNATURE_READINESS_READ = "OPERATIONAL_ORDERS_SIGNATURE_READINESS_RE
 PERMISSION_ASSIGN_SIGNING_AUTHORITY = "OPERATIONAL_ORDERS_ASSIGN_SIGNING_AUTHORITY"
 PERMISSION_MARK_READY_FOR_SIGNATURE = "OPERATIONAL_ORDERS_MARK_READY_FOR_SIGNATURE"
 PERMISSION_RETURN_FROM_SIGNATURE = "OPERATIONAL_ORDERS_RETURN_FROM_SIGNATURE"
+PERMISSION_SIGN = "OPERATIONAL_ORDERS_SIGN"
 
 
 def can_read_signature_readiness(user: dict[str, Any], document: dict[str, Any]) -> bool:
@@ -47,3 +48,11 @@ def can_return_from_signature(user: dict[str, Any], document: dict[str, Any]) ->
     if is_privileged(user):
         return True
     return has_admin_permission(int(user["user_id"]), PERMISSION_RETURN_FROM_SIGNATURE)
+
+
+def can_sign_document(user: dict[str, Any], document: dict[str, Any]) -> bool:
+    if not document_in_user_scope(user, document):
+        return False
+    if is_privileged(user):
+        return True
+    return has_admin_permission(int(user["user_id"]), PERMISSION_SIGN)

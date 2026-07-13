@@ -5,10 +5,10 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.operational_orders.repository import OO_DOCUMENT_TABLES, OO_LIFECYCLE_TABLES, OO_TABLES, document_aggregate_available, lifecycle_available, operational_orders_available
+from app.operational_orders.repository import OO_DOCUMENT_TABLES, OO_LIFECYCLE_TABLES, OO_SIGNING_COMMAND_TABLES, OO_TABLES, document_aggregate_available, lifecycle_available, operational_orders_available, signing_command_available
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
-DDL_REVISION = "c3d4e5f6a7b8"
+DDL_REVISION = "d4e5f6a7b8c9"
 
 
 def _schema_available() -> bool:
@@ -21,6 +21,10 @@ def _document_schema_available() -> bool:
 
 def _lifecycle_schema_available() -> bool:
     return lifecycle_available()
+
+
+def _signing_schema_available() -> bool:
+    return signing_command_available()
 
 
 def _require_schema() -> None:
@@ -49,6 +53,43 @@ def _require_oo_lifecycle_schema_fixture():
         pytest.skip(
             f"OO lifecycle schema missing — run: alembic upgrade head (revision {DDL_REVISION})"
         )
+
+
+@pytest.fixture(scope="session")
+def _require_oo_signing_schema_fixture():
+    if not _signing_schema_available():
+        pytest.skip(
+            f"OO signing command schema missing — run: alembic upgrade head (revision {DDL_REVISION})"
+        )
+
+
+@pytest.fixture
+def oo_signing_headers(seed):
+    user_id = int(seed["executor_user_id"])
+    perms = (
+        "OPERATIONAL_ORDERS_INTAKE_CREATE",
+        "OPERATIONAL_ORDERS_INTAKE_READ",
+        "OPERATIONAL_ORDERS_INTAKE_OPERATE",
+        "OPERATIONAL_ORDERS_TRANSLATION_ASSIGN",
+        "OPERATIONAL_ORDERS_TRANSLATION_WORK",
+        "OPERATIONAL_ORDERS_CONTENT_CONFIRM",
+        "OPERATIONAL_ORDERS_RECONCILE",
+        "OPERATIONAL_ORDERS_EDITORIAL_READY",
+        "OPERATIONAL_ORDERS_PROMOTE",
+        "OPERATIONAL_ORDERS_SIGNATURE_READINESS_READ",
+        "OPERATIONAL_ORDERS_ASSIGN_SIGNING_AUTHORITY",
+        "OPERATIONAL_ORDERS_MARK_READY_FOR_SIGNATURE",
+        "OPERATIONAL_ORDERS_RETURN_FROM_SIGNATURE",
+        "OPERATIONAL_ORDERS_SIGN",
+    )
+    with engine.begin() as conn:
+        for perm in perms:
+            _grant_user_permission(conn, user_id, perm)
+    try:
+        yield auth_headers(user_id)
+    finally:
+        with engine.begin() as conn:
+            revoke_user_access_grants(conn, user_id)
 
 
 @pytest.fixture
@@ -216,6 +257,22 @@ def cleanup_workspace(conn, workspace_id: int) -> None:
         {"workspace_id": int(workspace_id)},
     ).fetchall()
     for (document_id,) in document_ids:
+        if table_exists(conn, "operational_order_lifecycle_command_idempotency"):
+            conn.execute(
+                text(
+                    "DELETE FROM public.operational_order_lifecycle_command_idempotency "
+                    "WHERE document_id = :document_id"
+                ),
+                {"document_id": int(document_id)},
+            )
+        if table_exists(conn, "operational_order_signing_attestations"):
+            conn.execute(
+                text(
+                    "DELETE FROM public.operational_order_signing_attestations "
+                    "WHERE document_id = :document_id"
+                ),
+                {"document_id": int(document_id)},
+            )
         if table_exists(conn, "operational_order_lifecycle_audit"):
             conn.execute(
                 text("DELETE FROM public.operational_order_lifecycle_audit WHERE document_id = :document_id"),

@@ -32,6 +32,11 @@ OO_LIFECYCLE_TABLES = (
     "operational_order_lifecycle_audit",
 )
 
+OO_SIGNING_COMMAND_TABLES = (
+    "operational_order_signing_attestations",
+    "operational_order_lifecycle_command_idempotency",
+)
+
 
 def _table_exists(conn, table: str) -> bool:
     row = conn.execute(
@@ -64,6 +69,13 @@ def lifecycle_available() -> bool:
     with engine.connect() as conn:
         return document_aggregate_available() and all(
             _table_exists(conn, table) for table in OO_LIFECYCLE_TABLES
+        )
+
+
+def signing_command_available() -> bool:
+    with engine.connect() as conn:
+        return lifecycle_available() and all(
+            _table_exists(conn, table) for table in OO_SIGNING_COMMAND_TABLES
         )
 
 

@@ -19,6 +19,7 @@ from app.operational_orders.errors import (
     OperationalOrderDocumentVersionConflictError,
     OperationalOrderDocumentVersionNotFoundError,
     OperationalOrderDocumentAlreadyReadyError,
+    OperationalOrderDocumentAlreadySignedError,
     OperationalOrderDocumentNotReadyError,
     OperationalOrderDocumentStatusConflictError,
     OperationalOrderEditorialPackageNotReadyError,
@@ -33,6 +34,9 @@ from app.operational_orders.errors import (
     OperationalOrderSigningAuthorityConflictError,
     OperationalOrderSigningAuthorityInvalidError,
     OperationalOrderSigningAuthorityNotFoundError,
+    OperationalOrderSignAuthorityMismatchError,
+    OperationalOrderSignIdempotencyConflictError,
+    OperationalOrderSignOverrideReasonRequiredError,
     OperationalOrderSnapshotIntegrityError,
     OperationalOrderSubmittedTextImmutableError,
     OperationalOrderTranslationAssignmentConflictError,
@@ -69,6 +73,7 @@ from app.operational_orders.lifecycle_permissions import (
     can_mark_ready_for_signature,
     can_read_signature_readiness,
     can_return_from_signature,
+    can_sign_document,
 )
 from app.operational_orders.scope import (
     assert_document_in_scope,
@@ -97,6 +102,8 @@ from app.operational_orders.schemas.document_aggregate import (
     ReadyForSignatureResultOut,
     ReturnToCreatedIn,
     ReturnToCreatedResultOut,
+    SignDocumentIn,
+    SignDocumentResultOut,
     SignatureReadinessOut,
     SigningAuthorityAssignIn,
     SigningAuthorityResultOut,
@@ -150,6 +157,8 @@ def _domain_http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderForbiddenError):
         return HTTPException(status_code=403, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderSignAuthorityMismatchError):
+        return HTTPException(status_code=403, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderVersionConflictError):
         return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderDocumentVersionConflictError):
@@ -171,9 +180,11 @@ def _domain_http(exc: Exception) -> HTTPException:
             OperationalOrderPromotionNotReadyError,
             OperationalOrderWorkspaceFrozenError,
             OperationalOrderDocumentAlreadyReadyError,
+            OperationalOrderDocumentAlreadySignedError,
             OperationalOrderDocumentStatusConflictError,
             OperationalOrderSigningAuthorityConflictError,
             OperationalOrderSigningAuthorityInvalidError,
+            OperationalOrderSignIdempotencyConflictError,
             OperationalOrderSnapshotIntegrityError,
             OperationalOrderRevisionRequiredError,
             OperationalOrderLifecycleTransitionForbiddenError,
@@ -947,6 +958,29 @@ def mark_ready_for_signature_endpoint(
             expected_document_version=body.expected_document_version,
         )
         return mappers.to_ready_for_signature_result_out(result)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.post("/documents/{document_id}/sign", response_model=SignDocumentResultOut)
+def sign_document_endpoint(
+    document_id: int,
+    body: SignDocumentIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        detail = call_service(promotion_svc.get_document, document_id=document_id)
+        if not can_sign_document(user, detail["document"]):
+            raise OperationalOrderForbiddenError("Access denied.")
+        result = call_service(
+            lifecycle_svc.sign_document,
+            document_id=document_id,
+            actor_user=user,
+            idempotency_key=body.idempotency_key,
+            override_reason=body.override_reason,
+            expected_document_version=body.expected_document_version,
+        )
+        return mappers.to_sign_document_result_out(result)
     except Exception as exc:
         raise _domain_http(exc) from exc
 

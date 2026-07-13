@@ -29,7 +29,9 @@ from app.operational_orders.schemas.document_aggregate import (
     PromotionSummaryOut,
     ReadyForSignatureResultOut,
     ReturnToCreatedResultOut,
+    SignDocumentResultOut,
     SignatureReadinessOut,
+    SigningAttestationOut,
     SigningAuthorityOut,
     SigningAuthorityResultOut,
 )
@@ -202,6 +204,15 @@ def to_ready_for_signature_result_out(result: dict[str, Any]) -> ReadyForSignatu
 def to_return_to_created_result_out(result: dict[str, Any]) -> ReturnToCreatedResultOut:
     return ReturnToCreatedResultOut(
         document=to_document_detail_out(result["document"]),
+        idempotent_replay=bool(result.get("idempotent_replay")),
+    )
+
+
+def to_sign_document_result_out(result: dict[str, Any]) -> SignDocumentResultOut:
+    attestation = result.get("signing_attestation")
+    return SignDocumentResultOut(
+        document=to_document_detail_out(result["document"]),
+        signing_attestation=SigningAttestationOut.model_validate(attestation),
         idempotent_replay=bool(result.get("idempotent_replay")),
     )
 

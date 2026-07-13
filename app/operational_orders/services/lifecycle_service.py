@@ -1,6 +1,7 @@
-"""Document lifecycle service — CREATED → READY_FOR_SIGNATURE (OO-IMP-004)."""
+"""Document lifecycle service — CREATED → READY_FOR_SIGNATURE (OO-IMP-004), signing (OO-IMP-005C)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -10,22 +11,31 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.db.models.operational_orders import (
     DOCUMENT_STATUS_CREATED,
+    DOCUMENT_STATUS_PUBLISHED,
     DOCUMENT_STATUS_READY_FOR_SIGNATURE,
+    DOCUMENT_STATUS_REGISTERED,
+    DOCUMENT_STATUS_SIGNED,
+    DOCUMENT_STATUS_VOIDED,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_READY_FOR_SIGNATURE,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_RETURNED_TO_CREATED,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_SIGNED,
     LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_FAILED,
     LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_VALIDATED,
     LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_ASSIGNED,
     LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_SUPERSEDED,
+    LIFECYCLE_COMMAND_TYPE_SIGN,
     PARTY_REFERENCE_TYPES,
+    PROMOTION_STATUS_COMPLETED,
     SIGNING_AUTHORITY_STATUS_ACTIVE,
     SIGNING_AUTHORITY_STATUS_SUPERSEDED,
+    WORKSPACE_STAGE_DOCUMENT_PROMOTED,
 )
 from app.document_engine import ValidationResult
 from app.document_engine.lifecycle.lifecycle_rules import LifecycleRules
 from app.document_engine.value_objects.lifecycle import DocumentLifecycleState
 from app.operational_orders.domain import json_safe, normalize_party_reference
 from app.operational_orders.errors import (
+    OperationalOrderDocumentAlreadySignedError,
     OperationalOrderDocumentAlreadyReadyError,
     OperationalOrderDocumentNotFoundError,
     OperationalOrderDocumentNotReadyError,
@@ -34,10 +44,11 @@ from app.operational_orders.errors import (
     OperationalOrderLifecycleTransitionForbiddenError,
     OperationalOrderSigningAuthorityConflictError,
     OperationalOrderSigningAuthorityInvalidError,
+    OperationalOrderSignIdempotencyConflictError,
     OperationalOrderValidationBlockedError,
     OperationalOrderValidationError,
 )
-from app.operational_orders.repository import fetch_workspace_row, lifecycle_available
+from app.operational_orders.repository import fetch_workspace_row, lifecycle_available, signing_command_available
 from app.operational_orders.services import draft_intake_service as intake_svc
 from app.operational_orders.services import editorial_workflow_service as editorial_svc
 from app.operational_orders.services import promotion_service as promotion_svc
@@ -45,11 +56,17 @@ from app.operational_orders.services.workspace_drift_detector import detect_work
 from app.operational_orders.validation.signature_readiness_validation import (
     validate_signature_readiness,
 )
+from app.operational_orders.validation.signing_authorization import resolve_signing_authorization
 
 
 def _require_available() -> None:
     if not lifecycle_available():
         raise OperationalOrderValidationError("Operational orders lifecycle schema is not available.")
+
+
+def _require_signing_available() -> None:
+    if not signing_command_available():
+        raise OperationalOrderValidationError("Operational orders signing command schema is not available.")
 
 
 def _utcnow() -> datetime:
@@ -262,6 +279,10 @@ def _document_summary(document: dict[str, Any]) -> dict[str, Any]:
         "registered_by_user_id": document.get("registered_by_user_id"),
         "published_at": document.get("published_at"),
         "published_by_user_id": document.get("published_by_user_id"),
+        "signing_authority_id": document.get("signing_authority_id"),
+        "signatory_display_name": document.get("signatory_display_name"),
+        "signatory_party_reference": document.get("signatory_party_reference"),
+        "signatory_position": document.get("signatory_position"),
     }
 
 
@@ -847,6 +868,503 @@ def return_to_created(
             "document": _build_document_detail(conn, document_id),
             "idempotent_replay": False,
         }
+
+
+def _sign_payload_hash(*, document_id: int, override_reason: str | None) -> str:
+    payload = {
+        "document_id": int(document_id),
+        "override_reason": str(override_reason or "").strip(),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _fetch_idempotency_record(conn, idempotency_key: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        text(
+            """
+            SELECT *
+            FROM public.operational_order_lifecycle_command_idempotency
+            WHERE idempotency_key = :idempotency_key
+            LIMIT 1
+            """
+        ),
+        {"idempotency_key": str(idempotency_key)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _fetch_signing_attestation(conn, document_id: int) -> dict[str, Any] | None:
+    row = conn.execute(
+        text(
+            """
+            SELECT *
+            FROM public.operational_order_signing_attestations
+            WHERE document_id = :document_id
+            LIMIT 1
+            """
+        ),
+        {"document_id": int(document_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def _fetch_position_name(conn, position_id: int | None) -> str | None:
+    if position_id is None:
+        return None
+    row = conn.execute(
+        text(
+            """
+            SELECT name
+            FROM public.positions
+            WHERE position_id = :position_id
+            LIMIT 1
+            """
+        ),
+        {"position_id": int(position_id)},
+    ).first()
+    return str(row[0]) if row and row[0] else None
+
+
+def _fetch_user_employee_id(conn, user_id: int) -> int | None:
+    row = conn.execute(
+        text(
+            """
+            SELECT employee_id
+            FROM public.users
+            WHERE user_id = :user_id
+            LIMIT 1
+            """
+        ),
+        {"user_id": int(user_id)},
+    ).first()
+    return int(row[0]) if row and row[0] is not None else None
+
+
+def _signing_attestation_summary(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": int(row["id"]),
+        "document_id": int(row["document_id"]),
+        "signing_authority_id": int(row["signing_authority_id"]),
+        "document_version_id": int(row["document_version_id"]),
+        "actor_user_id": int(row["actor_user_id"]),
+        "actor_employee_id": row.get("actor_employee_id"),
+        "assigned_authority_party_type": str(row["assigned_authority_party_type"]),
+        "assigned_authority_party_reference": str(row["assigned_authority_party_reference"]),
+        "assigned_authority_display_name": row.get("assigned_authority_display_name"),
+        "assigned_authority_position_id": row.get("assigned_authority_position_id"),
+        "assigned_authority_org_unit_id": row.get("assigned_authority_org_unit_id"),
+        "assigned_authority_basis": row.get("assigned_authority_basis"),
+        "signatory_position_name": row.get("signatory_position_name"),
+        "privileged_override": bool(row.get("privileged_override")),
+        "override_reason": row.get("override_reason"),
+        "signed_at": row["signed_at"],
+    }
+
+
+def _validate_sign_preconditions(
+    *,
+    document: dict[str, Any],
+    current_version: dict[str, Any] | None,
+    signing_authority: dict[str, Any] | None,
+    promotion: dict[str, Any] | None,
+    workspace: dict[str, Any] | None,
+) -> None:
+    status = str(document.get("status") or "")
+    if status == DOCUMENT_STATUS_VOIDED:
+        raise OperationalOrderDocumentStatusConflictError("VOIDED documents cannot be signed.")
+    if status != DOCUMENT_STATUS_READY_FOR_SIGNATURE:
+        raise OperationalOrderDocumentStatusConflictError(
+            "Document must be in READY_FOR_SIGNATURE status to sign."
+        )
+    if current_version is None:
+        raise OperationalOrderSigningAuthorityInvalidError("Current document version is missing.")
+    if signing_authority is None:
+        raise OperationalOrderSigningAuthorityInvalidError("Signing authority is missing.")
+    if str(signing_authority.get("status")) != SIGNING_AUTHORITY_STATUS_ACTIVE:
+        raise OperationalOrderSigningAuthorityInvalidError("Signing authority is not active.")
+    if int(signing_authority.get("document_id") or 0) != int(document["id"]):
+        raise OperationalOrderSigningAuthorityInvalidError("Signing authority document mismatch.")
+    if int(signing_authority.get("document_version_id") or 0) != int(current_version["id"]):
+        raise OperationalOrderSigningAuthorityInvalidError(
+            "Signing authority does not match current document version."
+        )
+    if promotion is None or str(promotion.get("status")) != PROMOTION_STATUS_COMPLETED:
+        raise OperationalOrderDocumentStatusConflictError("Promotion is not completed.")
+    if workspace is None or str(workspace.get("stage")) != WORKSPACE_STAGE_DOCUMENT_PROMOTED:
+        raise OperationalOrderDocumentStatusConflictError("Workspace is not in DOCUMENT_PROMOTED stage.")
+
+
+def _build_sign_result(
+    conn,
+    *,
+    document_id: int,
+    attestation: dict[str, Any],
+    idempotent_replay: bool,
+) -> dict[str, Any]:
+    return {
+        "document": _build_document_detail(conn, document_id),
+        "signing_attestation": _signing_attestation_summary(attestation),
+        "idempotent_replay": idempotent_replay,
+    }
+
+
+_POST_SIGN_DOCUMENT_STATUSES = frozenset(
+    {
+        DOCUMENT_STATUS_SIGNED,
+        DOCUMENT_STATUS_REGISTERED,
+        DOCUMENT_STATUS_PUBLISHED,
+        DOCUMENT_STATUS_VOIDED,
+    }
+)
+
+
+def _validate_sign_replay_document_state(conn, *, document_id: int) -> None:
+    row = conn.execute(
+        text(
+            """
+            SELECT status, signed_at, signed_by_user_id
+            FROM public.operational_order_documents
+            WHERE id = :document_id
+            LIMIT 1
+            """
+        ),
+        {"document_id": int(document_id)},
+    ).mappings().first()
+    if row is None:
+        raise OperationalOrderDocumentNotFoundError("Document not found.")
+    status = str(row["status"])
+    if status not in _POST_SIGN_DOCUMENT_STATUSES:
+        raise OperationalOrderSignIdempotencyConflictError(
+            "Idempotency replay requires a post-sign document state."
+        )
+    if row.get("signed_at") is None or row.get("signed_by_user_id") is None:
+        raise OperationalOrderSignIdempotencyConflictError(
+            "Idempotency replay requires signing metadata on the document."
+        )
+
+
+def _resolve_sign_idempotency(
+    conn,
+    *,
+    document_id: int,
+    idempotency_key: str,
+    payload_hash: str,
+) -> dict[str, Any] | None:
+    record = _fetch_idempotency_record(conn, idempotency_key)
+    if record is None:
+        return None
+    if int(record["document_id"]) != int(document_id):
+        raise OperationalOrderSignIdempotencyConflictError(
+            "Idempotency key is already bound to a different document."
+        )
+    if str(record["request_payload_hash"]) != payload_hash:
+        raise OperationalOrderSignIdempotencyConflictError(
+            "Idempotency key conflicts with a different command payload."
+        )
+    if record.get("attestation_id") is None:
+        raise OperationalOrderSignIdempotencyConflictError(
+            "Idempotency key exists without a completed signing attestation."
+        )
+    attestation = conn.execute(
+        text(
+            """
+            SELECT *
+            FROM public.operational_order_signing_attestations
+            WHERE id = :attestation_id
+            LIMIT 1
+            """
+        ),
+        {"attestation_id": int(record["attestation_id"])},
+    ).mappings().first()
+    if not attestation:
+        raise OperationalOrderSignIdempotencyConflictError(
+            "Idempotency record references a missing signing attestation."
+        )
+    return dict(attestation)
+
+
+def sign_document(
+    *,
+    document_id: int,
+    actor_user: dict[str, Any],
+    idempotency_key: str,
+    override_reason: str | None = None,
+    expected_document_version: int | None = None,
+) -> dict[str, Any]:
+    _require_signing_available()
+    key = str(idempotency_key or "").strip()
+    if not key:
+        raise OperationalOrderValidationError("idempotency_key is required.")
+
+    actor_user_id = int(actor_user["user_id"])
+    payload_hash = _sign_payload_hash(document_id=document_id, override_reason=override_reason)
+
+    with engine.begin() as conn:
+        replay_attestation = _resolve_sign_idempotency(
+            conn,
+            document_id=document_id,
+            idempotency_key=key,
+            payload_hash=payload_hash,
+        )
+        if replay_attestation is not None:
+            _validate_sign_replay_document_state(conn, document_id=document_id)
+            return _build_sign_result(
+                conn,
+                document_id=document_id,
+                attestation=replay_attestation,
+                idempotent_replay=True,
+            )
+
+        ctx = _load_document_context(conn, document_id)
+        document = ctx["document"]
+        current_version = ctx["current_version"]
+        signing_authority = ctx["signing_authority"]
+        status = str(document["status"])
+
+        if status == DOCUMENT_STATUS_SIGNED:
+            existing = _fetch_signing_attestation(conn, document_id)
+            if existing is not None:
+                raise OperationalOrderDocumentAlreadySignedError(
+                    "Document is already signed without a matching idempotency replay."
+                )
+            raise OperationalOrderDocumentAlreadySignedError("Document is already signed.")
+
+        _validate_sign_preconditions(
+            document=document,
+            current_version=current_version,
+            signing_authority=signing_authority,
+            promotion=ctx["promotion"],
+            workspace=ctx["workspace"],
+        )
+        _assert_document_version(document, expected_document_version)
+
+        validation = validate_signature_readiness(
+            document=document,
+            current_versions=ctx["current_versions"],
+            localizations=ctx["localizations"],
+            promotion=ctx["promotion"],
+            workspace=ctx["workspace"],
+            signing_authority=signing_authority,
+            expected_document_version=expected_document_version,
+            workspace_drift_detected=ctx["workspace_drift_detected"],
+            for_mark_ready=False,
+        )
+        if not validation.is_valid:
+            raise OperationalOrderValidationBlockedError("Signature readiness validation failed.")
+
+        ude_current = _map_oo_status_to_ude(status)
+        transition = LifecycleRules.evaluate_transition(
+            ude_current,
+            DocumentLifecycleState.SIGNED,
+            gate_ready=True,
+        )
+        if not transition.allowed:
+            raise OperationalOrderLifecycleTransitionForbiddenError(
+                "Lifecycle transition to SIGNED is forbidden."
+            )
+
+        authorization = resolve_signing_authorization(
+            conn,
+            user=actor_user,
+            authority=signing_authority,
+            override_reason=override_reason,
+        )
+
+        position_name = _fetch_position_name(
+            conn,
+            int(signing_authority["authority_position_id"])
+            if signing_authority.get("authority_position_id") is not None
+            else None,
+        )
+        signatory_display_name = signing_authority.get("authority_display_name")
+        signatory_party_reference = str(signing_authority.get("authority_party_reference") or "")
+        now = _utcnow()
+        actor_employee_id = _fetch_user_employee_id(conn, actor_user_id)
+        snapshot = {
+            "assigned_authority": {
+                "id": int(signing_authority["id"]),
+                "party_type": str(signing_authority["authority_party_type"]),
+                "party_reference": signatory_party_reference,
+                "display_name": signatory_display_name,
+                "position_id": signing_authority.get("authority_position_id"),
+                "org_unit_id": signing_authority.get("authority_org_unit_id"),
+                "basis": signing_authority.get("authority_basis"),
+            },
+            "actor": {
+                "user_id": actor_user_id,
+                "employee_id": actor_employee_id,
+            },
+            "authorization": {
+                "mode": authorization.mode,
+                "privileged_override": authorization.privileged_override,
+                "override_reason": authorization.override_reason,
+            },
+            "idempotency_key": key,
+        }
+
+        new_version = int(document["version"]) + 1
+        updated = conn.execute(
+            text(
+                """
+                UPDATE public.operational_order_documents
+                SET status = :status,
+                    version = :new_version,
+                    signed_at = :signed_at,
+                    signed_by_user_id = :signed_by_user_id,
+                    signing_authority_id = :signing_authority_id,
+                    signatory_display_name = :signatory_display_name,
+                    signatory_party_reference = :signatory_party_reference,
+                    signatory_position = :signatory_position
+                WHERE id = :document_id
+                  AND version = :expected_version
+                  AND status = :required_status
+                RETURNING *
+                """
+            ),
+            {
+                "document_id": int(document_id),
+                "status": DOCUMENT_STATUS_SIGNED,
+                "new_version": new_version,
+                "signed_at": now,
+                "signed_by_user_id": actor_user_id,
+                "signing_authority_id": int(signing_authority["id"]),
+                "signatory_display_name": signatory_display_name,
+                "signatory_party_reference": signatory_party_reference,
+                "signatory_position": position_name,
+                "expected_version": int(document["version"]),
+                "required_status": DOCUMENT_STATUS_READY_FOR_SIGNATURE,
+            },
+        ).mappings().first()
+        if not updated:
+            raise OperationalOrderDocumentVersionConflictError("Document aggregate version conflict.")
+
+        attestation_row = conn.execute(
+            text(
+                """
+                INSERT INTO public.operational_order_signing_attestations (
+                    document_id,
+                    signing_authority_id,
+                    document_version_id,
+                    actor_user_id,
+                    actor_employee_id,
+                    assigned_authority_party_type,
+                    assigned_authority_party_reference,
+                    assigned_authority_display_name,
+                    assigned_authority_position_id,
+                    assigned_authority_org_unit_id,
+                    assigned_authority_basis,
+                    signatory_position_name,
+                    privileged_override,
+                    override_reason,
+                    signed_at,
+                    snapshot_json
+                ) VALUES (
+                    :document_id,
+                    :signing_authority_id,
+                    :document_version_id,
+                    :actor_user_id,
+                    :actor_employee_id,
+                    :assigned_authority_party_type,
+                    :assigned_authority_party_reference,
+                    :assigned_authority_display_name,
+                    :assigned_authority_position_id,
+                    :assigned_authority_org_unit_id,
+                    :assigned_authority_basis,
+                    :signatory_position_name,
+                    :privileged_override,
+                    :override_reason,
+                    :signed_at,
+                    CAST(:snapshot_json AS jsonb)
+                )
+                RETURNING *
+                """
+            ),
+            {
+                "document_id": int(document_id),
+                "signing_authority_id": int(signing_authority["id"]),
+                "document_version_id": int(current_version["id"]),
+                "actor_user_id": actor_user_id,
+                "actor_employee_id": actor_employee_id,
+                "assigned_authority_party_type": str(signing_authority["authority_party_type"]),
+                "assigned_authority_party_reference": signatory_party_reference,
+                "assigned_authority_display_name": signatory_display_name,
+                "assigned_authority_position_id": signing_authority.get("authority_position_id"),
+                "assigned_authority_org_unit_id": signing_authority.get("authority_org_unit_id"),
+                "assigned_authority_basis": signing_authority.get("authority_basis"),
+                "signatory_position_name": position_name,
+                "privileged_override": authorization.privileged_override,
+                "override_reason": authorization.override_reason,
+                "signed_at": now,
+                "snapshot_json": json.dumps(json_safe(snapshot) or {}),
+            },
+        ).mappings().first()
+        attestation = dict(attestation_row)
+
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.operational_order_lifecycle_command_idempotency (
+                    idempotency_key,
+                    command_type,
+                    document_id,
+                    actor_user_id,
+                    request_payload_hash,
+                    attestation_id
+                ) VALUES (
+                    :idempotency_key,
+                    :command_type,
+                    :document_id,
+                    :actor_user_id,
+                    :request_payload_hash,
+                    :attestation_id
+                )
+                """
+            ),
+            {
+                "idempotency_key": key,
+                "command_type": LIFECYCLE_COMMAND_TYPE_SIGN,
+                "document_id": int(document_id),
+                "actor_user_id": actor_user_id,
+                "request_payload_hash": payload_hash,
+                "attestation_id": int(attestation["id"]),
+            },
+        )
+
+        _append_lifecycle_audit(
+            conn,
+            document_id=document_id,
+            document_version_id=int(current_version["id"]),
+            transition_from=DOCUMENT_STATUS_READY_FOR_SIGNATURE,
+            transition_to=DOCUMENT_STATUS_SIGNED,
+            action=LIFECYCLE_AUDIT_ACTION_DOCUMENT_SIGNED,
+            actor_user_id=actor_user_id,
+            reason=authorization.override_reason,
+            metadata={
+                "idempotency_key": key,
+                "signing_authority_id": int(signing_authority["id"]),
+                "attestation_id": int(attestation["id"]),
+                "privileged_override": authorization.privileged_override,
+                "assigned_authority_party_type": str(signing_authority["authority_party_type"]),
+                "assigned_authority_party_reference": signatory_party_reference,
+                "assigned_authority_display_name": signatory_display_name,
+                "actor_user_id": actor_user_id,
+                "actor_employee_id": actor_employee_id,
+                "signed_at": now.isoformat(),
+                "snapshot": snapshot,
+            },
+            document_version_before=int(document["version"]),
+            document_version_after=new_version,
+        )
+
+        return _build_sign_result(
+            conn,
+            document_id=document_id,
+            attestation=attestation,
+            idempotent_replay=False,
+        )
 
 
 def assert_document_ready_for_read(*, document_id: int) -> dict[str, Any]:

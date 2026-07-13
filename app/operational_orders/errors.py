@@ -159,5 +159,21 @@ class OperationalOrderLifecycleTransitionForbiddenError(OperationalOrderError):
     code = "OO_LIFECYCLE_TRANSITION_FORBIDDEN"
 
 
+class OperationalOrderDocumentAlreadySignedError(OperationalOrderError):
+    code = "OO_DOCUMENT_ALREADY_SIGNED"
+
+
+class OperationalOrderSignAuthorityMismatchError(PermissionError):
+    code = "OO_SIGN_AUTHORITY_MISMATCH"
+
+
+class OperationalOrderSignIdempotencyConflictError(OperationalOrderError):
+    code = "OO_SIGN_IDEMPOTENCY_CONFLICT"
+
+
+class OperationalOrderSignOverrideReasonRequiredError(OperationalOrderValidationError):
+    code = "OO_SIGN_OVERRIDE_REASON_REQUIRED"
+
+
 class OperationalOrderDocumentScopeForbiddenError(PermissionError):
     code = "OO_DOCUMENT_SCOPE_FORBIDDEN"

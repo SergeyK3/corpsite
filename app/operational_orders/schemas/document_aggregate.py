@@ -38,6 +38,43 @@ class DocumentSummaryOut(BaseModel):
     registered_by_user_id: int | None = None
     published_at: datetime | None = None
     published_by_user_id: int | None = None
+    signing_authority_id: int | None = None
+    signatory_display_name: str | None = None
+    signatory_party_reference: str | None = None
+    signatory_position: str | None = None
+
+
+class SigningAttestationOut(BaseModel):
+    id: int
+    document_id: int
+    signing_authority_id: int
+    document_version_id: int
+    actor_user_id: int
+    actor_employee_id: int | None = None
+    assigned_authority_party_type: str
+    assigned_authority_party_reference: str
+    assigned_authority_display_name: str | None = None
+    assigned_authority_position_id: int | None = None
+    assigned_authority_org_unit_id: int | None = None
+    assigned_authority_basis: str | None = None
+    signatory_position_name: str | None = None
+    privileged_override: bool = False
+    override_reason: str | None = None
+    signed_at: datetime
+
+
+class SignDocumentIn(BaseModel):
+    idempotency_key: str = Field(..., min_length=1)
+    override_reason: str | None = None
+    expected_document_version: int | None = Field(default=None, alias="expected_version")
+
+    model_config = {"populate_by_name": True}
+
+
+class SignDocumentResultOut(BaseModel):
+    document: DocumentDetailOut
+    signing_attestation: SigningAttestationOut
+    idempotent_replay: bool = False
 
 
 class DocumentVersionOut(BaseModel):

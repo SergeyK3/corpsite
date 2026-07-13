@@ -336,6 +336,7 @@ LIFECYCLE_AUDIT_ACTION_SIGNATURE_READINESS_FAILED = "SIGNATURE_READINESS_FAILED"
 LIFECYCLE_AUDIT_ACTION_DOCUMENT_READY_FOR_SIGNATURE = "DOCUMENT_READY_FOR_SIGNATURE"
 LIFECYCLE_AUDIT_ACTION_READY_FOR_SIGNATURE_REPLAY = "READY_FOR_SIGNATURE_REPLAY"
 LIFECYCLE_AUDIT_ACTION_DOCUMENT_RETURNED_TO_CREATED = "DOCUMENT_RETURNED_TO_CREATED"
+LIFECYCLE_AUDIT_ACTION_DOCUMENT_SIGNED = "DOCUMENT_SIGNED"
 
 LIFECYCLE_AUDIT_ACTIONS = (
     LIFECYCLE_AUDIT_ACTION_SIGNING_AUTHORITY_ASSIGNED,
@@ -345,7 +346,10 @@ LIFECYCLE_AUDIT_ACTIONS = (
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_READY_FOR_SIGNATURE,
     LIFECYCLE_AUDIT_ACTION_READY_FOR_SIGNATURE_REPLAY,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_RETURNED_TO_CREATED,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_SIGNED,
 )
+
+LIFECYCLE_COMMAND_TYPE_SIGN = "SIGN"
 
 
 class OperationalOrderDraftWorkspace(Base):
@@ -680,6 +684,14 @@ class OperationalOrderDocument(Base):
     published_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
     )
+    signing_authority_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_signing_authority.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    signatory_display_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signatory_party_reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signatory_position: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class OperationalOrderDocumentVersion(Base):
@@ -869,3 +881,79 @@ class OperationalOrderLifecycleAudit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     document_version_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     document_version_after: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class OperationalOrderSigningAttestation(Base):
+    """Immutable signing attestation snapshot for a signed document."""
+
+    __tablename__ = "operational_order_signing_attestations"
+    __table_args__ = (
+        UniqueConstraint("document_id", name="uq_oo_signing_attestations_document"),
+        Index("ix_oo_signing_attestations_authority", "signing_authority_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    signing_authority_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_signing_authority.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    document_version_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_document_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_employee_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("employees.employee_id", ondelete="SET NULL"), nullable=True
+    )
+    assigned_authority_party_type: Mapped[str] = mapped_column(Text, nullable=False)
+    assigned_authority_party_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    assigned_authority_display_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_authority_position_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    assigned_authority_org_unit_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("org_units.unit_id", ondelete="SET NULL"), nullable=True
+    )
+    assigned_authority_basis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signatory_position_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    privileged_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalOrderLifecycleCommandIdempotency(Base):
+    """Idempotency ledger for lifecycle commands (OO-IMP-005C+)."""
+
+    __tablename__ = "operational_order_lifecycle_command_idempotency"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_oo_lifecycle_command_idempotency_key"),
+        Index("ix_oo_lifecycle_command_idempotency_document", "document_id", "command_type"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
+    command_type: Mapped[str] = mapped_column(Text, nullable=False)
+    document_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False
+    )
+    request_payload_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    attestation_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("operational_order_signing_attestations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

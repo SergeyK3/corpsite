@@ -14,6 +14,7 @@ from app.operational_orders.lifecycle_permissions import (
     PERMISSION_ASSIGN_SIGNING_AUTHORITY,
     PERMISSION_MARK_READY_FOR_SIGNATURE,
     PERMISSION_RETURN_FROM_SIGNATURE,
+    PERMISSION_SIGN,
     PERMISSION_SIGNATURE_READINESS_READ,
 )
 from app.operational_orders.permissions import (
@@ -49,6 +50,7 @@ def build_operational_orders_permissions(user: dict[str, Any]) -> dict[str, bool
         "assign_signing_authority": has_admin_permission(uid, PERMISSION_ASSIGN_SIGNING_AUTHORITY),
         "mark_ready_for_signature": has_admin_permission(uid, PERMISSION_MARK_READY_FOR_SIGNATURE),
         "return_from_signature": has_admin_permission(uid, PERMISSION_RETURN_FROM_SIGNATURE),
+        "sign_document": has_admin_permission(uid, PERMISSION_SIGN),
     }
 
 
@@ -85,4 +87,5 @@ _PERMISSION_KEYS = (
     "assign_signing_authority",
     "mark_ready_for_signature",
     "return_from_signature",
+    "sign_document",
 )

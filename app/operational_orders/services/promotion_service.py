@@ -323,6 +323,10 @@ def _document_summary(document: dict[str, Any]) -> dict[str, Any]:
         "registered_by_user_id": document.get("registered_by_user_id"),
         "published_at": document.get("published_at"),
         "published_by_user_id": document.get("published_by_user_id"),
+        "signing_authority_id": document.get("signing_authority_id"),
+        "signatory_display_name": document.get("signatory_display_name"),
+        "signatory_party_reference": document.get("signatory_party_reference"),
+        "signatory_position": document.get("signatory_position"),
     }
 
 
