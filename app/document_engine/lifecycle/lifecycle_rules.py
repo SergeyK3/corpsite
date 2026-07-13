@@ -12,6 +12,7 @@ _TRANSITION_SPECS: tuple[tuple[DocumentLifecycleState, DocumentLifecycleState, L
     (DocumentLifecycleState.READY_FOR_SIGNATURE, DocumentLifecycleState.VOIDED, LifecycleGate.CANCEL),
     (DocumentLifecycleState.SIGNED, DocumentLifecycleState.REGISTERED, LifecycleGate.REGISTER),
     (DocumentLifecycleState.SIGNED, DocumentLifecycleState.VOIDED, LifecycleGate.ANNUL),
+    (DocumentLifecycleState.REGISTERED, DocumentLifecycleState.PUBLISHED, LifecycleGate.PUBLISH),
     (DocumentLifecycleState.REGISTERED, DocumentLifecycleState.VOIDED, LifecycleGate.ANNUL),
 )
 
@@ -29,7 +30,11 @@ _STRUCTURALLY_ALLOWED: dict[DocumentLifecycleState, set[DocumentLifecycleState]]
         DocumentLifecycleState.REGISTERED,
         DocumentLifecycleState.VOIDED,
     },
-    DocumentLifecycleState.REGISTERED: {DocumentLifecycleState.VOIDED},
+    DocumentLifecycleState.REGISTERED: {
+        DocumentLifecycleState.PUBLISHED,
+        DocumentLifecycleState.VOIDED,
+    },
+    DocumentLifecycleState.PUBLISHED: set(),
     DocumentLifecycleState.VOIDED: set(),
 }
 

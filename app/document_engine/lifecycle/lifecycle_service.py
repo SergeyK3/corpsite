@@ -51,6 +51,11 @@ class LifecycleEvaluationService:
                 return False, readiness.blockers[0].message if readiness.blockers else "Not ready"
             return True, None
 
+        if gate == LifecycleGate.PUBLISH:
+            if lifecycle.lifecycle_state != DocumentLifecycleState.REGISTERED:
+                return False, "Publish requires REGISTERED"
+            return True, None
+
         if gate in (LifecycleGate.CANCEL, LifecycleGate.ANNUL):
             if lifecycle.lifecycle_state == DocumentLifecycleState.VOIDED:
                 return False, "Already voided"

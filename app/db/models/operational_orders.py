@@ -7,16 +7,18 @@ OO-IMP-003-official-draft-package.md.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     Text,
     UniqueConstraint,
     func,
@@ -273,6 +275,7 @@ DOCUMENT_STATUS_CREATED = "CREATED"
 DOCUMENT_STATUS_READY_FOR_SIGNATURE = "READY_FOR_SIGNATURE"
 DOCUMENT_STATUS_SIGNED = "SIGNED"
 DOCUMENT_STATUS_REGISTERED = "REGISTERED"
+DOCUMENT_STATUS_PUBLISHED = "PUBLISHED"
 DOCUMENT_STATUS_VOIDED = "VOIDED"
 
 DOCUMENT_STATUSES = (
@@ -280,6 +283,7 @@ DOCUMENT_STATUSES = (
     DOCUMENT_STATUS_READY_FOR_SIGNATURE,
     DOCUMENT_STATUS_SIGNED,
     DOCUMENT_STATUS_REGISTERED,
+    DOCUMENT_STATUS_PUBLISHED,
     DOCUMENT_STATUS_VOIDED,
 )
 
@@ -659,6 +663,21 @@ class OperationalOrderDocument(Base):
         DateTime(timezone=True), nullable=True
     )
     ready_for_signature_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    signed_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    registration_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registration_year: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
+    registration_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    registered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    registered_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
     )
 

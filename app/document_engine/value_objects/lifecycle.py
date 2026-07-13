@@ -5,12 +5,13 @@ from enum import Enum
 
 
 class DocumentLifecycleState(str, Enum):
-    """Ratified five-state document lifecycle model."""
+    """Ratified document lifecycle model (UDE-005, extended with PUBLISHED)."""
 
     DRAFT = "DRAFT"
     READY_FOR_SIGNATURE = "READY_FOR_SIGNATURE"
     SIGNED = "SIGNED"
     REGISTERED = "REGISTERED"
+    PUBLISHED = "PUBLISHED"
     VOIDED = "VOIDED"
 
 

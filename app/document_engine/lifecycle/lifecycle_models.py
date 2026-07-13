@@ -25,6 +25,7 @@ class LifecycleGate(str, Enum):
     MARK_READY = "MARK_READY"
     SIGN = "SIGN"
     REGISTER = "REGISTER"
+    PUBLISH = "PUBLISH"
     CANCEL = "CANCEL"
     ANNUL = "ANNUL"
     ARCHIVE = "ARCHIVE"

@@ -8,7 +8,7 @@ from app.db.engine import engine
 from app.operational_orders.repository import OO_DOCUMENT_TABLES, OO_LIFECYCLE_TABLES, OO_TABLES, document_aggregate_available, lifecycle_available, operational_orders_available
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
-DDL_REVISION = "a1b2c3d4e5f6"
+DDL_REVISION = "c3d4e5f6a7b8"
 
 
 def _schema_available() -> bool:

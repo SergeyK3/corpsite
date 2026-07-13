@@ -72,6 +72,41 @@ def test_lifecycle_rules_voided_terminal() -> None:
     assert LifecycleRules.possible_transitions(DocumentLifecycleState.VOIDED) == ()
 
 
+def test_lifecycle_rules_published_present() -> None:
+    assert DocumentLifecycleState.PUBLISHED.value == "PUBLISHED"
+
+
+def test_lifecycle_rules_registered_to_published() -> None:
+    assert LifecycleRules.structurally_allowed(
+        DocumentLifecycleState.REGISTERED,
+        DocumentLifecycleState.PUBLISHED,
+    )
+    gate = LifecycleRules.gate_for_transition(
+        DocumentLifecycleState.REGISTERED,
+        DocumentLifecycleState.PUBLISHED,
+    )
+    assert gate == LifecycleGate.PUBLISH
+
+
+def test_lifecycle_rules_forbidden_backward_transitions() -> None:
+    assert not LifecycleRules.structurally_allowed(
+        DocumentLifecycleState.PUBLISHED,
+        DocumentLifecycleState.REGISTERED,
+    )
+    assert not LifecycleRules.structurally_allowed(
+        DocumentLifecycleState.PUBLISHED,
+        DocumentLifecycleState.SIGNED,
+    )
+    assert not LifecycleRules.structurally_allowed(
+        DocumentLifecycleState.REGISTERED,
+        DocumentLifecycleState.SIGNED,
+    )
+    assert not LifecycleRules.structurally_allowed(
+        DocumentLifecycleState.SIGNED,
+        DocumentLifecycleState.READY_FOR_SIGNATURE,
+    )
+
+
 def test_readiness_policy_passes_synthetic_draft(editorial_snapshot) -> None:
     draft = editorial_snapshot.official_draft
     assert draft is not None

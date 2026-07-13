@@ -1,7 +1,7 @@
 """Pydantic transport schemas for Operational Orders document aggregate API."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -29,6 +29,15 @@ class DocumentSummaryOut(BaseModel):
     submitting_org_unit_id: int | None = None
     ready_for_signature_at: datetime | None = None
     ready_for_signature_by_user_id: int | None = None
+    signed_at: datetime | None = None
+    signed_by_user_id: int | None = None
+    registration_number: str | None = None
+    registration_year: int | None = None
+    registration_date: date | None = None
+    registered_at: datetime | None = None
+    registered_by_user_id: int | None = None
+    published_at: datetime | None = None
+    published_by_user_id: int | None = None
 
 
 class DocumentVersionOut(BaseModel):

@@ -253,6 +253,15 @@ def _document_summary(document: dict[str, Any]) -> dict[str, Any]:
         "submitting_org_unit_id": int(document.get("submitting_org_unit_id") or 0) or None,
         "ready_for_signature_at": document.get("ready_for_signature_at"),
         "ready_for_signature_by_user_id": document.get("ready_for_signature_by_user_id"),
+        "signed_at": document.get("signed_at"),
+        "signed_by_user_id": document.get("signed_by_user_id"),
+        "registration_number": document.get("registration_number"),
+        "registration_year": document.get("registration_year"),
+        "registration_date": document.get("registration_date"),
+        "registered_at": document.get("registered_at"),
+        "registered_by_user_id": document.get("registered_by_user_id"),
+        "published_at": document.get("published_at"),
+        "published_by_user_id": document.get("published_by_user_id"),
     }
 
 

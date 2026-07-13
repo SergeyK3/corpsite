@@ -51,6 +51,7 @@ def test_document_id_is_immutable() -> None:
                 "READY_FOR_SIGNATURE",
                 "SIGNED",
                 "REGISTERED",
+                "PUBLISHED",
                 "VOIDED",
             ),
         ),
@@ -79,11 +80,12 @@ def test_enum_members_are_str_enums(enum_cls, members) -> None:
     assert tuple(member.value for member in enum_cls) == members
 
 
-def test_document_lifecycle_state_values_match_po_constants() -> None:
+def test_document_lifecycle_state_values_superset_of_po_constants() -> None:
     from app.db.models.personnel_orders import ORDER_STATUSES
 
     shared_values = {state.value for state in DocumentLifecycleState}
-    assert shared_values == set(ORDER_STATUSES)
+    assert set(ORDER_STATUSES).issubset(shared_values)
+    assert "PUBLISHED" in shared_values
 
 
 def test_void_kind_values_match_po_constants() -> None:
