@@ -13,6 +13,7 @@ import {
 import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
 import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
+import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
 import {
   createPersonnelOrderItem,
