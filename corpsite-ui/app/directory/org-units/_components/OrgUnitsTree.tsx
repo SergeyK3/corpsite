@@ -8,6 +8,7 @@ export type OrgUnitNodeType = "org" | "dept" | "unit";
 export type TreeNode = {
   id: string;
   title: string;
+  code?: string | null;
   type: OrgUnitNodeType;
   children?: TreeNode[];
 };
@@ -94,6 +95,14 @@ function pathToRoot(parentById: Map<string, string | null>, id: string): string[
 
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function nodeSearchText(node: Pick<TreeNode, "id" | "title" | "code">): string {
+  return [node.title || "", node.code || "", node.id || ""].join(" ").trim();
+}
+
+export function nodeMatchesQuery(node: Pick<TreeNode, "id" | "title" | "code">, qRe: RegExp): boolean {
+  return qRe.test(nodeSearchText(node));
 }
 
 function TypeIcon({ type }: { type: OrgUnitNodeType }) {
@@ -245,7 +254,7 @@ function ContextMenu({
   );
 }
 
-function filterTreeForSearch(opts: {
+export function filterTreeForSearch(opts: {
   nodes: TreeNode[];
   q: string;
   inactiveSet: Set<string>;
@@ -285,8 +294,7 @@ function filterTreeForSearch(opts: {
 
   const prune = (n: TreeNode): TreeNode | null => {
     const id = String(n.id);
-    const title = n.title || "";
-    const titleMatch = qRe.test(title);
+    const titleMatch = nodeMatchesQuery(n, qRe);
     if (titleMatch) matchIds.add(id);
 
     const childOut: TreeNode[] = [];
@@ -441,7 +449,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
     const needOpen = new Set<string>();
     for (const [id, node] of fullIdx.byId.entries()) {
-      if (qRe.test(node.title || "")) {
+      if (nodeMatchesQuery(node, qRe)) {
         const path = pathToRoot(fullIdx.parentById, id);
         for (let i = 1; i < path.length; i++) needOpen.add(path[i]);
       }
@@ -452,6 +460,15 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
       if (!expandedNow.has(id)) onToggle(id, true);
     }
   }, [searchQuery, fullIdx.byId, fullIdx.parentById, expandedIds, onToggle]);
+
+  useEffect(() => {
+    const q = (searchQuery || "").trim();
+    if (!q || matchIds.size !== 1) return;
+    const onlyId = Array.from(matchIds)[0];
+    if (onlyId && onlyId !== selectedId) {
+      onSelect(onlyId);
+    }
+  }, [searchQuery, matchIds, selectedId, onSelect]);
 
   useEffect(() => {
     const q = (searchQuery || "").trim();
@@ -474,7 +491,9 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
 
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(firstMatchId!)}"]`);
-      if (el) el.scrollIntoView({ block: "center" });
+      if (el && typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "center" });
+      }
     }, 0);
 
     return () => window.clearTimeout(t);
@@ -631,6 +650,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
     const isOpen = expandedSet.has(nodeId);
     const isSelected = nodeId === selectedId;
     const isInactive = inactiveSet.has(nodeId);
+    const isSearchMatch = matchIds.has(nodeId);
 
     const [hover, setHover] = useState(false);
 
@@ -656,6 +676,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
           className={[
             "group flex items-center rounded-lg px-2 py-1.5 text-sm",
             isSelected ? "bg-gray-100 ring-1 ring-gray-200" : "hover:bg-gray-50",
+            isSearchMatch ? "ring-1 ring-amber-300 bg-amber-50/80" : "",
             "focus:outline-none focus:ring-2 focus:ring-offset-2",
             isInactive ? "text-gray-700" : "text-gray-900",
           ].join(" ")}
@@ -713,7 +734,7 @@ export default function OrgUnitsTree(props: OrgUnitsTreeProps) {
           <input
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="Поиск по структуре"
+            placeholder="Поиск по названию, коду или ID"
             className="w-full rounded-xl border bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-offset-2"
           />
 

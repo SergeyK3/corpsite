@@ -82,6 +82,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     matchPrefixes: ["/admin/system/personnel-lifecycle"],
   },
   {
+    href: "/admin/system/org-units",
+    title: "Справочник подразделений",
+    matchPrefixes: ["/admin/system/org-units"],
+  },
+  {
     href: "/admin/system/personnel-identity/operations",
     title: "Операции привязки пользователей",
     matchPrefixes: ["/admin/system/personnel-identity"],
@@ -150,6 +155,9 @@ function isNavItemActive(pathname: string, item: NavItem): boolean {
       return false;
     }
     if (prefix === "/admin/system" && pathname.startsWith("/admin/system/personnel-identity")) {
+      return false;
+    }
+    if (prefix === "/admin/system" && pathname.startsWith("/admin/system/org-units")) {
       return false;
     }
     if (prefix === "/directory/personnel" && pathname.startsWith("/directory/staff")) {

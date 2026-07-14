@@ -69,8 +69,10 @@ from app.services.personnel_visibility_service import (
 )
 from app.services.security_audit_service import list_security_events
 from app.services.telegram_health_service import get_telegram_health
+from app.api.admin_org_units_routes import router as admin_org_units_router
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+router.include_router(admin_org_units_router)
 
 
 def _value_error_to_http(exc: ValueError) -> HTTPException:

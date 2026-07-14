@@ -2,6 +2,7 @@
 "use client";
 
 import { apiFetchJson } from "../../../../lib/api";
+import type { OrgUnitNodeType, TreeNode as UiTreeNode } from "../_components/OrgUnitsTree";
 
 export type TreeNode = {
   id: string;
@@ -126,6 +127,33 @@ function normalizeTreeResponse(body: any): TreeNode[] {
   if (Array.isArray(body?.nodes)) return body.nodes.map(normalizeTreeNode);
   if (Array.isArray(body?.tree)) return body.tree.map(normalizeTreeNode);
   return [];
+}
+
+function uiNodeType(raw: any): OrgUnitNodeType {
+  const t = String(raw?.type ?? "unit").trim().toLowerCase();
+  if (t === "org" || t === "dept" || t === "unit") return t;
+  return "unit";
+}
+
+/** Приводит ответ backend tree к контракту OrgUnitsTree (title + code). */
+export function mapApiTreeNodesToUi(raw: any[]): UiTreeNode[] {
+  const mapOne = (node: any): UiTreeNode => {
+    const id = String(node?.id ?? node?.unit_id ?? "").trim();
+    const title =
+      String(node?.title ?? "").trim() ||
+      String(node?.name_ru ?? "").trim() ||
+      String(node?.name ?? "").trim() ||
+      (id ? `ID ${id}` : "Подразделение");
+    const code = node?.code != null && String(node.code).trim() ? String(node.code).trim() : null;
+    return {
+      id,
+      title,
+      code,
+      type: uiNodeType(node),
+      children: Array.isArray(node?.children) ? node.children.map(mapOne) : [],
+    };
+  };
+  return raw.map(mapOne);
 }
 
 /**

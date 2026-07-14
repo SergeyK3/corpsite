@@ -144,6 +144,7 @@ export function shouldShowPrimaryAdminNavItem(
   if (item.href === "/admin/system/personnel-identity/operations") {
     return opts.showPersonnelIdentityOperationsNav;
   }
+  if (item.href === "/admin/system/org-units") return opts.showSysadminNav;
   if (item.href === "/admin/system") return opts.showSysadminNav;
   if (isPersonnelDirectoryNavItem(item)) return canSeePersonnelDirectoryNav(me);
   if (isHrProcessesNavItem(item)) return canSeeHrProcessesNav(me);
@@ -172,6 +173,7 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/education")) return "/education";
   if (pathname.startsWith("/admin/regular-tasks/catch-up")) return "/admin/regular-tasks/catch-up";
   if (pathname.startsWith("/admin/regular-tasks")) return "/admin/regular-tasks";
+  if (pathname.startsWith("/admin/system/org-units")) return "/admin/system/org-units";
   if (pathname.startsWith("/regular-tasks")) return "/regular-tasks";
   if (pathname.startsWith("/directory/staff")) return "/directory/staff";
   if (pathname.startsWith("/directory/roles")) return "/directory/roles";

@@ -13,6 +13,7 @@ import {
   createOrgUnit,
   deactivateOrgUnit,
   getOrgUnitsTree,
+  mapApiTreeNodesToUi,
   mapApiErrorToMessage,
   moveOrgUnit,
   renameOrgUnit,
@@ -91,7 +92,7 @@ export default function OrgUnitsPage() {
         org_unit_id: orgScope.org_unit_id ?? null,
       });
 
-      setNodes(data.items as unknown as TreeNode[]);
+      setNodes(mapApiTreeNodesToUi(data.items));
       setInactiveIds(data.inactive_ids);
 
       if (data.root_id != null) {

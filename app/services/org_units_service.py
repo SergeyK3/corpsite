@@ -619,6 +619,7 @@ class OrgUnitsService:
             nodes[u.unit_id] = {
                 "id": str(u.unit_id),
                 "title": u.name,
+                "code": u.code,
                 "type": "unit",
                 "group_id": u.group_id,
                 "is_active": bool(u.is_active),
@@ -659,6 +660,54 @@ class OrgUnitsService:
     # ---------------------------
     # B3.1 Rename (write)
     # ---------------------------
+    def update_org_unit_code(self, *, unit_id: int, code: Optional[str]) -> OrgUnit:
+        cd = self._trim_opt(code)
+        sql = text(
+            f"""
+            UPDATE {self._schema}.{self._org_units_table}
+            SET code = :code
+            WHERE unit_id = :unit_id
+            RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
+            """
+        )
+        with self._engine.begin() as c:
+            r = c.execute(sql, {"unit_id": int(unit_id), "code": cd}).mappings().first()
+        if not r:
+            raise LookupError(f"org unit not found: unit_id={unit_id}")
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
+            is_active=bool(r["is_active"]),
+        )
+
+    def update_org_unit_group(self, *, unit_id: int, group_id: int) -> OrgUnit:
+        sql = text(
+            f"""
+            UPDATE {self._schema}.{self._org_units_table}
+            SET group_id = :group_id
+            WHERE unit_id = :unit_id
+            RETURNING unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
+            """
+        )
+        with self._engine.begin() as c:
+            r = c.execute(
+                sql,
+                {"unit_id": int(unit_id), "group_id": int(group_id)},
+            ).mappings().first()
+        if not r:
+            raise LookupError(f"org unit not found: unit_id={unit_id}")
+        return OrgUnit(
+            unit_id=int(r["unit_id"]),
+            parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
+            name=str(r["name"]) if r["name"] is not None else "",
+            code=str(r["code"]) if r["code"] is not None else None,
+            group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
+            is_active=bool(r["is_active"]),
+        )
+
     def rename_org_unit(
         self,
         *,

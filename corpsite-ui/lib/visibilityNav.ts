@@ -59,6 +59,7 @@ export function shouldShowOrgUnitsPanel(
 
   if (pathname.startsWith("/directory/department-groups")) return false;
   if (pathname.startsWith("/directory/org-units")) return false;
+  if (pathname.startsWith("/admin/system/org-units")) return false;
 
   if (canSeeAdminShell(me)) {
     return (
