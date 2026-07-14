@@ -9,9 +9,19 @@ from sqlalchemy.engine import Connection
 from app.db.engine import engine
 from app.org_scope.resolver import resolve_subtree_unit_ids
 from app.security.directory_scope import is_privileged as _is_privileged
-from app.services.access_resolver_service import resolve_effective_access
+from app.security.admin_permissions import HR_ENROLLMENT_MANAGER_CODE
+from app.services.access_resolver_service import list_active_access_role_codes, resolve_effective_access
 
 ACCESS_LEVELS_WITH_IMPLICIT_VISIBILITY = frozenset({"MANAGER", "ADMIN"})
+
+
+def _has_hr_enrollment_manager_grant(user_id: int) -> bool:
+    """HR enrollment operates org-wide (access grant scope_type=GLOBAL); align E1 read scope."""
+    try:
+        codes = set(list_active_access_role_codes(int(user_id)))
+    except ValueError:
+        return False
+    return HR_ENROLLMENT_MANAGER_CODE in codes
 
 
 def _table_exists(conn: Connection, table: str) -> bool:
@@ -240,11 +250,12 @@ def resolve_effective_personnel_visibility(
             access_level = "NONE"
 
         if access_level in ACCESS_LEVELS_WITH_IMPLICIT_VISIBILITY:
+            organization_wide = access_level == "ADMIN" or _has_hr_enrollment_manager_grant(int(user_id))
             return {
                 "has_visibility": True,
                 "show_org_sidebar": True,
-                "organization_wide": access_level == "ADMIN",
-                "scope_unit_ids": None if access_level == "ADMIN" else [],
+                "organization_wide": organization_wide,
+                "scope_unit_ids": None if organization_wide else [],
                 "can_view_personnel": True,
                 "can_view_tasks": access_level == "ADMIN",
                 "source": "access_level",

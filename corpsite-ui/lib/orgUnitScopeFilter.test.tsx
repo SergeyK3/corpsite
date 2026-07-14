@@ -1,8 +1,8 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
-import { getOrgUnitsTree } from "@/app/directory/org-units/_lib/api.client";
+import { loadOrgUnitSelectOptions } from "@/lib/orgUnitsSelect";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
@@ -10,72 +10,52 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
 }));
 
-vi.mock("@/app/directory/org-units/_lib/api.client", () => ({
-  getOrgUnitsTree: vi.fn(),
+vi.mock("@/lib/orgUnitsSelect", () => ({
+  loadOrgUnitSelectOptions: vi.fn(),
 }));
+
+const clinicalGroupId = 1;
+const adminGroupId = 2;
+
+const catalog = [
+  { unit_id: 100, name: "Клинический корпус", group_id: clinicalGroupId },
+  { unit_id: 101, name: "Терапевтическое отделение", group_id: clinicalGroupId },
+  { unit_id: 200, name: "Отдел кадров", group_id: adminGroupId },
+  { unit_id: 10, name: "Отделение A", group_id: clinicalGroupId },
+  { unit_id: 20, name: "Отделение B", group_id: adminGroupId },
+];
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
-describe("OrgUnitScopeFilter", () => {
-  it("loads units via getOrgUnitsTree with org_group_id when group is selected", async () => {
-    vi.mocked(getOrgUnitsTree).mockResolvedValue({
-      items: [
-        {
-          id: "10",
-          unit_id: 10,
-          name: "MMC",
-          group_id: 1,
-          children: [
-            {
-              id: "11",
-              unit_id: 11,
-              name: "HR Department",
-              group_id: null,
-              children: [],
-            },
-          ],
-        },
-      ],
-      inactive_ids: [],
-      root_id: 10,
-    });
+describe("OrgUnitScopeFilter cascade", () => {
+  it("filters catalog when group is selected", async () => {
+    vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue(catalog);
 
     render(
       <OrgUnitScopeFilter
         basePath="/directory/personnel/orders"
         label="Подразделение"
         allLabel="Выберите подразделение"
-        orgGroupId={1}
+        orgGroupId={clinicalGroupId}
         value={null}
         onChange={vi.fn()}
       />,
     );
 
     await waitFor(() => {
-      expect(getOrgUnitsTree).toHaveBeenCalledWith({ org_group_id: 1 });
+      expect(loadOrgUnitSelectOptions).toHaveBeenCalled();
     });
 
-    expect(await screen.findByRole("option", { name: "MMC" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /HR Department/ })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "Клинический корпус" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Терапевтическое отделение" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Отдел кадров" })).not.toBeInTheDocument();
   });
 
-  it("loads full tree when org group is not selected", async () => {
-    vi.mocked(getOrgUnitsTree).mockResolvedValue({
-      items: [
-        {
-          id: "10",
-          unit_id: 10,
-          name: "MMC",
-          group_id: 1,
-          children: [],
-        },
-      ],
-      inactive_ids: [],
-      root_id: 10,
-    });
+  it("loads full catalog when org group is not selected", async () => {
+    vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue(catalog);
 
     render(
       <OrgUnitScopeFilter
@@ -87,52 +67,86 @@ describe("OrgUnitScopeFilter", () => {
     );
 
     await waitFor(() => {
-      expect(getOrgUnitsTree).toHaveBeenCalledWith({ org_group_id: undefined });
+      expect(loadOrgUnitSelectOptions).toHaveBeenCalled();
     });
-    expect(await screen.findByRole("option", { name: "MMC" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "Отдел кадров" })).toBeInTheDocument();
   });
 
   it("replaces dropdown options when org group changes", async () => {
-    vi.mocked(getOrgUnitsTree).mockImplementation(async (args) => {
-      const groupId = args?.org_group_id;
-      if (groupId === 2) {
-        return {
-          items: [{ id: "20", unit_id: 20, name: "Group 2 Unit", group_id: 2, children: [] }],
-          inactive_ids: [],
-          root_id: 20,
-        };
-      }
-      return {
-        items: [{ id: "10", unit_id: 10, name: "Group 1 Unit", group_id: 1, children: [] }],
-        inactive_ids: [],
-        root_id: 10,
-      };
-    });
+    vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue(catalog);
 
     const { rerender } = render(
       <OrgUnitScopeFilter
         basePath="/directory/personnel/orders"
-        orgGroupId={1}
+        orgGroupId={clinicalGroupId}
         value={null}
         onChange={vi.fn()}
       />,
     );
 
-    expect(await screen.findByRole("option", { name: "Group 1 Unit" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Group 2 Unit" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "Клинический корпус" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Отдел кадров" })).not.toBeInTheDocument();
 
     rerender(
       <OrgUnitScopeFilter
         basePath="/directory/personnel/orders"
-        orgGroupId={2}
+        orgGroupId={adminGroupId}
         value={null}
         onChange={vi.fn()}
       />,
     );
 
+    expect(await screen.findByRole("option", { name: "Отдел кадров" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Клинический корпус" })).not.toBeInTheDocument();
+  });
+
+  it("clears incompatible selected unit when group changes", async () => {
+    vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue(catalog);
+    const onChange = vi.fn();
+
+    const { rerender } = render(
+      <OrgUnitScopeFilter
+        basePath="/directory/personnel/orders"
+        orgGroupId={clinicalGroupId}
+        value={101}
+        onChange={onChange}
+      />,
+    );
+
     await waitFor(() => {
-      expect(screen.queryByRole("option", { name: "Group 1 Unit" })).not.toBeInTheDocument();
+      expect(loadOrgUnitSelectOptions).toHaveBeenCalled();
     });
-    expect(await screen.findByRole("option", { name: "Group 2 Unit" })).toBeInTheDocument();
+
+    rerender(
+      <OrgUnitScopeFilter
+        basePath="/directory/personnel/orders"
+        orgGroupId={adminGroupId}
+        value={101}
+        onChange={onChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(null);
+    });
+  });
+
+  it("calls onChange with selected unit id", async () => {
+    vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue(catalog);
+    const onChange = vi.fn();
+
+    render(
+      <OrgUnitScopeFilter
+        basePath="/directory/personnel/orders"
+        orgGroupId={clinicalGroupId}
+        value={null}
+        onChange={onChange}
+      />,
+    );
+
+    const select = await screen.findByTestId("org-unit-scope-filter-select");
+    fireEvent.change(select, { target: { value: "101" } });
+
+    expect(onChange).toHaveBeenCalledWith(101);
   });
 });

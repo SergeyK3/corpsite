@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import { createPersonnelOrderItem, updatePersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
-import { loadScopedPositionOptions } from "@/lib/taskOrgFilters";
+import { loadScopedPositionOptions, loadGlobalPositionCatalogCached, resetGlobalPositionCatalogCache } from "@/lib/taskOrgFilters";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
 vi.mock("next/navigation", () => ({
@@ -40,7 +40,17 @@ vi.mock("@/lib/taskOrgFilters", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/taskOrgFilters")>();
   return {
     ...actual,
-    loadScopedPositionOptions: vi.fn(async () => [{ id: 77, label: "Врач" }]),
+    loadScopedPositionOptions: vi.fn(async () => [
+      { id: 77, label: "Врач" },
+      { id: 78, label: "Заведующий" },
+    ]),
+    loadGlobalPositionCatalogCached: vi.fn(async () => [
+      { id: 77, label: "Врач" },
+      { id: 78, label: "Заведующий" },
+      { id: 88, label: "Медсестра" },
+      { id: 89, label: "Кадровый специалист" },
+      { id: 90, label: "Врач" },
+    ]),
   };
 });
 
@@ -137,9 +147,20 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  resetGlobalPositionCatalogCache();
   vi.mocked(getEmployees).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(getEmployee).mockResolvedValue(activeEmployee);
-  vi.mocked(loadScopedPositionOptions).mockResolvedValue([{ id: 77, label: "Врач" }]);
+  vi.mocked(loadScopedPositionOptions).mockResolvedValue([
+    { id: 77, label: "Врач" },
+    { id: 78, label: "Заведующий" },
+  ]);
+  vi.mocked(loadGlobalPositionCatalogCached).mockResolvedValue([
+    { id: 77, label: "Врач" },
+    { id: 78, label: "Заведующий" },
+    { id: 88, label: "Медсестра" },
+    { id: 89, label: "Кадровый специалист" },
+    { id: 90, label: "Врач" },
+  ]);
   vi.mocked(createPersonnelOrderItem).mockResolvedValue({
     order: {
       order_id: 1,
@@ -301,6 +322,172 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
         org_unit_id: 10,
       });
     });
+  });
+
+  it("clears unit and position when department group changes", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "10" },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-position-select")).not.toBeDisabled();
+    });
+    fireEvent.change(screen.getByTestId("personnel-order-position-select"), {
+      target: { value: "77" },
+    });
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "2" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mock-org-unit-Подразделение")).toHaveValue("");
+      expect(screen.getByTestId("personnel-order-position-select")).toHaveValue("");
+    });
+  });
+
+  it("clears position when org unit changes", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "10" },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-position-select")).not.toBeDisabled();
+    });
+    fireEvent.change(screen.getByTestId("personnel-order-position-select"), {
+      target: { value: "77" },
+    });
+
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "11" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-position-select")).toHaveValue("");
+      expect(loadScopedPositionOptions).toHaveBeenLastCalledWith({
+        org_group_id: 1,
+        org_unit_id: 11,
+      });
+    });
+  });
+
+  it("keeps global position selectable when it is absent from scoped list", async () => {
+    vi.mocked(loadScopedPositionOptions).mockResolvedValueOnce([{ id: 78, label: "Заведующий" }]);
+    vi.mocked(loadGlobalPositionCatalogCached).mockResolvedValue([
+      { id: 77, label: "Врач" },
+      { id: 78, label: "Заведующий" },
+      { id: 89, label: "Кадровый специалист" },
+    ]);
+
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "10" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-position-select")).not.toBeDisabled();
+    });
+
+    fireEvent.change(screen.getByTestId("personnel-order-position-select"), {
+      target: { value: "89" },
+    });
+
+    expect(screen.getByTestId("personnel-order-position-select")).toHaveValue("89");
+  });
+});
+
+describe("PersonnelOrderItemEditor position catalog", () => {
+  it("shows scoped and global positions with optgroups", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "10" },
+    });
+
+    await waitFor(() => {
+      expect(loadScopedPositionOptions).toHaveBeenCalledWith({
+        org_group_id: 1,
+        org_unit_id: 10,
+      });
+      expect(loadGlobalPositionCatalogCached).toHaveBeenCalledTimes(1);
+    });
+
+    const positionSelect = screen.getByTestId("personnel-order-position-select") as HTMLSelectElement;
+    await waitFor(() => {
+      expect(positionSelect).not.toBeDisabled();
+    });
+
+    const optgroups = Array.from(positionSelect.querySelectorAll("optgroup"));
+    expect(optgroups.map((node) => node.getAttribute("label"))).toEqual([
+      "Используются в подразделении",
+      "Все должности",
+    ]);
+    expect(positionSelect.querySelectorAll("option").length).toBeGreaterThanOrEqual(5);
+    expect(screen.getByRole("option", { name: "Кадровый специалист" })).toBeInTheDocument();
+    expect(screen.getAllByRole("option", { name: "Врач" }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("allows selecting a global position not used in the selected unit", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "10" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-position-select")).not.toBeDisabled();
+    });
+
+    fireEvent.change(screen.getByTestId("personnel-order-position-select"), {
+      target: { value: "89" },
+    });
+
+    expect(screen.getByTestId("personnel-order-position-select")).toHaveValue("89");
+  });
+
+  it("does not reload global catalog when org unit changes", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+
+    fireEvent.change(screen.getByTestId("mock-org-group-Группа отделений"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "10" },
+    });
+
+    await waitFor(() => {
+      expect(loadGlobalPositionCatalogCached).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.change(screen.getByTestId("mock-org-unit-Подразделение"), {
+      target: { value: "11" },
+    });
+
+    await waitFor(() => {
+      expect(loadScopedPositionOptions).toHaveBeenLastCalledWith({
+        org_group_id: 1,
+        org_unit_id: 11,
+      });
+    });
+    expect(loadGlobalPositionCatalogCached).toHaveBeenCalledTimes(1);
   });
 });
 

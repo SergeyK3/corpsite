@@ -4,12 +4,13 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { getOrgUnitsTree } from "@/app/directory/org-units/_lib/api.client";
-import { flattenOrgUnits } from "@/lib/orgUnitsTree";
+import { isOrgUnitAllowedForGroup } from "@/lib/taskOrgFilters";
 import {
   ORG_UNIT_ID_PARAM,
   readOrgScopeFromSearchParams,
 } from "@/lib/orgScope";
+import type { OrgUnitSelectOption } from "@/lib/orgUnitsSelect";
+import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 
 type OrgUnitScopeFilterProps = {
   basePath: string;
@@ -22,6 +23,10 @@ type OrgUnitScopeFilterProps = {
   orgGroupId?: number | null;
   value?: number | null;
   onChange?: (unitId: number | null) => void;
+  /** Optional injected options (e.g. shared hook in PersonnelOrderItemEditor). */
+  unitOptions?: OrgUnitSelectOption[];
+  unitsLoading?: boolean;
+  unitsError?: string | null;
 };
 
 export default function OrgUnitScopeFilter({
@@ -34,6 +39,9 @@ export default function OrgUnitScopeFilter({
   orgGroupId: controlledOrgGroupId,
   value,
   onChange,
+  unitOptions: injectedUnitOptions,
+  unitsLoading: injectedUnitsLoading,
+  unitsError: injectedUnitsError,
 }: OrgUnitScopeFilterProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -45,45 +53,22 @@ export default function OrgUnitScopeFilter({
   const orgGroupId = isControlled ? (controlledOrgGroupId ?? null) : orgScope.org_group_id;
   const selectedOrgUnitId = isControlled ? (value ?? null) : orgScope.org_unit_id;
 
-  const [options, setOptions] = React.useState<Array<{ id: number; label: string }>>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const internal = useOrgUnitScopeOptions(orgGroupId, injectedUnitOptions == null);
+  const options = injectedUnitOptions ?? internal.options;
+  const catalogOptions = injectedUnitOptions ?? internal.catalogOptions;
+  const loading = injectedUnitsLoading ?? internal.loading;
+  const error = injectedUnitsError ?? internal.error;
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      setOptions([]);
-      setLoading(true);
-      setError(null);
-
-      try {
-        const tree = await getOrgUnitsTree({
-          org_group_id: orgGroupId ?? undefined,
-        });
-        if (cancelled) return;
-
-        const seen = new Set<number>();
-        const rows = flattenOrgUnits(tree.items ?? []).filter((row) => {
-          if (seen.has(row.id)) return false;
-          seen.add(row.id);
-          return true;
-        });
-
-        setOptions(rows);
-      } catch (e: unknown) {
-        if (cancelled) return;
-        setOptions([]);
-        setError(e instanceof Error ? e.message : "Не удалось загрузить отделения.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [orgGroupId]);
+    if (!isControlled || selectedOrgUnitId == null) return;
+    if (catalogOptions.length === 0) return;
+    const allowed = isOrgUnitAllowedForGroup(
+      selectedOrgUnitId,
+      orgGroupId ?? undefined,
+      catalogOptions,
+    );
+    if (!allowed) onChange?.(null);
+  }, [isControlled, selectedOrgUnitId, orgGroupId, catalogOptions, onChange]);
 
   function handleChange(nextValue: string) {
     const parsed = nextValue ? Number(nextValue) : null;
@@ -103,9 +88,9 @@ export default function OrgUnitScopeFilter({
       params.delete("org_unit_name");
     } else {
       params.set(ORG_UNIT_ID_PARAM, nextValue);
-      const picked = options.find((row) => String(row.id) === nextValue);
+      const picked = options.find((row) => String(row.unit_id) === nextValue);
       if (picked) {
-        params.set("org_unit_name", picked.label.replace(/^—\s*/g, "").trim());
+        params.set("org_unit_name", picked.name.replace(/^—\s*/g, "").trim());
       } else {
         params.delete("org_unit_name");
       }
@@ -122,9 +107,10 @@ export default function OrgUnitScopeFilter({
   }
 
   return (
-    <div className={className}>
+    <div className={className} data-testid="org-unit-scope-filter">
       <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</label>
       <select
+        data-testid="org-unit-scope-filter-select"
         value={selectedOrgUnitId != null ? String(selectedOrgUnitId) : ""}
         onChange={(e) => handleChange(e.target.value)}
         disabled={disabled || loading}
@@ -132,8 +118,8 @@ export default function OrgUnitScopeFilter({
       >
         <option value="">{allLabel}</option>
         {options.map((row) => (
-          <option key={row.id} value={String(row.id)}>
-            {row.label}
+          <option key={row.unit_id} value={String(row.unit_id)}>
+            {row.name}
           </option>
         ))}
       </select>

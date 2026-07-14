@@ -1,5 +1,6 @@
 // FILE: corpsite-ui/lib/positionCabinetNav.ts
 
+import { isOperationalOrdersRoute } from "./operationalOrdersNav";
 import { isHrProcessesRoute } from "./personnelNav";
 
 /** Position Cabinet section identifiers (UI shell only — no backend binding yet). */
@@ -76,5 +77,6 @@ export function shouldShowPositionCabinetNav(
 ): boolean {
   if (isPositionCabinetRoute(pathname)) return true;
   if (options.showPersonnelVisibility && isHrProcessesRoute(pathname)) return true;
+  if (options.showPersonnelVisibility && isOperationalOrdersRoute(pathname)) return true;
   return false;
 }

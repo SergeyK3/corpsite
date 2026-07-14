@@ -6,9 +6,12 @@ import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.cl
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import {
-  loadScopedPositionOptions,
-  type TaskOrgFilterOption,
+  isOrgUnitAllowedForGroup,
+  isPositionAllowedInOptions,
+  type PersonnelOrderPositionSelectGroup,
 } from "@/lib/taskOrgFilters";
+import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
+import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
 import {
@@ -76,6 +79,22 @@ const FIELD_HINT_CLASS = "mt-1 text-xs text-zinc-500 dark:text-zinc-400";
 function placementValue(value: string | null | undefined): string {
   const text = String(value ?? "").trim();
   return text || "—";
+}
+
+function renderPersonnelOrderPositionOptions(
+  groups: readonly PersonnelOrderPositionSelectGroup[],
+) {
+  if (groups.length === 0) return null;
+
+  return groups.map((group) => (
+    <optgroup key={group.key} label={group.label}>
+      {group.items.map((position) => (
+        <option key={position.id} value={String(position.id)}>
+          {position.label}
+        </option>
+      ))}
+    </optgroup>
+  ));
 }
 
 function FormField({
@@ -165,8 +184,6 @@ export default function PersonnelOrderItemEditor({
   const [payloadDraft, setPayloadDraft] = React.useState<ItemPayloadDraft>(emptyItemPayloadDraft());
   const [targetOrgGroupId, setTargetOrgGroupId] = React.useState<number | null>(null);
   const [hireOrgGroupId, setHireOrgGroupId] = React.useState<number | null>(null);
-  const [positions, setPositions] = React.useState<TaskOrgFilterOption[]>([]);
-  const [positionsLoading, setPositionsLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [employeeSearchError, setEmployeeSearchError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -174,7 +191,22 @@ export default function PersonnelOrderItemEditor({
   const formConfig = getItemFormRegistry(itemTypeCode);
   const orgScoped = isOrgScopedItemType(itemTypeCode);
   const activeOrgGroupId = formConfig?.showHirePlacement ? hireOrgGroupId : targetOrgGroupId;
+  const {
+    options: orgUnitSelectOptions,
+    catalogOptions: orgUnitCatalogOptions,
+    loading: orgUnitsLoading,
+    error: orgUnitsError,
+  } = useOrgUnitScopeOptions(orgScoped ? activeOrgGroupId : null);
   const selectedOrgUnitId = selectedOrgUnitIdFromDraft(payloadDraft, itemTypeCode);
+  const {
+    positionGroups,
+    allOptions: positionOptions,
+    loading: positionsLoading,
+  } = usePersonnelOrderPositionOptions({
+    enabled: orgScoped,
+    orgUnitId: selectedOrgUnitId,
+    orgGroupId: activeOrgGroupId,
+  });
   const effectiveDateLabel =
     itemTypeCode.toUpperCase() === "TERMINATION" ? "Дата увольнения" : "Дата вступления в силу";
   const savedEmployeeIdBlocksPendingReset =
@@ -232,32 +264,29 @@ export default function PersonnelOrderItemEditor({
   }, [employeeQuery, formConfig?.employeePicker, itemTypeCode, pendingNewEmployee]);
 
   React.useEffect(() => {
-    if (!orgScoped || selectedOrgUnitId == null) {
-      setPositions([]);
-      setPositionsLoading(false);
-      return;
-    }
+    if (!orgScoped) return;
+    if (orgUnitCatalogOptions.length === 0) return;
 
-    let cancelled = false;
-    setPositionsLoading(true);
-    void loadScopedPositionOptions({
-      org_group_id: activeOrgGroupId ?? undefined,
-      org_unit_id: selectedOrgUnitId,
-    })
-      .then((options) => {
-        if (!cancelled) setPositions(options);
-      })
-      .catch(() => {
-        if (!cancelled) setPositions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setPositionsLoading(false);
-      });
+    const unitAllowed = isOrgUnitAllowedForGroup(
+      selectedOrgUnitId ?? undefined,
+      activeOrgGroupId ?? undefined,
+      orgUnitCatalogOptions,
+    );
+    if (unitAllowed) return;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [orgScoped, activeOrgGroupId, selectedOrgUnitId]);
+    setPayloadDraft((prev) => clearOrgDependentFields(prev, itemTypeCode));
+  }, [orgScoped, activeOrgGroupId, selectedOrgUnitId, orgUnitCatalogOptions, itemTypeCode]);
+
+  React.useEffect(() => {
+    if (!orgScoped) return;
+
+    const positionId = Number(selectedPositionIdFromDraft(payloadDraft, itemTypeCode));
+    if (!Number.isFinite(positionId) || positionId <= 0) return;
+    if (positionsLoading) return;
+    if (isPositionAllowedInOptions(positionId, positionOptions)) return;
+
+    setPayloadDraft((prev) => setPositionId(prev, itemTypeCode, ""));
+  }, [orgScoped, positionOptions, positionsLoading, payloadDraft, itemTypeCode]);
 
   function resetForm(typeCode: PersonnelOrderItemFormType = defaultItemType) {
     setEditingItemId(null);
@@ -271,7 +300,6 @@ export default function PersonnelOrderItemEditor({
     setPayloadDraft(emptyItemPayloadDraft());
     setTargetOrgGroupId(null);
     setHireOrgGroupId(null);
-    setPositions([]);
     setError(null);
   }
 
@@ -285,7 +313,6 @@ export default function PersonnelOrderItemEditor({
     if (config?.clearTargetOnEmployeeChange) {
       setPayloadDraft((prev) => clearTransferTargetFields(prev));
       setTargetOrgGroupId(null);
-      setPositions([]);
     }
 
     if (config?.showCurrentPlacement) {
@@ -358,7 +385,6 @@ export default function PersonnelOrderItemEditor({
     setPayloadDraft(emptyItemPayloadDraft());
     setTargetOrgGroupId(null);
     setHireOrgGroupId(null);
-    setPositions([]);
     setPendingNewEmployee(
       editingItemId != null &&
         editingItemSavedEmployeeId == null &&
@@ -473,6 +499,9 @@ export default function PersonnelOrderItemEditor({
               allLabel={options.unitEmptyLabel}
               orgGroupId={options.orgGroupId}
               value={selectedOrgUnitIdFromDraft(payloadDraft, cascadeType)}
+              unitOptions={orgUnitSelectOptions}
+              unitsLoading={orgUnitsLoading}
+              unitsError={orgUnitsError}
               onChange={(unitId) => {
                 if (formConfig?.showHirePlacement) {
                   setPayloadDraft((prev) => setOrgUnitAndClearPosition(prev, "HIRE", unitId));
@@ -493,7 +522,9 @@ export default function PersonnelOrderItemEditor({
                   }
                 }}
                 disabled={
-                  selectedOrgUnitIdFromDraft(payloadDraft, cascadeType) == null || positionsLoading
+                  selectedOrgUnitIdFromDraft(payloadDraft, cascadeType) == null ||
+                  positionsLoading ||
+                  positionOptions.length === 0
                 }
                 className={FIELD_INPUT_CLASS}
               >
@@ -502,13 +533,11 @@ export default function PersonnelOrderItemEditor({
                     ? "Сначала выберите подразделение"
                     : positionsLoading
                       ? "Загрузка…"
-                      : "—"}
+                      : positionOptions.length === 0
+                        ? "Нет доступных должностей"
+                        : "—"}
                 </option>
-                {positions.map((position) => (
-                  <option key={position.id} value={String(position.id)}>
-                    {position.label}
-                  </option>
-                ))}
+                {renderPersonnelOrderPositionOptions(positionGroups)}
               </select>
             </FormField>
           </div>

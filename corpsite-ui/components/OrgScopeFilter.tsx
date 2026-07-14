@@ -104,6 +104,7 @@ export default function OrgScopeFilter({
     <div className={className}>
       <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</label>
       <select
+        data-testid="org-scope-filter-select"
         value={selectedGroupId != null ? String(selectedGroupId) : ""}
         onChange={(e) => handleChange(e.target.value)}
         disabled={disabled || loading}

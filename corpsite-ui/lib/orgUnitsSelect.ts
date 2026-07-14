@@ -18,8 +18,8 @@ type OrgUnitRow = {
   name?: string | null;
   title?: string | null;
   code?: string | null;
-  group_id?: number | null;
-  groupId?: number | null;
+  group_id?: number | string | null;
+  groupId?: number | string | null;
   children?: OrgUnitRow[];
 };
 
@@ -60,19 +60,29 @@ function unitNameOf(row: OrgUnitRow): string {
 
 function ownGroupId(row: OrgUnitRow | OrgTreeNode): number | null {
   const g = row.group_id ?? (row as OrgUnitRow).groupId;
-  if (typeof g === "number" && Number.isFinite(g) && g > 0) return g;
+  if (typeof g === "number" && Number.isFinite(g) && g > 0) return Math.trunc(g);
+  if (typeof g === "string" && g.trim()) {
+    const parsed = Number(g.trim());
+    if (Number.isFinite(parsed) && parsed > 0) return Math.trunc(parsed);
+  }
   return null;
 }
 
 function dedupeOrgUnitOptions(items: OrgUnitSelectOption[]): OrgUnitSelectOption[] {
-  const seen = new Set<number>();
-  return items
-    .filter((x) => {
-      if (seen.has(x.unit_id)) return false;
-      seen.add(x.unit_id);
-      return true;
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const byUnitId = new Map<number, OrgUnitSelectOption>();
+
+  for (const item of items) {
+    const existing = byUnitId.get(item.unit_id);
+    if (!existing) {
+      byUnitId.set(item.unit_id, item);
+      continue;
+    }
+    if (existing.group_id == null && item.group_id != null) {
+      byUnitId.set(item.unit_id, item);
+    }
+  }
+
+  return Array.from(byUnitId.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
 function nodeKey(raw: OrgUnitRow): string {
@@ -131,13 +141,14 @@ function buildTreeFromFlat(itemsRaw: OrgUnitRow[]): OrgTreeNode[] {
 function groupChildrenByGroupId(
   children: OrgTreeNode[],
   groupLabelById: Map<number, string>,
+  parentGroupId: number | null = null,
 ): OrgTreeNode[] {
   const buckets = new Map<number, OrgTreeNode[]>();
   const rest: OrgTreeNode[] = [];
 
   for (const ch of children) {
-    const gid = ch.group_id;
-    if (gid && groupLabelById.has(gid)) {
+    const gid = ownGroupId(ch) ?? parentGroupId;
+    if (gid != null && groupLabelById.has(gid)) {
       if (!buckets.has(gid)) buckets.set(gid, []);
       buckets.get(gid)!.push(ch);
     } else {
@@ -166,32 +177,49 @@ function injectGroupsIfPossible(tree: OrgTreeNode[], groupLabelById: Map<number,
 
   if (tree.length === 1 && Array.isArray(tree[0].children) && tree[0].children.length > 0) {
     const root = tree[0];
-    const hasGroupIds = root.children.some((c) => !!c.group_id && groupLabelById.has(c.group_id));
+    const rootGroupId = ownGroupId(root);
+    const hasGroupIds =
+      (rootGroupId != null && groupLabelById.has(rootGroupId)) ||
+      root.children.some((c) => {
+        const gid = ownGroupId(c) ?? rootGroupId;
+        return gid != null && groupLabelById.has(gid);
+      });
     const alreadyGrouped = root.children.some((c) => c.key.startsWith("group-"));
 
     if (hasGroupIds && !alreadyGrouped) {
-      return [{ ...root, children: groupChildrenByGroupId(root.children, groupLabelById) }];
+      return [{ ...root, children: groupChildrenByGroupId(root.children, groupLabelById, rootGroupId) }];
     }
   }
 
   return tree;
 }
 
-function stripVisibleRootIfNeeded(tree: OrgTreeNode[]): OrgTreeNode[] {
-  if (!Array.isArray(tree) || tree.length !== 1) return tree;
+type PreparedOrgTree = {
+  nodes: OrgTreeNode[];
+  inheritedGroupId: number | null;
+};
+
+function stripVisibleRootIfNeeded(
+  tree: OrgTreeNode[],
+  inheritedGroupId: number | null = null,
+): PreparedOrgTree {
+  if (!Array.isArray(tree) || tree.length !== 1) {
+    return { nodes: tree, inheritedGroupId };
+  }
 
   const root = tree[0];
   const hasChildren = Array.isArray(root.children) && root.children.length > 0;
-  if (!hasChildren) return tree;
+  if (!hasChildren) return { nodes: tree, inheritedGroupId };
 
   if (normalizeText(root.name) === normalizeText(HIDDEN_VISIBLE_ROOT_NAME)) {
-    return root.children;
+    const rootGroup = ownGroupId(root) ?? inheritedGroupId;
+    return { nodes: root.children, inheritedGroupId: rootGroup };
   }
 
-  return tree;
+  return { nodes: tree, inheritedGroupId };
 }
 
-function prepareOrgTree(itemsRaw: OrgUnitRow[], groupLabelById: Map<number, string>): OrgTreeNode[] {
+function prepareOrgTree(itemsRaw: OrgUnitRow[], groupLabelById: Map<number, string>): PreparedOrgTree {
   const looksTree = itemsRaw.some((x) => Array.isArray(x.children) && (x.children?.length ?? 0) > 0);
   let tree: OrgTreeNode[];
   if (looksTree) {
@@ -203,7 +231,8 @@ function prepareOrgTree(itemsRaw: OrgUnitRow[], groupLabelById: Map<number, stri
     tree = flatHasParents ? buildTreeFromFlat(itemsRaw) : itemsRaw.map(normalizeOrgUnitNodeTree);
   }
 
-  return stripVisibleRootIfNeeded(injectGroupsIfPossible(tree, groupLabelById));
+  const grouped = injectGroupsIfPossible(tree, groupLabelById);
+  return stripVisibleRootIfNeeded(grouped);
 }
 
 function flattenOrgUnitTree(nodes: OrgTreeNode[], inheritedGroupId: number | null = null): OrgUnitSelectOption[] {
@@ -268,6 +297,26 @@ function mergeOrgUnitOptions(...lists: OrgUnitSelectOption[][]): OrgUnitSelectOp
   return dedupeOrgUnitOptions(lists.flat());
 }
 
+/** Build select options from API payloads (tree + flat). Exported for tests and cascade pipelines. */
+export function buildOrgUnitSelectOptionsFromRows(
+  treeRows: OrgUnitRow[],
+  flatRows: OrgUnitRow[],
+  groupLabelById: Map<number, string>,
+): OrgUnitSelectOption[] {
+  const collected: OrgUnitSelectOption[][] = [];
+
+  if (treeRows.length > 0) {
+    const prepared = prepareOrgTree(treeRows, groupLabelById);
+    collected.push(flattenOrgUnitTree(prepared.nodes, prepared.inheritedGroupId));
+  }
+
+  if (flatRows.length > 0) {
+    collected.push(enrichFlatOrgUnitsWithInheritedGroup(flatRows));
+  }
+
+  return mergeOrgUnitOptions(...collected);
+}
+
 export async function loadOrgUnitSelectOptions(): Promise<OrgUnitSelectOption[]> {
   const groupLabelById = await loadDepartmentGroupLabelMap();
   const collected: OrgUnitSelectOption[][] = [];
@@ -278,7 +327,8 @@ export async function loadOrgUnitSelectOptions(): Promise<OrgUnitSelectOption[]>
     });
     const itemsRaw = Array.isArray(tree?.items) ? tree.items : [];
     if (itemsRaw.length > 0) {
-      collected.push(flattenOrgUnitTree(prepareOrgTree(itemsRaw, groupLabelById)));
+      const prepared = prepareOrgTree(itemsRaw, groupLabelById);
+      collected.push(flattenOrgUnitTree(prepared.nodes, prepared.inheritedGroupId));
     }
   } catch {
     // try flat fallback below

@@ -61,22 +61,37 @@ export function shouldShowTaskOrgFilters(options: {
   return options.isSystemAdmin && options.taskScope === "team";
 }
 
+export function normalizeOrgGroupId(value: number | string | null | undefined): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null;
+}
+
 export function filterOrgUnitOptionsForGroup(
   options: readonly OrgUnitSelectOption[],
-  orgGroupId: number | undefined,
+  orgGroupId: number | string | undefined,
 ): OrgUnitSelectOption[] {
-  if (orgGroupId == null) return [...options];
-  return options.filter((opt) => opt.group_id === orgGroupId);
+  const targetGroupId = normalizeOrgGroupId(orgGroupId);
+  if (targetGroupId == null) return [...options];
+  return options.filter((opt) => normalizeOrgGroupId(opt.group_id) === targetGroupId);
 }
 
 export function isOrgUnitAllowedForGroup(
   orgUnitId: number | undefined,
-  orgGroupId: number | undefined,
+  orgGroupId: number | string | undefined,
   options: readonly OrgUnitSelectOption[],
 ): boolean {
   if (orgUnitId == null) return true;
-  if (orgGroupId == null) return options.some((opt) => opt.unit_id === orgUnitId);
-  return options.some((opt) => opt.unit_id === orgUnitId && opt.group_id === orgGroupId);
+  const targetGroupId = normalizeOrgGroupId(orgGroupId);
+  if (targetGroupId == null) return options.some((opt) => opt.unit_id === orgUnitId);
+  return options.some(
+    (opt) => opt.unit_id === orgUnitId && normalizeOrgGroupId(opt.group_id) === targetGroupId,
+  );
 }
 
 export function isPositionAllowedInOptions(
@@ -105,6 +120,102 @@ export function normalizePositionOptions(rows: readonly PositionRowDto[]): TaskO
   }
 
   return out.sort((a, b) => a.label.localeCompare(b.label, "ru"));
+}
+
+/** Matches backend GET /directory/positions max limit. */
+export const GLOBAL_POSITIONS_CATALOG_LIMIT = 1000;
+
+export type PersonnelOrderPositionSelectGroup = {
+  key: "used_in_unit" | "all_positions";
+  label: string;
+  items: TaskOrgFilterOption[];
+};
+
+export const PERSONNEL_ORDER_POSITION_GROUP_LABELS = {
+  usedInUnit: "Используются в подразделении",
+  allPositions: "Все должности",
+} as const;
+
+/**
+ * Merge scoped (used in unit) and global catalog positions for personnel order editor.
+ * Scoped items stay first; dedupe strictly by position_id; preserve duplicate names.
+ */
+export function buildPersonnelOrderPositionSelectGroups(
+  scoped: readonly TaskOrgFilterOption[],
+  global: readonly TaskOrgFilterOption[],
+): PersonnelOrderPositionSelectGroup[] {
+  const seen = new Set<number>();
+  const usedInUnit: TaskOrgFilterOption[] = [];
+
+  for (const option of scoped) {
+    if (seen.has(option.id)) continue;
+    seen.add(option.id);
+    usedInUnit.push(option);
+  }
+
+  const rest: TaskOrgFilterOption[] = [];
+  for (const option of global) {
+    if (seen.has(option.id)) continue;
+    seen.add(option.id);
+    rest.push(option);
+  }
+  rest.sort((a, b) => a.label.localeCompare(b.label, "ru"));
+
+  const groups: PersonnelOrderPositionSelectGroup[] = [];
+  if (usedInUnit.length > 0) {
+    groups.push({
+      key: "used_in_unit",
+      label: PERSONNEL_ORDER_POSITION_GROUP_LABELS.usedInUnit,
+      items: usedInUnit,
+    });
+  }
+  if (rest.length > 0) {
+    groups.push({
+      key: "all_positions",
+      label: PERSONNEL_ORDER_POSITION_GROUP_LABELS.allPositions,
+      items: rest,
+    });
+  }
+  return groups;
+}
+
+export function flattenPersonnelOrderPositionGroups(
+  groups: readonly PersonnelOrderPositionSelectGroup[],
+): TaskOrgFilterOption[] {
+  return groups.flatMap((group) => group.items);
+}
+
+export async function loadGlobalPositionCatalog(
+  limit: number = GLOBAL_POSITIONS_CATALOG_LIMIT,
+): Promise<TaskOrgFilterOption[]> {
+  const body = await apiFetchJson<{ items?: PositionRowDto[] }>("/directory/positions", {
+    query: { limit, offset: 0 },
+  });
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return normalizePositionOptions(items);
+}
+
+let globalPositionCatalogCache: TaskOrgFilterOption[] | null = null;
+let globalPositionCatalogPromise: Promise<TaskOrgFilterOption[]> | null = null;
+
+/** Cached global catalog — reused across org-unit changes within one editor session. */
+export async function loadGlobalPositionCatalogCached(
+  limit: number = GLOBAL_POSITIONS_CATALOG_LIMIT,
+): Promise<TaskOrgFilterOption[]> {
+  if (globalPositionCatalogCache) return globalPositionCatalogCache;
+  if (!globalPositionCatalogPromise) {
+    globalPositionCatalogPromise = loadGlobalPositionCatalog(limit).then((items) => {
+      globalPositionCatalogCache = items;
+      return items;
+    });
+  }
+  return globalPositionCatalogPromise;
+}
+
+/** Test helper — reset module-level global catalog cache. */
+export function resetGlobalPositionCatalogCache(): void {
+  globalPositionCatalogCache = null;
+  globalPositionCatalogPromise = null;
 }
 
 export async function loadScopedPositionOptions(scope: {

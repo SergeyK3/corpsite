@@ -56,4 +56,31 @@ describe("PositionCabinetNav UI", () => {
       "page",
     );
   });
+
+  it("marks tasks as active on /tasks", () => {
+    usePathnameMock.mockReturnValue("/tasks");
+    render(<PositionCabinetNav />);
+
+    expect(screen.getByTestId("position-cabinet-tab-tasks")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("position-cabinet-tab-dashboards")).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("position-cabinet-tab-education")).not.toHaveAttribute("aria-current");
+  });
+
+  it("does not mark any tab active on operational orders routes", () => {
+    usePathnameMock.mockReturnValue("/directory/operational-orders");
+    render(<PositionCabinetNav />);
+
+    for (const section of ["tasks", "dashboards", "education"] as const) {
+      expect(screen.getByTestId(`position-cabinet-tab-${section}`)).not.toHaveAttribute("aria-current");
+    }
+  });
+
+  it("does not mark any tab active on nested operational orders routes", () => {
+    usePathnameMock.mockReturnValue("/directory/operational-orders/workspaces/1");
+    render(<PositionCabinetNav />);
+
+    for (const section of ["tasks", "dashboards", "education"] as const) {
+      expect(screen.getByTestId(`position-cabinet-tab-${section}`)).not.toHaveAttribute("aria-current");
+    }
+  });
 });

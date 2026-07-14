@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildPersonnelOrderPositionSelectGroups,
   buildTaskOrgFiltersResetUrl,
+  flattenPersonnelOrderPositionGroups,
   filterOrgUnitOptionsForGroup,
   hasActiveTaskOrgFilters,
   isOrgUnitAllowedForGroup,
   isPositionAllowedInOptions,
+  normalizeOrgGroupId,
   normalizePositionOptions,
   readTaskOrgFiltersFromSearchParams,
   shouldShowTaskOrgFilters,
@@ -67,6 +70,12 @@ describe("interconnected org filter helpers", () => {
   it("rejects org unit outside selected group", () => {
     expect(isOrgUnitAllowedForGroup(11, 1, units)).toBe(false);
     expect(isOrgUnitAllowedForGroup(10, 1, units)).toBe(true);
+    expect(isOrgUnitAllowedForGroup(10, "1", units)).toBe(true);
+  });
+
+  it("normalizes string group ids during filtering", () => {
+    expect(filterOrgUnitOptionsForGroup(units, "1")).toEqual([units[0]]);
+    expect(normalizeOrgGroupId("2")).toBe(2);
   });
 
   it("rejects position outside available options", () => {
@@ -87,6 +96,43 @@ describe("normalizePositionOptions", () => {
     ).toEqual([
       { id: 1, label: "Врач" },
       { id: 2, label: "Экономист" },
+    ]);
+  });
+
+  it("keeps same-name positions with different ids", () => {
+    expect(
+      normalizePositionOptions([
+        { position_id: 10, name: "E1 Test Position" },
+        { position_id: 11, name: "E1 Test Position" },
+      ]),
+    ).toEqual([
+      { id: 10, label: "E1 Test Position" },
+      { id: 11, label: "E1 Test Position" },
+    ]);
+  });
+});
+
+describe("buildPersonnelOrderPositionSelectGroups", () => {
+  it("places scoped positions first and dedupes by position_id", () => {
+    const scoped = [
+      { id: 2, label: "Заведующий" },
+      { id: 1, label: "Дворник" },
+    ];
+    const global = [
+      { id: 1, label: "Дворник" },
+      { id: 3, label: "Кадровый специалист" },
+      { id: 4, label: "Врач" },
+      { id: 5, label: "Медсестра" },
+    ];
+
+    const groups = buildPersonnelOrderPositionSelectGroups(scoped, global);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.key).toBe("used_in_unit");
+    expect(groups[0]?.items.map((row) => row.id)).toEqual([2, 1]);
+    expect(groups[1]?.key).toBe("all_positions");
+    expect(groups[1]?.items.map((row) => row.id)).toEqual([4, 3, 5]);
+    expect(flattenPersonnelOrderPositionGroups(groups).map((row) => row.id)).toEqual([
+      2, 1, 4, 3, 5,
     ]);
   });
 });
