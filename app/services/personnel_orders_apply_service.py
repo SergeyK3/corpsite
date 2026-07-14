@@ -101,7 +101,8 @@ def _fetch_employee_snapshot(conn, employee_id: int) -> Dict[str, Any]:
                 position_id,
                 employment_rate,
                 is_active,
-                date_from
+                date_from,
+                date_to
             FROM public.employees
             WHERE employee_id = :employee_id
             FOR UPDATE
@@ -142,12 +143,21 @@ def _build_pre_apply_state(conn, snapshot: Dict[str, Any]) -> Dict[str, Any]:
     else:
         date_from_value = None
 
+    date_to_raw = snapshot.get("date_to")
+    if date_to_raw is not None and hasattr(date_to_raw, "isoformat"):
+        date_to_value: Optional[str] = date_to_raw.isoformat()
+    elif date_to_raw is not None:
+        date_to_value = str(date_to_raw)
+    else:
+        date_to_value = None
+
     return {
         "org_unit_id": int(org_raw) if org_raw is not None else None,
         "position_id": int(position_raw) if position_raw is not None else None,
         "employment_rate": float(rate_raw) if rate_raw is not None else None,
         "is_active": bool(snapshot.get("is_active")),
         "date_from": date_from_value,
+        "date_to": date_to_value,
         "had_prior_employment_events": _count_prior_approved_events(
             conn, int(snapshot["employee_id"])
         )

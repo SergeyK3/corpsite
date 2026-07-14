@@ -152,6 +152,104 @@ def _parse_pre_apply_state(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return pre_apply_state if isinstance(pre_apply_state, dict) else None
 
 
+def _parse_pre_apply_state_date(raw: Any) -> Optional[date]:
+    if raw is None:
+        return None
+    if isinstance(raw, date):
+        return raw
+    return date.fromisoformat(str(raw))
+
+
+def _restore_employee_from_pre_apply_state(
+    conn,
+    *,
+    employee_id: int,
+    pre_apply_state: Dict[str, Any],
+) -> None:
+    org_unit_id = pre_apply_state.get("org_unit_id")
+    position_id = pre_apply_state.get("position_id")
+    employment_rate = pre_apply_state.get("employment_rate")
+    conn.execute(
+        text(
+            """
+            UPDATE public.employees
+            SET org_unit_id = :org_unit_id,
+                position_id = :position_id,
+                employment_rate = :employment_rate,
+                is_active = :is_active,
+                date_from = :date_from,
+                date_to = :date_to
+            WHERE employee_id = :employee_id
+            """
+        ),
+        {
+            "employee_id": employee_id,
+            "org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+            "position_id": int(position_id) if position_id is not None else None,
+            "employment_rate": float(employment_rate) if employment_rate is not None else None,
+            "is_active": bool(pre_apply_state.get("is_active")),
+            "date_from": _parse_pre_apply_state_date(pre_apply_state.get("date_from")),
+            "date_to": _parse_pre_apply_state_date(pre_apply_state.get("date_to")),
+        },
+    )
+
+
+def _restore_user_unit_if_org_changed(
+    conn,
+    *,
+    employee_id: int,
+    pre_apply_state: Dict[str, Any],
+    event: Dict[str, Any],
+) -> None:
+    from_org = pre_apply_state.get("org_unit_id")
+    to_org = event.get("to_org_unit_id")
+    if (
+        from_org is not None
+        and to_org is not None
+        and int(from_org) != int(to_org)
+    ):
+        conn.execute(
+            text(
+                """
+                UPDATE public.users
+                SET unit_id = :unit_id
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {"employee_id": employee_id, "unit_id": int(from_org)},
+        )
+
+
+def _restore_user_active(conn, *, employee_id: int, is_active: bool) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE public.users
+            SET is_active = :is_active
+            WHERE employee_id = :employee_id
+            """
+        ),
+        {"employee_id": employee_id, "is_active": bool(is_active)},
+    )
+
+
+def _count_other_approved_events(conn, *, employee_id: int, event_id: int) -> int:
+    return int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM public.employee_events
+                WHERE employee_id = :employee_id
+                  AND lifecycle_status = 'APPROVED'
+                  AND event_id <> :event_id
+                """
+            ),
+            {"employee_id": int(employee_id), "event_id": int(event_id)},
+        ).scalar_one()
+    )
+
+
 def _rollback_hire_snapshot(conn, *, employee_id: int, event: Dict[str, Any]) -> None:
     pre_apply_state = _parse_pre_apply_state(event)
     if pre_apply_state is not None:
@@ -195,6 +293,15 @@ def _rollback_hire_snapshot(conn, *, employee_id: int, event: Dict[str, Any]) ->
     from_org = event.get("from_org_unit_id")
     from_position = event.get("from_position_id")
     from_rate = event.get("from_rate")
+    sole_approved_event = (
+        _count_other_approved_events(
+            conn,
+            employee_id=employee_id,
+            event_id=int(event["event_id"]),
+        )
+        == 0
+    )
+
     if from_org is None and from_position is None:
         conn.execute(
             text(
@@ -206,25 +313,110 @@ def _rollback_hire_snapshot(conn, *, employee_id: int, event: Dict[str, Any]) ->
             ),
             {"employee_id": employee_id},
         )
-    else:
+        return
+
+    conn.execute(
+        text(
+            """
+            UPDATE public.employees
+            SET org_unit_id = :org_unit_id,
+                position_id = :position_id,
+                employment_rate = COALESCE(:employment_rate, employment_rate),
+                is_active = :is_active
+            WHERE employee_id = :employee_id
+            """
+        ),
+        {
+            "employee_id": employee_id,
+            "org_unit_id": int(from_org) if from_org is not None else None,
+            "position_id": int(from_position) if from_position is not None else None,
+            "employment_rate": float(from_rate) if from_rate is not None else None,
+            "is_active": not sole_approved_event,
+        },
+    )
+
+
+def _rollback_transfer_snapshot(conn, *, employee_id: int, event: Dict[str, Any]) -> None:
+    pre_apply_state = _parse_pre_apply_state(event)
+    if pre_apply_state is not None:
+        _restore_employee_from_pre_apply_state(
+            conn,
+            employee_id=employee_id,
+            pre_apply_state=pre_apply_state,
+        )
+        _restore_user_unit_if_org_changed(
+            conn,
+            employee_id=employee_id,
+            pre_apply_state=pre_apply_state,
+            event=event,
+        )
+        return
+
+    from_org = event.get("from_org_unit_id")
+    from_position = event.get("from_position_id")
+    from_rate = event.get("from_rate")
+    to_org = event.get("to_org_unit_id")
+    conn.execute(
+        text(
+            """
+            UPDATE public.employees
+            SET org_unit_id = :org_unit_id,
+                position_id = :position_id,
+                employment_rate = COALESCE(:employment_rate, employment_rate)
+            WHERE employee_id = :employee_id
+            """
+        ),
+        {
+            "employee_id": employee_id,
+            "org_unit_id": int(from_org),
+            "position_id": int(from_position) if from_position is not None else None,
+            "employment_rate": float(from_rate) if from_rate is not None else None,
+        },
+    )
+    if (
+        from_org is not None
+        and to_org is not None
+        and int(from_org) != int(to_org)
+    ):
         conn.execute(
             text(
                 """
-                UPDATE public.employees
-                SET org_unit_id = :org_unit_id,
-                    position_id = :position_id,
-                    employment_rate = COALESCE(:employment_rate, employment_rate),
-                    is_active = TRUE
+                UPDATE public.users
+                SET unit_id = :unit_id
                 WHERE employee_id = :employee_id
                 """
             ),
-            {
-                "employee_id": employee_id,
-                "org_unit_id": int(from_org) if from_org is not None else None,
-                "position_id": int(from_position) if from_position is not None else None,
-                "employment_rate": float(from_rate) if from_rate is not None else None,
-            },
+            {"employee_id": employee_id, "unit_id": int(from_org)},
         )
+
+
+def _rollback_termination_snapshot(conn, *, employee_id: int, event: Dict[str, Any]) -> None:
+    pre_apply_state = _parse_pre_apply_state(event)
+    if pre_apply_state is not None:
+        _restore_employee_from_pre_apply_state(
+            conn,
+            employee_id=employee_id,
+            pre_apply_state=pre_apply_state,
+        )
+        _restore_user_active(
+            conn,
+            employee_id=employee_id,
+            is_active=bool(pre_apply_state.get("is_active")),
+        )
+        return
+
+    conn.execute(
+        text(
+            """
+            UPDATE public.employees
+            SET is_active = TRUE,
+                date_to = NULL
+            WHERE employee_id = :employee_id
+            """
+        ),
+        {"employee_id": employee_id},
+    )
+    _restore_user_active(conn, employee_id=employee_id, is_active=True)
 
 
 def _fetch_approved_events_for_item(conn, order_item_id: int) -> List[Dict[str, Any]]:
@@ -324,66 +516,11 @@ def _rollback_snapshot_for_event(conn, event: Dict[str, Any]) -> None:
         return
 
     if event_type == "TRANSFER":
-        from_org = event.get("from_org_unit_id")
-        from_position = event.get("from_position_id")
-        from_rate = event.get("from_rate")
-        to_org = event.get("to_org_unit_id")
-        conn.execute(
-            text(
-                """
-                UPDATE public.employees
-                SET org_unit_id = :org_unit_id,
-                    position_id = :position_id,
-                    employment_rate = COALESCE(:employment_rate, employment_rate)
-                WHERE employee_id = :employee_id
-                """
-            ),
-            {
-                "employee_id": employee_id,
-                "org_unit_id": int(from_org),
-                "position_id": int(from_position) if from_position is not None else None,
-                "employment_rate": float(from_rate) if from_rate is not None else None,
-            },
-        )
-        if (
-            from_org is not None
-            and to_org is not None
-            and int(from_org) != int(to_org)
-        ):
-            conn.execute(
-                text(
-                    """
-                    UPDATE public.users
-                    SET unit_id = :unit_id
-                    WHERE employee_id = :employee_id
-                    """
-                ),
-                {"employee_id": employee_id, "unit_id": int(from_org)},
-            )
+        _rollback_transfer_snapshot(conn, employee_id=employee_id, event=event)
         return
 
     if event_type == "TERMINATION":
-        conn.execute(
-            text(
-                """
-                UPDATE public.employees
-                SET is_active = TRUE,
-                    date_to = NULL
-                WHERE employee_id = :employee_id
-                """
-            ),
-            {"employee_id": employee_id},
-        )
-        conn.execute(
-            text(
-                """
-                UPDATE public.users
-                SET is_active = TRUE
-                WHERE employee_id = :employee_id
-                """
-            ),
-            {"employee_id": employee_id},
-        )
+        _rollback_termination_snapshot(conn, employee_id=employee_id, event=event)
         return
 
     if event_type == "RATE_CHANGE":
