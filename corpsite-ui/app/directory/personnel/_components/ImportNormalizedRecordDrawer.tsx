@@ -24,6 +24,7 @@ import {
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 import { MIGRATION_COMMIT_CTA_LABEL } from "../_lib/personnelMigrationHrLabels";
+import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import {
   buildMigrationCandidateId,
   buildMigrationSessionHref,
@@ -458,8 +459,11 @@ export default function ImportNormalizedRecordDrawer({
       <div className="relative ml-auto flex h-full w-full max-w-[720px] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Нормализованная запись</h2>
-            <p className="mt-1 text-sm text-zinc-500">ID {record.record_id} · batch {record.batch_id}</p>
+            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Нормализованная запись</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">{IMPORT_RECORD_CARD_TITLE}</p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              ID {record.record_id} · batch {record.batch_id}
+            </p>
           </div>
           <button
             type="button"

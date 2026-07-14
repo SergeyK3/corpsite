@@ -255,7 +255,7 @@ export default function EmployeeDrawer({
 
               {employeeStatusMeta(details).active && employeeCardHref ? (
                 <p className="text-xs text-zinc-500">
-                  Для кадровых действий и полной истории откройте{" "}
+                  Для кадровых действий, удаления сотрудника и полной истории откройте{" "}
                   <Link href={employeeCardHref} className="font-medium text-blue-700 hover:underline dark:text-blue-300">
                     {HR_DOSSIER_LINK_TEXT}
                   </Link>
