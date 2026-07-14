@@ -103,6 +103,33 @@ export type EmployeeTransferResponse = {
   event: EmployeeEventDTO;
 };
 
+export type EmployeeCorrectGeneralPayload = {
+  domain: "general";
+  full_name: string;
+  effective_date: string;
+  reason: string;
+  comment: string;
+};
+
+export type EmployeeCorrectAssignmentPayload = {
+  domain: "assignment";
+  org_unit_id: number;
+  position_id?: number;
+  employment_rate?: number;
+  date_from: string | null;
+  date_to?: string | null;
+  effective_date: string;
+  reason: string;
+  comment: string;
+};
+
+export type EmployeeCorrectPayload = EmployeeCorrectGeneralPayload | EmployeeCorrectAssignmentPayload;
+
+export type EmployeeCorrectResponse = {
+  item: EmployeeDetails;
+  event: EmployeeEventDTO;
+};
+
 export type LinkedUserDTO = {
   user_id: number;
   login: string | null;

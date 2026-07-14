@@ -2,12 +2,10 @@
 
 import * as React from "react";
 
-import EmployeeTransferDrawer from "../../employees/_components/EmployeeTransferDrawer";
-import type { EmployeeTransferFormValues } from "../../employees/_components/EmployeeTransferForm";
 import {
+  correctEmployee,
   getEmployee,
   mapApiErrorToMessage,
-  transferEmployee,
 } from "../../employees/_lib/api.client";
 import type { EmployeeDetails } from "../../employees/_lib/types";
 import { getOrgUnitsTree } from "../../org-units/_lib/api.client";
@@ -25,6 +23,9 @@ import {
   mapImportApiError,
   type NormalizedRecord,
 } from "../_lib/importApi.client";
+import EmployeeAssignmentCorrectionDrawer, {
+  type EmployeeAssignmentCorrectionFormValues,
+} from "./EmployeeAssignmentCorrectionDrawer";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
 
 type Props = {
@@ -92,9 +93,9 @@ export default function EmployeeOperationalAssignmentSection({
   const [details, setDetails] = React.useState<EmployeeDetails | null>(null);
   const [groupName, setGroupName] = React.useState("—");
 
-  const [transferOpen, setTransferOpen] = React.useState(false);
-  const [transferSaving, setTransferSaving] = React.useState(false);
-  const [transferError, setTransferError] = React.useState<string | null>(null);
+  const [correctionOpen, setCorrectionOpen] = React.useState(false);
+  const [correctionSaving, setCorrectionSaving] = React.useState(false);
+  const [correctionError, setCorrectionError] = React.useState<string | null>(null);
 
   const [enrollDrawerOpen, setEnrollDrawerOpen] = React.useState(false);
   const [enrollRecord, setEnrollRecord] = React.useState<NormalizedRecord | null>(null);
@@ -178,55 +179,43 @@ export default function EmployeeOperationalAssignmentSection({
     setEnrollError(null);
   }
 
-  function handleOpenTransfer() {
-    if (!details || !active) return;
-    setTransferError(null);
-    setTransferOpen(true);
+  function handleOpenCorrection() {
+    if (!details || !enrolled) return;
+    setCorrectionError(null);
+    setCorrectionOpen(true);
   }
 
-  function handleCloseTransfer() {
-    if (transferSaving) return;
-    setTransferOpen(false);
-    setTransferError(null);
+  function handleCloseCorrection() {
+    if (correctionSaving) return;
+    setCorrectionOpen(false);
+    setCorrectionError(null);
   }
 
-  async function handleTransferSubmit(values: EmployeeTransferFormValues) {
+  async function handleCorrectionSubmit(values: EmployeeAssignmentCorrectionFormValues) {
     if (!employeeId || !details) return;
 
-    setTransferSaving(true);
-    setTransferError(null);
+    setCorrectionSaving(true);
+    setCorrectionError(null);
     try {
-      const toOrgUnitId = Number(values.to_org_unit_id);
-      if (!Number.isFinite(toOrgUnitId) || toOrgUnitId < 1) {
-        setTransferError("Выберите целевое отделение.");
-        return;
-      }
-
-      const payload: Parameters<typeof transferEmployee>[1] = {
-        to_org_unit_id: toOrgUnitId,
+      const result = await correctEmployee(employeeId, {
+        domain: "assignment",
+        org_unit_id: values.org_unit_id,
+        position_id: values.position_id ?? undefined,
+        employment_rate: values.employment_rate,
+        date_from: values.date_from,
+        date_to: values.date_to,
         effective_date: values.effective_date,
-      };
-
-      const toPositionId = Number(values.to_position_id);
-      if (Number.isFinite(toPositionId) && toPositionId > 0) {
-        payload.to_position_id = toPositionId;
-      }
-
-      const orderRef = values.order_ref.trim();
-      if (orderRef) payload.order_ref = orderRef;
-
-      const comment = values.comment.trim();
-      if (comment) payload.comment = comment;
-
-      const result = await transferEmployee(employeeId, payload);
+        reason: values.reason,
+        comment: values.comment,
+      });
       setDetails(result.item);
-      setTransferOpen(false);
+      setCorrectionOpen(false);
       onAssignmentChanged?.();
       await loadAssignment();
     } catch (e) {
-      setTransferError(mapApiErrorToMessage(e));
+      setCorrectionError(mapApiErrorToMessage(e));
     } finally {
-      setTransferSaving(false);
+      setCorrectionSaving(false);
     }
   }
 
@@ -261,13 +250,14 @@ export default function EmployeeOperationalAssignmentSection({
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {enrolled && active ? (
+        {enrolled ? (
           <button
             type="button"
-            onClick={handleOpenTransfer}
+            onClick={handleOpenCorrection}
+            data-testid="assignment-correction-open"
             className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           >
-            Изменить назначение
+            Исправить назначение
           </button>
         ) : null}
         {!enrolled ? (
@@ -288,13 +278,13 @@ export default function EmployeeOperationalAssignmentSection({
         </div>
       ) : null}
 
-      <EmployeeTransferDrawer
-        open={transferOpen}
+      <EmployeeAssignmentCorrectionDrawer
+        open={correctionOpen}
         details={details}
-        saving={transferSaving}
-        error={transferError}
-        onClose={handleCloseTransfer}
-        onSubmit={handleTransferSubmit}
+        saving={correctionSaving}
+        error={correctionError}
+        onClose={handleCloseCorrection}
+        onSubmit={handleCorrectionSubmit}
       />
 
       <ImportNormalizedRecordDrawer

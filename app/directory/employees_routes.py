@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +22,7 @@ from app.services.directory_service import (
     update_employee as svc_update_employee,
     transfer_employee as svc_transfer_employee,
     correct_employee_org_unit as svc_correct_employee_org_unit,
+    correct_employee as svc_correct_employee,
     list_employee_events as svc_list_employee_events,
 )
 from app.services.hr_event_registry import list_registry_for_ui
@@ -80,6 +81,33 @@ class EmployeeCorrectOrgUnitIn(BaseModel):
     to_position_id: Optional[int] = Field(default=None, ge=1)
     effective_date: date
     comment: str = Field(..., min_length=1, max_length=2000)
+
+
+class EmployeeCorrectGeneralIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    domain: Literal["general"]
+    full_name: str = Field(..., min_length=1, max_length=500)
+    effective_date: date
+    reason: str = Field(..., min_length=1, max_length=500)
+    comment: str = Field(..., min_length=1, max_length=2000)
+
+
+class EmployeeCorrectAssignmentIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    domain: Literal["assignment"]
+    org_unit_id: int = Field(..., ge=1)
+    position_id: Optional[int] = Field(default=None, ge=1)
+    employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    date_from: Optional[date] = Field(...)
+    date_to: Optional[date] = None
+    effective_date: date
+    reason: str = Field(..., min_length=1, max_length=500)
+    comment: str = Field(..., min_length=1, max_length=2000)
+
+
+EmployeeCorrectIn = Union[EmployeeCorrectGeneralIn, EmployeeCorrectAssignmentIn]
 
 
 class PersonnelEventCreateIn(BaseModel):
@@ -586,6 +614,60 @@ def transfer_employee(
         raise
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Unable to transfer employee.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/correct")
+def correct_employee(
+    employee_id: str = Path(..., min_length=1),
+    body: EmployeeCorrectGeneralIn | EmployeeCorrectAssignmentIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not _is_privileged(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        if isinstance(body, EmployeeCorrectGeneralIn):
+            event = call_service(
+                svc_correct_employee,
+                employee_id=employee_id,
+                domain="general",
+                full_name=body.full_name,
+                effective_date=body.effective_date,
+                reason=body.reason,
+                comment=body.comment,
+                created_by=int(user["user_id"]),
+            )
+        else:
+            event = call_service(
+                svc_correct_employee,
+                employee_id=employee_id,
+                domain="assignment",
+                org_unit_id=body.org_unit_id,
+                position_id=body.position_id,
+                employment_rate=body.employment_rate,
+                date_from=body.date_from,
+                date_to=body.date_to,
+                effective_date=body.effective_date,
+                reason=body.reason,
+                comment=body.comment,
+                created_by=int(user["user_id"]),
+            )
+
+        item = call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+
+        return {"item": item, "event": event}
+
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to correct employee.")
     except Exception as e:
         raise as_http500(e)
 

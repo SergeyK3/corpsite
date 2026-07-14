@@ -11,6 +11,10 @@ import {
   formatPersonnelOrderDate,
   personnelOrderStatusLabel,
 } from "../_lib/personnelOrdersApi.client";
+import {
+  correctionDomainLabel,
+  describeCorrectionEvent,
+} from "../_lib/correctionHistory";
 
 type Props = {
   employeeId: string;
@@ -86,6 +90,10 @@ function rateLabel(rate: number | null | undefined): string | null {
 function describeEvent(event: EmployeeEventDTO, maps: LabelMaps): string {
   const type = String(event.event_type || "").toUpperCase();
 
+  if (type === "CORRECTION") {
+    return describeCorrectionEvent(event, maps).join(" · ");
+  }
+
   if (type === "HIRE") {
     return [
       orgLabel(maps, event.to_org_unit_id),
@@ -120,15 +128,27 @@ function describeEvent(event: EmployeeEventDTO, maps: LabelMaps): string {
 function eventTypeMeta(event: EmployeeEventDTO) {
   const fromApi = String(event.event_label ?? "").trim();
   const key = String(event.event_type || "").toUpperCase();
+  const correctionLabel = key === "CORRECTION" ? correctionDomainLabel(event) : null;
   const fallback =
     EVENT_TYPE_META[key] ?? {
       label: key || "Событие",
       badgeClass: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
     };
   return {
-    label: fromApi || fallback.label,
+    label: correctionLabel || fromApi || fallback.label,
     badgeClass: fallback.badgeClass,
   };
+}
+
+function renderCorrectionDetails(event: EmployeeEventDTO, maps: LabelMaps) {
+  const lines = describeCorrectionEvent(event, maps);
+  return (
+    <div className="mt-1 space-y-0.5 text-sm text-zinc-800 dark:text-zinc-200">
+      {lines.map((line) => (
+        <div key={line}>{line}</div>
+      ))}
+    </div>
+  );
 }
 
 function periodKeyFromDate(value: string | null | undefined): string {
@@ -368,7 +388,9 @@ export default function EmployeePersonnelHistorySection({ employeeId, refreshTok
             <ol className="relative ml-2 space-y-0 border-l border-zinc-200 dark:border-zinc-800">
               {group.events.map((event) => {
                 const meta = eventTypeMeta(event);
-                const summary = describeEvent(event, labelMaps);
+                const typeKey = String(event.event_type || "").toUpperCase();
+                const isCorrection = typeKey === "CORRECTION";
+                const summary = isCorrection ? null : describeEvent(event, labelMaps);
                 const orderStatus = event.order_status
                   ? personnelOrderStatusLabel(event.order_status)
                   : null;
@@ -395,8 +417,12 @@ export default function EmployeePersonnelHistorySection({ employeeId, refreshTok
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">{orderStatus}</span>
                         ) : null}
                       </div>
-                      <div className="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{summary}</div>
-                      {event.comment ? (
+                      {isCorrection ? (
+                        renderCorrectionDetails(event, labelMaps)
+                      ) : (
+                        <div className="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{summary}</div>
+                      )}
+                      {!isCorrection && event.comment ? (
                         <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{event.comment}</div>
                       ) : null}
                     </div>

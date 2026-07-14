@@ -7,6 +7,8 @@ import type {
   EmployeeUpdatePayload,
   EmployeeTransferPayload,
   EmployeeTransferResponse,
+  EmployeeCorrectPayload,
+  EmployeeCorrectResponse,
   EmployeeEventsResponse,
   UserDTO,
   UserCreatePayload,
@@ -248,6 +250,71 @@ export async function transferEmployee(
 
   return apiPostJson<EmployeeTransferResponse>(
     `/directory/employees/${encodeURIComponent(id)}/transfer`,
+    payload
+  );
+}
+
+/**
+ * Административная корректировка данных сотрудника (audited).
+ * Backend: POST /directory/employees/{id}/correct
+ */
+export async function correctEmployee(
+  employeeId: string,
+  body: EmployeeCorrectPayload
+): Promise<EmployeeCorrectResponse> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+
+  const effective_date = String(body.effective_date ?? "").trim();
+  if (!effective_date) throw new Error("effective_date is required");
+
+  const reason = String(body.reason ?? "").trim();
+  if (!reason) throw new Error("reason is required");
+
+  const comment = String(body.comment ?? "").trim();
+  if (!comment) throw new Error("comment is required");
+
+  if (body.domain === "general") {
+    const full_name = String(body.full_name ?? "").trim();
+    if (!full_name) throw new Error("full_name is required");
+
+    return apiPostJson<EmployeeCorrectResponse>(
+      `/directory/employees/${encodeURIComponent(id)}/correct`,
+      {
+        domain: "general",
+        full_name,
+        effective_date,
+        reason,
+        comment,
+      }
+    );
+  }
+
+  const org_unit_id = Number(body.org_unit_id);
+  if (!Number.isFinite(org_unit_id) || org_unit_id < 1) {
+    throw new Error("org_unit_id is required");
+  }
+
+  const payload: Record<string, unknown> = {
+    domain: "assignment",
+    org_unit_id,
+    date_from: body.date_from ?? null,
+    date_to: body.date_to ?? null,
+    effective_date,
+    reason,
+    comment,
+  };
+
+  if (body.position_id != null && Number.isFinite(Number(body.position_id))) {
+    payload.position_id = Number(body.position_id);
+  }
+
+  if (body.employment_rate != null && Number.isFinite(Number(body.employment_rate))) {
+    payload.employment_rate = Number(body.employment_rate);
+  }
+
+  return apiPostJson<EmployeeCorrectResponse>(
+    `/directory/employees/${encodeURIComponent(id)}/correct`,
     payload
   );
 }

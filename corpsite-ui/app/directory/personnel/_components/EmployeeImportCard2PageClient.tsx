@@ -137,7 +137,14 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
                 title="Общие сведения"
                 description="Идентификация сотрудника и статус в справочнике персонала."
               >
-                <EmployeeCardGeneralSection employeeId={employeeId} details={employee} />
+                <EmployeeCardGeneralSection
+                  employeeId={employeeId}
+                  details={employee}
+                  onDetailsChanged={() => {
+                    void loadShell();
+                    setAssignmentRefreshToken((t) => t + 1);
+                  }}
+                />
               </EmployeeImportCardSection>
 
               <EmployeeImportCardSection
