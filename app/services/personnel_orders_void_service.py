@@ -6,6 +6,8 @@ and snapshot rollback.
 """
 from __future__ import annotations
 
+import json
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
@@ -128,6 +130,103 @@ def _fetch_item(conn, order_id: int, item_id: int) -> Dict[str, Any]:
     return dict(row)
 
 
+def _parse_event_metadata(raw: Any) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _parse_pre_apply_state(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    metadata = _parse_event_metadata(event.get("metadata"))
+    if not metadata:
+        return None
+    pre_apply_state = metadata.get("pre_apply_state")
+    return pre_apply_state if isinstance(pre_apply_state, dict) else None
+
+
+def _rollback_hire_snapshot(conn, *, employee_id: int, event: Dict[str, Any]) -> None:
+    pre_apply_state = _parse_pre_apply_state(event)
+    if pre_apply_state is not None:
+        had_prior = bool(pre_apply_state.get("had_prior_employment_events"))
+        is_active = bool(pre_apply_state.get("is_active")) if had_prior else False
+        org_unit_id = pre_apply_state.get("org_unit_id")
+        position_id = pre_apply_state.get("position_id")
+        employment_rate = pre_apply_state.get("employment_rate")
+        date_from_raw = pre_apply_state.get("date_from")
+        date_from_value: Optional[date] = None
+        if date_from_raw is not None:
+            date_from_value = (
+                date.fromisoformat(str(date_from_raw))
+                if not isinstance(date_from_raw, date)
+                else date_from_raw
+            )
+
+        conn.execute(
+            text(
+                """
+                UPDATE public.employees
+                SET org_unit_id = :org_unit_id,
+                    position_id = :position_id,
+                    employment_rate = :employment_rate,
+                    is_active = :is_active,
+                    date_from = :date_from
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {
+                "employee_id": employee_id,
+                "org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
+                "position_id": int(position_id) if position_id is not None else None,
+                "employment_rate": float(employment_rate) if employment_rate is not None else None,
+                "is_active": is_active,
+                "date_from": date_from_value,
+            },
+        )
+        return
+
+    from_org = event.get("from_org_unit_id")
+    from_position = event.get("from_position_id")
+    from_rate = event.get("from_rate")
+    if from_org is None and from_position is None:
+        conn.execute(
+            text(
+                """
+                UPDATE public.employees
+                SET is_active = FALSE
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {"employee_id": employee_id},
+        )
+    else:
+        conn.execute(
+            text(
+                """
+                UPDATE public.employees
+                SET org_unit_id = :org_unit_id,
+                    position_id = :position_id,
+                    employment_rate = COALESCE(:employment_rate, employment_rate),
+                    is_active = TRUE
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {
+                "employee_id": employee_id,
+                "org_unit_id": int(from_org) if from_org is not None else None,
+                "position_id": int(from_position) if from_position is not None else None,
+                "employment_rate": float(from_rate) if from_rate is not None else None,
+            },
+        )
+
+
 def _fetch_approved_events_for_item(conn, order_item_id: int) -> List[Dict[str, Any]]:
     rows = conn.execute(
         text(
@@ -143,7 +242,8 @@ def _fetch_approved_events_for_item(conn, order_item_id: int) -> List[Dict[str, 
                 from_rate,
                 to_org_unit_id,
                 to_position_id,
-                to_rate
+                to_rate,
+                metadata
             FROM public.employee_events
             WHERE order_item_id = :order_item_id
               AND lifecycle_status = 'APPROVED'
@@ -220,39 +320,7 @@ def _rollback_snapshot_for_event(conn, event: Dict[str, Any]) -> None:
     )
 
     if event_type == "HIRE":
-        from_org = event.get("from_org_unit_id")
-        from_position = event.get("from_position_id")
-        from_rate = event.get("from_rate")
-        if from_org is None and from_position is None:
-            conn.execute(
-                text(
-                    """
-                    UPDATE public.employees
-                    SET is_active = FALSE
-                    WHERE employee_id = :employee_id
-                    """
-                ),
-                {"employee_id": employee_id},
-            )
-        else:
-            conn.execute(
-                text(
-                    """
-                    UPDATE public.employees
-                    SET org_unit_id = :org_unit_id,
-                        position_id = :position_id,
-                        employment_rate = COALESCE(:employment_rate, employment_rate),
-                        is_active = TRUE
-                    WHERE employee_id = :employee_id
-                    """
-                ),
-                {
-                    "employee_id": employee_id,
-                    "org_unit_id": int(from_org) if from_org is not None else None,
-                    "position_id": int(from_position) if from_position is not None else None,
-                    "employment_rate": float(from_rate) if from_rate is not None else None,
-                },
-            )
+        _rollback_hire_snapshot(conn, employee_id=employee_id, event=event)
         return
 
     if event_type == "TRANSFER":

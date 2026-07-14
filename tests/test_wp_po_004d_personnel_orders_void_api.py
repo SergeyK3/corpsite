@@ -2,6 +2,7 @@
 """API tests for WP-PO-004D personnel orders void/cancel endpoints."""
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, List
 from uuid import uuid4
 
@@ -236,6 +237,10 @@ def test_void_applied_order_cascades_events(client, privileged_headers, seed):
         assert all(item["item_status"] == "VOIDED" for item in body["items"])
         assert all(event["lifecycle_status"] == "VOIDED" for event in body["events"])
 
+        with engine.begin() as conn:
+            after_snapshot = _employee_snapshot(conn, employee_id)
+        assert bool(after_snapshot["is_active"]) is False
+
         repeat = client.post(
             f"/directory/personnel-orders/{order_id}/void",
             json={"void_reason": "Repeat"},
@@ -245,6 +250,187 @@ def test_void_applied_order_cascades_events(client, privileged_headers, seed):
     finally:
         _cleanup_order(order_id)
         with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM public.employees WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            )
+            if pos_ids:
+                conn.execute(
+                    text("DELETE FROM public.positions WHERE position_id = ANY(:ids)"),
+                    {"ids": pos_ids},
+                )
+
+
+def _employee_snapshot(conn, employee_id: int) -> Dict[str, Any]:
+    return dict(
+        conn.execute(
+            text(
+                """
+                SELECT org_unit_id, position_id, employment_rate, is_active, date_from
+                FROM public.employees
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {"employee_id": employee_id},
+        ).mappings().one()
+    )
+
+
+def test_hire_void_deactivates_employee_without_prior_events(client, privileged_headers, seed):
+    """Pilot-like path: pre-created employee with placement but no prior events."""
+    pos_ids: List[int] = []
+    employee_id = 0
+    with engine.begin() as conn:
+        org_unit_id = int(seed["unit_id"])
+        position_id = _create_position(conn, name=f"WPPO4D-hire-void-{uuid4().hex[:8]}")
+        pos_ids.append(position_id)
+        employee_id = _create_test_employee(
+            conn,
+            org_unit_id=org_unit_id,
+            position_id=position_id,
+        )
+        before_snapshot = _employee_snapshot(conn, employee_id)
+        row = before_snapshot
+
+    order_id, _ = _create_registered_order(client, privileged_headers, order_type_code="HIRE")
+    try:
+        _add_item(
+            client,
+            privileged_headers,
+            order_id=order_id,
+            item_type_code="HIRE",
+            employee_id=employee_id,
+            payload={
+                "org_unit_id": int(row["org_unit_id"]),
+                "position_id": int(row["position_id"]),
+                "employment_rate": float(row["employment_rate"] or 1.0),
+            },
+        )
+        client.post(
+            f"/directory/personnel-orders/{order_id}/register",
+            json={"target_status": "REGISTERED"},
+            headers=privileged_headers,
+        )
+        apply_resp = client.post(f"/directory/personnel-orders/{order_id}/apply", headers=privileged_headers)
+        assert apply_resp.status_code == 200, apply_resp.text
+
+        void_resp = client.post(
+            f"/directory/personnel-orders/{order_id}/void",
+            json={"void_reason": "HIRE rollback without prior events"},
+            headers=privileged_headers,
+        )
+        assert void_resp.status_code == 200, void_resp.text
+
+        with engine.begin() as conn:
+            after_snapshot = _employee_snapshot(conn, employee_id)
+        assert bool(after_snapshot["is_active"]) is False
+        assert int(after_snapshot["position_id"]) == int(before_snapshot["position_id"])
+        assert int(after_snapshot["org_unit_id"]) == int(before_snapshot["org_unit_id"])
+    finally:
+        _cleanup_order(order_id)
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM public.employees WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            )
+            if pos_ids:
+                conn.execute(
+                    text("DELETE FROM public.positions WHERE position_id = ANY(:ids)"),
+                    {"ids": pos_ids},
+                )
+
+
+def test_hire_void_preserves_active_employee_with_prior_events(client, privileged_headers, seed):
+    pos_ids: List[int] = []
+    employee_id = 0
+    with engine.begin() as conn:
+        org_unit_id = int(seed["unit_id"])
+        position_id = _create_position(conn, name=f"WPPO4D-hire-prior-{uuid4().hex[:8]}")
+        pos_ids.append(position_id)
+        employee_id = _create_test_employee(
+            conn,
+            org_unit_id=org_unit_id,
+            position_id=position_id,
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.employee_events (
+                    employee_id,
+                    event_type,
+                    event_class,
+                    lifecycle_status,
+                    effective_date,
+                    to_org_unit_id,
+                    to_position_id,
+                    to_rate,
+                    created_by
+                )
+                VALUES (
+                    :employee_id,
+                    'HIRE',
+                    'EMPLOYMENT',
+                    'APPROVED',
+                    :effective_date,
+                    :org_unit_id,
+                    :position_id,
+                    :employment_rate,
+                    :created_by
+                )
+                """
+            ),
+            {
+                "employee_id": employee_id,
+                "effective_date": date(2026, 1, 1),
+                "org_unit_id": org_unit_id,
+                "position_id": position_id,
+                "employment_rate": 1.0,
+                "created_by": int(seed["initiator_user_id"]),
+            },
+        )
+        row = _employee_snapshot(conn, employee_id)
+
+    order_id, _ = _create_registered_order(client, privileged_headers, order_type_code="HIRE")
+    try:
+        _add_item(
+            client,
+            privileged_headers,
+            order_id=order_id,
+            item_type_code="HIRE",
+            employee_id=employee_id,
+            payload={
+                "org_unit_id": int(row["org_unit_id"]),
+                "position_id": int(row["position_id"]),
+                "employment_rate": float(row["employment_rate"] or 1.0),
+            },
+        )
+        client.post(
+            f"/directory/personnel-orders/{order_id}/register",
+            json={"target_status": "REGISTERED"},
+            headers=privileged_headers,
+        )
+        apply_resp = client.post(f"/directory/personnel-orders/{order_id}/apply", headers=privileged_headers)
+        assert apply_resp.status_code == 200, apply_resp.text
+        pre_apply_state = (apply_resp.json()["events"][0].get("metadata") or {}).get("pre_apply_state") or {}
+        assert pre_apply_state.get("had_prior_employment_events") is True
+
+        void_resp = client.post(
+            f"/directory/personnel-orders/{order_id}/void",
+            json={"void_reason": "HIRE rollback with prior events"},
+            headers=privileged_headers,
+        )
+        assert void_resp.status_code == 200, void_resp.text
+
+        with engine.begin() as conn:
+            after_snapshot = _employee_snapshot(conn, employee_id)
+        assert bool(after_snapshot["is_active"]) is True
+    finally:
+        _cleanup_order(order_id)
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM public.employee_events WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            )
             conn.execute(
                 text("DELETE FROM public.employees WHERE employee_id = :employee_id"),
                 {"employee_id": employee_id},

@@ -100,7 +100,8 @@ def _fetch_employee_snapshot(conn, employee_id: int) -> Dict[str, Any]:
                 org_unit_id,
                 position_id,
                 employment_rate,
-                is_active
+                is_active,
+                date_from
             FROM public.employees
             WHERE employee_id = :employee_id
             FOR UPDATE
@@ -111,6 +112,47 @@ def _fetch_employee_snapshot(conn, employee_id: int) -> Dict[str, Any]:
     if row is None:
         raise PersonnelOrderValidationError(f"Employee {employee_id} not found.")
     return dict(row)
+
+
+def _count_prior_approved_events(conn, employee_id: int) -> int:
+    return int(
+        conn.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM public.employee_events
+                WHERE employee_id = :employee_id
+                  AND lifecycle_status = 'APPROVED'
+                """
+            ),
+            {"employee_id": int(employee_id)},
+        ).scalar_one()
+    )
+
+
+def _build_pre_apply_state(conn, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    org_raw = snapshot.get("org_unit_id")
+    position_raw = snapshot.get("position_id")
+    rate_raw = snapshot.get("employment_rate")
+    date_from_raw = snapshot.get("date_from")
+    if date_from_raw is not None and hasattr(date_from_raw, "isoformat"):
+        date_from_value: Optional[str] = date_from_raw.isoformat()
+    elif date_from_raw is not None:
+        date_from_value = str(date_from_raw)
+    else:
+        date_from_value = None
+
+    return {
+        "org_unit_id": int(org_raw) if org_raw is not None else None,
+        "position_id": int(position_raw) if position_raw is not None else None,
+        "employment_rate": float(rate_raw) if rate_raw is not None else None,
+        "is_active": bool(snapshot.get("is_active")),
+        "date_from": date_from_value,
+        "had_prior_employment_events": _count_prior_approved_events(
+            conn, int(snapshot["employee_id"])
+        )
+        > 0,
+    }
 
 
 def _parse_payload(raw: Any) -> Dict[str, Any]:
@@ -154,6 +196,7 @@ def _build_item_metadata(
     item_id: int,
     item_type_code: str,
     payload: Dict[str, Any],
+    pre_apply_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {
         "order_item_id": int(item_id),
@@ -162,6 +205,8 @@ def _build_item_metadata(
     for key in ("concurrent_position_id", "concurrent_rate", "total_rate"):
         if key in payload and payload[key] is not None:
             metadata[key] = payload[key]
+    if pre_apply_state is not None:
+        metadata["pre_apply_state"] = pre_apply_state
     return metadata
 
 
@@ -189,6 +234,7 @@ def _apply_hire(
     to_rate = _optional_rate(payload.get("employment_rate")) or 1.0
 
     snapshot = _fetch_employee_snapshot(conn, employee_id)
+    pre_apply_state = _build_pre_apply_state(conn, snapshot)
     from_org_unit_id = int(snapshot["org_unit_id"]) if snapshot.get("org_unit_id") is not None else None
     from_position_raw = snapshot.get("position_id")
     from_position_id = int(from_position_raw) if from_position_raw is not None else None
@@ -226,6 +272,7 @@ def _apply_hire(
             item_id=int(item["item_id"]),
             item_type_code=str(item["item_type_code"]),
             payload=payload,
+            pre_apply_state=pre_apply_state,
         ),
         effective_date=effective_date,
         from_org_unit_id=from_org_unit_id,
@@ -255,6 +302,7 @@ def _apply_transfer(
     payload = _parse_payload(item.get("payload"))
 
     snapshot = _fetch_employee_snapshot(conn, employee_id)
+    pre_apply_state = _build_pre_apply_state(conn, snapshot)
     if snapshot.get("is_active") is False:
         raise PersonnelOrderConflictError(f"Employee {employee_id} is inactive.")
 
@@ -324,6 +372,7 @@ def _apply_transfer(
             item_id=int(item["item_id"]),
             item_type_code=str(item["item_type_code"]),
             payload=payload,
+            pre_apply_state=pre_apply_state,
         ),
         effective_date=effective_date,
         from_org_unit_id=from_org_unit_id,
@@ -353,6 +402,7 @@ def _apply_termination(
     payload = _parse_payload(item.get("payload"))
 
     snapshot = _fetch_employee_snapshot(conn, employee_id)
+    pre_apply_state = _build_pre_apply_state(conn, snapshot)
     from_org_unit_id = int(snapshot["org_unit_id"])
     from_position_raw = snapshot.get("position_id")
     from_position_id = int(from_position_raw) if from_position_raw is not None else None
@@ -391,6 +441,7 @@ def _apply_termination(
             item_id=int(item["item_id"]),
             item_type_code=str(item["item_type_code"]),
             payload=payload,
+            pre_apply_state=pre_apply_state,
         ),
         effective_date=effective_date,
         from_org_unit_id=from_org_unit_id,
@@ -468,6 +519,7 @@ def _apply_rate_change(
     effective_item_type = item_type_code or str(item["item_type_code"])
 
     snapshot = _fetch_employee_snapshot(conn, employee_id)
+    pre_apply_state = _build_pre_apply_state(conn, snapshot)
     if snapshot.get("is_active") is False:
         raise PersonnelOrderConflictError(f"Employee {employee_id} is inactive.")
 
@@ -508,6 +560,7 @@ def _apply_rate_change(
             item_id=int(item["item_id"]),
             item_type_code=effective_item_type,
             payload=payload,
+            pre_apply_state=pre_apply_state,
         ),
         effective_date=effective_date,
         from_org_unit_id=from_org_unit_id,

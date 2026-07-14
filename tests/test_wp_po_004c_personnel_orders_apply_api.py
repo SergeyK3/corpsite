@@ -190,6 +190,12 @@ def test_apply_registered_hire_order_creates_linked_event(client, privileged_hea
         assert event["order_item_id"] == item_id
         assert event["order_ref"] == f"№{order_number} от 2026-07-07"
         assert _count_events_for_order(order_id) == 1
+        metadata = event.get("metadata") or {}
+        pre_apply_state = metadata.get("pre_apply_state") or {}
+        assert pre_apply_state.get("had_prior_employment_events") is False
+        assert pre_apply_state.get("is_active") is True
+        assert int(pre_apply_state["org_unit_id"]) == int(row["org_unit_id"])
+        assert int(pre_apply_state["position_id"]) == int(row["position_id"])
     finally:
         _cleanup_order(order_id)
         with engine.begin() as conn:
