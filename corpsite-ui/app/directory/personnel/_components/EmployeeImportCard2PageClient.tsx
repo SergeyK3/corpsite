@@ -15,6 +15,7 @@ import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmen
 import EmployeePersonnelHistorySection from "./EmployeePersonnelHistorySection";
 import EmployeeCardGeneralSection from "./EmployeeCardGeneralSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
+import EmployeeCardDeletionNotice from "./EmployeeCardDeletionNotice";
 import { EmployeeImportCardSection, EmployeeImportCardSectionNav } from "./EmployeeImportCardSection";
 import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
 import {
@@ -193,6 +194,8 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
                   refreshToken={assignmentRefreshToken}
                 />
               </EmployeeImportCardSection>
+
+              <EmployeeCardDeletionNotice />
             </div>
           </>
         ) : null}
