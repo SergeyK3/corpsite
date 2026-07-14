@@ -101,10 +101,10 @@ describe("EnrollmentCompletionPanel", () => {
       />
     );
 
-    expect(screen.getByText(/✓ Employee создан · Employee ID 100/)).toBeInTheDocument();
-    expect(screen.getByText("Operational Employee")).toBeInTheDocument();
+    expect(screen.getByText(/✓ Сотрудник создан · ID 100/)).toBeInTheDocument();
+    expect(screen.getByText("Сотрудник добавлен в персонал")).toBeInTheDocument();
     expect(screen.getByText(/Привязка HR-записей \(2\)/)).toBeInTheDocument();
-    expect(screen.getByText("Контакт operational")).toBeInTheDocument();
+    expect(screen.getByText("Контакт сотрудника")).toBeInTheDocument();
     expect(screen.getByText("Следующий шаг")).toBeInTheDocument();
     expect(screen.getByText(/Учётная запись Corpsite создаётся отдельно/)).toBeInTheDocument();
     expect(screen.getByTestId("employee-account-sections")).toHaveTextContent(
@@ -112,7 +112,7 @@ describe("EnrollmentCompletionPanel", () => {
     );
   });
 
-  it("links to import-card provisioning route", () => {
+  it("links to employee card provisioning route", () => {
     render(
       <EnrollmentCompletionPanel
         employeeId={100}
@@ -122,11 +122,11 @@ describe("EnrollmentCompletionPanel", () => {
     );
 
     expect(buildImportCardAccountHref(100)).toBe(
-      "/directory/personnel/employees/100/import-card?provisionAccount=1"
+      "/directory/personnel/employees/100/card?section=access&provisionAccount=1"
     );
-    expect(screen.getByRole("link", { name: "Карта импорта и доступ" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Открыть карточку сотрудника" })).toHaveAttribute(
       "href",
-      "/directory/personnel/employees/100/import-card?provisionAccount=1"
+      "/directory/personnel/employees/100/card?section=access&provisionAccount=1"
     );
   });
 });

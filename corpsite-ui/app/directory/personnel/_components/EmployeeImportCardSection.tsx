@@ -2,17 +2,20 @@
 
 import * as React from "react";
 
+import {
+  EMPLOYEE_CARD_SECTIONS,
+  type EmployeeCardSectionDef,
+} from "@/lib/employeeCardNav";
+
 export type EmployeeImportCardSectionDef = {
   id: string;
   title: string;
 };
 
-export const EMPLOYEE_IMPORT_CARD_SECTIONS: EmployeeImportCardSectionDef[] = [
-  { id: "assignment", title: "Назначение" },
-  { id: "hr-contour", title: "Кадровый контур" },
-  { id: "access", title: "Доступ" },
-  { id: "history", title: "История" },
-];
+/** @deprecated Use EMPLOYEE_CARD_SECTIONS from @/lib/employeeCardNav */
+export const EMPLOYEE_IMPORT_CARD_SECTIONS: EmployeeImportCardSectionDef[] = EMPLOYEE_CARD_SECTIONS.map(
+  (s) => ({ id: s.id, title: s.title }),
+);
 
 type SectionProps = {
   id: string;
@@ -67,9 +70,13 @@ export function EmployeeImportCardSection({
 
 type NavProps = {
   className?: string;
+  sections?: EmployeeCardSectionDef[];
 };
 
-export function EmployeeImportCardSectionNav({ className }: NavProps) {
+export function EmployeeImportCardSectionNav({
+  className,
+  sections = EMPLOYEE_CARD_SECTIONS,
+}: NavProps) {
   function scrollToSection(sectionId: string) {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -85,7 +92,7 @@ export function EmployeeImportCardSectionNav({ className }: NavProps) {
         .join(" ")}
     >
       <div className="flex flex-wrap gap-2">
-        {EMPLOYEE_IMPORT_CARD_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <button
             key={section.id}
             type="button"

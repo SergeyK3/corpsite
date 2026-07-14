@@ -1,6 +1,6 @@
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeeDrawer.test.tsx
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeDrawer from "./EmployeeDrawer";
 import { getEmployee } from "../_lib/api.client";
@@ -9,13 +9,7 @@ import type { EmployeeDetails } from "../_lib/types";
 
 vi.mock("../_lib/api.client", () => ({
   getEmployee: vi.fn(),
-  getEmployees: vi.fn(),
-  getPositions: vi.fn(),
   mapApiErrorToMessage: vi.fn((e: unknown) => String(e)),
-  transferEmployee: vi.fn(),
-  updateEmployee: vi.fn(),
-  createUser: vi.fn(),
-  updateUserRole: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -43,33 +37,26 @@ const employeeWithAccount: EmployeeDetails = {
   },
 } as EmployeeDetails;
 
-describe("EmployeeDrawer read-only contract (/directory/staff)", () => {
+describe("EmployeeDrawer preview contract", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.mocked(getEmployee).mockResolvedValue(activeEmployee);
     vi.mocked(apiAuthMe).mockResolvedValue({ user_id: 10, role_id: 5 });
   });
 
-  it("shows Доступ summary but hides HR/account mutations when readOnly is true", async () => {
-    render(
-      <EmployeeDrawer
-        employeeId="42"
-        open
-        readOnly
-        onClose={vi.fn()}
-      />,
-    );
+  it("shows read-only summary without mutation actions", async () => {
+    render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeInTheDocument();
     });
 
+    expect(screen.getByRole("heading", { name: "Основные сведения" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Текущее назначение" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Доступ" })).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByText("□ Учётная запись Corpsite ещё не создана")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Telegram")).toBeInTheDocument();
 
     expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Перевести" })).not.toBeInTheDocument();
@@ -79,25 +66,43 @@ describe("EmployeeDrawer read-only contract (/directory/staff)", () => {
     expect(screen.getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
   });
 
-  it("allows privileged operator to edit Corpsite role from read-only staff drawer", async () => {
-    vi.mocked(getEmployee).mockResolvedValue(employeeWithAccount);
-    vi.mocked(apiAuthMe).mockResolvedValue({ user_id: 1, role_id: 2, is_privileged: true });
+  it("shows HR card link for personnel admin", async () => {
+    vi.mocked(apiAuthMe).mockResolvedValue({ user_id: 4, role_id: 3, has_personnel_admin: true });
 
-    render(
-      <EmployeeDrawer
-        employeeId="42"
-        open
-        readOnly
-        onClose={vi.fn()}
-      />,
-    );
+    render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("ivanov.ii")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Открыть карточку сотрудника" })).toHaveAttribute(
+        "href",
+        "/directory/personnel/employees/42/card",
+      );
+    });
+  });
+
+  it("hides HR card link for management browse users", async () => {
+    vi.mocked(apiAuthMe).mockResolvedValue({
+      user_id: 10,
+      role_id: 5,
+      show_org_sidebar: true,
+      has_personnel_visibility: true,
     });
 
-    expect(screen.getByText("Руководитель ОВЭиПД")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Изменить роль Corpsite" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Создать доступ к Corpsite" })).not.toBeInTheDocument();
+    render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("link", { name: "Открыть карточку сотрудника" })).not.toBeInTheDocument();
+  });
+
+  it("shows compact account summary when user is linked", async () => {
+    vi.mocked(getEmployee).mockResolvedValue(employeeWithAccount);
+
+    render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/логин ivanov\.ii/)).toBeInTheDocument();
+    });
   });
 });

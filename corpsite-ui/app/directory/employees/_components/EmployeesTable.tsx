@@ -4,6 +4,7 @@
 import Link from "next/link";
 
 import type { EmployeeListItem } from "../_lib/types";
+import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
@@ -179,7 +180,7 @@ export default function EmployeesTable({
                         ) : null}
                         {showCard2Button && !!employeeId ? (
                           <Link
-                            href={`/directory/personnel/employees/${encodeURIComponent(employeeId)}/import-card`}
+                            href={buildEmployeeCardHref(employeeId)}
                             className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                           >
                             Открыть

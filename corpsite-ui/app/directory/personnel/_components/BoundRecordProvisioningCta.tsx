@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { buildImportCardAccountHref } from "./EnrollmentCompletionPanel";
+import { buildEmployeeCardAccessHref } from "@/lib/employeeCardNav";
 
 type Props = {
   employeeId: number;
@@ -19,10 +19,10 @@ export default function BoundRecordProvisioningCta({ employeeId }: Props) {
       </div>
       <div className="flex flex-wrap gap-2">
         <Link
-          href={buildImportCardAccountHref(employeeId)}
+          href={buildEmployeeCardAccessHref(employeeId)}
           className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
         >
-          Открыть карту импорта и доступ
+          Открыть карточку сотрудника
         </Link>
         <Link
           href={`/directory/staff?employeeId=${employeeId}`}

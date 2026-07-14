@@ -658,6 +658,21 @@ export async function getEmployeeImportCard2(employeeId: string | number): Promi
   return apiGetJson(`/directory/personnel/employees/${encodeURIComponent(String(employeeId))}/import-card`);
 }
 
+/** Returns null when no HR import row exists (404) — operational shell still works. */
+export async function getEmployeeImportCard2Optional(
+  employeeId: string | number,
+): Promise<EmployeeImportCard2Detail | null> {
+  const path = `/directory/personnel/employees/${encodeURIComponent(String(employeeId))}/import-card`;
+  const url = resolveApiUrl(path);
+  const res = await fetch(url, { method: "GET", headers: authHeaders(), cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, body, "Не удалось загрузить данные.");
+  }
+  return res.json() as Promise<EmployeeImportCard2Detail>;
+}
+
 export async function saveEmployeeImportCard2(
   employeeId: string | number,
   profile: ImportProfile

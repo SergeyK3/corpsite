@@ -139,7 +139,7 @@ describe("ImportNormalizedRecordDrawer", () => {
     expect(screen.queryByTestId("enroll-wizard")).not.toBeInTheDocument();
   });
 
-  it("shows bound record provisioning CTA with import-card link", () => {
+  it("shows bound record provisioning CTA with employee card link", () => {
     renderDrawer(boundRecord, { canProvisionAccount: true });
 
     expect(
@@ -147,9 +147,9 @@ describe("ImportNormalizedRecordDrawer", () => {
         "Сотрудник уже создан в персонале. Если сотруднику нужен вход в систему, выдайте доступ к Corpsite."
       )
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Открыть карту импорта и доступ" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Открыть карточку сотрудника" })).toHaveAttribute(
       "href",
-      "/directory/personnel/employees/45/import-card?provisionAccount=1"
+      "/directory/personnel/employees/45/card?section=access&provisionAccount=1"
     );
     expect(screen.getByRole("link", { name: "Открыть в «Персонале»" })).toHaveAttribute(
       "href",
@@ -161,7 +161,7 @@ describe("ImportNormalizedRecordDrawer", () => {
   it("hides bound record provisioning CTA for unbound records", () => {
     renderDrawer(baseRecord, { canProvisionAccount: true });
 
-    expect(screen.queryByRole("link", { name: "Открыть карту импорта и доступ" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Открыть карточку сотрудника" })).not.toBeInTheDocument();
   });
 
   it("hides bound record provisioning CTA when provisioning is not allowed", () => {

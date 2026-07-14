@@ -3,6 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 
+import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+
 import {
   formatHrChangeEventDate,
   formatHrChangeEventValue,
@@ -140,7 +142,7 @@ export default function HrChangeEventDrawer({ event, open, onClose }: Props) {
 
           {event.employee_id != null ? (
             <Link
-              href={`/directory/personnel/employees/${event.employee_id}/import-card`}
+              href={buildEmployeeCardHref(event.employee_id)}
               className="inline-flex text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
             >
               Карточка сотрудника

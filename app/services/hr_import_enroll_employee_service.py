@@ -364,6 +364,15 @@ def _validate_record_eligible(
     return full_name, iin_digits
 
 
+def _preview_date_from_value(hire_date: Optional[date]) -> Optional[str]:
+    return hire_date.isoformat() if hire_date is not None else None
+
+
+def _enrollment_event_effective_date(hire_date: Optional[date]) -> date:
+    """employee_events.effective_date is NOT NULL; use hire date when known, else enrollment action date."""
+    return hire_date if hire_date is not None else datetime.now(timezone.utc).date()
+
+
 def _insert_enrolled_event(
     conn: Connection,
     *,
@@ -568,7 +577,7 @@ def enroll_employee_from_normalized_record(
         "org_unit_name": _org_unit_name(conn, request.org_unit_id),
         "position_id": request.position_id,
         "position_name": _position_name(conn, request.position_id),
-        "date_from": (request.date_from or date.today()).isoformat(),
+        "date_from": _preview_date_from_value(request.date_from),
         "employment_rate": float(request.employment_rate if request.employment_rate is not None else 1.0),
         "org_unit_hint": dept_hint,
         "position_hint": pos_hint,
@@ -605,7 +614,7 @@ def enroll_employee_from_normalized_record(
 
     org_unit_id = int(request.org_unit_id)
     position_id = int(request.position_id)
-    hired_on = request.date_from if request.date_from is not None else date.today()
+    hire_date = request.date_from
     rate = float(request.employment_rate if request.employment_rate is not None else 1.0)
 
     org_check = conn.execute(
@@ -648,7 +657,7 @@ def enroll_employee_from_normalized_record(
                 "full_name": full_name,
                 "org_unit_id": org_unit_id,
                 "position_id": position_id,
-                "date_from": hired_on,
+                "date_from": hire_date,
                 "employment_rate": rate,
             },
         ).scalar_one()
@@ -672,7 +681,7 @@ def enroll_employee_from_normalized_record(
         org_unit_id=org_unit_id,
         position_id=position_id,
         employment_rate=rate,
-        effective_date=hired_on,
+        effective_date=_enrollment_event_effective_date(hire_date),
         created_by=created_by,
         metadata=event_metadata,
     )
@@ -702,6 +711,7 @@ def enroll_employee_from_normalized_record(
         full_name=full_name,
     )
 
+    preview["date_from"] = _preview_date_from_value(hire_date)
     preview["org_unit_id"] = org_unit_id
     preview["org_unit_name"] = _org_unit_name(conn, org_unit_id)
     preview["position_id"] = position_id

@@ -4,7 +4,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
+import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
 import {
@@ -249,8 +249,9 @@ export default function PersonnelJournalPageClient() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
+  function openEmployee(id: number) {
+    router.push(buildEmployeeCardHref(id, { section: "history" }));
+  }
 
   const eventType = searchParams.get("event_type") || "";
   const dateFrom = searchParams.get("date_from") || "";
@@ -324,11 +325,6 @@ export default function PersonnelJournalPageClient() {
     }
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "/directory/personnel/journal");
-  }
-
-  function openEmployee(id: number) {
-    setDrawerEmployeeId(String(id));
-    setDrawerOpen(true);
   }
 
   return (
@@ -479,11 +475,6 @@ export default function PersonnelJournalPageClient() {
         </div>
       </div>
 
-      <EmployeeDrawer
-        employeeId={drawerEmployeeId}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
     </div>
   );
 }

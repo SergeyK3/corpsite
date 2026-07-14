@@ -8,9 +8,9 @@ import PersonnelSectionHeader from "./PersonnelSectionHeader";
 
 export default function PersonnelLayoutShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "";
-  const isImportCardPage = /\/directory\/personnel\/employees\/[^/]+\/import-card(?:\/|$)/.test(pathname);
+  const isEmployeeCardPage = /\/directory\/personnel\/employees\/[^/]+\/(?:card|import-card)(?:\/|$)/.test(pathname);
   const isPrintPage = isPersonnelOrderPrintRoute(pathname);
-  const barePage = isImportCardPage || isPrintPage;
+  const barePage = isEmployeeCardPage || isPrintPage;
 
   if (isPrintPage) {
     return <div className="min-h-0 min-w-0">{children}</div>;

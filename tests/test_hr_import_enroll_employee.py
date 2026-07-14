@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
@@ -137,6 +139,185 @@ def test_phase_3i_migration_allows_enrolled_from_import_event_type():
             "chk_employee_events_event_type must include EMPLOYEE_ENROLLED_FROM_IMPORT "
             "(run: alembic upgrade head, revision h7i8j9k0l1m2)"
         )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_dry_run_without_date_from_returns_null_preview(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing — run alembic upgrade head")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Enroll Dry No Date {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(dry_run=True),
+            )
+        assert result.outcome == "ready"
+        assert result.preview.get("date_from") is None
+        assert result.preview["date_from"] != date.today().isoformat()
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_execute_without_date_from_persists_null_employee_date(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Enroll Null Date {suffix}"
+    iin = _test_iin(suffix)
+    batch_id = None
+    employee_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            pos_id = _create_position(conn, name=f"pytest_enroll_null_date_{suffix}")
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(
+                    dry_run=False,
+                    org_unit_id=int(seed["unit_id"]),
+                    position_id=pos_id,
+                ),
+            )
+            employee_id = int(result.employee_id)
+            stored_date_from = conn.execute(
+                text("SELECT date_from FROM public.employees WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            ).scalar_one()
+            enrolled_event = conn.execute(
+                text(
+                    """
+                    SELECT effective_date, metadata
+                    FROM public.employee_events
+                    WHERE employee_id = :employee_id
+                      AND event_type = :event_type
+                    ORDER BY event_id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"employee_id": employee_id, "event_type": EVENT_TYPE_ENROLLED_FROM_IMPORT},
+            ).mappings().first()
+
+        assert result.created is True
+        assert result.preview.get("date_from") is None
+        assert stored_date_from is None
+        assert enrolled_event is not None
+        assert enrolled_event["effective_date"] is not None
+        metadata = enrolled_event["metadata"]
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata)
+        assert "date_from" not in (metadata or {})
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if employee_id:
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_identities WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_enroll_execute_with_date_from_persists_provided_date(seed, tmp_path: Path):
+    _require_phase_3g()
+    if not _phase_3i_available():
+        pytest.skip("ADR-039 Phase 3I migration missing")
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Enroll With Date {suffix}"
+    iin = _test_iin(suffix)
+    hire_date = date(2024, 3, 15)
+    batch_id = None
+    employee_id = None
+
+    try:
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=iin)
+        with engine.begin() as conn:
+            pos_id = _create_position(conn, name=f"pytest_enroll_with_date_{suffix}")
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _first_normalized_record_id(conn, row_id)
+            result = enroll_employee_from_normalized_record(
+                conn,
+                record_id,
+                created_by=int(seed["initiator_user_id"]),
+                request=EnrollEmployeeRequest(
+                    dry_run=False,
+                    org_unit_id=int(seed["unit_id"]),
+                    position_id=pos_id,
+                    date_from=hire_date,
+                ),
+            )
+            employee_id = int(result.employee_id)
+            stored_date_from = conn.execute(
+                text("SELECT date_from FROM public.employees WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            ).scalar_one()
+            enrolled_event = conn.execute(
+                text(
+                    """
+                    SELECT effective_date
+                    FROM public.employee_events
+                    WHERE employee_id = :employee_id
+                      AND event_type = :event_type
+                    ORDER BY event_id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"employee_id": employee_id, "event_type": EVENT_TYPE_ENROLLED_FROM_IMPORT},
+            ).mappings().first()
+
+        assert result.created is True
+        assert result.preview.get("date_from") == hire_date.isoformat()
+        assert stored_date_from == hire_date
+        assert enrolled_event is not None
+        assert enrolled_event["effective_date"] == hire_date
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if employee_id:
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(
+                    text("DELETE FROM public.employee_identities WHERE employee_id = :id"),
+                    {"id": employee_id},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": employee_id})
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

@@ -2,8 +2,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 
-import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
+import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import {
   countDocumentsByExpiryStatus,
   DOCUMENT_QUICK_FILTERS,
@@ -87,8 +88,6 @@ export default function ProfessionalDocumentsPageClient() {
   const [specialtyGroups, setSpecialtyGroups] = React.useState<MedicalSpecialtyGroupRow[]>([]);
   const [specialties, setSpecialties] = React.useState<MedicalSpecialtyRow[]>([]);
 
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [formMode, setFormMode] = React.useState<"create" | "edit">("create");
@@ -675,18 +674,14 @@ export default function ProfessionalDocumentsPageClient() {
                           >
                             Изменить
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDrawerEmployeeId(String(row.employee_id));
-                              setDrawerOpen(true);
-                            }}
-                            className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                          <Link
+                            href={buildEmployeeCardHref(row.employee_id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-1 inline-block rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
                             title="Карточка сотрудника"
                           >
                             Сотрудник
-                          </button>
+                          </Link>
                         </td>
                       </tr>
                     );
@@ -697,11 +692,6 @@ export default function ProfessionalDocumentsPageClient() {
         </div>
       </div>
 
-      <EmployeeDrawer
-        employeeId={drawerEmployeeId}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
 
       <EmployeeDocumentViewModal
         open={viewOpen}

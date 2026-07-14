@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 
 import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
+import { buildEmployeeCardAccessHref } from "@/lib/employeeCardNav";
 import type { EnrollEmployeeResponse, NormalizedRecord } from "../_lib/importApi.client";
 
 type Props = {
@@ -55,9 +56,9 @@ function CompletedItem({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** @deprecated Use buildEmployeeCardAccessHref from @/lib/employeeCardNav */
 export function buildImportCardAccountHref(employeeId: number | string): string {
-  const id = encodeURIComponent(String(employeeId));
-  return `/directory/personnel/employees/${id}/import-card?provisionAccount=1`;
+  return buildEmployeeCardAccessHref(employeeId);
 }
 
 export default function EnrollmentCompletionPanel({
@@ -73,10 +74,10 @@ export default function EnrollmentCompletionPanel({
     <section className="space-y-4 rounded-lg border border-green-200 bg-green-50/60 p-4 dark:border-green-900 dark:bg-green-950/30">
       <div>
         <h3 className="text-sm font-semibold text-green-900 dark:text-green-100">
-          ✓ Employee создан · Employee ID {employeeId}
+          ✓ Сотрудник создан · ID {employeeId}
         </h3>
         <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-          HR Import → Enrollment → Operational Employee завершены. Следующий шаг жизненного цикла — доступ к
+          Импорт → Зачисление → Добавление в персонал завершены. Следующий шаг жизненного цикла — доступ к
           Corpsite.
         </p>
       </div>
@@ -84,12 +85,12 @@ export default function EnrollmentCompletionPanel({
       <div className="rounded-lg border border-green-200/80 bg-white/70 p-3 dark:border-green-900/60 dark:bg-zinc-950/40">
         <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Выполнено</div>
         <ul className="mt-2 space-y-1">
-          <CompletedItem>Operational Employee</CompletedItem>
+          <CompletedItem>Сотрудник добавлен в персонал</CompletedItem>
           <CompletedItem>
             Привязка HR-записей
             {linkedCount > 0 ? ` (${linkedCount})` : ""}
           </CompletedItem>
-          <CompletedItem>Контакт operational</CompletedItem>
+          <CompletedItem>Контакт сотрудника</CompletedItem>
         </ul>
       </div>
 
@@ -107,16 +108,16 @@ export default function EnrollmentCompletionPanel({
 
       <div className="flex flex-wrap gap-2">
         <Link
+          href={buildEmployeeCardAccessHref(employeeId)}
+          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          Открыть карточку сотрудника
+        </Link>
+        <Link
           href={`/directory/staff?employeeId=${employeeId}`}
           className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
         >
-          Открыть в «Персонал»
-        </Link>
-        <Link
-          href={buildImportCardAccountHref(employeeId)}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
-        >
-          Карта импорта и доступ
+          Быстрый просмотр в «Персонал»
         </Link>
       </div>
 

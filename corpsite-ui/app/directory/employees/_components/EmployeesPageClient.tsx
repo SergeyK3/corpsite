@@ -584,12 +584,7 @@ export default function EmployeesPageClient(props: Props) {
         employeeId={drawerEmployeeId}
         open={drawerOpen}
         onClose={handleCloseDrawer}
-        onSaved={async () => {
-          await loadItems();
-          setEmployeeRefreshToken((t) => t + 1);
-        }}
         refreshToken={employeeRefreshToken}
-        readOnly={readOnly}
       />
 
       {!readOnly ? (
