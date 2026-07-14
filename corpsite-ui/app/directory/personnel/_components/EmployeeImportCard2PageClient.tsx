@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
+import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
 import {
   EMPLOYEE_CARD_DEFAULT_SECTION,
   parseEmployeeCardSection,
@@ -59,7 +60,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
     } catch (e) {
       setEmployee(null);
       setImportDetail(null);
-      setShellError(mapApiErrorToMessage(e, "Не удалось загрузить карточку сотрудника."));
+      setShellError(mapApiErrorToMessage(e, `Не удалось загрузить ${HR_DOSSIER_TITLE.toLowerCase()}.`));
     } finally {
       setShellLoading(false);
     }
@@ -94,7 +95,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{displayName}</h1>
-            <p className="mt-0.5 text-xs text-zinc-500">Карточка сотрудника</p>
+            <p className="mt-0.5 text-xs text-zinc-500">{HR_DOSSIER_TITLE}</p>
           </div>
           <button
             type="button"
@@ -116,7 +117,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
 
         {!hasImportRow && !shellLoading && !shellError && employee ? (
           <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100">
-            Кадровое портфолио не привязано к HR-импорту. Операционные разделы карточки доступны.
+            Кадровое портфолио не привязано к HR-импорту. Операционные разделы досье доступны.
           </div>
         ) : null}
 
@@ -127,7 +128,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
         ) : null}
 
         {shellLoading ? (
-          <div className="py-16 text-center text-sm text-zinc-500">Загрузка карточки сотрудника…</div>
+          <div className="py-16 text-center text-sm text-zinc-500">Загрузка {HR_DOSSIER_TITLE.toLowerCase()}…</div>
         ) : employee ? (
           <>
             <EmployeeImportCardSectionNav />

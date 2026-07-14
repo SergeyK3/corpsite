@@ -14,6 +14,7 @@ import {
   type PromotionItemResult,
   type PromotionResponse,
 } from "../_lib/importApi.client";
+import { HR_DOSSIER_PLURAL } from "@/lib/personnelCardTerminology";
 import {
   buildBlockerReasonLines,
   buildDryRunSummary,
@@ -217,7 +218,7 @@ export default function NormalizedRecordsPromotionPanel({
 
     if (
       !window.confirm(
-        `Вы собираетесь записать утверждённые записи в кадровые карточки сотрудников.\n\n` +
+        `Вы собираетесь записать утверждённые записи в ${HR_DOSSIER_PLURAL}.\n\n` +
           `Запрошено: ${requested}\n` +
           `Будет промотировано: ${wouldPromote > 0 ? wouldPromote : "неизвестно (dry-run не выполнялся)"}\n\n` +
           `Это действие необратимо. Записи получат статус «Промотировано».\n\n` +
@@ -273,7 +274,7 @@ export default function NormalizedRecordsPromotionPanel({
             Promotion (ADR-039 Phase 3F)
           </h2>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Запись утверждённых нормализованных записей в кадровые карточки сотрудников.
+            Запись утверждённых нормализованных записей в {HR_DOSSIER_PLURAL}.
             Сначала выполните dry-run, затем подтвердите реальный promote.
           </p>
         </div>
@@ -377,7 +378,7 @@ export default function NormalizedRecordsPromotionPanel({
 
       {promotionResult && !isDryRunResult ? (
         <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
-          <div className="font-medium">Promotion выполнен — данные записаны в кадровые карточки</div>
+          <div className="font-medium">Promotion выполнен — данные записаны в {HR_DOSSIER_PLURAL}</div>
           <div className="mt-3 grid gap-2 grid-cols-2 sm:grid-cols-4">
             <ResultTile label="Запрошено" value={promotionResult.requested} />
             <ResultTile label="Промотировано" value={promotionResult.promoted} />

@@ -6,6 +6,7 @@ import {
   EMPLOYEE_CARD_SECTIONS,
   type EmployeeCardSectionDef,
 } from "@/lib/employeeCardNav";
+import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
 
 export type EmployeeImportCardSectionDef = {
   id: string;
@@ -83,7 +84,7 @@ export function EmployeeImportCardSectionNav({
 
   return (
     <nav
-      aria-label="Разделы карточки сотрудника"
+      aria-label={`Разделы ${HR_DOSSIER_TITLE.toLowerCase()}`}
       className={[
         "sticky top-0 z-[1] -mx-4 mb-5 border-b border-zinc-200 bg-white/95 px-4 py-2 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/95 sm:-mx-6 sm:px-6",
         className,

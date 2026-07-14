@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { buildEmployeeCardAccessHref } from "@/lib/employeeCardNav";
+import { OPEN_HR_DOSSIER_CTA, OPEN_WORKING_EMPLOYEE_CARD_CTA } from "@/lib/personnelCardTerminology";
 
 type Props = {
   employeeId: number;
@@ -22,13 +23,13 @@ export default function BoundRecordProvisioningCta({ employeeId }: Props) {
           href={buildEmployeeCardAccessHref(employeeId)}
           className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
         >
-          Открыть карточку сотрудника
+          {OPEN_HR_DOSSIER_CTA}
         </Link>
         <Link
           href={`/directory/staff?employeeId=${employeeId}`}
           className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
         >
-          Открыть в «Персонале»
+          {OPEN_WORKING_EMPLOYEE_CARD_CTA}
         </Link>
       </div>
     </section>

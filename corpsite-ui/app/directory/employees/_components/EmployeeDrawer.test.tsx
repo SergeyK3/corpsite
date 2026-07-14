@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeDrawer from "./EmployeeDrawer";
+import { OPEN_HR_DOSSIER_CTA, WORKING_EMPLOYEE_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import { getEmployee } from "../_lib/api.client";
 import { apiAuthMe } from "@/lib/api";
 import type { EmployeeDetails } from "../_lib/types";
@@ -51,7 +52,8 @@ describe("EmployeeDrawer preview contract", () => {
     render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: WORKING_EMPLOYEE_CARD_TITLE })).toBeInTheDocument();
+      expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
     });
 
     expect(screen.getByRole("heading", { name: "Основные сведения" })).toBeInTheDocument();
@@ -72,7 +74,7 @@ describe("EmployeeDrawer preview contract", () => {
     render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Открыть карточку сотрудника" })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: OPEN_HR_DOSSIER_CTA })).toHaveAttribute(
         "href",
         "/directory/personnel/employees/42/card",
       );
@@ -90,10 +92,11 @@ describe("EmployeeDrawer preview contract", () => {
     render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: WORKING_EMPLOYEE_CARD_TITLE })).toBeInTheDocument();
+      expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
     });
 
-    expect(screen.queryByRole("link", { name: "Открыть карточку сотрудника" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
   });
 
   it("shows compact account summary when user is linked", async () => {

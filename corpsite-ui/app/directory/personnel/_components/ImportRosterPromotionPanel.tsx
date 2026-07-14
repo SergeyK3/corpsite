@@ -8,6 +8,7 @@ import {
   type RosterPromotionItem,
   type RosterPromotionOutcome,
 } from "../_lib/importApi.client";
+import { HR_DOSSIER_PLURAL, HR_DOSSIER_PLURAL_TITLE } from "@/lib/personnelCardTerminology";
 
 const OUTCOME_LABELS: Record<RosterPromotionOutcome, string> = {
   would_create: "Будет создан",
@@ -115,7 +116,7 @@ export default function ImportRosterPromotionPanel({ batchId }: Props) {
             onClick={applyPromotion}
             className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            Создать/обновить карточки
+            Создать/обновить {HR_DOSSIER_PLURAL}
           </button>
         </div>
       </div>
@@ -128,7 +129,7 @@ export default function ImportRosterPromotionPanel({ batchId }: Props) {
 
       {applied ? (
         <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
-          Карточки сотрудников обновлены. Можно переходить к promotion документов.
+          {HR_DOSSIER_PLURAL_TITLE} обновлены. Можно переходить к promotion документов.
         </div>
       ) : null}
 

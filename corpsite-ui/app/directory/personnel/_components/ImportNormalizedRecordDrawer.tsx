@@ -23,6 +23,7 @@ import {
   type NormalizedRecordReviewStatus,
 } from "../_lib/importApi.client";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
+import { MIGRATION_COMMIT_CTA_LABEL } from "../_lib/personnelMigrationHrLabels";
 import {
   buildMigrationCandidateId,
   buildMigrationSessionHref,
@@ -691,7 +692,7 @@ export default function ImportNormalizedRecordDrawer({
                   href={migrationHref}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
-                  Перенести в кадровую карточку
+                  {MIGRATION_COMMIT_CTA_LABEL}
                 </Link>
               ) : null}
               {canApprove ? (

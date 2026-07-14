@@ -12,7 +12,7 @@ import {
 } from "@/lib/taskOrgFilters";
 import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
-import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
+import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
 
 import {
   createPersonnelOrderItem,
@@ -607,7 +607,7 @@ export default function PersonnelOrderItemEditor({
                   }
                 >
                   {pendingNewEmployeeAllowed
-                    ? "Карточка сотрудника будет создана позже. Пункт сохранится без привязки к employee_id."
+                    ? `${HR_DOSSIER_TITLE} будет создана позже. Пункт сохранится без привязки к employee_id.`
                     : "Сброс сотрудника в сохранённом пункте пока не поддерживается."}
                 </span>
               </span>

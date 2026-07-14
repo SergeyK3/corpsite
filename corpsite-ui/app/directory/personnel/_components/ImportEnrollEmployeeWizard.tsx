@@ -6,6 +6,10 @@ import Link from "next/link";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import {
+  OPEN_HR_DOSSIER_CTA,
+  WORKING_QUICK_VIEW_MODE,
+} from "@/lib/personnelCardTerminology";
 import { fetchDepartmentGroups, type DepartmentGroupRow } from "@/lib/orgScope";
 import {
   isOrgUnitAllowedForGroup,
@@ -629,13 +633,13 @@ export default function ImportEnrollEmployeeWizard({
               href={buildEmployeeCardHref(primary.employee_id)}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
             >
-              Карточка сотрудника
+              {OPEN_HR_DOSSIER_CTA}
             </Link>
             <Link
               href={`/directory/staff?employeeId=${primary.employee_id}`}
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
             >
-              Быстрый просмотр
+              {WORKING_QUICK_VIEW_MODE}
             </Link>
             <button
               type="button"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
+import { HR_DOSSIER_ACCUSATIVE } from "@/lib/personnelCardTerminology";
 
 type BreadcrumbSegment = {
   label: string;
@@ -93,7 +94,7 @@ export function MigrationForbiddenPanel() {
     <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
       <p className="font-medium">Недостаточно прав</p>
       <p className="mt-2">
-        Перенос данных в кадровую карточку доступен только уполномоченным HR-операторам. Если вам нужен
+        Перенос данных в {HR_DOSSIER_ACCUSATIVE} доступен только уполномоченным HR-операторам. Если вам нужен
         доступ, обратитесь к системному администратору.
       </p>
     </div>

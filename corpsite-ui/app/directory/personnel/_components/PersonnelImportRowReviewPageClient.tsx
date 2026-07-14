@@ -12,6 +12,7 @@ import {
   type RowReviewDetail,
 } from "../_lib/importApi.client";
 import { calcRecordValidityNote } from "../_lib/importProfileEditor";
+import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
 
 const EDUCATION_SECTION_LABELS: Record<string, string> = {
   basic: "Базовое образование",
@@ -224,7 +225,7 @@ export default function PersonnelImportRowReviewPageClient({
 
       {error ? <div className="mb-4 text-sm text-red-600">{error}</div> : null}
       {loading || !detail ? (
-        <div className="py-12 text-center text-zinc-500">Загрузка карточки…</div>
+        <div className="py-12 text-center text-zinc-500">Загрузка {IMPORT_RECORD_CARD_TITLE.toLowerCase()}…</div>
       ) : (
         <div className="space-y-4">
           <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">

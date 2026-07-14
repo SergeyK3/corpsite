@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import { OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
 
 import {
   formatHrChangeEventDate,
@@ -145,7 +146,7 @@ export default function HrChangeEventDrawer({ event, open, onClose }: Props) {
               href={buildEmployeeCardHref(event.employee_id)}
               className="inline-flex text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
             >
-              Карточка сотрудника
+              {OPEN_HR_DOSSIER_CTA}
             </Link>
           ) : null}
         </div>

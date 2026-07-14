@@ -2,6 +2,7 @@
 "use client";
 
 import { MIGRATION_ROADMAP_ITEMS } from "../_lib/personnelMigrationHrLabels";
+import { HR_DOSSIER_GENITIVE } from "@/lib/personnelCardTerminology";
 
 function roadmapMarker(status: (typeof MIGRATION_ROADMAP_ITEMS)[number]["status"]): string {
   switch (status) {
@@ -28,7 +29,7 @@ export default function MigrationRoadmapPanel() {
     >
       <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Будут доступны</h2>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-        Инструмент переноса данных будет расширяться на все основные разделы кадровой карточки.
+        Инструмент переноса данных будет расширяться на все основные разделы {HR_DOSSIER_GENITIVE}.
       </p>
       <ul className="mt-4 grid gap-2 sm:grid-cols-2">
         {MIGRATION_ROADMAP_ITEMS.map((item) => (

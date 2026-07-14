@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import EnrollmentCompletionPanel, {
   buildImportCardAccountHref,
 } from "./EnrollmentCompletionPanel";
+import { OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
 import type { EnrollEmployeeResponse, NormalizedRecord } from "../_lib/importApi.client";
 
 vi.mock("../../employees/_components/EmployeeAccountSections", () => ({
@@ -124,7 +125,7 @@ describe("EnrollmentCompletionPanel", () => {
     expect(buildImportCardAccountHref(100)).toBe(
       "/directory/personnel/employees/100/card?section=access&provisionAccount=1"
     );
-    expect(screen.getByRole("link", { name: "Открыть карточку сотрудника" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: OPEN_HR_DOSSIER_CTA })).toHaveAttribute(
       "href",
       "/directory/personnel/employees/100/card?section=access&provisionAccount=1"
     );

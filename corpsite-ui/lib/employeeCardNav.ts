@@ -1,5 +1,5 @@
 // FILE: corpsite-ui/lib/employeeCardNav.ts
-/** Navigation helpers for the unified HR Employee Card (user-facing «Карточка сотрудника»). */
+/** Navigation helpers for the unified HR dossier page (user-facing «Кадровая карточка-досье»). */
 
 export type EmployeeCardSectionId =
   | "general"

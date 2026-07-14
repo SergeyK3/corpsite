@@ -7,6 +7,12 @@ import { useCallback, useEffect, useState } from "react";
 import { apiAuthMe } from "@/lib/api";
 import { canSeeHrProcessesNav } from "@/lib/personnelNav";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import {
+  HR_DOSSIER_LINK_TEXT,
+  OPEN_HR_DOSSIER_CTA,
+  WORKING_EMPLOYEE_CARD_TITLE,
+  WORKING_QUICK_VIEW_MODE,
+} from "@/lib/personnelCardTerminology";
 import type { MeInfo } from "@/lib/types";
 import type { EmployeeDetails } from "../_lib/types";
 import { getEmployee, mapApiErrorToMessage } from "../_lib/api.client";
@@ -156,10 +162,13 @@ export default function EmployeeDrawer({
         <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5 dark:border-zinc-800">
           <div className="min-w-0">
             <h2 className="truncate text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
-              {String(displayFio)}
+              {WORKING_EMPLOYEE_CARD_TITLE}
             </h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {details ? `Таб. № ${tabNo}` : "Быстрый просмотр"}
+            <p className="mt-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              {String(displayFio)}
+            </p>
+            <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
+              {details ? `Таб. № ${tabNo}` : WORKING_QUICK_VIEW_MODE}
             </p>
           </div>
 
@@ -170,7 +179,7 @@ export default function EmployeeDrawer({
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
                 onClick={onClose}
               >
-                Открыть карточку сотрудника
+                {OPEN_HR_DOSSIER_CTA}
               </Link>
             ) : null}
             <button
@@ -248,7 +257,7 @@ export default function EmployeeDrawer({
                 <p className="text-xs text-zinc-500">
                   Для кадровых действий и полной истории откройте{" "}
                   <Link href={employeeCardHref} className="font-medium text-blue-700 hover:underline dark:text-blue-300">
-                    карточку сотрудника
+                    {HR_DOSSIER_LINK_TEXT}
                   </Link>
                   .
                 </p>

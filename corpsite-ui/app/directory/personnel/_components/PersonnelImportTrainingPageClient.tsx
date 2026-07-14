@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import ImportEducationProfileCardModal from "./ImportEducationProfileCardModal";
+import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import {
   departmentFilterOptionValue,
   getDepartmentRecodingOptions,
@@ -96,7 +97,7 @@ export default function PersonnelImportTrainingPageClient({ batchId }: { batchId
           Образовательные профили сотрудников из импорта
         </h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Одна строка = один сотрудник. Обучение, сертификаты и категории — внутри карточки (staging,
+          Одна строка = один сотрудник. Обучение, сертификаты и категории — внутри {IMPORT_RECORD_CARD_TITLE.toLowerCase()} (staging,
           без auto-apply).
         </p>
       </div>

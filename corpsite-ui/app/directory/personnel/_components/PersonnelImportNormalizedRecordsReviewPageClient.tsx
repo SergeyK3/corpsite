@@ -29,6 +29,10 @@ import {
   type NormalizedRecordSummary,
   type RepairBatchEmployeeBindingsResult,
 } from "../_lib/importApi.client";
+import {
+  HR_DOSSIER_ACCUSATIVE,
+  IMPORT_RECORD_CARD_TITLE,
+} from "@/lib/personnelCardTerminology";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 import { apiAuthMe } from "@/lib/api";
 import { isPrivilegedOperator } from "@/lib/adminNav";
@@ -98,19 +102,19 @@ function NormalizedRecordsReviewHelpPanel({ onCollapse }: { onCollapse: () => vo
       <p className="mt-4 font-medium text-zinc-900 dark:text-zinc-100">Порядок работы:</p>
       <ol className="mt-2 list-decimal space-y-1 pl-5">
         <li>Нажмите на строку записи.</li>
-        <li>В открывшейся карточке проверьте данные.</li>
+        <li>В {IMPORT_RECORD_CARD_TITLE.toLowerCase()} проверьте данные.</li>
         <li>Сверьте запись с кадровыми документами сотрудника.</li>
         <li>При корректных данных нажмите «Утвердить».</li>
         <li>При ошибке нажмите «Отклонить».</li>
         <li>Если требуется повторная проверка — «Вернуть в ожидание».</li>
         <li>После утверждения записей выберите импорт и выполните Dry Run promotion.</li>
-        <li>Если dry-run успешен — подтвердите Promote для записи в кадровую карточку.</li>
+        <li>Если dry-run успешен — подтвердите Promote для записи в {HR_DOSSIER_ACCUSATIVE}.</li>
       </ol>
 
       <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         <p className="font-medium">Важно:</p>
         <p className="mt-1 leading-relaxed">
-          Утверждение на этом этапе НЕ записывает данные в кадровую карточку сотрудника. Для записи
+          Утверждение на этом этапе НЕ записывает данные в {HR_DOSSIER_ACCUSATIVE}. Для записи
           используйте блок Promotion: сначала Dry Run, затем Promote с подтверждением.
         </p>
       </div>

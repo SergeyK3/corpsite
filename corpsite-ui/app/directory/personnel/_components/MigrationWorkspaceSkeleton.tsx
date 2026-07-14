@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { NormalizedRecord } from "../_lib/importApi.client";
 import { migrationCandidateSummary } from "../_lib/personnelMigrationCandidates";
 import type { MigrationRunItem } from "../_lib/personnelMigrationApi.client";
+import { HR_DOSSIER_GENITIVE } from "@/lib/personnelCardTerminology";
 
 type MigrationWorkspaceSkeletonProps = {
   record: NormalizedRecord | null;
@@ -79,7 +80,7 @@ export default function MigrationWorkspaceSkeleton({
 
         <Panel title="Personnel Card" testId="migration-panel-personnel">
           <p className="rounded-lg border border-dashed border-zinc-300 px-3 py-6 text-center text-xs dark:border-zinc-700">
-            Целевые поля кадровой карточки — PMF-4E
+            Целевые поля {HR_DOSSIER_GENITIVE} — PMF-4E
           </p>
         </Panel>
       </div>

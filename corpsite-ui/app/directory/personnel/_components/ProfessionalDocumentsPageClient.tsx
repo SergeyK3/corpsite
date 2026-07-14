@@ -5,6 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import { OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
 import {
   countDocumentsByExpiryStatus,
   DOCUMENT_QUICK_FILTERS,
@@ -678,7 +679,7 @@ export default function ProfessionalDocumentsPageClient() {
                             href={buildEmployeeCardHref(row.employee_id)}
                             onClick={(e) => e.stopPropagation()}
                             className="ml-1 inline-block rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                            title="Карточка сотрудника"
+                            title={OPEN_HR_DOSSIER_CTA}
                           >
                             Сотрудник
                           </Link>

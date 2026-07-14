@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { EmployeeListItem } from "../_lib/types";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import { OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
@@ -181,6 +182,8 @@ export default function EmployeesTable({
                         {showCard2Button && !!employeeId ? (
                           <Link
                             href={buildEmployeeCardHref(employeeId)}
+                            title={OPEN_HR_DOSSIER_CTA}
+                            aria-label={OPEN_HR_DOSSIER_CTA}
                             className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                           >
                             Открыть

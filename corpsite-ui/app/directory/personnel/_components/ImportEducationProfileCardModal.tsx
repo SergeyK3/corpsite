@@ -13,6 +13,7 @@ import {
   type ImportProfile,
 } from "../_lib/importApi.client";
 import { extractEditableSectionsOverride, normalizeEditableProfile, validateEditableProfile } from "../_lib/importProfileEditor";
+import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
 
 type Props = {
   batchId: number;
@@ -116,7 +117,7 @@ export default function ImportEducationProfileCardModal({ batchId, detail, onClo
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-                {detail.full_name || "Карточка сотрудника"}
+                {detail.full_name || IMPORT_RECORD_CARD_TITLE}
               </h2>
               <p className="text-sm text-zinc-500">
                 staging · rows {detail.source_row_ids?.join(", ") ?? detail.row_id}

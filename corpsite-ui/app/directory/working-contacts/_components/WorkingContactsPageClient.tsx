@@ -7,6 +7,7 @@ import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiFetchJson } from "@/lib/api";
 import { formatThrownError, recordStatusLabel, uiFieldLabel } from "@/lib/i18n";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
+import { WORKING_EMPLOYEE_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import WorkingContactsTable from "./WorkingContactsTable";
 
 type WorkingContactItem = {
@@ -141,7 +142,7 @@ function WorkingContactDrawer({ open, item, onClose }: WorkingContactDrawerProps
         <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
           <div>
             <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">Рабочий контакт</h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Карточка сотрудника</p>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{WORKING_EMPLOYEE_CARD_TITLE}</p>
           </div>
 
           <button

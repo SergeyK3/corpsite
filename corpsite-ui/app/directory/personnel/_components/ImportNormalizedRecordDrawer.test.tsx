@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ImportEnrollEmployeeWizard from "./ImportEnrollEmployeeWizard";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
+import { MIGRATION_COMMIT_CTA_LABEL } from "../_lib/personnelMigrationHrLabels";
+import { OPEN_HR_DOSSIER_CTA, OPEN_WORKING_EMPLOYEE_CARD_CTA } from "@/lib/personnelCardTerminology";
 import type { NormalizedRecord } from "../_lib/importApi.client";
 
 vi.mock("./ImportEnrollEmployeeWizard", () => ({
@@ -147,11 +149,11 @@ describe("ImportNormalizedRecordDrawer", () => {
         "Сотрудник уже создан в персонале. Если сотруднику нужен вход в систему, выдайте доступ к Corpsite."
       )
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Открыть карточку сотрудника" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: OPEN_HR_DOSSIER_CTA })).toHaveAttribute(
       "href",
       "/directory/personnel/employees/45/card?section=access&provisionAccount=1"
     );
-    expect(screen.getByRole("link", { name: "Открыть в «Персонале»" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: OPEN_WORKING_EMPLOYEE_CARD_CTA })).toHaveAttribute(
       "href",
       "/directory/staff?employeeId=45"
     );
@@ -161,7 +163,7 @@ describe("ImportNormalizedRecordDrawer", () => {
   it("hides bound record provisioning CTA for unbound records", () => {
     renderDrawer(baseRecord, { canProvisionAccount: true });
 
-    expect(screen.queryByRole("link", { name: "Открыть карточку сотрудника" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
   });
 
   it("hides bound record provisioning CTA when provisioning is not allowed", () => {
@@ -178,7 +180,7 @@ describe("ImportNormalizedRecordDrawer", () => {
   it("shows migration CTA for approved bound education/training records", () => {
     renderDrawer(approvedBoundRecord);
 
-    const link = screen.getByRole("link", { name: "Перенести в кадровую карточку" });
+    const link = screen.getByRole("link", { name: MIGRATION_COMMIT_CTA_LABEL });
     expect(link).toHaveAttribute(
       "href",
       "/directory/personnel/migration/education/45?candidate_id=education%3Anormalized_record%3A42&source=review",
@@ -187,6 +189,6 @@ describe("ImportNormalizedRecordDrawer", () => {
 
   it("hides migration CTA for pending records", () => {
     renderDrawer(baseRecord);
-    expect(screen.queryByRole("link", { name: "Перенести в кадровую карточку" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: MIGRATION_COMMIT_CTA_LABEL })).not.toBeInTheDocument();
   });
 });

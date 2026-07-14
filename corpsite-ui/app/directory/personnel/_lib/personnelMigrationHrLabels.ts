@@ -1,11 +1,17 @@
 // PMF-4B.1 — HR-facing copy for Migration Wizard (no technical terms).
 
+import {
+  HR_DOSSIER_ACCUSATIVE,
+  HR_DOSSIER_GENITIVE,
+  WORKING_EMPLOYEE_CARD_TITLE,
+} from "@/lib/personnelCardTerminology";
+
 import type { MigrationDomainRow } from "./personnelMigrationApi.client";
 
-export const MIGRATION_HERO_TITLE = "Перенос проверенных данных в кадровую карточку";
+export const MIGRATION_HERO_TITLE = `Перенос проверенных данных в ${HR_DOSSIER_ACCUSATIVE}`;
 
 export const MIGRATION_HERO_DESCRIPTION =
-  "Используйте этот раздел после проверки импортированных записей. Здесь вы переносите одобренные данные из импорта в постоянную кадровую карточку сотрудника.";
+  `Используйте этот раздел после проверки импортированных записей. Здесь вы переносите одобренные данные из импорта в постоянную ${HR_DOSSIER_ACCUSATIVE}.`;
 
 export const MIGRATION_REVIEW_LINK_HREF = "/directory/personnel/import/review";
 
@@ -22,8 +28,8 @@ export type MigrationProcessStep = {
 export const MIGRATION_PROCESS_STEPS: MigrationProcessStep[] = [
   { id: "import", title: "Импорт", href: "/directory/personnel/import" },
   { id: "review", title: "Проверка записей", href: MIGRATION_REVIEW_LINK_HREF },
-  { id: "transfer", title: "Перенос в кадровую карточку", href: null },
-  { id: "personal_file", title: "Личная карточка сотрудника", href: "/directory/staff" },
+  { id: "transfer", title: `Перенос в ${HR_DOSSIER_ACCUSATIVE}`, href: null },
+  { id: "personal_file", title: WORKING_EMPLOYEE_CARD_TITLE, href: "/directory/staff" },
 ];
 
 export const MIGRATION_CURRENT_STEP_ID: MigrationProcessStepId = "transfer";
@@ -51,7 +57,7 @@ export const MIGRATION_NEXT_STEPS: MigrationNextStep[] = [
   {
     number: 3,
     title: "Подтвердите перенос",
-    description: "Проверьте данные и зафиксируйте их в кадровой карточке.",
+    description: `Проверьте данные и зафиксируйте их в ${HR_DOSSIER_GENITIVE}.`,
     available: false,
   },
 ];
@@ -221,9 +227,9 @@ export function migrationHrEmployeeNotFound(): string {
 export const MIGRATION_COMMIT_CONFIRM_TITLE = "Подтвердите перенос";
 
 export const MIGRATION_COMMIT_CONFIRM_MESSAGE =
-  "Запись будет добавлена в кадровую карточку сотрудника. После переноса она станет частью кадровых данных.";
+  `Запись будет добавлена в ${HR_DOSSIER_ACCUSATIVE}. После переноса она станет частью кадровых данных.`;
 
-export const MIGRATION_COMMIT_CTA_LABEL = "Перенести в кадровую карточку";
+export const MIGRATION_COMMIT_CTA_LABEL = `Перенести в ${HR_DOSSIER_ACCUSATIVE}`;
 
 export const MIGRATION_COMMIT_CONFIRM_BUTTON = "Подтвердить перенос";
 
@@ -232,7 +238,7 @@ export const MIGRATION_COMMIT_CANCEL_BUTTON = "Отмена";
 export const MIGRATION_COMMIT_SUCCESS_TITLE = "Запись перенесена";
 
 export const MIGRATION_COMMIT_SUCCESS_MESSAGE =
-  "Данные добавлены в кадровую карточку сотрудника и теперь являются частью кадровых сведений.";
+  `Данные добавлены в ${HR_DOSSIER_ACCUSATIVE} и теперь являются частью кадровых сведений.`;
 
 export const MIGRATION_REVIEW_SUMMARY_TITLE = "Проверка перед переносом";
 

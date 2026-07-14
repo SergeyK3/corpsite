@@ -130,7 +130,7 @@ export default function EmployeeCardOrdersSection({ employeeId }: Props) {
 
       <p className="text-xs text-zinc-500">
         Кадровые действия (перевод, увольнение, совмещение) выполняются через приказ и не изменяют данные
-        сотрудника напрямую из этой карточки.
+        сотрудника напрямую из этого досье.
       </p>
     </div>
   );

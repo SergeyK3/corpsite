@@ -8,6 +8,7 @@ import type { EmployeeDTO, EmployeesResponse } from "../../employees/_lib/types"
 
 import EmployeeDrawer from "../../employees/_components/EmployeeDrawer";
 import { apiFetchJson } from "../../../../lib/api";
+import { OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
 
 type UnitPick = {
   key: string;
@@ -473,7 +474,7 @@ export default function OrgPageClient() {
                           openEmployeeDrawer(id);
                         }
                       }}
-                      title="Открыть карточку сотрудника"
+                      title={OPEN_HR_DOSSIER_CTA}
                     >
                       <td className="border-b border-zinc-200 dark:border-zinc-800 p-2 whitespace-nowrap">{id}</td>
                       <td className="border-b border-zinc-200 dark:border-zinc-800 p-2">{safeFio(e)}</td>
