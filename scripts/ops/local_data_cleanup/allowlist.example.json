@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "description": "Example allowlist structure for local/dev cleanup. Copy outside Git and populate with explicit IDs and expected_signature fields.",
+  "protected": {
+    "persons": [
+      {
+        "id": 0,
+        "label": "example-protected-person",
+        "reason": "production person — must never be deleted",
+        "expected_signature": {
+          "full_name": "Example Protected Person"
+        }
+      }
+    ],
+    "employees": [
+      {
+        "id": 0,
+        "label": "example-protected-employee",
+        "reason": "production employee — must never be deleted",
+        "expected_signature": {
+          "full_name": "Example Protected Employee",
+          "person_id": 0
+        }
+      }
+    ],
+    "users": [
+      {
+        "id": 0,
+        "label": "example.protected.user",
+        "reason": "production platform user — must never be deleted",
+        "expected_signature": {
+          "google_login": "example.protected.user",
+          "full_name": "Example Protected User",
+          "employee_id": 0
+        }
+      }
+    ],
+    "units": [
+      {
+        "id": 0,
+        "label": "ORG_EXAMPLE",
+        "reason": "production org unit — must never be deleted",
+        "expected_signature": {
+          "code": "ORG_EXAMPLE",
+          "name": "Example Root Organization"
+        }
+      }
+    ],
+    "positions": [],
+    "roles": []
+  },
+  "persons": [
+    {
+      "id": 0,
+      "label": "example-test-person",
+      "reason": "explicit test fixture — not selected by name prefix alone",
+      "expected_signature": {
+        "full_name": "Example Test Person",
+        "match_key": "name:example test person abcd1234"
+      }
+    }
+  ],
+  "employees": [
+    {
+      "id": 0,
+      "label": "example-test-employee",
+      "reason": "explicit test fixture",
+      "expected_signature": {
+        "full_name": "Example Test Employee",
+        "person_id": 0
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": 0,
+      "label": "example.test.user",
+      "reason": "explicit test fixture user",
+      "expected_signature": {
+        "google_login": "example.test.user",
+        "full_name": "Example Test User",
+        "unit_id": 0,
+        "role_id": 0,
+        "employee_id": null
+      }
+    }
+  ],
+  "units": [
+    {
+      "id": 0,
+      "label": "example_test_unit",
+      "reason": "explicit test org unit — prefix alone is insufficient",
+      "expected_signature": {
+        "code": "example_test_unit",
+        "name": "Example Test Unit"
+      }
+    }
+  ],
+  "assignments": [],
+  "positions": [
+    {
+      "id": 0,
+      "label": "example_test_position",
+      "reason": "explicit test position",
+      "expected_signature": {
+        "name": "Example Test Position",
+        "category": "other"
+      }
+    }
+  ],
+  "identities": [],
+  "batches": [],
+  "snapshots": [],
+  "audit": [],
+  "roles": [
+    {
+      "id": 0,
+      "label": "example_test_role",
+      "reason": "explicit test role — deleted only if orphaned after users",
+      "expected_signature": {
+        "code": "example_test_role",
+        "name": "example_test_role"
+      }
+    }
+  ],
+  "reconciliation": {
+    "items": [],
+    "runs": []
+  }
+}
