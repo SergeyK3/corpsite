@@ -70,10 +70,25 @@ def test_migration_revision_chain() -> None:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_single_alembic_head_includes_revision() -> None:
+def test_single_alembic_head() -> None:
     heads = _heads()
     assert len(heads) == 1
-    assert REVISION_ID in heads
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_revision_is_ancestor_of_current_head() -> None:
+    script = ScriptDirectory.from_config(_alembic_config())
+    heads = _heads()
+    assert len(heads) == 1
+    head_revision = heads.pop()
+    walk = script.get_revision(head_revision)
+    found = False
+    while walk is not None:
+        if walk.revision == REVISION_ID:
+            found = True
+            break
+        walk = script.get_revision(walk.down_revision) if walk.down_revision else None
+    assert found, f"{REVISION_ID} is not an ancestor of head {head_revision}"
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

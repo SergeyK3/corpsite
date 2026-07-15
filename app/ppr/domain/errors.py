@@ -49,3 +49,19 @@ class PprMergeCycleError(PprIdentityResolutionError):
 
 class PprMergeDepthExceededError(PprIdentityResolutionError):
     code = "PPR_MERGE_DEPTH_EXCEEDED"
+
+
+class PprEventValidationError(PprError):
+    code = "PPR_EVENT_VALIDATION_ERROR"
+
+
+class PprEventTypeUnknownError(PprError):
+    code = "PPR_EVENT_TYPE_UNKNOWN"
+
+
+class PprLegacyEventMappingError(PprError):
+    code = "PPR_LEGACY_EVENT_MAPPING_ERROR"
+
+
+class PprLegacyEventMappingAmbiguousError(PprLegacyEventMappingError):
+    code = "PPR_LEGACY_EVENT_MAPPING_AMBIGUOUS"

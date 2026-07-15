@@ -287,10 +287,10 @@ class PersonnelRecordEvent(Base):
         ForeignKey("employees.employee_id", ondelete="SET NULL"),
         nullable=True,
     )
-    domain_code: Mapped[str] = mapped_column(
+    domain_code: Mapped[Optional[str]] = mapped_column(
         Text,
         ForeignKey("personnel_migration_domains.domain_code", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     record_table_name: Mapped[str] = mapped_column(Text, nullable=False)
     record_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
