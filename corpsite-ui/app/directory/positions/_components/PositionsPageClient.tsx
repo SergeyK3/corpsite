@@ -80,12 +80,47 @@ function parsePositiveInt(value: string | null): number | null {
 
 function readPositionListScope(
   sp: ReturnType<typeof useSearchParams>,
-  hasOrgFilter: boolean,
+  orgUnitId: number | null,
 ): PositionListScope | null {
-  if (!hasOrgFilter) return null;
+  if (orgUnitId == null) return null;
   const raw = String(sp.get(POSITION_SCOPE_PARAM) ?? "").trim().toLowerCase();
   if (raw === "used" || raw === "allowed") return raw;
   return "allowed";
+}
+
+export function buildPositionsListQuery(args: {
+  search?: string;
+  category?: PositionCategory;
+  orgGroupId?: number | null;
+  orgUnitId?: number | null;
+  positionScope?: PositionListScope | null;
+  page?: number;
+  pageSize?: number;
+}): Record<string, string | number | undefined> {
+  const pageSize = args.pageSize ?? PAGE_SIZE;
+  const page = args.page ?? 0;
+  const query: Record<string, string | number | undefined> = {
+    limit: pageSize,
+    offset: page * pageSize,
+  };
+
+  const search = String(args.search ?? "").trim();
+  if (search) query.q = search;
+
+  if (args.category && args.category !== "all") {
+    query.category = args.category;
+  }
+
+  if (args.orgGroupId != null && args.orgUnitId == null) {
+    query.org_group_id = args.orgGroupId;
+  }
+
+  if (args.orgUnitId != null) {
+    query.org_unit_id = args.orgUnitId;
+    query.scope = args.positionScope ?? "allowed";
+  }
+
+  return query;
 }
 
 function positionScopeLabel(scope: PositionListScope | null): string | null {
@@ -144,20 +179,44 @@ export default function PositionsPageClient() {
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-
-  const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
-  const orgGroupId = orgScope.org_group_id;
-  const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
-  const hasOrgFilter = orgGroupId != null || orgUnitId != null;
-  const positionScope = React.useMemo(
-    () => readPositionListScope(sp, hasOrgFilter),
-    [sp, hasOrgFilter],
+  const searchParamsKey = sp.toString();
+  const parsedSearchParams = React.useMemo(
+    () => new URLSearchParams(searchParamsKey),
+    [searchParamsKey],
   );
+
+  const orgScope = React.useMemo(
+    () => readOrgScopeFromSearchParams(parsedSearchParams),
+    [parsedSearchParams],
+  );
+  const orgGroupId = orgScope.org_group_id;
+  const orgUnitId = React.useMemo(
+    () => readSelectedOrgUnitId(parsedSearchParams),
+    [parsedSearchParams],
+  );
+  const hasOrgUnitFilter = orgUnitId != null;
+  const urlPositionScope = React.useMemo(
+    () => readPositionListScope(parsedSearchParams, orgUnitId),
+    [parsedSearchParams, orgUnitId],
+  );
+
+  const [localPositionScope, setLocalPositionScope] = React.useState<PositionListScope | null>(null);
+  const pendingScopeTransitionRef = React.useRef<PositionListScope | null>(null);
+  const prevOrgUnitIdRef = React.useRef<number | null | undefined>(orgUnitId);
+
+  const positionScope = React.useMemo(() => {
+    if (!hasOrgUnitFilter) return null;
+    if (localPositionScope != null) return localPositionScope;
+    return urlPositionScope;
+  }, [hasOrgUnitFilter, localPositionScope, urlPositionScope]);
+
   const positionScopeCaption = positionScopeLabel(positionScope);
   const orgUnitNameFromUrl = React.useMemo(() => {
-    const v = String(sp.get("org_unit_name") ?? "").trim();
+    const v = String(parsedSearchParams.get("org_unit_name") ?? "").trim();
     return v || null;
-  }, [sp]);
+  }, [parsedSearchParams]);
+
+  const loadSeqRef = React.useRef(0);
 
   const [items, setItems] = React.useState<PositionItem[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -194,31 +253,63 @@ export default function PositionsPageClient() {
     setPage(0);
   }, [orgGroupId, orgUnitId, positionScope]);
 
-  function setPositionScope(nextScope: PositionListScope) {
-    const params = new URLSearchParams(sp.toString());
-    params.set(POSITION_SCOPE_PARAM, nextScope);
-    params.delete("offset");
+  React.useEffect(() => {
+    if (prevOrgUnitIdRef.current !== orgUnitId) {
+      prevOrgUnitIdRef.current = orgUnitId;
+      pendingScopeTransitionRef.current = null;
+      setLocalPositionScope(orgUnitId == null ? null : urlPositionScope);
+      return;
+    }
+
+    if (orgUnitId == null) {
+      pendingScopeTransitionRef.current = null;
+      setLocalPositionScope(null);
+      return;
+    }
+
+    const pendingScope = pendingScopeTransitionRef.current;
+    if (pendingScope != null) {
+      if (urlPositionScope === pendingScope) {
+        pendingScopeTransitionRef.current = null;
+      }
+      return;
+    }
+
+    setLocalPositionScope(urlPositionScope);
+  }, [orgUnitId, urlPositionScope, searchParamsKey]);
+
+  React.useEffect(() => {
+    if (orgUnitId == null) return;
+    if (pendingScopeTransitionRef.current != null) return;
+    const raw = String(parsedSearchParams.get(POSITION_SCOPE_PARAM) ?? "").trim().toLowerCase();
+    if (raw === "used" || raw === "allowed") return;
+
+    const params = new URLSearchParams(searchParamsKey);
+    params.set(POSITION_SCOPE_PARAM, "allowed");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname);
-    setPage(0);
-  }
+    pendingScopeTransitionRef.current = "allowed";
+    setLocalPositionScope("allowed");
+  }, [orgUnitId, pathname, parsedSearchParams, router, searchParamsKey]);
 
   const loadItems = React.useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setPageError(null);
 
     try {
       const payload = await apiFetchJson<PositionsResponse>(API_BASE, {
-        query: {
-          q: search || undefined,
-          category: category === "all" ? undefined : category,
-          org_group_id: orgGroupId ?? undefined,
-          org_unit_id: orgUnitId ?? undefined,
-          scope: positionScope ?? undefined,
-          limit: PAGE_SIZE,
-          offset: page * PAGE_SIZE,
-        },
+        query: buildPositionsListQuery({
+          search,
+          category,
+          orgGroupId,
+          orgUnitId,
+          positionScope,
+          page,
+        }),
       });
+
+      if (seq !== loadSeqRef.current) return;
 
       const normalized = normalizeItems(payload);
       setItems(normalized.items);
@@ -226,15 +317,31 @@ export default function PositionsPageClient() {
       setFilterOrgUnitId(normalized.filterOrgUnitId);
       setFilterOrgUnitName(normalized.filterOrgUnitName);
     } catch (error) {
+      if (seq !== loadSeqRef.current) return;
       setPageError(extractErrorMessage(error));
       setItems([]);
       setTotal(0);
       setFilterOrgUnitId(null);
       setFilterOrgUnitName(null);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [search, category, orgGroupId, orgUnitId, positionScope, page]);
+
+  const setPositionScope = React.useCallback(
+    (nextScope: PositionListScope) => {
+      pendingScopeTransitionRef.current = nextScope;
+      setLocalPositionScope(nextScope);
+      setPage(0);
+
+      const params = new URLSearchParams(searchParamsKey);
+      params.set(POSITION_SCOPE_PARAM, nextScope);
+      params.delete("offset");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
+    },
+    [pathname, router, searchParamsKey],
+  );
 
   React.useEffect(() => {
     void loadItems();
@@ -353,16 +460,16 @@ export default function PositionsPageClient() {
               <OrgScopeFilter
                 basePath="/directory/positions"
                 className="min-w-[240px]"
-                resetParamsOnChange={["offset", "org_unit_id", "org_unit_name"]}
+                resetParamsOnChange={["offset", "org_unit_id", "org_unit_name", POSITION_SCOPE_PARAM]}
               />
 
               <OrgUnitScopeFilter
                 basePath="/directory/positions"
                 className="min-w-[240px]"
-                resetParamsOnChange={["offset"]}
+                resetParamsOnChange={["offset", POSITION_SCOPE_PARAM]}
               />
 
-              {hasOrgFilter ? (
+              {hasOrgUnitFilter ? (
                 <div
                   className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-0.5 dark:border-zinc-800 dark:bg-zinc-900"
                   data-testid="positions-scope-toggle"
@@ -386,6 +493,13 @@ export default function PositionsPageClient() {
                       </button>
                     );
                   })}
+                </div>
+              ) : orgGroupId != null ? (
+                <div
+                  className="flex h-8.5 items-center rounded-lg border border-dashed border-zinc-300 px-2.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+                  data-testid="positions-scope-hint"
+                >
+                  Выберите подразделение
                 </div>
               ) : null}
 
