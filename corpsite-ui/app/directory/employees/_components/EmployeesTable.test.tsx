@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import EmployeesTable from "./EmployeesTable";
 import {
   HR_DOSSIER_JOURNAL_ACTION,
+  HR_DOSSIER_JOURNAL_ACTION_LEGACY,
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
+  OPEN_PERSONAL_CARD_CTA,
 } from "@/lib/personnelCardTerminology";
 
 describe("EmployeesTable journal actions", () => {
@@ -24,7 +26,7 @@ describe("EmployeesTable journal actions", () => {
     onChangePage: vi.fn(),
   };
 
-  it("shows working-card «Открыть» and HR dossier «Карточка» in management read-only view", () => {
+  it("shows working-card «Открыть» and HR dossier «Карточка» in legacy management read-only view", () => {
     render(
       <EmployeesTable
         {...baseProps}
@@ -39,8 +41,28 @@ describe("EmployeesTable journal actions", () => {
       "/directory/personnel/employees/42/card",
     );
     expect(screen.getByRole("link", { name: OPEN_HR_DOSSIER_CTA })).toHaveTextContent(
+      HR_DOSSIER_JOURNAL_ACTION_LEGACY,
+    );
+  });
+
+  it("navigates directly to personal card when openPersonalCardDirectly is enabled", () => {
+    render(
+      <EmployeesTable
+        {...baseProps}
+        managementView
+        openPersonalCardDirectly
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).toHaveAttribute(
+      "href",
+      "/directory/personnel/employees/42/card",
+    );
+    expect(screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).toHaveTextContent(
       HR_DOSSIER_JOURNAL_ACTION,
     );
+    expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
   });
 
   it("disables HR dossier «Карточка» with tooltip when employee_id is missing", () => {
@@ -74,6 +96,6 @@ describe("EmployeesTable journal actions", () => {
       "/directory/personnel/employees/42/card",
     );
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: HR_DOSSIER_JOURNAL_ACTION })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: HR_DOSSIER_JOURNAL_ACTION_LEGACY })).not.toBeInTheDocument();
   });
 });

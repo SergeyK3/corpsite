@@ -5,7 +5,13 @@ import Link from "next/link";
 
 import type { EmployeeListItem } from "../_lib/types";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
-import { HR_DOSSIER_JOURNAL_ACTION, HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP, OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
+import {
+  HR_DOSSIER_JOURNAL_ACTION,
+  HR_DOSSIER_JOURNAL_ACTION_LEGACY,
+  HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
+  OPEN_HR_DOSSIER_CTA,
+  OPEN_PERSONAL_CARD_CTA,
+} from "@/lib/personnelCardTerminology";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
@@ -19,6 +25,8 @@ type Props = {
   showCard2Button?: boolean;
   /** HR dossier link alongside the working-card «Открыть» action (management «Персонал»). */
   showHrDossierLink?: boolean;
+  /** When true, «Открыть» navigates directly to the PPR personal card (no working drawer). */
+  openPersonalCardDirectly?: boolean;
   /** Compact columns: ФИО, должность, отделение, статус, ставки, открыть. */
   managementView?: boolean;
 };
@@ -53,16 +61,22 @@ const journalActionClass =
 const journalActionDisabledClass =
   "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
 
-function HrDossierJournalAction({ employeeId }: { employeeId: string }) {
+function HrDossierJournalAction({
+  employeeId,
+  pprMode = false,
+}: {
+  employeeId: string;
+  pprMode?: boolean;
+}) {
   if (employeeId) {
     return (
       <Link
         href={buildEmployeeCardHref(employeeId)}
-        title={OPEN_HR_DOSSIER_CTA}
-        aria-label={OPEN_HR_DOSSIER_CTA}
+        title={pprMode ? OPEN_PERSONAL_CARD_CTA : OPEN_HR_DOSSIER_CTA}
+        aria-label={pprMode ? OPEN_PERSONAL_CARD_CTA : OPEN_HR_DOSSIER_CTA}
         className={journalActionClass}
       >
-        {HR_DOSSIER_JOURNAL_ACTION}
+        {pprMode ? HR_DOSSIER_JOURNAL_ACTION : HR_DOSSIER_JOURNAL_ACTION_LEGACY}
       </Link>
     );
   }
@@ -92,6 +106,7 @@ export default function EmployeesTable({
   onChangePage,
   showCard2Button = false,
   showHrDossierLink = false,
+  openPersonalCardDirectly = false,
   managementView = false,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
@@ -208,7 +223,7 @@ export default function EmployeesTable({
 
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
-                        {!showCard2Button && !!employeeId ? (
+                        {!showCard2Button && !!employeeId && !openPersonalCardDirectly ? (
                           <button
                             type="button"
                             onClick={() => onOpenEmployee(employeeId)}
@@ -217,7 +232,19 @@ export default function EmployeesTable({
                             Открыть
                           </button>
                         ) : null}
-                        {showHrDossierLink ? <HrDossierJournalAction employeeId={employeeId} /> : null}
+                        {openPersonalCardDirectly && !!employeeId ? (
+                          <Link
+                            href={buildEmployeeCardHref(employeeId)}
+                            title={OPEN_PERSONAL_CARD_CTA}
+                            aria-label={OPEN_PERSONAL_CARD_CTA}
+                            className={journalActionClass}
+                          >
+                            Открыть
+                          </Link>
+                        ) : null}
+                        {showHrDossierLink && !openPersonalCardDirectly ? (
+                          <HrDossierJournalAction employeeId={employeeId} />
+                        ) : null}
                         {showCard2Button && !!employeeId ? (
                           <Link
                             href={buildEmployeeCardHref(employeeId)}

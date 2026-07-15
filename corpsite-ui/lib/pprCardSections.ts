@@ -1,0 +1,31 @@
+/** Section registry for PPR «Личная карточка» read-only page. */
+
+export type PprCardSectionId =
+  | "general"
+  | "education"
+  | "training"
+  | "assignment"
+  | "orders"
+  | "changes";
+
+export type PprCardSectionDef = {
+  id: PprCardSectionId;
+  title: string;
+};
+
+export const PPR_CARD_SECTIONS: PprCardSectionDef[] = [
+  { id: "general", title: "Общие сведения" },
+  { id: "education", title: "Образование" },
+  { id: "training", title: "Обучение и повышение квалификации" },
+  { id: "assignment", title: "Трудовая деятельность" },
+  { id: "orders", title: "Кадровые приказы" },
+  { id: "changes", title: "История изменений" },
+];
+
+export const PPR_CARD_DEFAULT_SECTION: PprCardSectionId = "general";
+
+export function parsePprCardSection(value: string | null | undefined): PprCardSectionId {
+  const normalized = String(value || "").trim().toLowerCase();
+  const known = PPR_CARD_SECTIONS.find((s) => s.id === normalized);
+  return known?.id ?? PPR_CARD_DEFAULT_SECTION;
+}

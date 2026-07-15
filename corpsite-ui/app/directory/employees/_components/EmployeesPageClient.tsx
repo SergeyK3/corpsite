@@ -5,6 +5,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
+import { isPprCardEnabled } from "@/lib/pprCardFeature";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
@@ -432,6 +433,7 @@ export default function EmployeesPageClient(props: Props) {
   const departmentFilterValue = orgGroupId != null ? orgUnitId : departmentId;
   const isPersonnelRoute = routeBase === "/directory/personnel";
   const showHrImportCardLink = isPersonnelRoute && !readOnly;
+  const openPersonalCardDirectly = isPprCardEnabled() && managementView && readOnly;
 
   const pageContent = (
     <>
@@ -557,7 +559,8 @@ export default function EmployeesPageClient(props: Props) {
               onOpenEmployee={handleOpenEmployee}
               onChangePage={setPageOffset}
               showCard2Button={showHrImportCardLink}
-              showHrDossierLink={managementView && readOnly}
+              showHrDossierLink={managementView && readOnly && !openPersonalCardDirectly}
+              openPersonalCardDirectly={openPersonalCardDirectly}
               managementView={managementView}
             />
           </div>

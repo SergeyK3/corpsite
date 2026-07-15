@@ -1,15 +1,27 @@
-// Shared user-facing labels: working card vs HR dossier vs import staging record.
+// Shared user-facing labels: working card vs personal HR record vs import staging record.
 
-/** Full title for the HR dossier page and section headers. */
+/** Full title for the PPR personal card page (UI Read Migration v1). */
+export const PERSONAL_CARD_TITLE = "Личная карточка по учёту кадров";
+
+/** Short title for breadcrumbs and compact headers. */
+export const PERSONAL_CARD_SHORT_TITLE = "Личная карточка";
+
+/** CTA for opening the personal card from personnel lists. */
+export const OPEN_PERSONAL_CARD_CTA = "Открыть личную карточку";
+
+/** Legacy HR dossier title — retained for rollback import-card path. */
 export const HR_DOSSIER_TITLE = "Кадровая карточка-досье";
 
-/** Short CTA label linking into the HR dossier (/card). */
+/** Legacy CTA linking into the import-card dossier (/card legacy mode). */
 export const OPEN_HR_DOSSIER_CTA = "Открыть кадровое досье";
 
-/** Compact journal action linking to the HR dossier (/card). */
-export const HR_DOSSIER_JOURNAL_ACTION = "Карточка";
+/** Compact journal action linking to the personal card (/card). */
+export const HR_DOSSIER_JOURNAL_ACTION = "Открыть";
 
-/** Tooltip when journal row has no employee_id for HR dossier navigation. */
+/** Legacy compact action label when PPR card flag is off. */
+export const HR_DOSSIER_JOURNAL_ACTION_LEGACY = "Карточка";
+
+/** Tooltip when journal row has no employee_id for card navigation. */
 export const HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP =
   "Невозможно открыть карточку: у записи не указан идентификатор сотрудника";
 
