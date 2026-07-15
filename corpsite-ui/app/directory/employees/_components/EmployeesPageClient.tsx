@@ -557,6 +557,7 @@ export default function EmployeesPageClient(props: Props) {
               onOpenEmployee={handleOpenEmployee}
               onChangePage={setPageOffset}
               showCard2Button={showHrImportCardLink}
+              showHrDossierLink={managementView && readOnly}
               managementView={managementView}
             />
           </div>

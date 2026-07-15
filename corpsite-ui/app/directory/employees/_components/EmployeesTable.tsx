@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import type { EmployeeListItem } from "../_lib/types";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
-import { OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
+import { HR_DOSSIER_JOURNAL_ACTION, HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP, OPEN_HR_DOSSIER_CTA } from "@/lib/personnelCardTerminology";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
 type Props = {
@@ -17,6 +17,8 @@ type Props = {
   onOpenEmployee: (employee_id: string) => void;
   onChangePage: (nextOffset: number) => void;
   showCard2Button?: boolean;
+  /** HR dossier link alongside the working-card «Открыть» action (management «Персонал»). */
+  showHrDossierLink?: boolean;
   /** Compact columns: ФИО, должность, отделение, статус, ставки, открыть. */
   managementView?: boolean;
 };
@@ -45,6 +47,41 @@ function getPositionName(it: any): string {
   return it?.position_name ?? it?.positionName ?? it?.position?.name ?? it?.position?.title ?? "—";
 }
 
+const journalActionClass =
+  "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700";
+
+const journalActionDisabledClass =
+  "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
+
+function HrDossierJournalAction({ employeeId }: { employeeId: string }) {
+  if (employeeId) {
+    return (
+      <Link
+        href={buildEmployeeCardHref(employeeId)}
+        title={OPEN_HR_DOSSIER_CTA}
+        aria-label={OPEN_HR_DOSSIER_CTA}
+        className={journalActionClass}
+      >
+        {HR_DOSSIER_JOURNAL_ACTION}
+      </Link>
+    );
+  }
+
+  return (
+    <span title={HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP} className="inline-flex">
+      <button
+        type="button"
+        disabled
+        aria-disabled="true"
+        aria-label={HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP}
+        className={journalActionDisabledClass}
+      >
+        {HR_DOSSIER_JOURNAL_ACTION}
+      </button>
+    </span>
+  );
+}
+
 export default function EmployeesTable({
   items,
   total,
@@ -54,6 +91,7 @@ export default function EmployeesTable({
   onOpenEmployee,
   onChangePage,
   showCard2Button = false,
+  showHrDossierLink = false,
   managementView = false,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
@@ -103,7 +141,7 @@ export default function EmployeesTable({
               <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Статус
               </th>
-              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+              <th className={`${showHrDossierLink ? "w-[200px]" : "w-[120px]"} px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400`}>
                 Действия
               </th>
             </tr>
@@ -179,6 +217,7 @@ export default function EmployeesTable({
                             Открыть
                           </button>
                         ) : null}
+                        {showHrDossierLink ? <HrDossierJournalAction employeeId={employeeId} /> : null}
                         {showCard2Button && !!employeeId ? (
                           <Link
                             href={buildEmployeeCardHref(employeeId)}

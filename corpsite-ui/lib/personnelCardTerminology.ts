@@ -6,6 +6,13 @@ export const HR_DOSSIER_TITLE = "Кадровая карточка-досье";
 /** Short CTA label linking into the HR dossier (/card). */
 export const OPEN_HR_DOSSIER_CTA = "Открыть кадровое досье";
 
+/** Compact journal action linking to the HR dossier (/card). */
+export const HR_DOSSIER_JOURNAL_ACTION = "Карточка";
+
+/** Tooltip when journal row has no employee_id for HR dossier navigation. */
+export const HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP =
+  "Невозможно открыть карточку: у записи не указан идентификатор сотрудника";
+
 /** Link text inside a sentence (accusative). */
 export const HR_DOSSIER_LINK_TEXT = "кадровое досье";
 
