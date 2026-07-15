@@ -1,5 +1,6 @@
 """Corpsite SQLAlchemy ORM models."""
 from app.db.base import Base
+from app.db.models.org_unit_allowed_positions import OrgUnitAllowedPosition
 from app.db.models.aliases import OrgUnitAlias, PositionAlias
 from app.db.models.employee_identity import IDENTITY_TYPE_IIN, EmployeeIdentity
 from app.db.models.personnel_orders import (
@@ -217,6 +218,7 @@ __all__ = [
     "OperationalOrderPromotionAudit",
     "OperationalOrderTextProvenance",
     "OperationalOrderTranslationAssignment",
+    "OrgUnitAllowedPosition",
     "PositionAlias",
     "SOURCE_TYPE_HR_CONTROL_LIST",
     "BATCH_STATUS_UPLOADED",

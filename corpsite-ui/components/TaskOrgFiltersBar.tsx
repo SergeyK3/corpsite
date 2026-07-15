@@ -93,6 +93,7 @@ export default function TaskOrgFiltersBar({
         const options = await loadScopedPositionOptions({
           org_group_id: orgGroupId,
           org_unit_id: filters.org_unit_id,
+          scope: "used",
         });
         if (cancelled) return;
         setPositionOptions(options);

@@ -4,7 +4,8 @@
 import * as React from "react";
 
 import type { EmployeeDetails } from "../_lib/types";
-import { getEmployees, getPositions } from "../_lib/api.client";
+import { getPositions } from "../_lib/api.client";
+import { loadUnitAllowedPositionOptionsWithFallback } from "@/lib/taskOrgFilters";
 import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 
 export type OrgUnitOption = {
@@ -75,9 +76,14 @@ function currentPositionLabel(details: EmployeeDetails): string {
   return String(position?.name ?? d.position_name ?? "").trim() || "—";
 }
 
-function employeePositionId(item: { position?: { id?: number | null } | null }): number {
-  const id = Number(item?.position?.id ?? 0);
-  return Number.isFinite(id) && id > 0 ? id : 0;
+type UnitPositionGroups = {
+  matched: PositionOption[];
+  rest: PositionOption[];
+  hasMatches: boolean;
+};
+
+function mapTaskOptions(options: { id: number; label: string }[]): PositionOption[] {
+  return options.map((opt) => ({ id: opt.id, label: opt.label }));
 }
 
 function normalizePositionOptions(raw: unknown): PositionOption[] {
@@ -121,7 +127,7 @@ export default function EmployeeTransferForm({
   const [orgUnitOptions, setOrgUnitOptions] = React.useState<OrgUnitOption[]>([]);
   const [orgUnitsLoading, setOrgUnitsLoading] = React.useState(false);
   const [allPositionOptions, setAllPositionOptions] = React.useState<PositionOption[]>([]);
-  const [unitPositionIds, setUnitPositionIds] = React.useState<Set<number> | null>(null);
+  const [unitPositionGroups, setUnitPositionGroups] = React.useState<UnitPositionGroups | null>(null);
   const [unitPositionsLoading, setUnitPositionsLoading] = React.useState(false);
   const [showAllPositions, setShowAllPositions] = React.useState(false);
 
@@ -182,7 +188,7 @@ export default function EmployeeTransferForm({
   React.useEffect(() => {
     const unitId = String(values.to_org_unit_id ?? "").trim();
     if (!unitId) {
-      setUnitPositionIds(null);
+      setUnitPositionGroups(null);
       setUnitPositionsLoading(false);
       return;
     }
@@ -192,23 +198,33 @@ export default function EmployeeTransferForm({
 
     void (async () => {
       try {
-        const res = await getEmployees({
-          status: "all",
-          org_unit_id: unitId,
-          include_children: false,
-          limit: 200,
-          offset: 0,
+        const parsedUnitId = Number(unitId);
+        const result = await loadUnitAllowedPositionOptionsWithFallback({
+          org_unit_id: Number.isFinite(parsedUnitId) && parsedUnitId > 0 ? parsedUnitId : undefined,
         });
         if (cancelled) return;
 
-        const ids = new Set<number>();
-        for (const item of res.items ?? []) {
-          const pid = employeePositionId(item);
-          if (pid > 0) ids.add(pid);
+        if (result.usesGlobalFallback) {
+          setUnitPositionGroups({
+            matched: [],
+            rest: mapTaskOptions(result.global),
+            hasMatches: false,
+          });
+          return;
         }
-        setUnitPositionIds(ids);
+
+        const allowed = mapTaskOptions(result.allowed);
+        const allowedIds = new Set(allowed.map((opt) => opt.id));
+        const rest = mapTaskOptions(result.global).filter((opt) => !allowedIds.has(opt.id));
+        setUnitPositionGroups({
+          matched: allowed,
+          rest,
+          hasMatches: allowed.length > 0,
+        });
       } catch {
-        if (!cancelled) setUnitPositionIds(new Set());
+        if (!cancelled) {
+          setUnitPositionGroups({ matched: [], rest: allPositionOptions, hasMatches: false });
+        }
       } finally {
         if (!cancelled) setUnitPositionsLoading(false);
       }
@@ -217,40 +233,37 @@ export default function EmployeeTransferForm({
     return () => {
       cancelled = true;
     };
-  }, [values.to_org_unit_id]);
+  }, [values.to_org_unit_id, allPositionOptions]);
 
   const sortedAllPositions = React.useMemo(
     () => [...allPositionOptions].sort((a, b) => a.label.localeCompare(b.label, "ru")),
     [allPositionOptions]
   );
 
-  const unitPositionGroups = React.useMemo(() => {
+  const unitPositionView = React.useMemo(() => {
     const unitId = String(values.to_org_unit_id ?? "").trim();
-    if (!unitId || !unitPositionIds || unitPositionIds.size === 0) {
+    if (!unitId || !unitPositionGroups) {
       return { matched: [] as PositionOption[], rest: sortedAllPositions, hasMatches: false };
     }
+    return unitPositionGroups;
+  }, [sortedAllPositions, values.to_org_unit_id, unitPositionGroups]);
 
-    const matched = sortedAllPositions.filter((o) => unitPositionIds.has(o.id));
-    const rest = sortedAllPositions.filter((o) => !unitPositionIds.has(o.id));
-    return { matched, rest, hasMatches: matched.length > 0 };
-  }, [sortedAllPositions, values.to_org_unit_id, unitPositionIds]);
-
-  const showFilteredOnly = unitPositionGroups.hasMatches && !showAllPositions;
+  const showFilteredOnly = unitPositionView.hasMatches && !showAllPositions;
 
   const positionSelectOptions = React.useMemo(() => {
     if (!values.to_org_unit_id) return sortedAllPositions;
 
-    if (showFilteredOnly) return unitPositionGroups.matched;
-    if (unitPositionGroups.hasMatches && showAllPositions) return sortedAllPositions;
-    if (unitPositionIds !== null && unitPositionIds.size === 0) return sortedAllPositions;
+    if (showFilteredOnly) return unitPositionView.matched;
+    if (unitPositionView.hasMatches && showAllPositions) return sortedAllPositions;
+    if (unitPositionGroups !== null && !unitPositionView.hasMatches) return sortedAllPositions;
     return sortedAllPositions;
   }, [
     values.to_org_unit_id,
     showFilteredOnly,
+    unitPositionView,
     unitPositionGroups,
     sortedAllPositions,
     showAllPositions,
-    unitPositionIds,
   ]);
 
   function handleOrgUnitChange(orgUnitId: string) {
@@ -366,7 +379,7 @@ export default function EmployeeTransferForm({
                     </option>
                   ))}
                 </select>
-                {unitPositionGroups.hasMatches && !showAllPositions && values.to_org_unit_id ? (
+                {unitPositionView.hasMatches && !showAllPositions && values.to_org_unit_id ? (
                   <button
                     type="button"
                     onClick={() => setShowAllPositions(true)}
@@ -375,13 +388,13 @@ export default function EmployeeTransferForm({
                     Показать все должности ({sortedAllPositions.length})
                   </button>
                 ) : null}
-                {unitPositionGroups.hasMatches && showAllPositions && values.to_org_unit_id ? (
+                {unitPositionView.hasMatches && showAllPositions && values.to_org_unit_id ? (
                   <button
                     type="button"
                     onClick={() => setShowAllPositions(false)}
                     className="self-start text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
                   >
-                    Только должности отделения ({unitPositionGroups.matched.length})
+                    Только разрешённые для подразделения ({unitPositionView.matched.length})
                   </button>
                 ) : null}
               </div>

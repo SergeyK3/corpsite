@@ -417,11 +417,15 @@ export async function getPositions(args?: {
   limit?: number;
   offset?: number;
   org_unit_id?: number;
+  org_group_id?: number;
+  scope?: "used" | "allowed";
 }): Promise<any> {
   const qs = buildQuery({
     limit: args?.limit ?? 200,
     offset: args?.offset ?? 0,
     org_unit_id: args?.org_unit_id,
+    org_group_id: args?.org_group_id,
+    scope: args?.scope,
   });
   return apiGetJson<any>("/directory/positions", qs);
 }

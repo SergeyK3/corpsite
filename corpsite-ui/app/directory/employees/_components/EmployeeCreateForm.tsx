@@ -3,7 +3,7 @@
 
 import * as React from "react";
 
-import { getEmployees } from "../_lib/api.client";
+import { loadUnitAllowedPositionOptionsWithFallback } from "@/lib/taskOrgFilters";
 
 export type OrgUnitOption = {
   id: number;
@@ -34,9 +34,14 @@ type EmployeeCreateFormProps = {
   onCancel: () => void;
 };
 
-function employeePositionId(item: { position?: { id?: number | null } | null }): number {
-  const id = Number(item?.position?.id ?? 0);
-  return Number.isFinite(id) && id > 0 ? id : 0;
+type UnitPositionGroups = {
+  matched: PositionOption[];
+  rest: PositionOption[];
+  hasMatches: boolean;
+};
+
+function mapTaskOptions(options: { id: number; label: string }[]): PositionOption[] {
+  return options.map((opt) => ({ id: opt.id, label: opt.label }));
 }
 
 function sortPositionOptions(opts: PositionOption[]): PositionOption[] {
@@ -53,9 +58,14 @@ export default function EmployeeCreateForm({
   onCancel,
 }: EmployeeCreateFormProps) {
   const [values, setValues] = React.useState<EmployeeCreateFormValues>(initialValues);
-  const [unitPositionIds, setUnitPositionIds] = React.useState<Set<number> | null>(null);
+  const [unitPositionGroups, setUnitPositionGroups] = React.useState<UnitPositionGroups | null>(null);
   const [unitPositionsLoading, setUnitPositionsLoading] = React.useState(false);
   const [showAllPositions, setShowAllPositions] = React.useState(false);
+
+  const sortedAllPositions = React.useMemo(
+    () => sortPositionOptions(positionOptions),
+    [positionOptions]
+  );
 
   React.useEffect(() => {
     setValues(initialValues);
@@ -65,11 +75,11 @@ export default function EmployeeCreateForm({
     setShowAllPositions(false);
   }, [values.org_unit_id]);
 
-  // Должности, уже используемые сотрудниками выбранного отделения (org_unit_id).
+  // Allowed positions for selected org unit; global fallback when allowed list is empty.
   React.useEffect(() => {
     const unitId = String(values.org_unit_id ?? "").trim();
     if (!unitId) {
-      setUnitPositionIds(null);
+      setUnitPositionGroups(null);
       setUnitPositionsLoading(false);
       return;
     }
@@ -79,23 +89,37 @@ export default function EmployeeCreateForm({
 
     void (async () => {
       try {
-        const res = await getEmployees({
-          status: "all",
-          org_unit_id: unitId,
-          include_children: false,
-          limit: 200,
-          offset: 0,
+        const parsedUnitId = Number(unitId);
+        const result = await loadUnitAllowedPositionOptionsWithFallback({
+          org_unit_id: Number.isFinite(parsedUnitId) && parsedUnitId > 0 ? parsedUnitId : undefined,
         });
         if (cancelled) return;
 
-        const ids = new Set<number>();
-        for (const item of res.items ?? []) {
-          const pid = employeePositionId(item);
-          if (pid > 0) ids.add(pid);
+        if (result.usesGlobalFallback) {
+          setUnitPositionGroups({
+            matched: [],
+            rest: mapTaskOptions(result.global),
+            hasMatches: false,
+          });
+          return;
         }
-        setUnitPositionIds(ids);
+
+        const allowed = mapTaskOptions(result.allowed);
+        const allowedIds = new Set(allowed.map((opt) => opt.id));
+        const rest = mapTaskOptions(result.global).filter((opt) => !allowedIds.has(opt.id));
+        setUnitPositionGroups({
+          matched: allowed,
+          rest,
+          hasMatches: allowed.length > 0,
+        });
       } catch {
-        if (!cancelled) setUnitPositionIds(new Set());
+        if (!cancelled) {
+          setUnitPositionGroups({
+            matched: [],
+            rest: sortPositionOptions(positionOptions),
+            hasMatches: false,
+          });
+        }
       } finally {
         if (!cancelled) setUnitPositionsLoading(false);
       }
@@ -104,33 +128,21 @@ export default function EmployeeCreateForm({
     return () => {
       cancelled = true;
     };
-  }, [values.org_unit_id]);
+  }, [values.org_unit_id, positionOptions]);
 
-  const sortedAllPositions = React.useMemo(
-    () => sortPositionOptions(positionOptions),
-    [positionOptions]
-  );
-
-  const unitPositionGroups = React.useMemo(() => {
+  const unitPositionView = React.useMemo(() => {
     const unitId = String(values.org_unit_id ?? "").trim();
-    if (!unitId || !unitPositionIds || unitPositionIds.size === 0) {
+    if (!unitId || !unitPositionGroups) {
       return {
         matched: [] as PositionOption[],
         rest: sortedAllPositions,
         hasMatches: false,
       };
     }
+    return unitPositionGroups;
+  }, [sortedAllPositions, values.org_unit_id, unitPositionGroups]);
 
-    const matched = sortedAllPositions.filter((o) => unitPositionIds.has(o.id));
-    const rest = sortedAllPositions.filter((o) => !unitPositionIds.has(o.id));
-    return {
-      matched,
-      rest,
-      hasMatches: matched.length > 0,
-    };
-  }, [sortedAllPositions, values.org_unit_id, unitPositionIds]);
-
-  const showFilteredOnly = unitPositionGroups.hasMatches && !showAllPositions;
+  const showFilteredOnly = unitPositionView.hasMatches && !showAllPositions;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -144,7 +156,7 @@ export default function EmployeeCreateForm({
 
   function renderPositionOptions() {
     if (showFilteredOnly) {
-      return unitPositionGroups.matched.map((opt) => (
+      return unitPositionView.matched.map((opt) => (
         <option
           key={opt.id}
           value={String(opt.id)}
@@ -155,11 +167,11 @@ export default function EmployeeCreateForm({
       ));
     }
 
-    if (unitPositionGroups.hasMatches && showAllPositions) {
+    if (unitPositionView.hasMatches && showAllPositions) {
       return (
         <>
-          <optgroup label="В выбранном отделении">
-            {unitPositionGroups.matched.map((opt) => (
+          <optgroup label="Разрешённые для подразделения">
+            {unitPositionView.matched.map((opt) => (
               <option
                 key={`unit-${opt.id}`}
                 value={String(opt.id)}
@@ -169,9 +181,9 @@ export default function EmployeeCreateForm({
               </option>
             ))}
           </optgroup>
-          {unitPositionGroups.rest.length > 0 && (
+          {unitPositionView.rest.length > 0 && (
             <optgroup label="Прочие должности">
-              {unitPositionGroups.rest.map((opt) => (
+              {unitPositionView.rest.map((opt) => (
                 <option
                   key={`all-${opt.id}`}
                   value={String(opt.id)}
@@ -289,7 +301,7 @@ export default function EmployeeCreateForm({
               </option>
               {renderPositionOptions()}
             </select>
-            {unitPositionGroups.hasMatches && !showAllPositions && (
+            {unitPositionView.hasMatches && !showAllPositions && (
               <button
                 type="button"
                 onClick={() => setShowAllPositions(true)}
@@ -298,18 +310,18 @@ export default function EmployeeCreateForm({
                 Показать все должности ({sortedAllPositions.length})
               </button>
             )}
-            {unitPositionGroups.hasMatches && showAllPositions && (
+            {unitPositionView.hasMatches && showAllPositions && (
               <button
                 type="button"
                 onClick={() => setShowAllPositions(false)}
                 className="self-start text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
               >
-                Только должности отделения ({unitPositionGroups.matched.length})
+                Только разрешённые для подразделения ({unitPositionView.matched.length})
               </button>
             )}
             {showFilteredOnly && (
               <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                Показаны должности, уже используемые в выбранном отделении ({unitPositionGroups.matched.length}).
+                Показаны должности, разрешённые для выбранного подразделения ({unitPositionView.matched.length}).
               </p>
             )}
           </div>

@@ -74,6 +74,7 @@ export function usePersonnelOrderPositionOptions({
     void loadScopedPositionOptions({
       org_group_id: orgGroupId ?? undefined,
       org_unit_id: orgUnitId,
+      scope: "allowed",
     })
       .then((options) => {
         if (!cancelled) setScopedOptions(options);

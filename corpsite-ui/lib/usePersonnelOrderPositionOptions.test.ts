@@ -46,6 +46,12 @@ describe("usePersonnelOrderPositionOptions", () => {
       expect(result.current.loading).toBe(false);
     });
 
+    expect(loadScopedPositionOptions).toHaveBeenCalledWith({
+      org_group_id: 1,
+      org_unit_id: 55,
+      scope: "allowed",
+    });
+
     expect(result.current.allOptions.map((row) => row.id)).toEqual([1, 2, 4, 3, 5]);
     expect(result.current.positionGroups[0]?.items.map((row) => row.id)).toEqual([1, 2]);
     expect(result.current.positionGroups[1]?.items.map((row) => row.id)).toEqual([4, 3, 5]);

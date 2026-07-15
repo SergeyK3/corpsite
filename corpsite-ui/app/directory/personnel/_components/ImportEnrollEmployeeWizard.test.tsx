@@ -256,6 +256,7 @@ describe("ImportEnrollEmployeeWizard single-screen UX", () => {
       expect(loadScopedPositionOptions).toHaveBeenCalledWith({
         org_group_id: CLINICAL_GROUP_ID,
         org_unit_id: 44,
+        scope: "allowed",
       });
     });
 

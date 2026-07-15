@@ -72,7 +72,7 @@ export default function EmployeeAssignmentCorrectionDrawer({
     error: orgUnitsError,
   } = useOrgUnitScopeOptions(orgGroupId);
 
-  const { scopedOptions: positionOptions, loading: positionsLoading } = usePersonnelOrderPositionOptions({
+  const { allOptions: positionOptions, loading: positionsLoading } = usePersonnelOrderPositionOptions({
     enabled: open,
     orgUnitId,
     orgGroupId,

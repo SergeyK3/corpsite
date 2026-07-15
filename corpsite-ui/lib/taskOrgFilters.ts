@@ -126,31 +126,33 @@ export function normalizePositionOptions(rows: readonly PositionRowDto[]): TaskO
 export const GLOBAL_POSITIONS_CATALOG_LIMIT = 1000;
 
 export type PersonnelOrderPositionSelectGroup = {
-  key: "used_in_unit" | "all_positions";
+  key: "allowed_in_unit" | "all_positions";
   label: string;
   items: TaskOrgFilterOption[];
 };
 
 export const PERSONNEL_ORDER_POSITION_GROUP_LABELS = {
-  usedInUnit: "Используются в подразделении",
+  allowedInUnit: "Разрешённые для подразделения",
   allPositions: "Все должности",
 } as const;
 
+export type PositionListScope = "used" | "allowed";
+
 /**
- * Merge scoped (used in unit) and global catalog positions for personnel order editor.
- * Scoped items stay first; dedupe strictly by position_id; preserve duplicate names.
+ * Merge allowed (or configured unit) and global catalog positions for personnel forms.
+ * Primary group items stay first; dedupe strictly by position_id; preserve duplicate names.
  */
 export function buildPersonnelOrderPositionSelectGroups(
   scoped: readonly TaskOrgFilterOption[],
   global: readonly TaskOrgFilterOption[],
 ): PersonnelOrderPositionSelectGroup[] {
   const seen = new Set<number>();
-  const usedInUnit: TaskOrgFilterOption[] = [];
+  const allowedInUnit: TaskOrgFilterOption[] = [];
 
   for (const option of scoped) {
     if (seen.has(option.id)) continue;
     seen.add(option.id);
-    usedInUnit.push(option);
+    allowedInUnit.push(option);
   }
 
   const rest: TaskOrgFilterOption[] = [];
@@ -162,11 +164,11 @@ export function buildPersonnelOrderPositionSelectGroups(
   rest.sort((a, b) => a.label.localeCompare(b.label, "ru"));
 
   const groups: PersonnelOrderPositionSelectGroup[] = [];
-  if (usedInUnit.length > 0) {
+  if (allowedInUnit.length > 0) {
     groups.push({
-      key: "used_in_unit",
-      label: PERSONNEL_ORDER_POSITION_GROUP_LABELS.usedInUnit,
-      items: usedInUnit,
+      key: "allowed_in_unit",
+      label: PERSONNEL_ORDER_POSITION_GROUP_LABELS.allowedInUnit,
+      items: allowedInUnit,
     });
   }
   if (rest.length > 0) {
@@ -221,6 +223,7 @@ export function resetGlobalPositionCatalogCache(): void {
 export async function loadScopedPositionOptions(scope: {
   org_group_id?: number;
   org_unit_id?: number;
+  scope?: PositionListScope;
 }): Promise<TaskOrgFilterOption[]> {
   const query: Record<string, string | number | undefined> = {
     limit: 500,
@@ -228,12 +231,38 @@ export async function loadScopedPositionOptions(scope: {
   };
   if (scope.org_group_id != null) query.org_group_id = scope.org_group_id;
   if (scope.org_unit_id != null) query.org_unit_id = scope.org_unit_id;
+  if (scope.scope != null) query.scope = scope.scope;
 
   const body = await apiFetchJson<{ items?: PositionRowDto[] }>("/directory/positions", {
     query,
   });
   const items = Array.isArray(body?.items) ? body.items : [];
   return normalizePositionOptions(items);
+}
+
+/** Allowed positions for a unit with global catalog fallback when allowed list is empty. */
+export async function loadUnitAllowedPositionOptionsWithFallback(scope: {
+  org_group_id?: number;
+  org_unit_id?: number;
+}): Promise<{
+  allowed: TaskOrgFilterOption[];
+  global: TaskOrgFilterOption[];
+  primary: TaskOrgFilterOption[];
+  usesGlobalFallback: boolean;
+}> {
+  const [allowed, global] = await Promise.all([
+    scope.org_unit_id != null
+      ? loadScopedPositionOptions({ ...scope, scope: "allowed" })
+      : Promise.resolve([] as TaskOrgFilterOption[]),
+    loadGlobalPositionCatalogCached(),
+  ]);
+  const usesGlobalFallback = allowed.length === 0;
+  return {
+    allowed,
+    global,
+    primary: usesGlobalFallback ? global : allowed,
+    usesGlobalFallback,
+  };
 }
 
 export function buildTaskOrgFiltersResetUrl(

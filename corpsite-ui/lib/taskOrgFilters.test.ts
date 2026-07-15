@@ -127,7 +127,7 @@ describe("buildPersonnelOrderPositionSelectGroups", () => {
 
     const groups = buildPersonnelOrderPositionSelectGroups(scoped, global);
     expect(groups).toHaveLength(2);
-    expect(groups[0]?.key).toBe("used_in_unit");
+    expect(groups[0]?.key).toBe("allowed_in_unit");
     expect(groups[0]?.items.map((row) => row.id)).toEqual([2, 1]);
     expect(groups[1]?.key).toBe("all_positions");
     expect(groups[1]?.items.map((row) => row.id)).toEqual([4, 3, 5]);

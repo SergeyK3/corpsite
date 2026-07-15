@@ -320,6 +320,7 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
       expect(loadScopedPositionOptions).toHaveBeenCalledWith({
         org_group_id: 1,
         org_unit_id: 10,
+        scope: "allowed",
       });
     });
   });
@@ -375,6 +376,7 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
       expect(loadScopedPositionOptions).toHaveBeenLastCalledWith({
         org_group_id: 1,
         org_unit_id: 11,
+        scope: "allowed",
       });
     });
   });
@@ -423,6 +425,7 @@ describe("PersonnelOrderItemEditor position catalog", () => {
       expect(loadScopedPositionOptions).toHaveBeenCalledWith({
         org_group_id: 1,
         org_unit_id: 10,
+        scope: "allowed",
       });
       expect(loadGlobalPositionCatalogCached).toHaveBeenCalledTimes(1);
     });
@@ -434,7 +437,7 @@ describe("PersonnelOrderItemEditor position catalog", () => {
 
     const optgroups = Array.from(positionSelect.querySelectorAll("optgroup"));
     expect(optgroups.map((node) => node.getAttribute("label"))).toEqual([
-      "Используются в подразделении",
+      "Разрешённые для подразделения",
       "Все должности",
     ]);
     expect(positionSelect.querySelectorAll("option").length).toBeGreaterThanOrEqual(5);
@@ -485,6 +488,7 @@ describe("PersonnelOrderItemEditor position catalog", () => {
       expect(loadScopedPositionOptions).toHaveBeenLastCalledWith({
         org_group_id: 1,
         org_unit_id: 11,
+        scope: "allowed",
       });
     });
     expect(loadGlobalPositionCatalogCached).toHaveBeenCalledTimes(1);

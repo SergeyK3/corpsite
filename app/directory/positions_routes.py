@@ -15,10 +15,15 @@ from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
 
 from app.directory.rbac import compute_scope, require_personnel_visibility_or_403
+from app.services.org_unit_allowed_positions_service import (
+    build_allowed_positions_exists_sql,
+    build_allowed_positions_order_sql,
+)
 
 router = APIRouter()
 
 ALLOWED_CATEGORIES = {"leaders", "medical", "admin", "technical", "other"}
+POSITION_LIST_SCOPES = {"used", "allowed"}
 
 
 class PositionUpsert(BaseModel):
@@ -101,6 +106,26 @@ def _get_org_unit_caption(org_unit_id: int) -> str:
     return str(row.get("unit_name") or f"unit #{int(org_unit_id)}").strip()
 
 
+def _normalize_list_scope(
+    scope: Optional[str],
+    *,
+    org_group_id: Optional[int],
+    org_unit_id: Optional[int],
+) -> str:
+    normalized = str(scope or "used").strip().lower()
+    if normalized not in POSITION_LIST_SCOPES:
+        raise HTTPException(
+            status_code=422,
+            detail="scope must be one of: used, allowed.",
+        )
+    if normalized == "allowed" and org_group_id is None and org_unit_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="scope=allowed requires org_unit_id and/or org_group_id.",
+        )
+    return normalized
+
+
 @router.get("/positions")
 def list_positions_crud(
     q: Optional[str] = Query(default=None),
@@ -111,18 +136,23 @@ def list_positions_crud(
         description="Filter by top-level org group of employee's unit.",
     ),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
+    scope: Optional[str] = Query(
+        default=None,
+        description="Org-unit filter semantics: used (employees) or allowed (junction table). Default: used.",
+    ),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     uid = int(user["user_id"])
-    scope = compute_scope(uid, user)
-    require_personnel_visibility_or_403(user, scope)
+    visibility_scope = compute_scope(uid, user)
+    require_personnel_visibility_or_403(user, visibility_scope)
 
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     where_parts = ["TRUE"]
     with_prefix = ""
     filter_org_unit_name: Optional[str] = None
+    order_sql = "p.name ASC, p.position_id ASC"
 
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
@@ -132,33 +162,59 @@ def list_positions_crud(
         params["category"] = _normalize_category(category)
         where_parts.append("p.category = :category")
 
+    if scope is not None and str(scope).strip().lower() == "allowed":
+        if org_group_id is None and org_unit_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="scope=allowed requires org_unit_id and/or org_group_id.",
+            )
+
     if org_group_id is not None or org_unit_id is not None:
-        emp_meta = _employees_org_meta()
+        list_scope = _normalize_list_scope(
+            scope,
+            org_group_id=org_group_id,
+            org_unit_id=org_unit_id,
+        )
         if org_unit_id is not None:
             filter_org_unit_name = _get_org_unit_caption(int(org_unit_id))
 
-        org_scope = apply_org_scope(
-            strategy=OrgScopeStrategy.OWNER_UNIT,
-            params=OrgScopeParams(
+        if list_scope == "allowed":
+            allowed_exists, allowed_params = build_allowed_positions_exists_sql(
                 org_group_id=int(org_group_id) if org_group_id is not None else None,
                 org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
-            ),
-            regular_task_alias="e",
-            owner_unit_column=emp_meta["org_unit_col"],
-        )
-        params.update(org_scope.params)
-        with_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
-
-        where_parts.append(
-            f"""
-            EXISTS (
-                SELECT 1
-                FROM public.employees e
-                WHERE e.{emp_meta['position_col']} = p.position_id
-                  AND ({org_scope.where_sql})
             )
-            """.strip()
-        )
+            params.update(allowed_params)
+            where_parts.append(allowed_exists)
+            allowed_order, allowed_order_params = build_allowed_positions_order_sql(
+                org_group_id=int(org_group_id) if org_group_id is not None else None,
+                org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+            )
+            params.update(allowed_order_params)
+            order_sql = allowed_order
+        else:
+            emp_meta = _employees_org_meta()
+            org_scope = apply_org_scope(
+                strategy=OrgScopeStrategy.OWNER_UNIT,
+                params=OrgScopeParams(
+                    org_group_id=int(org_group_id) if org_group_id is not None else None,
+                    org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
+                ),
+                regular_task_alias="e",
+                owner_unit_column=emp_meta["org_unit_col"],
+            )
+            params.update(org_scope.params)
+            with_prefix = f"{org_scope.cte_sql}\n" if org_scope.cte_sql else ""
+
+            where_parts.append(
+                f"""
+                EXISTS (
+                    SELECT 1
+                    FROM public.employees e
+                    WHERE e.{emp_meta['position_col']} = p.position_id
+                      AND ({org_scope.where_sql})
+                )
+                """.strip()
+            )
 
     where_sql = " AND ".join(where_parts)
 
@@ -177,7 +233,7 @@ def list_positions_crud(
         SELECT p.position_id, p.name, p.category
         FROM public.positions p
         WHERE {where_sql}
-        ORDER BY p.name ASC, p.position_id ASC
+        ORDER BY {order_sql}
         LIMIT :limit OFFSET :offset
         """
     )
@@ -208,8 +264,8 @@ def get_position(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     uid = int(user["user_id"])
-    scope = compute_scope(uid, user)
-    require_personnel_visibility_or_403(user, scope)
+    visibility_scope = compute_scope(uid, user)
+    require_personnel_visibility_or_403(user, visibility_scope)
 
     q_one = text(
         """
