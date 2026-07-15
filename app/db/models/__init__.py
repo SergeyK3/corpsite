@@ -77,6 +77,16 @@ from app.db.models.operational_orders import (
     OperationalOrderTextProvenance,
     OperationalOrderTranslationAssignment,
 )
+from app.db.models.personnel_record_metadata import (
+    HR_RELATIONSHIP_CONTEXTS,
+    HR_RELATIONSHIP_UNKNOWN,
+    PPR_ENVELOPE_INITIAL_HR_RELATIONSHIP_CONTEXT,
+    PPR_ENVELOPE_INITIAL_LIFECYCLE_STATE,
+    PPR_ENVELOPE_INITIAL_VERSION,
+    PPR_LIFECYCLE_CREATED,
+    PPR_LIFECYCLE_STATES,
+    PersonnelRecordMetadata,
+)
 from app.db.models.personnel_migration import (
     DOMAIN_CODE_EDUCATION,
     EDUCATION_KINDS,
@@ -245,6 +255,14 @@ __all__ = [
     "REVIEW_STATUS_APPROVED",
     "REVIEW_STATUS_REJECTED",
     "REVIEW_STATUS_MERGED",
+    "HR_RELATIONSHIP_CONTEXTS",
+    "HR_RELATIONSHIP_UNKNOWN",
+    "PPR_ENVELOPE_INITIAL_HR_RELATIONSHIP_CONTEXT",
+    "PPR_ENVELOPE_INITIAL_LIFECYCLE_STATE",
+    "PPR_ENVELOPE_INITIAL_VERSION",
+    "PPR_LIFECYCLE_CREATED",
+    "PPR_LIFECYCLE_STATES",
+    "PersonnelRecordMetadata",
     "DOMAIN_CODE_EDUCATION",
     "EDUCATION_KINDS",
     "EVENT_TYPE_EDUCATION_MIGRATED",
