@@ -12,6 +12,7 @@ import { closePersonnelOrderPdfBrowser } from "./personnelOrderPdfBrowser";
 import { extractPersonnelOrderPdfAuth, isPersonnelOrderPdfAuthenticated } from "./personnelOrderPdfAuth";
 import { parsePersonnelOrderPrintLanguage } from "./personnelOrderPrintLanguage";
 import { statusMarkLinesForLanguage } from "./personnelOrderPrintLocale";
+import { buildPersonnelOrderPrintDocumentHtml } from "./personnelOrderPrintDocumentHtml";
 import {
   buildPersonnelOrderPrintViewModel,
   type PersonnelOrderPrintViewModel,
@@ -148,6 +149,50 @@ describe("personnelOrderPdf language and watermark", () => {
     expect(html).not.toContain("ПРОЕКТ");
     expect(html).not.toContain("НА ПОДПИСЬ");
     expect(html).not.toContain("АННУЛИРОВАН");
+  });
+
+  it("includes signatory requisites in PDF HTML document", () => {
+    const html = buildPersonnelOrderPdfHtmlDocument({
+      model: sampleModel({
+        order_date: "2026-07-18",
+        signed_by_name: "М. Тулеутаев",
+        signed_by_position: "Директор",
+      }),
+      language: "ru",
+    });
+    expect(html).toContain("18 июля 2026 года");
+    expect(html).toContain("Директор");
+    expect(html).toContain("М. Тулеутаев");
+    expect(html).toContain('data-testid="personnel-order-print-signature"');
+  });
+
+  it("includes manual signatory override in PDF HTML document", () => {
+    const html = buildPersonnelOrderPdfHtmlDocument({
+      model: sampleModel({
+        order_date: "2026-07-18",
+        signed_by_name: "К. Замещающий",
+        signed_by_position: "И. о. директора",
+      }),
+      language: "ru",
+    });
+    expect(html).toContain("И. о. директора");
+    expect(html).toContain("К. Замещающий");
+    expect(html).not.toContain("М. Тулеутаев");
+  });
+
+  it("pdf pipeline uses the same requisites in print HTML and PDF HTML document", () => {
+    const model = sampleModel({
+      order_date: "2026-07-18",
+      signed_by_name: "М. Тулеутаев",
+      signed_by_position: "Директор",
+    });
+    const pdfHtml = buildPersonnelOrderPdfHtmlDocument({ model, language: "ru" });
+    const printHtml = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+
+    for (const value of ["18 июля 2026 года", "Директор", "М. Тулеутаев"]) {
+      expect(pdfHtml).toContain(value);
+      expect(printHtml).toContain(value);
+    }
   });
 });
 

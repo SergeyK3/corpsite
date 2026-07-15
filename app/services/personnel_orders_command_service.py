@@ -28,6 +28,9 @@ from app.db.models.personnel_orders import (
     SOURCE_MODE_PAPER,
 )
 from app.services.personnel_order_archive_guard import assert_order_not_archived
+from app.services.personnel_order_signatory_resolver import (
+    apply_default_signatory_if_needed,
+)
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
     PersonnelOrderValidationError,
@@ -270,6 +273,18 @@ def create_personnel_order_draft(
 
     try:
         with engine.begin() as conn:
+            (
+                signed_by_employee_id,
+                signed_by_name,
+                signed_by_position,
+                _signatory_warning,
+            ) = apply_default_signatory_if_needed(
+                signed_by_employee_id=signed_by_employee_id,
+                signed_by_name=signed_by_name,
+                signed_by_position=signed_by_position,
+                conn=conn,
+            )
+
             if signed_by_employee_id is not None:
                 _ensure_employee_exists(conn, signed_by_employee_id)
 

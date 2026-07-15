@@ -122,4 +122,49 @@ describe("PersonnelOrderDetailDrawer print entry", () => {
     expect(screen.queryByRole("button", { name: "Аннулировать" })).not.toBeInTheDocument();
     expect(screen.getByTestId("personnel-order-drawer-print")).toBeInTheDocument();
   });
+
+  it("shows read-only requisites from saved order header", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({
+      ...detail,
+      order: {
+        ...detail.order,
+        status: "REGISTERED",
+        order_date: "2026-07-18",
+        signed_by_position: "Директор",
+        signed_by_name: "М. Тулеутаев",
+      },
+    });
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Должность подписанта")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("М. Тулеутаев")).toBeInTheDocument();
+    expect(screen.getByText("Директор")).toBeInTheDocument();
+    expect(screen.getByText("Дата приказа")).toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-order-header-editor")).not.toBeInTheDocument();
+  });
+
+  it("shows manual signatory override in read-only header view", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({
+      ...detail,
+      order: {
+        ...detail.order,
+        status: "REGISTERED",
+        order_date: "2026-07-18",
+        signed_by_position: "И. о. директора",
+        signed_by_name: "К. Замещающий",
+      },
+    });
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("И. о. директора")).toBeInTheDocument();
+    });
+    expect(screen.getByText("К. Замещающий")).toBeInTheDocument();
+    expect(screen.queryByText("М. Тулеутаев")).not.toBeInTheDocument();
+  });
 });

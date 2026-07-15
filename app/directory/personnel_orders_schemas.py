@@ -142,6 +142,14 @@ class PersonnelOrderDetailResponse(BaseModel):
     events: List[PersonnelOrderLinkedEventOut]
 
 
+class PersonnelOrderSignatoryDefaultOut(BaseModel):
+    signed_by_employee_id: Optional[int] = None
+    signed_by_name: Optional[str] = None
+    signed_by_position: Optional[str] = None
+    warning: Optional[str] = None
+    source: Optional[str] = None
+
+
 class PersonnelOrderCreateIn(BaseModel):
     order_number: Optional[str] = Field(default=None, min_length=1, max_length=200)
     order_date: Optional[date] = None

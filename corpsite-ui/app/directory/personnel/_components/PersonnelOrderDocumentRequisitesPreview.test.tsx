@@ -75,4 +75,24 @@ describe("PersonnelOrderDocumentRequisitesPreview", () => {
     expect(fio.className).toContain("text-right");
     expect(fio).toHaveTextContent("М. Тулеутаев");
   });
+
+  it("shows manual signatory override with position left and FIO right", () => {
+    render(
+      <PersonnelOrderDocumentRequisitesPreview
+        order={{
+          order_date: "2026-07-18",
+          signed_by_name: "К. Замещающий",
+          signed_by_position: "И. о. директора",
+        }}
+        locale="ru"
+      />,
+    );
+
+    const position = screen.getByTestId("personnel-order-requisites-signatory-position");
+    const fio = screen.getByTestId("personnel-order-requisites-signatory-fio");
+    expect(position).toHaveTextContent("И. о. директора");
+    expect(fio).toHaveTextContent("К. Замещающий");
+    expect(fio.className).toContain("text-right");
+    expect(screen.queryByText("М. Тулеутаев")).not.toBeInTheDocument();
+  });
 });

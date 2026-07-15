@@ -24,6 +24,7 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderLocalizedTextUpsertIn,
     PersonnelOrderRegisterIn,
     PersonnelOrderRestoreIn,
+    PersonnelOrderSignatoryDefaultOut,
     PersonnelOrderUpdateIn,
     PersonnelOrderVoidIn,
 )
@@ -73,6 +74,7 @@ from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
     PersonnelOrderValidationError,
     get_personnel_order,
+    get_default_personnel_order_signatory,
     list_personnel_orders,
     validation_error_to_http422,
 )
@@ -171,6 +173,25 @@ def list_personnel_orders_route(
         )
     except PersonnelOrderArchivedError as exc:
         raise _order_archived_http(exc)
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get(
+    "/personnel-orders/signatory-default",
+    response_model=PersonnelOrderSignatoryDefaultOut,
+)
+def get_personnel_order_signatory_default_route(
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Resolve current default signatory for personnel order header prefill."""
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(get_default_personnel_order_signatory)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except HTTPException:

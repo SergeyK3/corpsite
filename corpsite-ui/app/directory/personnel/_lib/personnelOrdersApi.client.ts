@@ -257,6 +257,14 @@ export type PersonnelOrderUpdatePayload = {
   comment?: string | null;
 };
 
+export type PersonnelOrderSignatoryDefault = {
+  signed_by_employee_id?: number | null;
+  signed_by_name?: string | null;
+  signed_by_position?: string | null;
+  warning?: string | null;
+  source?: string | null;
+};
+
 export type PersonnelOrderItemCreatePayload = {
   item_type_code: string;
   employee_id?: number | null;
@@ -505,6 +513,16 @@ export async function createPersonnelOrder(
     body: payload,
     fallback: "Не удалось создать приказ.",
   });
+}
+
+export async function getPersonnelOrderSignatoryDefault(): Promise<PersonnelOrderSignatoryDefault> {
+  return requestJson<PersonnelOrderSignatoryDefault>(
+    "GET",
+    "/directory/personnel-orders/signatory-default",
+    {
+      fallback: "Не удалось определить подписанта по умолчанию.",
+    },
+  );
 }
 
 export async function updatePersonnelOrder(

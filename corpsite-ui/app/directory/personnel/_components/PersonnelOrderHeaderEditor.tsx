@@ -4,6 +4,7 @@ import * as React from "react";
 
 import {
   PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
+  getPersonnelOrderSignatoryDefault,
   mapPersonnelOrdersApiError,
   updatePersonnelOrder,
   type PersonnelOrderDetailResponse,
@@ -15,6 +16,10 @@ import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
 const FIELD_LABEL_CLASS = "mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200";
 const FIELD_INPUT_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950";
+
+function hasSignatoryValues(order: Pick<PersonnelOrderHeader, "signed_by_name" | "signed_by_position">) {
+  return Boolean((order.signed_by_name || "").trim() || (order.signed_by_position || "").trim());
+}
 
 type Props = {
   order: PersonnelOrderHeader;
@@ -33,6 +38,8 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [signatoryHint, setSignatoryHint] = React.useState<string | null>(null);
+  const [prefillDone, setPrefillDone] = React.useState(false);
 
   React.useEffect(() => {
     setOrderNumber(order.order_number || "");
@@ -44,7 +51,36 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
     setBasisSummary(order.basis_summary || "");
     setError(null);
     setMessage(null);
+    setSignatoryHint(null);
+    setPrefillDone(hasSignatoryValues(order));
   }, [order]);
+
+  React.useEffect(() => {
+    if (disabled || prefillDone || hasSignatoryValues(order)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const defaults = await getPersonnelOrderSignatoryDefault();
+        if (cancelled) return;
+        if (defaults.signed_by_name) setSignedByName(defaults.signed_by_name);
+        if (defaults.signed_by_position) setSignedByPosition(defaults.signed_by_position);
+        if (defaults.warning) setSignatoryHint(defaults.warning);
+        setPrefillDone(true);
+      } catch {
+        if (!cancelled) {
+          setSignatoryHint(
+            "Действующий директор не найден. Заполните должность и ФИО подписанта вручную.",
+          );
+          setPrefillDone(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [disabled, order, prefillDone]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -158,6 +194,14 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
               data-testid="personnel-order-header-signatory-name"
             />
           </div>
+          {signatoryHint ? (
+            <div
+              className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
+              data-testid="personnel-order-header-signatory-hint"
+            >
+              {signatoryHint}
+            </div>
+          ) : null}
           <div className="sm:col-span-2">
             <label className={FIELD_LABEL_CLASS}>Основание</label>
             <input

@@ -703,3 +703,28 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
 
 def validation_error_to_http422(exc: PersonnelOrderValidationError) -> HTTPException:
     return HTTPException(status_code=422, detail=str(exc))
+
+
+def get_default_personnel_order_signatory() -> Dict[str, Any]:
+    """Return resolved default signatory for UI prefill (not persisted until save/create)."""
+    from app.services.personnel_order_signatory_resolver import (
+        resolve_default_personnel_order_signatory,
+    )
+
+    _require_available()
+
+    with engine.begin() as conn:
+        resolution = resolve_default_personnel_order_signatory(conn)
+
+    return {
+        "signed_by_employee_id": resolution.employee_id,
+        "signed_by_name": resolution.signed_by_name,
+        "signed_by_position": resolution.signed_by_position,
+        "warning": resolution.warning,
+        "source": resolution.source,
+    }
+
+
+def _require_available() -> None:
+    if not personnel_orders_available():
+        raise PersonnelOrderValidationError("Personnel orders schema is not available.")
