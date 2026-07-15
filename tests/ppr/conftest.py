@@ -91,6 +91,14 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
             text("DELETE FROM public.personnel_record_events WHERE person_id = ANY(:ids)"),
             {"ids": person_ids},
         )
+        conn.execute(
+            text("DELETE FROM public.person_education WHERE person_id = ANY(:ids)"),
+            {"ids": person_ids},
+        )
+        conn.execute(
+            text("DELETE FROM public.person_training WHERE person_id = ANY(:ids)"),
+            {"ids": person_ids},
+        )
     if employee_ids:
         conn.execute(
             text("DELETE FROM public.employees WHERE employee_id = ANY(:ids)"),

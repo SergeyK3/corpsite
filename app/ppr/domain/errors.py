@@ -65,3 +65,23 @@ class PprLegacyEventMappingError(PprError):
 
 class PprLegacyEventMappingAmbiguousError(PprLegacyEventMappingError):
     code = "PPR_LEGACY_EVENT_MAPPING_AMBIGUOUS"
+
+
+class SectionRecordNotFoundError(LookupError):
+    code = "PPR_SECTION_RECORD_NOT_FOUND"
+
+
+class SectionDuplicateRecordError(PprError):
+    code = "PPR_SECTION_DUPLICATE_RECORD"
+
+
+class SectionValidationError(PprError):
+    code = "PPR_SECTION_VALIDATION_ERROR"
+
+
+class UnknownSectionTypeError(PprError):
+    code = "PPR_UNKNOWN_SECTION_TYPE"
+
+
+class SectionOptimisticConcurrencyConflictError(PprError):
+    code = "PPR_SECTION_OPTIMISTIC_CONCURRENCY_CONFLICT"
