@@ -67,6 +67,7 @@ from app.services.hr_import_employee_card_service import (
     get_employee_import_card,
     save_employee_import_card,
 )
+from app.services.personnel_card_read_dispatcher import PersonnelCardReadDispatcher
 from app.services.hr_import_row_review_service import (
     export_declarations_excel,
     get_row_medical_category_history,
@@ -100,6 +101,7 @@ from app.services.hr_import_enroll_employee_service import (
     OUTCOME_CONFLICT,
     enroll_employee_from_normalized_record,
 )
+from app.ppr.domain.errors import PprReadLegacyAdapterError, PprReadPathConfigError
 from app.services.hr_import_service import import_control_list
 
 from .common import as_http500, call_service
@@ -110,6 +112,9 @@ router = APIRouter()
 def _with_conn(fn, **kwargs):
     with engine.begin() as conn:
         return fn(conn, **kwargs)
+
+
+_import_card_dispatcher = PersonnelCardReadDispatcher()
 
 
 def _batch_not_found(exc: BatchNotFoundError) -> HTTPException:
@@ -139,11 +144,17 @@ def get_personnel_employee_import_card(
 ) -> Dict[str, Any]:
     require_personnel_admin_or_403(user)
     try:
-        return _with_conn(get_employee_import_card, employee_id=employee_id)
+        return _with_conn(
+            _import_card_dispatcher.load_import_card,
+            employee_id=employee_id,
+            user_ctx=user,
+        )
     except EmployeeImportCardNotFoundError as e:
         raise _employee_import_card_not_found(e)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
+    except (PprReadPathConfigError, PprReadLegacyAdapterError) as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

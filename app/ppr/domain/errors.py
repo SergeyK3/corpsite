@@ -121,3 +121,11 @@ class PprPmfBridgeError(PprError):
 
 class PprPmfCommandMappingError(PprError):
     code = "PPR_PMF_COMMAND_MAPPING_ERROR"
+
+
+class PprReadPathConfigError(PprError):
+    code = "PPR_READ_PATH_CONFIG_ERROR"
+
+
+class PprReadLegacyAdapterError(PprError):
+    code = "PPR_READ_LEGACY_ADAPTER_ERROR"
