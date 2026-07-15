@@ -37,6 +37,8 @@ const API_BASE = "/directory/positions";
 const PAGE_SIZE = 50;
 const POSITION_SCOPE_PARAM = "position_scope";
 
+type SearchParamsReader = Pick<URLSearchParams, "get">;
+
 const POSITION_SCOPE_OPTIONS: Array<{ value: PositionListScope; label: string }> = [
   { value: "allowed", label: "Разрешённые" },
   { value: "used", label: "Используемые" },
@@ -79,7 +81,7 @@ function parsePositiveInt(value: string | null): number | null {
 }
 
 function readPositionListScope(
-  sp: ReturnType<typeof useSearchParams>,
+  sp: SearchParamsReader,
   orgUnitId: number | null,
 ): PositionListScope | null {
   if (orgUnitId == null) return null;
@@ -128,7 +130,7 @@ function positionScopeLabel(scope: PositionListScope | null): string | null {
   return POSITION_SCOPE_OPTIONS.find((opt) => opt.value === scope)?.label ?? null;
 }
 
-function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number | null {
+function readSelectedOrgUnitId(sp: SearchParamsReader): number | null {
   return (
     parsePositiveInt(sp.get("org_unit_id")) ??
     parsePositiveInt(sp.get("unit_id")) ??
