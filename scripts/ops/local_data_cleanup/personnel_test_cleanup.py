@@ -39,6 +39,21 @@ from personnel_cleanup_fk_graph import (
     table_pk_column,
     topological_delete_order,
 )
+from positions_domain import (
+    run_allowed_positions_audit,
+    run_allowed_positions_execute,
+    run_positions_audit,
+    run_positions_execute,
+    run_positions_verify,
+)
+from position_contours_domain import (
+    load_contour_allowlist,
+    run_position_contours_execute,
+    run_position_contours_plan,
+    run_position_contours_verify,
+)
+
+POSITION_DOMAINS = frozenset({"positions", "allowed-positions", "position-contours"})
 
 logger = logging.getLogger("personnel_test_cleanup")
 
@@ -1140,8 +1155,26 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument(
         "--allowlist",
         type=Path,
-        required=True,
-        help="External allowlist JSON path (outside toolkit directory).",
+        default=None,
+        help="External allowlist JSON path (outside toolkit directory). Required for legacy and execute modes.",
+    )
+    common.add_argument(
+        "--domain",
+        choices=sorted(POSITION_DOMAINS),
+        default=None,
+        help="Cleanup domain: positions | allowed-positions | position-contours.",
+    )
+    common.add_argument(
+        "--allowlist-out",
+        type=Path,
+        default=None,
+        help="For plan mode: write generated allowlist draft to this external path.",
+    )
+    common.add_argument(
+        "--org-unit-id",
+        type=int,
+        default=None,
+        help="Target org unit for --domain allowed-positions (required for that domain).",
     )
     common.add_argument(
         "--manifest-out",
@@ -1160,6 +1193,11 @@ def build_parser() -> argparse.ArgumentParser:
         "dry-run",
         parents=[common],
         help="Alias for audit (default safe mode).",
+    )
+    plan_parser = sub.add_parser(
+        "plan",
+        parents=[common],
+        help="Read-only position-contours plan: forensic inventory + delete order + allowlist draft.",
     )
     exec_parser = sub.add_parser(
         "execute",
@@ -1219,10 +1257,121 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         url = resolve_database_url(args.database_url)
-        allowlist = load_allowlist(args.allowlist)
         engine, db_identity = create_engine_from_guard(
             url, expected_database_name=args.expected_database_name
         )
+
+        if args.domain in POSITION_DOMAINS:
+            if args.domain == "allowed-positions" and args.org_unit_id is None:
+                raise SafetyAbort("--org-unit-id is required for --domain allowed-positions")
+            if args.domain == "position-contours":
+                if args.command == "plan":
+                    run_position_contours_plan(
+                        engine,
+                        db_identity,
+                        manifest_out=args.manifest_out,
+                        allowlist_out=args.allowlist_out,
+                    )
+                    return 0
+                if args.command == "execute":
+                    if args.allowlist is None:
+                        raise SafetyAbort("--allowlist is required for position-contours execute")
+                    allowlist = load_contour_allowlist(args.allowlist)
+                    assert_execute_guards(
+                        confirm_phrase=args.confirm_phrase,
+                        expected_database_name=args.expected_database_name,
+                        confirm_database_name=args.confirm_database_name,
+                        backup_path=args.backup_path,
+                        backup_acknowledged=args.backup_acknowledged,
+                    )
+                    run_position_contours_execute(
+                        engine,
+                        allowlist,
+                        db_identity,
+                        manifest_out=args.manifest_out,
+                    )
+                    return 0
+                if args.command == "verify":
+                    if args.allowlist is None:
+                        raise SafetyAbort("--allowlist is required for position-contours verify")
+                    allowlist = load_contour_allowlist(args.allowlist)
+                    before_manifest = None
+                    if args.before_manifest and args.before_manifest.is_file():
+                        with args.before_manifest.open(encoding="utf-8") as fh:
+                            before_manifest = json.load(fh)
+                    report = run_position_contours_verify(
+                        engine,
+                        allowlist,
+                        db_identity,
+                        manifest_out=args.manifest_out,
+                        before_manifest=before_manifest,
+                    )
+                    return 0 if report["result"]["passed"] else 1
+                raise SafetyAbort(
+                    f"Domain mode {args.domain!r} supports plan, execute, verify — not {args.command!r}"
+                )
+            if args.command in {"audit", "dry-run"}:
+                if args.domain == "positions":
+                    run_positions_audit(engine, db_identity, manifest_out=args.manifest_out)
+                else:
+                    run_allowed_positions_audit(
+                        engine,
+                        db_identity,
+                        org_unit_id=int(args.org_unit_id),
+                        manifest_out=args.manifest_out,
+                    )
+                return 0
+            if args.command == "execute":
+                if args.allowlist is None:
+                    raise SafetyAbort("--allowlist is required for domain execute")
+                allowlist = load_allowlist(args.allowlist)
+                assert_execute_guards(
+                    confirm_phrase=args.confirm_phrase,
+                    expected_database_name=args.expected_database_name,
+                    confirm_database_name=args.confirm_database_name,
+                    backup_path=args.backup_path,
+                    backup_acknowledged=args.backup_acknowledged,
+                )
+                if args.domain == "positions":
+                    run_positions_execute(
+                        engine,
+                        allowlist,
+                        db_identity,
+                        manifest_out=args.manifest_out,
+                    )
+                else:
+                    run_allowed_positions_execute(
+                        engine,
+                        allowlist,
+                        db_identity,
+                        manifest_out=args.manifest_out,
+                    )
+                return 0
+            if args.command == "verify":
+                if args.allowlist is None:
+                    raise SafetyAbort("--allowlist is required for domain verify")
+                allowlist = load_allowlist(args.allowlist)
+                before_manifest = None
+                if args.before_manifest and args.before_manifest.is_file():
+                    with args.before_manifest.open(encoding="utf-8") as fh:
+                        before_manifest = json.load(fh)
+                if args.domain == "positions":
+                    report = run_positions_verify(
+                        engine,
+                        allowlist,
+                        db_identity,
+                        manifest_out=args.manifest_out,
+                        before_manifest=before_manifest,
+                    )
+                    return 0 if report["result"]["passed"] else 1
+                raise SafetyAbort(
+                    f"Domain mode {args.domain!r} does not support command 'verify'"
+                )
+            raise SafetyAbort(f"Domain mode {args.domain!r} does not support command {args.command!r}")
+
+        if args.allowlist is None:
+            raise SafetyAbort("--allowlist is required unless --domain audit mode is used")
+        allowlist = load_allowlist(args.allowlist)
 
         if args.command in {"audit", "dry-run"}:
             run_audit_or_dry_run(

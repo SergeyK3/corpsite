@@ -108,6 +108,18 @@
       }
     }
   ],
+  "org_unit_allowed_position_links": [
+    {
+      "id": 0,
+      "label": "example-hr-probe-link",
+      "reason": "explicit test allowed-link for org unit — not selected by name alone",
+      "expected_signature": {
+        "org_unit_id": 73,
+        "position_id": 0,
+        "position_name": "ProbeAllowedA"
+      }
+    }
+  ],
   "identities": [],
   "batches": [],
   "snapshots": [],

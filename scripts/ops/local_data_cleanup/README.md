@@ -60,6 +60,19 @@ python scripts/ops/local_data_cleanup/personnel_test_cleanup.py audit `
   --allowlist C:\path\to\cleanup_allowlist.json `
   --manifest-out C:\path\to\manifests\cleanup_dryrun.json
 
+# 3a. Positions domain audit (no allowlist required)
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py audit `
+  --expected-database-name corpsite `
+  --domain positions `
+  --manifest-out C:\path\to\manifests\positions_audit.json
+
+# 3b. HR allowed-positions audit for org unit 73
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py audit `
+  --expected-database-name corpsite `
+  --domain allowed-positions `
+  --org-unit-id 73 `
+  --manifest-out C:\path\to\manifests\hr_allowed_audit.json
+
 # 4. Review manifest: deletable / protected / blocked sections
 
 # 5. Execute (only after backup and manifest review)
@@ -72,7 +85,61 @@ python scripts/ops/local_data_cleanup/personnel_test_cleanup.py execute `
   --before-manifest C:\path\to\manifests\cleanup_dryrun.json `
   --manifest-out C:\path\to\manifests\cleanup_after.json
 
-# 6. Verify
+# 5a. Execute HR allowed-link cleanup (explicit link IDs in allowlist.org_unit_allowed_position_links)
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py execute `
+  --expected-database-name corpsite `
+  --domain allowed-positions `
+  --org-unit-id 73 `
+  --confirm-database-name corpsite `
+  --confirm-phrase DELETE_LOCAL_TEST_DATA `
+  --allowlist C:\path\to\local_hr_allowed_links_allowlist.json `
+  --backup-acknowledged `
+  --manifest-out C:\path\to\manifests\hr_allowed_execute.json
+
+# 5c. Plan position-contours (read-only forensic + delete order + allowlist draft)
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py plan `
+  --expected-database-name corpsite `
+  --domain position-contours `
+  --manifest-out C:\path\to\manifests\position_contours_plan.json `
+  --allowlist-out C:\path\to\local_position_contours_allowlist.json
+
+# 5d. Execute position-contours (explicit contour allowlist)
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py execute `
+  --expected-database-name corpsite `
+  --domain position-contours `
+  --confirm-database-name corpsite `
+  --confirm-phrase DELETE_LOCAL_TEST_DATA `
+  --allowlist C:\path\to\local_position_contours_allowlist.json `
+  --backup-path C:\path\to\backups\dev_before_contours.dump `
+  --manifest-out C:\path\to\manifests\position_contours_execute.json
+
+# 5e. Verify position-contours
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py verify `
+  --expected-database-name corpsite `
+  --domain position-contours `
+  --allowlist C:\path\to\local_position_contours_allowlist.json `
+  --before-manifest C:\path\to\manifests\position_contours_plan.json `
+  --manifest-out C:\path\to\manifests\position_contours_verify.json
+
+# 5b. Execute global test positions cleanup (explicit IDs in allowlist.positions)
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py execute `
+  --expected-database-name corpsite `
+  --domain positions `
+  --confirm-database-name corpsite `
+  --confirm-phrase DELETE_LOCAL_TEST_DATA `
+  --allowlist C:\path\to\local_test_positions_allowlist.json `
+  --backup-acknowledged `
+  --manifest-out C:\path\to\manifests\positions_execute.json
+
+# 6. Verify positions domain (read-only)
+python scripts/ops/local_data_cleanup/personnel_test_cleanup.py verify `
+  --expected-database-name corpsite `
+  --domain positions `
+  --allowlist C:\path\to\local_test_positions_allowlist.json `
+  --before-manifest C:\path\to\manifests\positions_audit_before.json `
+  --manifest-out C:\path\to\manifests\positions_verify.json
+
+# 6b. Verify general personnel cleanup
 python scripts/ops/local_data_cleanup/personnel_test_cleanup.py verify `
   --expected-database-name your_dev_database `
   --allowlist C:\path\to\cleanup_allowlist.json `
@@ -88,6 +155,14 @@ python scripts/ops/local_data_cleanup/personnel_test_cleanup.py verify `
 | `dry-run` | Alias for `audit` |
 | `execute` | Delete allowlisted rows inside a transaction (requires confirmation + backup proof) |
 | `verify` | Post-cleanup checks: allowlisted rows removed, protected entities still present |
+
+### Positions domain verify policy
+
+- **Read-only** — no INSERT/UPDATE/DELETE/DDL.
+- **Blocked positions** listed in `--before-manifest` `blocked_candidates` must still exist; unexpected absence **fails** verify.
+- **Protected** `position_id=1` (Архивариус) and HR etalon position names must remain.
+- **Optional tables** (for example `org_unit_allowed_positions`) are **skipped**, not fatal.
+- **ID reuse** (same `position_id`, different `name` than allowlist signature) **fails** verify.
 
 ## Allowlist rules
 
