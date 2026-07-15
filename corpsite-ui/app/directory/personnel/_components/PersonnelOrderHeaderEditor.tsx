@@ -9,10 +9,11 @@ import {
   updatePersonnelOrder,
   type PersonnelOrderDetailResponse,
   type PersonnelOrderHeader,
+  type PersonnelOrderSignatoryDefault,
   type PersonnelOrderUpdatePayload,
 } from "../_lib/personnelOrdersApi.client";
 import type { PersonnelOrderRequisitesSnapshot } from "../_lib/personnelOrderDocumentRequisites";
-import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
+import { isEditablePersonnelOrderStatus, personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
 
 const FIELD_LABEL_CLASS = "mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200";
@@ -25,6 +26,18 @@ function isSignatoryComplete(
   return Boolean((order.signed_by_name || "").trim() && (order.signed_by_position || "").trim());
 }
 
+function hasSavedSignatoryEmployee(order: Pick<PersonnelOrderHeader, "signed_by_employee_id">) {
+  return order.signed_by_employee_id != null && Number(order.signed_by_employee_id) > 0;
+}
+
+function hasPartialSavedSignatory(
+  order: Pick<PersonnelOrderHeader, "signed_by_name" | "signed_by_position">,
+) {
+  const hasName = Boolean((order.signed_by_name || "").trim());
+  const hasPosition = Boolean((order.signed_by_position || "").trim());
+  return hasName !== hasPosition;
+}
+
 function snapshotFromFields(
   orderDate: string,
   signedByName: string,
@@ -35,6 +48,37 @@ function snapshotFromFields(
     signed_by_name: signedByName.trim() || null,
     signed_by_position: signedByPosition.trim() || null,
   };
+}
+
+function resolverResultIsComplete(defaults: PersonnelOrderSignatoryDefault): boolean {
+  return Boolean(
+    !defaults.warning &&
+      (defaults.signed_by_name || "").trim() &&
+      (defaults.signed_by_position || "").trim() &&
+      defaults.signed_by_employee_id != null,
+  );
+}
+
+function signatoryPayloadDiffersFromSaved(
+  order: PersonnelOrderHeader,
+  nextName: string,
+  nextPosition: string,
+  employeeId?: number | null,
+): boolean {
+  if ((order.signed_by_name || "").trim() !== nextName) return true;
+  if ((order.signed_by_position || "").trim() !== nextPosition) return true;
+  if (employeeId != null && order.signed_by_employee_id !== employeeId) return true;
+  return false;
+}
+
+function canAutoPersistSignatory(order: PersonnelOrderHeader, disabled: boolean): boolean {
+  if (disabled) return false;
+  if (!isEditablePersonnelOrderStatus(order.status)) return false;
+  if (order.is_archived) return false;
+  if (isSignatoryComplete(order)) return false;
+  if (hasPartialSavedSignatory(order)) return false;
+  if (hasSavedSignatoryEmployee(order)) return false;
+  return true;
 }
 
 type Props = {
@@ -62,7 +106,11 @@ export default function PersonnelOrderHeaderEditor({
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [signatoryHint, setSignatoryHint] = React.useState<string | null>(null);
-  const [prefillDone, setPrefillDone] = React.useState(false);
+  const [autoPersistNotice, setAutoPersistNotice] = React.useState<string | null>(null);
+
+  const manualSignatoryEditRef = React.useRef(false);
+  const prefillAttemptedOrderIdRef = React.useRef<number | null>(null);
+  const autoPersistAttemptedRef = React.useRef(false);
 
   React.useEffect(() => {
     setOrderNumber(order.order_number || "");
@@ -75,7 +123,10 @@ export default function PersonnelOrderHeaderEditor({
     setError(null);
     setMessage(null);
     setSignatoryHint(null);
-    setPrefillDone(isSignatoryComplete(order));
+    setAutoPersistNotice(null);
+    manualSignatoryEditRef.current = false;
+    autoPersistAttemptedRef.current = false;
+    prefillAttemptedOrderIdRef.current = isSignatoryComplete(order) ? order.order_id : null;
   }, [order]);
 
   React.useEffect(() => {
@@ -83,47 +134,71 @@ export default function PersonnelOrderHeaderEditor({
   }, [orderDate, signedByName, signedByPosition, onRequisitesChange]);
 
   React.useEffect(() => {
-    if (disabled || prefillDone || isSignatoryComplete(order)) return;
+    if (!canAutoPersistSignatory(order, disabled)) return;
+    if (prefillAttemptedOrderIdRef.current === order.order_id) return;
 
+    prefillAttemptedOrderIdRef.current = order.order_id;
     let cancelled = false;
+
     void (async () => {
       try {
         const defaults = await getPersonnelOrderSignatoryDefault();
-        if (cancelled) return;
+        if (cancelled || manualSignatoryEditRef.current) return;
 
-        const nextName =
-          !(order.signed_by_name || "").trim() && defaults.signed_by_name
-            ? String(defaults.signed_by_name).trim()
-            : String(order.signed_by_name || signedByName || "").trim();
-        const nextPosition =
-          !(order.signed_by_position || "").trim() && defaults.signed_by_position
-            ? String(defaults.signed_by_position).trim()
-            : String(order.signed_by_position || signedByPosition || "").trim();
+        const resolvedName = String(defaults.signed_by_name || "").trim();
+        const resolvedPosition = String(defaults.signed_by_position || "").trim();
 
-        if (!(order.signed_by_name || "").trim() && nextName) setSignedByName(nextName);
-        if (!(order.signed_by_position || "").trim() && nextPosition) setSignedByPosition(nextPosition);
-        if (defaults.warning) setSignatoryHint(defaults.warning);
-
-        const shouldPersist =
-          !isSignatoryComplete(order) && Boolean(nextName || nextPosition);
-        if (shouldPersist) {
-          const detail = await updatePersonnelOrder(order.order_id, {
-            signed_by_name: nextName || null,
-            signed_by_position: nextPosition || null,
-          });
-          if (!cancelled) {
-            onSaved(detail);
-            setMessage("Реквизиты подписанта сохранены.");
-          }
+        if (defaults.warning) {
+          setSignatoryHint(defaults.warning);
+          return;
         }
 
-        if (!cancelled) setPrefillDone(true);
-      } catch {
-        if (!cancelled) {
+        if (!resolverResultIsComplete(defaults)) {
           setSignatoryHint(
             "Действующий директор не найден. Заполните должность и ФИО подписанта вручную.",
           );
-          setPrefillDone(true);
+          return;
+        }
+
+        if (!(order.signed_by_name || "").trim()) setSignedByName(resolvedName);
+        if (!(order.signed_by_position || "").trim()) setSignedByPosition(resolvedPosition);
+
+        const shouldPersist =
+          !autoPersistAttemptedRef.current &&
+          !manualSignatoryEditRef.current &&
+          signatoryPayloadDiffersFromSaved(
+            order,
+            resolvedName,
+            resolvedPosition,
+            defaults.signed_by_employee_id,
+          );
+
+        if (!shouldPersist) return;
+
+        autoPersistAttemptedRef.current = true;
+        try {
+          const detail = await updatePersonnelOrder(order.order_id, {
+            signed_by_name: resolvedName,
+            signed_by_position: resolvedPosition,
+            signed_by_employee_id: defaults.signed_by_employee_id ?? undefined,
+          });
+          if (!cancelled && !manualSignatoryEditRef.current) {
+            onSaved(detail);
+            setSignatoryHint(null);
+            setMessage("Реквизиты подписанта сохранены.");
+          }
+        } catch {
+          if (!cancelled) {
+            setAutoPersistNotice(
+              "Не удалось автоматически сохранить реквизиты подписанта. Сохраните заголовок вручную.",
+            );
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSignatoryHint(
+            "Не удалось автоматически определить подписанта. Заполните должность и ФИО вручную.",
+          );
         }
       }
     })();
@@ -131,11 +206,24 @@ export default function PersonnelOrderHeaderEditor({
     return () => {
       cancelled = true;
     };
-  }, [disabled, onSaved, order, prefillDone]);
+  }, [disabled, onSaved, order]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (disabled) return;
+
+    const nextName = signedByName.trim();
+    const nextPosition = signedByPosition.trim();
+    const hadSavedName = Boolean((order.signed_by_name || "").trim());
+    const hadSavedPosition = Boolean((order.signed_by_position || "").trim());
+    const partialSignatory = Boolean(nextName) !== Boolean(nextPosition);
+
+    if (partialSignatory) {
+      setError("Укажите и должность, и ФИО подписанта.");
+      setMessage(null);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -148,10 +236,6 @@ export default function PersonnelOrderHeaderEditor({
       if (orderNumber.trim()) payload.order_number = orderNumber.trim();
       if (orderDate.trim()) payload.order_date = orderDate.trim();
 
-      const nextName = signedByName.trim();
-      const nextPosition = signedByPosition.trim();
-      const hadSavedName = Boolean((order.signed_by_name || "").trim());
-      const hadSavedPosition = Boolean((order.signed_by_position || "").trim());
       if (nextName || nextPosition || hadSavedName || hadSavedPosition) {
         payload.signed_by_name = nextName;
         payload.signed_by_position = nextPosition;
@@ -159,6 +243,9 @@ export default function PersonnelOrderHeaderEditor({
 
       const detail = await updatePersonnelOrder(order.order_id, payload);
       onSaved(detail);
+      if (nextName && nextPosition) {
+        setSignatoryHint(null);
+      }
       setMessage("Сохранено.");
     } catch (err) {
       setError(mapPersonnelOrdersApiError(err, "Не удалось сохранить заголовок."));
@@ -234,7 +321,10 @@ export default function PersonnelOrderHeaderEditor({
             <label className={FIELD_LABEL_CLASS}>Должность подписанта</label>
             <input
               value={signedByPosition}
-              onChange={(e) => setSignedByPosition(e.target.value)}
+              onChange={(e) => {
+                manualSignatoryEditRef.current = true;
+                setSignedByPosition(e.target.value);
+              }}
               disabled={disabled}
               placeholder="Например: Директор"
               className={FIELD_INPUT_CLASS}
@@ -245,7 +335,10 @@ export default function PersonnelOrderHeaderEditor({
             <label className={FIELD_LABEL_CLASS}>ФИО подписанта</label>
             <input
               value={signedByName}
-              onChange={(e) => setSignedByName(e.target.value)}
+              onChange={(e) => {
+                manualSignatoryEditRef.current = true;
+                setSignedByName(e.target.value);
+              }}
               disabled={disabled}
               placeholder="Например: М. Тулеутаев"
               className={FIELD_INPUT_CLASS}
@@ -258,6 +351,14 @@ export default function PersonnelOrderHeaderEditor({
               data-testid="personnel-order-header-signatory-hint"
             >
               {signatoryHint}
+            </div>
+          ) : null}
+          {autoPersistNotice ? (
+            <div
+              className="sm:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-200"
+              data-testid="personnel-order-header-signatory-autopersist-notice"
+            >
+              {autoPersistNotice}
             </div>
           ) : null}
           <div className="sm:col-span-2">

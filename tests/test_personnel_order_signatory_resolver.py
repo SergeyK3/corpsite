@@ -2,7 +2,7 @@
 """Tests for personnel order default signatory resolution."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import pytest
@@ -10,6 +10,13 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.services.personnel_order_signatory_resolver import (
+    SOURCE_HR_DIRECTOR_ASSIGNMENT,
+    SOURCE_PLATFORM_ROLE,
+    SOURCE_PLATFORM_ROLE_VERIFIED_NAME_BRIDGE,
+    WARNING_AMBIGUOUS_DIRECTORS,
+    WARNING_AMBIGUOUS_EMPLOYEES,
+    WARNING_NAME_BRIDGE_BLOCKED,
+    WARNING_NOT_FOUND,
     apply_default_signatory_if_needed,
     format_signatory_fio_short,
     resolve_default_personnel_order_signatory,
@@ -80,7 +87,7 @@ def _ensure_director_role_id(conn) -> int:
 def _create_director_user(
     conn,
     *,
-    employee_id: int,
+    employee_id: Optional[int],
     role_id: int,
     full_name: str,
 ) -> int:
@@ -91,11 +98,94 @@ def _create_director_user(
         "role_id": role_id,
         "is_active": True,
     }
-    if "employee_id" in cols:
+    if "employee_id" in cols and employee_id is not None:
         values["employee_id"] = int(employee_id)
     if "login" in cols:
         values["login"] = f"pytest_director_{uuid4().hex[:8]}"
     return insert_returning_id(conn, table="users", id_col="user_id", values=values)
+
+
+def _ensure_director_position_id(conn) -> int:
+    existing = conn.execute(
+        text(
+            """
+            SELECT position_id
+            FROM public.positions
+            WHERE LOWER(BTRIM(name)) = 'директор'
+            ORDER BY position_id
+            LIMIT 1
+            """
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return int(existing)
+    return _create_position(conn, name="Директор")
+
+
+def _deactivate_active_director_contours(conn) -> Tuple[List[int], List[int]]:
+    """Temporarily hide seed/production director rows for isolated resolver tests."""
+    deactivated_user_ids = [
+        int(row[0])
+        for row in conn.execute(
+            text(
+                """
+                SELECT u.user_id
+                FROM public.users u
+                JOIN public.roles r ON r.role_id = u.role_id
+                WHERE UPPER(BTRIM(r.code)) = 'DIRECTOR'
+                  AND COALESCE(u.is_active, TRUE) = TRUE
+                """
+            )
+        ).all()
+    ]
+    if deactivated_user_ids:
+        conn.execute(
+            text("UPDATE public.users SET is_active = FALSE WHERE user_id = ANY(:ids)"),
+            {"ids": deactivated_user_ids},
+        )
+
+    deactivated_employee_ids = [
+        int(row[0])
+        for row in conn.execute(
+            text(
+                """
+                SELECT e.employee_id
+                FROM public.employees e
+                JOIN public.positions p ON p.position_id = e.position_id
+                WHERE LOWER(BTRIM(p.name)) = 'директор'
+                  AND COALESCE(e.is_active, TRUE) = TRUE
+                """
+            )
+        ).all()
+    ]
+    if deactivated_employee_ids:
+        conn.execute(
+            text(
+                "UPDATE public.employees SET is_active = FALSE WHERE employee_id = ANY(:ids)"
+            ),
+            {"ids": deactivated_employee_ids},
+        )
+    return deactivated_user_ids, deactivated_employee_ids
+
+
+def _restore_active_director_contours(
+    conn,
+    *,
+    deactivated_user_ids: List[int],
+    deactivated_employee_ids: List[int],
+) -> None:
+    if deactivated_user_ids:
+        conn.execute(
+            text("UPDATE public.users SET is_active = TRUE WHERE user_id = ANY(:ids)"),
+            {"ids": deactivated_user_ids},
+        )
+    if deactivated_employee_ids:
+        conn.execute(
+            text(
+                "UPDATE public.employees SET is_active = TRUE WHERE employee_id = ANY(:ids)"
+            ),
+            {"ids": deactivated_employee_ids},
+        )
 
 
 def _cleanup_director_fixtures(
@@ -151,11 +241,13 @@ def test_resolve_single_director_via_platform_role(seed) -> None:
     user_ids: List[int] = []
     employee_ids: List[int] = []
     position_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
 
     try:
         with engine.begin() as conn:
-            position_id = _create_position(conn, name=f"Директор pytest {suffix}")
-            position_ids.append(position_id)
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
             employee_id = _create_employee(
                 conn,
                 full_name="Тулеутаев Мухтар Есенжанович",
@@ -176,8 +268,8 @@ def test_resolve_single_director_via_platform_role(seed) -> None:
 
         assert resolution.employee_id == employee_id
         assert resolution.signed_by_name == "М. Тулеутаев"
-        assert resolution.signed_by_position == f"Директор pytest {suffix}"
-        assert resolution.source == "platform_role"
+        assert resolution.signed_by_position == "Директор"
+        assert resolution.source == SOURCE_PLATFORM_ROLE
         assert resolution.warning is None
     finally:
         _cleanup_director_fixtures(
@@ -185,6 +277,62 @@ def test_resolve_single_director_via_platform_role(seed) -> None:
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
+
+
+def test_resolve_director_via_platform_role_without_user_employee_link(seed) -> None:
+    """ADR-044 gap: DIRECTOR user without users.employee_id matches employee by full_name."""
+    suffix = uuid4().hex[:8]
+    user_ids: List[int] = []
+    employee_ids: List[int] = []
+    position_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
+
+    try:
+        with engine.begin() as conn:
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
+            employee_id = _create_employee(
+                conn,
+                full_name="Тулеутаев Мухтар Есенжанович",
+                org_unit_id=int(seed["unit_id"]),
+                position_id=position_id,
+            )
+            employee_ids.append(employee_id)
+            role_id = _ensure_director_role_id(conn)
+            user_id = _create_director_user(
+                conn,
+                employee_id=None,
+                role_id=role_id,
+                full_name="Тулеутаев Мухтар Есенжанович",
+            )
+            user_ids.append(user_id)
+
+            resolution = resolve_default_personnel_order_signatory(conn)
+
+        assert resolution.employee_id == employee_id
+        assert resolution.signed_by_name == "М. Тулеутаев"
+        assert resolution.signed_by_position == "Директор"
+        assert resolution.source == SOURCE_PLATFORM_ROLE_VERIFIED_NAME_BRIDGE
+        assert resolution.warning is None
+    finally:
+        _cleanup_director_fixtures(
+            user_ids=user_ids,
+            employee_ids=employee_ids,
+            position_ids=position_ids,
+        )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_resolve_multiple_directors_is_ambiguous(seed) -> None:
@@ -192,11 +340,13 @@ def test_resolve_multiple_directors_is_ambiguous(seed) -> None:
     user_ids: List[int] = []
     employee_ids: List[int] = []
     position_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
 
     try:
         with engine.begin() as conn:
-            position_id = _create_position(conn, name=f"Директор pytest {suffix}")
-            position_ids.append(position_id)
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
             role_id = _ensure_director_role_id(conn)
 
             for index in range(2):
@@ -228,6 +378,12 @@ def test_resolve_multiple_directors_is_ambiguous(seed) -> None:
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_resolve_director_missing_returns_warning(seed) -> None:
@@ -360,11 +516,13 @@ def test_create_draft_auto_fills_signatory_from_director(client, privileged_head
     employee_ids: List[int] = []
     position_ids: List[int] = []
     order_id: Optional[int] = None
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
 
     try:
         with engine.begin() as conn:
-            position_id = _create_position(conn, name=f"Директор pytest {suffix}")
-            position_ids.append(position_id)
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
             employee_id = _create_employee(
                 conn,
                 full_name="Тулеутаев Мухтар Есенжанович",
@@ -391,7 +549,7 @@ def test_create_draft_auto_fills_signatory_from_director(client, privileged_head
         order_id = created["order"]["order_id"]
         assert created["order"]["signed_by_employee_id"] == employee_id
         assert created["order"]["signed_by_name"] == "М. Тулеутаев"
-        assert created["order"]["signed_by_position"] == f"Директор pytest {suffix}"
+        assert created["order"]["signed_by_position"] == "Директор"
     finally:
         if order_id is not None:
             _cleanup_order(order_id)
@@ -400,6 +558,12 @@ def test_create_draft_auto_fills_signatory_from_director(client, privileged_head
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_create_draft_respects_explicit_signatory(client, privileged_headers, seed) -> None:
@@ -408,11 +572,13 @@ def test_create_draft_respects_explicit_signatory(client, privileged_headers, se
     employee_ids: List[int] = []
     position_ids: List[int] = []
     order_id: Optional[int] = None
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
 
     try:
         with engine.begin() as conn:
-            position_id = _create_position(conn, name=f"Директор pytest {suffix}")
-            position_ids.append(position_id)
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
             employee_id = _create_employee(
                 conn,
                 full_name="Тулеутаев Мухтар Есенжанович",
@@ -453,6 +619,12 @@ def test_create_draft_respects_explicit_signatory(client, privileged_headers, se
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_existing_order_snapshot_not_changed_after_director_swap(client, privileged_headers, seed) -> None:
@@ -462,11 +634,13 @@ def test_existing_order_snapshot_not_changed_after_director_swap(client, privile
     position_ids: List[int] = []
     order_id: Optional[int] = None
     new_order_id: Optional[int] = None
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
 
     try:
         with engine.begin() as conn:
-            position_id = _create_position(conn, name=f"Директор pytest {suffix}")
-            position_ids.append(position_id)
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
             first_employee_id = _create_employee(
                 conn,
                 full_name="Тулеутаев Мухтар Есенжанович",
@@ -540,6 +714,12 @@ def test_existing_order_snapshot_not_changed_after_director_swap(client, privile
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_signatory_default_endpoint(client, privileged_headers, seed) -> None:
@@ -547,11 +727,13 @@ def test_signatory_default_endpoint(client, privileged_headers, seed) -> None:
     user_ids: List[int] = []
     employee_ids: List[int] = []
     position_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
 
     try:
         with engine.begin() as conn:
-            position_id = _create_position(conn, name=f"Директор pytest {suffix}")
-            position_ids.append(position_id)
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
             employee_id = _create_employee(
                 conn,
                 full_name="Тулеутаев Мухтар Есенжанович",
@@ -576,11 +758,135 @@ def test_signatory_default_endpoint(client, privileged_headers, seed) -> None:
         payload = resp.json()
         assert payload["signed_by_employee_id"] == employee_id
         assert payload["signed_by_name"] == "М. Тулеутаев"
-        assert payload["signed_by_position"] == f"Директор pytest {suffix}"
-        assert payload["source"] == "platform_role"
+        assert payload["signed_by_position"] == "Директор"
+        assert payload["source"] == SOURCE_PLATFORM_ROLE
     finally:
         _cleanup_director_fixtures(
             user_ids=user_ids,
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
+
+
+def test_name_bridge_rejects_inactive_employee_with_matching_fio(seed) -> None:
+    user_ids: List[int] = []
+    employee_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
+
+    try:
+        with engine.begin() as conn:
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
+            employee_id = _create_employee(
+                conn,
+                full_name="Тулеутаев Мухтар Есенжанович",
+                org_unit_id=int(seed["unit_id"]),
+                position_id=position_id,
+            )
+            employee_ids.append(employee_id)
+            conn.execute(
+                text("UPDATE public.employees SET is_active = FALSE WHERE employee_id = :id"),
+                {"id": employee_id},
+            )
+            role_id = _ensure_director_role_id(conn)
+            user_ids.append(
+                _create_director_user(
+                    conn,
+                    employee_id=None,
+                    role_id=role_id,
+                    full_name="Тулеутаев Мухтар Есенжанович",
+                )
+            )
+            resolution = resolve_default_personnel_order_signatory(conn)
+
+        assert not resolution.resolved
+        assert resolution.warning is not None
+    finally:
+        _cleanup_director_fixtures(user_ids=user_ids, employee_ids=employee_ids, position_ids=[])
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
+
+
+def test_name_bridge_rejects_duplicate_employee_names(seed) -> None:
+    user_ids: List[int] = []
+    employee_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
+
+    try:
+        with engine.begin() as conn:
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
+            for _ in range(2):
+                employee_ids.append(
+                    _create_employee(
+                        conn,
+                        full_name="Тулеутаев  Мухтар   Есенжанович",
+                        org_unit_id=int(seed["unit_id"]),
+                        position_id=position_id,
+                    )
+                )
+            role_id = _ensure_director_role_id(conn)
+            user_ids.append(
+                _create_director_user(
+                    conn,
+                    employee_id=None,
+                    role_id=role_id,
+                    full_name="тулеутаев мухтар есенжанович",
+                )
+            )
+            resolution = resolve_default_personnel_order_signatory(conn)
+
+        assert not resolution.resolved
+        assert resolution.warning == WARNING_AMBIGUOUS_EMPLOYEES
+        assert resolution.source == SOURCE_PLATFORM_ROLE_VERIFIED_NAME_BRIDGE
+    finally:
+        _cleanup_director_fixtures(user_ids=user_ids, employee_ids=employee_ids, position_ids=[])
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
+
+
+def test_hr_fallback_resolves_without_platform_user_linkage(seed) -> None:
+    employee_ids: List[int] = []
+    deactivated_user_ids: List[int] = []
+    deactivated_employee_ids: List[int] = []
+
+    try:
+        with engine.begin() as conn:
+            deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
+            position_id = _ensure_director_position_id(conn)
+            employee_id = _create_employee(
+                conn,
+                full_name="Садыкова Алия Болатовна",
+                org_unit_id=int(seed["unit_id"]),
+                position_id=position_id,
+            )
+            employee_ids.append(employee_id)
+            resolution = resolve_default_personnel_order_signatory(conn)
+
+        assert resolution.resolved
+        assert resolution.employee_id == employee_id
+        assert resolution.source == SOURCE_HR_DIRECTOR_ASSIGNMENT
+    finally:
+        _cleanup_director_fixtures(user_ids=[], employee_ids=employee_ids, position_ids=[])
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )

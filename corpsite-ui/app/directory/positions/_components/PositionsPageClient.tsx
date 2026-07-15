@@ -2,10 +2,11 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
+import type { PositionListScope } from "@/lib/taskOrgFilters";
 import { apiFetchJson } from "../../../../lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
@@ -34,6 +35,12 @@ type PositionsResponse =
 
 const API_BASE = "/directory/positions";
 const PAGE_SIZE = 50;
+const POSITION_SCOPE_PARAM = "position_scope";
+
+const POSITION_SCOPE_OPTIONS: Array<{ value: PositionListScope; label: string }> = [
+  { value: "allowed", label: "Разрешённые" },
+  { value: "used", label: "Используемые" },
+];
 
 const CATEGORY_OPTIONS: Array<{ value: PositionCategory; label: string }> = [
   { value: "all", label: "Все" },
@@ -69,6 +76,21 @@ function parsePositiveInt(value: string | null): number | null {
   const n = Number(String(value ?? "").trim());
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.trunc(n);
+}
+
+function readPositionListScope(
+  sp: ReturnType<typeof useSearchParams>,
+  hasOrgFilter: boolean,
+): PositionListScope | null {
+  if (!hasOrgFilter) return null;
+  const raw = String(sp.get(POSITION_SCOPE_PARAM) ?? "").trim().toLowerCase();
+  if (raw === "used" || raw === "allowed") return raw;
+  return "allowed";
+}
+
+function positionScopeLabel(scope: PositionListScope | null): string | null {
+  if (scope == null) return null;
+  return POSITION_SCOPE_OPTIONS.find((opt) => opt.value === scope)?.label ?? null;
 }
 
 function readSelectedOrgUnitId(sp: ReturnType<typeof useSearchParams>): number | null {
@@ -120,10 +142,18 @@ function normalizeItems(payload: PositionsResponse): {
 
 export default function PositionsPageClient() {
   const sp = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const orgScope = React.useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
   const orgGroupId = orgScope.org_group_id;
   const orgUnitId = React.useMemo(() => readSelectedOrgUnitId(sp), [sp]);
+  const hasOrgFilter = orgGroupId != null || orgUnitId != null;
+  const positionScope = React.useMemo(
+    () => readPositionListScope(sp, hasOrgFilter),
+    [sp, hasOrgFilter],
+  );
+  const positionScopeCaption = positionScopeLabel(positionScope);
   const orgUnitNameFromUrl = React.useMemo(() => {
     const v = String(sp.get("org_unit_name") ?? "").trim();
     return v || null;
@@ -162,7 +192,16 @@ export default function PositionsPageClient() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [orgGroupId, orgUnitId]);
+  }, [orgGroupId, orgUnitId, positionScope]);
+
+  function setPositionScope(nextScope: PositionListScope) {
+    const params = new URLSearchParams(sp.toString());
+    params.set(POSITION_SCOPE_PARAM, nextScope);
+    params.delete("offset");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+    setPage(0);
+  }
 
   const loadItems = React.useCallback(async () => {
     setLoading(true);
@@ -175,6 +214,7 @@ export default function PositionsPageClient() {
           category: category === "all" ? undefined : category,
           org_group_id: orgGroupId ?? undefined,
           org_unit_id: orgUnitId ?? undefined,
+          scope: positionScope ?? undefined,
           limit: PAGE_SIZE,
           offset: page * PAGE_SIZE,
         },
@@ -194,7 +234,7 @@ export default function PositionsPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [search, category, orgGroupId, orgUnitId, page]);
+  }, [search, category, orgGroupId, orgUnitId, positionScope, page]);
 
   React.useEffect(() => {
     void loadItems();
@@ -322,6 +362,33 @@ export default function PositionsPageClient() {
                 resetParamsOnChange={["offset"]}
               />
 
+              {hasOrgFilter ? (
+                <div
+                  className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-0.5 dark:border-zinc-800 dark:bg-zinc-900"
+                  data-testid="positions-scope-toggle"
+                >
+                  {POSITION_SCOPE_OPTIONS.map((option) => {
+                    const active = positionScope === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        data-testid={`positions-scope-${option.value}`}
+                        aria-pressed={active}
+                        onClick={() => setPositionScope(option.value)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                          active
+                            ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
+                            : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
               <div className="flex-1">
                 <input
                   value={searchInput}
@@ -373,6 +440,12 @@ export default function PositionsPageClient() {
 
             <div className="mb-1.5 flex flex-col gap-1 text-[11px] text-zinc-600 dark:text-zinc-400 md:flex-row md:items-center md:justify-between">
               <div>
+                {positionScopeCaption ? (
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                    Режим: {positionScopeCaption}
+                  </span>
+                ) : null}
+                {positionScopeCaption ? <span className="mx-2">·</span> : null}
                 Всего: {total}
                 {total > 0 ? <span className="ml-2">· показано: {pageFrom}–{pageTo}</span> : null}
               </div>

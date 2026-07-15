@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
+import { loadScopedPositionOptions } from "@/lib/taskOrgFilters";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
@@ -46,5 +47,17 @@ describe("TaskOrgFiltersBar", () => {
   it("does not render when hidden", () => {
     render(<TaskOrgFiltersBar visible={false} />);
     expect(screen.queryByTestId("task-org-filters")).not.toBeInTheDocument();
+  });
+
+  it("loads positions with scope=used", async () => {
+    render(<TaskOrgFiltersBar visible />);
+
+    await waitFor(() => {
+      expect(loadScopedPositionOptions).toHaveBeenCalled();
+    });
+
+    expect(loadScopedPositionOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: "used" }),
+    );
   });
 });

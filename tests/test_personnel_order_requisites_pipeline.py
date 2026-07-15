@@ -15,7 +15,9 @@ from tests.test_personnel_order_signatory_resolver import (
     _cleanup_director_fixtures,
     _cleanup_order,
     _create_director_user,
+    _deactivate_active_director_contours,
     _ensure_director_role_id,
+    _restore_active_director_contours,
 )
 from tests.test_wp_po_003_personnel_orders_schema import _require_schema
 
@@ -33,13 +35,14 @@ def privileged_headers(seed, monkeypatch):
     return auth_headers(seed["initiator_user_id"])
 
 
-def _setup_director(seed) -> tuple[int, int, List[int], List[int], List[int]]:
+def _setup_director(seed) -> tuple[int, int, List[int], List[int], List[int], List[int], List[int]]:
     suffix = uuid4().hex[:8]
     user_ids: List[int] = []
     employee_ids: List[int] = []
     position_ids: List[int] = []
 
     with engine.begin() as conn:
+        deactivated_user_ids, deactivated_employee_ids = _deactivate_active_director_contours(conn)
         position_id = _create_position(conn, name=f"Директор pytest {suffix}")
         position_ids.append(position_id)
         employee_id = _create_employee(
@@ -58,11 +61,27 @@ def _setup_director(seed) -> tuple[int, int, List[int], List[int], List[int]]:
         )
         user_ids.append(user_id)
 
-    return employee_id, position_id, user_ids, employee_ids, position_ids
+    return (
+        employee_id,
+        position_id,
+        user_ids,
+        employee_ids,
+        position_ids,
+        deactivated_user_ids,
+        deactivated_employee_ids,
+    )
 
 
 def test_card_auto_fill_and_get_persist_requisites(client, privileged_headers, seed) -> None:
-    employee_id, position_id, user_ids, employee_ids, position_ids = _setup_director(seed)
+    (
+        employee_id,
+        position_id,
+        user_ids,
+        employee_ids,
+        position_ids,
+        deactivated_user_ids,
+        deactivated_employee_ids,
+    ) = _setup_director(seed)
     order_id: Optional[int] = None
 
     try:
@@ -112,12 +131,26 @@ def test_card_auto_fill_and_get_persist_requisites(client, privileged_headers, s
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_manual_signatory_replacement_persists_and_is_not_overwritten(
     client, privileged_headers, seed
 ) -> None:
-    employee_id, _position_id, user_ids, employee_ids, position_ids = _setup_director(seed)
+    (
+        employee_id,
+        _position_id,
+        user_ids,
+        employee_ids,
+        position_ids,
+        deactivated_user_ids,
+        deactivated_employee_ids,
+    ) = _setup_director(seed)
     order_id: Optional[int] = None
 
     try:
@@ -161,6 +194,12 @@ def test_manual_signatory_replacement_persists_and_is_not_overwritten(
             employee_ids=employee_ids,
             position_ids=position_ids,
         )
+        with engine.begin() as conn:
+            _restore_active_director_contours(
+                conn,
+                deactivated_user_ids=deactivated_user_ids,
+                deactivated_employee_ids=deactivated_employee_ids,
+            )
 
 
 def test_create_without_director_does_not_fail(client, privileged_headers, seed) -> None:
