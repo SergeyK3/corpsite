@@ -511,6 +511,34 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("М. Тулеутаев");
   });
 
+  it("updates structured requisites preview when saved order header changes", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+
+    const { rerender } = render(
+      <PersonnelOrderEditorialTextEditor
+        orderId={42}
+        order={{ order_date: null, signed_by_name: null, signed_by_position: null }}
+        items={items}
+        editable
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-requisites-preview-empty")).toBeInTheDocument();
+    });
+
+    rerender(
+      <PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("Директор");
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+    expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("М. Тулеутаев");
+    expect(screen.getByTestId("personnel-order-requisites-date")).toHaveTextContent("18 июля 2026 года");
+  });
+
   it("does not embed requisites in closing textarea when editing", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
     vi.mocked(patchPersonnelOrderEditorialBlock).mockResolvedValue(sampleState());

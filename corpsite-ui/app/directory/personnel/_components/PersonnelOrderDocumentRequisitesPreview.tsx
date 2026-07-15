@@ -70,6 +70,7 @@ export default function PersonnelOrderDocumentRequisitesPreview({ order, locale 
           <div
             className="border-b border-zinc-400 pb-0.5 dark:border-zinc-600"
             aria-hidden="true"
+            data-testid="personnel-order-requisites-signatory-line"
           />
           <div
             className="min-w-0 text-right font-medium leading-snug text-zinc-900 dark:text-zinc-100"

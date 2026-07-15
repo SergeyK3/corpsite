@@ -4,6 +4,7 @@ import {
   buildPersonnelOrderDocumentRequisitesDisplay,
   hasPersonnelOrderRequisitesDate,
   hasPersonnelOrderSignatory,
+  mergePersonnelOrderRequisitesForPreview,
   resolvePersonnelOrderSignatoryDisplay,
 } from "./personnelOrderDocumentRequisites";
 
@@ -48,5 +49,20 @@ describe("personnelOrderDocumentRequisites", () => {
     expect(hasPersonnelOrderSignatory({ position: null, fio: null })).toBe(false);
     expect(hasPersonnelOrderSignatory({ position: "Директор", fio: null })).toBe(true);
     expect(hasPersonnelOrderSignatory({ position: null, fio: "Иванов" })).toBe(true);
+  });
+
+  it("prefers header-editor draft over saved order for in-drawer preview", () => {
+    const saved = {
+      order_date: "2026-07-10",
+      signed_by_name: "М. Тулеутаев",
+      signed_by_position: "Директор",
+    };
+    const draft = {
+      order_date: "2026-07-18",
+      signed_by_name: "К. Замещающий",
+      signed_by_position: "И. о. директора",
+    };
+    expect(mergePersonnelOrderRequisitesForPreview(saved, draft)).toEqual(draft);
+    expect(mergePersonnelOrderRequisitesForPreview(saved, null)).toEqual(saved);
   });
 });

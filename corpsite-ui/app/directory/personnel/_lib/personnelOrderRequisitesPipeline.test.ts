@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildPersonnelOrderDocumentRequisitesDisplay } from "./personnelOrderDocumentRequisites";
 import { buildPersonnelOrderPdfHtmlDocument } from "./personnelOrderPdfHtml";
 import { buildPersonnelOrderPrintDocumentHtml } from "./personnelOrderPrintDocumentHtml";
+import {
+  buildPersonnelOrderPrintNameMaps,
+  loadPersonnelOrderPrintViewModelClient,
+} from "./personnelOrderPrintLoad.client";
 import {
   buildPersonnelOrderPrintViewModel,
   type PersonnelOrderPrintViewModel,
@@ -11,6 +15,27 @@ import type {
   PersonnelOrderDetailResponse,
   PersonnelOrderEditorialState,
 } from "./personnelOrdersApi.client";
+
+vi.mock("./personnelOrdersApi.client", async () => {
+  const actual = await vi.importActual<typeof import("./personnelOrdersApi.client")>(
+    "./personnelOrdersApi.client",
+  );
+  return {
+    ...actual,
+    getPersonnelOrder: vi.fn(),
+    getPersonnelOrderEditorial: vi.fn(),
+  };
+});
+
+vi.mock("@/app/directory/org-units/_lib/api.client", () => ({
+  getOrgUnitsTree: vi.fn(async () => ({ items: [] })),
+}));
+
+vi.mock("@/app/directory/employees/_lib/api.client", () => ({
+  getPositions: vi.fn(async () => ({ items: [] })),
+}));
+
+import { getPersonnelOrder, getPersonnelOrderEditorial } from "./personnelOrdersApi.client";
 
 const CLOSING_TEXT = "Контроль за исполнением приказа оставляю за собой.";
 
@@ -176,6 +201,20 @@ describe("personnelOrder requisites pipeline", () => {
     expect(pdfHtml).not.toContain("Подписант не указан");
   });
 
+  it("renders HTML signatory row as position, line, then FIO", () => {
+    const html = buildPersonnelOrderPrintDocumentHtml(buildPipelineModel(), "ru");
+    const signatureStart = html.indexOf('data-testid="personnel-order-print-signature"');
+    const signatureChunk = html.slice(signatureStart, signatureStart + 900);
+    expect(signatureChunk.indexOf("personnel-order-print-signature-position")).toBeLessThan(
+      signatureChunk.indexOf("personnel-order-print-signature-line"),
+    );
+    expect(signatureChunk.indexOf("personnel-order-print-signature-line")).toBeLessThan(
+      signatureChunk.indexOf("personnel-order-print-signature-fio"),
+    );
+    expect(signatureChunk).toContain("Директор");
+    expect(signatureChunk).toContain("М. Тулеутаев");
+  });
+
   it("keeps same requisites after simulated re-open (detail → model → html)", () => {
     const detail = sampleDetail();
     const firstModel = buildPersonnelOrderPrintViewModel(detail, { editorial: sampleEditorial() });
@@ -188,5 +227,53 @@ describe("personnelOrder requisites pipeline", () => {
     expect(firstModel.signatory?.fio).toBe(secondModel.signatory?.fio);
     expect(html).toContain("М. Тулеутаев");
     expect(html).toContain("18 июля 2026 года");
+  });
+
+  it("loads print model through the same client path as the preview button", async () => {
+    const detail = sampleDetail();
+    vi.mocked(getPersonnelOrder).mockResolvedValue(detail);
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleEditorial());
+
+    const { model, detail: loadedDetail } = await loadPersonnelOrderPrintViewModelClient(42);
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+
+    expect(loadedDetail.order.signed_by_position).toBe("Директор");
+    expect(loadedDetail.order.signed_by_name).toBe("М. Тулеутаев");
+    expect(loadedDetail.order.order_date).toBe("2026-07-18");
+    expect(model.orderDate).toBe("2026-07-18");
+    expect(model.signatory?.position?.ru).toBe("Директор");
+    expect(model.signatory?.fio).toBe("М. Тулеутаев");
+
+    expect(html).toContain("18 июля 2026 года");
+    expect(html).toContain("Директор");
+    expect(html).toContain("М. Тулеутаев");
+    expect(html).not.toContain("Петрова");
+    expect(html).not.toContain("Director Test");
+
+    const signatureStart = html.indexOf('data-testid="personnel-order-print-signature"');
+    const signatureChunk = html.slice(signatureStart, signatureStart + 900);
+    expect(signatureChunk.indexOf("personnel-order-print-signature-position")).toBeLessThan(
+      signatureChunk.indexOf("personnel-order-print-signature-line"),
+    );
+    expect(signatureChunk.indexOf("personnel-order-print-signature-line")).toBeLessThan(
+      signatureChunk.indexOf("personnel-order-print-signature-fio"),
+    );
+  });
+
+  it("buildPersonnelOrderPrintNameMaps passes saved header snapshots into view model", async () => {
+    const detail = sampleDetail({
+      signed_by_position: "И. о. директора",
+      signed_by_name: "К. Замещающий",
+    });
+    const model = buildPersonnelOrderPrintViewModel(
+      detail,
+      await buildPersonnelOrderPrintNameMaps(detail, sampleEditorial()),
+    );
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+
+    expect(model.signatory?.fio).toBe("К. Замещающий");
+    expect(model.signatory?.position?.ru).toBe("И. о. директора");
+    expect(html).toContain("К. Замещающий");
+    expect(html).not.toContain("М. Тулеутаев");
   });
 });

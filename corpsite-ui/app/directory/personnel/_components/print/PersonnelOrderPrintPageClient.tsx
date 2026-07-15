@@ -3,15 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { getPositions } from "@/app/directory/employees/_lib/api.client";
-import { getOrgUnitsTree, type TreeNode } from "@/app/directory/org-units/_lib/api.client";
-
-import {
-  PERSONNEL_ORDERS_BASE_PATH,
-  getPersonnelOrder,
-  getPersonnelOrderEditorial,
-  mapPersonnelOrdersApiError,
-} from "../../_lib/personnelOrdersApi.client";
+import { mapPersonnelOrdersApiError, PERSONNEL_ORDERS_BASE_PATH } from "../../_lib/personnelOrdersApi.client";
 import {
   PERSONNEL_ORDER_PRINT_LANGUAGE_DEFAULT,
   buildPersonnelOrderPrintHref,
@@ -19,11 +11,8 @@ import {
   type PersonnelOrderPrintLanguage,
 } from "../../_lib/personnelOrderPrintLanguage";
 import { openPersonnelOrderPdf } from "../../_lib/personnelOrderPdfOpen.client";
-import {
-  buildPersonnelOrderPrintViewModel,
-  collectPersonnelOrderPrintLookupIds,
-  type PersonnelOrderPrintViewModel,
-} from "../../_lib/personnelOrderPrintViewModel";
+import { loadPersonnelOrderPrintViewModelClient } from "../../_lib/personnelOrderPrintLoad.client";
+import type { PersonnelOrderPrintViewModel } from "../../_lib/personnelOrderPrintViewModel";
 import PersonnelOrderPrintDocument from "./PersonnelOrderPrintDocument";
 import PersonnelOrderPrintToolbar from "./PersonnelOrderPrintToolbar";
 
@@ -31,35 +20,11 @@ type Props = {
   orderId: number;
 };
 
-function flattenOrgUnitNames(nodes: TreeNode[], out: Record<number, string>) {
-  for (const node of nodes) {
-    const unitId = Number(node.unit_id ?? node.id);
-    if (Number.isFinite(unitId) && unitId > 0) {
-      const name = String(node.name ?? node.name_ru ?? "").trim();
-      if (name) out[unitId] = name;
-    }
-    if (Array.isArray(node.children) && node.children.length > 0) {
-      flattenOrgUnitNames(node.children, out);
-    }
-  }
-}
-
-async function loadOrganizationName(): Promise<string | null> {
-  try {
-    const res = await fetch("/tenant.json", { cache: "no-store" });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { orgName?: string };
-    const name = String(json?.orgName ?? "").trim();
-    return name || null;
-  } catch {
-    return null;
-  }
-}
-
 export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const languageParam = searchParams.get("language");
+  const freshParam = searchParams.get("v");
   const parsedLanguage = parsePersonnelOrderPrintLanguage(languageParam, {
     fallbackToDefault: false,
   });
@@ -80,44 +45,9 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const detail = await getPersonnelOrder(orderId);
-        const ids = collectPersonnelOrderPrintLookupIds(detail);
-        const [organizationName, tree, positionsRaw, editorial] = await Promise.all([
-          loadOrganizationName(),
-          getOrgUnitsTree({ include_inactive: false }).catch(() => null),
-          getPositions({ limit: 1000, offset: 0 }).catch(() => null),
-          getPersonnelOrderEditorial(orderId).catch(() => null),
-        ]);
-
-        const orgUnitNames: Record<number, string> = {};
-        if (tree?.items) flattenOrgUnitNames(tree.items, orgUnitNames);
-
-        const positionNames: Record<number, string> = {};
-        const list = Array.isArray(positionsRaw)
-          ? positionsRaw
-          : Array.isArray((positionsRaw as { items?: unknown[] } | null)?.items)
-            ? ((positionsRaw as { items: unknown[] }).items)
-            : [];
-        for (const row of list) {
-          const id = Number(
-            (row as { position_id?: number; id?: number }).position_id ??
-              (row as { id?: number }).id,
-          );
-          if (!Number.isFinite(id) || id <= 0) continue;
-          if (ids.positionIds.length > 0 && !ids.positionIds.includes(id)) continue;
-          const name = String((row as { name?: string }).name ?? "").trim();
-          if (name) positionNames[id] = name;
-        }
-
+        const { model: nextModel } = await loadPersonnelOrderPrintViewModelClient(orderId);
         if (cancelled) return;
-        setModel(
-          buildPersonnelOrderPrintViewModel(detail, {
-            organizationName,
-            orgUnitNames,
-            positionNames,
-            editorial,
-          }),
-        );
+        setModel(nextModel);
       } catch (e) {
         if (cancelled) return;
         setModel(null);
@@ -131,7 +61,7 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [orderId]);
+  }, [orderId, freshParam]);
 
   function handleLanguageChange(next: PersonnelOrderPrintLanguage) {
     router.replace(buildPersonnelOrderPrintHref(orderId, next));

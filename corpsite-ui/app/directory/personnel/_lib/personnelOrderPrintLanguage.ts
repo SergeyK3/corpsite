@@ -33,8 +33,12 @@ export function parsePersonnelOrderPrintLanguage(
 export function buildPersonnelOrderPrintHref(
   orderId: number,
   language: PersonnelOrderPrintLanguage = PERSONNEL_ORDER_PRINT_LANGUAGE_DEFAULT,
+  freshToken?: string | number | null,
 ): string {
-  return `/directory/personnel/orders/${orderId}/print?language=${language}`;
+  const params = new URLSearchParams({ language });
+  const token = freshToken == null ? "" : String(freshToken).trim();
+  if (token) params.set("v", token);
+  return `/directory/personnel/orders/${orderId}/print?${params.toString()}`;
 }
 
 export function isPersonnelOrderPrintRoute(pathname: string | null | undefined): boolean {

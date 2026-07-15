@@ -9,7 +9,9 @@ import {
   updatePersonnelOrder,
   type PersonnelOrderDetailResponse,
   type PersonnelOrderHeader,
+  type PersonnelOrderUpdatePayload,
 } from "../_lib/personnelOrdersApi.client";
+import type { PersonnelOrderRequisitesSnapshot } from "../_lib/personnelOrderDocumentRequisites";
 import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
 
@@ -17,17 +19,38 @@ const FIELD_LABEL_CLASS = "mb-1 block text-sm font-medium text-zinc-800 dark:tex
 const FIELD_INPUT_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950";
 
-function hasSignatoryValues(order: Pick<PersonnelOrderHeader, "signed_by_name" | "signed_by_position">) {
-  return Boolean((order.signed_by_name || "").trim() || (order.signed_by_position || "").trim());
+function isSignatoryComplete(
+  order: Pick<PersonnelOrderHeader, "signed_by_name" | "signed_by_position">,
+) {
+  return Boolean((order.signed_by_name || "").trim() && (order.signed_by_position || "").trim());
+}
+
+function snapshotFromFields(
+  orderDate: string,
+  signedByName: string,
+  signedByPosition: string,
+): PersonnelOrderRequisitesSnapshot {
+  return {
+    order_date: orderDate.trim() || null,
+    signed_by_name: signedByName.trim() || null,
+    signed_by_position: signedByPosition.trim() || null,
+  };
 }
 
 type Props = {
   order: PersonnelOrderHeader;
   disabled?: boolean;
   onSaved: (detail: PersonnelOrderDetailResponse) => void;
+  /** Live requisites from header inputs — for in-drawer preview before/without save. */
+  onRequisitesChange?: (snapshot: PersonnelOrderRequisitesSnapshot) => void;
 };
 
-export default function PersonnelOrderHeaderEditor({ order, disabled = false, onSaved }: Props) {
+export default function PersonnelOrderHeaderEditor({
+  order,
+  disabled = false,
+  onSaved,
+  onRequisitesChange,
+}: Props) {
   const [orderNumber, setOrderNumber] = React.useState(order.order_number || "");
   const [orderDate, setOrderDate] = React.useState(order.order_date || "");
   const [signedByName, setSignedByName] = React.useState(order.signed_by_name || "");
@@ -52,21 +75,49 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
     setError(null);
     setMessage(null);
     setSignatoryHint(null);
-    setPrefillDone(hasSignatoryValues(order));
+    setPrefillDone(isSignatoryComplete(order));
   }, [order]);
 
   React.useEffect(() => {
-    if (disabled || prefillDone || hasSignatoryValues(order)) return;
+    onRequisitesChange?.(snapshotFromFields(orderDate, signedByName, signedByPosition));
+  }, [orderDate, signedByName, signedByPosition, onRequisitesChange]);
+
+  React.useEffect(() => {
+    if (disabled || prefillDone || isSignatoryComplete(order)) return;
 
     let cancelled = false;
     void (async () => {
       try {
         const defaults = await getPersonnelOrderSignatoryDefault();
         if (cancelled) return;
-        if (defaults.signed_by_name) setSignedByName(defaults.signed_by_name);
-        if (defaults.signed_by_position) setSignedByPosition(defaults.signed_by_position);
+
+        const nextName =
+          !(order.signed_by_name || "").trim() && defaults.signed_by_name
+            ? String(defaults.signed_by_name).trim()
+            : String(order.signed_by_name || signedByName || "").trim();
+        const nextPosition =
+          !(order.signed_by_position || "").trim() && defaults.signed_by_position
+            ? String(defaults.signed_by_position).trim()
+            : String(order.signed_by_position || signedByPosition || "").trim();
+
+        if (!(order.signed_by_name || "").trim() && nextName) setSignedByName(nextName);
+        if (!(order.signed_by_position || "").trim() && nextPosition) setSignedByPosition(nextPosition);
         if (defaults.warning) setSignatoryHint(defaults.warning);
-        setPrefillDone(true);
+
+        const shouldPersist =
+          !isSignatoryComplete(order) && Boolean(nextName || nextPosition);
+        if (shouldPersist) {
+          const detail = await updatePersonnelOrder(order.order_id, {
+            signed_by_name: nextName || null,
+            signed_by_position: nextPosition || null,
+          });
+          if (!cancelled) {
+            onSaved(detail);
+            setMessage("Реквизиты подписанта сохранены.");
+          }
+        }
+
+        if (!cancelled) setPrefillDone(true);
       } catch {
         if (!cancelled) {
           setSignatoryHint(
@@ -80,7 +131,7 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
     return () => {
       cancelled = true;
     };
-  }, [disabled, order, prefillDone]);
+  }, [disabled, onSaved, order, prefillDone]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -89,15 +140,22 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
     setError(null);
     setMessage(null);
     try {
-      const payload: Record<string, string> = {
+      const payload: PersonnelOrderUpdatePayload = {
         order_type_code: orderTypeCode,
         comment,
         basis_summary: basisSummary,
       };
       if (orderNumber.trim()) payload.order_number = orderNumber.trim();
       if (orderDate.trim()) payload.order_date = orderDate.trim();
-      payload.signed_by_name = signedByName.trim();
-      payload.signed_by_position = signedByPosition.trim();
+
+      const nextName = signedByName.trim();
+      const nextPosition = signedByPosition.trim();
+      const hadSavedName = Boolean((order.signed_by_name || "").trim());
+      const hadSavedPosition = Boolean((order.signed_by_position || "").trim());
+      if (nextName || nextPosition || hadSavedName || hadSavedPosition) {
+        payload.signed_by_name = nextName;
+        payload.signed_by_position = nextPosition;
+      }
 
       const detail = await updatePersonnelOrder(order.order_id, payload);
       onSaved(detail);

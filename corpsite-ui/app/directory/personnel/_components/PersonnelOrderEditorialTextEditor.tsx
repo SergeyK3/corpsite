@@ -393,7 +393,11 @@ export default function PersonnelOrderEditorialTextEditor({
                       <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         Реквизиты документа
                       </h4>
-                      <PersonnelOrderDocumentRequisitesPreview order={order} locale={activeLocale} />
+                      <PersonnelOrderDocumentRequisitesPreview
+                        key={`${order.order_date ?? ""}:${order.signed_by_position ?? ""}:${order.signed_by_name ?? ""}`}
+                        order={order}
+                        locale={activeLocale}
+                      />
                     </div>
                   ) : null}
                 </div>

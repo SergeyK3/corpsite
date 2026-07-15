@@ -167,7 +167,7 @@ def _resolve_by_platform_role(conn: Connection) -> PersonnelOrderSignatoryResolu
             SELECT
                 e.employee_id,
                 e.full_name,
-                p.name AS position_name
+                COALESCE(NULLIF(BTRIM(p.name), ''), NULLIF(BTRIM(r.name), '')) AS position_name
             FROM public.users u
             JOIN public.roles r
               ON r.role_id = u.role_id

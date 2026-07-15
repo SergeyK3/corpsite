@@ -203,9 +203,9 @@ function renderSignature(
 
   return `<section class="personnel-order-print-signature personnel-order-print-block" data-testid="personnel-order-print-signature">
   <div class="personnel-order-print-signature-grid">
-    <div class="personnel-order-print-signature-position">${position}</div>
-    <div class="personnel-order-print-signature-line">&nbsp;</div>
-    <div class="personnel-order-print-signature-fio">${fioHtml}</div>
+    <div class="personnel-order-print-signature-position" data-testid="personnel-order-print-signature-position">${position}</div>
+    <div class="personnel-order-print-signature-line" data-testid="personnel-order-print-signature-line">&nbsp;</div>
+    <div class="personnel-order-print-signature-fio" data-testid="personnel-order-print-signature-fio">${fioHtml}</div>
   </div>
 </section>`;
 }

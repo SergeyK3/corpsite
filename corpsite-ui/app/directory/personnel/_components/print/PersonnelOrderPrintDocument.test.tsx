@@ -264,6 +264,24 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(screen.getByTestId("personnel-order-print-signature")).not.toHaveTextContent("Қолы");
   });
 
+  it("renders signatory row as position, signature line, then FIO", () => {
+    const model = buildPersonnelOrderPrintViewModel(detail, {
+      organizationName: "ММЦ",
+    });
+    render(<PersonnelOrderPrintDocument model={model} language="ru" />);
+
+    const signature = screen.getByTestId("personnel-order-print-signature");
+    const grid = signature.querySelector(".personnel-order-print-signature-grid");
+    expect(grid).not.toBeNull();
+    const children = Array.from(grid!.children).map((node) => node.className);
+    expect(children[0]).toContain("personnel-order-print-signature-position");
+    expect(children[1]).toContain("personnel-order-print-signature-line");
+    expect(children[2]).toContain("personnel-order-print-signature-fio");
+    expect(screen.getByTestId("personnel-order-print-signature-position")).toHaveTextContent("Директор");
+    expect(screen.getByTestId("personnel-order-print-signature-line")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-print-signature-fio")).toHaveTextContent("Иванов И.И.");
+  });
+
   it("renders editorial closing before tail date and signature block", () => {
     const model = buildPersonnelOrderPrintViewModel(detail, {
       organizationName: "ММЦ",

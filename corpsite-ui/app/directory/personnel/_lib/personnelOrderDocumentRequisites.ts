@@ -7,6 +7,11 @@ import type { PersonnelOrderEditorialUiLocale } from "./personnelOrderEditorialU
 import { formatPersonnelOrderPrintDate } from "./personnelOrderPrintFormat";
 import type { PersonnelOrderHeader } from "./personnelOrdersApi.client";
 
+export type PersonnelOrderRequisitesSnapshot = Pick<
+  PersonnelOrderHeader,
+  "order_date" | "signed_by_name" | "signed_by_position"
+>;
+
 export type PersonnelOrderSignatoryDisplay = {
   position: string | null;
   fio: string | null;
@@ -44,8 +49,16 @@ export function hasPersonnelOrderSignatory(
   return Boolean(signatory.position || signatory.fio);
 }
 
+/** Prefer live header-editor draft over last saved order snapshot for in-drawer preview. */
+export function mergePersonnelOrderRequisitesForPreview(
+  saved: PersonnelOrderRequisitesSnapshot,
+  draft: PersonnelOrderRequisitesSnapshot | null | undefined,
+): PersonnelOrderRequisitesSnapshot {
+  return draft ?? saved;
+}
+
 export function buildPersonnelOrderDocumentRequisitesDisplay(
-  order: Pick<PersonnelOrderHeader, "order_date" | "signed_by_name" | "signed_by_position">,
+  order: PersonnelOrderRequisitesSnapshot,
   locale: PersonnelOrderEditorialUiLocale,
 ): PersonnelOrderDocumentRequisitesDisplay {
   const orderDate = optionalTrim(order.order_date);

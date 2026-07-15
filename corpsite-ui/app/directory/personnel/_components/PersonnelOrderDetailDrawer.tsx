@@ -15,6 +15,12 @@ import {
   type PersonnelOrderDetailResponse,
   type PersonnelOrderLinkedEvent,
 } from "../_lib/personnelOrdersApi.client";
+import {
+  hasPersonnelOrderSignatory,
+  mergePersonnelOrderRequisitesForPreview,
+  resolvePersonnelOrderSignatoryDisplay,
+  type PersonnelOrderRequisitesSnapshot,
+} from "../_lib/personnelOrderDocumentRequisites";
 import PersonnelOrderAppliedBadge from "./PersonnelOrderAppliedBadge";
 import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
@@ -26,11 +32,12 @@ import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
 import PersonnelOrderPrintLanguageDialog, {
   type PersonnelOrderPrintDialogAction,
 } from "./print/PersonnelOrderPrintLanguageDialog";
-import {
-  buildPersonnelOrderPrintHref,
-  type PersonnelOrderPrintLanguage,
-} from "../_lib/personnelOrderPrintLanguage";
+import type { PersonnelOrderPrintLanguage } from "../_lib/personnelOrderPrintLanguage";
 import { openPersonnelOrderPdf } from "../_lib/personnelOrderPdfOpen.client";
+import {
+  PERSONNEL_ORDER_PRINT_POPUP_BLOCKED_MESSAGE,
+  openPersonnelOrderPrintPreview,
+} from "../_lib/personnelOrderPrintPreview.client";
 
 type Props = {
   orderId: number | null;
@@ -102,6 +109,8 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
   const [printOpen, setPrintOpen] = React.useState(false);
   const [printBusy, setPrintBusy] = React.useState(false);
   const [printError, setPrintError] = React.useState<string | null>(null);
+  const [headerRequisitesDraft, setHeaderRequisitesDraft] =
+    React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -133,6 +142,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
       setDetail(null);
       setError(null);
       setToast(null);
+      setHeaderRequisitesDraft(null);
       return;
     }
     let cancelled = false;
@@ -146,12 +156,30 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
 
   function handleChanged(next: PersonnelOrderDetailResponse) {
     setDetail(next);
+    setHeaderRequisitesDraft(null);
     onChanged?.(next);
   }
+
+  const handleHeaderRequisitesChange = React.useCallback(
+    (snapshot: PersonnelOrderRequisitesSnapshot) => {
+      setHeaderRequisitesDraft(snapshot);
+    },
+    [],
+  );
 
   if (!open || orderId == null) return null;
 
   const order = detail?.order;
+  const previewRequisites = order
+    ? mergePersonnelOrderRequisitesForPreview(
+        {
+          order_date: order.order_date ?? null,
+          signed_by_name: order.signed_by_name ?? null,
+          signed_by_position: order.signed_by_position ?? null,
+        },
+        headerRequisitesDraft,
+      )
+    : null;
   const linkedEventCount = detail?.events.length || 0;
   const applied = isPersonnelOrderApplied(linkedEventCount);
   const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
@@ -229,7 +257,11 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Заголовок</h3>
                 {editable ? (
-                  <PersonnelOrderHeaderEditor order={order} onSaved={handleChanged} />
+                  <PersonnelOrderHeaderEditor
+                    order={order}
+                    onSaved={handleChanged}
+                    onRequisitesChange={handleHeaderRequisitesChange}
+                  />
                 ) : (
                   <>
                     <div className="mb-3">
@@ -326,7 +358,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
               <section>
                 <PersonnelOrderEditorialTextEditor
                   orderId={order.order_id}
-                  order={order}
+                  order={previewRequisites ?? order}
                   items={detail?.items || []}
                   editable={editable}
                 />
@@ -367,8 +399,46 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
           if (orderId == null) return;
           if (action === "preview") {
             setPrintOpen(false);
+            setPrintBusy(true);
             setPrintError(null);
-            window.open(buildPersonnelOrderPrintHref(orderId, language), "_blank", "noopener,noreferrer");
+            try {
+              const fresh = await getPersonnelOrder(orderId);
+              setDetail(fresh);
+              const draft = headerRequisitesDraft;
+              const savedSignatory = resolvePersonnelOrderSignatoryDisplay(fresh.order);
+              const draftSignatory = draft ? resolvePersonnelOrderSignatoryDisplay(draft) : null;
+              const draftDiffersFromSaved = Boolean(
+                draft &&
+                  ((draft.signed_by_name || "") !== (fresh.order.signed_by_name || "") ||
+                    (draft.signed_by_position || "") !== (fresh.order.signed_by_position || "") ||
+                    (draft.order_date || "") !== (fresh.order.order_date || "")),
+              );
+              if (draftDiffersFromSaved) {
+                setPrintError("Сохраните заголовок приказа перед предпросмотром.");
+                return;
+              }
+              if (!hasPersonnelOrderSignatory(savedSignatory)) {
+                if (draft && hasPersonnelOrderSignatory(draftSignatory!)) {
+                  setPrintError("Сохраните заголовок приказа перед предпросмотром.");
+                  return;
+                }
+                setPrintError(
+                  "Реквизиты подписанта не сохранены. Заполните и сохраните заголовок приказа.",
+                );
+                return;
+              }
+              setHeaderRequisitesDraft(null);
+              const opened = openPersonnelOrderPrintPreview(
+                orderId,
+                language,
+                fresh.order.updated_at || Date.now(),
+              );
+              setPrintError(opened ? null : PERSONNEL_ORDER_PRINT_POPUP_BLOCKED_MESSAGE);
+            } catch (e) {
+              setPrintError(mapPersonnelOrdersApiError(e, "Не удалось подготовить предпросмотр."));
+            } finally {
+              setPrintBusy(false);
+            }
             return;
           }
           setPrintBusy(true);

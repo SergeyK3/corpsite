@@ -16,6 +16,7 @@ import {
   buildPersonnelOrdersQueryParams,
   filterPersonnelOrdersBySearch,
   listPersonnelOrders,
+  getPersonnelOrder,
   mapPersonnelOrdersApiError,
   parsePersonnelOrdersFilters,
   personnelOrderStatusLabel,
@@ -29,6 +30,14 @@ import {
   type PersonnelOrderPrintLanguage,
 } from "../_lib/personnelOrderPrintLanguage";
 import { openPersonnelOrderPdf } from "../_lib/personnelOrderPdfOpen.client";
+import {
+  PERSONNEL_ORDER_PRINT_POPUP_BLOCKED_MESSAGE,
+  openPersonnelOrderPrintPreview,
+} from "../_lib/personnelOrderPrintPreview.client";
+import {
+  hasPersonnelOrderSignatory,
+  resolvePersonnelOrderSignatoryDisplay,
+} from "../_lib/personnelOrderDocumentRequisites";
 import type { PersonnelOrderPrintDialogAction } from "./print/PersonnelOrderPrintLanguageDialog";
 
 function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
@@ -158,7 +167,24 @@ export default function PersonnelOrdersPageClient() {
     const orderId = printOrderId;
     if (action === "preview") {
       setPrintOrderId(null);
-      window.open(buildPersonnelOrderPrintHref(orderId, language), "_blank", "noopener,noreferrer");
+      try {
+        const fresh = await getPersonnelOrder(orderId);
+        const signatory = resolvePersonnelOrderSignatoryDisplay(fresh.order);
+        if (!hasPersonnelOrderSignatory(signatory)) {
+          setPrintError(
+            "Реквизиты подписанта не сохранены. Заполните и сохраните заголовок приказа.",
+          );
+          return;
+        }
+        const opened = openPersonnelOrderPrintPreview(
+          orderId,
+          language,
+          fresh.order.updated_at || Date.now(),
+        );
+        setPrintError(opened ? null : PERSONNEL_ORDER_PRINT_POPUP_BLOCKED_MESSAGE);
+      } catch (e) {
+        setPrintError(mapPersonnelOrdersApiError(e, "Не удалось подготовить предпросмотр."));
+      }
       return;
     }
     setPrintBusy(true);

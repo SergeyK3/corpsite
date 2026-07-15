@@ -164,6 +164,14 @@ describe("personnelOrderPdf language and watermark", () => {
     expect(html).toContain("Директор");
     expect(html).toContain("М. Тулеутаев");
     expect(html).toContain('data-testid="personnel-order-print-signature"');
+    const signatureStart = html.indexOf('data-testid="personnel-order-print-signature"');
+    const signatureChunk = html.slice(signatureStart, signatureStart + 900);
+    expect(signatureChunk.indexOf("personnel-order-print-signature-position")).toBeLessThan(
+      signatureChunk.indexOf("personnel-order-print-signature-line"),
+    );
+    expect(signatureChunk.indexOf("personnel-order-print-signature-line")).toBeLessThan(
+      signatureChunk.indexOf("personnel-order-print-signature-fio"),
+    );
   });
 
   it("includes manual signatory override in PDF HTML document", () => {
