@@ -229,6 +229,8 @@ class _SectionStore:
         person_id: int,
         section_code: str,
         record_id: int,
+        *,
+        expected_updated_at: datetime,
     ) -> SectionRecord:
         spec = _resolve_section(section_code)
         result = self._conn.execute(
@@ -240,6 +242,7 @@ class _SectionStore:
                 WHERE {spec['id_col']} = :record_id
                   AND person_id = :person_id
                   AND lifecycle_status = :active_status
+                  AND updated_at = :expected_updated_at
                 """
             ),
             {
@@ -247,19 +250,25 @@ class _SectionStore:
                 "record_id": int(record_id),
                 "person_id": int(person_id),
                 "active_status": LIFECYCLE_STATUS_ACTIVE,
+                "expected_updated_at": expected_updated_at,
             },
         )
-        if result.rowcount != 1:
+        if result.rowcount == 1:
+            loaded = self.load_record(person_id, section_code, record_id)
+            if loaded is None:
+                raise SectionRecordNotFoundError(
+                    f"Section record missing after void: person_id={person_id}, record_id={record_id}"
+                )
+            return loaded
+        existing = self.load_record(person_id, section_code, record_id)
+        if existing is None:
             raise SectionRecordNotFoundError(
                 f"Active section record not found for void: "
                 f"section_code={section_code}, person_id={person_id}, record_id={record_id}"
             )
-        loaded = self.load_record(person_id, section_code, record_id)
-        if loaded is None:
-            raise SectionRecordNotFoundError(
-                f"Section record missing after void: person_id={person_id}, record_id={record_id}"
-            )
-        return loaded
+        raise SectionOptimisticConcurrencyConflictError(
+            f"Stale {SECTION_OPTIMISTIC_TOKEN_FIELD} for void record_id={record_id}"
+        )
 
     def supersede_pair(
         self,
@@ -267,6 +276,8 @@ class _SectionStore:
         section_code: str,
         old_record_id: int,
         new_record: SectionRecord,
+        *,
+        expected_updated_at: datetime,
     ) -> tuple[SectionRecord, SectionRecord]:
         spec = _resolve_section(section_code)
         result = self._conn.execute(
@@ -278,6 +289,7 @@ class _SectionStore:
                 WHERE {spec['id_col']} = :record_id
                   AND person_id = :person_id
                   AND lifecycle_status = :active_status
+                  AND updated_at = :expected_updated_at
                 """
             ),
             {
@@ -285,12 +297,18 @@ class _SectionStore:
                 "record_id": int(old_record_id),
                 "person_id": int(person_id),
                 "active_status": LIFECYCLE_STATUS_ACTIVE,
+                "expected_updated_at": expected_updated_at,
             },
         )
         if result.rowcount != 1:
-            raise SectionRecordNotFoundError(
-                f"Active section record not found for supersede: "
-                f"section_code={section_code}, person_id={person_id}, record_id={old_record_id}"
+            existing = self.load_record(person_id, section_code, old_record_id)
+            if existing is None:
+                raise SectionRecordNotFoundError(
+                    f"Active section record not found for supersede: "
+                    f"section_code={section_code}, person_id={person_id}, record_id={old_record_id}"
+                )
+            raise SectionOptimisticConcurrencyConflictError(
+                f"Stale {SECTION_OPTIMISTIC_TOKEN_FIELD} for supersede record_id={old_record_id}"
             )
         if new_record.person_id != person_id:
             raise SectionValidationError("new_record.person_id must match supersede person_id")
@@ -578,8 +596,15 @@ class SqlAlchemySectionMutationRepository:
         person_id: int,
         section_code: str,
         record_id: int,
+        *,
+        expected_updated_at: datetime,
     ) -> SectionRecord:
-        return self._store.void_record(person_id, section_code, record_id)
+        return self._store.void_record(
+            person_id,
+            section_code,
+            record_id,
+            expected_updated_at=expected_updated_at,
+        )
 
     def supersede_pair(
         self,
@@ -587,5 +612,13 @@ class SqlAlchemySectionMutationRepository:
         section_code: str,
         old_record_id: int,
         new_record: SectionRecord,
+        *,
+        expected_updated_at: datetime,
     ) -> tuple[SectionRecord, SectionRecord]:
-        return self._store.supersede_pair(person_id, section_code, old_record_id, new_record)
+        return self._store.supersede_pair(
+            person_id,
+            section_code,
+            old_record_id,
+            new_record,
+            expected_updated_at=expected_updated_at,
+        )

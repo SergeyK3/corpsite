@@ -88,7 +88,22 @@ def test_migration_revision_chain() -> None:
 def test_single_alembic_head_is_r3_revision() -> None:
     heads = _heads()
     assert len(heads) == 1
-    assert REVISION_ID in heads
+    script = ScriptDirectory.from_config(_alembic_config())
+    rev = script.get_revision(REVISION_ID)
+    assert rev is not None
+    head = script.get_revision(next(iter(heads)))
+    assert head is not None
+    # R3 revision must remain an ancestor of current head (R5+ may extend chain).
+    current = head
+    seen: set[str] = set()
+    while current is not None:
+        if current.revision == REVISION_ID:
+            return
+        if current.revision in seen:
+            break
+        seen.add(current.revision)
+        current = script.get_revision(current.down_revision) if current.down_revision else None
+    raise AssertionError(f"{REVISION_ID} is not an ancestor of head {heads}")
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

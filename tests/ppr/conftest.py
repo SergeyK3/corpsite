@@ -84,6 +84,10 @@ def insert_employee(
 def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]) -> None:
     if person_ids:
         conn.execute(
+            text("DELETE FROM public.ppr_command_executions WHERE person_id = ANY(:ids)"),
+            {"ids": person_ids},
+        )
+        conn.execute(
             text("DELETE FROM public.personnel_record_metadata WHERE person_id = ANY(:ids)"),
             {"ids": person_ids},
         )

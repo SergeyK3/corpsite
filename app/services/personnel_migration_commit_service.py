@@ -32,6 +32,12 @@ from app.services.personnel_migration_types import (
     RunContext,
 )
 from app.services.personnel_record_event_service import emit_personnel_record_event
+from app.services.personnel_migration_ppr_bridge import (
+    commit_run_via_ppr_bridge,
+    pmf_ppr_bridge_active,
+    supersede_record_via_ppr_bridge,
+    void_run_via_ppr_bridge,
+)
 
 PMF_TABLES = (
     "personnel_migration_domains",
@@ -424,6 +430,14 @@ def commit_run(
             item_errors=item_error_details,
         )
 
+    if pmf_ppr_bridge_active():
+        return commit_run_via_ppr_bridge(
+            conn,
+            run_ctx=run_ctx,
+            items=items,
+            actor_id=actor_id,
+        )
+
     written = plugin.write_records(conn, run=run_ctx, items=items, actor_id=actor_id)
     written_by_item = {record.item_id: record for record in written}
 
@@ -538,7 +552,8 @@ def void_run(
                 item_id,
                 target_table_name,
                 target_record_id,
-                item_status
+                item_status,
+                record_kind
             FROM public.personnel_migration_items
             WHERE run_id = :run_id
               AND item_status = :item_status
@@ -548,6 +563,21 @@ def void_run(
         ),
         {"run_id": int(run_id), "item_status": ITEM_STATUS_COMMITTED},
     ).mappings().all()
+
+    if pmf_ppr_bridge_active():
+        record_kind_by_item = {
+            int(row["item_id"]): str(row.get("record_kind") or "education")
+            for row in item_rows
+        }
+        item_dicts = [dict(row) for row in item_rows]
+        return void_run_via_ppr_bridge(
+            conn,
+            run_ctx=run_ctx,
+            item_rows=item_dicts,
+            actor_id=actor_id,
+            void_reason=normalized_reason,
+            record_kind_by_item=record_kind_by_item,
+        )
 
     voided_items: list[dict[str, Any]] = []
     event_ids: list[int] = []
@@ -666,6 +696,23 @@ def supersede_record(
         run_status=RUN_STATUS_COMMITTED,
         metadata={},
     )
+
+    record_kind = replacement_payload.get("record_kind") or (
+        "training" if record_table_name == "person_training" else "education"
+    )
+
+    if pmf_ppr_bridge_active():
+        return supersede_record_via_ppr_bridge(
+            conn,
+            domain_code=domain_code,
+            employee_context_id=int(employee_context_id),
+            person_id=person_id,
+            record_table_name=record_table_name,
+            record_id=int(record_id),
+            replacement_payload=replacement_payload,
+            actor_id=actor_id,
+            record_kind=str(record_kind),
+        )
 
     written = plugin.supersede_target_record(
         conn,

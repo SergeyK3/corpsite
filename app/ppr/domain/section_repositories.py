@@ -45,8 +45,10 @@ class SectionMutationRepository(Protocol):
         person_id: int,
         section_code: str,
         record_id: int,
+        *,
+        expected_updated_at: datetime,
     ) -> SectionRecord:
-        """Soft-void active row (lifecycle_status=voided)."""
+        """Soft-void active row (lifecycle_status=voided) with optimistic CAS."""
         ...
 
     def supersede_pair(
@@ -55,6 +57,8 @@ class SectionMutationRepository(Protocol):
         section_code: str,
         old_record_id: int,
         new_record: SectionRecord,
+        *,
+        expected_updated_at: datetime,
     ) -> tuple[SectionRecord, SectionRecord]:
         """Mark old row superseded and insert replacement atomically in caller transaction."""
         ...

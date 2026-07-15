@@ -35,8 +35,15 @@ class SectionMutationContext:
         person_id: int,
         section_code: str,
         record_id: int,
+        *,
+        expected_updated_at: datetime,
     ) -> SectionRecord:
-        return self._mutations.void_record(person_id, section_code, record_id)
+        return self._mutations.void_record(
+            person_id,
+            section_code,
+            record_id,
+            expected_updated_at=expected_updated_at,
+        )
 
     def supersede_pair(
         self,
@@ -44,10 +51,13 @@ class SectionMutationContext:
         section_code: str,
         old_record_id: int,
         new_record: SectionRecord,
+        *,
+        expected_updated_at: datetime,
     ) -> tuple[SectionRecord, SectionRecord]:
         return self._mutations.supersede_pair(
             person_id,
             section_code,
             old_record_id,
             new_record,
+            expected_updated_at=expected_updated_at,
         )

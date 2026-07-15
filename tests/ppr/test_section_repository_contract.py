@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -173,10 +175,12 @@ def test_void_education_record(section_repos, section_person_id: int) -> None:
             institution_name="Void Me",
         )
     )
+    assert inserted.updated_at is not None
     voided = mutation_repo.void_record(
         section_person_id,
         SECTION_CODE_PPR_EDUCATION,
         inserted.record_id or 0,
+        expected_updated_at=inserted.updated_at,
     )
     active = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_EDUCATION)
 
@@ -203,6 +207,7 @@ def test_supersede_pair(section_repos, section_person_id: int) -> None:
             education_kind=EDUCATION_KIND_BASIC,
             institution_name="New School",
         ),
+        expected_updated_at=old.updated_at,
     )
     active = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_EDUCATION)
 
@@ -222,7 +227,12 @@ def test_load_missing_returns_none(section_repos, section_person_id: int) -> Non
 def test_void_missing_raises_not_found(section_repos, section_person_id: int) -> None:
     _, mutation_repo = section_repos
     with pytest.raises(SectionRecordNotFoundError):
-        mutation_repo.void_record(section_person_id, SECTION_CODE_PPR_EDUCATION, 9_999_999)
+        mutation_repo.void_record(
+            section_person_id,
+            SECTION_CODE_PPR_EDUCATION,
+            9_999_999,
+            expected_updated_at=datetime(2000, 1, 1, tzinfo=UTC),
+        )
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -278,6 +288,7 @@ def test_supersede_rollback_restores_old_record_on_insert_failure(section_person
                     education_kind="not-a-valid-education-kind",
                     institution_name="Invalid Replacement",
                 ),
+                expected_updated_at=old.updated_at,
             )
         trans.rollback()
 

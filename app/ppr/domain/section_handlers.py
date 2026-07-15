@@ -210,6 +210,7 @@ def handle_void_education_record(
         command.person_id,
         SECTION_CODE_PPR_EDUCATION,
         command.record_id,
+        expected_updated_at=command.expected_updated_at,
     )
     if not isinstance(voided, EducationRecord):
         raise SectionValidationError("void_record returned unexpected section type")
@@ -248,6 +249,7 @@ def handle_supersede_education_record(
         SECTION_CODE_PPR_EDUCATION,
         command.record_id,
         replacement,
+        expected_updated_at=command.expected_updated_at,
     )
     if not isinstance(old_record, EducationRecord) or not isinstance(new_record, EducationRecord):
         raise SectionValidationError("supersede_pair returned unexpected section types")
@@ -339,6 +341,7 @@ def handle_void_training_record(
         command.person_id,
         SECTION_CODE_PPR_TRAINING,
         command.record_id,
+        expected_updated_at=command.expected_updated_at,
     )
     if not isinstance(voided, TrainingRecord):
         raise SectionValidationError("void_record returned unexpected section type")
@@ -376,6 +379,7 @@ def handle_supersede_training_record(
         SECTION_CODE_PPR_TRAINING,
         command.record_id,
         replacement,
+        expected_updated_at=command.expected_updated_at,
     )
     if not isinstance(old_record, TrainingRecord) or not isinstance(new_record, TrainingRecord):
         raise SectionValidationError("supersede_pair returned unexpected section types")

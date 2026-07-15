@@ -180,6 +180,7 @@ def test_handler_update_and_void_education(handler_person_id: int) -> None:
                 person_id=handler_person_id,
                 record_id=updated.record.record_id or 0,
                 reason="test void",
+                expected_updated_at=updated.record.updated_at,
             ),
             uow,
         )

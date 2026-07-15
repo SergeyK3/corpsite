@@ -85,3 +85,39 @@ class UnknownSectionTypeError(PprError):
 
 class SectionOptimisticConcurrencyConflictError(PprError):
     code = "PPR_SECTION_OPTIMISTIC_CONCURRENCY_CONFLICT"
+
+
+class PprApplicationValidationError(PprError):
+    code = "PPR_APPLICATION_VALIDATION_ERROR"
+
+
+class PprAuthorizationDeniedError(PprError):
+    code = "PPR_AUTHORIZATION_DENIED"
+
+
+class PprCommandIdConflictError(PprError):
+    code = "PPR_COMMAND_ID_CONFLICT"
+
+
+class PprCommandInProgressError(PprError):
+    code = "PPR_COMMAND_IN_PROGRESS"
+
+
+class PprNotMaterializedError(PprError):
+    code = "PPR_NOT_MATERIALIZED"
+
+
+class PprLifecycleTransitionError(PprError):
+    code = "PPR_LIFECYCLE_TRANSITION_ERROR"
+
+
+class PprIdentityInputMismatchError(PprError):
+    code = "PPR_IDENTITY_INPUT_MISMATCH"
+
+
+class PprPmfBridgeError(PprError):
+    code = "PPR_PMF_BRIDGE_ERROR"
+
+
+class PprPmfCommandMappingError(PprError):
+    code = "PPR_PMF_COMMAND_MAPPING_ERROR"

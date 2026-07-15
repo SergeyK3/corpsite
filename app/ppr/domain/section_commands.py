@@ -45,12 +45,14 @@ class VoidEducationRecord:
     person_id: int
     record_id: int
     reason: str
+    expected_updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
 class SupersedeEducationRecord:
     person_id: int
     record_id: int
+    expected_updated_at: datetime
     replacement: AddEducationRecord
 
 
@@ -90,10 +92,12 @@ class VoidTrainingRecord:
     person_id: int
     record_id: int
     reason: str
+    expected_updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
 class SupersedeTrainingRecord:
     person_id: int
     record_id: int
+    expected_updated_at: datetime
     replacement: AddTrainingRecord
