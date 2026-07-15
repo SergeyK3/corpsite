@@ -246,8 +246,9 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
                     <dl className="grid gap-3 sm:grid-cols-2">
                     <Field label="№ приказа" value={formatPersonnelOrderNumber(order.order_number)} />
                     <Field label="Дата приказа" value={formatPersonnelOrderDate(order.order_date)} />
+                    <Field label="Должность подписанта" value={order.signed_by_position || "—"} />
+                    <Field label="ФИО подписанта" value={order.signed_by_name || "—"} />
                     <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
-                    <Field label="Подписант" value={order.signed_by_name || "—"} />
                     <Field label="Основание" value={order.legal_basis_article || order.basis_summary || "—"} />
                     <Field label="Комментарий" value={order.comment || "—"} />
                     {order.void_reason ? (
@@ -325,6 +326,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
               <section>
                 <PersonnelOrderEditorialTextEditor
                   orderId={order.order_id}
+                  order={order}
                   items={detail?.items || []}
                   editable={editable}
                 />

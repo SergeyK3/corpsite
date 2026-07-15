@@ -25,6 +25,8 @@ type Props = {
 export default function PersonnelOrderHeaderEditor({ order, disabled = false, onSaved }: Props) {
   const [orderNumber, setOrderNumber] = React.useState(order.order_number || "");
   const [orderDate, setOrderDate] = React.useState(order.order_date || "");
+  const [signedByName, setSignedByName] = React.useState(order.signed_by_name || "");
+  const [signedByPosition, setSignedByPosition] = React.useState(order.signed_by_position || "");
   const [orderTypeCode, setOrderTypeCode] = React.useState(order.order_type_code);
   const [comment, setComment] = React.useState(order.comment || "");
   const [basisSummary, setBasisSummary] = React.useState(order.basis_summary || "");
@@ -35,6 +37,8 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
   React.useEffect(() => {
     setOrderNumber(order.order_number || "");
     setOrderDate(order.order_date || "");
+    setSignedByName(order.signed_by_name || "");
+    setSignedByPosition(order.signed_by_position || "");
     setOrderTypeCode(order.order_type_code);
     setComment(order.comment || "");
     setBasisSummary(order.basis_summary || "");
@@ -56,6 +60,8 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
       };
       if (orderNumber.trim()) payload.order_number = orderNumber.trim();
       if (orderDate.trim()) payload.order_date = orderDate.trim();
+      payload.signed_by_name = signedByName.trim();
+      payload.signed_by_position = signedByPosition.trim();
 
       const detail = await updatePersonnelOrder(order.order_id, payload);
       onSaved(detail);
@@ -127,6 +133,29 @@ export default function PersonnelOrderHeaderEditor({ order, disabled = false, on
               onChange={(e) => setOrderDate(e.target.value)}
               disabled={disabled}
               className={FIELD_INPUT_CLASS}
+              data-testid="personnel-order-header-order-date"
+            />
+          </div>
+          <div>
+            <label className={FIELD_LABEL_CLASS}>Должность подписанта</label>
+            <input
+              value={signedByPosition}
+              onChange={(e) => setSignedByPosition(e.target.value)}
+              disabled={disabled}
+              placeholder="Например: Директор"
+              className={FIELD_INPUT_CLASS}
+              data-testid="personnel-order-header-signatory-position"
+            />
+          </div>
+          <div>
+            <label className={FIELD_LABEL_CLASS}>ФИО подписанта</label>
+            <input
+              value={signedByName}
+              onChange={(e) => setSignedByName(e.target.value)}
+              disabled={disabled}
+              placeholder="Например: М. Тулеутаев"
+              className={FIELD_INPUT_CLASS}
+              data-testid="personnel-order-header-signatory-name"
             />
           </div>
           <div className="sm:col-span-2">

@@ -389,10 +389,72 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     const html = buildPersonnelOrderPrintDocumentHtml(withClosing, "ru");
     expect(html).toContain('data-testid="personnel-order-print-closing"');
     expect(html).toContain("Контроль за исполнением приказа оставляю за собой.");
+    expect(html).toContain('data-testid="personnel-order-print-tail-date"');
+    expect(html).toContain("10 июля 2026 года");
+    expect(html).toContain('data-testid="personnel-order-print-signature"');
+    expect(html.indexOf("personnel-order-print-closing")).toBeLessThan(
+      html.indexOf("personnel-order-print-tail-date"),
+    );
+    expect(html.indexOf("personnel-order-print-tail-date")).toBeLessThan(
+      html.indexOf("personnel-order-print-signature"),
+    );
 
     const withoutClosing = buildPersonnelOrderPrintViewModel(sampleDetail(), {});
     const htmlEmpty = buildPersonnelOrderPrintDocumentHtml(withoutClosing, "ru");
     expect(htmlEmpty).not.toContain('data-testid="personnel-order-print-closing"');
+  });
+
+  it("omits tail date when order_date is empty but keeps signature block", () => {
+    const model = buildPersonnelOrderPrintViewModel(sampleDetail({ order_date: null }), {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 50,
+            scope: "order",
+            locale: "ru",
+            block_type: "closing",
+            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+    expect(html).not.toContain('data-testid="personnel-order-print-tail-date"');
+    expect(html).toContain('data-testid="personnel-order-print-signature"');
+  });
+
+  it("renders tail date once in bilingual HTML", () => {
+    const model = buildPersonnelOrderPrintViewModel(sampleDetail(), {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [
+          {
+            block_id: 50,
+            scope: "order",
+            locale: "ru",
+            block_type: "closing",
+            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 1,
+          },
+        ],
+        items: [],
+      },
+    });
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "kk-ru");
+    expect(html.match(/data-testid="personnel-order-print-tail-date"/g)?.length).toBe(1);
+    expect(html).toContain("2026 жылғы 10 шілде");
+    expect(html).toContain("10 июля 2026 года");
   });
 
   it("detects embedded order verb in editorial preamble to avoid duplication", () => {

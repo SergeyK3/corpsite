@@ -10,6 +10,7 @@ import {
   resetPersonnelOrderEditorialBlock,
   type PersonnelOrderEditorialBlock,
   type PersonnelOrderEditorialState,
+  type PersonnelOrderHeader,
   type PersonnelOrderItem,
 } from "../_lib/personnelOrdersApi.client";
 import {
@@ -25,6 +26,7 @@ import {
   type PersonnelOrderEditorialUiLocale,
   type PersonnelOrderEditorialUiStatus,
 } from "../_lib/personnelOrderEditorialUi";
+import PersonnelOrderDocumentRequisitesPreview from "./PersonnelOrderDocumentRequisitesPreview";
 
 const GENERATE_CONFIRM_MESSAGE = [
   "Пересформировать текст приказа?",
@@ -36,6 +38,7 @@ const GENERATE_CONFIRM_MESSAGE = [
 
 type Props = {
   orderId: number;
+  order: Pick<PersonnelOrderHeader, "order_date" | "signed_by_name" | "signed_by_position">;
   items: PersonnelOrderItem[];
   /** Structured DRAFT write permission from order status. */
   editable: boolean;
@@ -215,7 +218,12 @@ function BlockEditor({
   );
 }
 
-export default function PersonnelOrderEditorialTextEditor({ orderId, items, editable }: Props) {
+export default function PersonnelOrderEditorialTextEditor({
+  orderId,
+  order,
+  items,
+  editable,
+}: Props) {
   const [state, setState] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [activeLocale, setActiveLocale] = React.useState<PersonnelOrderEditorialUiLocale>("kk");
   const [loading, setLoading] = React.useState(true);
@@ -366,6 +374,7 @@ export default function PersonnelOrderEditorialTextEditor({ orderId, items, edit
         <div className="space-y-6">
           {sections.map((section) => {
             if (section.kind === "order") {
+              const isClosing = section.blockType === "closing";
               return (
                 <div
                   key={section.key}
@@ -379,6 +388,14 @@ export default function PersonnelOrderEditorialTextEditor({ orderId, items, edit
                     onSave={handleSave}
                     onReset={handleReset}
                   />
+                  {isClosing ? (
+                    <div className="mt-4 space-y-2" data-testid="personnel-order-editorial-requisites">
+                      <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        Реквизиты документа
+                      </h4>
+                      <PersonnelOrderDocumentRequisitesPreview order={order} locale={activeLocale} />
+                    </div>
+                  ) : null}
                 </div>
               );
             }

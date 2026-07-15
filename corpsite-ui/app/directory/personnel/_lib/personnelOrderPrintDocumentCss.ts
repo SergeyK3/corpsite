@@ -181,6 +181,12 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_CSS = `
   gap: 0.375rem;
 }
 
+.personnel-order-print-document .personnel-order-print-tail-date {
+  margin-top: 0;
+  text-align: left;
+  line-height: 1.375;
+}
+
 .personnel-order-print-document .personnel-order-print-tail {
   display: flex;
   flex-direction: column;

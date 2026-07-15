@@ -264,7 +264,7 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(screen.getByTestId("personnel-order-print-signature")).not.toHaveTextContent("Қолы");
   });
 
-  it("renders editorial closing before signature block", () => {
+  it("renders editorial closing before tail date and signature block", () => {
     const model = buildPersonnelOrderPrintViewModel(detail, {
       organizationName: "ММЦ",
       editorial: {
@@ -290,6 +290,8 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(screen.getByTestId("personnel-order-print-closing")).toHaveTextContent(
       "Контроль за исполнением приказа оставляю за собой.",
     );
+    expect(screen.getByTestId("personnel-order-print-tail-date")).toHaveTextContent("10 июля 2026 года");
+    expect(screen.getByTestId("personnel-order-print-signature")).toHaveTextContent("Директор");
   });
 
   it("does not duplicate ПРИКАЗЫВАЮ when editorial preamble already includes it", () => {

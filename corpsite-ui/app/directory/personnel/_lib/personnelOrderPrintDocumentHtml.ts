@@ -62,7 +62,6 @@ function renderHeader(
   const orgLines = resolveLocalizedLines(model.organization, language);
   const titleLines = resolveLocalizedLines(model.title, language);
   const placeLines = resolveLocalizedLines(model.placeOfIssue, language);
-  const dateLines = formatPersonnelOrderPrintDateLines(model.orderDate, language);
   const orderNumber = model.orderNumber?.trim() || "—";
 
   const org =
@@ -77,7 +76,6 @@ function renderHeader(
   const meta = `<div class="personnel-order-print-meta">
   <div class="personnel-order-print-meta-number">${escapePersonnelOrderPrintHtml(primary.orderNumber)} ${escapePersonnelOrderPrintHtml(orderNumber)}</div>
   <div class="personnel-order-print-meta-date">
-    ${linesHtml(dateLines)}
     ${linesHtml(placeLines)}
   </div>
 </div>`;
@@ -177,6 +175,16 @@ function renderClosing(
   return `<section class="personnel-order-print-block personnel-order-print-closing" data-testid="personnel-order-print-closing">${body}</section>`;
 }
 
+function renderTailDate(
+  model: PersonnelOrderPrintViewModel,
+  language: PersonnelOrderPrintLanguage,
+): string {
+  const dateLines = formatPersonnelOrderPrintDateLines(model.orderDate, language);
+  const hasDate = dateLines.some((line) => String(line || "").trim() && line !== "—");
+  if (!hasDate) return "";
+  return `<section class="personnel-order-print-block personnel-order-print-tail-date" data-testid="personnel-order-print-tail-date">${linesHtml(dateLines)}</section>`;
+}
+
 function renderSignature(
   model: PersonnelOrderPrintViewModel,
   language: PersonnelOrderPrintLanguage,
@@ -252,6 +260,7 @@ export function buildPersonnelOrderPrintDocumentHtml(
     ${renderBasis(model, language)}
     ${renderClosing(model, language)}
     <div class="personnel-order-print-tail">
+      ${renderTailDate(model, language)}
       ${renderSignature(model, language)}
       ${renderAcknowledgement(model, language)}
     </div>

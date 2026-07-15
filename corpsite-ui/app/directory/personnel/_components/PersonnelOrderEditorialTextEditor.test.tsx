@@ -35,6 +35,12 @@ const items: PersonnelOrderItem[] = [
   },
 ];
 
+const sampleOrder = {
+  order_date: "2026-07-18",
+  signed_by_name: "М. Тулеутаев",
+  signed_by_position: "Директор",
+};
+
 function sampleState(overrides?: Partial<PersonnelOrderEditorialState>): PersonnelOrderEditorialState {
   return {
     order_id: 42,
@@ -189,7 +195,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
   it("loads editorial state and shows document structure without technical fields", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-editorial-editor")).toBeInTheDocument();
@@ -228,7 +234,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     });
     vi.mocked(generatePersonnelOrderEditorial).mockResolvedValue(sampleState());
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(generatePersonnelOrderEditorial).toHaveBeenCalledWith(42);
@@ -241,7 +247,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
   it("does not auto-generate again when both locales already exist", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByText("Жұмысқа қабылдау туралы")).toBeInTheDocument();
@@ -254,7 +260,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     vi.mocked(generatePersonnelOrderEditorial).mockResolvedValue(sampleState());
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-editorial-generate")).toBeInTheDocument();
@@ -277,7 +283,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
   it("shows only kk blocks on kk tab even when ru blocks are present in state", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByText("Жұмысқа қабылдау туралы")).toBeInTheDocument();
@@ -288,7 +294,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
   it("shows ru blocks when Russian tab is selected", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-editorial-locale-ru")).toBeInTheDocument();
@@ -318,7 +324,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     );
     vi.mocked(patchPersonnelOrderEditorialBlock).mockResolvedValue(afterSave);
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-editorial-locale-ru")).toBeInTheDocument();
@@ -371,7 +377,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     });
     vi.mocked(generatePersonnelOrderEditorial).mockResolvedValue(sampleState());
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(generatePersonnelOrderEditorial).toHaveBeenCalledWith(42);
@@ -382,7 +388,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
     vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-editorial-generate")).toBeInTheDocument();
@@ -408,7 +414,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     );
     vi.mocked(patchPersonnelOrderEditorialBlock).mockResolvedValue(afterSave);
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByText("Жұмысқа қабылдау туралы")).toBeInTheDocument();
@@ -449,7 +455,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     vi.mocked(resetPersonnelOrderEditorialBlock).mockResolvedValue(sampleState());
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
       expect(screen.getByText("Қолмен")).toBeInTheDocument();
@@ -471,7 +477,14 @@ describe("PersonnelOrderEditorialTextEditor", () => {
       sampleState({ order_status: "READY_FOR_SIGNATURE", editable: false }),
     );
 
-    render(<PersonnelOrderEditorialTextEditor orderId={42} items={items} editable={false} />);
+    render(
+      <PersonnelOrderEditorialTextEditor
+        orderId={42}
+        order={sampleOrder}
+        items={items}
+        editable={false}
+      />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Жұмысқа қабылдау туралы")).toBeInTheDocument();
@@ -480,5 +493,53 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.queryByTestId("personnel-order-editorial-edit")).not.toBeInTheDocument();
     expect(screen.queryByTestId("personnel-order-editorial-generate")).not.toBeInTheDocument();
     expect(screen.getByText(/только для просмотра/i)).toBeInTheDocument();
+  });
+
+  it("shows structured requisites preview after closing section", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-editorial-requisites")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+
+    expect(screen.getByTestId("personnel-order-requisites-date")).toHaveTextContent("18 июля 2026 года");
+    expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("Директор");
+    expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("М. Тулеутаев");
+  });
+
+  it("does not embed requisites in closing textarea when editing", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    vi.mocked(patchPersonnelOrderEditorialBlock).mockResolvedValue(sampleState());
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-editorial-block-Заключительная часть")).toBeInTheDocument();
+    });
+
+    const closingSection = screen.getByTestId("personnel-order-editorial-block-Заключительная часть");
+    fireEvent.click(closingSection.querySelector('[data-testid="personnel-order-editorial-edit"]')!);
+
+    const textarea = screen.getByTestId("personnel-order-editorial-textarea");
+    fireEvent.change(textarea, {
+      target: { value: "Контроль за исполнением приказа оставляю за собой." },
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-save"));
+
+    await waitFor(() => {
+      expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledWith(42, 3, {
+        override_text: "Контроль за исполнением приказа оставляю за собой.",
+        expected_revision: 1,
+      });
+    });
+
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+
+    expect(screen.getByTestId("personnel-order-requisites-date")).toHaveTextContent("18 июля 2026 года");
+    expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("М. Тулеутаев");
   });
 });
