@@ -359,7 +359,9 @@ def test_demo_section_coverage_manifest() -> None:
         "training": "create_demo_ppr_applicants (ahmetov only)",
         "employment_biography": "seed_demo_employment_biography",
         "military": "seed_demo_military_service",
+        "family": "seed_demo_family",
     }
-    missing_in_ops = ["family"]
+    missing_in_ops: list[str] = []
     assert "military" in ops_sections
-    assert missing_in_ops == ["family"]
+    assert "family" in ops_sections
+    assert missing_in_ops == []

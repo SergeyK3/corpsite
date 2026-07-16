@@ -4,17 +4,21 @@
 Production-safe one-off ops script. Does NOT run on production by default.
 Default mode is dry-run (no writes). Mutations require ``--execute``.
 
-Demo PPR ops on Ubuntu/VPS (``DATABASE_URL`` is taken from the service environment):
+Prefer the unified pipeline (all PPR sections in one command):
+
+.. code-block:: bash
+
+   export CORPSITE_ALLOW_DEMO_PPR_SEED=1
+   python scripts/ops/seed_demo_ppr.py --dry-run
+   python scripts/ops/seed_demo_ppr.py --execute
+
+This script alone (envelope, education, training) on Ubuntu/VPS:
 
 .. code-block:: bash
 
    export CORPSITE_ALLOW_DEMO_PPR_SEED=1
    python scripts/ops/create_demo_ppr_applicants.py --dry-run
    python scripts/ops/create_demo_ppr_applicants.py --execute
-   python scripts/ops/seed_demo_employment_biography.py --dry-run
-   python scripts/ops/seed_demo_employment_biography.py --execute
-   python scripts/ops/seed_demo_military_service.py --dry-run
-   python scripts/ops/seed_demo_military_service.py --execute
 
 On production-like hosts, ``CORPSITE_ALLOW_DEMO_PPR_SEED=1`` is mandatory for ``--execute``
 and ``--rollback``.
@@ -49,6 +53,8 @@ from app.ppr.application.command_models import (
     COMMAND_TYPE_ADD_EDUCATION,
     COMMAND_TYPE_ADD_TRAINING,
     COMMAND_TYPE_MATERIALIZE_PPR,
+    COMMAND_TYPE_VOID_EDUCATION,
+    COMMAND_TYPE_VOID_TRAINING,
     MaterializePprPayload,
     PprCommandEnvelope,
 )
@@ -59,6 +65,7 @@ from app.services.ppr_candidate_service import (
     save_intended_employment,
     update_hr_relationship_context_tx,
 )
+from scripts.ops.demo_ppr_section_rollback import DEMO_ROLLBACK_REASON
 
 DEMO_MATCH_KEY_PREFIX = "demo:ppr-applicant:"
 DEMO_SOURCE = "manual"
@@ -722,28 +729,73 @@ def execute_manifest(
     return results
 
 
+DEMO_PURGE_SUITES: frozenset[str] = frozenset(
+    {
+        DEMO_METADATA["demo_suite"],
+        "employment_biography_v1",
+        "military_service_v1",
+        "family_v1",
+    }
+)
+
+
+def _purge_demo_marked_section_rows(conn: Connection, *, person_id: int) -> None:
+    """Remove demo-marked section rows (including voided) before deleting demo person shell."""
+    for table in (
+        "person_relatives",
+        "person_military_service",
+        "person_external_employment",
+        "person_training",
+        "person_education",
+    ):
+        conn.execute(
+            text(
+                f"""
+                DELETE FROM public.{table}
+                WHERE person_id = :person_id
+                  AND (
+                    metadata->>'demo_suite' = ANY(:suites)
+                    OR metadata->>'demo' = 'true'
+                  )
+                """
+            ),
+            {"person_id": person_id, "suites": list(DEMO_PURGE_SUITES)},
+        )
+
+
+def _count_active_non_demo_section_rows(conn: Connection, *, person_id: int) -> int:
+    total = 0
+    for table in (
+        "person_relatives",
+        "person_military_service",
+        "person_external_employment",
+        "person_training",
+        "person_education",
+    ):
+        row = conn.execute(
+            text(
+                f"""
+                SELECT COUNT(*)
+                FROM public.{table}
+                WHERE person_id = :person_id
+                  AND lifecycle_status = 'active'
+                  AND COALESCE(metadata->>'demo_suite', '') <> ALL(:suites)
+                  AND COALESCE(metadata->>'demo', '') <> 'true'
+                """
+            ),
+            {"person_id": person_id, "suites": list(DEMO_PURGE_SUITES)},
+        ).scalar_one()
+        total += int(row)
+    return total
+
+
 def _delete_person_demo_data(conn: Connection, person_id: int) -> None:
-    """Delete PPR section rows and envelope for a demo person (rollback helper)."""
-    conn.execute(
-        text("DELETE FROM public.person_military_service WHERE person_id = :person_id"),
-        {"person_id": person_id},
-    )
-    conn.execute(
-        text("DELETE FROM public.person_external_employment WHERE person_id = :person_id"),
-        {"person_id": person_id},
-    )
-    conn.execute(
-        text("DELETE FROM public.person_relatives WHERE person_id = :person_id"),
-        {"person_id": person_id},
-    )
-    conn.execute(
-        text("DELETE FROM public.person_training WHERE person_id = :person_id"),
-        {"person_id": person_id},
-    )
-    conn.execute(
-        text("DELETE FROM public.person_education WHERE person_id = :person_id"),
-        {"person_id": person_id},
-    )
+    """Delete demo person shell after section rollbacks (rollback helper).
+
+    Does not delete lifecycle section rows — those are voided via application commands
+    in dedicated stage rollbacks or ``_void_demo_applicant_sections`` below.
+    """
+    _purge_demo_marked_section_rows(conn, person_id=person_id)
     conn.execute(
         text("DELETE FROM public.personnel_record_events WHERE person_id = :person_id"),
         {"person_id": person_id},
@@ -762,6 +814,94 @@ def _delete_person_demo_data(conn: Connection, person_id: int) -> None:
     )
 
 
+def _count_active_section_rows(conn: Connection, *, person_id: int) -> int:
+    return _count_active_non_demo_section_rows(conn, person_id=person_id)
+
+
+def _load_demo_applicant_section_rows(
+    conn: Connection,
+    *,
+    person_id: int,
+    table: str,
+    id_column: str,
+) -> list[tuple[int, datetime]]:
+    rows = conn.execute(
+        text(
+            f"""
+            SELECT {id_column} AS record_id, updated_at
+            FROM public.{table}
+            WHERE person_id = :person_id
+              AND lifecycle_status = 'active'
+              AND metadata->>'demo_suite' = :demo_suite
+            """
+        ),
+        {"person_id": person_id, "demo_suite": DEMO_METADATA["demo_suite"]},
+    ).all()
+    return [(int(row[0]), row[1]) for row in rows]
+
+
+def _void_demo_applicant_sections(conn: Connection, *, person_id: int, execute: bool) -> list[str]:
+    statuses: list[str] = []
+    if not execute:
+        education_rows = _load_demo_applicant_section_rows(
+            conn,
+            person_id=person_id,
+            table="person_education",
+            id_column="education_id",
+        )
+        training_rows = _load_demo_applicant_section_rows(
+            conn,
+            person_id=person_id,
+            table="person_training",
+            id_column="training_id",
+        )
+        for _ in education_rows:
+            statuses.append("dry_run_void_education")
+        for _ in training_rows:
+            statuses.append("dry_run_void_training")
+        return statuses
+
+    section = _section_service()
+    for record_id, updated_at in _load_demo_applicant_section_rows(
+        conn,
+        person_id=person_id,
+        table="person_education",
+        id_column="education_id",
+    ):
+        result = section.void_education(
+            _command_envelope(
+                command_type=COMMAND_TYPE_VOID_EDUCATION,
+                person_id=person_id,
+                payload={
+                    "record_id": record_id,
+                    "reason": DEMO_ROLLBACK_REASON,
+                    "expected_updated_at": updated_at,
+                },
+            )
+        )
+        statuses.append(f"void_education:{result.status}")
+
+    for record_id, updated_at in _load_demo_applicant_section_rows(
+        conn,
+        person_id=person_id,
+        table="person_training",
+        id_column="training_id",
+    ):
+        result = section.void_training(
+            _command_envelope(
+                command_type=COMMAND_TYPE_VOID_TRAINING,
+                person_id=person_id,
+                payload={
+                    "record_id": record_id,
+                    "reason": DEMO_ROLLBACK_REASON,
+                    "expected_updated_at": updated_at,
+                },
+            )
+        )
+        statuses.append(f"void_training:{result.status}")
+    return statuses
+
+
 def rollback_demo_applicants(conn: Connection, *, execute: bool) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for spec in APPLICANTS:
@@ -774,13 +914,41 @@ def rollback_demo_applicants(conn: Connection, *, execute: bool) -> list[dict[st
         if audit.has_active_employee:
             raise RuntimeError(f"{spec['key']}: refusing rollback — active employee exists")
 
+        person_id = int(audit.person_id)
+        section_statuses = _void_demo_applicant_sections(conn, person_id=person_id, execute=execute)
+
         if not execute:
-            rows.append({"key": spec["key"], "action": "dry_run_delete", "person_id": audit.person_id})
+            rows.append(
+                {
+                    "key": spec["key"],
+                    "action": "dry_run_delete",
+                    "person_id": person_id,
+                    "section_statuses": section_statuses,
+                }
+            )
             continue
 
-        person_id = int(audit.person_id)
+        if _count_active_non_demo_section_rows(conn, person_id=person_id) > 0:
+            rows.append(
+                {
+                    "key": spec["key"],
+                    "action": "skipped_person_has_active_non_demo_sections",
+                    "person_id": person_id,
+                    "section_statuses": section_statuses,
+                }
+            )
+            continue
+
+        _purge_demo_marked_section_rows(conn, person_id=person_id)
         _delete_person_demo_data(conn, person_id)
-        rows.append({"key": spec["key"], "action": "deleted", "person_id": person_id})
+        rows.append(
+            {
+                "key": spec["key"],
+                "action": "deleted",
+                "person_id": person_id,
+                "section_statuses": section_statuses,
+            }
+        )
     return rows
 
 

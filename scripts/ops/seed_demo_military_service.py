@@ -4,17 +4,16 @@
 Production-safe ops script. Uses PPR application layer only (no direct section INSERTs).
 Default mode is dry-run (no writes). Mutations require ``--execute``.
 
-Prerequisites: run ``create_demo_ppr_applicants.py --execute`` first.
+Prerequisites: run ``create_demo_ppr_applicants.py --execute`` first, or use the unified
+``seed_demo_ppr.py`` pipeline.
 
 Demo PPR ops on Ubuntu/VPS (``DATABASE_URL`` is taken from the service environment):
 
 .. code-block:: bash
 
    export CORPSITE_ALLOW_DEMO_PPR_SEED=1
-   python scripts/ops/create_demo_ppr_applicants.py --execute
-   python scripts/ops/seed_demo_employment_biography.py --execute
-   python scripts/ops/seed_demo_military_service.py --dry-run
-   python scripts/ops/seed_demo_military_service.py --execute
+   python scripts/ops/seed_demo_ppr.py --dry-run
+   python scripts/ops/seed_demo_ppr.py --execute
 
 On production-like hosts, ``CORPSITE_ALLOW_DEMO_PPR_SEED=1`` is mandatory for ``--execute``.
 """
@@ -46,6 +45,7 @@ from app.ppr.domain.models import PPR_LIFECYCLE_NOT_MATERIALIZED
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
     COMMAND_TYPE_CREATE_MILITARY_SERVICE,
+    COMMAND_TYPE_VOID_MILITARY_SERVICE,
     PprCommandEnvelope,
 )
 from app.ppr.application.section_service import PprSectionApplicationService
@@ -55,6 +55,11 @@ from scripts.ops.create_demo_ppr_applicants import (
     PersonAudit,
     audit_person_by_iin,
     parse_db_target,
+)
+from scripts.ops.demo_ppr_section_rollback import (
+    DemoSectionRecordRef,
+    load_active_demo_record,
+    void_record_via_service,
 )
 
 DEMO_SUITE = "military_service_v1"
@@ -389,6 +394,109 @@ def run(*, execute: bool = False, db: Engine | None = None) -> SeedReport:
         report.created = 0
 
     print("=== REPORT ===")
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str))
+    return report
+
+
+def build_rollback_plan(
+    conn: Connection,
+    *,
+    execute: bool,
+) -> tuple[SeedReport, list[DemoSectionRecordRef]]:
+    report = SeedReport(mode="rollback_execute" if execute else "rollback_dry_run")
+    pending_voids: list[DemoSectionRecordRef] = []
+
+    for applicant in APPLICANTS:
+        key = applicant["key"]
+        record_spec = DEMO_MILITARY_BY_KEY.get(key)
+        if record_spec is None:
+            continue
+        audit = audit_person_by_iin(
+            conn,
+            iin=applicant["iin"],
+            expected_name=applicant["full_name"],
+        )
+        demo_record_key = str(record_spec["demo_record_key"])
+        base = RecordAction(
+            person_key=key,
+            iin=applicant["iin"],
+            person_id=audit.person_id,
+            demo_record_key=demo_record_key,
+            record_kind=str(record_spec["record_kind"]),
+            action="pending",
+        )
+        if not audit.exists or audit.person_id is None:
+            report.actions.append(
+                RecordAction(
+                    **{**asdict(base), "action": "skipped", "detail": "demo person not found by IIN"}
+                )
+            )
+            report.skipped += 1
+            continue
+        ref = load_active_demo_record(
+            conn,
+            table="person_military_service",
+            id_column="military_id",
+            person_id=int(audit.person_id),
+            demo_suite=DEMO_SUITE,
+            demo_record_key=demo_record_key,
+        )
+        if ref is None:
+            report.actions.append(
+                RecordAction(
+                    **{**asdict(base), "action": "skipped", "detail": "active demo record not found"}
+                )
+            )
+            report.skipped += 1
+            continue
+        if not execute:
+            report.actions.append(
+                RecordAction(
+                    **{
+                        **asdict(base),
+                        "action": "dry_run_void",
+                        "detail": "would void via application layer",
+                        "military_id": ref.record_id,
+                    }
+                )
+            )
+            report.created += 1
+            continue
+        pending_voids.append(ref)
+        report.actions.append(
+            RecordAction(**{**asdict(base), "action": "void", "military_id": ref.record_id})
+        )
+
+    return report, pending_voids
+
+
+def execute_rollback_plan(pending_voids: list[DemoSectionRecordRef]) -> None:
+    section = _section_service()
+    for ref in pending_voids:
+        void_record_via_service(
+            void_fn=section.void_military_service,
+            command_type=COMMAND_TYPE_VOID_MILITARY_SERVICE,
+            actor_id=OPS_ACTOR_ID,
+            record=ref,
+            command_prefix="demo-mil-void",
+        )
+
+
+def run_rollback(*, execute: bool = False, db: Engine | None = None) -> SeedReport:
+    db_engine = db or engine
+    db_target = parse_db_target(os.getenv("DATABASE_URL", ""))
+    _require_execute_allowed(db_target, execute=execute)
+
+    with db_engine.connect() as conn:
+        report, pending_voids = build_rollback_plan(conn, execute=execute)
+
+    if execute and pending_voids:
+        execute_rollback_plan(pending_voids)
+        report.created = len(pending_voids)
+    elif execute:
+        report.created = 0
+
+    print("=== ROLLBACK REPORT ===")
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str))
     return report
 

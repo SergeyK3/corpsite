@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed demo Employment Biography records for whitelisted demo persons.
+"""Seed demo Family (person_relatives) records for whitelisted demo persons.
 
 Production-safe ops script. Uses PPR application layer only (no direct section INSERTs).
 Default mode is dry-run (no writes). Mutations require ``--execute``.
@@ -37,20 +37,23 @@ if REPO_ROOT not in sys.path:
 
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
-    EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-    EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+    RELATIONSHIP_TYPE_FATHER,
+    RELATIONSHIP_TYPE_MOTHER,
+    RELATIONSHIP_TYPE_SON,
+    RELATIONSHIP_TYPE_SPOUSE,
+    SECTION_SOURCE_TYPE_ENTERED,
 )
-from app.ppr.domain.models import PPR_LIFECYCLE_NOT_MATERIALIZED
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
-    COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
-    COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT,
+    COMMAND_TYPE_ADD_RELATIVE,
+    COMMAND_TYPE_VOID_RELATIVE,
     PprCommandEnvelope,
 )
 from app.ppr.application.section_service import PprSectionApplicationService
+from app.ppr.domain.models import PPR_LIFECYCLE_NOT_MATERIALIZED
 from scripts.ops.create_demo_ppr_applicants import (
-    APPLICANTS,
     ALLOWED_IINS,
+    APPLICANTS,
     PersonAudit,
     audit_person_by_iin,
     parse_db_target,
@@ -61,36 +64,50 @@ from scripts.ops.demo_ppr_section_rollback import (
     void_record_via_service,
 )
 
-DEMO_SUITE = "employment_biography_v1"
-DEMO_SOURCE = "demo_employment_biography"
-OPS_ACTOR_ID = "ops:seed_demo_employment_biography"
+DEMO_SUITE = "family_v1"
+DEMO_SOURCE = "demo_family"
+OPS_ACTOR_ID = "ops:seed_demo_family"
 
-DEMO_EMPLOYMENT_BY_KEY: dict[str, list[dict[str, Any]]] = {
+DEMO_FAMILY_BY_KEY: dict[str, list[dict[str, Any]]] = {
     "ahmetov": [
         {
-            "demo_record_key": "ahmetov:episode:gp7-almaty",
-            "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-            "employer_name": "ГП №7 г. Алматы",
-            "department_name": "Регистратура",
-            "position_title": "Медицинский регистратор",
-            "started_at": date(2016, 3, 1),
-            "ended_at": date(2019, 12, 31),
+            "demo_record_key": "ahmetov:relative:spouse",
+            "relationship_type": RELATIONSHIP_TYPE_SPOUSE,
+            "full_name": "Ахметова Гульнара Сериковна",
+            "birth_date": date(1992, 6, 15),
+            "birth_place": "г. Алматы",
         },
         {
-            "demo_record_key": "ahmetov:narrative:prehire-summary",
-            "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
-            "notes": "Сводный стаж до поступления в организацию — 3 года 10 месяцев",
+            "demo_record_key": "ahmetov:relative:son",
+            "relationship_type": RELATIONSHIP_TYPE_SON,
+            "full_name": "Ахметов Дамир Айдарович",
+            "birth_date": date(2015, 3, 20),
+            "birth_place": "г. Алматы",
+        },
+        {
+            "demo_record_key": "ahmetov:relative:mother",
+            "relationship_type": RELATIONSHIP_TYPE_MOTHER,
+            "full_name": "Ахметова Бикеш Сапаровна",
+            "birth_date": date(1965, 11, 8),
+            "birth_place": "г. Шымкент",
+            "notes": "пенсионер",
         },
     ],
     "seitova": [
         {
-            "demo_record_key": "seitova:episode:karaganda-hospital",
-            "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-            "employer_name": "ГКП «Областная больница» г. Караганды",
-            "department_name": "Терапевтическое отделение",
-            "position_title": "Медицинская сестра",
-            "started_at": date(2018, 8, 1),
-            "ended_at": date(2023, 6, 30),
+            "demo_record_key": "seitova:relative:father",
+            "relationship_type": RELATIONSHIP_TYPE_FATHER,
+            "full_name": "Сейтов Марат Кайратович",
+            "birth_date": date(1970, 4, 12),
+            "birth_place": "г. Караганда",
+            "organization_name": "ТОО «СтройСервис»",
+        },
+        {
+            "demo_record_key": "seitova:relative:mother",
+            "relationship_type": RELATIONSHIP_TYPE_MOTHER,
+            "full_name": "Сейтова Айгуль Нурлановна",
+            "birth_date": date(1972, 9, 25),
+            "birth_place": "г. Караганда",
         },
     ],
 }
@@ -102,10 +119,10 @@ class RecordAction:
     iin: str
     person_id: int | None
     demo_record_key: str
-    record_kind: str
+    relationship_type: str
     action: str
     detail: str | None = None
-    employment_id: int | None = None
+    relative_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -146,14 +163,14 @@ def _demo_person_specs() -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
     for applicant in APPLICANTS:
         key = applicant["key"]
-        if key not in DEMO_EMPLOYMENT_BY_KEY:
+        if key not in DEMO_FAMILY_BY_KEY:
             continue
         specs.append(
             {
                 "key": key,
                 "full_name": applicant["full_name"],
                 "iin": applicant["iin"],
-                "records": DEMO_EMPLOYMENT_BY_KEY[key],
+                "records": DEMO_FAMILY_BY_KEY[key],
             }
         )
     return specs
@@ -176,7 +193,7 @@ def _is_ppr_materialized(conn: Connection, *, person_id: int) -> bool:
     return bool(state) and state != PPR_LIFECYCLE_NOT_MATERIALIZED
 
 
-def _employment_demo_record_exists(
+def _family_demo_record_exists(
     conn: Connection,
     *,
     person_id: int,
@@ -186,7 +203,7 @@ def _employment_demo_record_exists(
         text(
             """
             SELECT 1
-            FROM public.person_external_employment
+            FROM public.person_relatives
             WHERE person_id = :person_id
               AND lifecycle_status = 'active'
               AND metadata->>'demo_record_key' = :demo_record_key
@@ -210,17 +227,12 @@ def _record_metadata(demo_record_key: str) -> dict[str, Any]:
 def _build_payload(record_spec: dict[str, Any]) -> dict[str, Any]:
     demo_record_key = str(record_spec["demo_record_key"])
     payload: dict[str, Any] = {
-        "record_kind": record_spec["record_kind"],
+        "relationship_type": record_spec["relationship_type"],
+        "full_name": record_spec["full_name"],
+        "source_type": SECTION_SOURCE_TYPE_ENTERED,
         "metadata": _record_metadata(demo_record_key),
     }
-    for field_name in (
-        "employer_name",
-        "department_name",
-        "position_title",
-        "started_at",
-        "ended_at",
-        "notes",
-    ):
+    for field_name in ("birth_date", "birth_place", "organization_name", "notes"):
         if field_name in record_spec and record_spec[field_name] is not None:
             payload[field_name] = record_spec[field_name]
     return payload
@@ -232,13 +244,13 @@ def _section_service() -> PprSectionApplicationService:
 
 def _command_envelope(*, person_id: int, payload: dict[str, Any]) -> PprCommandEnvelope:
     return PprCommandEnvelope(
-        command_id=f"demo-emp-bio-{uuid4().hex}",
-        command_type=COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+        command_id=f"demo-family-{uuid4().hex}",
+        command_type=COMMAND_TYPE_ADD_RELATIVE,
         actor_id=OPS_ACTOR_ID,
         requested_at=datetime.now(UTC),
         payload=payload,
         person_id=person_id,
-        correlation_id=f"demo-emp-bio-{uuid4().hex[:12]}",
+        correlation_id=f"demo-family-{uuid4().hex[:12]}",
     )
 
 
@@ -256,7 +268,7 @@ def plan_record_action(
         iin=person_spec["iin"],
         person_id=audit.person_id,
         demo_record_key=str(record_spec["demo_record_key"]),
-        record_kind=str(record_spec["record_kind"]),
+        relationship_type=str(record_spec["relationship_type"]),
         action="pending",
     )
 
@@ -318,7 +330,7 @@ def build_seed_plan(
 
         for record_spec in person_spec["records"]:
             exists = (
-                _employment_demo_record_exists(
+                _family_demo_record_exists(
                     conn,
                     person_id=audit.person_id,
                     demo_record_key=str(record_spec["demo_record_key"]),
@@ -356,10 +368,10 @@ def execute_seed_plan(
     section = _section_service()
     for action, payload in pending_creates:
         assert action.person_id is not None
-        result = section.add_external_employment(
+        result = section.add_relative(
             _command_envelope(person_id=action.person_id, payload=payload)
         )
-        action.employment_id = result.section_record_id
+        action.relative_id = result.section_record_id
         action.detail = result.status
 
 
@@ -409,7 +421,7 @@ def build_rollback_plan(
 
     for applicant in APPLICANTS:
         key = applicant["key"]
-        records = DEMO_EMPLOYMENT_BY_KEY.get(key)
+        records = DEMO_FAMILY_BY_KEY.get(key)
         if not records:
             continue
         audit = audit_person_by_iin(
@@ -424,21 +436,25 @@ def build_rollback_plan(
                 iin=applicant["iin"],
                 person_id=audit.person_id,
                 demo_record_key=demo_record_key,
-                record_kind=str(record_spec["record_kind"]),
+                relationship_type=str(record_spec["relationship_type"]),
                 action="pending",
             )
             if not audit.exists or audit.person_id is None:
                 report.actions.append(
                     RecordAction(
-                        **{**asdict(base), "action": "skipped", "detail": "demo person not found by IIN"}
+                        **{
+                            **asdict(base),
+                            "action": "skipped",
+                            "detail": "demo person not found by IIN",
+                        }
                     )
                 )
                 report.skipped += 1
                 continue
             ref = load_active_demo_record(
                 conn,
-                table="person_external_employment",
-                id_column="employment_id",
+                table="person_relatives",
+                id_column="relative_id",
                 person_id=int(audit.person_id),
                 demo_suite=DEMO_SUITE,
                 demo_record_key=demo_record_key,
@@ -446,7 +462,11 @@ def build_rollback_plan(
             if ref is None:
                 report.actions.append(
                     RecordAction(
-                        **{**asdict(base), "action": "skipped", "detail": "active demo record not found"}
+                        **{
+                            **asdict(base),
+                            "action": "skipped",
+                            "detail": "active demo record not found",
+                        }
                     )
                 )
                 report.skipped += 1
@@ -458,7 +478,7 @@ def build_rollback_plan(
                             **asdict(base),
                             "action": "dry_run_void",
                             "detail": "would void via application layer",
-                            "employment_id": ref.record_id,
+                            "relative_id": ref.record_id,
                         }
                     )
                 )
@@ -467,7 +487,11 @@ def build_rollback_plan(
             pending_voids.append(ref)
             report.actions.append(
                 RecordAction(
-                    **{**asdict(base), "action": "void", "employment_id": ref.record_id}
+                    **{
+                        **asdict(base),
+                        "action": "void",
+                        "relative_id": ref.record_id,
+                    }
                 )
             )
 
@@ -478,11 +502,11 @@ def execute_rollback_plan(pending_voids: list[DemoSectionRecordRef]) -> None:
     section = _section_service()
     for ref in pending_voids:
         void_record_via_service(
-            void_fn=section.void_external_employment,
-            command_type=COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT,
+            void_fn=section.void_relative,
+            command_type=COMMAND_TYPE_VOID_RELATIVE,
             actor_id=OPS_ACTOR_ID,
             record=ref,
-            command_prefix="demo-emp-void",
+            command_prefix="demo-family-void",
         )
 
 
@@ -507,7 +531,7 @@ def run_rollback(*, execute: bool = False, db: Engine | None = None) -> SeedRepo
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Seed demo Employment Biography for whitelisted demo persons.",
+        description="Seed demo Family records for whitelisted demo persons.",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -518,7 +542,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument(
         "--execute",
         action="store_true",
-        help="Create missing demo employment biography records idempotently.",
+        help="Create missing demo family records idempotently.",
     )
     args = parser.parse_args(argv)
     run(execute=bool(args.execute))

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""Seed two PPR applicants (CANDIDATE) with education, family and intended employment.
+"""DEPRECATED — use the production ops pipeline instead.
 
-Usage:
+This dev script bypasses production safety guards and is no longer maintained.
+For local and VPS demo data, use:
+
+  export CORPSITE_ALLOW_DEMO_PPR_SEED=1
+  python scripts/ops/seed_demo_ppr.py --dry-run
+  python scripts/ops/seed_demo_ppr.py --execute
+
+Legacy usage (will exit with an error unless ``--legacy`` is passed):
+
   python scripts/dev/seed_ppr_applicants.py
   python scripts/dev/seed_ppr_applicants.py --dry-run
 """
@@ -413,7 +421,20 @@ def seed(*, dry_run: bool) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed PPR applicant test records")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Run the deprecated dev-only seed (not for production).",
+    )
     args = parser.parse_args()
+    if not args.legacy:
+        print(
+            "scripts/dev/seed_ppr_applicants.py is deprecated.\n"
+            "Use: python scripts/ops/seed_demo_ppr.py --execute\n"
+            "Pass --legacy to run this dev script anyway.",
+            file=sys.stderr,
+        )
+        return 1
     rows = seed(dry_run=args.dry_run)
     print("Applicants:")
     for row in rows:
