@@ -23,6 +23,7 @@ from app.services.ppr_candidate_service import load_hire_defaults, save_intended
 from app.services.ppr_query_access_service import (
     assert_ppr_read_allowed_for_employee,
     assert_ppr_read_allowed_for_person,
+    include_military_restricted_fields,
     include_sensitive_identity_fields,
     require_ppr_write_for_person,
 )
@@ -51,6 +52,7 @@ def get_ppr_composite_by_person(
             read_mode="ppr",
             source="ppr_query_api",
             include_sensitive_identity=include_sensitive_identity_fields(user),
+            include_military_restricted=include_military_restricted_fields(user),
         )
     except HTTPException:
         raise
@@ -186,6 +188,7 @@ def get_ppr_composite_by_employee(
             read_mode="ppr",
             source="ppr_query_api",
             include_sensitive_identity=include_sensitive_identity_fields(user),
+            include_military_restricted=include_military_restricted_fields(user),
         )
     except HTTPException:
         raise

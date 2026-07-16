@@ -21,8 +21,10 @@ from app.ppr.domain.section_commands import (
     AddExternalEmploymentRecord,
     AddRelativeRecord,
     AddTrainingRecord,
+    CreateMilitaryServiceRecord,
     SupersedeEducationRecord,
     SupersedeExternalEmploymentRecord,
+    SupersedeMilitaryServiceRecord,
     SupersedeRelativeRecord,
     SupersedeTrainingRecord,
     UpdateEducationRecord,
@@ -30,6 +32,7 @@ from app.ppr.domain.section_commands import (
     UpdateTrainingRecord,
     VoidEducationRecord,
     VoidExternalEmploymentRecord,
+    VoidMilitaryServiceRecord,
     VoidRelativeRecord,
     VoidTrainingRecord,
 )
@@ -41,15 +44,18 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
     EducationRecord,
     ExternalEmploymentRecord,
+    MilitaryServiceRecord,
     RelativeRecord,
     SectionMutationResult,
     TrainingRecord,
 )
 from app.ppr.domain.section_record_validation import (
     validate_external_employment_record,
+    validate_military_service_record,
     validate_relative_record,
 )
 from app.ppr.domain.unit_of_work import UnitOfWork
@@ -648,6 +654,107 @@ def handle_supersede_external_employment_record(
         expected_updated_at=command.expected_updated_at,
     )
     if not isinstance(old_record, ExternalEmploymentRecord) or not isinstance(new_record, ExternalEmploymentRecord):
+        raise SectionValidationError("supersede_pair returned unexpected section types")
+    return SectionMutationResult(
+        record=new_record,
+        mutation_kind=MUTATION_KIND_SUPERSEDE,
+        prior_record=old_record,
+    )
+
+
+def _military_service_from_create(command: CreateMilitaryServiceRecord) -> MilitaryServiceRecord:
+    record = MilitaryServiceRecord(
+        person_id=command.person_id,
+        record_kind=command.record_kind,
+        employee_context_id=command.employee_context_id,
+        obligation_status=command.obligation_status,
+        registration_category=command.registration_category,
+        military_rank=command.military_rank,
+        military_specialty_code=command.military_specialty_code,
+        personnel_composition=command.personnel_composition,
+        fitness_category=command.fitness_category,
+        registration_status=command.registration_status,
+        commissariat_name=command.commissariat_name,
+        registered_at=command.registered_at,
+        deregistered_at=command.deregistered_at,
+        military_id_book_series=command.military_id_book_series,
+        military_id_book_number=command.military_id_book_number,
+        registration_certificate_series=command.registration_certificate_series,
+        registration_certificate_number=command.registration_certificate_number,
+        notes=command.notes,
+        source_type=command.source_type or SECTION_SOURCE_TYPE_ENTERED,
+        provenance=dict(command.provenance) if command.provenance is not None else None,
+        metadata=dict(command.metadata) if command.metadata is not None else None,
+    )
+    validate_military_service_record(record)
+    return record
+
+
+def _require_active_military_service(
+    uow: UnitOfWork,
+    person_id: int,
+    record_id: int,
+) -> MilitaryServiceRecord:
+    loaded = uow.sections.load_record(person_id, SECTION_CODE_PPR_MILITARY, record_id)
+    if loaded is None or not isinstance(loaded, MilitaryServiceRecord):
+        raise SectionRecordNotFoundError(
+            f"Military service record not found: person_id={person_id}, record_id={record_id}"
+        )
+    if loaded.lifecycle_status != LIFECYCLE_STATUS_ACTIVE:
+        raise SectionValidationError(
+            f"Military service record {record_id} is not active (status={loaded.lifecycle_status!r})"
+        )
+    return loaded
+
+
+def handle_create_military_service_record(
+    command: CreateMilitaryServiceRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    candidate = _military_service_from_create(command)
+    inserted = uow.section_mutations().insert_record(candidate)
+    if not isinstance(inserted, MilitaryServiceRecord):
+        raise SectionValidationError("insert_record returned unexpected section type")
+    return SectionMutationResult(record=inserted, mutation_kind=MUTATION_KIND_INSERT)
+
+
+def handle_void_military_service_record(
+    command: VoidMilitaryServiceRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    _require_non_empty(command.reason, "reason")
+    _require_active_military_service(uow, command.person_id, command.record_id)
+    voided = uow.section_mutations().void_record(
+        command.person_id,
+        SECTION_CODE_PPR_MILITARY,
+        command.record_id,
+        expected_updated_at=command.expected_updated_at,
+    )
+    if not isinstance(voided, MilitaryServiceRecord):
+        raise SectionValidationError("void_record returned unexpected section type")
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+
+
+def handle_supersede_military_service_record(
+    command: SupersedeMilitaryServiceRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    _require_active_military_service(uow, command.person_id, command.record_id)
+    if command.replacement.person_id != command.person_id:
+        raise SectionValidationError("replacement.person_id must match supersede person_id")
+
+    replacement = _military_service_from_create(command.replacement)
+    old_record, new_record = uow.section_mutations().supersede_pair(
+        command.person_id,
+        SECTION_CODE_PPR_MILITARY,
+        command.record_id,
+        replacement,
+        expected_updated_at=command.expected_updated_at,
+    )
+    if not isinstance(old_record, MilitaryServiceRecord) or not isinstance(new_record, MilitaryServiceRecord):
         raise SectionValidationError("supersede_pair returned unexpected section types")
     return SectionMutationResult(
         record=new_record,

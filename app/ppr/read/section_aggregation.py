@@ -13,6 +13,7 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
     SectionRecord,
 )
@@ -107,6 +108,20 @@ class PprSectionAggregationReader:
         return self.load_section(
             person_id,
             SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+            include_superseded=include_superseded,
+            include_voided=include_voided,
+        )
+
+    def load_military(
+        self,
+        person_id: int,
+        *,
+        include_superseded: bool = True,
+        include_voided: bool = True,
+    ) -> PprSectionAggregation:
+        return self.load_section(
+            person_id,
+            SECTION_CODE_PPR_MILITARY,
             include_superseded=include_superseded,
             include_voided=include_voided,
         )

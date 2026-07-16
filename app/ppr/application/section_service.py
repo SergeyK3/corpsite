@@ -9,8 +9,10 @@ from app.ppr.application.command_models import (
     COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
     COMMAND_TYPE_ADD_RELATIVE,
     COMMAND_TYPE_ADD_TRAINING,
+    COMMAND_TYPE_CREATE_MILITARY_SERVICE,
     COMMAND_TYPE_SUPERSEDE_EDUCATION,
     COMMAND_TYPE_SUPERSEDE_EXTERNAL_EMPLOYMENT,
+    COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE,
     COMMAND_TYPE_SUPERSEDE_RELATIVE,
     COMMAND_TYPE_SUPERSEDE_TRAINING,
     COMMAND_TYPE_UPDATE_EDUCATION,
@@ -18,6 +20,7 @@ from app.ppr.application.command_models import (
     COMMAND_TYPE_UPDATE_TRAINING,
     COMMAND_TYPE_VOID_EDUCATION,
     COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT,
+    COMMAND_TYPE_VOID_MILITARY_SERVICE,
     COMMAND_TYPE_VOID_RELATIVE,
     COMMAND_TYPE_VOID_TRAINING,
     PprCommandEnvelope,
@@ -32,8 +35,10 @@ from app.ppr.domain.section_commands import (
     AddExternalEmploymentRecord,
     AddRelativeRecord,
     AddTrainingRecord,
+    CreateMilitaryServiceRecord,
     SupersedeEducationRecord,
     SupersedeExternalEmploymentRecord,
+    SupersedeMilitaryServiceRecord,
     SupersedeRelativeRecord,
     SupersedeTrainingRecord,
     UpdateEducationRecord,
@@ -41,6 +46,7 @@ from app.ppr.domain.section_commands import (
     UpdateTrainingRecord,
     VoidEducationRecord,
     VoidExternalEmploymentRecord,
+    VoidMilitaryServiceRecord,
     VoidRelativeRecord,
     VoidTrainingRecord,
 )
@@ -49,8 +55,10 @@ from app.ppr.domain.section_handlers import (
     handle_add_external_employment_record,
     handle_add_relative_record,
     handle_add_training_record,
+    handle_create_military_service_record,
     handle_supersede_education_record,
     handle_supersede_external_employment_record,
+    handle_supersede_military_service_record,
     handle_supersede_relative_record,
     handle_supersede_training_record,
     handle_update_education_record,
@@ -58,6 +66,7 @@ from app.ppr.domain.section_handlers import (
     handle_update_training_record,
     handle_void_education_record,
     handle_void_external_employment_record,
+    handle_void_military_service_record,
     handle_void_relative_record,
     handle_void_training_record,
 )
@@ -215,6 +224,39 @@ class PprSectionApplicationService(PprCommandApplicationService):
             section_code="PPR-EMPLOYMENT-BIOGRAPHY",
         )
 
+    def create_military_service(self, envelope: PprCommandEnvelope) -> PprApplicationResult:
+        return self._run_section_command(
+            envelope,
+            command_type=COMMAND_TYPE_CREATE_MILITARY_SERVICE,
+            domain_factory=lambda person_id, payload: CreateMilitaryServiceRecord(
+                person_id=person_id,
+                **payload,
+            ),
+            handler=handle_create_military_service_record,
+            section_code="PPR-MILITARY",
+        )
+
+    def void_military_service(self, envelope: PprCommandEnvelope) -> PprApplicationResult:
+        return self._run_section_command(
+            envelope,
+            command_type=COMMAND_TYPE_VOID_MILITARY_SERVICE,
+            domain_factory=lambda person_id, payload: VoidMilitaryServiceRecord(
+                person_id=person_id,
+                **payload,
+            ),
+            handler=handle_void_military_service_record,
+            section_code="PPR-MILITARY",
+        )
+
+    def supersede_military_service(self, envelope: PprCommandEnvelope) -> PprApplicationResult:
+        return self._run_section_command(
+            envelope,
+            command_type=COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE,
+            domain_factory=self._supersede_military_service_factory,
+            handler=handle_supersede_military_service_record,
+            section_code="PPR-MILITARY",
+        )
+
     @staticmethod
     def _supersede_education_factory(person_id: int, payload: dict[str, Any]) -> SupersedeEducationRecord:
         replacement_data = dict(payload["replacement"])
@@ -260,6 +302,20 @@ class PprSectionApplicationService(PprCommandApplicationService):
             record_id=int(payload["record_id"]),
             expected_updated_at=payload["expected_updated_at"],
             replacement=AddExternalEmploymentRecord(**replacement_data),
+        )
+
+    @staticmethod
+    def _supersede_military_service_factory(
+        person_id: int,
+        payload: dict[str, Any],
+    ) -> SupersedeMilitaryServiceRecord:
+        replacement_data = dict(payload["replacement"])
+        replacement_data["person_id"] = person_id
+        return SupersedeMilitaryServiceRecord(
+            person_id=person_id,
+            record_id=int(payload["record_id"]),
+            expected_updated_at=payload["expected_updated_at"],
+            replacement=CreateMilitaryServiceRecord(**replacement_data),
         )
 
     def _run_section_command(

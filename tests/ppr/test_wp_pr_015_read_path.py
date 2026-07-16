@@ -25,6 +25,7 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
 )
 from app.ppr.read.models import (
@@ -117,6 +118,7 @@ def test_external_employment_record_response_serializes_canonical_fields() -> No
             section_code=SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
             active=(record,),
         ),
+        military=_empty_section(SECTION_CODE_PPR_MILITARY),
         events=None,
         intended_employment=None,
         metadata=PprCompositeReadMetadata(
@@ -215,6 +217,7 @@ def test_external_employment_record_response_preserves_per_record_employee_conte
             section_code=SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
             active=(record_with_context, record_without_context, record_other_context),
         ),
+        military=_empty_section(SECTION_CODE_PPR_MILITARY),
         events=None,
         intended_employment=None,
         metadata=PprCompositeReadMetadata(
@@ -266,6 +269,7 @@ def test_external_employment_record_response_defaults_source_system() -> None:
             section_code=SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
             active=(record,),
         ),
+        military=_empty_section(SECTION_CODE_PPR_MILITARY),
         events=None,
         intended_employment=None,
         metadata=PprCompositeReadMetadata(
@@ -303,6 +307,7 @@ def test_summary_includes_external_employment_active_count() -> None:
         training_active_count=0,
         family_active_count=0,
         external_employment_active_count=3,
+        military_active_count=0,
         recent_event_count=1,
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,

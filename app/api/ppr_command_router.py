@@ -1,4 +1,4 @@
-"""PPR command REST API — employment biography mutations (WP-PR-016)."""
+"""PPR command REST API — employment biography and military service mutations."""
 from __future__ import annotations
 
 from typing import Any
@@ -10,6 +10,9 @@ from app.api.ppr_command_schemas import (
     PprExternalEmploymentCreateRequest,
     PprExternalEmploymentSupersedeRequest,
     PprExternalEmploymentVoidRequest,
+    PprMilitaryServiceCreateRequest,
+    PprMilitaryServiceSupersedeRequest,
+    PprMilitaryServiceVoidRequest,
 )
 from app.api.ppr_errors import map_ppr_mutation_error
 from app.api.ppr_employment_command_api import (
@@ -19,6 +22,14 @@ from app.api.ppr_employment_command_api import (
     supersede_external_employment_by_person,
     void_external_employment_by_employee,
     void_external_employment_by_person,
+)
+from app.api.ppr_military_command_api import (
+    create_military_service_by_employee,
+    create_military_service_by_person,
+    supersede_military_service_by_employee,
+    supersede_military_service_by_person,
+    void_military_service_by_employee,
+    void_military_service_by_person,
 )
 from app.auth import get_current_user
 from app.directory.common import as_http500
@@ -185,6 +196,150 @@ def supersede_employment_biography_by_employee(
     assert_ppr_read_allowed_for_employee(user, employee_id)
     return _run_mutation(
         lambda: supersede_external_employment_by_employee(
+            user,
+            employee_id=employee_id,
+            record_id=record_id,
+            body=body,
+        ),
+        response=response,
+        is_create=False,
+    )
+
+
+@router.post(
+    "/persons/{person_id}/military-service/records",
+    response_model=PprCommandMutationResponse,
+)
+def create_military_service_by_person_route(
+    body: PprMilitaryServiceCreateRequest,
+    response: Response,
+    person_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprCommandMutationResponse:
+    """Create military service record for a person (canonical route)."""
+    require_hr_import_admin_or_403(user)
+    assert_ppr_read_allowed_for_person(user, person_id)
+    return _run_mutation(
+        lambda: create_military_service_by_person(user, person_id=person_id, body=body),
+        response=response,
+        is_create=True,
+    )
+
+
+@router.post(
+    "/persons/{person_id}/military-service/records/{record_id}/void",
+    response_model=PprCommandMutationResponse,
+)
+def void_military_service_by_person_route(
+    body: PprMilitaryServiceVoidRequest,
+    response: Response,
+    person_id: int = Path(..., ge=1),
+    record_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprCommandMutationResponse:
+    """Void an active military service record for a person."""
+    require_hr_import_admin_or_403(user)
+    assert_ppr_read_allowed_for_person(user, person_id)
+    return _run_mutation(
+        lambda: void_military_service_by_person(
+            user,
+            person_id=person_id,
+            record_id=record_id,
+            body=body,
+        ),
+        response=response,
+        is_create=False,
+    )
+
+
+@router.post(
+    "/persons/{person_id}/military-service/records/{record_id}/supersede",
+    response_model=PprCommandMutationResponse,
+)
+def supersede_military_service_by_person_route(
+    body: PprMilitaryServiceSupersedeRequest,
+    response: Response,
+    person_id: int = Path(..., ge=1),
+    record_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprCommandMutationResponse:
+    """Supersede an active military service record for a person."""
+    require_hr_import_admin_or_403(user)
+    assert_ppr_read_allowed_for_person(user, person_id)
+    return _run_mutation(
+        lambda: supersede_military_service_by_person(
+            user,
+            person_id=person_id,
+            record_id=record_id,
+            body=body,
+        ),
+        response=response,
+        is_create=False,
+    )
+
+
+@router.post(
+    "/employees/{employee_id}/military-service/records",
+    response_model=PprCommandMutationResponse,
+)
+def create_military_service_by_employee_route(
+    body: PprMilitaryServiceCreateRequest,
+    response: Response,
+    employee_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprCommandMutationResponse:
+    """Create military service record via employee_id (identity resolution)."""
+    require_hr_import_admin_or_403(user)
+    assert_ppr_read_allowed_for_employee(user, employee_id)
+    return _run_mutation(
+        lambda: create_military_service_by_employee(user, employee_id=employee_id, body=body),
+        response=response,
+        is_create=True,
+    )
+
+
+@router.post(
+    "/employees/{employee_id}/military-service/records/{record_id}/void",
+    response_model=PprCommandMutationResponse,
+)
+def void_military_service_by_employee_route(
+    body: PprMilitaryServiceVoidRequest,
+    response: Response,
+    employee_id: int = Path(..., ge=1),
+    record_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprCommandMutationResponse:
+    """Void an active military service record via employee_id."""
+    require_hr_import_admin_or_403(user)
+    assert_ppr_read_allowed_for_employee(user, employee_id)
+    return _run_mutation(
+        lambda: void_military_service_by_employee(
+            user,
+            employee_id=employee_id,
+            record_id=record_id,
+            body=body,
+        ),
+        response=response,
+        is_create=False,
+    )
+
+
+@router.post(
+    "/employees/{employee_id}/military-service/records/{record_id}/supersede",
+    response_model=PprCommandMutationResponse,
+)
+def supersede_military_service_by_employee_route(
+    body: PprMilitaryServiceSupersedeRequest,
+    response: Response,
+    employee_id: int = Path(..., ge=1),
+    record_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprCommandMutationResponse:
+    """Supersede an active military service record via employee_id."""
+    require_hr_import_admin_or_403(user)
+    assert_ppr_read_allowed_for_employee(user, employee_id)
+    return _run_mutation(
+        lambda: supersede_military_service_by_employee(
             user,
             employee_id=employee_id,
             record_id=record_id,

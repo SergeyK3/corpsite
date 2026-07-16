@@ -24,6 +24,9 @@ COMMAND_TYPE_SUPERSEDE_RELATIVE = "SupersedeRelativeRecord"
 COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT = "AddExternalEmploymentRecord"
 COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT = "VoidExternalEmploymentRecord"
 COMMAND_TYPE_SUPERSEDE_EXTERNAL_EMPLOYMENT = "SupersedeExternalEmploymentRecord"
+COMMAND_TYPE_CREATE_MILITARY_SERVICE = "CreateMilitaryServiceRecord"
+COMMAND_TYPE_VOID_MILITARY_SERVICE = "VoidMilitaryServiceRecord"
+COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE = "SupersedeMilitaryServiceRecord"
 
 
 @dataclass(frozen=True, slots=True)

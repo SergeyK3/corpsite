@@ -59,6 +59,11 @@ class PprCompositeReadOrchestrator:
             include_superseded=include_superseded_void,
             include_voided=include_superseded_void,
         )
+        military = section_reader.load_military(
+            resolved_person_id,
+            include_superseded=include_superseded_void,
+            include_voided=include_superseded_void,
+        )
 
         events: PprEventSummary | None = None
         if include_events:
@@ -102,6 +107,7 @@ class PprCompositeReadOrchestrator:
             training=training,
             family=family,
             external_employment=external_employment,
+            military=military,
             events=events,
             intended_employment=intended_slice,
             metadata=PprCompositeReadMetadata(
@@ -141,6 +147,7 @@ class PprCompositeReadOrchestrator:
             training_active_count=len(composite.training.active),
             family_active_count=len(composite.family.active),
             external_employment_active_count=len(composite.external_employment.active),
+            military_active_count=len(composite.military.active),
             recent_event_count=recent_event_count,
             metadata=composite.metadata,
         )

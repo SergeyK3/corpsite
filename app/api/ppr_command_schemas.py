@@ -53,6 +53,57 @@ class PprExternalEmploymentSupersedeRequest(BaseModel):
     replacement: PprExternalEmploymentRecordWrite
 
 
+class PprMilitaryServiceRecordWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_kind: str
+    employee_context_id: int | None = Field(default=None, ge=1)
+    obligation_status: str | None = None
+    registration_category: str | None = None
+    military_rank: str | None = None
+    military_specialty_code: str | None = None
+    personnel_composition: str | None = None
+    fitness_category: str | None = None
+    registration_status: str | None = None
+    commissariat_name: str | None = None
+    registered_at: date | None = None
+    deregistered_at: date | None = None
+    military_id_book_series: str | None = None
+    military_id_book_number: str | None = None
+    registration_certificate_series: str | None = None
+    registration_certificate_number: str | None = None
+    notes: str | None = None
+    source_type: str | None = None
+    provenance: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class PprMilitaryServiceCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1)
+    correlation_id: str | None = None
+    record: PprMilitaryServiceRecordWrite
+
+
+class PprMilitaryServiceVoidRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1)
+    correlation_id: str | None = None
+    reason: str = Field(min_length=1)
+    expected_updated_at: datetime
+
+
+class PprMilitaryServiceSupersedeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1)
+    correlation_id: str | None = None
+    expected_updated_at: datetime
+    replacement: PprMilitaryServiceRecordWrite
+
+
 class PprCommandMutationResponse(BaseModel):
     command_id: str
     command_type: str

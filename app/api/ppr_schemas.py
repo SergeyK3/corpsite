@@ -135,6 +135,37 @@ class PprExternalEmploymentRecordResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class PprMilitaryRecordResponse(BaseModel):
+    record_id: int | None = None
+    record_kind: str
+    obligation_status: str | None = None
+    registration_category: str | None = None
+    military_rank: str | None = None
+    military_specialty_code: str | None = None
+    personnel_composition: str | None = None
+    fitness_category: str | None = None
+    registration_status: str | None = None
+    commissariat_name: str | None = None
+    registered_at: date | None = None
+    deregistered_at: date | None = None
+    notes: str | None = None
+    source_type: str
+    provenance: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    employee_context_id: int | None = None
+    verification_status: str
+    lifecycle_status: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class PprMilitaryRecordDetailsResponse(PprMilitaryRecordResponse):
+    military_id_book_series: str | None = None
+    military_id_book_number: str | None = None
+    registration_certificate_series: str | None = None
+    registration_certificate_number: str | None = None
+
+
 class PprSectionResponse(BaseModel):
     section_code: str
     active: list[
@@ -142,18 +173,24 @@ class PprSectionResponse(BaseModel):
         | PprTrainingRecordResponse
         | PprRelativeRecordResponse
         | PprExternalEmploymentRecordResponse
+        | PprMilitaryRecordResponse
+        | PprMilitaryRecordDetailsResponse
     ] = Field(default_factory=list)
     superseded: list[
         PprEducationRecordResponse
         | PprTrainingRecordResponse
         | PprRelativeRecordResponse
         | PprExternalEmploymentRecordResponse
+        | PprMilitaryRecordResponse
+        | PprMilitaryRecordDetailsResponse
     ] = Field(default_factory=list)
     voided: list[
         PprEducationRecordResponse
         | PprTrainingRecordResponse
         | PprRelativeRecordResponse
         | PprExternalEmploymentRecordResponse
+        | PprMilitaryRecordResponse
+        | PprMilitaryRecordDetailsResponse
     ] = Field(default_factory=list)
 
 
@@ -204,5 +241,6 @@ class PprCompositeSummaryResponse(BaseModel):
     training_active_count: int
     family_active_count: int
     external_employment_active_count: int
+    military_active_count: int
     recent_event_count: int
     metadata: PprReadMetadataResponse

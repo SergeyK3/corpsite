@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from app.ppr.domain.errors import (
     PprApplicationValidationError,
@@ -22,6 +23,34 @@ from app.ppr.domain.errors import (
     SectionRecordNotFoundError,
     SectionValidationError,
 )
+
+MILITARY_ONE_ACTIVE_PER_PERSON_CONSTRAINT = "uq_person_military_service_one_active_per_person"
+
+
+def _integrity_error_pgcode(exc: IntegrityError) -> str | None:
+    orig = getattr(exc, "orig", None)
+    if orig is None:
+        return None
+    pgcode = getattr(orig, "pgcode", None)
+    return str(pgcode) if pgcode is not None else None
+
+
+def _integrity_error_constraint_name(exc: IntegrityError) -> str | None:
+    orig = getattr(exc, "orig", None)
+    if orig is None:
+        return None
+    diag = getattr(orig, "diag", None)
+    if diag is None:
+        return None
+    constraint_name = getattr(diag, "constraint_name", None)
+    return str(constraint_name) if constraint_name is not None else None
+
+
+def _is_military_second_active_conflict(exc: IntegrityError) -> bool:
+    return (
+        _integrity_error_pgcode(exc) == "23505"
+        and _integrity_error_constraint_name(exc) == MILITARY_ONE_ACTIVE_PER_PERSON_CONSTRAINT
+    )
 
 
 def ppr_not_found_http404(exc: LookupError) -> HTTPException:
@@ -82,4 +111,6 @@ def map_ppr_mutation_error(exc: Exception) -> HTTPException | None:
         return ppr_conflict_http409(exc)
     if isinstance(exc, PprApplicationValidationError):
         return ppr_validation_http422(exc)
+    if isinstance(exc, IntegrityError) and _is_military_second_active_conflict(exc):
+        return ppr_conflict_http409(exc)
     return None

@@ -166,3 +166,12 @@ def include_sensitive_identity_fields(user_ctx: dict[str, Any]) -> bool:
     uid = int(user_ctx["user_id"])
     scope = compute_scope(uid, user_ctx)
     return _is_org_wide_reader(user_ctx, scope)
+
+
+def include_military_restricted_fields(user_ctx: dict[str, Any]) -> bool:
+    """Users with VIEW_MILITARY_DETAILS grant receive restricted military document fields."""
+    from app.security.directory_scope import _parse_int_set_env
+
+    uid = int(user_ctx["user_id"])
+    allowed_users = _parse_int_set_env("PPR_VIEW_MILITARY_DETAILS_USER_IDS")
+    return uid in allowed_users

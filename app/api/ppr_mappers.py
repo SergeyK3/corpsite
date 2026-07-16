@@ -14,6 +14,8 @@ from app.api.ppr_schemas import (
     PprIdentityResponse,
     PprIntendedEmploymentResponse,
     PprMaterializationResponse,
+    PprMilitaryRecordDetailsResponse,
+    PprMilitaryRecordResponse,
     PprReadMetadataResponse,
     PprRelativeRecordResponse,
     PprSectionResponse,
@@ -23,10 +25,12 @@ from app.ppr.domain.identity_models import INPUT_KIND_EMPLOYEE_ID, INPUT_KIND_PE
 from app.ppr.domain.section_models import (
     EducationRecord,
     ExternalEmploymentRecord,
+    MilitaryServiceRecord,
     RelativeRecord,
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
     TrainingRecord,
 )
@@ -131,22 +135,96 @@ def _external_employment_record(record: ExternalEmploymentRecord) -> PprExternal
     )
 
 
-def _section_response(section: PprSectionAggregation) -> PprSectionResponse:
+def _military_record_base(record: MilitaryServiceRecord) -> dict:
+    provenance = dict(record.provenance) if record.provenance is not None else None
+    metadata = dict(record.metadata) if record.metadata is not None else None
+    return {
+        "record_id": record.record_id,
+        "record_kind": record.record_kind,
+        "obligation_status": record.obligation_status,
+        "registration_category": record.registration_category,
+        "military_rank": record.military_rank,
+        "military_specialty_code": record.military_specialty_code,
+        "personnel_composition": record.personnel_composition,
+        "fitness_category": record.fitness_category,
+        "registration_status": record.registration_status,
+        "commissariat_name": record.commissariat_name,
+        "registered_at": record.registered_at,
+        "deregistered_at": record.deregistered_at,
+        "notes": record.notes,
+        "source_type": record.source_type,
+        "provenance": provenance,
+        "metadata": metadata,
+        "employee_context_id": record.employee_context_id,
+        "verification_status": record.verification_status,
+        "lifecycle_status": record.lifecycle_status,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+
+
+def _military_record(
+    record: MilitaryServiceRecord,
+    *,
+    include_restricted: bool,
+) -> PprMilitaryRecordResponse | PprMilitaryRecordDetailsResponse:
+    base = _military_record_base(record)
+    if include_restricted:
+        return PprMilitaryRecordDetailsResponse(
+            **base,
+            military_id_book_series=record.military_id_book_series,
+            military_id_book_number=record.military_id_book_number,
+            registration_certificate_series=record.registration_certificate_series,
+            registration_certificate_number=record.registration_certificate_number,
+        )
+    return PprMilitaryRecordResponse(**base)
+
+
+def _section_response(
+    section: PprSectionAggregation,
+    *,
+    include_military_restricted: bool = False,
+) -> PprSectionResponse:
     if section.section_code == SECTION_CODE_PPR_EDUCATION:
         mapper = _education_record
+        active = [mapper(record) for record in section.active]  # type: ignore[arg-type]
+        superseded = [mapper(record) for record in section.superseded]  # type: ignore[arg-type]
+        voided = [mapper(record) for record in section.voided]  # type: ignore[arg-type]
     elif section.section_code == SECTION_CODE_PPR_TRAINING:
         mapper = _training_record
+        active = [mapper(record) for record in section.active]  # type: ignore[arg-type]
+        superseded = [mapper(record) for record in section.superseded]  # type: ignore[arg-type]
+        voided = [mapper(record) for record in section.voided]  # type: ignore[arg-type]
     elif section.section_code == SECTION_CODE_PPR_FAMILY:
         mapper = _relative_record
+        active = [mapper(record) for record in section.active]  # type: ignore[arg-type]
+        superseded = [mapper(record) for record in section.superseded]  # type: ignore[arg-type]
+        voided = [mapper(record) for record in section.voided]  # type: ignore[arg-type]
     elif section.section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY:
         mapper = _external_employment_record
+        active = [mapper(record) for record in section.active]  # type: ignore[arg-type]
+        superseded = [mapper(record) for record in section.superseded]  # type: ignore[arg-type]
+        voided = [mapper(record) for record in section.voided]  # type: ignore[arg-type]
+    elif section.section_code == SECTION_CODE_PPR_MILITARY:
+        active = [
+            _military_record(record, include_restricted=include_military_restricted)  # type: ignore[arg-type]
+            for record in section.active
+        ]
+        superseded = [
+            _military_record(record, include_restricted=include_military_restricted)  # type: ignore[arg-type]
+            for record in section.superseded
+        ]
+        voided = [
+            _military_record(record, include_restricted=include_military_restricted)  # type: ignore[arg-type]
+            for record in section.voided
+        ]
     else:
         raise ValueError(f"Unsupported section_code for API mapping: {section.section_code!r}")
     return PprSectionResponse(
         section_code=section.section_code,
-        active=[mapper(record) for record in section.active],  # type: ignore[arg-type]
-        superseded=[mapper(record) for record in section.superseded],  # type: ignore[arg-type]
-        voided=[mapper(record) for record in section.voided],  # type: ignore[arg-type]
+        active=active,
+        superseded=superseded,
+        voided=voided,
     )
 
 
@@ -156,6 +234,7 @@ def composite_to_response(
     read_mode: str,
     source: str,
     include_sensitive_identity: bool,
+    include_military_restricted: bool = False,
     warnings: list[str] | None = None,
 ) -> PprCompositeReadResponse:
     resolution = composite.identity_resolution
@@ -211,6 +290,10 @@ def composite_to_response(
             SECTION_CODE_PPR_TRAINING: _section_response(composite.training),
             SECTION_CODE_PPR_FAMILY: _section_response(composite.family),
             SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: _section_response(composite.external_employment),
+            SECTION_CODE_PPR_MILITARY: _section_response(
+                composite.military,
+                include_military_restricted=include_military_restricted,
+            ),
         },
         events=(
             PprEventSummaryResponse(
@@ -285,6 +368,7 @@ def summary_to_response(
         training_active_count=summary.training_active_count,
         family_active_count=summary.family_active_count,
         external_employment_active_count=summary.external_employment_active_count,
+        military_active_count=summary.military_active_count,
         recent_event_count=summary.recent_event_count,
         metadata=PprReadMetadataResponse(
             read_mode=read_mode,

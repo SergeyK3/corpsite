@@ -8,6 +8,7 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
 )
 from app.ppr.read.models import PprCompositeReadModel, PprCompositeSummary, PprSectionAggregation
@@ -114,6 +115,11 @@ class PprQueryApplicationService:
                     include_voided=include_superseded_void,
                 ),
                 SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: reader.load_external_employment(
+                    survivor_id,
+                    include_superseded=include_superseded_void,
+                    include_voided=include_superseded_void,
+                ),
+                SECTION_CODE_PPR_MILITARY: reader.load_military(
                     survivor_id,
                     include_superseded=include_superseded_void,
                     include_voided=include_superseded_void,

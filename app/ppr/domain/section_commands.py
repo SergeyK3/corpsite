@@ -183,3 +183,44 @@ class SupersedeExternalEmploymentRecord:
     record_id: int
     expected_updated_at: datetime
     replacement: AddExternalEmploymentRecord
+
+
+@dataclass(frozen=True, slots=True)
+class CreateMilitaryServiceRecord:
+    person_id: int
+    record_kind: str
+    employee_context_id: int | None = None
+    obligation_status: str | None = None
+    registration_category: str | None = None
+    military_rank: str | None = None
+    military_specialty_code: str | None = None
+    personnel_composition: str | None = None
+    fitness_category: str | None = None
+    registration_status: str | None = None
+    commissariat_name: str | None = None
+    registered_at: date | None = None
+    deregistered_at: date | None = None
+    military_id_book_series: str | None = None
+    military_id_book_number: str | None = None
+    registration_certificate_series: str | None = None
+    registration_certificate_number: str | None = None
+    notes: str | None = None
+    source_type: str | None = None
+    provenance: Mapping[str, Any] | None = None
+    metadata: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VoidMilitaryServiceRecord:
+    person_id: int
+    record_id: int
+    reason: str
+    expected_updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SupersedeMilitaryServiceRecord:
+    person_id: int
+    record_id: int
+    expected_updated_at: datetime
+    replacement: CreateMilitaryServiceRecord
