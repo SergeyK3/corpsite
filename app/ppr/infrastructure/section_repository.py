@@ -22,9 +22,11 @@ from app.ppr.domain.errors import (
 )
 from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     SECTION_OPTIMISTIC_TOKEN_FIELD,
     EducationRecord,
+    RelativeRecord,
     SectionRecord,
     TrainingRecord,
 )
@@ -37,6 +39,10 @@ _SECTION_SPECS: dict[str, dict[str, str]] = {
     SECTION_CODE_PPR_TRAINING: {
         "table": "person_training",
         "id_col": "training_id",
+    },
+    SECTION_CODE_PPR_FAMILY: {
+        "table": "person_relatives",
+        "id_col": "relative_id",
     },
 }
 
@@ -78,6 +84,30 @@ _TRAINING_SELECT = """
     updated_at,
     metadata
 """
+
+_RELATIVE_SELECT = """
+    relative_id,
+    person_id,
+    relationship_type,
+    full_name,
+    birth_date,
+    birth_place,
+    organization_name,
+    residence_address,
+    notes,
+    verification_status,
+    lifecycle_status,
+    source_type,
+    created_at,
+    updated_at,
+    metadata
+"""
+
+_SECTION_SELECTS: dict[str, str] = {
+    SECTION_CODE_PPR_EDUCATION: _EDUCATION_SELECT,
+    SECTION_CODE_PPR_TRAINING: _TRAINING_SELECT,
+    SECTION_CODE_PPR_FAMILY: _RELATIVE_SELECT,
+}
 
 
 def _metadata_dict(value: Any) -> dict[str, Any]:
@@ -142,10 +172,36 @@ def _mapping_to_training(row: RowMapping) -> TrainingRecord:
     )
 
 
+def _mapping_to_relative(row: RowMapping) -> RelativeRecord:
+    return RelativeRecord(
+        record_id=int(row["relative_id"]),
+        person_id=int(row["person_id"]),
+        relationship_type=str(row["relationship_type"]),
+        full_name=str(row["full_name"]),
+        birth_date=row.get("birth_date"),
+        birth_place=row.get("birth_place"),
+        organization_name=row.get("organization_name"),
+        residence_address=row.get("residence_address"),
+        notes=row.get("notes"),
+        verification_status=str(row["verification_status"]),
+        lifecycle_status=str(row["lifecycle_status"]),
+        source_type=str(row["source_type"]),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+        metadata=_metadata_dict(row.get("metadata")),
+    )
+
+
 def _row_to_record(section_code: str, row: RowMapping) -> SectionRecord:
     if section_code == SECTION_CODE_PPR_EDUCATION:
         return _mapping_to_education(row)
-    return _mapping_to_training(row)
+    if section_code == SECTION_CODE_PPR_TRAINING:
+        return _mapping_to_training(row)
+    return _mapping_to_relative(row)
+
+
+def _select_cols(section_code: str) -> str:
+    return _SECTION_SELECTS[section_code]
 
 
 class _SectionStore:
@@ -156,7 +212,7 @@ class _SectionStore:
 
     def load_active_records(self, person_id: int, section_code: str) -> tuple[SectionRecord, ...]:
         spec = _resolve_section(section_code)
-        select_cols = _EDUCATION_SELECT if section_code == SECTION_CODE_PPR_EDUCATION else _TRAINING_SELECT
+        select_cols = _select_cols(section_code)
         rows = (
             self._conn.execute(
                 text(
@@ -185,7 +241,7 @@ class _SectionStore:
         record_id: int,
     ) -> SectionRecord | None:
         spec = _resolve_section(section_code)
-        select_cols = _EDUCATION_SELECT if section_code == SECTION_CODE_PPR_EDUCATION else _TRAINING_SELECT
+        select_cols = _select_cols(section_code)
         row = (
             self._conn.execute(
                 text(
@@ -210,6 +266,8 @@ class _SectionStore:
             return self._insert_education(record)
         if isinstance(record, TrainingRecord):
             return self._insert_training(record)
+        if isinstance(record, RelativeRecord):
+            return self._insert_relative(record)
         raise SectionValidationError(f"Unsupported section record type: {type(record)!r}")
 
     def update_record(
@@ -222,6 +280,8 @@ class _SectionStore:
             return self._update_education(record, expected_updated_at=expected_updated_at)
         if isinstance(record, TrainingRecord):
             return self._update_training(record, expected_updated_at=expected_updated_at)
+        if isinstance(record, RelativeRecord):
+            return self._update_relative(record, expected_updated_at=expected_updated_at)
         raise SectionValidationError(f"Unsupported section record type: {type(record)!r}")
 
     def void_record(
@@ -433,6 +493,58 @@ class _SectionStore:
         ).mappings().one()
         return _mapping_to_training(row)
 
+    def _insert_relative(self, record: RelativeRecord) -> RelativeRecord:
+        row = self._conn.execute(
+            text(
+                f"""
+                INSERT INTO public.person_relatives (
+                    person_id,
+                    relationship_type,
+                    full_name,
+                    birth_date,
+                    birth_place,
+                    organization_name,
+                    residence_address,
+                    notes,
+                    verification_status,
+                    lifecycle_status,
+                    source_type,
+                    metadata
+                )
+                VALUES (
+                    :person_id,
+                    :relationship_type,
+                    :full_name,
+                    :birth_date,
+                    :birth_place,
+                    :organization_name,
+                    :residence_address,
+                    :notes,
+                    :verification_status,
+                    :lifecycle_status,
+                    :source_type,
+                    CAST(:metadata AS jsonb)
+                )
+                RETURNING {_RELATIVE_SELECT}
+                """
+            ),
+            {
+                "person_id": int(record.person_id),
+                "relationship_type": record.relationship_type,
+                "full_name": record.full_name,
+                "birth_date": record.birth_date,
+                "birth_place": record.birth_place,
+                "organization_name": record.organization_name,
+                "residence_address": record.residence_address,
+                "notes": record.notes,
+                "verification_status": record.verification_status or VERIFICATION_STATUS_PENDING,
+                "lifecycle_status": record.lifecycle_status or LIFECYCLE_STATUS_ACTIVE,
+                "source_type": record.source_type,
+                "metadata": _metadata_json(record.metadata),
+            },
+        ).mappings().one()
+        return _mapping_to_relative(row)
+
     def _update_education(
         self,
         record: EducationRecord,
@@ -552,6 +664,66 @@ class _SectionStore:
         if loaded is None or not isinstance(loaded, TrainingRecord):
             raise SectionRecordNotFoundError(
                 f"Training record missing after update: record_id={record.record_id}"
+            )
+        return loaded
+
+    def _update_relative(
+        self,
+        record: RelativeRecord,
+        *,
+        expected_updated_at: datetime,
+    ) -> RelativeRecord:
+        if record.record_id is None:
+            raise SectionValidationError("relative record_id is required for update")
+        result = self._conn.execute(
+            text(
+                f"""
+                UPDATE public.person_relatives
+                SET relationship_type = :relationship_type,
+                    full_name = :full_name,
+                    birth_date = :birth_date,
+                    birth_place = :birth_place,
+                    organization_name = :organization_name,
+                    residence_address = :residence_address,
+                    notes = :notes,
+                    source_type = :source_type,
+                    metadata = CAST(:metadata AS jsonb),
+                    updated_at = now()
+                WHERE relative_id = :record_id
+                  AND person_id = :person_id
+                  AND lifecycle_status = :active_status
+                  AND updated_at = :expected_updated_at
+                """
+            ),
+            {
+                "relationship_type": record.relationship_type,
+                "full_name": record.full_name,
+                "birth_date": record.birth_date,
+                "birth_place": record.birth_place,
+                "organization_name": record.organization_name,
+                "residence_address": record.residence_address,
+                "notes": record.notes,
+                "source_type": record.source_type,
+                "metadata": _metadata_json(record.metadata),
+                "record_id": int(record.record_id),
+                "person_id": int(record.person_id),
+                "active_status": LIFECYCLE_STATUS_ACTIVE,
+                "expected_updated_at": expected_updated_at,
+            },
+        )
+        if result.rowcount == 0:
+            existing = self.load_record(record.person_id, SECTION_CODE_PPR_FAMILY, record.record_id)
+            if existing is None:
+                raise SectionRecordNotFoundError(
+                    f"Relative record not found: record_id={record.record_id}"
+                )
+            raise SectionOptimisticConcurrencyConflictError(
+                f"Stale {SECTION_OPTIMISTIC_TOKEN_FIELD} for relative record_id={record.record_id}"
+            )
+        loaded = self.load_record(record.person_id, SECTION_CODE_PPR_FAMILY, record.record_id)
+        if loaded is None or not isinstance(loaded, RelativeRecord):
+            raise SectionRecordNotFoundError(
+                f"Relative record missing after update: record_id={record.record_id}"
             )
         return loaded
 

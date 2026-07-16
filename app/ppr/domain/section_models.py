@@ -9,14 +9,20 @@ from typing import Any, Union
 
 from app.db.models.personnel_migration import (
     LIFECYCLE_STATUS_ACTIVE,
+    SECTION_SOURCE_TYPE_ENTERED,
     VERIFICATION_STATUS_PENDING,
 )
 
 SECTION_CODE_PPR_EDUCATION = "PPR-EDUCATION"
 SECTION_CODE_PPR_TRAINING = "PPR-TRAINING"
+SECTION_CODE_PPR_FAMILY = "PPR-FAMILY"
 
 SUPPORTED_SECTION_CODES: frozenset[str] = frozenset(
-    {SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_TRAINING}
+    {
+        SECTION_CODE_PPR_EDUCATION,
+        SECTION_CODE_PPR_TRAINING,
+        SECTION_CODE_PPR_FAMILY,
+    }
 )
 
 # Optimistic concurrency for section updates (WP-PR-010 OQ-4).
@@ -83,7 +89,32 @@ class TrainingRecord:
         return SECTION_CODE_PPR_TRAINING
 
 
-SectionRecord = Union[EducationRecord, TrainingRecord]
+@dataclass(frozen=True, slots=True)
+class RelativeRecord:
+    """Domain record for person_relatives (not ORM)."""
+
+    person_id: int
+    relationship_type: str
+    full_name: str
+    record_id: int | None = None
+    birth_date: date | None = None
+    birth_place: str | None = None
+    organization_name: str | None = None
+    residence_address: str | None = None
+    notes: str | None = None
+    verification_status: str = VERIFICATION_STATUS_PENDING
+    lifecycle_status: str = LIFECYCLE_STATUS_ACTIVE
+    source_type: str = SECTION_SOURCE_TYPE_ENTERED
+    created_at: datetime | None = None
+    updated_at: datetime | None = None  # temporary optimistic token until record_version exists
+    metadata: Mapping[str, Any] | None = None
+
+    @property
+    def section_code(self) -> str:
+        return SECTION_CODE_PPR_FAMILY
+
+
+SectionRecord = Union[EducationRecord, TrainingRecord, RelativeRecord]
 
 
 @dataclass(frozen=True, slots=True)

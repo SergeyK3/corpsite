@@ -122,6 +122,38 @@ LIFECYCLE_STATUSES = (
     LIFECYCLE_STATUS_VOIDED,
 )
 
+RELATIONSHIP_TYPE_FATHER = "father"
+RELATIONSHIP_TYPE_MOTHER = "mother"
+RELATIONSHIP_TYPE_BROTHER = "brother"
+RELATIONSHIP_TYPE_SISTER = "sister"
+RELATIONSHIP_TYPE_SON = "son"
+RELATIONSHIP_TYPE_DAUGHTER = "daughter"
+RELATIONSHIP_TYPE_SPOUSE = "spouse"
+RELATIONSHIP_TYPE_OTHER_CLOSE = "other_close"
+
+RELATIONSHIP_TYPES = (
+    RELATIONSHIP_TYPE_FATHER,
+    RELATIONSHIP_TYPE_MOTHER,
+    RELATIONSHIP_TYPE_BROTHER,
+    RELATIONSHIP_TYPE_SISTER,
+    RELATIONSHIP_TYPE_SON,
+    RELATIONSHIP_TYPE_DAUGHTER,
+    RELATIONSHIP_TYPE_SPOUSE,
+    RELATIONSHIP_TYPE_OTHER_CLOSE,
+)
+
+SECTION_SOURCE_TYPE_ENTERED = "entered"
+SECTION_SOURCE_TYPE_IMPORTED = "imported"
+SECTION_SOURCE_TYPE_NORMALIZED = "normalized"
+SECTION_SOURCE_TYPE_DERIVED = "derived"
+
+SECTION_SOURCE_TYPES = (
+    SECTION_SOURCE_TYPE_ENTERED,
+    SECTION_SOURCE_TYPE_IMPORTED,
+    SECTION_SOURCE_TYPE_NORMALIZED,
+    SECTION_SOURCE_TYPE_DERIVED,
+)
+
 EVENT_TYPE_EDUCATION_MIGRATED = "EDUCATION_MIGRATED"
 EVENT_TYPE_EDUCATION_VERIFIED = "EDUCATION_VERIFIED"
 EVENT_TYPE_EDUCATION_SUPERSEDED = "EDUCATION_SUPERSEDED"
@@ -445,6 +477,61 @@ class PersonTraining(Base):
     confidence: Mapped[Optional[Decimal]] = mapped_column(Numeric, nullable=True)
     migrated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     migrated_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+
+class PersonRelative(Base):
+    """Permanent family/relative record (PPR-FAMILY, person-owned SoT)."""
+
+    __tablename__ = "person_relatives"
+    __table_args__ = (
+        Index("ix_person_relatives_person_id", "person_id"),
+        Index("ix_person_relatives_person_lifecycle", "person_id", "lifecycle_status"),
+    )
+
+    relative_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("persons.person_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    relationship_type: Mapped[str] = mapped_column(Text, nullable=False)
+    full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    birth_place: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    organization_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    residence_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verification_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{VERIFICATION_STATUS_PENDING}'"),
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{LIFECYCLE_STATUS_ACTIVE}'"),
+    )
+    source_type: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{SECTION_SOURCE_TYPE_ENTERED}'"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

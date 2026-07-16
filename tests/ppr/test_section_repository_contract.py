@@ -16,6 +16,7 @@ from app.db.models.personnel_migration import (
     LIFECYCLE_STATUS_ACTIVE,
     LIFECYCLE_STATUS_SUPERSEDED,
     LIFECYCLE_STATUS_VOIDED,
+    RELATIONSHIP_TYPE_MOTHER,
     TRAINING_KIND_COURSE,
 )
 from app.ppr.domain.errors import (
@@ -25,9 +26,12 @@ from app.ppr.domain.errors import (
 )
 from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     SECTION_OPTIMISTIC_TOKEN_FIELD,
+    SUPPORTED_SECTION_CODES,
     EducationRecord,
+    RelativeRecord,
     TrainingRecord,
 )
 from app.ppr.domain.section_repositories import SectionMutationRepository, SectionReadRepository
@@ -43,6 +47,8 @@ def _require_section_schema() -> None:
     with engine.begin() as conn:
         if not table_exists(conn, "person_education"):
             pytest.skip("person_education missing — run: alembic upgrade head")
+        if not table_exists(conn, "person_relatives"):
+            pytest.skip("person_relatives missing — run: alembic upgrade head")
 
 
 @pytest.fixture
@@ -301,3 +307,179 @@ def test_supersede_rollback_restores_old_record_on_insert_failure(section_person
     assert loaded.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
     assert len(active) == 1
     assert active[0].record_id == old_id
+
+
+def test_supported_section_codes_include_family() -> None:
+    assert SECTION_CODE_PPR_FAMILY in SUPPORTED_SECTION_CODES
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_insert_and_load_relative_record(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Петрова Мария Сергеевна",
+        )
+    )
+    loaded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_FAMILY,
+        inserted.record_id or 0,
+    )
+
+    assert inserted.record_id is not None
+    assert loaded is not None
+    assert isinstance(loaded, RelativeRecord)
+    assert loaded.person_id == section_person_id
+    assert loaded.full_name == "Петрова Мария Сергеевна"
+    assert loaded.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert not hasattr(loaded, "_sa_instance_state")
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_relative_lifecycle_buckets(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    active_row = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Active Relative",
+        )
+    )
+    void_candidate = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Void Relative",
+        )
+    )
+    supersede_candidate = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Supersede Relative",
+        )
+    )
+
+    assert void_candidate.updated_at is not None
+    voided = mutation_repo.void_record(
+        section_person_id,
+        SECTION_CODE_PPR_FAMILY,
+        void_candidate.record_id or 0,
+        expected_updated_at=void_candidate.updated_at,
+    )
+    assert supersede_candidate.updated_at is not None
+    old_record, new_record = mutation_repo.supersede_pair(
+        section_person_id,
+        SECTION_CODE_PPR_FAMILY,
+        supersede_candidate.record_id or 0,
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Supersede Replacement",
+        ),
+        expected_updated_at=supersede_candidate.updated_at,
+    )
+
+    active_rows = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_FAMILY)
+    loaded_voided = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_FAMILY,
+        void_candidate.record_id or 0,
+    )
+    loaded_superseded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_FAMILY,
+        supersede_candidate.record_id or 0,
+    )
+
+    assert voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+    assert old_record.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+    assert new_record.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert len(active_rows) == 2
+    active_ids = {row.record_id for row in active_rows}
+    assert active_row.record_id in active_ids
+    assert new_record.record_id in active_ids
+    assert void_candidate.record_id not in active_ids
+    assert supersede_candidate.record_id not in active_ids
+    assert loaded_voided is not None
+    assert loaded_voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+    assert loaded_superseded is not None
+    assert loaded_superseded.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_relative_update_with_expected_updated_at(section_repos, section_person_id: int) -> None:
+    _, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Before Update",
+        )
+    )
+    assert inserted.updated_at is not None
+    updated = mutation_repo.update_record(
+        RelativeRecord(
+            record_id=inserted.record_id,
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="After Update",
+            updated_at=inserted.updated_at,
+        ),
+        expected_updated_at=inserted.updated_at,
+    )
+
+    assert updated.full_name == "After Update"
+    assert SECTION_OPTIMISTIC_TOKEN_FIELD == "updated_at"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_relative_stale_update_raises_concurrency_conflict(section_repos, section_person_id: int) -> None:
+    _, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Stale Test",
+        )
+    )
+    assert inserted.updated_at is not None
+    with pytest.raises(SectionOptimisticConcurrencyConflictError):
+        mutation_repo.update_record(
+            RelativeRecord(
+                record_id=inserted.record_id,
+                person_id=section_person_id,
+                relationship_type=RELATIONSHIP_TYPE_MOTHER,
+                full_name="Should Fail",
+            ),
+            expected_updated_at=inserted.updated_at.replace(year=2000),
+        )
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_relative_load_wrong_person_id_returns_none(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        RelativeRecord(
+            person_id=section_person_id,
+            relationship_type=RELATIONSHIP_TYPE_MOTHER,
+            full_name="Ownership Test",
+        )
+    )
+    wrong_person_id = section_person_id + 99_999
+    loaded = read_repo.load_record(
+        wrong_person_id,
+        SECTION_CODE_PPR_FAMILY,
+        inserted.record_id or 0,
+    )
+
+    assert loaded is None
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_mutation_repository_has_no_delete_method() -> None:
+    assert not hasattr(SqlAlchemySectionMutationRepository, "delete_record")
+    assert not hasattr(SqlAlchemySectionMutationRepository, "delete")
