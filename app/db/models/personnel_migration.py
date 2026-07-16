@@ -147,6 +147,57 @@ SECTION_SOURCE_TYPE_IMPORTED = "imported"
 SECTION_SOURCE_TYPE_NORMALIZED = "normalized"
 SECTION_SOURCE_TYPE_DERIVED = "derived"
 
+EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE = "episode"
+EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY = "narrative_summary"
+EXTERNAL_EMPLOYMENT_RECORD_KIND_ATTESTATION_NONE = "attestation_none"
+
+EXTERNAL_EMPLOYMENT_RECORD_KINDS = (
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_ATTESTATION_NONE,
+)
+
+EXTERNAL_EMPLOYMENT_TYPE_PRIMARY = "primary"
+EXTERNAL_EMPLOYMENT_TYPE_PART_TIME = "part_time"
+EXTERNAL_EMPLOYMENT_TYPE_CONTRACT = "contract"
+EXTERNAL_EMPLOYMENT_TYPE_INTERNSHIP = "internship"
+EXTERNAL_EMPLOYMENT_TYPE_OTHER = "other"
+
+EXTERNAL_EMPLOYMENT_TYPES = (
+    EXTERNAL_EMPLOYMENT_TYPE_PRIMARY,
+    EXTERNAL_EMPLOYMENT_TYPE_PART_TIME,
+    EXTERNAL_EMPLOYMENT_TYPE_CONTRACT,
+    EXTERNAL_EMPLOYMENT_TYPE_INTERNSHIP,
+    EXTERNAL_EMPLOYMENT_TYPE_OTHER,
+)
+
+EXTERNAL_EMPLOYMENT_SOURCE_MANUAL = "manual"
+EXTERNAL_EMPLOYMENT_SOURCE_IMPORT_ROW = "import_row"
+EXTERNAL_EMPLOYMENT_SOURCE_PMF_MIGRATION = "pmf_migration"
+EXTERNAL_EMPLOYMENT_SOURCE_INTEGRATION = "integration"
+
+EXTERNAL_EMPLOYMENT_SOURCE_SYSTEMS = (
+    EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
+    EXTERNAL_EMPLOYMENT_SOURCE_IMPORT_ROW,
+    EXTERNAL_EMPLOYMENT_SOURCE_PMF_MIGRATION,
+    EXTERNAL_EMPLOYMENT_SOURCE_INTEGRATION,
+)
+
+EXTERNAL_EMPLOYMENT_VERIFICATION_STATUS_DISPUTED = "disputed"
+
+EXTERNAL_EMPLOYMENT_VERIFICATION_STATUSES = (
+    VERIFICATION_STATUS_PENDING,
+    VERIFICATION_STATUS_VERIFIED,
+    EXTERNAL_EMPLOYMENT_VERIFICATION_STATUS_DISPUTED,
+)
+
+# ADR-056 §12.1 — section row lifecycle (no draft; wizard draft lives on migration_items).
+EXTERNAL_EMPLOYMENT_LIFECYCLE_STATUSES = (
+    LIFECYCLE_STATUS_ACTIVE,
+    LIFECYCLE_STATUS_SUPERSEDED,
+    LIFECYCLE_STATUS_VOIDED,
+)
+
 SECTION_SOURCE_TYPES = (
     SECTION_SOURCE_TYPE_ENTERED,
     SECTION_SOURCE_TYPE_IMPORTED,
@@ -477,6 +528,71 @@ class PersonTraining(Base):
     confidence: Mapped[Optional[Decimal]] = mapped_column(Numeric, nullable=True)
     migrated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     migrated_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+
+class PersonExternalEmployment(Base):
+    """External employment biography record (PPR-EMPLOYMENT-BIOGRAPHY, person-owned SoT)."""
+
+    __tablename__ = "person_external_employment"
+    __table_args__ = (
+        Index("ix_person_external_employment_person_id", "person_id"),
+        Index("ix_person_external_employment_person_lifecycle", "person_id", "lifecycle_status"),
+    )
+
+    employment_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("persons.person_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    record_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    employer_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    department_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    position_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    employment_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    ended_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    termination_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    document_reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_system: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{EXTERNAL_EMPLOYMENT_SOURCE_MANUAL}'"),
+    )
+    source_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    provenance: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    verification_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{VERIFICATION_STATUS_PENDING}'"),
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{LIFECYCLE_STATUS_ACTIVE}'"),
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    employee_context_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

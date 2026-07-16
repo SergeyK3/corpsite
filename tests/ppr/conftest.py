@@ -112,6 +112,10 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
             text("DELETE FROM public.person_relatives WHERE person_id = ANY(:ids)"),
             {"ids": person_ids},
         )
+        conn.execute(
+            text("DELETE FROM public.person_external_employment WHERE person_id = ANY(:ids)"),
+            {"ids": person_ids},
+        )
     if employee_ids:
         if table_exists(conn, "employee_events"):
             conn.execute(

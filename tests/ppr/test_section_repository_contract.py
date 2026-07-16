@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, date
 
 import pytest
 from sqlalchemy import text
@@ -13,6 +13,7 @@ from sqlalchemy.exc import DBAPIError
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
     EDUCATION_KIND_BASIC,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
     LIFECYCLE_STATUS_ACTIVE,
     LIFECYCLE_STATUS_SUPERSEDED,
     LIFECYCLE_STATUS_VOIDED,
@@ -26,11 +27,13 @@ from app.ppr.domain.errors import (
 )
 from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     SECTION_OPTIMISTIC_TOKEN_FIELD,
     SUPPORTED_SECTION_CODES,
     EducationRecord,
+    ExternalEmploymentRecord,
     RelativeRecord,
     TrainingRecord,
 )
@@ -49,6 +52,8 @@ def _require_section_schema() -> None:
             pytest.skip("person_education missing — run: alembic upgrade head")
         if not table_exists(conn, "person_relatives"):
             pytest.skip("person_relatives missing — run: alembic upgrade head")
+        if not table_exists(conn, "person_external_employment"):
+            pytest.skip("person_external_employment missing — run: alembic upgrade head")
 
 
 @pytest.fixture
@@ -313,6 +318,22 @@ def test_supported_section_codes_include_family() -> None:
     assert SECTION_CODE_PPR_FAMILY in SUPPORTED_SECTION_CODES
 
 
+def test_supported_section_codes_include_employment_biography() -> None:
+    assert SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY in SUPPORTED_SECTION_CODES
+
+
+def _episode_record(person_id: int, **overrides) -> ExternalEmploymentRecord:
+    base = {
+        "person_id": person_id,
+        "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+        "employer_name": "Employer",
+        "position_title": "Role",
+        "started_at": date(2020, 1, 1),
+    }
+    base.update(overrides)
+    return ExternalEmploymentRecord(**base)
+
+
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_insert_and_load_relative_record(section_repos, section_person_id: int) -> None:
     read_repo, mutation_repo = section_repos
@@ -483,3 +504,160 @@ def test_relative_load_wrong_person_id_returns_none(section_repos, section_perso
 def test_mutation_repository_has_no_delete_method() -> None:
     assert not hasattr(SqlAlchemySectionMutationRepository, "delete_record")
     assert not hasattr(SqlAlchemySectionMutationRepository, "delete")
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_insert_and_load_external_employment_record(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        _episode_record(
+            section_person_id,
+            employer_name="ТОО «Внешний работодатель»",
+            position_title="Бухгалтер",
+        )
+    )
+    loaded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        inserted.record_id or 0,
+    )
+
+    assert inserted.record_id is not None
+    assert loaded is not None
+    assert isinstance(loaded, ExternalEmploymentRecord)
+    assert loaded.person_id == section_person_id
+    assert loaded.employer_name == "ТОО «Внешний работодатель»"
+    assert loaded.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert not hasattr(loaded, "_sa_instance_state")
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_lifecycle_buckets(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    active_row = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Active Employer", position_title="Engineer")
+    )
+    void_candidate = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Void Employer", position_title="Clerk")
+    )
+    supersede_candidate = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Supersede Employer", position_title="Manager")
+    )
+
+    assert void_candidate.updated_at is not None
+    voided = mutation_repo.void_record(
+        section_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        void_candidate.record_id or 0,
+        expected_updated_at=void_candidate.updated_at,
+    )
+    assert supersede_candidate.updated_at is not None
+    old_record, new_record = mutation_repo.supersede_pair(
+        section_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        supersede_candidate.record_id or 0,
+        ExternalEmploymentRecord(
+            person_id=section_person_id,
+            record_kind=EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+            employer_name="Replacement Employer",
+            position_title="Lead",
+            started_at=date(2021, 1, 1),
+        ),
+        expected_updated_at=supersede_candidate.updated_at,
+    )
+
+    active_rows = read_repo.load_active_records(
+        section_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+    )
+    loaded_voided = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        void_candidate.record_id or 0,
+    )
+    loaded_superseded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        supersede_candidate.record_id or 0,
+    )
+
+    assert voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+    assert old_record.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+    assert new_record.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert len(active_rows) == 2
+    active_ids = {row.record_id for row in active_rows}
+    assert active_row.record_id in active_ids
+    assert new_record.record_id in active_ids
+    assert void_candidate.record_id not in active_ids
+    assert supersede_candidate.record_id not in active_ids
+    assert loaded_voided is not None
+    assert loaded_voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+    assert loaded_superseded is not None
+    assert loaded_superseded.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_update_with_expected_updated_at(section_repos, section_person_id: int) -> None:
+    _, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Before Update", position_title="Role A")
+    )
+    assert inserted.updated_at is not None
+    updated = mutation_repo.update_record(
+        ExternalEmploymentRecord(
+            record_id=inserted.record_id,
+            person_id=section_person_id,
+            record_kind=EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+            employer_name="After Update",
+            position_title="Role B",
+            started_at=date(2020, 1, 1),
+            updated_at=inserted.updated_at,
+        ),
+        expected_updated_at=inserted.updated_at,
+    )
+
+    assert updated.employer_name == "After Update"
+    assert SECTION_OPTIMISTIC_TOKEN_FIELD == "updated_at"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_stale_update_raises_concurrency_conflict(
+    section_repos,
+    section_person_id: int,
+) -> None:
+    _, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Stale Test", position_title="Role")
+    )
+    assert inserted.updated_at is not None
+    with pytest.raises(SectionOptimisticConcurrencyConflictError):
+        mutation_repo.update_record(
+            ExternalEmploymentRecord(
+                record_id=inserted.record_id,
+                person_id=section_person_id,
+                record_kind=EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+                employer_name="Should Fail",
+                position_title="Role",
+                started_at=date(2020, 1, 1),
+            ),
+            expected_updated_at=inserted.updated_at.replace(year=2000),
+        )
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_load_wrong_person_id_returns_none(
+    section_repos,
+    section_person_id: int,
+) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Ownership Test", position_title="Role")
+    )
+    wrong_person_id = section_person_id + 99_999
+    loaded = read_repo.load_record(
+        wrong_person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        inserted.record_id or 0,
+    )
+
+    assert loaded is None

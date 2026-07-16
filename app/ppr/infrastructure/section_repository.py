@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection, RowMapping
 
 from app.db.models.personnel_migration import (
+    EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
     LIFECYCLE_STATUS_ACTIVE,
     LIFECYCLE_STATUS_SUPERSEDED,
     LIFECYCLE_STATUS_VOIDED,
@@ -22,10 +23,12 @@ from app.ppr.domain.errors import (
 )
 from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     SECTION_OPTIMISTIC_TOKEN_FIELD,
     EducationRecord,
+    ExternalEmploymentRecord,
     RelativeRecord,
     SectionRecord,
     TrainingRecord,
@@ -43,6 +46,10 @@ _SECTION_SPECS: dict[str, dict[str, str]] = {
     SECTION_CODE_PPR_FAMILY: {
         "table": "person_relatives",
         "id_col": "relative_id",
+    },
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: {
+        "table": "person_external_employment",
+        "id_col": "employment_id",
     },
 }
 
@@ -103,10 +110,35 @@ _RELATIVE_SELECT = """
     metadata
 """
 
+_EXTERNAL_EMPLOYMENT_SELECT = """
+    employment_id,
+    person_id,
+    record_kind,
+    employer_name,
+    department_name,
+    position_title,
+    employment_type,
+    started_at,
+    ended_at,
+    termination_reason,
+    document_reference,
+    source_system,
+    source_id,
+    provenance,
+    verification_status,
+    lifecycle_status,
+    notes,
+    employee_context_id,
+    created_at,
+    updated_at,
+    metadata
+"""
+
 _SECTION_SELECTS: dict[str, str] = {
     SECTION_CODE_PPR_EDUCATION: _EDUCATION_SELECT,
     SECTION_CODE_PPR_TRAINING: _TRAINING_SELECT,
     SECTION_CODE_PPR_FAMILY: _RELATIVE_SELECT,
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: _EXTERNAL_EMPLOYMENT_SELECT,
 }
 
 
@@ -192,11 +224,39 @@ def _mapping_to_relative(row: RowMapping) -> RelativeRecord:
     )
 
 
+def _mapping_to_external_employment(row: RowMapping) -> ExternalEmploymentRecord:
+    return ExternalEmploymentRecord(
+        record_id=int(row["employment_id"]),
+        person_id=int(row["person_id"]),
+        record_kind=str(row["record_kind"]),
+        employer_name=row.get("employer_name"),
+        department_name=row.get("department_name"),
+        position_title=row.get("position_title"),
+        employment_type=row.get("employment_type"),
+        started_at=row.get("started_at"),
+        ended_at=row.get("ended_at"),
+        termination_reason=row.get("termination_reason"),
+        document_reference=row.get("document_reference"),
+        source_system=str(row["source_system"]),
+        source_id=row.get("source_id"),
+        provenance=_metadata_dict(row.get("provenance")),
+        verification_status=str(row["verification_status"]),
+        lifecycle_status=str(row["lifecycle_status"]),
+        notes=row.get("notes"),
+        employee_context_id=row.get("employee_context_id"),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+        metadata=_metadata_dict(row.get("metadata")),
+    )
+
+
 def _row_to_record(section_code: str, row: RowMapping) -> SectionRecord:
     if section_code == SECTION_CODE_PPR_EDUCATION:
         return _mapping_to_education(row)
     if section_code == SECTION_CODE_PPR_TRAINING:
         return _mapping_to_training(row)
+    if section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY:
+        return _mapping_to_external_employment(row)
     return _mapping_to_relative(row)
 
 
@@ -268,6 +328,8 @@ class _SectionStore:
             return self._insert_training(record)
         if isinstance(record, RelativeRecord):
             return self._insert_relative(record)
+        if isinstance(record, ExternalEmploymentRecord):
+            return self._insert_external_employment(record)
         raise SectionValidationError(f"Unsupported section record type: {type(record)!r}")
 
     def update_record(
@@ -282,6 +344,8 @@ class _SectionStore:
             return self._update_training(record, expected_updated_at=expected_updated_at)
         if isinstance(record, RelativeRecord):
             return self._update_relative(record, expected_updated_at=expected_updated_at)
+        if isinstance(record, ExternalEmploymentRecord):
+            return self._update_external_employment(record, expected_updated_at=expected_updated_at)
         raise SectionValidationError(f"Unsupported section record type: {type(record)!r}")
 
     def void_record(
@@ -545,6 +609,76 @@ class _SectionStore:
         ).mappings().one()
         return _mapping_to_relative(row)
 
+    def _insert_external_employment(self, record: ExternalEmploymentRecord) -> ExternalEmploymentRecord:
+        row = self._conn.execute(
+            text(
+                f"""
+                INSERT INTO public.person_external_employment (
+                    person_id,
+                    record_kind,
+                    employer_name,
+                    department_name,
+                    position_title,
+                    employment_type,
+                    started_at,
+                    ended_at,
+                    termination_reason,
+                    document_reference,
+                    source_system,
+                    source_id,
+                    provenance,
+                    verification_status,
+                    lifecycle_status,
+                    notes,
+                    employee_context_id,
+                    metadata
+                )
+                VALUES (
+                    :person_id,
+                    :record_kind,
+                    :employer_name,
+                    :department_name,
+                    :position_title,
+                    :employment_type,
+                    :started_at,
+                    :ended_at,
+                    :termination_reason,
+                    :document_reference,
+                    :source_system,
+                    :source_id,
+                    CAST(:provenance AS jsonb),
+                    :verification_status,
+                    :lifecycle_status,
+                    :notes,
+                    :employee_context_id,
+                    CAST(:metadata AS jsonb)
+                )
+                RETURNING {_EXTERNAL_EMPLOYMENT_SELECT}
+                """
+            ),
+            {
+                "person_id": int(record.person_id),
+                "record_kind": record.record_kind,
+                "employer_name": record.employer_name,
+                "department_name": record.department_name,
+                "position_title": record.position_title,
+                "employment_type": record.employment_type,
+                "started_at": record.started_at,
+                "ended_at": record.ended_at,
+                "termination_reason": record.termination_reason,
+                "document_reference": record.document_reference,
+                "source_system": record.source_system or EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
+                "source_id": record.source_id,
+                "provenance": _metadata_json(record.provenance),
+                "verification_status": record.verification_status or VERIFICATION_STATUS_PENDING,
+                "lifecycle_status": record.lifecycle_status or LIFECYCLE_STATUS_ACTIVE,
+                "notes": record.notes,
+                "employee_context_id": record.employee_context_id,
+                "metadata": _metadata_json(record.metadata),
+            },
+        ).mappings().one()
+        return _mapping_to_external_employment(row)
+
     def _update_education(
         self,
         record: EducationRecord,
@@ -724,6 +858,86 @@ class _SectionStore:
         if loaded is None or not isinstance(loaded, RelativeRecord):
             raise SectionRecordNotFoundError(
                 f"Relative record missing after update: record_id={record.record_id}"
+            )
+        return loaded
+
+    def _update_external_employment(
+        self,
+        record: ExternalEmploymentRecord,
+        *,
+        expected_updated_at: datetime,
+    ) -> ExternalEmploymentRecord:
+        if record.record_id is None:
+            raise SectionValidationError("external employment record_id is required for update")
+        result = self._conn.execute(
+            text(
+                f"""
+                UPDATE public.person_external_employment
+                SET record_kind = :record_kind,
+                    employer_name = :employer_name,
+                    department_name = :department_name,
+                    position_title = :position_title,
+                    employment_type = :employment_type,
+                    started_at = :started_at,
+                    ended_at = :ended_at,
+                    termination_reason = :termination_reason,
+                    document_reference = :document_reference,
+                    source_system = :source_system,
+                    source_id = :source_id,
+                    provenance = CAST(:provenance AS jsonb),
+                    notes = :notes,
+                    employee_context_id = :employee_context_id,
+                    metadata = CAST(:metadata AS jsonb),
+                    updated_at = now()
+                WHERE employment_id = :record_id
+                  AND person_id = :person_id
+                  AND lifecycle_status = :active_status
+                  AND updated_at = :expected_updated_at
+                """
+            ),
+            {
+                "record_kind": record.record_kind,
+                "employer_name": record.employer_name,
+                "department_name": record.department_name,
+                "position_title": record.position_title,
+                "employment_type": record.employment_type,
+                "started_at": record.started_at,
+                "ended_at": record.ended_at,
+                "termination_reason": record.termination_reason,
+                "document_reference": record.document_reference,
+                "source_system": record.source_system,
+                "source_id": record.source_id,
+                "provenance": _metadata_json(record.provenance),
+                "notes": record.notes,
+                "employee_context_id": record.employee_context_id,
+                "metadata": _metadata_json(record.metadata),
+                "record_id": int(record.record_id),
+                "person_id": int(record.person_id),
+                "active_status": LIFECYCLE_STATUS_ACTIVE,
+                "expected_updated_at": expected_updated_at,
+            },
+        )
+        if result.rowcount == 0:
+            existing = self.load_record(
+                record.person_id,
+                SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+                record.record_id,
+            )
+            if existing is None:
+                raise SectionRecordNotFoundError(
+                    f"External employment record not found: record_id={record.record_id}"
+                )
+            raise SectionOptimisticConcurrencyConflictError(
+                f"Stale {SECTION_OPTIMISTIC_TOKEN_FIELD} for external employment record_id={record.record_id}"
+            )
+        loaded = self.load_record(
+            record.person_id,
+            SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+            record.record_id,
+        )
+        if loaded is None or not isinstance(loaded, ExternalEmploymentRecord):
+            raise SectionRecordNotFoundError(
+                f"External employment record missing after update: record_id={record.record_id}"
             )
         return loaded
 

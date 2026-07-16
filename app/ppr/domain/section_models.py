@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any, Union
 
 from app.db.models.personnel_migration import (
+    EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
     LIFECYCLE_STATUS_ACTIVE,
     SECTION_SOURCE_TYPE_ENTERED,
     VERIFICATION_STATUS_PENDING,
@@ -16,12 +17,14 @@ from app.db.models.personnel_migration import (
 SECTION_CODE_PPR_EDUCATION = "PPR-EDUCATION"
 SECTION_CODE_PPR_TRAINING = "PPR-TRAINING"
 SECTION_CODE_PPR_FAMILY = "PPR-FAMILY"
+SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY = "PPR-EMPLOYMENT-BIOGRAPHY"
 
 SUPPORTED_SECTION_CODES: frozenset[str] = frozenset(
     {
         SECTION_CODE_PPR_EDUCATION,
         SECTION_CODE_PPR_TRAINING,
         SECTION_CODE_PPR_FAMILY,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     }
 )
 
@@ -114,7 +117,38 @@ class RelativeRecord:
         return SECTION_CODE_PPR_FAMILY
 
 
-SectionRecord = Union[EducationRecord, TrainingRecord, RelativeRecord]
+@dataclass(frozen=True, slots=True)
+class ExternalEmploymentRecord:
+    """Domain record for person_external_employment (not ORM)."""
+
+    person_id: int
+    record_kind: str
+    record_id: int | None = None
+    employer_name: str | None = None
+    department_name: str | None = None
+    position_title: str | None = None
+    employment_type: str | None = None
+    started_at: date | None = None
+    ended_at: date | None = None
+    termination_reason: str | None = None
+    document_reference: str | None = None
+    source_system: str = EXTERNAL_EMPLOYMENT_SOURCE_MANUAL
+    source_id: str | None = None
+    provenance: Mapping[str, Any] | None = None
+    verification_status: str = VERIFICATION_STATUS_PENDING
+    lifecycle_status: str = LIFECYCLE_STATUS_ACTIVE
+    notes: str | None = None
+    employee_context_id: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None  # temporary optimistic token until record_version exists
+    metadata: Mapping[str, Any] | None = None
+
+    @property
+    def section_code(self) -> str:
+        return SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY
+
+
+SectionRecord = Union[EducationRecord, TrainingRecord, RelativeRecord, ExternalEmploymentRecord]
 
 
 @dataclass(frozen=True, slots=True)
