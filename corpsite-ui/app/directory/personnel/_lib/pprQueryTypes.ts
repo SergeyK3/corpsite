@@ -61,11 +61,25 @@ export type PprTrainingRecordResponse = {
   lifecycle_status: string;
 };
 
+export type PprRelativeRecordResponse = {
+  record_id: number | null;
+  relationship_type: string;
+  relationship_label: string | null;
+  full_name: string;
+  birth_date: string | null;
+  birth_place: string | null;
+  organization_name: string | null;
+  residence_address: string | null;
+  notes: string | null;
+  verification_status: string;
+  lifecycle_status: string;
+};
+
 export type PprSectionResponse = {
   section_code: string;
-  active: Array<PprEducationRecordResponse | PprTrainingRecordResponse>;
-  superseded: Array<PprEducationRecordResponse | PprTrainingRecordResponse>;
-  voided: Array<PprEducationRecordResponse | PprTrainingRecordResponse>;
+  active: Array<PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse>;
+  superseded: Array<PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse>;
+  voided: Array<PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse>;
 };
 
 export type PprEventSummaryItemResponse = {
@@ -127,6 +141,7 @@ export type PprCompositeSummaryResponse = {
   full_name: string;
   education_active_count: number;
   training_active_count: number;
+  family_active_count: number;
   recent_event_count: number;
   metadata: PprReadMetadataResponse;
 };
@@ -135,5 +150,6 @@ export const PPR_HR_RELATIONSHIP_CANDIDATE = "CANDIDATE";
 export const PPR_HR_RELATIONSHIP_EMPLOYED = "EMPLOYED";
 export const PPR_SECTION_CODE_EDUCATION = "PPR-EDUCATION";
 export const PPR_SECTION_CODE_TRAINING = "PPR-TRAINING";
+export const PPR_SECTION_CODE_FAMILY = "PPR-FAMILY";
 
 export const PPR_LIFECYCLE_NOT_MATERIALIZED = "NOT_MATERIALIZED";

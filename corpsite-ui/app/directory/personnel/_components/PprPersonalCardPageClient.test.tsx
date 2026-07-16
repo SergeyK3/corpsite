@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PprPersonalCardPageClient from "./PprPersonalCardPageClient";
 import {
+  PPR_HR_RELATIONSHIP_CANDIDATE,
   PPR_SECTION_CODE_EDUCATION,
+  PPR_SECTION_CODE_FAMILY,
   PPR_SECTION_CODE_TRAINING,
   type PprCompositeReadResponse,
 } from "../_lib/pprQueryTypes";
@@ -25,8 +27,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 const getPprByEmployeeIdMock = vi.fn();
+const getPprByPersonIdMock = vi.fn();
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByEmployeeId: (...args: unknown[]) => getPprByEmployeeIdMock(...args),
+  getPprByPersonId: (...args: unknown[]) => getPprByPersonIdMock(...args),
 }));
 
 const getEmployeeImportCard2OptionalMock = vi.fn();
@@ -146,6 +150,54 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
         superseded: [],
         voided: [],
       },
+      [PPR_SECTION_CODE_FAMILY]: {
+        section_code: PPR_SECTION_CODE_FAMILY,
+        active: [
+          {
+            record_id: 20,
+            relationship_type: "spouse",
+            relationship_label: "Супруг(а)",
+            full_name: "Иванова Мария Петровна",
+            birth_date: "1988-04-12",
+            birth_place: "г. Алматы",
+            organization_name: "ТОО «Пример»",
+            residence_address: null,
+            notes: null,
+            verification_status: "verified",
+            lifecycle_status: "active",
+          },
+        ],
+        superseded: [
+          {
+            record_id: 21,
+            relationship_type: "mother",
+            relationship_label: "Мать",
+            full_name: "Иванова Анна Семёновна (устар.)",
+            birth_date: "1960-01-01",
+            birth_place: null,
+            organization_name: null,
+            residence_address: null,
+            notes: null,
+            verification_status: "verified",
+            lifecycle_status: "superseded",
+          },
+        ],
+        voided: [
+          {
+            record_id: 22,
+            relationship_type: "son",
+            relationship_label: "Сын",
+            full_name: "Иванов Пётр Иванович",
+            birth_date: "2010-05-20",
+            birth_place: null,
+            organization_name: null,
+            residence_address: null,
+            notes: null,
+            verification_status: "verified",
+            lifecycle_status: "voided",
+          },
+        ],
+      },
     },
     events: {
       recent: [
@@ -180,6 +232,7 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
 
 beforeEach(() => {
   getPprByEmployeeIdMock.mockReset();
+  getPprByPersonIdMock.mockReset();
   getEmployeeImportCard2OptionalMock.mockReset();
   pushMock.mockReset();
   Element.prototype.scrollIntoView = vi.fn();
@@ -218,6 +271,7 @@ describe("PprPersonalCardPageClient", () => {
     expect(screen.queryByRole("button", { name: /редактир/i })).not.toBeInTheDocument();
     expect(screen.getByText("КазНМУ")).toBeInTheDocument();
     expect(screen.getByText("Первая помощь")).toBeInTheDocument();
+    expect(screen.getByText("Иванова Мария Петровна")).toBeInTheDocument();
     expect(screen.getByText("Личная карточка сформирована")).toBeInTheDocument();
     expect(screen.getByTestId("assignment-section")).toBeInTheDocument();
     expect(screen.getByTestId("orders-section")).toBeInTheDocument();
@@ -240,6 +294,7 @@ describe("PprPersonalCardPageClient", () => {
     const nav = screen.getByRole("navigation", { name: /Разделы Личная карточка/ });
     expect(within(nav).getByRole("link", { name: "Образование" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Обучение и повышение квалификации" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Родственники" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая деятельность" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();
   });
@@ -293,10 +348,11 @@ describe("PprPersonalCardPageClient", () => {
       expect(screen.getByText("КазНМУ")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: /Заменённые записи \(1\)/ })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+    const educationSection = document.getElementById("education");
+    expect(educationSection).not.toBeNull();
+    expect(
+      within(educationSection as HTMLElement).getByRole("button", { name: /Заменённые записи \(1\)/ }),
+    ).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Школа №1")).not.toBeInTheDocument();
     expect(screen.queryByText("Аннулированный колледж")).not.toBeInTheDocument();
   });
@@ -310,7 +366,10 @@ describe("PprPersonalCardPageClient", () => {
       expect(screen.getByText("КазНМУ")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Заменённые записи \(1\)/ }));
+    const educationSection = document.getElementById("education");
+    fireEvent.click(
+      within(educationSection as HTMLElement).getByRole("button", { name: /Заменённые записи \(1\)/ }),
+    );
     expect(screen.getByText("Школа №1")).toBeInTheDocument();
   });
 
@@ -417,6 +476,91 @@ describe("PprPersonalCardPageClient", () => {
     expect(within(nav).getByRole("link", { name: "Общие сведения" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Образование" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();
+  });
+
+  it("collapses superseded and voided family groups by default", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Иванова Мария Петровна")).toBeInTheDocument();
+    });
+
+    const familySection = document.getElementById("family");
+    expect(familySection).not.toBeNull();
+    expect(
+      within(familySection as HTMLElement).getByRole("button", { name: /Заменённые записи \(1\)/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Иванова Анна Семёновна (устар.)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Иванов Пётр Иванович")).not.toBeInTheDocument();
+  });
+
+  it("shows family empty state when section has no records", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        sections: {
+          [PPR_SECTION_CODE_EDUCATION]: {
+            section_code: PPR_SECTION_CODE_EDUCATION,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+          [PPR_SECTION_CODE_TRAINING]: {
+            section_code: PPR_SECTION_CODE_TRAINING,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+          [PPR_SECTION_CODE_FAMILY]: {
+            section_code: PPR_SECTION_CODE_FAMILY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Сведения о родственниках отсутствуют.")).toBeInTheDocument();
+    });
+  });
+
+  it("renders family section for applicant card", async () => {
+    getPprByPersonIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        identity: {
+          requested_person_id: 501,
+          requested_employee_id: null,
+          resolved_person_id: 501,
+          merge_redirected: false,
+          merge_chain: [501],
+          employee_context_id: null,
+          person_status: "active",
+          match_key: "iin:seed",
+          iin: "900101350123",
+        },
+        materialization: {
+          materialized: true,
+          lifecycle_state: "CREATED",
+          hr_relationship_context: PPR_HR_RELATIONSHIP_CANDIDATE,
+          envelope_version: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-02-01T00:00:00Z",
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient personId="501" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ppr-applicant-status-banner")).toBeInTheDocument();
+      expect(screen.getByText("Иванова Мария Петровна")).toBeInTheDocument();
+    });
+    expect(getPprByPersonIdMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not expose legacy import-card dual-fetch", async () => {

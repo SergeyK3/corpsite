@@ -100,3 +100,19 @@ export function formatPprDateTime(value: string | null | undefined): string {
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleString("ru-RU");
 }
+
+const RELATIONSHIP_TYPE_LABELS: Record<string, string> = {
+  father: "Отец",
+  mother: "Мать",
+  brother: "Брат",
+  sister: "Сестра",
+  son: "Сын",
+  daughter: "Дочь",
+  spouse: "Супруг(а)",
+  other_close: "Иной близкий родственник",
+};
+
+export function relationshipTypeLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return RELATIONSHIP_TYPE_LABELS[value] || value;
+}

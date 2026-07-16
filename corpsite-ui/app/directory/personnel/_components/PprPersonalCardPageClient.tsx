@@ -15,10 +15,12 @@ import {
   PPR_HR_RELATIONSHIP_CANDIDATE,
   PPR_LIFECYCLE_NOT_MATERIALIZED,
   PPR_SECTION_CODE_EDUCATION,
+  PPR_SECTION_CODE_FAMILY,
   PPR_SECTION_CODE_TRAINING,
   type PprCompositeReadResponse,
   type PprEducationRecordResponse,
   type PprIntendedEmploymentResponse,
+  type PprRelativeRecordResponse,
   type PprTrainingRecordResponse,
 } from "../_lib/pprQueryTypes";
 import { mapPprCardError, lifecycleStatusLabel, hrRelationshipLabel } from "../_lib/pprCardPresentation";
@@ -27,6 +29,7 @@ import { PprCardSectionNav } from "./PprCardSectionNav";
 import PprCardGeneralSection from "./PprCardGeneralSection";
 import PprCardEducationSection from "./PprCardEducationSection";
 import PprCardTrainingSection from "./PprCardTrainingSection";
+import PprCardFamilySection from "./PprCardFamilySection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
@@ -38,9 +41,15 @@ type Props = {
 };
 
 function isEducationRecord(
-  record: PprEducationRecordResponse | PprTrainingRecordResponse,
+  record: PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse,
 ): record is PprEducationRecordResponse {
   return "education_kind" in record;
+}
+
+function isRelativeRecord(
+  record: PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse,
+): record is PprRelativeRecordResponse {
+  return "relationship_type" in record;
 }
 
 export default function PprPersonalCardPageClient({ employeeId, personId }: Props) {
@@ -102,18 +111,22 @@ export default function PprPersonalCardPageClient({ employeeId, personId }: Prop
 
   const educationSection = ppr?.sections[PPR_SECTION_CODE_EDUCATION];
   const trainingSection = ppr?.sections[PPR_SECTION_CODE_TRAINING];
+  const familySection = ppr?.sections[PPR_SECTION_CODE_FAMILY];
   const educationActive = (educationSection?.active ?? []).filter(isEducationRecord);
   const educationSuperseded = (educationSection?.superseded ?? []).filter(isEducationRecord);
   const educationVoided = (educationSection?.voided ?? []).filter(isEducationRecord);
   const trainingActive = (trainingSection?.active ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r),
+    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r),
   );
   const trainingSuperseded = (trainingSection?.superseded ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r),
+    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r),
   );
   const trainingVoided = (trainingSection?.voided ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r),
+    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r),
   );
+  const familyActive = (familySection?.active ?? []).filter(isRelativeRecord);
+  const familySuperseded = (familySection?.superseded ?? []).filter(isRelativeRecord);
+  const familyVoided = (familySection?.voided ?? []).filter(isRelativeRecord);
 
   const displayName =
     ppr?.general.full_name ||
@@ -254,6 +267,18 @@ export default function PprPersonalCardPageClient({ employeeId, personId }: Prop
                   active={trainingActive}
                   superseded={trainingSuperseded}
                   voided={trainingVoided}
+                />
+              </EmployeeImportCardSection>
+
+              <EmployeeImportCardSection
+                id="family"
+                title="Родственники"
+                description="Сведения о близких родственниках."
+              >
+                <PprCardFamilySection
+                  active={familyActive}
+                  superseded={familySuperseded}
+                  voided={familyVoided}
                 />
               </EmployeeImportCardSection>
 
