@@ -1,17 +1,26 @@
-"""PPR domain error → HTTP mapping for query API (R7)."""
+"""PPR domain error → HTTP mapping for query and command APIs."""
 from __future__ import annotations
 
 from fastapi import HTTPException
 
 from app.ppr.domain.errors import (
+    PprApplicationValidationError,
     PprAuthorizationDeniedError,
+    PprCommandIdConflictError,
+    PprCommandInProgressError,
     PprEmployeeNotFoundError,
     PprEmployeePersonLinkMissingError,
     PprIdentityInputMismatchError,
     PprIdentityResolutionError,
+    PprLifecycleTransitionError,
+    PprNotMaterializedError,
+    PprOptimisticConcurrencyConflictError,
     PprPersonNotFoundError,
     PprReadLegacyAdapterError,
     PprReadPathConfigError,
+    SectionOptimisticConcurrencyConflictError,
+    SectionRecordNotFoundError,
+    SectionValidationError,
 )
 
 
@@ -48,4 +57,29 @@ def map_ppr_query_error(exc: Exception) -> HTTPException | None:
         return ppr_conflict_http409(exc)
     if isinstance(exc, (PprReadPathConfigError, PprReadLegacyAdapterError)):
         return ppr_config_http503(exc)
+    return None
+
+
+def map_ppr_mutation_error(exc: Exception) -> HTTPException | None:
+    mapped = map_ppr_query_error(exc)
+    if mapped is not None:
+        return mapped
+    if isinstance(exc, SectionValidationError):
+        return ppr_validation_http422(exc)
+    if isinstance(exc, SectionRecordNotFoundError):
+        return ppr_not_found_http404(exc)
+    if isinstance(
+        exc,
+        (
+            SectionOptimisticConcurrencyConflictError,
+            PprOptimisticConcurrencyConflictError,
+            PprNotMaterializedError,
+            PprCommandIdConflictError,
+            PprCommandInProgressError,
+            PprLifecycleTransitionError,
+        ),
+    ):
+        return ppr_conflict_http409(exc)
+    if isinstance(exc, PprApplicationValidationError):
+        return ppr_validation_http422(exc)
     return None

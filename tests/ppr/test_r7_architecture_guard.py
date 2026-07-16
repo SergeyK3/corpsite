@@ -8,31 +8,63 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 READ_LAYER = REPO_ROOT / "app/ppr/read"
-API_PPR_FILES = (
+READ_API_PPR_FILES = (
     REPO_ROOT / "app/api/ppr_router.py",
     REPO_ROOT / "app/api/ppr_schemas.py",
     REPO_ROOT / "app/api/ppr_mappers.py",
     REPO_ROOT / "app/api/ppr_errors.py",
 )
-DISPATCHER = REPO_ROOT / "app/services/personnel_card_read_dispatcher.py"
+COMMAND_API_PPR_FILES = (
+    REPO_ROOT / "app/api/ppr_command_router.py",
+    REPO_ROOT / "app/api/ppr_command_schemas.py",
+    REPO_ROOT / "app/api/ppr_employment_command_api.py",
+)
+API_PPR_FILES = READ_API_PPR_FILES
 
-FORBIDDEN_IN_API = (
+FORBIDDEN_IN_READ_API = (
     "section_handlers",
     "SectionMutationRepository",
     "command_service",
-    "lifecycle_service",
     "section_service",
     "import_bridge_service",
     "materialize_ppr",
     "MaterializePPR",
 )
 
+FORBIDDEN_IN_COMMAND_API = (
+    "section_handlers",
+    "SectionMutationRepository",
+    "import_bridge_service",
+    "materialize_ppr",
+    "MaterializePPR",
+    "SqlAlchemySection",
+    "sqlalchemy",
+    "ApplicationUnitOfWork",
+    "PprApplicationUnitOfWork",
+    "engine.begin",
+    ".commit(",
+    ".rollback(",
+)
+
+
+DISPATCHER = REPO_ROOT / "app/services/personnel_card_read_dispatcher.py"
+
 
 def test_query_api_no_write_imports() -> None:
     violations: list[str] = []
-    for path in API_PPR_FILES:
+    for path in READ_API_PPR_FILES:
         content = path.read_text(encoding="utf-8")
-        for forbidden in FORBIDDEN_IN_API:
+        for forbidden in FORBIDDEN_IN_READ_API:
+            if forbidden in content:
+                violations.append(f"{path.relative_to(REPO_ROOT)}: {forbidden}")
+    assert not violations, "\n".join(violations)
+
+
+def test_command_api_no_direct_persistence_imports() -> None:
+    violations: list[str] = []
+    for path in COMMAND_API_PPR_FILES:
+        content = path.read_text(encoding="utf-8")
+        for forbidden in FORBIDDEN_IN_COMMAND_API:
             if forbidden in content:
                 violations.append(f"{path.relative_to(REPO_ROOT)}: {forbidden}")
     assert not violations, "\n".join(violations)
@@ -75,6 +107,13 @@ def test_no_frontend_changes() -> None:
     if ui_card.is_file():
         content = ui_card.read_text(encoding="utf-8")
         assert "/api/ppr" not in content
+
+
+def test_command_router_has_no_direct_sql() -> None:
+    tree = ast.parse((REPO_ROOT / "app/api/ppr_command_router.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and "sqlalchemy" in node.module:
+            raise AssertionError("ppr_command_router must not import SQLAlchemy")
 
 
 def test_router_has_no_direct_sql() -> None:

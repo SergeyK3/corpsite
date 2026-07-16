@@ -39,6 +39,7 @@ from app.api.admin_router import router as admin_router
 from app.api.personnel_admin_router import router as personnel_admin_router
 from app.api.personnel_migration_router import router as personnel_migration_router
 from app.api.ppr_router import router as ppr_router
+from app.api.ppr_command_router import router as ppr_command_router
 from app.operational_orders.router import router as operational_orders_router
 
 
@@ -121,6 +122,7 @@ app.include_router(personnel_admin_router)
 # PMF-3A — personnel migration draft API
 app.include_router(personnel_migration_router)
 app.include_router(ppr_router)
+app.include_router(ppr_command_router)
 app.include_router(operational_orders_router)
 
 # -----------------------
