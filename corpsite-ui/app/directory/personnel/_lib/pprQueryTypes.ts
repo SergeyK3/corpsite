@@ -97,11 +97,44 @@ export type PprExternalEmploymentRecordResponse = {
   updated_at: string | null;
 };
 
+export type PprMilitaryRecordResponse = {
+  record_id: number | null;
+  record_kind: string;
+  obligation_status: string | null;
+  registration_category: string | null;
+  military_rank: string | null;
+  military_specialty_code: string | null;
+  personnel_composition: string | null;
+  fitness_category: string | null;
+  registration_status: string | null;
+  commissariat_name: string | null;
+  registered_at: string | null;
+  deregistered_at: string | null;
+  notes: string | null;
+  source_type: string;
+  provenance: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  employee_context_id: number | null;
+  verification_status: string;
+  lifecycle_status: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type PprMilitaryRecordDetailsResponse = PprMilitaryRecordResponse & {
+  military_id_book_series?: string | null;
+  military_id_book_number?: string | null;
+  registration_certificate_series?: string | null;
+  registration_certificate_number?: string | null;
+};
+
 export type PprSectionRecordResponse =
   | PprEducationRecordResponse
   | PprTrainingRecordResponse
   | PprRelativeRecordResponse
-  | PprExternalEmploymentRecordResponse;
+  | PprExternalEmploymentRecordResponse
+  | PprMilitaryRecordResponse
+  | PprMilitaryRecordDetailsResponse;
 
 export type PprSectionResponse = {
   section_code: string;
@@ -181,6 +214,10 @@ export const PPR_SECTION_CODE_EDUCATION = "PPR-EDUCATION";
 export const PPR_SECTION_CODE_TRAINING = "PPR-TRAINING";
 export const PPR_SECTION_CODE_FAMILY = "PPR-FAMILY";
 export const PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY = "PPR-EMPLOYMENT-BIOGRAPHY";
+export const PPR_SECTION_CODE_MILITARY = "PPR-MILITARY";
+
+export const PPR_MILITARY_RECORD_KIND_REGISTRATION = "registration";
+export const PPR_MILITARY_RECORD_KIND_NOT_APPLICABLE = "not_applicable";
 
 export const PPR_EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE = "episode";
 export const PPR_EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY = "narrative_summary";

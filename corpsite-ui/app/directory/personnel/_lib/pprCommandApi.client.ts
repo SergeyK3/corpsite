@@ -188,3 +188,143 @@ export async function supersedeExternalEmployment(
     ? supersedeExternalEmploymentByPerson(route.id, recordId, body)
     : supersedeExternalEmploymentByEmployee(route.id, recordId, body);
 }
+
+export type PprMilitaryServiceRecordWrite = {
+  record_kind: string;
+  employee_context_id?: number | null;
+  obligation_status?: string | null;
+  registration_category?: string | null;
+  military_rank?: string | null;
+  military_specialty_code?: string | null;
+  personnel_composition?: string | null;
+  fitness_category?: string | null;
+  registration_status?: string | null;
+  commissariat_name?: string | null;
+  registered_at?: string | null;
+  deregistered_at?: string | null;
+  military_id_book_series?: string | null;
+  military_id_book_number?: string | null;
+  registration_certificate_series?: string | null;
+  registration_certificate_number?: string | null;
+  notes?: string | null;
+  source_type?: string | null;
+  provenance?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type PprMilitaryServiceCreateBody = {
+  command_id: string;
+  correlation_id?: string | null;
+  record: PprMilitaryServiceRecordWrite;
+};
+
+export type PprMilitaryServiceVoidBody = {
+  command_id: string;
+  correlation_id?: string | null;
+  reason: string;
+  expected_updated_at: string;
+};
+
+export type PprMilitaryServiceSupersedeBody = {
+  command_id: string;
+  correlation_id?: string | null;
+  expected_updated_at: string;
+  replacement: PprMilitaryServiceRecordWrite;
+};
+
+export type PprMilitaryServiceRoute =
+  | { kind: "person"; id: number }
+  | { kind: "employee"; id: string };
+
+export async function createMilitaryServiceByPerson(
+  personId: string | number,
+  body: PprMilitaryServiceCreateBody,
+): Promise<PprCommandMutationResponse> {
+  return pprPostJson<PprCommandMutationResponse>(
+    `/api/ppr/persons/${encodeURIComponent(String(personId))}/military-service/records`,
+    body,
+  );
+}
+
+export async function createMilitaryServiceByEmployee(
+  employeeId: string | number,
+  body: PprMilitaryServiceCreateBody,
+): Promise<PprCommandMutationResponse> {
+  return pprPostJson<PprCommandMutationResponse>(
+    `/api/ppr/employees/${encodeURIComponent(String(employeeId))}/military-service/records`,
+    body,
+  );
+}
+
+export async function voidMilitaryServiceByPerson(
+  personId: string | number,
+  recordId: string | number,
+  body: PprMilitaryServiceVoidBody,
+): Promise<PprCommandMutationResponse> {
+  return pprPostJson<PprCommandMutationResponse>(
+    `/api/ppr/persons/${encodeURIComponent(String(personId))}/military-service/records/${encodeURIComponent(String(recordId))}/void`,
+    body,
+  );
+}
+
+export async function voidMilitaryServiceByEmployee(
+  employeeId: string | number,
+  recordId: string | number,
+  body: PprMilitaryServiceVoidBody,
+): Promise<PprCommandMutationResponse> {
+  return pprPostJson<PprCommandMutationResponse>(
+    `/api/ppr/employees/${encodeURIComponent(String(employeeId))}/military-service/records/${encodeURIComponent(String(recordId))}/void`,
+    body,
+  );
+}
+
+export async function supersedeMilitaryServiceByPerson(
+  personId: string | number,
+  recordId: string | number,
+  body: PprMilitaryServiceSupersedeBody,
+): Promise<PprCommandMutationResponse> {
+  return pprPostJson<PprCommandMutationResponse>(
+    `/api/ppr/persons/${encodeURIComponent(String(personId))}/military-service/records/${encodeURIComponent(String(recordId))}/supersede`,
+    body,
+  );
+}
+
+export async function supersedeMilitaryServiceByEmployee(
+  employeeId: string | number,
+  recordId: string | number,
+  body: PprMilitaryServiceSupersedeBody,
+): Promise<PprCommandMutationResponse> {
+  return pprPostJson<PprCommandMutationResponse>(
+    `/api/ppr/employees/${encodeURIComponent(String(employeeId))}/military-service/records/${encodeURIComponent(String(recordId))}/supersede`,
+    body,
+  );
+}
+
+export async function createMilitaryService(
+  route: PprMilitaryServiceRoute,
+  body: PprMilitaryServiceCreateBody,
+): Promise<PprCommandMutationResponse> {
+  return route.kind === "person"
+    ? createMilitaryServiceByPerson(route.id, body)
+    : createMilitaryServiceByEmployee(route.id, body);
+}
+
+export async function voidMilitaryService(
+  route: PprMilitaryServiceRoute,
+  recordId: number,
+  body: PprMilitaryServiceVoidBody,
+): Promise<PprCommandMutationResponse> {
+  return route.kind === "person"
+    ? voidMilitaryServiceByPerson(route.id, recordId, body)
+    : voidMilitaryServiceByEmployee(route.id, recordId, body);
+}
+
+export async function supersedeMilitaryService(
+  route: PprMilitaryServiceRoute,
+  recordId: number,
+  body: PprMilitaryServiceSupersedeBody,
+): Promise<PprCommandMutationResponse> {
+  return route.kind === "person"
+    ? supersedeMilitaryServiceByPerson(route.id, recordId, body)
+    : supersedeMilitaryServiceByEmployee(route.id, recordId, body);
+}

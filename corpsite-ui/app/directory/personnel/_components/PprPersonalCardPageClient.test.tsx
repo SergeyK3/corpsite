@@ -7,7 +7,9 @@ import {
   PPR_SECTION_CODE_EDUCATION,
   PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
   PPR_SECTION_CODE_FAMILY,
+  PPR_SECTION_CODE_MILITARY,
   PPR_SECTION_CODE_TRAINING,
+  PPR_MILITARY_RECORD_KIND_REGISTRATION,
   type PprCompositeReadResponse,
 } from "../_lib/pprQueryTypes";
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
@@ -199,6 +201,36 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
           },
         ],
       },
+      [PPR_SECTION_CODE_MILITARY]: {
+        section_code: PPR_SECTION_CODE_MILITARY,
+        active: [
+          {
+            record_id: 301,
+            record_kind: PPR_MILITARY_RECORD_KIND_REGISTRATION,
+            obligation_status: "liable",
+            registration_category: "II",
+            military_rank: "рядовой",
+            military_specialty_code: "123456",
+            personnel_composition: "soldiers",
+            fitness_category: "А",
+            registration_status: "registered",
+            commissariat_name: "Алмалинский РВК",
+            registered_at: "2015-05-01",
+            deregistered_at: null,
+            notes: null,
+            source_type: "entered",
+            provenance: null,
+            metadata: null,
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "active",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-03-01T00:00:00Z",
+          },
+        ],
+        superseded: [],
+        voided: [],
+      },
       [PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY]: {
         section_code: PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
         active: [
@@ -368,6 +400,7 @@ describe("PprPersonalCardPageClient", () => {
     expect(within(nav).getByRole("link", { name: "Образование" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Обучение и повышение квалификации" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Родственники" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Воинский учёт" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая биография" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая деятельность" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();
@@ -834,6 +867,106 @@ describe("PprPersonalCardPageClient", () => {
     await waitFor(() => {
       expect(screen.getByTestId("ppr-applicant-status-banner")).toBeInTheDocument();
       expect(screen.getByText("Иванова Мария Петровна")).toBeInTheDocument();
+    });
+    expect(getPprByPersonIdMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders military section with active record", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("military-record-301")).toBeInTheDocument();
+      expect(screen.getByText("Алмалинский РВК")).toBeInTheDocument();
+    });
+  });
+
+  it("shows military empty state", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        sections: {
+          [PPR_SECTION_CODE_MILITARY]: {
+            section_code: PPR_SECTION_CODE_MILITARY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("military-empty")).toBeInTheDocument();
+      expect(screen.getByText("Сведения о воинском учёте отсутствуют.")).toBeInTheDocument();
+    });
+  });
+
+  it("shows military mutations for materialized editable card", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" canEditPprSections />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("military-create-btn")).toBeInTheDocument();
+      expect(screen.getByTestId("military-supersede-btn-301")).toBeInTheDocument();
+      expect(screen.getByTestId("military-void-btn-301")).toBeInTheDocument();
+    });
+  });
+
+  it("hides military mutations for read-only card access", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" canEditPprSections={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("military-record-301")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("military-create-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("military-supersede-btn-301")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("military-void-btn-301")).not.toBeInTheDocument();
+  });
+
+  it("shows military on person card with editable actions", async () => {
+    getPprByPersonIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        identity: {
+          requested_person_id: 501,
+          requested_employee_id: null,
+          resolved_person_id: 501,
+          merge_redirected: false,
+          merge_chain: [501],
+          employee_context_id: null,
+          person_status: "active",
+          match_key: "iin:seed",
+          iin: "900101350123",
+        },
+        materialization: {
+          materialized: true,
+          lifecycle_state: "CREATED",
+          hr_relationship_context: PPR_HR_RELATIONSHIP_CANDIDATE,
+          envelope_version: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-02-01T00:00:00Z",
+        },
+        sections: {
+          [PPR_SECTION_CODE_MILITARY]: {
+            section_code: PPR_SECTION_CODE_MILITARY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient personId="501" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("military-empty")).toBeInTheDocument();
+      expect(screen.getByTestId("military-create-btn")).toBeInTheDocument();
     });
     expect(getPprByPersonIdMock).toHaveBeenCalledTimes(1);
   });

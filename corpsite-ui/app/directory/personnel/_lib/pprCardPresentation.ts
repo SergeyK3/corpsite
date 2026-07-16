@@ -128,6 +128,62 @@ export function externalEmploymentRecordKindLabel(value: string | null | undefin
   return EXTERNAL_EMPLOYMENT_RECORD_KIND_LABELS[value] || value;
 }
 
+const MILITARY_RECORD_KIND_LABELS: Record<string, string> = {
+  registration: "Сведения о воинском учёте",
+  not_applicable: "Не подлежит воинскому учёту",
+};
+
+export function militaryRecordKindLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return MILITARY_RECORD_KIND_LABELS[value] || value;
+}
+
+const OBLIGATION_STATUS_LABELS: Record<string, string> = {
+  liable: "Военнообязанный",
+  not_liable: "Не военнообязанный",
+  exempt: "Освобождён",
+  unknown: "Не определено",
+};
+
+export function obligationStatusLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return OBLIGATION_STATUS_LABELS[value] || value;
+}
+
+const REGISTRATION_STATUS_LABELS: Record<string, string> = {
+  registered: "Состоит на учёте",
+  deregistered: "Снят с учёта",
+  reserved: "В запасе",
+  deferment: "Отсрочка",
+  unknown: "Не определено",
+};
+
+export function registrationStatusLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return REGISTRATION_STATUS_LABELS[value] || value;
+}
+
+const PERSONNEL_COMPOSITION_LABELS: Record<string, string> = {
+  soldiers: "Рядовой и сержантский состав",
+  sergeants: "Сержантский состав",
+  officers: "Офицерский состав",
+  other: "Иной состав",
+};
+
+export function personnelCompositionLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return PERSONNEL_COMPOSITION_LABELS[value] || value;
+}
+
+export function isPprDisplayValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 && trimmed !== "***";
+  }
+  return true;
+}
+
 export function mapPprMutationError(error: unknown): string {
   const api = error as { status?: number; message?: string; detail?: string };
   const status = typeof api.status === "number" ? api.status : undefined;
@@ -137,7 +193,7 @@ export function mapPprMutationError(error: unknown): string {
       : typeof api.message === "string"
         ? api.message
         : null;
-  if (status === 403) return "Недостаточно прав для изменения трудовой биографии.";
+  if (status === 403) return "Недостаточно прав для изменения записи.";
   if (status === 404) return "Запись не найдена. Обновите данные и повторите.";
   if (status === 409) {
     return detail || "Данные были изменены другим пользователем. Обновите карточку и повторите.";

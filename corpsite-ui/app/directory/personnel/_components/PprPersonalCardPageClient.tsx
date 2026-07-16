@@ -17,23 +17,26 @@ import {
   PPR_SECTION_CODE_EDUCATION,
   PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
   PPR_SECTION_CODE_FAMILY,
+  PPR_SECTION_CODE_MILITARY,
   PPR_SECTION_CODE_TRAINING,
   type PprCompositeReadResponse,
   type PprEducationRecordResponse,
   type PprExternalEmploymentRecordResponse,
   type PprIntendedEmploymentResponse,
+  type PprMilitaryRecordResponse,
   type PprRelativeRecordResponse,
   type PprSectionRecordResponse,
   type PprTrainingRecordResponse,
 } from "../_lib/pprQueryTypes";
 import { mapPprCardError, lifecycleStatusLabel, hrRelationshipLabel } from "../_lib/pprCardPresentation";
-import type { PprEmploymentBiographyRoute } from "../_lib/pprCommandApi.client";
+import type { PprEmploymentBiographyRoute, PprMilitaryServiceRoute } from "../_lib/pprCommandApi.client";
 import { EmployeeImportCardSection } from "./EmployeeImportCardSection";
 import { PprCardSectionNav } from "./PprCardSectionNav";
 import PprCardGeneralSection from "./PprCardGeneralSection";
 import PprCardEducationSection from "./PprCardEducationSection";
 import PprCardTrainingSection from "./PprCardTrainingSection";
 import PprCardFamilySection from "./PprCardFamilySection";
+import PprCardMilitarySection from "./PprCardMilitarySection";
 import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
@@ -58,7 +61,11 @@ function isRelativeRecord(record: PprSectionRecordResponse): record is PprRelati
 function isExternalEmploymentRecord(
   record: PprSectionRecordResponse,
 ): record is PprExternalEmploymentRecordResponse {
-  return "record_kind" in record;
+  return "source_system" in record && "record_kind" in record;
+}
+
+function isMilitaryRecord(record: PprSectionRecordResponse): record is PprMilitaryRecordResponse {
+  return "source_type" in record && !("source_system" in record);
 }
 
 export default function PprPersonalCardPageClient({
@@ -125,22 +132,29 @@ export default function PprPersonalCardPageClient({
   const educationSection = ppr?.sections[PPR_SECTION_CODE_EDUCATION];
   const trainingSection = ppr?.sections[PPR_SECTION_CODE_TRAINING];
   const familySection = ppr?.sections[PPR_SECTION_CODE_FAMILY];
+  const militarySection = ppr?.sections[PPR_SECTION_CODE_MILITARY];
   const employmentBiographySection = ppr?.sections[PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY];
   const educationActive = (educationSection?.active ?? []).filter(isEducationRecord);
   const educationSuperseded = (educationSection?.superseded ?? []).filter(isEducationRecord);
   const educationVoided = (educationSection?.voided ?? []).filter(isEducationRecord);
   const trainingActive = (trainingSection?.active ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r),
+    (r): r is PprTrainingRecordResponse =>
+      !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r) && !isMilitaryRecord(r),
   );
   const trainingSuperseded = (trainingSection?.superseded ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r),
+    (r): r is PprTrainingRecordResponse =>
+      !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r) && !isMilitaryRecord(r),
   );
   const trainingVoided = (trainingSection?.voided ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r),
+    (r): r is PprTrainingRecordResponse =>
+      !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r) && !isMilitaryRecord(r),
   );
   const familyActive = (familySection?.active ?? []).filter(isRelativeRecord);
   const familySuperseded = (familySection?.superseded ?? []).filter(isRelativeRecord);
   const familyVoided = (familySection?.voided ?? []).filter(isRelativeRecord);
+  const militaryActive = (militarySection?.active ?? []).filter(isMilitaryRecord);
+  const militarySuperseded = (militarySection?.superseded ?? []).filter(isMilitaryRecord);
+  const militaryVoided = (militarySection?.voided ?? []).filter(isMilitaryRecord);
   const employmentBiographyActive = (employmentBiographySection?.active ?? []).filter(isExternalEmploymentRecord);
   const employmentBiographySuperseded = (employmentBiographySection?.superseded ?? []).filter(isExternalEmploymentRecord);
   const employmentBiographyVoided = (employmentBiographySection?.voided ?? []).filter(isExternalEmploymentRecord);
@@ -154,8 +168,16 @@ export default function PprPersonalCardPageClient({
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
   const employmentBiographyEditable = !notMaterialized && canEditPprSections;
+  const militaryEditable = !notMaterialized && canEditPprSections;
 
   const employmentBiographyRoute: PprEmploymentBiographyRoute | null =
+    personId != null
+      ? { kind: "person", id: Number(personId) }
+      : resolvedEmployeeId != null
+        ? { kind: "employee", id: resolvedEmployeeId }
+        : null;
+
+  const militaryRoute: PprMilitaryServiceRoute | null =
     personId != null
       ? { kind: "person", id: Number(personId) }
       : resolvedEmployeeId != null
@@ -306,6 +328,23 @@ export default function PprPersonalCardPageClient({
                   voided={familyVoided}
                 />
               </EmployeeImportCardSection>
+
+              {militaryRoute ? (
+                <EmployeeImportCardSection
+                  id="military"
+                  title="Воинский учёт"
+                  description="Сведения о воинской обязанности и воинском учёте."
+                >
+                  <PprCardMilitarySection
+                    active={militaryActive}
+                    superseded={militarySuperseded}
+                    voided={militaryVoided}
+                    route={militaryRoute}
+                    editable={militaryEditable}
+                    onMutated={() => loadCard()}
+                  />
+                </EmployeeImportCardSection>
+              ) : null}
 
               {employmentBiographyRoute ? (
                 <EmployeeImportCardSection
