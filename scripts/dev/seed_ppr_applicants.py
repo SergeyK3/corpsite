@@ -19,12 +19,16 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from app.db.engine import engine
-from app.db.models.personnel_migration import EDUCATION_KIND_BASIC
+from app.db.models.personnel_migration import (
+    EDUCATION_KIND_BASIC,
+    TRAINING_KIND_CONTINUING_EDUCATION,
+)
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
 from app.services.ppr_candidate_service import save_intended_employment
 
 APPLICANTS = [
     {
+        "key": "ahmetov",
         "full_name": "Ахметов Айдар Серикович",
         "iin": "900101350123",
         "birth_date": date(1990, 1, 1),
@@ -36,8 +40,21 @@ APPLICANTS = [
             "completed_at": date(2014, 6, 30),
         },
         "intended_rate": 1.0,
+        "intended_complete": True,
+        "training": [
+            {
+                "training_kind": TRAINING_KIND_CONTINUING_EDUCATION,
+                "title": "Организация архивного дела в медицинских учреждениях",
+                "organization_name": "Казахский медицинский университет непрерывного образования",
+                "started_at": date(2024, 9, 1),
+                "completed_at": date(2025, 2, 28),
+                "hours": 72,
+                "source_field": "continuing_education",
+            },
+        ],
     },
     {
+        "key": "seitova",
         "full_name": "Сейтова Алия Маратовна",
         "iin": "950515450456",
         "birth_date": date(1995, 5, 15),
@@ -49,44 +66,65 @@ APPLICANTS = [
             "completed_at": date(2018, 6, 25),
         },
         "intended_rate": 0.5,
+        "intended_complete": False,
+        "training": [],
     },
 ]
 
 
-def _pick_placement(conn) -> tuple[int | None, int, int]:
-    unit = conn.execute(
+def _pick_placement(conn) -> tuple[int, int, int]:
+    """Pick a consistent org_group_id + org_unit_id + position_id triple.
+
+    Prefers HR (unit 73) with «Архивариус МЦ» when present — matches Ahmetov's
+    test narrative. Never uses the MMC root (unit 41 / ORG_MAIN): its group_id is
+    NULL and must not be paired with a deps_group row.
+    """
+    preferred = conn.execute(
         text(
             """
-            SELECT unit_id
-            FROM public.org_units
-            WHERE COALESCE(is_active, TRUE) = TRUE
-            ORDER BY unit_id ASC
+            SELECT ou.group_id, ou.unit_id, p.position_id
+            FROM public.org_units ou
+            JOIN public.org_unit_allowed_positions ouap
+              ON ouap.org_unit_id = ou.unit_id
+            JOIN public.positions p
+              ON p.position_id = ouap.position_id
+            WHERE ou.unit_id = 73
+              AND p.position_id = 340
+              AND ou.group_id IS NOT NULL
+              AND COALESCE(ou.is_active, TRUE) = TRUE
             LIMIT 1
             """
         )
     ).mappings().first()
-    if unit is None:
-        raise RuntimeError("No org_units found — seed org structure first.")
-    org_unit_id = int(unit["unit_id"])
+    if preferred is not None:
+        return (
+            int(preferred["group_id"]),
+            int(preferred["unit_id"]),
+            int(preferred["position_id"]),
+        )
 
-    group = conn.execute(
+    row = conn.execute(
         text(
             """
-            SELECT group_id
-            FROM public.deps_group
-            ORDER BY group_id ASC
+            SELECT ou.group_id, ou.unit_id, MIN(p.position_id) AS position_id
+            FROM public.org_units ou
+            JOIN public.org_unit_allowed_positions ouap
+              ON ouap.org_unit_id = ou.unit_id
+            JOIN public.positions p
+              ON p.position_id = ouap.position_id
+            WHERE ou.group_id IS NOT NULL
+              AND COALESCE(ou.is_active, TRUE) = TRUE
+            GROUP BY ou.group_id, ou.unit_id
+            ORDER BY ou.group_id ASC, ou.unit_id ASC
             LIMIT 1
             """
         )
     ).mappings().first()
-    org_group_id = int(group["group_id"]) if group else None
-
-    position = conn.execute(
-        text("SELECT position_id FROM public.positions ORDER BY position_id ASC LIMIT 1")
-    ).mappings().first()
-    if position is None:
-        raise RuntimeError("No positions found — seed positions first.")
-    return org_group_id, org_unit_id, int(position["position_id"])
+    if row is None:
+        raise RuntimeError(
+            "No org unit with group_id and allowed positions — seed org structure first."
+        )
+    return int(row["group_id"]), int(row["unit_id"]), int(row["position_id"])
 
 
 def _upsert_person(conn, *, full_name: str, iin: str, birth_date: date) -> int:
@@ -156,21 +194,16 @@ def _materialize_candidate(person_id: int) -> None:
 
 
 def _insert_education(conn, *, person_id: int, education: dict) -> None:
-    existing = conn.execute(
+    conn.execute(
         text(
             """
-            SELECT 1
-            FROM public.person_education
+            DELETE FROM public.person_education
             WHERE person_id = :person_id
               AND institution_name = :institution_name
-            LIMIT 1
             """
         ),
         {"person_id": person_id, "institution_name": education["institution_name"]},
-    ).first()
-    if existing:
-        return
-
+    )
     conn.execute(
         text(
             """
@@ -200,6 +233,49 @@ def _insert_education(conn, *, person_id: int, education: dict) -> None:
     )
 
 
+def _replace_training(conn, *, person_id: int, records: list[dict]) -> None:
+    conn.execute(
+        text("DELETE FROM public.person_training WHERE person_id = :person_id"),
+        {"person_id": person_id},
+    )
+    for record in records:
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.person_training (
+                    person_id,
+                    training_kind,
+                    title,
+                    organization_name,
+                    hours,
+                    started_at,
+                    completed_at,
+                    verification_status,
+                    lifecycle_status,
+                    source_field
+                )
+                VALUES (
+                    :person_id,
+                    :training_kind,
+                    :title,
+                    :organization_name,
+                    :hours,
+                    :started_at,
+                    :completed_at,
+                    'verified',
+                    'active',
+                    :source_field
+                )
+                """
+            ),
+            {
+                "person_id": person_id,
+                "hours": record.get("hours"),
+                **record,
+            },
+        )
+
+
 def seed(*, dry_run: bool) -> list[dict]:
     if dry_run:
         return [{"dry_run": True, **spec} for spec in APPLICANTS]
@@ -219,25 +295,31 @@ def seed(*, dry_run: bool) -> list[dict]:
 
         _materialize_candidate(person_id)
 
+        intended_position_id = position_id if spec.get("intended_complete", True) else None
+
         with engine.begin() as conn:
             save_intended_employment(
                 conn,
                 person_id=person_id,
                 org_group_id=org_group_id,
                 org_unit_id=org_unit_id,
-                position_id=position_id,
+                position_id=intended_position_id,
                 employment_rate=float(spec["intended_rate"]),
             )
             _insert_education(conn, person_id=person_id, education=spec["education"])
+            _replace_training(conn, person_id=person_id, records=list(spec.get("training") or []))
 
         created.append(
             {
                 "person_id": person_id,
+                "key": spec["key"],
                 "full_name": spec["full_name"],
                 "iin": spec["iin"],
+                "org_group_id": org_group_id,
                 "org_unit_id": org_unit_id,
-                "position_id": position_id,
+                "position_id": intended_position_id,
                 "employment_rate": spec["intended_rate"],
+                "intended_complete": spec.get("intended_complete", True),
             }
         )
     return created
