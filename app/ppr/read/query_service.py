@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.ppr.application.identity_resolution import resolve_canonical_person_id
 from app.ppr.domain.errors import PprIdentityInputMismatchError
 from app.ppr.domain.identity_models import IdentityResolution, PersonIdentitySnapshot
-from app.ppr.domain.section_models import SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_TRAINING
+from app.ppr.domain.section_models import SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_FAMILY, SECTION_CODE_PPR_TRAINING
 from app.ppr.read.models import PprCompositeReadModel, PprCompositeSummary, PprSectionAggregation
 from app.ppr.read.orchestrator import PprCompositeReadOrchestrator
 from app.ppr.read.section_aggregation import PprSectionAggregationReader
@@ -99,6 +99,11 @@ class PprQueryApplicationService:
                     include_voided=include_superseded_void,
                 ),
                 SECTION_CODE_PPR_TRAINING: reader.load_training(
+                    survivor_id,
+                    include_superseded=include_superseded_void,
+                    include_voided=include_superseded_void,
+                ),
+                SECTION_CODE_PPR_FAMILY: reader.load_family(
                     survivor_id,
                     include_superseded=include_superseded_void,
                     include_voided=include_superseded_void,

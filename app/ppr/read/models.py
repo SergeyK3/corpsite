@@ -119,6 +119,7 @@ class PprCompositeReadModel:
     general: PersonGeneralReadSnapshot
     education: PprSectionAggregation
     training: PprSectionAggregation
+    family: PprSectionAggregation
     events: PprEventSummary | None
     intended_employment: PprIntendedEmploymentReadSlice | None
     metadata: PprCompositeReadMetadata
@@ -138,5 +139,6 @@ class PprCompositeSummary:
     full_name: str
     education_active_count: int
     training_active_count: int
+    family_active_count: int
     recent_event_count: int
     metadata: PprCompositeReadMetadata

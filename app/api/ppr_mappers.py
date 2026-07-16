@@ -14,12 +14,35 @@ from app.api.ppr_schemas import (
     PprIntendedEmploymentResponse,
     PprMaterializationResponse,
     PprReadMetadataResponse,
+    PprRelativeRecordResponse,
     PprSectionResponse,
     PprTrainingRecordResponse,
 )
 from app.ppr.domain.identity_models import INPUT_KIND_EMPLOYEE_ID, INPUT_KIND_PERSON_ID
-from app.ppr.domain.section_models import EducationRecord, SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_TRAINING, TrainingRecord
+from app.ppr.domain.section_models import (
+    EducationRecord,
+    RelativeRecord,
+    SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_TRAINING,
+    TrainingRecord,
+)
 from app.ppr.read.models import PprCompositeReadModel, PprCompositeSummary, PprSectionAggregation
+
+RELATIONSHIP_TYPE_LABELS: dict[str, str] = {
+    "father": "Отец",
+    "mother": "Мать",
+    "brother": "Брат",
+    "sister": "Сестра",
+    "son": "Сын",
+    "daughter": "Дочь",
+    "spouse": "Супруг(а)",
+    "other_close": "Иной близкий родственник",
+}
+
+
+def _relationship_type_label(relationship_type: str) -> str:
+    return RELATIONSHIP_TYPE_LABELS.get(relationship_type, relationship_type)
 
 
 def _mask_iin(iin: str | None) -> str | None:
@@ -64,11 +87,31 @@ def _training_record(record: TrainingRecord) -> PprTrainingRecordResponse:
     )
 
 
+def _relative_record(record: RelativeRecord) -> PprRelativeRecordResponse:
+    return PprRelativeRecordResponse(
+        record_id=record.record_id,
+        relationship_type=record.relationship_type,
+        relationship_label=_relationship_type_label(record.relationship_type),
+        full_name=record.full_name,
+        birth_date=record.birth_date,
+        birth_place=record.birth_place,
+        organization_name=record.organization_name,
+        residence_address=record.residence_address,
+        notes=record.notes,
+        verification_status=record.verification_status,
+        lifecycle_status=record.lifecycle_status,
+    )
+
+
 def _section_response(section: PprSectionAggregation) -> PprSectionResponse:
     if section.section_code == SECTION_CODE_PPR_EDUCATION:
         mapper = _education_record
-    else:
+    elif section.section_code == SECTION_CODE_PPR_TRAINING:
         mapper = _training_record
+    elif section.section_code == SECTION_CODE_PPR_FAMILY:
+        mapper = _relative_record
+    else:
+        raise ValueError(f"Unsupported section_code for API mapping: {section.section_code!r}")
     return PprSectionResponse(
         section_code=section.section_code,
         active=[mapper(record) for record in section.active],  # type: ignore[arg-type]
@@ -136,6 +179,7 @@ def composite_to_response(
         sections={
             SECTION_CODE_PPR_EDUCATION: _section_response(composite.education),
             SECTION_CODE_PPR_TRAINING: _section_response(composite.training),
+            SECTION_CODE_PPR_FAMILY: _section_response(composite.family),
         },
         events=(
             PprEventSummaryResponse(
@@ -208,6 +252,7 @@ def summary_to_response(
         full_name=summary.full_name,
         education_active_count=summary.education_active_count,
         training_active_count=summary.training_active_count,
+        family_active_count=summary.family_active_count,
         recent_event_count=summary.recent_event_count,
         metadata=PprReadMetadataResponse(
             read_mode=read_mode,

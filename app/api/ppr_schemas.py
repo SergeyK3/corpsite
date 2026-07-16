@@ -99,11 +99,31 @@ class PprTrainingRecordResponse(BaseModel):
     lifecycle_status: str
 
 
+class PprRelativeRecordResponse(BaseModel):
+    record_id: int | None = None
+    relationship_type: str
+    relationship_label: str | None = None
+    full_name: str
+    birth_date: date | None = None
+    birth_place: str | None = None
+    organization_name: str | None = None
+    residence_address: str | None = None
+    notes: str | None = None
+    verification_status: str
+    lifecycle_status: str
+
+
 class PprSectionResponse(BaseModel):
     section_code: str
-    active: list[PprEducationRecordResponse | PprTrainingRecordResponse] = Field(default_factory=list)
-    superseded: list[PprEducationRecordResponse | PprTrainingRecordResponse] = Field(default_factory=list)
-    voided: list[PprEducationRecordResponse | PprTrainingRecordResponse] = Field(default_factory=list)
+    active: list[
+        PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse
+    ] = Field(default_factory=list)
+    superseded: list[
+        PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse
+    ] = Field(default_factory=list)
+    voided: list[
+        PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse
+    ] = Field(default_factory=list)
 
 
 class PprEventSummaryItemResponse(BaseModel):
@@ -151,5 +171,6 @@ class PprCompositeSummaryResponse(BaseModel):
     full_name: str
     education_active_count: int
     training_active_count: int
+    family_active_count: int
     recent_event_count: int
     metadata: PprReadMetadataResponse

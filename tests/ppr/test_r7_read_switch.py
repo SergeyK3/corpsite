@@ -17,7 +17,7 @@ from app.ppr.domain.identity_models import (
 )
 from app.ppr.domain.models import PPR_LIFECYCLE_NOT_MATERIALIZED
 from app.ppr.domain.person_models import PersonGeneralReadSnapshot
-from app.ppr.domain.section_models import SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_TRAINING
+from app.ppr.domain.section_models import SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_FAMILY, SECTION_CODE_PPR_TRAINING
 from app.ppr.read.models import PprCompositeReadMetadata, PprCompositeReadModel, PprSectionAggregation
 from app.ppr.read.query_service import PprQueryApplicationService
 from app.services.personnel_card_read_dispatcher import PersonnelCardReadDispatcher
@@ -67,6 +67,7 @@ def _fake_composite(person_id: int = 1, employee_id: int = 2) -> PprCompositeRea
         general=general,
         education=PprSectionAggregation(section_code=SECTION_CODE_PPR_EDUCATION, active=()),
         training=PprSectionAggregation(section_code=SECTION_CODE_PPR_TRAINING, active=()),
+        family=PprSectionAggregation(section_code=SECTION_CODE_PPR_FAMILY, active=()),
         events=None,
         intended_employment=None,
         metadata=PprCompositeReadMetadata(

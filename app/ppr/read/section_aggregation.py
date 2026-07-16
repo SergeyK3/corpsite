@@ -11,13 +11,13 @@ from app.db.models.personnel_migration import (
 )
 from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     SectionRecord,
 )
 from app.ppr.domain.section_repositories import SectionReadRepository
 from app.ppr.infrastructure.section_repository import (
-    _EDUCATION_SELECT,
-    _TRAINING_SELECT,
+    _SECTION_SELECTS,
     _resolve_section,
     _row_to_record,
 )
@@ -81,6 +81,20 @@ class PprSectionAggregationReader:
             include_voided=include_voided,
         )
 
+    def load_family(
+        self,
+        person_id: int,
+        *,
+        include_superseded: bool = True,
+        include_voided: bool = True,
+    ) -> PprSectionAggregation:
+        return self.load_section(
+            person_id,
+            SECTION_CODE_PPR_FAMILY,
+            include_superseded=include_superseded,
+            include_voided=include_voided,
+        )
+
     def _load_by_lifecycle(
         self,
         person_id: int,
@@ -90,7 +104,7 @@ class PprSectionAggregationReader:
         if lifecycle_status == LIFECYCLE_STATUS_ACTIVE:
             return self._sections.load_active_records(person_id, section_code)
         spec = _resolve_section(section_code)
-        select_cols = _EDUCATION_SELECT if section_code == SECTION_CODE_PPR_EDUCATION else _TRAINING_SELECT
+        select_cols = _SECTION_SELECTS[section_code]
         rows = (
             self._conn.execute(
                 text(

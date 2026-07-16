@@ -11,13 +11,16 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.main import app
+from app.db.models.personnel_migration import RELATIONSHIP_TYPE_MOTHER
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
+    COMMAND_TYPE_ADD_RELATIVE,
     COMMAND_TYPE_MATERIALIZE_PPR,
     MaterializePprPayload,
     PprCommandEnvelope,
 )
 from app.ppr.application.lifecycle_service import PprLifecycleApplicationService
+from app.ppr.application.section_service import PprSectionApplicationService
 from app.ppr.domain.models import PPR_LIFECYCLE_CREATED, PPR_LIFECYCLE_NOT_MATERIALIZED
 from app.ppr.domain.section_models import EducationRecord
 from app.ppr.infrastructure.section_repository import SqlAlchemySectionMutationRepository
@@ -170,6 +173,33 @@ def test_education_aggregation_in_api(client: TestClient, bare_person: int, priv
     education = resp.json()["sections"]["PPR-EDUCATION"]["active"]
     assert len(education) == 1
     assert education[0]["institution_name"] == "R7 University"
+    assert "PPR-FAMILY" in resp.json()["sections"]
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_family_aggregation_in_api(client: TestClient, bare_person: int, privileged_headers) -> None:
+    _materialize(bare_person)
+    section_service = PprSectionApplicationService(authorization=AllowAllAuthorizationPort())
+    section_service.add_relative(
+        PprCommandEnvelope(
+            command_id=f"r7-family-{uuid4().hex}",
+            command_type=COMMAND_TYPE_ADD_RELATIVE,
+            actor_id="r7-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "relationship_type": RELATIONSHIP_TYPE_MOTHER,
+                "full_name": "R7 Mother Relative",
+            },
+            person_id=bare_person,
+        )
+    )
+    resp = client.get(f"/api/ppr/persons/{bare_person}", headers=privileged_headers)
+    assert resp.status_code == 200
+    family = resp.json()["sections"]["PPR-FAMILY"]["active"]
+    assert len(family) == 1
+    assert family[0]["full_name"] == "R7 Mother Relative"
+    assert family[0]["relationship_type"] == RELATIONSHIP_TYPE_MOTHER
+    assert family[0]["relationship_label"] == "Мать"
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -192,6 +222,7 @@ def test_summary_endpoint(client: TestClient, linked_person_employee: dict, priv
     body = resp.json()
     assert body["full_name"].startswith("R7 API Linked")
     assert "education_active_count" in body
+    assert "family_active_count" in body
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")

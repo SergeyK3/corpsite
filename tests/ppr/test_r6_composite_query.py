@@ -10,9 +10,10 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.db.models.personnel_migration import EDUCATION_KIND_BASIC, TRAINING_KIND_COURSE
+from app.db.models.personnel_migration import EDUCATION_KIND_BASIC, RELATIONSHIP_TYPE_MOTHER, TRAINING_KIND_COURSE
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
+    COMMAND_TYPE_ADD_RELATIVE,
     COMMAND_TYPE_MATERIALIZE_PPR,
     MaterializePprPayload,
     PprCommandEnvelope,
@@ -24,8 +25,8 @@ from app.ppr.domain.errors import (
     PprPersonNotFoundError,
 )
 from app.ppr.domain.identity_models import INPUT_KIND_EMPLOYEE_ID, INPUT_KIND_PERSON_ID, RESULT_MERGE_REDIRECTED
-from app.ppr.domain.models import PPR_LIFECYCLE_CREATED, PPR_LIFECYCLE_NOT_MATERIALIZED
-from app.ppr.domain.section_models import EducationRecord, SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_TRAINING
+from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE, HR_RELATIONSHIP_EMPLOYED, PPR_LIFECYCLE_CREATED, PPR_LIFECYCLE_NOT_MATERIALIZED
+from app.ppr.domain.section_models import EducationRecord, SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_FAMILY, SECTION_CODE_PPR_TRAINING
 from app.ppr.infrastructure.section_repository import SqlAlchemySectionMutationRepository
 from app.ppr.read import PprCompositeReadModel, PprQueryApplicationService
 from app.ppr.read import models as read_models
@@ -135,6 +136,46 @@ def _insert_education(person_id: int, institution: str) -> int:
             )
         )
         return int(record.record_id or 0)
+
+
+def _ensure_hr_context(person_id: int, hr_context: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.personnel_record_metadata (
+                    person_id, ppr_lifecycle_state, hr_relationship_context, version
+                )
+                VALUES (:person_id, :state, :ctx, 1)
+                ON CONFLICT (person_id) DO UPDATE
+                SET hr_relationship_context = EXCLUDED.hr_relationship_context,
+                    updated_at = now()
+                """
+            ),
+            {"person_id": person_id, "state": PPR_LIFECYCLE_CREATED, "ctx": hr_context},
+        )
+
+
+def _add_relative(
+    person_id: int,
+    section_service: PprSectionApplicationService,
+    *,
+    full_name: str,
+    relationship_type: str = RELATIONSHIP_TYPE_MOTHER,
+) -> None:
+    section_service.add_relative(
+        PprCommandEnvelope(
+            command_id=f"r6-family-{uuid4().hex}",
+            command_type=COMMAND_TYPE_ADD_RELATIVE,
+            actor_id="r6-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "relationship_type": relationship_type,
+                "full_name": full_name,
+            },
+            person_id=person_id,
+        )
+    )
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -260,6 +301,7 @@ def test_11_empty_sections(
     composite = query_service.load_by_person_id(bare_person_id)
     assert composite.education.active == ()
     assert composite.training.active == ()
+    assert composite.family.active == ()
     assert composite.education.superseded == ()
     assert composite.education.voided == ()
 
@@ -396,6 +438,7 @@ def test_20_load_sections(
     sections = query_service.load_sections(bare_person_id)
     assert SECTION_CODE_PPR_EDUCATION in sections
     assert SECTION_CODE_PPR_TRAINING in sections
+    assert SECTION_CODE_PPR_FAMILY in sections
     assert len(sections[SECTION_CODE_PPR_EDUCATION].active) == 1
 
 
@@ -431,3 +474,53 @@ def test_former_employee_without_envelope(
     finally:
         with engine.begin() as conn:
             cleanup_person_graph(conn, person_ids=[person_id], employee_ids=[employee_id])
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_21_family_aggregation_candidate(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    _ensure_hr_context(bare_person_id, HR_RELATIONSHIP_CANDIDATE)
+    _add_relative(bare_person_id, section_service, full_name="Иванова Анна Петровна")
+
+    composite = query_service.load_by_person_id(bare_person_id)
+    assert composite.hr_relationship_context == HR_RELATIONSHIP_CANDIDATE
+    assert composite.family.section_code == SECTION_CODE_PPR_FAMILY
+    assert len(composite.family.active) == 1
+    assert composite.family.active[0].full_name == "Иванова Анна Петровна"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_22_family_aggregation_employed(
+    employee_linked_person: dict[str, int],
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    person_id = employee_linked_person["person_id"]
+    _materialize(person_id, lifecycle_service)
+    _ensure_hr_context(person_id, HR_RELATIONSHIP_EMPLOYED)
+    _add_relative(person_id, section_service, full_name="Петров Сергей Иванович")
+
+    composite = query_service.load_by_employee_id(employee_linked_person["employee_id"])
+    assert composite.hr_relationship_context == HR_RELATIONSHIP_EMPLOYED
+    assert composite.family.section_code == SECTION_CODE_PPR_FAMILY
+    assert len(composite.family.active) == 1
+    assert composite.family.active[0].full_name == "Петров Сергей Иванович"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_23_summary_family_active_count(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    _add_relative(bare_person_id, section_service, full_name="Сидорова Мария")
+    summary = query_service.load_summary(person_id=bare_person_id)
+    assert summary.family_active_count == 1
