@@ -13,6 +13,8 @@ Demo PPR ops on Ubuntu/VPS (``DATABASE_URL`` is taken from the service environme
    python scripts/ops/create_demo_ppr_applicants.py --execute
    python scripts/ops/seed_demo_employment_biography.py --dry-run
    python scripts/ops/seed_demo_employment_biography.py --execute
+   python scripts/ops/seed_demo_military_service.py --dry-run
+   python scripts/ops/seed_demo_military_service.py --execute
 
 On production-like hosts, ``CORPSITE_ALLOW_DEMO_PPR_SEED=1`` is mandatory for ``--execute``
 and ``--rollback``.
@@ -722,6 +724,10 @@ def execute_manifest(
 
 def _delete_person_demo_data(conn: Connection, person_id: int) -> None:
     """Delete PPR section rows and envelope for a demo person (rollback helper)."""
+    conn.execute(
+        text("DELETE FROM public.person_military_service WHERE person_id = :person_id"),
+        {"person_id": person_id},
+    )
     conn.execute(
         text("DELETE FROM public.person_external_employment WHERE person_id = :person_id"),
         {"person_id": person_id},

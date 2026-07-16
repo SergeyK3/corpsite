@@ -13,6 +13,7 @@ from scripts.ops.create_demo_ppr_applicants import (
     run as run_applicants,
 )
 from scripts.ops.seed_demo_employment_biography import run as run_employment_biography
+from scripts.ops.seed_demo_military_service import run as run_military_service
 from tests.ppr.conftest import ppr_db_available
 
 
@@ -51,6 +52,26 @@ def _count_active_demo_employment() -> int:
                 WHERE p.iin = ANY(:iins)
                   AND pee.lifecycle_status = 'active'
                   AND pee.metadata->>'demo_suite' = 'employment_biography_v1'
+                """
+            ),
+            {"iins": list(ALLOWED_IINS)},
+        ).scalar_one()
+    return int(row)
+
+
+def _count_active_demo_military() -> int:
+    from app.db.engine import engine
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM public.person_military_service pms
+                JOIN public.persons p ON p.person_id = pms.person_id
+                WHERE p.iin = ANY(:iins)
+                  AND pms.lifecycle_status = 'active'
+                  AND pms.metadata->>'demo_suite' = 'military_service_v1'
                 """
             ),
             {"iins": list(ALLOWED_IINS)},
@@ -115,6 +136,20 @@ def test_employment_biography_main_defaults_to_dry_run(monkeypatch: pytest.Monke
     assert captured == [False]
 
 
+def test_military_service_main_defaults_to_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    import scripts.ops.seed_demo_military_service as mod
+    from scripts.ops.seed_demo_military_service import SeedReport
+
+    captured: list[bool] = []
+    monkeypatch.setattr(
+        mod,
+        "run",
+        lambda *, execute: captured.append(execute) or SeedReport(mode="dry_run"),
+    )
+    mod.main([])
+    assert captured == [False]
+
+
 def test_sequential_demo_seeds_are_idempotent(allow_demo_seed: None) -> None:
     _require_db()
 
@@ -122,6 +157,7 @@ def test_sequential_demo_seeds_are_idempotent(allow_demo_seed: None) -> None:
     _cleanup_demo_applicants()
     assert _count_demo_persons() == 0
     assert _count_active_demo_employment() == 0
+    assert _count_active_demo_military() == 0
 
     run_applicants(execute=True)
     assert _count_demo_persons() == len(APPLICANTS)
@@ -130,6 +166,10 @@ def test_sequential_demo_seeds_are_idempotent(allow_demo_seed: None) -> None:
     assert emp_first.created == 3
     assert _count_active_demo_employment() == 3
 
+    mil_first = run_military_service(execute=True)
+    assert mil_first.created == 2
+    assert _count_active_demo_military() == 2
+
     run_applicants(execute=True)
     assert _count_demo_persons() == len(APPLICANTS)
 
@@ -137,3 +177,8 @@ def test_sequential_demo_seeds_are_idempotent(allow_demo_seed: None) -> None:
     assert emp_second.created == 0
     assert emp_second.skipped == 3
     assert _count_active_demo_employment() == 3
+
+    mil_second = run_military_service(execute=True)
+    assert mil_second.created == 0
+    assert mil_second.skipped == 2
+    assert _count_active_demo_military() == 2

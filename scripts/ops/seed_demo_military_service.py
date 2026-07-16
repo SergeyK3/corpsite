@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed demo Employment Biography records for whitelisted demo persons.
+"""Seed demo Military Service records for whitelisted demo persons.
 
 Production-safe ops script. Uses PPR application layer only (no direct section INSERTs).
 Default mode is dry-run (no writes). Mutations require ``--execute``.
@@ -11,9 +11,7 @@ Demo PPR ops on Ubuntu/VPS (``DATABASE_URL`` is taken from the service environme
 .. code-block:: bash
 
    export CORPSITE_ALLOW_DEMO_PPR_SEED=1
-   python scripts/ops/create_demo_ppr_applicants.py --dry-run
    python scripts/ops/create_demo_ppr_applicants.py --execute
-   python scripts/ops/seed_demo_employment_biography.py --dry-run
    python scripts/ops/seed_demo_employment_biography.py --execute
    python scripts/ops/seed_demo_military_service.py --dry-run
    python scripts/ops/seed_demo_military_service.py --execute
@@ -40,13 +38,14 @@ if REPO_ROOT not in sys.path:
 
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
-    EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-    EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+    MILITARY_RECORD_KIND_NOT_APPLICABLE,
+    MILITARY_RECORD_KIND_REGISTRATION,
+    SECTION_SOURCE_TYPE_ENTERED,
 )
 from app.ppr.domain.models import PPR_LIFECYCLE_NOT_MATERIALIZED
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
-    COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+    COMMAND_TYPE_CREATE_MILITARY_SERVICE,
     PprCommandEnvelope,
 )
 from app.ppr.application.section_service import PprSectionApplicationService
@@ -58,38 +57,30 @@ from scripts.ops.create_demo_ppr_applicants import (
     parse_db_target,
 )
 
-DEMO_SUITE = "employment_biography_v1"
-DEMO_SOURCE = "demo_employment_biography"
-OPS_ACTOR_ID = "ops:seed_demo_employment_biography"
+DEMO_SUITE = "military_service_v1"
+DEMO_SOURCE = "demo_military_service"
+OPS_ACTOR_ID = "ops:seed_demo_military_service"
 
-DEMO_EMPLOYMENT_BY_KEY: dict[str, list[dict[str, Any]]] = {
-    "ahmetov": [
-        {
-            "demo_record_key": "ahmetov:episode:gp7-almaty",
-            "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-            "employer_name": "ГП №7 г. Алматы",
-            "department_name": "Регистратура",
-            "position_title": "Медицинский регистратор",
-            "started_at": date(2016, 3, 1),
-            "ended_at": date(2019, 12, 31),
-        },
-        {
-            "demo_record_key": "ahmetov:narrative:prehire-summary",
-            "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
-            "notes": "Сводный стаж до поступления в организацию — 3 года 10 месяцев",
-        },
-    ],
-    "seitova": [
-        {
-            "demo_record_key": "seitova:episode:karaganda-hospital",
-            "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-            "employer_name": "ГКП «Областная больница» г. Караганды",
-            "department_name": "Терапевтическое отделение",
-            "position_title": "Медицинская сестра",
-            "started_at": date(2018, 8, 1),
-            "ended_at": date(2023, 6, 30),
-        },
-    ],
+DEMO_MILITARY_BY_KEY: dict[str, dict[str, Any]] = {
+    "ahmetov": {
+        "demo_record_key": "ahmetov:military:registration-v1",
+        "record_kind": MILITARY_RECORD_KIND_REGISTRATION,
+        "obligation_status": "liable",
+        "registration_category": "II",
+        "military_rank": "рядовой",
+        "military_specialty_code": "868123А",
+        "personnel_composition": "soldiers",
+        "fitness_category": "А",
+        "registration_status": "registered",
+        "commissariat_name": "Районный военкомат Алмалинского района г. Алматы",
+        "registered_at": date(2008, 6, 15),
+        "notes": "Постановка на воинский учёт при приёме на работу — сведения подтверждены военным билетом.",
+    },
+    "seitova": {
+        "demo_record_key": "seitova:military:not-applicable-v1",
+        "record_kind": MILITARY_RECORD_KIND_NOT_APPLICABLE,
+        "notes": "Не подлежит воинскому учёту — женский пол, воинская обязанность отсутствует.",
+    },
 }
 
 
@@ -102,7 +93,7 @@ class RecordAction:
     record_kind: str
     action: str
     detail: str | None = None
-    employment_id: int | None = None
+    military_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -143,14 +134,14 @@ def _demo_person_specs() -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
     for applicant in APPLICANTS:
         key = applicant["key"]
-        if key not in DEMO_EMPLOYMENT_BY_KEY:
+        if key not in DEMO_MILITARY_BY_KEY:
             continue
         specs.append(
             {
                 "key": key,
                 "full_name": applicant["full_name"],
                 "iin": applicant["iin"],
-                "records": DEMO_EMPLOYMENT_BY_KEY[key],
+                "record": DEMO_MILITARY_BY_KEY[key],
             }
         )
     return specs
@@ -173,7 +164,7 @@ def _is_ppr_materialized(conn: Connection, *, person_id: int) -> bool:
     return bool(state) and state != PPR_LIFECYCLE_NOT_MATERIALIZED
 
 
-def _employment_demo_record_exists(
+def _military_demo_record_exists(
     conn: Connection,
     *,
     person_id: int,
@@ -183,7 +174,7 @@ def _employment_demo_record_exists(
         text(
             """
             SELECT 1
-            FROM public.person_external_employment
+            FROM public.person_military_service
             WHERE person_id = :person_id
               AND lifecycle_status = 'active'
               AND metadata->>'demo_record_key' = :demo_record_key
@@ -208,14 +199,20 @@ def _build_payload(record_spec: dict[str, Any]) -> dict[str, Any]:
     demo_record_key = str(record_spec["demo_record_key"])
     payload: dict[str, Any] = {
         "record_kind": record_spec["record_kind"],
+        "source_type": SECTION_SOURCE_TYPE_ENTERED,
         "metadata": _record_metadata(demo_record_key),
     }
     for field_name in (
-        "employer_name",
-        "department_name",
-        "position_title",
-        "started_at",
-        "ended_at",
+        "obligation_status",
+        "registration_category",
+        "military_rank",
+        "military_specialty_code",
+        "personnel_composition",
+        "fitness_category",
+        "registration_status",
+        "commissariat_name",
+        "registered_at",
+        "deregistered_at",
         "notes",
     ):
         if field_name in record_spec and record_spec[field_name] is not None:
@@ -229,13 +226,13 @@ def _section_service() -> PprSectionApplicationService:
 
 def _command_envelope(*, person_id: int, payload: dict[str, Any]) -> PprCommandEnvelope:
     return PprCommandEnvelope(
-        command_id=f"demo-emp-bio-{uuid4().hex}",
-        command_type=COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+        command_id=f"demo-mil-{uuid4().hex}",
+        command_type=COMMAND_TYPE_CREATE_MILITARY_SERVICE,
         actor_id=OPS_ACTOR_ID,
         requested_at=datetime.now(UTC),
         payload=payload,
         person_id=person_id,
-        correlation_id=f"demo-emp-bio-{uuid4().hex[:12]}",
+        correlation_id=f"demo-mil-{uuid4().hex[:12]}",
     )
 
 
@@ -313,33 +310,33 @@ def build_seed_plan(
         if audit.exists and audit.safe_to_touch and audit.person_id is not None:
             found_keys.add(person_spec["key"])
 
-        for record_spec in person_spec["records"]:
-            exists = (
-                _employment_demo_record_exists(
-                    conn,
-                    person_id=audit.person_id,
-                    demo_record_key=str(record_spec["demo_record_key"]),
-                )
-                if audit.person_id is not None
-                else False
+        record_spec = person_spec["record"]
+        exists = (
+            _military_demo_record_exists(
+                conn,
+                person_id=audit.person_id,
+                demo_record_key=str(record_spec["demo_record_key"]),
             )
-            action = plan_record_action(
-                person_spec=person_spec,
-                audit=audit,
-                record_spec=record_spec,
-                materialized=materialized,
-                exists=exists,
-                execute=execute,
-            )
-            report.actions.append(action)
-            if action.action == "create":
-                pending_creates.append((action, _build_payload(record_spec)))
-            elif action.action == "dry_run_create":
-                report.created += 1
-            elif action.action == "skipped":
-                report.skipped += 1
-            else:
-                report.errors.append(f"{action.demo_record_key}: unknown action {action.action}")
+            if audit.person_id is not None
+            else False
+        )
+        action = plan_record_action(
+            person_spec=person_spec,
+            audit=audit,
+            record_spec=record_spec,
+            materialized=materialized,
+            exists=exists,
+            execute=execute,
+        )
+        report.actions.append(action)
+        if action.action == "create":
+            pending_creates.append((action, _build_payload(record_spec)))
+        elif action.action == "dry_run_create":
+            report.created += 1
+        elif action.action == "skipped":
+            report.skipped += 1
+        else:
+            report.errors.append(f"{action.demo_record_key}: unknown action {action.action}")
 
     report.found_persons = len(found_keys)
     return report, pending_creates
@@ -353,10 +350,10 @@ def execute_seed_plan(
     section = _section_service()
     for action, payload in pending_creates:
         assert action.person_id is not None
-        result = section.add_external_employment(
+        result = section.create_military_service(
             _command_envelope(person_id=action.person_id, payload=payload)
         )
-        action.employment_id = result.section_record_id
+        action.military_id = result.section_record_id
         action.detail = result.status
 
 
@@ -398,7 +395,7 @@ def run(*, execute: bool = False, db: Engine | None = None) -> SeedReport:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Seed demo Employment Biography for whitelisted demo persons.",
+        description="Seed demo Military Service for whitelisted demo persons.",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -409,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument(
         "--execute",
         action="store_true",
-        help="Create missing demo employment biography records idempotently.",
+        help="Create missing demo military service records idempotently.",
     )
     args = parser.parse_args(argv)
     run(execute=bool(args.execute))
