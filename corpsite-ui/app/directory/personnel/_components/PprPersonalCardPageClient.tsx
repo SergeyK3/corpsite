@@ -1,17 +1,15 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
+import { PPR_CARD_RETURN_HREF } from "@/lib/pprCardFeature";
 import {
   PPR_CARD_DEFAULT_SECTION,
   parsePprCardSection,
   type PprCardSectionId,
 } from "@/lib/pprCardSections";
-import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import { getPprByEmployeeId } from "../_lib/pprQueryApi.client";
 import {
   PPR_LIFECYCLE_NOT_MATERIALIZED,
@@ -124,10 +122,10 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
           </div>
           <button
             type="button"
-            onClick={() => router.push(HR_PROCESSES_NAV_HREF)}
+            onClick={() => router.push(PPR_CARD_RETURN_HREF)}
             className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700"
           >
-            Закрыть
+            Назад к персоналу
           </button>
         </div>
       </div>
@@ -241,12 +239,13 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
               ) : null}
 
               <p className="text-xs text-zinc-500">
-                <Link
-                  href={buildEmployeeCardHref(employeeId, { section: "general" })}
+                <button
+                  type="button"
                   className="underline-offset-2 hover:underline"
+                  onClick={() => void loadCard()}
                 >
-                  Обновить страницу
-                </Link>
+                  Обновить данные
+                </button>
               </p>
             </div>
           </>

@@ -5,7 +5,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
-import { isPprCardEnabled } from "@/lib/pprCardFeature";
+import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
@@ -137,6 +137,7 @@ export default function EmployeesPageClient(props: Props) {
 
   const readOnly = props.readOnly === true;
   const managementView = props.managementView === true;
+  const isStaffRoute = routeBase === "/directory/staff";
 
   const pageTitle =
     props.pageTitle ??
@@ -350,15 +351,23 @@ export default function EmployeesPageClient(props: Props) {
 
   React.useEffect(() => {
     if (!deepLinkEmployeeId) return;
+    if (isStaffRoute) {
+      router.push(buildEmployeeCardHref(deepLinkEmployeeId));
+      return;
+    }
     setDrawerEmployeeId(deepLinkEmployeeId);
     setDrawerOpen(true);
-  }, [deepLinkEmployeeId]);
+  }, [deepLinkEmployeeId, isStaffRoute, router]);
 
   function applySearch() {
     updateUrl({ q: search }, { resetOffset: true });
   }
 
   function handleOpenEmployee(id: string) {
+    if (isStaffRoute) {
+      router.push(buildEmployeeCardHref(id));
+      return;
+    }
     setDrawerEmployeeId(id);
     setDrawerOpen(true);
   }
@@ -433,7 +442,6 @@ export default function EmployeesPageClient(props: Props) {
   const departmentFilterValue = orgGroupId != null ? orgUnitId : departmentId;
   const isPersonnelRoute = routeBase === "/directory/personnel";
   const showHrImportCardLink = isPersonnelRoute && !readOnly;
-  const openPersonalCardDirectly = isPprCardEnabled() && managementView && readOnly;
 
   const pageContent = (
     <>
@@ -559,8 +567,7 @@ export default function EmployeesPageClient(props: Props) {
               onOpenEmployee={handleOpenEmployee}
               onChangePage={setPageOffset}
               showCard2Button={showHrImportCardLink}
-              showHrDossierLink={managementView && readOnly && !openPersonalCardDirectly}
-              openPersonalCardDirectly={openPersonalCardDirectly}
+              directPersonalCardNav={isStaffRoute}
               managementView={managementView}
             />
           </div>
@@ -584,12 +591,14 @@ export default function EmployeesPageClient(props: Props) {
         </div>
       )}
 
-      <EmployeeDrawer
-        employeeId={drawerEmployeeId}
-        open={drawerOpen}
-        onClose={handleCloseDrawer}
-        refreshToken={employeeRefreshToken}
-      />
+      {isStaffRoute ? null : (
+        <EmployeeDrawer
+          employeeId={drawerEmployeeId}
+          open={drawerOpen}
+          onClose={handleCloseDrawer}
+          refreshToken={employeeRefreshToken}
+        />
+      )}
 
       {!readOnly ? (
         <EmployeeCreateDrawer

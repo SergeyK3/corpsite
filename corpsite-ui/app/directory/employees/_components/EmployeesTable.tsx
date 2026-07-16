@@ -6,8 +6,6 @@ import Link from "next/link";
 import type { EmployeeListItem } from "../_lib/types";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import {
-  HR_DOSSIER_JOURNAL_ACTION,
-  HR_DOSSIER_JOURNAL_ACTION_LEGACY,
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
   OPEN_PERSONAL_CARD_CTA,
@@ -22,11 +20,10 @@ type Props = {
   loading: boolean;
   onOpenEmployee: (employee_id: string) => void;
   onChangePage: (nextOffset: number) => void;
+  /** HR import journal: single «Открыть» link to /card. */
   showCard2Button?: boolean;
-  /** HR dossier link alongside the working-card «Открыть» action (management «Персонал»). */
-  showHrDossierLink?: boolean;
-  /** When true, «Открыть» navigates directly to the PPR personal card (no working drawer). */
-  openPersonalCardDirectly?: boolean;
+  /** Staff «Персонал»: one «Открыть» link straight to PPR personal card. */
+  directPersonalCardNav?: boolean;
   /** Compact columns: ФИО, должность, отделение, статус, ставки, открыть. */
   managementView?: boolean;
 };
@@ -55,28 +52,22 @@ function getPositionName(it: any): string {
   return it?.position_name ?? it?.positionName ?? it?.position?.name ?? it?.position?.title ?? "—";
 }
 
-const journalActionClass =
+const actionLinkClass =
   "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700";
 
-const journalActionDisabledClass =
+const actionDisabledClass =
   "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
 
-function HrDossierJournalAction({
-  employeeId,
-  pprMode = false,
-}: {
-  employeeId: string;
-  pprMode?: boolean;
-}) {
+function PersonalCardOpenAction({ employeeId }: { employeeId: string }) {
   if (employeeId) {
     return (
       <Link
         href={buildEmployeeCardHref(employeeId)}
-        title={pprMode ? OPEN_PERSONAL_CARD_CTA : OPEN_HR_DOSSIER_CTA}
-        aria-label={pprMode ? OPEN_PERSONAL_CARD_CTA : OPEN_HR_DOSSIER_CTA}
-        className={journalActionClass}
+        title={OPEN_PERSONAL_CARD_CTA}
+        aria-label={OPEN_PERSONAL_CARD_CTA}
+        className={actionLinkClass}
       >
-        {pprMode ? HR_DOSSIER_JOURNAL_ACTION : HR_DOSSIER_JOURNAL_ACTION_LEGACY}
+        Открыть
       </Link>
     );
   }
@@ -88,9 +79,9 @@ function HrDossierJournalAction({
         disabled
         aria-disabled="true"
         aria-label={HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP}
-        className={journalActionDisabledClass}
+        className={actionDisabledClass}
       >
-        {HR_DOSSIER_JOURNAL_ACTION}
+        Открыть
       </button>
     </span>
   );
@@ -105,8 +96,7 @@ export default function EmployeesTable({
   onOpenEmployee,
   onChangePage,
   showCard2Button = false,
-  showHrDossierLink = false,
-  openPersonalCardDirectly = false,
+  directPersonalCardNav = false,
   managementView = false,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
@@ -156,7 +146,7 @@ export default function EmployeesTable({
               <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Статус
               </th>
-              <th className={`${showHrDossierLink ? "w-[200px]" : "w-[120px]"} px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400`}>
+              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Действия
               </th>
             </tr>
@@ -223,34 +213,24 @@ export default function EmployeesTable({
 
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
-                        {!showCard2Button && !!employeeId && !openPersonalCardDirectly ? (
+                        {directPersonalCardNav ? (
+                          <PersonalCardOpenAction employeeId={employeeId} />
+                        ) : null}
+                        {!directPersonalCardNav && !showCard2Button && !!employeeId ? (
                           <button
                             type="button"
                             onClick={() => onOpenEmployee(employeeId)}
-                            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                            className={actionLinkClass}
                           >
                             Открыть
                           </button>
                         ) : null}
-                        {openPersonalCardDirectly && !!employeeId ? (
-                          <Link
-                            href={buildEmployeeCardHref(employeeId)}
-                            title={OPEN_PERSONAL_CARD_CTA}
-                            aria-label={OPEN_PERSONAL_CARD_CTA}
-                            className={journalActionClass}
-                          >
-                            Открыть
-                          </Link>
-                        ) : null}
-                        {showHrDossierLink && !openPersonalCardDirectly ? (
-                          <HrDossierJournalAction employeeId={employeeId} />
-                        ) : null}
-                        {showCard2Button && !!employeeId ? (
+                        {!directPersonalCardNav && showCard2Button && !!employeeId ? (
                           <Link
                             href={buildEmployeeCardHref(employeeId)}
                             title={OPEN_HR_DOSSIER_CTA}
                             aria-label={OPEN_HR_DOSSIER_CTA}
-                            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                            className={actionLinkClass}
                           >
                             Открыть
                           </Link>

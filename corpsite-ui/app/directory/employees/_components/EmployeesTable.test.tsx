@@ -1,17 +1,15 @@
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeesTable.test.tsx
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import EmployeesTable from "./EmployeesTable";
 import {
-  HR_DOSSIER_JOURNAL_ACTION,
-  HR_DOSSIER_JOURNAL_ACTION_LEGACY,
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
   OPEN_PERSONAL_CARD_CTA,
 } from "@/lib/personnelCardTerminology";
 
-describe("EmployeesTable journal actions", () => {
+describe("EmployeesTable actions", () => {
   afterEach(() => {
     cleanup();
   });
@@ -26,64 +24,58 @@ describe("EmployeesTable journal actions", () => {
     onChangePage: vi.fn(),
   };
 
-  it("shows working-card «Открыть» and HR dossier «Карточка» in legacy management read-only view", () => {
+  it("staff «Персонал»: single «Открыть» link to PPR card, no drawer button, no «Карточка»", () => {
+    const onOpenEmployee = vi.fn();
     render(
       <EmployeesTable
         {...baseProps}
+        onOpenEmployee={onOpenEmployee}
         managementView
-        showHrDossierLink
+        directPersonalCardNav
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Открыть" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: OPEN_HR_DOSSIER_CTA })).toHaveAttribute(
-      "href",
-      "/directory/personnel/employees/42/card",
-    );
-    expect(screen.getByRole("link", { name: OPEN_HR_DOSSIER_CTA })).toHaveTextContent(
-      HR_DOSSIER_JOURNAL_ACTION_LEGACY,
-    );
-  });
-
-  it("navigates directly to personal card when openPersonalCardDirectly is enabled", () => {
-    render(
-      <EmployeesTable
-        {...baseProps}
-        managementView
-        openPersonalCardDirectly
-      />,
-    );
-
-    expect(screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).toHaveAttribute(
-      "href",
-      "/directory/personnel/employees/42/card",
-    );
-    expect(screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).toHaveTextContent(
-      HR_DOSSIER_JOURNAL_ACTION,
-    );
+    const openLink = screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    expect(openLink).toHaveAttribute("href", "/directory/personnel/employees/42/card");
+    expect(openLink).toHaveTextContent("Открыть");
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
+    expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
+
+    fireEvent.click(openLink);
+    expect(onOpenEmployee).not.toHaveBeenCalled();
   });
 
-  it("disables HR dossier «Карточка» with tooltip when employee_id is missing", () => {
+  it("staff row without employee_id disables «Открыть» with tooltip", () => {
     render(
       <EmployeesTable
         {...baseProps}
         items={[{ fio: "Без ID", status: "active" }]}
         managementView
-        showHrDossierLink
+        directPersonalCardNav
       />,
     );
 
-    const cardButton = screen.getByRole("button", { name: HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP });
-    expect(cardButton).toBeDisabled();
-    expect(cardButton).toHaveTextContent(HR_DOSSIER_JOURNAL_ACTION);
-    expect(cardButton.closest("span")).toHaveAttribute("title", HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP);
-    expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
+    const disabled = screen.getByRole("button", { name: HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP });
+    expect(disabled).toBeDisabled();
+    expect(screen.queryByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).not.toBeInTheDocument();
   });
 
-  it("keeps HR personnel route card link as single «Открыть» action", () => {
+  it("editable employees list keeps drawer «Открыть» button", () => {
+    const onOpenEmployee = vi.fn();
+    render(
+      <EmployeesTable
+        {...baseProps}
+        onOpenEmployee={onOpenEmployee}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Открыть" }));
+    expect(onOpenEmployee).toHaveBeenCalledWith("42");
+    expect(screen.queryByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).not.toBeInTheDocument();
+  });
+
+  it("HR personnel journal keeps single card link as «Открыть»", () => {
     render(
       <EmployeesTable
         {...baseProps}
@@ -96,6 +88,6 @@ describe("EmployeesTable journal actions", () => {
       "/directory/personnel/employees/42/card",
     );
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: HR_DOSSIER_JOURNAL_ACTION_LEGACY })).not.toBeInTheDocument();
+    expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
   });
 });

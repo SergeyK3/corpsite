@@ -8,6 +8,7 @@ import {
   type PprCompositeReadResponse,
 } from "../_lib/pprQueryTypes";
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
+import { PPR_CARD_RETURN_HREF } from "@/lib/pprCardFeature";
 import { toApiError } from "@/lib/api";
 
 vi.mock("next/link", () => ({
@@ -221,6 +222,39 @@ describe("PprPersonalCardPageClient", () => {
     expect(screen.getByTestId("assignment-section")).toBeInTheDocument();
     expect(screen.getByTestId("orders-section")).toBeInTheDocument();
     expect(screen.queryByText("NOT_MATERIALIZED")).not.toBeInTheDocument();
+    expect(screen.queryByText("Кадровая карточка-досье")).not.toBeInTheDocument();
+    expect(screen.queryByText("Текущее назначение")).not.toBeInTheDocument();
+    expect(screen.queryByText("Доступ")).not.toBeInTheDocument();
+    expect(screen.queryByText("История кадровых событий")).not.toBeInTheDocument();
+  });
+
+  it("uses PPR tab navigation labels", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("navigation", { name: /Разделы Личная карточка/ })).toBeInTheDocument();
+    });
+
+    const nav = screen.getByRole("navigation", { name: /Разделы Личная карточка/ });
+    expect(within(nav).getByRole("link", { name: "Образование" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Обучение и повышение квалификации" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Трудовая деятельность" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();
+  });
+
+  it("shows back navigation to personnel list", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Назад к персоналу" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Назад к персоналу" }));
+    expect(pushMock).toHaveBeenCalledWith(PPR_CARD_RETURN_HREF);
   });
 
   it("shows NOT_MATERIALIZED as informational banner", async () => {
