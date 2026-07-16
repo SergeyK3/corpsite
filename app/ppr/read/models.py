@@ -81,6 +81,17 @@ class PprEventSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class PprIntendedEmploymentReadSlice:
+    org_group_id: int | None
+    org_unit_id: int | None
+    position_id: int | None
+    employment_rate: float | None
+    org_group_name: str | None = None
+    org_unit_name: str | None = None
+    position_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PprCompositeReadMetadata:
     """Assembly metadata attached to every composite read."""
 
@@ -109,6 +120,7 @@ class PprCompositeReadModel:
     education: PprSectionAggregation
     training: PprSectionAggregation
     events: PprEventSummary | None
+    intended_employment: PprIntendedEmploymentReadSlice | None
     metadata: PprCompositeReadMetadata
 
 

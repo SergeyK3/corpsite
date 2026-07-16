@@ -31,6 +31,34 @@ class PprMaterializationResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class PprIntendedEmploymentResponse(BaseModel):
+    org_group_id: int | None = None
+    org_unit_id: int | None = None
+    position_id: int | None = None
+    employment_rate: float | None = None
+    org_group_name: str | None = None
+    org_unit_name: str | None = None
+    position_name: str | None = None
+
+
+class PprIntendedEmploymentUpdateRequest(BaseModel):
+    org_group_id: int | None = Field(default=None, ge=1)
+    org_unit_id: int | None = Field(default=None, ge=1)
+    position_id: int | None = Field(default=None, ge=1)
+    employment_rate: float | None = Field(default=None, gt=0, le=2)
+
+
+class PprHireDefaultsResponse(BaseModel):
+    person_id: int
+    org_group_id: int | None = None
+    org_unit_id: int | None = None
+    position_id: int | None = None
+    employment_rate: float | None = None
+    org_group_name: str | None = None
+    org_unit_name: str | None = None
+    position_name: str | None = None
+
+
 class PprGeneralResponse(BaseModel):
     full_name: str
     last_name: str | None = None
@@ -113,6 +141,7 @@ class PprCompositeReadResponse(BaseModel):
     general: PprGeneralResponse
     sections: dict[str, PprSectionResponse]
     events: PprEventSummaryResponse | None = None
+    intended_employment: PprIntendedEmploymentResponse | None = None
     metadata: PprReadMetadataResponse
 
 

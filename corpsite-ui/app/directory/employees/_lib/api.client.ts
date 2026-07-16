@@ -109,6 +109,7 @@ export async function getEmployees(args: {
   org_group_id?: number | string | null;
   org_unit_id?: number | string | null;
   include_children?: boolean;
+  include_applicants?: boolean;
   q?: string | null;
   limit?: number | string;
   offset?: number | string;
@@ -120,6 +121,7 @@ export async function getEmployees(args: {
     org_group_id: args.org_group_id ?? undefined,
     org_unit_id: args.org_unit_id ?? undefined,
     include_children: args.include_children ? "true" : undefined,
+    include_applicants: args.include_applicants ? "true" : undefined,
     q: args.q ?? undefined,
     limit: args.limit ?? 50,
     offset: args.offset ?? 0,

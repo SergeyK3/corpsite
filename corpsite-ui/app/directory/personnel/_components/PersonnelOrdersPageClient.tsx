@@ -64,6 +64,12 @@ export default function PersonnelOrdersPageClient() {
     [searchParams],
   );
 
+  const hirePersonId = React.useMemo(() => {
+    const raw = searchParams.get("hire_person_id");
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  }, [searchParams]);
+
   const [items, setItems] = React.useState<PersonnelOrderListItem[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
@@ -108,6 +114,12 @@ export default function PersonnelOrdersPageClient() {
       setDrawerOpen(true);
     }
   }, [filters.order_id]);
+
+  React.useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      setCreateOpen(true);
+    }
+  }, [searchParams]);
 
   const filteredItems = React.useMemo(
     () => filterPersonnelOrdersBySearch(items, filters.q),
@@ -377,6 +389,7 @@ export default function PersonnelOrdersPageClient() {
         open={drawerOpen}
         onClose={closeDrawer}
         onChanged={handleChanged}
+        hirePersonId={hirePersonId}
       />
 
       <PersonnelOrderCreateDialog

@@ -97,12 +97,27 @@ export type PprReadMetadataResponse = {
   requested_input_id: number | null;
 };
 
+export type PprIntendedEmploymentResponse = {
+  org_group_id: number | null;
+  org_unit_id: number | null;
+  position_id: number | null;
+  employment_rate: number | null;
+  org_group_name: string | null;
+  org_unit_name: string | null;
+  position_name: string | null;
+};
+
+export type PprHireDefaultsResponse = PprIntendedEmploymentResponse & {
+  person_id: number;
+};
+
 export type PprCompositeReadResponse = {
   identity: PprIdentityResponse;
   materialization: PprMaterializationResponse;
   general: PprGeneralResponse;
   sections: Record<string, PprSectionResponse>;
   events: PprEventSummaryResponse | null;
+  intended_employment: PprIntendedEmploymentResponse | null;
   metadata: PprReadMetadataResponse;
 };
 
@@ -116,6 +131,8 @@ export type PprCompositeSummaryResponse = {
   metadata: PprReadMetadataResponse;
 };
 
+export const PPR_HR_RELATIONSHIP_CANDIDATE = "CANDIDATE";
+export const PPR_HR_RELATIONSHIP_EMPLOYED = "EMPLOYED";
 export const PPR_SECTION_CODE_EDUCATION = "PPR-EDUCATION";
 export const PPR_SECTION_CODE_TRAINING = "PPR-TRAINING";
 

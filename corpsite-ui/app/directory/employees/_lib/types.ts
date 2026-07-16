@@ -22,7 +22,9 @@ export type OrgUnitRef = {
  * То, что реально приходит с backend (/directory/employees и /directory/employees/{id})
  */
 export type EmployeeDTO = {
-  id: string;
+  id: string | null;
+  person_id?: number | null;
+  record_kind?: "employee" | "applicant" | string | null;
   fio: string | null;
 
   department: Department | null;

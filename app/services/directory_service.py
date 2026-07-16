@@ -503,6 +503,7 @@ def list_employees(
     offset: int,
     sort: Optional[str],
     order: Optional[str],
+    include_applicants: bool = False,
 ) -> Dict[str, Any]:
     emp_rel, emp_cols = _employees_relation()
     emp_id_col = _employees_id_col(emp_cols)
@@ -667,6 +668,22 @@ def list_employees(
         rows = conn.execute(q_list, params).mappings().all()
 
     items = [_normalize_employee_joined(dict(r), emp_rel) for r in rows]
+    if include_applicants:
+        from app.services.ppr_candidate_service import list_ppr_applicants
+
+        with engine.begin() as conn:
+            applicant_items, applicant_total = list_ppr_applicants(
+                conn,
+                q=q,
+                org_group_id=org_group_id,
+                org_unit_id=org_unit_id if org_unit_id is not None else None,
+                position_id=position_id,
+                limit=limit,
+                offset=0 if offset > 0 else 0,
+            )
+        if offset == 0:
+            items = items + applicant_items
+        total = total + applicant_total
     return {"items": items, "total": total}
 
 

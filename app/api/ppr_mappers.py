@@ -11,6 +11,7 @@ from app.api.ppr_schemas import (
     PprEventSummaryResponse,
     PprGeneralResponse,
     PprIdentityResponse,
+    PprIntendedEmploymentResponse,
     PprMaterializationResponse,
     PprReadMetadataResponse,
     PprSectionResponse,
@@ -89,6 +90,19 @@ def composite_to_response(
     requested_employee_id = resolution.input_id if resolution.input_kind == INPUT_KIND_EMPLOYEE_ID else None
     iin_value = composite.general.iin if include_sensitive_identity else _mask_iin(composite.general.iin)
 
+    intended_response: PprIntendedEmploymentResponse | None = None
+    if composite.intended_employment is not None:
+        intended = composite.intended_employment
+        intended_response = PprIntendedEmploymentResponse(
+            org_group_id=intended.org_group_id,
+            org_unit_id=intended.org_unit_id,
+            position_id=intended.position_id,
+            employment_rate=intended.employment_rate,
+            org_group_name=intended.org_group_name,
+            org_unit_name=intended.org_unit_name,
+            position_name=intended.position_name,
+        )
+
     return PprCompositeReadResponse(
         identity=PprIdentityResponse(
             requested_person_id=requested_person_id,
@@ -144,6 +158,7 @@ def composite_to_response(
             if composite.events is not None
             else None
         ),
+        intended_employment=intended_response,
         metadata=PprReadMetadataResponse(
             read_mode=read_mode,
             source=source,

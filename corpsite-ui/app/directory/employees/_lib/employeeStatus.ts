@@ -1,4 +1,4 @@
-export type EmployeeStatusVariant = "active" | "inactive" | "terminated" | "archived";
+export type EmployeeStatusVariant = "active" | "inactive" | "terminated" | "archived" | "applicant";
 
 export type EmployeeStatusMeta = {
   variant: EmployeeStatusVariant;
@@ -25,6 +25,12 @@ function computeIsActive(it: Record<string, unknown> | null | undefined): boolea
 export function employeeStatusMeta(it: unknown): EmployeeStatusMeta {
   const item = (it ?? {}) as Record<string, unknown>;
   const raw = String(item.status ?? "").trim().toLowerCase();
+  const recordKind = String(item.record_kind ?? "").trim().toLowerCase();
+
+  if (raw === "applicant" || recordKind === "applicant") {
+    return { variant: "applicant", label: "Заявитель", active: false };
+  }
+
   const active = computeIsActive(item);
 
   if (raw === "archived") {
@@ -53,6 +59,10 @@ export function employeeStatusBadgeClass(variant: EmployeeStatusVariant): string
 
   if (variant === "active") {
     return `${base} border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50`;
+  }
+
+  if (variant === "applicant") {
+    return `${base} border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100`;
   }
 
   return `${base} border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400`;

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Text, func, text
+from decimal import Decimal
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Numeric, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -64,3 +66,7 @@ class PersonnelRecordMetadata(Base):
         nullable=False,
         server_default=func.now(),
     )
+    intended_org_group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    intended_org_unit_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    intended_position_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    intended_employment_rate: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)

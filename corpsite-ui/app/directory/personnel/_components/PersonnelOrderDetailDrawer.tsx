@@ -44,6 +44,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onChanged?: (detail: PersonnelOrderDetailResponse) => void;
+  hirePersonId?: number | null;
 };
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -101,7 +102,13 @@ function formatEventDetails(event: PersonnelOrderLinkedEvent): string[] {
   ];
 }
 
-export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onChanged }: Props) {
+export default function PersonnelOrderDetailDrawer({
+  orderId,
+  open,
+  onClose,
+  onChanged,
+  hirePersonId = null,
+}: Props) {
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -319,6 +326,7 @@ export default function PersonnelOrderDetailDrawer({ orderId, open, onClose, onC
                   items={detail?.items || []}
                   disabled={!editable}
                   onChanged={handleChanged}
+                  hirePersonId={hirePersonId}
                 />
               </section>
 

@@ -68,9 +68,16 @@ export function mapEmployeesResponseToSearchOptions(
 export function requireEmployeeIdForItemType(
   itemTypeCode: string,
   employeeId: string | number | null | undefined,
-  options?: { pendingNewEmployee?: boolean },
+  options?: { pendingNewEmployee?: boolean; personId?: string | number | null },
 ): string | null {
-  if (allowsPendingNewEmployee(itemTypeCode) && options?.pendingNewEmployee) return null;
+  if (allowsPendingNewEmployee(itemTypeCode) && options?.pendingNewEmployee) {
+    if (String(itemTypeCode || "").trim().toUpperCase() === "HIRE") {
+      const personNumeric = Number(String(options.personId ?? "").trim());
+      if (Number.isFinite(personNumeric) && personNumeric > 0) return null;
+      return "Укажите заявителя (person_id) для приказа о приёме без employee_id.";
+    }
+    return null;
+  }
   if (!requiresEmployeeForFormType(itemTypeCode)) return null;
   const numeric = Number(employeeId);
   if (Number.isFinite(numeric) && numeric > 0) return null;

@@ -202,7 +202,8 @@ def _validate_registerable_order(conn, order: Dict[str, Any]) -> None:
                 item_type_code,
                 employee_id,
                 effective_date,
-                item_status
+                item_status,
+                payload
             FROM public.personnel_order_items
             WHERE order_id = :order_id
               AND item_status = :item_status
@@ -214,11 +215,17 @@ def _validate_registerable_order(conn, order: Dict[str, Any]) -> None:
     if not items:
         raise PersonnelOrderValidationError("At least one active order item is required before registration.")
 
+    from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
+
     for item in items:
-        if item.get("employee_id") is None:
-            raise PersonnelOrderValidationError(
-                f"Order item {item['item_id']} requires employee_id before registration."
-            )
+        payload_raw = item.get("payload")
+        payload = payload_raw if isinstance(payload_raw, dict) else {}
+        validate_hire_item_identity(
+            conn,
+            item_type_code=str(item.get("item_type_code") or ""),
+            employee_id=int(item["employee_id"]) if item.get("employee_id") is not None else None,
+            payload=payload,
+        )
         if not str(item.get("item_type_code") or "").strip():
             raise PersonnelOrderValidationError(
                 f"Order item {item['item_id']} requires item_type_code before registration."
@@ -448,6 +455,15 @@ def create_personnel_order_item(
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
 
+        from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
+
+        validate_hire_item_identity(
+            conn,
+            item_type_code=normalized_type,
+            employee_id=int(employee_id) if employee_id is not None else None,
+            payload=payload or {},
+        )
+
         if employee_id is not None:
             _ensure_employee_exists(conn, employee_id)
 
@@ -567,6 +583,32 @@ def update_personnel_order_item(
             raise PersonnelOrderItemNotFoundError(
                 f"Personnel order item {item_id} not found for order {order_id}."
             )
+
+        current_item = conn.execute(
+            text(
+                """
+                SELECT item_type_code, employee_id, payload
+                FROM public.personnel_order_items
+                WHERE item_id = :item_id
+                  AND order_id = :order_id
+                """
+            ),
+            {"item_id": int(item_id), "order_id": int(order_id)},
+        ).mappings().one()
+
+        merged_type = updates.get("item_type_code", current_item["item_type_code"])
+        merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
+        merged_payload_raw = payload if payload is not None else current_item.get("payload")
+        merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
+
+        from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
+
+        validate_hire_item_identity(
+            conn,
+            item_type_code=str(merged_type or ""),
+            employee_id=int(merged_employee_id) if merged_employee_id is not None else None,
+            payload=merged_payload,
+        )
 
         if employee_id is not None:
             _ensure_employee_exists(conn, employee_id)

@@ -344,6 +344,10 @@ def list_employees(
     ),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     include_children: bool = Query(default=False),
+    include_applicants: bool = Query(
+        default=False,
+        description="Include PPR applicants (CANDIDATE without active employee) in roster.",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: Optional[str] = Query(default=None),
@@ -369,6 +373,7 @@ def list_employees(
             org_group_id=org_group_id,
             org_unit_id=org_unit_id,
             include_children=include_children,
+            include_applicants=include_applicants,
             limit=limit,
             offset=offset,
             sort=sort,

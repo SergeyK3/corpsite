@@ -271,6 +271,28 @@ def _apply_hire(
             "effective_date": effective_date,
         },
     )
+    if conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'employees'
+              AND column_name = 'operational_status'
+            LIMIT 1
+            """
+        )
+    ).first():
+        conn.execute(
+            text(
+                """
+                UPDATE public.employees
+                SET operational_status = 'active'
+                WHERE employee_id = :employee_id
+                """
+            ),
+            {"employee_id": employee_id},
+        )
 
     _insert_employee_event(
         conn,
@@ -297,6 +319,27 @@ def _apply_hire(
         order_id=order_id,
         order_item_id=int(item["item_id"]),
     )
+
+    from app.services.ppr_candidate_service import sync_hr_context_after_hire
+    from app.services.personnel_order_hire_from_person_service import (
+        ensure_person_assignment_for_hire,
+        parse_person_id_from_payload,
+    )
+
+    sync_hr_context_after_hire(conn, employee_id=employee_id)
+
+    person_id = parse_person_id_from_payload(payload)
+    if person_id is not None:
+        ensure_person_assignment_for_hire(
+            conn,
+            person_id=person_id,
+            org_unit_id=to_org_unit_id,
+            position_id=to_position_id,
+            employment_rate=to_rate,
+            effective_date=effective_date,
+            order_id=order_id,
+            item_id=int(item["item_id"]),
+        )
 
 
 def _apply_transfer(
@@ -644,14 +687,21 @@ def apply_personnel_order(*, order_id: int, created_by: int) -> Dict[str, Any]:
         order_ref = _format_order_ref(str(order["order_number"]), order["order_date"])
 
         for item in items:
-            if item.get("employee_id") is None:
-                raise PersonnelOrderValidationError(
-                    f"Order item {item['item_id']} requires employee_id."
-                )
             if item.get("effective_date") is None:
                 raise PersonnelOrderValidationError(
                     f"Order item {item['item_id']} requires effective_date."
                 )
+
+            from app.services.personnel_order_hire_from_person_service import (
+                resolve_hire_employee_id_for_apply,
+            )
+
+            resolve_hire_employee_id_for_apply(
+                conn,
+                item=item,
+                created_by=int(created_by),
+            )
+
             _apply_item_events(
                 conn,
                 item=item,

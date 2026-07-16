@@ -22,6 +22,7 @@ import {
   type PersonnelOrderDetailResponse,
   type PersonnelOrderItem,
 } from "../_lib/personnelOrdersApi.client";
+import { getPprHireDefaultsByPersonId } from "../_lib/pprQueryApi.client";
 import {
   employeeDtoToSearchOption,
   resolveCurrentPlacementView,
@@ -68,6 +69,8 @@ type Props = {
   items: PersonnelOrderItem[];
   disabled?: boolean;
   onChanged: (detail: PersonnelOrderDetailResponse) => void;
+  /** Applicant person_id for HIRE without pre-existing employee. */
+  hirePersonId?: number | null;
 };
 
 const ORG_SCOPE_BASE_PATH = "/directory/personnel/orders";
@@ -165,6 +168,7 @@ export default function PersonnelOrderItemEditor({
   items,
   disabled = false,
   onChanged,
+  hirePersonId = null,
 }: Props) {
   const defaultItemType = resolveDefaultItemFormTypeForOrder(orderTypeCode);
   const itemTypeOptions = itemFormTypeOptionsForOrder(orderTypeCode);
@@ -188,6 +192,49 @@ export default function PersonnelOrderItemEditor({
   const [saving, setSaving] = React.useState(false);
   const [employeeSearchError, setEmployeeSearchError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (hirePersonId == null || !Number.isFinite(hirePersonId) || hirePersonId <= 0) return;
+    if (editingItemId != null) return;
+    const isHireContext =
+      orderTypeCode?.toUpperCase() === "HIRE" || defaultItemType === "HIRE";
+    if (!isHireContext) return;
+    setItemTypeCode("HIRE");
+    setPendingNewEmployee(true);
+    setPayloadDraft((prev) => ({
+      ...prev,
+      person_id: String(hirePersonId),
+    }));
+  }, [hirePersonId, orderTypeCode, defaultItemType, editingItemId]);
+
+  React.useEffect(() => {
+    if (itemTypeCode !== "HIRE") return;
+    const personNumeric = Number(String(payloadDraft.person_id || "").trim());
+    if (!Number.isFinite(personNumeric) || personNumeric <= 0) return;
+
+    let cancelled = false;
+    void getPprHireDefaultsByPersonId(personNumeric)
+      .then((defaults) => {
+        if (cancelled) return;
+        if (defaults.org_group_id != null) setHireOrgGroupId(defaults.org_group_id);
+        setPayloadDraft((prev) => ({
+          ...prev,
+          org_unit_id:
+            defaults.org_unit_id != null ? String(defaults.org_unit_id) : prev.org_unit_id ?? "",
+          position_id:
+            defaults.position_id != null ? String(defaults.position_id) : prev.position_id ?? "",
+          employment_rate:
+            defaults.employment_rate != null
+              ? String(defaults.employment_rate)
+              : prev.employment_rate ?? "1",
+        }));
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [itemTypeCode, payloadDraft.person_id]);
 
   const formConfig = getItemFormRegistry(itemTypeCode);
   const orgScoped = isOrgScopedItemType(itemTypeCode);
@@ -437,6 +484,7 @@ export default function PersonnelOrderItemEditor({
 
     const employeeRequiredMessage = requireEmployeeIdForItemType(itemTypeCode, employeeId, {
       pendingNewEmployee: pendingNewEmployee && pendingNewEmployeeAllowed,
+      personId: payloadDraft.person_id,
     });
     if (employeeRequiredMessage) {
       setError(employeeRequiredMessage);
@@ -676,7 +724,9 @@ export default function PersonnelOrderItemEditor({
             className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
             data-testid="personnel-order-pending-new-employee-hint"
           >
-            Сотрудник не выбран. Сохранение возможно без employee_id.
+            {payloadDraft.person_id
+              ? `Заявитель person #${payloadDraft.person_id}. Employee будет создан при проведении приказа.`
+              : "Сотрудник не выбран. Укажите person_id заявителя или сохраните пункт из карточки заявителя."}
           </p>
         ) : null}
       </div>

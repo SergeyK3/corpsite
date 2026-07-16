@@ -36,7 +36,23 @@ export function buildEmployeeCardHref(
   employeeId: string | number,
   options: BuildEmployeeCardHrefOptions = {},
 ): string {
-  const base = `/directory/personnel/employees/${normalizeEmployeeId(employeeId)}/card`;
+  return buildPersonalCardHref({ employeeId }, options);
+}
+
+export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions & {
+  personId?: string | number;
+  employeeId?: string | number;
+};
+
+export function buildPersonalCardHref(
+  subject: { personId?: string | number; employeeId?: string | number },
+  options: BuildEmployeeCardHrefOptions = {},
+): string {
+  const personId = subject.personId != null ? normalizeEmployeeId(subject.personId) : "";
+  const employeeId = subject.employeeId != null ? normalizeEmployeeId(subject.employeeId) : "";
+  const base = personId
+    ? `/directory/personnel/persons/${personId}/card`
+    : `/directory/personnel/employees/${employeeId}/card`;
   const params = new URLSearchParams();
 
   if (options.section && options.section !== EMPLOYEE_CARD_DEFAULT_SECTION) {

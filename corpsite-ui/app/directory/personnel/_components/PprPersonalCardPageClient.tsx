@@ -10,13 +10,15 @@ import {
   parsePprCardSection,
   type PprCardSectionId,
 } from "@/lib/pprCardSections";
-import { getPprByEmployeeId } from "../_lib/pprQueryApi.client";
+import { getPprByEmployeeId, getPprByPersonId } from "../_lib/pprQueryApi.client";
 import {
+  PPR_HR_RELATIONSHIP_CANDIDATE,
   PPR_LIFECYCLE_NOT_MATERIALIZED,
   PPR_SECTION_CODE_EDUCATION,
   PPR_SECTION_CODE_TRAINING,
   type PprCompositeReadResponse,
   type PprEducationRecordResponse,
+  type PprIntendedEmploymentResponse,
   type PprTrainingRecordResponse,
 } from "../_lib/pprQueryTypes";
 import { mapPprCardError, lifecycleStatusLabel, hrRelationshipLabel } from "../_lib/pprCardPresentation";
@@ -26,11 +28,13 @@ import PprCardGeneralSection from "./PprCardGeneralSection";
 import PprCardEducationSection from "./PprCardEducationSection";
 import PprCardTrainingSection from "./PprCardTrainingSection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
+import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 
 type Props = {
-  employeeId: string;
+  employeeId?: string;
+  personId?: string;
 };
 
 function isEducationRecord(
@@ -39,7 +43,7 @@ function isEducationRecord(
   return "education_kind" in record;
 }
 
-export default function PprPersonalCardPageClient({ employeeId }: Props) {
+export default function PprPersonalCardPageClient({ employeeId, personId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSection = parsePprCardSection(searchParams.get("section"));
@@ -47,24 +51,36 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [errorView, setErrorView] = React.useState<ReturnType<typeof mapPprCardError> | null>(null);
   const [ppr, setPpr] = React.useState<PprCompositeReadResponse | null>(null);
+  const [intendedEmployment, setIntendedEmployment] = React.useState<PprIntendedEmploymentResponse | null>(null);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
+
+  const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
+  const resolvedEmployeeId =
+    ppr?.identity.employee_context_id != null
+      ? String(ppr.identity.employee_context_id)
+      : employeeId ?? null;
 
   const loadCard = React.useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setErrorView(null);
       try {
-        const data = await getPprByEmployeeId(employeeId, { signal });
+        const data =
+          personId != null
+            ? await getPprByPersonId(personId, { signal })
+            : await getPprByEmployeeId(String(employeeId), { signal });
         setPpr(data);
+        setIntendedEmployment(data.intended_employment);
       } catch (e) {
         if (signal?.aborted) return;
         setPpr(null);
+        setIntendedEmployment(null);
         setErrorView(mapPprCardError(e));
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [employeeId],
+    [employeeId, personId],
   );
 
   React.useEffect(() => {
@@ -99,7 +115,10 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
     (r): r is PprTrainingRecordResponse => !isEducationRecord(r),
   );
 
-  const displayName = ppr?.general.full_name || `Сотрудник #${employeeId}`;
+  const displayName =
+    ppr?.general.full_name ||
+    (personId ? `Заявитель #${personId}` : `Сотрудник #${employeeId}`);
+  const isApplicant = ppr?.materialization.hr_relationship_context === PPR_HR_RELATIONSHIP_CANDIDATE;
   const notMaterialized =
     ppr != null &&
     (!ppr.materialization.materialized ||
@@ -107,16 +126,30 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
 
   return (
     <div className="flex max-h-[calc(100dvh-8.5rem)] min-h-[min(100dvh-8.5rem,640px)] flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950 sm:px-6">
+      <div
+        className={`shrink-0 border-b px-4 py-3 sm:px-6 ${
+          isApplicant
+            ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
+            : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+        }`}
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
+            {isApplicant ? (
+              <p
+                className="text-xs font-bold uppercase tracking-[0.14em] text-amber-900 dark:text-amber-100"
+                data-testid="ppr-applicant-status-banner"
+              >
+                Заявитель
+              </p>
+            ) : null}
             <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{PERSONAL_CARD_TITLE}</h1>
             <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">{displayName}</p>
             {ppr ? (
               <p className="mt-1 text-xs text-zinc-500">
-                {lifecycleStatusLabel(ppr.materialization.materialized, ppr.materialization.lifecycle_state)}
+                Статус: {hrRelationshipLabel(ppr.materialization.hr_relationship_context)}
                 {" · "}
-                {hrRelationshipLabel(ppr.materialization.hr_relationship_context)}
+                {lifecycleStatusLabel(ppr.materialization.materialized, ppr.materialization.lifecycle_state)}
               </p>
             ) : null}
           </div>
@@ -127,7 +160,26 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
           >
             Назад к персоналу
           </button>
+          {isApplicant && resolvedPersonId != null ? (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  `/directory/personnel/orders?create=1&hire_person_id=${resolvedPersonId}&order_type=HIRE`,
+                )
+              }
+              className="rounded border border-amber-400 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-50"
+              data-testid="ppr-applicant-create-hire-order"
+            >
+              Создать приказ о приёме
+            </button>
+          ) : null}
         </div>
+        {isApplicant ? (
+          <p className="mt-2 text-sm text-amber-900 dark:text-amber-100">
+            Трудовые отношения ещё не оформлены. Данные личной карточки используются для подготовки приёма на работу.
+          </p>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
@@ -205,21 +257,43 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
                 />
               </EmployeeImportCardSection>
 
-              <EmployeeImportCardSection
-                id="assignment"
-                title="Трудовая деятельность"
-                description="Текущее назначение и операционный контур занятости."
-              >
-                <EmployeeOperationalAssignmentSection employeeId={employeeId} batchId={null} rowId={null} />
-              </EmployeeImportCardSection>
+              {isApplicant && resolvedPersonId != null ? (
+                <EmployeeImportCardSection
+                  id="intended_employment"
+                  title="Предполагаемое трудоустройство"
+                  description="Намерение работодателя о подразделении, должности и ставке до приказа о приёме."
+                >
+                  <PprCardIntendedEmploymentSection
+                    personId={resolvedPersonId}
+                    initial={intendedEmployment}
+                    onSaved={(value) => setIntendedEmployment(value)}
+                  />
+                </EmployeeImportCardSection>
+              ) : null}
 
-              <EmployeeImportCardSection
-                id="orders"
-                title="Кадровые приказы"
-                description="Юридически значимые кадровые действия."
-              >
-                <EmployeeCardOrdersSection employeeId={employeeId} />
-              </EmployeeImportCardSection>
+              {!isApplicant && resolvedEmployeeId ? (
+                <EmployeeImportCardSection
+                  id="assignment"
+                  title="Трудовая деятельность"
+                  description="Текущее назначение и операционный контур занятости."
+                >
+                  <EmployeeOperationalAssignmentSection
+                    employeeId={resolvedEmployeeId}
+                    batchId={null}
+                    rowId={null}
+                  />
+                </EmployeeImportCardSection>
+              ) : null}
+
+              {!isApplicant && resolvedEmployeeId ? (
+                <EmployeeImportCardSection
+                  id="orders"
+                  title="Кадровые приказы"
+                  description="Юридически значимые кадровые действия."
+                >
+                  <EmployeeCardOrdersSection employeeId={resolvedEmployeeId} />
+                </EmployeeImportCardSection>
+              ) : null}
 
               <EmployeeImportCardSection
                 id="changes"
@@ -236,6 +310,8 @@ export default function PprPersonalCardPageClient({ employeeId }: Props) {
                     ? ` · person #${ppr.identity.resolved_person_id}`
                     : ""}
                 </p>
+              ) : resolvedPersonId != null ? (
+                <p className="text-xs text-zinc-500">Кадровый контекст: person #{resolvedPersonId}</p>
               ) : null}
 
               <p className="text-xs text-zinc-500">

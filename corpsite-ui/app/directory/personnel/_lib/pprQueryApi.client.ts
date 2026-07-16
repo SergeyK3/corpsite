@@ -64,3 +64,43 @@ export async function getPprSummaryByPersonId(
     opts?.signal,
   );
 }
+
+export type PprIntendedEmploymentUpdateBody = {
+  org_group_id?: number | null;
+  org_unit_id?: number | null;
+  position_id?: number | null;
+  employment_rate?: number | null;
+};
+
+export async function patchPprIntendedEmployment(
+  personId: string | number,
+  body: PprIntendedEmploymentUpdateBody,
+): Promise<import("./pprQueryTypes").PprIntendedEmploymentResponse> {
+  const res = await fetch(
+    resolveApiUrl(`/api/ppr/persons/${encodeURIComponent(String(personId))}/intended-employment`),
+    {
+      method: "PATCH",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    },
+  );
+  const payload = await readJsonSafe(res);
+  if (!res.ok) {
+    throw toApiError(res.status, payload, {
+      method: "PATCH",
+      url: `/api/ppr/persons/${personId}/intended-employment`,
+    });
+  }
+  return payload as import("./pprQueryTypes").PprIntendedEmploymentResponse;
+}
+
+export async function getPprHireDefaultsByPersonId(
+  personId: string | number,
+  opts?: { signal?: AbortSignal },
+): Promise<import("./pprQueryTypes").PprHireDefaultsResponse> {
+  return pprGetJson<import("./pprQueryTypes").PprHireDefaultsResponse>(
+    `/api/ppr/persons/${encodeURIComponent(String(personId))}/hire-defaults`,
+    opts?.signal,
+  );
+}

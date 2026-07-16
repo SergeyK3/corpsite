@@ -65,7 +65,7 @@ export function hrRelationshipLabel(value: string | null | undefined): string {
   const map: Record<string, string> = {
     EMPLOYED: "Работает",
     FORMER_EMPLOYEE: "Бывший сотрудник",
-    CANDIDATE: "Кандидат",
+    CANDIDATE: "Заявитель",
     UNKNOWN: "Не определено",
   };
   if (!value) return "—";

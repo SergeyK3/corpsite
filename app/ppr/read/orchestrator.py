@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.ppr.domain.identity_models import IdentityResolution
-from app.ppr.domain.models import PprEnvelope
+from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE, PprEnvelope
 from app.ppr.read.event_summary_reader import PprEventSummaryReader
 from app.ppr.read.models import (
     PprCompositeReadMetadata,
@@ -12,7 +12,9 @@ from app.ppr.read.models import (
     PprCompositeSummary,
     PprEnvelopeReadSlice,
     PprEventSummary,
+    PprIntendedEmploymentReadSlice,
 )
+from app.services.ppr_candidate_service import load_intended_employment
 from app.ppr.read.section_aggregation import PprSectionAggregationReader
 from app.ppr.read.uow import PprReadUnitOfWork
 
@@ -55,6 +57,25 @@ class PprCompositeReadOrchestrator:
                 limit=self._event_limit,
             )
 
+        intended_slice: PprIntendedEmploymentReadSlice | None = None
+        if envelope_slice.hr_relationship_context == HR_RELATIONSHIP_CANDIDATE:
+            intended = load_intended_employment(uow.connection, resolved_person_id)
+            if intended is not None and (
+                intended.org_unit_id is not None
+                or intended.position_id is not None
+                or intended.employment_rate is not None
+                or intended.org_group_id is not None
+            ):
+                intended_slice = PprIntendedEmploymentReadSlice(
+                    org_group_id=intended.org_group_id,
+                    org_unit_id=intended.org_unit_id,
+                    position_id=intended.position_id,
+                    employment_rate=intended.employment_rate,
+                    org_group_name=intended.org_group_name,
+                    org_unit_name=intended.org_unit_name,
+                    position_name=intended.position_name,
+                )
+
         return PprCompositeReadModel(
             person_id=resolved_person_id,
             employee_id=identity_resolution.employee_id,
@@ -70,6 +91,7 @@ class PprCompositeReadOrchestrator:
             education=education,
             training=training,
             events=events,
+            intended_employment=intended_slice,
             metadata=PprCompositeReadMetadata(
                 evaluated_at=datetime.now(UTC),
                 source_person_id=identity_resolution.source_person_id,

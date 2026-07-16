@@ -68,6 +68,7 @@ def _fake_composite(person_id: int = 1, employee_id: int = 2) -> PprCompositeRea
         education=PprSectionAggregation(section_code=SECTION_CODE_PPR_EDUCATION, active=()),
         training=PprSectionAggregation(section_code=SECTION_CODE_PPR_TRAINING, active=()),
         events=None,
+        intended_employment=None,
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,
             source_person_id=person_id,

@@ -4,7 +4,7 @@
 import Link from "next/link";
 
 import type { EmployeeListItem } from "../_lib/types";
-import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import { buildEmployeeCardHref, buildPersonalCardHref } from "@/lib/employeeCardNav";
 import {
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
@@ -58,7 +58,34 @@ const actionLinkClass =
 const actionDisabledClass =
   "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
 
-function PersonalCardOpenAction({ employeeId }: { employeeId: string }) {
+function getPersonId(it: any): number | null {
+  const raw = it?.person_id ?? it?.personId;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function isApplicantRow(it: any): boolean {
+  return String(it?.record_kind ?? it?.status ?? "").toLowerCase() === "applicant";
+}
+
+function PersonalCardOpenAction({ item }: { item: any }) {
+  const personId = getPersonId(item);
+  const employeeId = getEmployeeId(item);
+
+  if (isApplicantRow(item) && personId != null) {
+    return (
+      <Link
+        href={buildPersonalCardHref({ personId })}
+        title={OPEN_PERSONAL_CARD_CTA}
+        aria-label={OPEN_PERSONAL_CARD_CTA}
+        className={actionLinkClass}
+      >
+        Открыть
+      </Link>
+    );
+  }
+
   if (employeeId) {
     return (
       <Link
@@ -214,7 +241,7 @@ export default function EmployeesTable({
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
                         {directPersonalCardNav ? (
-                          <PersonalCardOpenAction employeeId={employeeId} />
+                          <PersonalCardOpenAction item={it} />
                         ) : null}
                         {!directPersonalCardNav && !showCard2Button && !!employeeId ? (
                           <button

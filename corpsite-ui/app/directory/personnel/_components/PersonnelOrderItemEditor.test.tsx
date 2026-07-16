@@ -569,11 +569,19 @@ describe("PersonnelOrderItemEditor HIRE", () => {
     expect(screen.queryByTestId("personnel-order-current-placement")).not.toBeInTheDocument();
   });
 
-  it("allows saving hire item without employee when pending new employee is checked", async () => {
+  it("allows saving hire item without employee when applicant person_id is set", async () => {
     const onChanged = vi.fn();
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={onChanged} />);
+    render(
+      <PersonnelOrderItemEditor
+        orderId={1}
+        orderTypeCode="HIRE"
+        items={[]}
+        onChanged={onChanged}
+        hirePersonId={204}
+      />,
+    );
 
-    fireEvent.click(screen.getByTestId("personnel-order-pending-new-employee"));
+    expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Добавить пункт" }));
 
     await waitFor(() => {
@@ -583,9 +591,11 @@ describe("PersonnelOrderItemEditor HIRE", () => {
     const body = vi.mocked(createPersonnelOrderItem).mock.calls[0]?.[1] as {
       item_type_code: string;
       employee_id: number | null;
+      payload: Record<string, unknown>;
     };
     expect(body.item_type_code).toBe("HIRE");
     expect(body.employee_id).toBeNull();
+    expect(body.payload.person_id).toBe(204);
   });
 
   it("uses status=all for HIRE employee search", async () => {

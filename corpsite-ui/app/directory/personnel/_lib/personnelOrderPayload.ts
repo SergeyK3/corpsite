@@ -1,6 +1,7 @@
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  person_id?: string;
   org_unit_id?: string;
   position_id?: string;
   employment_rate?: string;
@@ -44,6 +45,7 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     org_unit_id: asString("org_unit_id"),
     position_id: asString("position_id"),
     employment_rate: asString("employment_rate", "1"),
+    person_id: asString("person_id"),
     to_org_unit_id: asString("to_org_unit_id"),
     to_position_id: asString("to_position_id"),
     to_rate: asString("to_rate", asString("to_employment_rate")),
@@ -69,6 +71,8 @@ export function buildItemPayload(
     if (orgUnitId != null) payload.org_unit_id = orgUnitId;
     if (positionId != null) payload.position_id = positionId;
     if (rate != null) payload.employment_rate = rate;
+    const personId = optionalNumber(draft.person_id);
+    if (personId != null) payload.person_id = personId;
     return payload;
   }
 
