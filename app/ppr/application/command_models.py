@@ -21,6 +21,9 @@ COMMAND_TYPE_ADD_RELATIVE = "AddRelativeRecord"
 COMMAND_TYPE_UPDATE_RELATIVE = "UpdateRelativeRecord"
 COMMAND_TYPE_VOID_RELATIVE = "VoidRelativeRecord"
 COMMAND_TYPE_SUPERSEDE_RELATIVE = "SupersedeRelativeRecord"
+COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT = "AddExternalEmploymentRecord"
+COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT = "VoidExternalEmploymentRecord"
+COMMAND_TYPE_SUPERSEDE_EXTERNAL_EMPLOYMENT = "SupersedeExternalEmploymentRecord"
 
 
 @dataclass(frozen=True, slots=True)

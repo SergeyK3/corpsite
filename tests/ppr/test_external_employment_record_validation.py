@@ -98,6 +98,19 @@ def test_validate_external_employment_rejects_draft_lifecycle_status() -> None:
         validate_external_employment_record(_valid_episode(lifecycle_status=LIFECYCLE_STATUS_DRAFT))
 
 
+def test_validate_external_employment_rejects_attestation_none_with_employer() -> None:
+    with pytest.raises(SectionValidationError, match="attestation_none must not include employer_name"):
+        validate_external_employment_record(
+            ExternalEmploymentRecord(
+                person_id=1,
+                record_kind=EXTERNAL_EMPLOYMENT_RECORD_KIND_ATTESTATION_NONE,
+                employer_name="Should not be set",
+                notes="Стаж отсутствует",
+                source_system=EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
+            )
+        )
+
+
 def test_validate_external_employment_rejects_episode_without_employer_name() -> None:
     with pytest.raises(SectionValidationError, match="employer_name is required"):
         validate_external_employment_record(_valid_episode(employer_name="   "))

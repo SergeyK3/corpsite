@@ -91,6 +91,8 @@ def _section_table_name(section_code: str) -> str:
         return "person_training"
     if section_code == "PPR-FAMILY":
         return "person_relatives"
+    if section_code == "PPR-EMPLOYMENT-BIOGRAPHY":
+        return "person_external_employment"
     raise ValueError(f"Unsupported section_code: {section_code!r}")
 
 
@@ -120,6 +122,7 @@ def build_section_event(
     section_code = record.section_code
     record_id = record.record_id or 0
     payload: dict[str, Any] = {
+        "person_id": person_id,
         "section_code": section_code,
         "record_id": record_id,
         "mutation_kind": mutation.mutation_kind,

@@ -5,6 +5,7 @@ from datetime import date
 
 from app.db.models.personnel_migration import (
     EXTERNAL_EMPLOYMENT_LIFECYCLE_STATUSES,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_ATTESTATION_NONE,
     EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
     EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
     EXTERNAL_EMPLOYMENT_RECORD_KINDS,
@@ -69,3 +70,12 @@ def validate_external_employment_record(record: ExternalEmploymentRecord) -> Non
             )
     elif record.record_kind == EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY:
         _require_non_empty(record.notes, "notes")
+    elif record.record_kind == EXTERNAL_EMPLOYMENT_RECORD_KIND_ATTESTATION_NONE:
+        if record.employer_name and str(record.employer_name).strip():
+            raise SectionValidationError("attestation_none must not include employer_name")
+        if record.position_title and str(record.position_title).strip():
+            raise SectionValidationError("attestation_none must not include position_title")
+        if record.started_at is not None:
+            raise SectionValidationError("attestation_none must not include started_at")
+        if record.ended_at is not None:
+            raise SectionValidationError("attestation_none must not include ended_at")

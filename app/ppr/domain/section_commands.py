@@ -147,3 +147,39 @@ class SupersedeRelativeRecord:
     record_id: int
     expected_updated_at: datetime
     replacement: AddRelativeRecord
+
+
+@dataclass(frozen=True, slots=True)
+class AddExternalEmploymentRecord:
+    person_id: int
+    record_kind: str
+    employee_context_id: int | None = None
+    employer_name: str | None = None
+    department_name: str | None = None
+    position_title: str | None = None
+    employment_type: str | None = None
+    started_at: date | None = None
+    ended_at: date | None = None
+    termination_reason: str | None = None
+    document_reference: str | None = None
+    source_system: str | None = None
+    source_id: str | None = None
+    provenance: Mapping[str, Any] | None = None
+    notes: str | None = None
+    metadata: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VoidExternalEmploymentRecord:
+    person_id: int
+    record_id: int
+    reason: str
+    expected_updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SupersedeExternalEmploymentRecord:
+    person_id: int
+    record_id: int
+    expected_updated_at: datetime
+    replacement: AddExternalEmploymentRecord
