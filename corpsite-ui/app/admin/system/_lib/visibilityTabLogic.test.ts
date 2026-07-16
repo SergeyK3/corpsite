@@ -10,6 +10,7 @@ import {
   canSubmitVisibilityAssignment,
   clearDepartmentTargetSelection,
   countEmployeesWithoutUserAccount,
+  filterEmployeesWithId,
   departmentPrefilterRequired,
   extractPositionIdsFromEmployees,
   filterOrgUnitsByGroup,
@@ -459,5 +460,18 @@ describe("visibilityTabLogic", () => {
         { user: undefined },
       ]),
     ).toBe(1);
+  });
+
+  it("filterEmployeesWithId excludes applicant rows without Employee id", () => {
+    const items = [
+      { id: "emp-1", fio: "Иванов И.И.", user: { user_id: 10 } },
+      { id: null, fio: "Петров П.П.", record_kind: "applicant" as const },
+      { id: "emp-2", fio: "Сидоров С.С.", user: undefined },
+    ] as const;
+
+    const employees = filterEmployeesWithId([...items]);
+
+    expect(employees.map((e) => e.id)).toEqual(["emp-1", "emp-2"]);
+    expect(countEmployeesWithoutUserAccount(employees)).toBe(1);
   });
 });

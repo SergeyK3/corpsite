@@ -28,6 +28,7 @@ import {
   classifyBulkVisibilityCreateError,
   clearDepartmentTargetSelection,
   countEmployeesWithoutUserAccount,
+  filterEmployeesWithId,
   departmentPrefilterOptional,
   departmentPrefilterRequired,
   extractPositionIdsFromEmployees,
@@ -295,8 +296,9 @@ export default function VisibilityTab() {
           status: "active",
           limit: 200,
         });
-        setDepartmentEmployees(res.items);
-        setEmployeesWithoutAccount(countEmployeesWithoutUserAccount(res.items));
+        const employees = filterEmployeesWithId(res.items);
+        setDepartmentEmployees(employees);
+        setEmployeesWithoutAccount(countEmployeesWithoutUserAccount(employees));
       } catch {
         setDepartmentEmployees([]);
         setEmployeesWithoutAccount(0);

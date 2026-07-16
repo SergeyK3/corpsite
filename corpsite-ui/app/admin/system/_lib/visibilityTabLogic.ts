@@ -53,6 +53,15 @@ export type EmployeeLike = {
   user?: { user_id?: number; login?: string | null } | null;
 };
 
+export type EmployeeWithId = EmployeeLike & { id: string };
+
+/** Excludes applicant rows (EmployeeDTO.id === null) from employee-only admin flows. */
+export function filterEmployeesWithId<T extends { id?: string | null }>(
+  items: T[],
+): Array<T & { id: string }> {
+  return items.filter((item): item is T & { id: string } => item.id != null);
+}
+
 export type TreeNodeLike = {
   id?: string;
   unit_id?: number;

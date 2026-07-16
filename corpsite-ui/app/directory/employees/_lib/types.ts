@@ -227,6 +227,10 @@ function toNumber(v: string | number | null | undefined): number | null {
 }
 
 export function mapEmployee(dto: EmployeeDTO): Employee {
+  if (dto.id == null) {
+    throw new Error("Cannot map applicant row without Employee id");
+  }
+
   const dateTo = dto.date_to ?? null;
   const isActive = dto.status === "active" || dateTo == null;
 

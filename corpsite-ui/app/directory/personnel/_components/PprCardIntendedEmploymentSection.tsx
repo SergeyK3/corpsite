@@ -13,7 +13,6 @@ import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
 import { findOrgGroupIdForUnit } from "@/lib/userCreateOrgScope";
 import { getOrgUnitsTree } from "@/app/directory/org-units/_lib/api.client";
-import { fetchDepartmentGroups, type DepartmentGroupRow } from "@/lib/orgScope";
 
 import {
   patchPprIntendedEmployment,
@@ -58,7 +57,6 @@ export default function PprCardIntendedEmploymentSection({
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [savedSnapshot, setSavedSnapshot] = React.useState<PprIntendedEmploymentResponse | null>(initial);
-  const [departmentGroups, setDepartmentGroups] = React.useState<DepartmentGroupRow[]>([]);
 
   const {
     options: orgUnitSelectOptions,
@@ -81,31 +79,19 @@ export default function PprCardIntendedEmploymentSection({
   }, [initial]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    void fetchDepartmentGroups()
-      .then((rows) => {
-        if (!cancelled) setDepartmentGroups(rows);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
     if (orgGroupId != null || orgUnitId == null) return;
     let cancelled = false;
     void getOrgUnitsTree()
       .then((tree) => {
         if (cancelled) return;
-        const groupId = findOrgGroupIdForUnit(tree.items ?? [], orgUnitId, departmentGroups);
+        const groupId = findOrgGroupIdForUnit(tree.items ?? [], orgUnitId);
         if (groupId != null) setOrgGroupId(groupId);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [orgUnitId, orgGroupId, departmentGroups]);
+  }, [orgUnitId, orgGroupId]);
 
   async function handleSave() {
     if (!editable) return;
@@ -187,9 +173,10 @@ export default function PprCardIntendedEmploymentSection({
         <OrgUnitScopeFilter
           basePath={ORG_SCOPE_BASE_PATH}
           label="Подразделение"
+          orgGroupId={orgGroupId}
           value={orgUnitId}
-          options={orgUnitSelectOptions}
-          loading={orgUnitsLoading}
+          unitOptions={orgUnitSelectOptions}
+          unitsLoading={orgUnitsLoading}
           onChange={(next) => {
             setOrgUnitId(next);
             setPositionId(null);
