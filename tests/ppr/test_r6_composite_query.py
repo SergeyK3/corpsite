@@ -3,18 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, is_dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.db.models.personnel_migration import EDUCATION_KIND_BASIC, RELATIONSHIP_TYPE_MOTHER, TRAINING_KIND_COURSE
+from app.db.models.personnel_migration import (
+    EDUCATION_KIND_BASIC,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+    RELATIONSHIP_TYPE_MOTHER,
+    TRAINING_KIND_COURSE,
+)
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
+    COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
     COMMAND_TYPE_ADD_RELATIVE,
     COMMAND_TYPE_MATERIALIZE_PPR,
+    COMMAND_TYPE_SUPERSEDE_EXTERNAL_EMPLOYMENT,
+    COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT,
     MaterializePprPayload,
     PprCommandEnvelope,
 )
@@ -26,7 +35,13 @@ from app.ppr.domain.errors import (
 )
 from app.ppr.domain.identity_models import INPUT_KIND_EMPLOYEE_ID, INPUT_KIND_PERSON_ID, RESULT_MERGE_REDIRECTED
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE, HR_RELATIONSHIP_EMPLOYED, PPR_LIFECYCLE_CREATED, PPR_LIFECYCLE_NOT_MATERIALIZED
-from app.ppr.domain.section_models import EducationRecord, SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_FAMILY, SECTION_CODE_PPR_TRAINING
+from app.ppr.domain.section_models import (
+    EducationRecord,
+    SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+    SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_TRAINING,
+)
 from app.ppr.infrastructure.section_repository import SqlAlchemySectionMutationRepository
 from app.ppr.read import PprCompositeReadModel, PprQueryApplicationService
 from app.ppr.read import models as read_models
@@ -178,6 +193,58 @@ def _add_relative(
     )
 
 
+def _add_external_employment_episode(
+    person_id: int,
+    section_service: PprSectionApplicationService,
+    *,
+    employer_name: str,
+    position_title: str = "Инженер",
+    started_at: date | None = date(2018, 1, 1),
+    ended_at: date | None = None,
+) -> int:
+    payload: dict[str, object] = {
+        "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+        "employer_name": employer_name,
+        "position_title": position_title,
+    }
+    if started_at is not None:
+        payload["started_at"] = started_at
+    if ended_at is not None:
+        payload["ended_at"] = ended_at
+    result = section_service.add_external_employment(
+        PprCommandEnvelope(
+            command_id=f"r6-emp-{uuid4().hex}",
+            command_type=COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+            actor_id="r6-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+                "employer_name": employer_name,
+                "position_title": position_title,
+                **({"started_at": started_at} if started_at is not None else {}),
+                **({"ended_at": ended_at} if ended_at is not None else {}),
+            },
+            person_id=person_id,
+        )
+    )
+    assert result.section_record_id is not None
+    return int(result.section_record_id)
+
+
+def _load_external_employment_updated_at(record_id: int):
+    with engine.begin() as conn:
+        return conn.execute(
+            text(
+                """
+                SELECT updated_at
+                FROM public.person_external_employment
+                WHERE employment_id = :rid
+                """
+            ),
+            {"rid": record_id},
+        ).scalar_one()
+
+
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_01_load_materialized(
     materialized_person_id: int,
@@ -302,8 +369,11 @@ def test_11_empty_sections(
     assert composite.education.active == ()
     assert composite.training.active == ()
     assert composite.family.active == ()
+    assert composite.external_employment.active == ()
     assert composite.education.superseded == ()
     assert composite.education.voided == ()
+    assert composite.external_employment.superseded == ()
+    assert composite.external_employment.voided == ()
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -439,6 +509,7 @@ def test_20_load_sections(
     assert SECTION_CODE_PPR_EDUCATION in sections
     assert SECTION_CODE_PPR_TRAINING in sections
     assert SECTION_CODE_PPR_FAMILY in sections
+    assert SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY in sections
     assert len(sections[SECTION_CODE_PPR_EDUCATION].active) == 1
 
 
@@ -524,3 +595,232 @@ def test_23_summary_family_active_count(
     _add_relative(bare_person_id, section_service, full_name="Сидорова Мария")
     summary = query_service.load_summary(person_id=bare_person_id)
     assert summary.family_active_count == 1
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_24_external_employment_aggregation_candidate(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    _ensure_hr_context(bare_person_id, HR_RELATIONSHIP_CANDIDATE)
+    _add_external_employment_episode(bare_person_id, section_service, employer_name="ТОО «Кандидат»")
+
+    composite = query_service.load_by_person_id(bare_person_id)
+    assert composite.external_employment.section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY
+    assert len(composite.external_employment.active) == 1
+    assert composite.external_employment.active[0].employer_name == "ТОО «Кандидат»"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_25_external_employment_aggregation_employed(
+    employee_linked_person: dict[str, int],
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    person_id = employee_linked_person["person_id"]
+    _materialize(person_id, lifecycle_service)
+    _ensure_hr_context(person_id, HR_RELATIONSHIP_EMPLOYED)
+    _add_external_employment_episode(person_id, section_service, employer_name="ТОО «Сотрудник»")
+
+    composite = query_service.load_by_employee_id(employee_linked_person["employee_id"])
+    assert composite.external_employment.section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY
+    assert len(composite.external_employment.active) == 1
+    assert composite.external_employment.active[0].employer_name == "ТОО «Сотрудник»"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_26_summary_external_employment_active_count(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    _add_external_employment_episode(bare_person_id, section_service, employer_name="Employer A")
+    summary = query_service.load_summary(person_id=bare_person_id)
+    assert summary.external_employment_active_count == 1
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_27_external_employment_lifecycle_buckets(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    active_id = _add_external_employment_episode(bare_person_id, section_service, employer_name="Active Co")
+    void_id = _add_external_employment_episode(bare_person_id, section_service, employer_name="Void Co")
+    supersede_id = _add_external_employment_episode(bare_person_id, section_service, employer_name="Supersede Co")
+
+    void_updated_at = _load_external_employment_updated_at(void_id)
+    section_service.void_external_employment(
+        PprCommandEnvelope(
+            command_id=f"r6-emp-void-{uuid4().hex}",
+            command_type=COMMAND_TYPE_VOID_EXTERNAL_EMPLOYMENT,
+            actor_id="r6-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_id": void_id,
+                "reason": "cleanup",
+                "expected_updated_at": void_updated_at,
+            },
+            person_id=bare_person_id,
+        )
+    )
+
+    supersede_updated_at = _load_external_employment_updated_at(supersede_id)
+    section_service.supersede_external_employment(
+        PprCommandEnvelope(
+            command_id=f"r6-emp-sup-{uuid4().hex}",
+            command_type=COMMAND_TYPE_SUPERSEDE_EXTERNAL_EMPLOYMENT,
+            actor_id="r6-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_id": supersede_id,
+                "expected_updated_at": supersede_updated_at,
+                "replacement": {
+                    "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+                    "employer_name": "Replacement Co",
+                    "position_title": "Lead",
+                    "started_at": date(2020, 1, 1),
+                },
+            },
+            person_id=bare_person_id,
+        )
+    )
+
+    composite = query_service.load_by_person_id(bare_person_id)
+    section = composite.external_employment
+    assert section.section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY
+    assert len(section.active) == 2
+    assert {row.employer_name for row in section.active} == {"Active Co", "Replacement Co"}
+    assert len(section.superseded) == 1
+    assert section.superseded[0].employer_name == "Supersede Co"
+    assert len(section.voided) == 1
+    assert section.voided[0].employer_name == "Void Co"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_28_external_employment_order_by_started_at_desc(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    oldest_id = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Oldest",
+        started_at=date(2010, 1, 1),
+    )
+    newest_id = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Newest",
+        started_at=date(2022, 6, 1),
+    )
+    middle_id = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Middle",
+        started_at=date(2018, 3, 15),
+    )
+
+    composite = query_service.load_by_person_id(bare_person_id)
+    record_ids = [row.record_id for row in composite.external_employment.active]
+    assert record_ids == [newest_id, middle_id, oldest_id]
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_29_external_employment_order_null_dates_last(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    dated_newest_id = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Newest dated",
+        started_at=date(2020, 1, 1),
+    )
+    _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Older dated",
+        started_at=date(2015, 1, 1),
+    )
+    section_service.add_external_employment(
+        PprCommandEnvelope(
+            command_id=f"r6-emp-null-{uuid4().hex}",
+            command_type=COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+            actor_id="r6-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+                "notes": "Summary without episode dates",
+            },
+            person_id=bare_person_id,
+        )
+    )
+
+    composite = query_service.load_by_person_id(bare_person_id)
+    rows = composite.external_employment.active
+    assert rows[0].record_id == dated_newest_id
+    assert rows[0].started_at == date(2020, 1, 1)
+    assert rows[-1].started_at is None
+    assert rows[-1].record_kind == EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_30_external_employment_order_tie_breakers(
+    bare_person_id: int,
+    lifecycle_service: PprLifecycleApplicationService,
+    section_service: PprSectionApplicationService,
+    query_service: PprQueryApplicationService,
+) -> None:
+    _materialize(bare_person_id, lifecycle_service)
+    same_start_later_end = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Later end",
+        started_at=date(2020, 1, 1),
+        ended_at=date(2022, 12, 31),
+    )
+    same_start_earlier_end = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Earlier end",
+        started_at=date(2020, 1, 1),
+        ended_at=date(2021, 6, 30),
+    )
+    same_dates_first = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="First tie",
+        started_at=date(2020, 1, 1),
+        ended_at=date(2021, 6, 30),
+    )
+    same_dates_second = _add_external_employment_episode(
+        bare_person_id,
+        section_service,
+        employer_name="Second tie",
+        started_at=date(2020, 1, 1),
+        ended_at=date(2021, 6, 30),
+    )
+
+    composite = query_service.load_by_person_id(bare_person_id)
+    record_ids = [row.record_id for row in composite.external_employment.active]
+    assert record_ids == [
+        same_start_later_end,
+        same_dates_second,
+        same_dates_first,
+        same_start_earlier_end,
+    ]

@@ -11,6 +11,7 @@ from app.db.models.personnel_migration import (
 )
 from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     SectionRecord,
@@ -20,6 +21,7 @@ from app.ppr.infrastructure.section_repository import (
     _SECTION_SELECTS,
     _resolve_section,
     _row_to_record,
+    section_records_order_by,
 )
 from app.ppr.read.models import PprSectionAggregation
 
@@ -95,6 +97,20 @@ class PprSectionAggregationReader:
             include_voided=include_voided,
         )
 
+    def load_external_employment(
+        self,
+        person_id: int,
+        *,
+        include_superseded: bool = True,
+        include_voided: bool = True,
+    ) -> PprSectionAggregation:
+        return self.load_section(
+            person_id,
+            SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+            include_superseded=include_superseded,
+            include_voided=include_voided,
+        )
+
     def _load_by_lifecycle(
         self,
         person_id: int,
@@ -113,7 +129,7 @@ class PprSectionAggregationReader:
                     FROM public.{spec['table']}
                     WHERE person_id = :person_id
                       AND lifecycle_status = :lifecycle_status
-                    ORDER BY {spec['id_col']} ASC
+                    ORDER BY {section_records_order_by(section_code, spec['id_col'])}
                     """
                 ),
                 {

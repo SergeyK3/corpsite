@@ -120,6 +120,7 @@ class PprCompositeReadModel:
     education: PprSectionAggregation
     training: PprSectionAggregation
     family: PprSectionAggregation
+    external_employment: PprSectionAggregation
     events: PprEventSummary | None
     intended_employment: PprIntendedEmploymentReadSlice | None
     metadata: PprCompositeReadMetadata
@@ -140,5 +141,6 @@ class PprCompositeSummary:
     education_active_count: int
     training_active_count: int
     family_active_count: int
+    external_employment_active_count: int
     recent_event_count: int
     metadata: PprCompositeReadMetadata

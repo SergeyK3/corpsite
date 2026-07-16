@@ -9,6 +9,7 @@ from app.api.ppr_schemas import (
     PprEducationRecordResponse,
     PprEventSummaryItemResponse,
     PprEventSummaryResponse,
+    PprExternalEmploymentRecordResponse,
     PprGeneralResponse,
     PprIdentityResponse,
     PprIntendedEmploymentResponse,
@@ -21,8 +22,10 @@ from app.api.ppr_schemas import (
 from app.ppr.domain.identity_models import INPUT_KIND_EMPLOYEE_ID, INPUT_KIND_PERSON_ID
 from app.ppr.domain.section_models import (
     EducationRecord,
+    ExternalEmploymentRecord,
     RelativeRecord,
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     TrainingRecord,
@@ -103,6 +106,31 @@ def _relative_record(record: RelativeRecord) -> PprRelativeRecordResponse:
     )
 
 
+def _external_employment_record(record: ExternalEmploymentRecord) -> PprExternalEmploymentRecordResponse:
+    provenance = dict(record.provenance) if record.provenance is not None else None
+    return PprExternalEmploymentRecordResponse(
+        record_id=record.record_id,
+        record_kind=record.record_kind,
+        employer_name=record.employer_name,
+        department_name=record.department_name,
+        position_title=record.position_title,
+        employment_type=record.employment_type,
+        started_at=record.started_at,
+        ended_at=record.ended_at,
+        termination_reason=record.termination_reason,
+        document_reference=record.document_reference,
+        source_system=record.source_system,
+        source_id=record.source_id,
+        provenance=provenance,
+        notes=record.notes,
+        employee_context_id=record.employee_context_id,
+        verification_status=record.verification_status,
+        lifecycle_status=record.lifecycle_status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
 def _section_response(section: PprSectionAggregation) -> PprSectionResponse:
     if section.section_code == SECTION_CODE_PPR_EDUCATION:
         mapper = _education_record
@@ -110,6 +138,8 @@ def _section_response(section: PprSectionAggregation) -> PprSectionResponse:
         mapper = _training_record
     elif section.section_code == SECTION_CODE_PPR_FAMILY:
         mapper = _relative_record
+    elif section.section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY:
+        mapper = _external_employment_record
     else:
         raise ValueError(f"Unsupported section_code for API mapping: {section.section_code!r}")
     return PprSectionResponse(
@@ -180,6 +210,7 @@ def composite_to_response(
             SECTION_CODE_PPR_EDUCATION: _section_response(composite.education),
             SECTION_CODE_PPR_TRAINING: _section_response(composite.training),
             SECTION_CODE_PPR_FAMILY: _section_response(composite.family),
+            SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: _section_response(composite.external_employment),
         },
         events=(
             PprEventSummaryResponse(
@@ -253,6 +284,7 @@ def summary_to_response(
         education_active_count=summary.education_active_count,
         training_active_count=summary.training_active_count,
         family_active_count=summary.family_active_count,
+        external_employment_active_count=summary.external_employment_active_count,
         recent_event_count=summary.recent_event_count,
         metadata=PprReadMetadataResponse(
             read_mode=read_mode,

@@ -2,7 +2,7 @@
 """API integration tests for PPR R7 query endpoints."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
@@ -11,9 +11,13 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.main import app
-from app.db.models.personnel_migration import RELATIONSHIP_TYPE_MOTHER
+from app.db.models.personnel_migration import (
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+    RELATIONSHIP_TYPE_MOTHER,
+)
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
+    COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
     COMMAND_TYPE_ADD_RELATIVE,
     COMMAND_TYPE_MATERIALIZE_PPR,
     MaterializePprPayload,
@@ -174,6 +178,7 @@ def test_education_aggregation_in_api(client: TestClient, bare_person: int, priv
     assert len(education) == 1
     assert education[0]["institution_name"] == "R7 University"
     assert "PPR-FAMILY" in resp.json()["sections"]
+    assert "PPR-EMPLOYMENT-BIOGRAPHY" in resp.json()["sections"]
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -203,6 +208,69 @@ def test_family_aggregation_in_api(client: TestClient, bare_person: int, privile
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_aggregation_in_api(
+    client: TestClient,
+    bare_person: int,
+    privileged_headers,
+) -> None:
+    _materialize(bare_person)
+    section_service = PprSectionApplicationService(authorization=AllowAllAuthorizationPort())
+    section_service.add_external_employment(
+        PprCommandEnvelope(
+            command_id=f"r7-emp-{uuid4().hex}",
+            command_type=COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+            actor_id="r7-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+                "notes": "Сводный стаж 15 лет",
+            },
+            person_id=bare_person,
+        )
+    )
+    resp = client.get(f"/api/ppr/persons/{bare_person}", headers=privileged_headers)
+    assert resp.status_code == 200
+    section = resp.json()["sections"]["PPR-EMPLOYMENT-BIOGRAPHY"]
+    assert section["section_code"] == "PPR-EMPLOYMENT-BIOGRAPHY"
+    assert len(section["active"]) == 1
+    assert section["active"][0]["record_kind"] == EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY
+    assert section["active"][0]["notes"] == "Сводный стаж 15 лет"
+    assert section["superseded"] == []
+    assert section["voided"] == []
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_aggregation_in_employee_api(
+    client: TestClient,
+    linked_person_employee: dict,
+    privileged_headers,
+) -> None:
+    _materialize(linked_person_employee["person_id"])
+    section_service = PprSectionApplicationService(authorization=AllowAllAuthorizationPort())
+    section_service.add_external_employment(
+        PprCommandEnvelope(
+            command_id=f"r7-emp-emp-{uuid4().hex}",
+            command_type=COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
+            actor_id="r7-test",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+                "notes": "Employee path biography",
+            },
+            person_id=linked_person_employee["person_id"],
+        )
+    )
+    resp = client.get(
+        f"/api/ppr/employees/{linked_person_employee['employee_id']}",
+        headers=privileged_headers,
+    )
+    assert resp.status_code == 200
+    section = resp.json()["sections"]["PPR-EMPLOYMENT-BIOGRAPHY"]
+    assert len(section["active"]) == 1
+    assert section["active"][0]["notes"] == "Employee path biography"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_event_summary_in_materialized_api(client: TestClient, bare_person: int, privileged_headers) -> None:
     _materialize(bare_person)
     resp = client.get(f"/api/ppr/persons/{bare_person}", headers=privileged_headers)
@@ -223,6 +291,7 @@ def test_summary_endpoint(client: TestClient, linked_person_employee: dict, priv
     assert body["full_name"].startswith("R7 API Linked")
     assert "education_active_count" in body
     assert "family_active_count" in body
+    assert "external_employment_active_count" in body
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")

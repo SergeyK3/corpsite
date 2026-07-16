@@ -113,16 +113,47 @@ class PprRelativeRecordResponse(BaseModel):
     lifecycle_status: str
 
 
+class PprExternalEmploymentRecordResponse(BaseModel):
+    record_id: int | None = None
+    record_kind: str
+    employer_name: str | None = None
+    department_name: str | None = None
+    position_title: str | None = None
+    employment_type: str | None = None
+    started_at: date | None = None
+    ended_at: date | None = None
+    termination_reason: str | None = None
+    document_reference: str | None = None
+    source_system: str
+    source_id: str | None = None
+    provenance: dict[str, Any] | None = None
+    notes: str | None = None
+    employee_context_id: int | None = None
+    verification_status: str
+    lifecycle_status: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class PprSectionResponse(BaseModel):
     section_code: str
     active: list[
-        PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse
+        PprEducationRecordResponse
+        | PprTrainingRecordResponse
+        | PprRelativeRecordResponse
+        | PprExternalEmploymentRecordResponse
     ] = Field(default_factory=list)
     superseded: list[
-        PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse
+        PprEducationRecordResponse
+        | PprTrainingRecordResponse
+        | PprRelativeRecordResponse
+        | PprExternalEmploymentRecordResponse
     ] = Field(default_factory=list)
     voided: list[
-        PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse
+        PprEducationRecordResponse
+        | PprTrainingRecordResponse
+        | PprRelativeRecordResponse
+        | PprExternalEmploymentRecordResponse
     ] = Field(default_factory=list)
 
 
@@ -172,5 +203,6 @@ class PprCompositeSummaryResponse(BaseModel):
     education_active_count: int
     training_active_count: int
     family_active_count: int
+    external_employment_active_count: int
     recent_event_count: int
     metadata: PprReadMetadataResponse

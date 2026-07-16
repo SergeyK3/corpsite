@@ -142,6 +142,12 @@ _SECTION_SELECTS: dict[str, str] = {
 }
 
 
+def section_records_order_by(section_code: str, id_col: str) -> str:
+    if section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY:
+        return "started_at DESC NULLS LAST, ended_at DESC NULLS LAST, employment_id DESC"
+    return f"{id_col} ASC"
+
+
 def _metadata_dict(value: Any) -> dict[str, Any]:
     if value is None:
         return {}
@@ -281,7 +287,7 @@ class _SectionStore:
                     FROM public.{spec['table']}
                     WHERE person_id = :person_id
                       AND lifecycle_status = :lifecycle_status
-                    ORDER BY {spec['id_col']} ASC
+                    ORDER BY {section_records_order_by(section_code, spec['id_col'])}
                     """
                 ),
                 {

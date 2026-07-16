@@ -14,6 +14,7 @@ from app.db.engine import engine
 from app.db.models.personnel_migration import (
     EDUCATION_KIND_BASIC,
     EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
+    EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
     LIFECYCLE_STATUS_ACTIVE,
     LIFECYCLE_STATUS_SUPERSEDED,
     LIFECYCLE_STATUS_VOIDED,
@@ -642,6 +643,92 @@ def test_external_employment_stale_update_raises_concurrency_conflict(
             ),
             expected_updated_at=inserted.updated_at.replace(year=2000),
         )
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_active_order_by_started_at_desc(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    oldest = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Oldest", started_at=date(2010, 1, 1))
+    )
+    newest = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Newest", started_at=date(2022, 6, 1))
+    )
+    middle = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Middle", started_at=date(2018, 3, 15))
+    )
+
+    active_rows = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY)
+    assert [row.record_id for row in active_rows] == [
+        newest.record_id,
+        middle.record_id,
+        oldest.record_id,
+    ]
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_active_order_null_started_at_last(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    dated = mutation_repo.insert_record(
+        _episode_record(section_person_id, employer_name="Dated", started_at=date(2018, 1, 1))
+    )
+    null_started = mutation_repo.insert_record(
+        ExternalEmploymentRecord(
+            person_id=section_person_id,
+            record_kind=EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
+            notes="No episode dates",
+        )
+    )
+
+    active_rows = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY)
+    assert active_rows[0].record_id == dated.record_id
+    assert active_rows[-1].record_id == null_started.record_id
+    assert active_rows[-1].started_at is None
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_external_employment_active_order_tie_breakers(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    later_end = mutation_repo.insert_record(
+        _episode_record(
+            section_person_id,
+            employer_name="Later end",
+            started_at=date(2020, 1, 1),
+            ended_at=date(2022, 12, 31),
+        )
+    )
+    earlier_end = mutation_repo.insert_record(
+        _episode_record(
+            section_person_id,
+            employer_name="Earlier end",
+            started_at=date(2020, 1, 1),
+            ended_at=date(2021, 6, 30),
+        )
+    )
+    first_tie = mutation_repo.insert_record(
+        _episode_record(
+            section_person_id,
+            employer_name="First tie",
+            started_at=date(2020, 1, 1),
+            ended_at=date(2021, 6, 30),
+        )
+    )
+    second_tie = mutation_repo.insert_record(
+        _episode_record(
+            section_person_id,
+            employer_name="Second tie",
+            started_at=date(2020, 1, 1),
+            ended_at=date(2021, 6, 30),
+        )
+    )
+
+    active_rows = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY)
+    assert [row.record_id for row in active_rows] == [
+        later_end.record_id,
+        second_tie.record_id,
+        first_tie.record_id,
+        earlier_end.record_id,
+    ]
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
