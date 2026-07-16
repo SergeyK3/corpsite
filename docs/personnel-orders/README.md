@@ -93,7 +93,25 @@ d:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\
 | Инвентарь CSV (full, local only) | `inventories/order-samples-inventory.csv` |
 | Инвентарь MD | `inventories/ORDER-SAMPLES-INVENTORY-REPORT.md` |
 
-## Roadmap (editorial / leave)
+## Roadmap
+
+### Forward-flow «Заявитель → Работник» — COMPLETE (2026-07-16)
+
+PPR phases R0–R7 complete. Сценарий CANDIDATE → HIRE → Apply → EMPLOYED готов к commit.
+
+- ADR: [ADR-054-NOTE-intended-employment-lifecycle](../adr/ADR-054-NOTE-intended-employment-lifecycle.md)
+- PPR roadmap: [WP-PR-012 §0](../architecture/WP-PR-012-ppr-implementation-roadmap.md)
+
+### Hire lifecycle backlog (planned)
+
+| EPIC | WP | Scope |
+|------|-----|-------|
+| VOID HIRE | WP-PO-VOID-HIRE-001 … 004 | hr_context, assignment, operational_status rollback; integration test |
+| REHIRE | WP-PO-REHIRE-001 … 003 | Termination/Rehire hr_context sync; E2E |
+
+Index: [WP-PO-HIRE-LIFECYCLE-BACKLOG-INDEX](./work-packages/WP-PO-HIRE-LIFECYCLE-BACKLOG-INDEX.md)
+
+### Editorial / leave
 
 | WP | Status | Scope |
 |---|---|---|

@@ -12,13 +12,13 @@ Type:
 Architecture Work Package — Implementation Plan
 
 Status:
-Draft — Ready for Review
+In Progress — R0–R7 complete; forward-flow Applicant→Employee complete
 
 Revision:
-2
+3
 
 Date:
-2026-07-15
+2026-07-16
 
 Revision History:
 
@@ -26,6 +26,7 @@ Revision History:
 |-----|------|---------|
 | 1 | 2026-07-15 | Initial gap analysis and R0–R10 phased roadmap |
 | 2 | 2026-07-15 | Review clarifications: R1 infra-only (no MaterializePPR); MaterializePPR in R5; R4/R5 boundary; R3 event infra vs activation; R6A/R6B sub-stages; R8 additive rollup migration; DG-ReadSwitch; WP mapping fix; first coding slice R0+R1 |
+| 3 | 2026-07-16 | Mark R0–R7 **COMPLETE**; forward-flow «Заявитель → Работник» **COMPLETE**; VOID HIRE / REHIRE backlog registered |
 
 Parent:
 ARCH-002 — Personnel Personal Record Architecture
@@ -41,7 +42,43 @@ No code, migrations, API implementation, or business feature delivery in this WP
 
 # WP-PR-012 — PPR Phase 1 Implementation Roadmap
 
-**Date:** 2026-07-15
+**Date:** 2026-07-16 (rev. 3)
+
+---
+
+## 0. Implementation status (2026-07-16)
+
+### PPR phases R0–R7 — COMPLETE
+
+| Phase | Name | Status |
+|-------|------|--------|
+| **R0** | Module scaffold | ✅ **Complete** |
+| **R1** | Envelope persistence | ✅ **Complete** |
+| **R2** | Identity + PersonRepository | ✅ **Complete** |
+| **R3** | Event repository | ✅ **Complete** |
+| **R4** | SectionRepository + handlers | ✅ **Complete** |
+| **R5** | Application Layer (write) | ✅ **Complete** |
+| **R6** | Composite read v1 | ✅ **Complete** |
+| **R7** | Query API + read-switch | ✅ **Complete** |
+
+### Forward-flow «Заявитель → Работник» — COMPLETE
+
+```text
+PPR (CANDIDATE) → intended employment → HIRE → Apply → Employee + Assignment → PPR (EMPLOYED)
+```
+
+Architectural review sign-off: 2026-07-16. Ready for commit.
+
+ADR note: [ADR-054-NOTE-intended-employment-lifecycle](../adr/ADR-054-NOTE-intended-employment-lifecycle.md).
+
+### Next EPICs (planned)
+
+| EPIC | Scope | Backlog |
+|------|-------|---------|
+| **VOID HIRE** | Rollback hr_context, assignment, operational_status; integration test | [WP-PO-HIRE-LIFECYCLE-BACKLOG-INDEX](../personnel-orders/work-packages/WP-PO-HIRE-LIFECYCLE-BACKLOG-INDEX.md) |
+| **TERMINATION / REHIRE** | hr_context sync; E2E lifecycle | same index |
+| **EPIC-4** | New person_* PPR sections | [ARCH-002-IMPLEMENTATION-ROADMAP](./ARCH-002-IMPLEMENTATION-ROADMAP.md) |
+| **R8–R10** | Evaluation, UI migration, Import/PMF cutover | This document §R8–R10 |
 
 ---
 
@@ -608,19 +645,19 @@ Phases **R0–R10** are **roadmap phases** — independently deliverable with cl
 
 ## 6. Phase summary table
 
-| Phase | Name | Complexity | Depends on | Parallel after |
-|-------|------|------------|------------|----------------|
-| **R0** | Module scaffold | S | — | — |
-| **R1** | Envelope | M | R0 | R0 |
-| **R2** | Identity + PersonRepository | M | R0 | R0 |
-| **R3** | Event repository | M | R0, R1 | R1 |
-| **R4** | SectionRepository + handlers | L | R1, R2, R3 | R3 |
-| **R5** | Application Layer (write) | L | R1–R4 | R4 |
-| **R6** | Composite read v1 (R6A+R6B) | L | R1+R2 (R6A); **R5 (R6B exit)** | R1+R2 for R6A; R5 for R6B |
-| **R7** | Query API + read-switch | M | R6 complete | R6 |
-| **R8** | Evaluation v1 | L | R1, R4, R5 | R5 |
-| **R9** | UI migration (read) | M | R7 | R7 |
-| **R10** | Import/PMF cutover prep | L | R5, R7, R9 | R9 |
+| Phase | Name | Complexity | Depends on | Parallel after | Status |
+|-------|------|------------|------------|----------------|--------|
+| **R0** | Module scaffold | S | — | — | ✅ Complete |
+| **R1** | Envelope | M | R0 | R0 | ✅ Complete |
+| **R2** | Identity + PersonRepository | M | R0 | R0 | ✅ Complete |
+| **R3** | Event repository | M | R0, R1 | R1 | ✅ Complete |
+| **R4** | SectionRepository + handlers | L | R1, R2, R3 | R3 | ✅ Complete |
+| **R5** | Application Layer (write) | L | R1–R4 | R4 | ✅ Complete |
+| **R6** | Composite read v1 (R6A+R6B) | L | R1+R2 (R6A); **R5 (R6B exit)** | R1+R2 for R6A; R5 for R6B | ✅ Complete |
+| **R7** | Query API + read-switch | M | R6 complete | R6 | ✅ Complete |
+| **R8** | Evaluation v1 | L | R1, R4, R5 | R5 | Planned |
+| **R9** | UI migration (read) | M | R7 | R7 | Planned |
+| **R10** | Import/PMF cutover prep | L | R5, R7, R9 | R9 | Planned |
 
 ---
 

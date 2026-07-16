@@ -11,6 +11,7 @@
 | Decision Gate | DG-1 — **Closed** (см. §Decision Gate) |
 | Parent | [ARCH-002](../architecture/ARCH-002-personnel-personal-record-architecture.md) |
 | Roadmap | [ARCH-002-IMPLEMENTATION-ROADMAP](../architecture/ARCH-002-IMPLEMENTATION-ROADMAP.md) |
+| Addendum | [ADR-054-NOTE-intended-employment-lifecycle](./ADR-054-NOTE-intended-employment-lifecycle.md) — intended_* SoT after Apply |
 
 ---
 
