@@ -25,6 +25,8 @@ type OrgUnitScopeFilterProps = {
   onChange?: (unitId: number | null) => void;
   /** Optional injected options (e.g. shared hook in PersonnelOrderItemEditor). */
   unitOptions?: OrgUnitSelectOption[];
+  /** Full catalog for selection validation (defaults to unitOptions / internal catalog). */
+  catalogUnitOptions?: OrgUnitSelectOption[];
   unitsLoading?: boolean;
   unitsError?: string | null;
 };
@@ -40,6 +42,7 @@ export default function OrgUnitScopeFilter({
   value,
   onChange,
   unitOptions: injectedUnitOptions,
+  catalogUnitOptions: injectedCatalogUnitOptions,
   unitsLoading: injectedUnitsLoading,
   unitsError: injectedUnitsError,
 }: OrgUnitScopeFilterProps) {
@@ -55,7 +58,7 @@ export default function OrgUnitScopeFilter({
 
   const internal = useOrgUnitScopeOptions(orgGroupId, injectedUnitOptions == null);
   const options = injectedUnitOptions ?? internal.options;
-  const catalogOptions = injectedUnitOptions ?? internal.catalogOptions;
+  const catalogOptions = injectedCatalogUnitOptions ?? injectedUnitOptions ?? internal.catalogOptions;
   const loading = injectedUnitsLoading ?? internal.loading;
   const error = injectedUnitsError ?? internal.error;
 

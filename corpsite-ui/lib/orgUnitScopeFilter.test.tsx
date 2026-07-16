@@ -131,6 +131,29 @@ describe("OrgUnitScopeFilter cascade", () => {
     });
   });
 
+  it("clears unit pinned only in display options when catalog rejects group pairing", async () => {
+    const displayWithHistorical = [
+      ...catalog,
+      { unit_id: 41, name: "ММЦ (корень)", group_id: clinicalGroupId },
+    ];
+    const onChange = vi.fn();
+
+    render(
+      <OrgUnitScopeFilter
+        basePath="/directory/personnel/orders"
+        orgGroupId={clinicalGroupId}
+        value={41}
+        unitOptions={displayWithHistorical}
+        catalogUnitOptions={catalog}
+        onChange={onChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(null);
+    });
+  });
+
   it("calls onChange with selected unit id", async () => {
     vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue(catalog);
     const onChange = vi.fn();

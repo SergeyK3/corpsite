@@ -7,8 +7,14 @@ import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import {
   isOrgUnitAllowedForGroup,
   isPositionAllowedInOptions,
+  buildPersonnelOrderPositionSelectGroups,
+  flattenPersonnelOrderPositionGroups,
   type PersonnelOrderPositionSelectGroup,
 } from "@/lib/taskOrgFilters";
+import {
+  ensureOrgUnitInOptions,
+  ensurePositionInGroups,
+} from "@/lib/pprIntendedEmploymentSelect";
 import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
 import { findOrgGroupIdForUnit } from "@/lib/userCreateOrgScope";
@@ -64,11 +70,50 @@ export default function PprCardIntendedEmploymentSection({
     loading: orgUnitsLoading,
   } = useOrgUnitScopeOptions(orgGroupId);
 
-  const { positionGroups, scopedOptions, loading: positionsLoading } = usePersonnelOrderPositionOptions({
+  const { positionGroups, scopedOptions, globalOptions, loading: positionsLoading } = usePersonnelOrderPositionOptions({
     enabled: true,
     orgUnitId,
     orgGroupId,
   });
+
+  const selectionSource = savedSnapshot ?? initial;
+
+  // Display options: pin saved unit/position so labels survive async loading.
+  const unitOptionsForSelect = React.useMemo(
+    () =>
+      ensureOrgUnitInOptions(
+        orgUnitSelectOptions,
+        orgUnitId,
+        selectionSource?.org_unit_name,
+        orgGroupId ?? selectionSource?.org_group_id ?? null,
+      ),
+    [orgUnitSelectOptions, orgUnitId, orgGroupId, selectionSource],
+  );
+
+  // Validation catalog: real options only — pinned display rows must not bypass group checks.
+  const catalogUnitOptionsForValidation = orgUnitCatalogOptions;
+
+  const positionGroupsForSelect = React.useMemo(
+    () =>
+      ensurePositionInGroups(
+        positionGroups.length > 0
+          ? positionGroups
+          : buildPersonnelOrderPositionSelectGroups(scopedOptions, globalOptions),
+        positionId,
+        selectionSource?.position_name,
+      ),
+    [positionGroups, scopedOptions, globalOptions, positionId, selectionSource],
+  );
+
+  const positionOptionsForValidation = React.useMemo(
+    () =>
+      flattenPersonnelOrderPositionGroups(
+        positionGroups.length > 0
+          ? positionGroups
+          : buildPersonnelOrderPositionSelectGroups(scopedOptions, globalOptions),
+      ),
+    [positionGroups, scopedOptions, globalOptions],
+  );
 
   React.useEffect(() => {
     setSavedSnapshot(initial);
@@ -109,7 +154,7 @@ export default function PprCardIntendedEmploymentSection({
       setError("Подразделение не входит в выбранную группу.");
       return;
     }
-    if (!isPositionAllowedInOptions(positionId, scopedOptions)) {
+    if (!isPositionAllowedInOptions(positionId, positionOptionsForValidation)) {
       setError("Выберите должность из списка для выбранного подразделения.");
       return;
     }
@@ -175,7 +220,8 @@ export default function PprCardIntendedEmploymentSection({
           label="Подразделение"
           orgGroupId={orgGroupId}
           value={orgUnitId}
-          unitOptions={orgUnitSelectOptions}
+          unitOptions={unitOptionsForSelect}
+          catalogUnitOptions={catalogUnitOptionsForValidation}
           unitsLoading={orgUnitsLoading}
           onChange={(next) => {
             setOrgUnitId(next);
@@ -198,7 +244,7 @@ export default function PprCardIntendedEmploymentSection({
             }}
           >
             <option value="">{orgUnitId == null ? "Сначала выберите подразделение" : "Выберите должность"}</option>
-            {renderPositionOptions(positionGroups)}
+            {renderPositionOptions(positionGroupsForSelect)}
           </select>
         </div>
       </div>
