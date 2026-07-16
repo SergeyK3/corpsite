@@ -75,11 +75,39 @@ export type PprRelativeRecordResponse = {
   lifecycle_status: string;
 };
 
+export type PprExternalEmploymentRecordResponse = {
+  record_id: number | null;
+  record_kind: string;
+  employer_name: string | null;
+  department_name: string | null;
+  position_title: string | null;
+  employment_type: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  termination_reason: string | null;
+  document_reference: string | null;
+  source_system: string;
+  source_id: string | null;
+  provenance: Record<string, unknown> | null;
+  notes: string | null;
+  employee_context_id: number | null;
+  verification_status: string;
+  lifecycle_status: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type PprSectionRecordResponse =
+  | PprEducationRecordResponse
+  | PprTrainingRecordResponse
+  | PprRelativeRecordResponse
+  | PprExternalEmploymentRecordResponse;
+
 export type PprSectionResponse = {
   section_code: string;
-  active: Array<PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse>;
-  superseded: Array<PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse>;
-  voided: Array<PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse>;
+  active: PprSectionRecordResponse[];
+  superseded: PprSectionRecordResponse[];
+  voided: PprSectionRecordResponse[];
 };
 
 export type PprEventSummaryItemResponse = {
@@ -142,6 +170,7 @@ export type PprCompositeSummaryResponse = {
   education_active_count: number;
   training_active_count: number;
   family_active_count: number;
+  external_employment_active_count: number;
   recent_event_count: number;
   metadata: PprReadMetadataResponse;
 };
@@ -151,5 +180,10 @@ export const PPR_HR_RELATIONSHIP_EMPLOYED = "EMPLOYED";
 export const PPR_SECTION_CODE_EDUCATION = "PPR-EDUCATION";
 export const PPR_SECTION_CODE_TRAINING = "PPR-TRAINING";
 export const PPR_SECTION_CODE_FAMILY = "PPR-FAMILY";
+export const PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY = "PPR-EMPLOYMENT-BIOGRAPHY";
+
+export const PPR_EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE = "episode";
+export const PPR_EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY = "narrative_summary";
+export const PPR_EXTERNAL_EMPLOYMENT_RECORD_KIND_ATTESTATION_NONE = "attestation_none";
 
 export const PPR_LIFECYCLE_NOT_MATERIALIZED = "NOT_MATERIALIZED";

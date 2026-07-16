@@ -116,3 +116,32 @@ export function relationshipTypeLabel(value: string | null | undefined): string 
   if (!value) return "—";
   return RELATIONSHIP_TYPE_LABELS[value] || value;
 }
+
+const EXTERNAL_EMPLOYMENT_RECORD_KIND_LABELS: Record<string, string> = {
+  episode: "Эпизод трудовой деятельности",
+  narrative_summary: "Сводная запись о стаже",
+  attestation_none: "Нет стажа до поступления",
+};
+
+export function externalEmploymentRecordKindLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return EXTERNAL_EMPLOYMENT_RECORD_KIND_LABELS[value] || value;
+}
+
+export function mapPprMutationError(error: unknown): string {
+  const api = error as { status?: number; message?: string; detail?: string };
+  const status = typeof api.status === "number" ? api.status : undefined;
+  const detail =
+    typeof api.detail === "string"
+      ? api.detail
+      : typeof api.message === "string"
+        ? api.message
+        : null;
+  if (status === 403) return "Недостаточно прав для изменения трудовой биографии.";
+  if (status === 404) return "Запись не найдена. Обновите данные и повторите.";
+  if (status === 409) {
+    return detail || "Данные были изменены другим пользователем. Обновите карточку и повторите.";
+  }
+  if (status === 422) return detail || "Проверьте заполнение полей.";
+  return detail || "Не удалось выполнить операцию.";
+}

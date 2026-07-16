@@ -5,6 +5,7 @@ import PprPersonalCardPageClient from "./PprPersonalCardPageClient";
 import {
   PPR_HR_RELATIONSHIP_CANDIDATE,
   PPR_SECTION_CODE_EDUCATION,
+  PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
   PPR_SECTION_CODE_FAMILY,
   PPR_SECTION_CODE_TRAINING,
   type PprCompositeReadResponse,
@@ -198,6 +199,77 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
           },
         ],
       },
+      [PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY]: {
+        section_code: PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
+        active: [
+          {
+            record_id: 101,
+            record_kind: "episode",
+            employer_name: "ТОО Альфа",
+            department_name: "Производство",
+            position_title: "Инженер",
+            employment_type: null,
+            started_at: "2020-01-01",
+            ended_at: "2022-12-31",
+            termination_reason: null,
+            document_reference: null,
+            source_system: "manual",
+            source_id: null,
+            provenance: null,
+            notes: null,
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "active",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-03-01T00:00:00Z",
+          },
+          {
+            record_id: 100,
+            record_kind: "narrative_summary",
+            employer_name: null,
+            department_name: null,
+            position_title: null,
+            employment_type: null,
+            started_at: null,
+            ended_at: null,
+            termination_reason: null,
+            document_reference: null,
+            source_system: "manual",
+            source_id: null,
+            provenance: null,
+            notes: "Сводный стаж до поступления",
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "active",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-02-01T00:00:00Z",
+          },
+        ],
+        superseded: [
+          {
+            record_id: 99,
+            record_kind: "episode",
+            employer_name: "ТОО Бета (устар.)",
+            department_name: null,
+            position_title: "Стажёр",
+            employment_type: null,
+            started_at: "2015-01-01",
+            ended_at: "2017-12-31",
+            termination_reason: null,
+            document_reference: null,
+            source_system: "manual",
+            source_id: null,
+            provenance: null,
+            notes: null,
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "superseded",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-01-15T00:00:00Z",
+          },
+        ],
+        voided: [],
+      },
     },
     events: {
       recent: [
@@ -215,6 +287,7 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
       returned_count: 1,
       limit: 20,
     },
+    intended_employment: null,
     metadata: {
       read_mode: "composite",
       source: "ppr",
@@ -295,6 +368,7 @@ describe("PprPersonalCardPageClient", () => {
     expect(within(nav).getByRole("link", { name: "Образование" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Обучение и повышение квалификации" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Родственники" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Трудовая биография" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая деятельность" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();
   });
@@ -323,7 +397,14 @@ describe("PprPersonalCardPageClient", () => {
           created_at: null,
           updated_at: null,
         },
-        sections: {},
+        sections: {
+          [PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY]: {
+            section_code: PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+        },
         events: null,
       }),
     );
@@ -334,9 +415,132 @@ describe("PprPersonalCardPageClient", () => {
       expect(
         screen.getByText(/Формирование служебной части личной карточки ещё не завершено/),
       ).toBeInTheDocument();
+      expect(screen.getByTestId("emp-bio-empty")).toBeInTheDocument();
     });
     expect(screen.getByText("Не сформирована полностью")).toBeInTheDocument();
     expect(screen.queryByText(/ошибк/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("emp-bio-create-btn")).not.toBeInTheDocument();
+  });
+
+  it("hides employment biography mutations for read-only card access", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" canEditPprSections={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("emp-bio-record-101")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("emp-bio-create-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("emp-bio-supersede-btn-101")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("emp-bio-void-btn-101")).not.toBeInTheDocument();
+  });
+
+  it("shows employment biography mutations for materialized editable card", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" canEditPprSections />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("emp-bio-create-btn")).toBeInTheDocument();
+      expect(screen.getByTestId("emp-bio-supersede-btn-101")).toBeInTheDocument();
+      expect(screen.getByTestId("emp-bio-void-btn-101")).toBeInTheDocument();
+    });
+  });
+
+  it("renders employment biography records in backend order", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("emp-bio-record-101")).toBeInTheDocument();
+    });
+
+    const cards = screen.getAllByTestId(/emp-bio-record-/);
+    expect(cards[0]).toHaveTextContent("ТОО Альфа");
+    expect(cards[1]).toHaveTextContent("Сводная запись о стаже");
+    expect(screen.queryByText("ТОО Бета (устар.)")).not.toBeInTheDocument();
+  });
+
+  it("shows employment biography empty state", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        sections: {
+          [PPR_SECTION_CODE_EDUCATION]: {
+            section_code: PPR_SECTION_CODE_EDUCATION,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+          [PPR_SECTION_CODE_TRAINING]: {
+            section_code: PPR_SECTION_CODE_TRAINING,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+          [PPR_SECTION_CODE_FAMILY]: {
+            section_code: PPR_SECTION_CODE_FAMILY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+          [PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY]: {
+            section_code: PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("emp-bio-empty")).toBeInTheDocument();
+      expect(screen.getByText("Записи трудовой биографии отсутствуют.")).toBeInTheDocument();
+    });
+  });
+
+  it("shows employment biography on person card with editable actions", async () => {
+    getPprByPersonIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        identity: {
+          requested_person_id: 501,
+          requested_employee_id: null,
+          resolved_person_id: 501,
+          merge_redirected: false,
+          merge_chain: [501],
+          employee_context_id: null,
+          person_status: "active",
+          match_key: "iin:seed",
+          iin: "900101350123",
+        },
+        materialization: {
+          materialized: true,
+          lifecycle_state: "CREATED",
+          hr_relationship_context: PPR_HR_RELATIONSHIP_CANDIDATE,
+          envelope_version: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-02-01T00:00:00Z",
+        },
+        sections: {
+          [PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY]: {
+            section_code: PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
+            active: [],
+            superseded: [],
+            voided: [],
+          },
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient personId="501" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("emp-bio-empty")).toBeInTheDocument();
+      expect(screen.getByTestId("emp-bio-create-btn")).toBeInTheDocument();
+    });
   });
 
   it("collapses superseded and voided education groups by default", async () => {
@@ -516,9 +720,80 @@ describe("PprPersonalCardPageClient", () => {
             section_code: PPR_SECTION_CODE_FAMILY,
             active: [],
             superseded: [],
-            voided: [],
+        voided: [],
+      },
+      [PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY]: {
+        section_code: PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
+        active: [
+          {
+            record_id: 101,
+            record_kind: "episode",
+            employer_name: "ТОО Альфа",
+            department_name: "Производство",
+            position_title: "Инженер",
+            employment_type: null,
+            started_at: "2020-01-01",
+            ended_at: "2022-12-31",
+            termination_reason: null,
+            document_reference: null,
+            source_system: "manual",
+            source_id: null,
+            provenance: null,
+            notes: null,
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "active",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-03-01T00:00:00Z",
           },
-        },
+          {
+            record_id: 100,
+            record_kind: "narrative_summary",
+            employer_name: null,
+            department_name: null,
+            position_title: null,
+            employment_type: null,
+            started_at: null,
+            ended_at: null,
+            termination_reason: null,
+            document_reference: null,
+            source_system: "manual",
+            source_id: null,
+            provenance: null,
+            notes: "Сводный стаж до поступления",
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "active",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-02-01T00:00:00Z",
+          },
+        ],
+        superseded: [
+          {
+            record_id: 99,
+            record_kind: "episode",
+            employer_name: "ТОО Бета (устар.)",
+            department_name: null,
+            position_title: "Стажёр",
+            employment_type: null,
+            started_at: "2015-01-01",
+            ended_at: "2017-12-31",
+            termination_reason: null,
+            document_reference: null,
+            source_system: "manual",
+            source_id: null,
+            provenance: null,
+            notes: null,
+            employee_context_id: null,
+            verification_status: "verified",
+            lifecycle_status: "superseded",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-01-15T00:00:00Z",
+          },
+        ],
+        voided: [],
+      },
+    },
       }),
     );
 

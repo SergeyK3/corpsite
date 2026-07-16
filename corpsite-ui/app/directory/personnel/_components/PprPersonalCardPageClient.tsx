@@ -15,21 +15,26 @@ import {
   PPR_HR_RELATIONSHIP_CANDIDATE,
   PPR_LIFECYCLE_NOT_MATERIALIZED,
   PPR_SECTION_CODE_EDUCATION,
+  PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY,
   PPR_SECTION_CODE_FAMILY,
   PPR_SECTION_CODE_TRAINING,
   type PprCompositeReadResponse,
   type PprEducationRecordResponse,
+  type PprExternalEmploymentRecordResponse,
   type PprIntendedEmploymentResponse,
   type PprRelativeRecordResponse,
+  type PprSectionRecordResponse,
   type PprTrainingRecordResponse,
 } from "../_lib/pprQueryTypes";
 import { mapPprCardError, lifecycleStatusLabel, hrRelationshipLabel } from "../_lib/pprCardPresentation";
+import type { PprEmploymentBiographyRoute } from "../_lib/pprCommandApi.client";
 import { EmployeeImportCardSection } from "./EmployeeImportCardSection";
 import { PprCardSectionNav } from "./PprCardSectionNav";
 import PprCardGeneralSection from "./PprCardGeneralSection";
 import PprCardEducationSection from "./PprCardEducationSection";
 import PprCardTrainingSection from "./PprCardTrainingSection";
 import PprCardFamilySection from "./PprCardFamilySection";
+import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
@@ -38,21 +43,29 @@ import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 type Props = {
   employeeId?: string;
   personId?: string;
+  /** When false, PPR section mutations stay hidden while records remain visible. */
+  canEditPprSections?: boolean;
 };
 
-function isEducationRecord(
-  record: PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse,
-): record is PprEducationRecordResponse {
+function isEducationRecord(record: PprSectionRecordResponse): record is PprEducationRecordResponse {
   return "education_kind" in record;
 }
 
-function isRelativeRecord(
-  record: PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse,
-): record is PprRelativeRecordResponse {
+function isRelativeRecord(record: PprSectionRecordResponse): record is PprRelativeRecordResponse {
   return "relationship_type" in record;
 }
 
-export default function PprPersonalCardPageClient({ employeeId, personId }: Props) {
+function isExternalEmploymentRecord(
+  record: PprSectionRecordResponse,
+): record is PprExternalEmploymentRecordResponse {
+  return "record_kind" in record;
+}
+
+export default function PprPersonalCardPageClient({
+  employeeId,
+  personId,
+  canEditPprSections = true,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSection = parsePprCardSection(searchParams.get("section"));
@@ -112,21 +125,25 @@ export default function PprPersonalCardPageClient({ employeeId, personId }: Prop
   const educationSection = ppr?.sections[PPR_SECTION_CODE_EDUCATION];
   const trainingSection = ppr?.sections[PPR_SECTION_CODE_TRAINING];
   const familySection = ppr?.sections[PPR_SECTION_CODE_FAMILY];
+  const employmentBiographySection = ppr?.sections[PPR_SECTION_CODE_EMPLOYMENT_BIOGRAPHY];
   const educationActive = (educationSection?.active ?? []).filter(isEducationRecord);
   const educationSuperseded = (educationSection?.superseded ?? []).filter(isEducationRecord);
   const educationVoided = (educationSection?.voided ?? []).filter(isEducationRecord);
   const trainingActive = (trainingSection?.active ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r),
+    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r),
   );
   const trainingSuperseded = (trainingSection?.superseded ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r),
+    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r),
   );
   const trainingVoided = (trainingSection?.voided ?? []).filter(
-    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r),
+    (r): r is PprTrainingRecordResponse => !isEducationRecord(r) && !isRelativeRecord(r) && !isExternalEmploymentRecord(r),
   );
   const familyActive = (familySection?.active ?? []).filter(isRelativeRecord);
   const familySuperseded = (familySection?.superseded ?? []).filter(isRelativeRecord);
   const familyVoided = (familySection?.voided ?? []).filter(isRelativeRecord);
+  const employmentBiographyActive = (employmentBiographySection?.active ?? []).filter(isExternalEmploymentRecord);
+  const employmentBiographySuperseded = (employmentBiographySection?.superseded ?? []).filter(isExternalEmploymentRecord);
+  const employmentBiographyVoided = (employmentBiographySection?.voided ?? []).filter(isExternalEmploymentRecord);
 
   const displayName =
     ppr?.general.full_name ||
@@ -136,6 +153,14 @@ export default function PprPersonalCardPageClient({ employeeId, personId }: Prop
     ppr != null &&
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
+  const employmentBiographyEditable = !notMaterialized && canEditPprSections;
+
+  const employmentBiographyRoute: PprEmploymentBiographyRoute | null =
+    personId != null
+      ? { kind: "person", id: Number(personId) }
+      : resolvedEmployeeId != null
+        ? { kind: "employee", id: resolvedEmployeeId }
+        : null;
 
   return (
     <div className="flex max-h-[calc(100dvh-8.5rem)] min-h-[min(100dvh-8.5rem,640px)] flex-col overflow-hidden">
@@ -281,6 +306,23 @@ export default function PprPersonalCardPageClient({ employeeId, personId }: Prop
                   voided={familyVoided}
                 />
               </EmployeeImportCardSection>
+
+              {employmentBiographyRoute ? (
+                <EmployeeImportCardSection
+                  id="employment_biography"
+                  title="Трудовая биография"
+                  description="Сведения о трудовой деятельности до поступления в организацию."
+                >
+                  <PprCardEmploymentBiographySection
+                    active={employmentBiographyActive}
+                    superseded={employmentBiographySuperseded}
+                    voided={employmentBiographyVoided}
+                    route={employmentBiographyRoute}
+                    editable={employmentBiographyEditable}
+                    onMutated={() => loadCard()}
+                  />
+                </EmployeeImportCardSection>
+              ) : null}
 
               {isApplicant && resolvedPersonId != null ? (
                 <EmployeeImportCardSection
