@@ -7,6 +7,7 @@ from typing import Any
 from app.db.models.personnel_migration import (
     EDUCATION_KINDS,
     LIFECYCLE_STATUS_ACTIVE,
+    SECTION_SOURCE_TYPE_ENTERED,
     TRAINING_KINDS,
 )
 from app.ppr.domain.errors import (
@@ -16,12 +17,16 @@ from app.ppr.domain.errors import (
 )
 from app.ppr.domain.section_commands import (
     AddEducationRecord,
+    AddRelativeRecord,
     AddTrainingRecord,
     SupersedeEducationRecord,
+    SupersedeRelativeRecord,
     SupersedeTrainingRecord,
     UpdateEducationRecord,
+    UpdateRelativeRecord,
     UpdateTrainingRecord,
     VoidEducationRecord,
+    VoidRelativeRecord,
     VoidTrainingRecord,
 )
 from app.ppr.domain.section_models import (
@@ -30,11 +35,14 @@ from app.ppr.domain.section_models import (
     MUTATION_KIND_UPDATE,
     MUTATION_KIND_VOID,
     SECTION_CODE_PPR_EDUCATION,
+    SECTION_CODE_PPR_FAMILY,
     SECTION_CODE_PPR_TRAINING,
     EducationRecord,
+    RelativeRecord,
     SectionMutationResult,
     TrainingRecord,
 )
+from app.ppr.domain.section_record_validation import validate_relative_record
 from app.ppr.domain.unit_of_work import UnitOfWork
 
 
@@ -252,6 +260,159 @@ def handle_supersede_education_record(
         expected_updated_at=command.expected_updated_at,
     )
     if not isinstance(old_record, EducationRecord) or not isinstance(new_record, EducationRecord):
+        raise SectionValidationError("supersede_pair returned unexpected section types")
+    return SectionMutationResult(
+        record=new_record,
+        mutation_kind=MUTATION_KIND_SUPERSEDE,
+        prior_record=old_record,
+    )
+
+
+def _relative_fingerprint(record: RelativeRecord) -> tuple[Any, ...]:
+    return (record.relationship_type, record.full_name.strip())
+
+
+def _relative_from_add(command: AddRelativeRecord) -> RelativeRecord:
+    record = RelativeRecord(
+        person_id=command.person_id,
+        relationship_type=command.relationship_type,
+        full_name=str(command.full_name).strip(),
+        birth_date=command.birth_date,
+        birth_place=command.birth_place,
+        organization_name=command.organization_name,
+        residence_address=command.residence_address,
+        notes=command.notes,
+        source_type=command.source_type or SECTION_SOURCE_TYPE_ENTERED,
+        metadata=dict(command.metadata) if command.metadata is not None else None,
+    )
+    validate_relative_record(record)
+    return record
+
+
+def _assert_no_duplicate_relative(
+    uow: UnitOfWork,
+    *,
+    person_id: int,
+    candidate: RelativeRecord,
+    exclude_record_id: int | None = None,
+) -> None:
+    active = uow.sections.load_active_records(person_id, SECTION_CODE_PPR_FAMILY)
+    fp = _relative_fingerprint(candidate)
+    for existing in active:
+        if not isinstance(existing, RelativeRecord):
+            continue
+        if exclude_record_id is not None and existing.record_id == exclude_record_id:
+            continue
+        if _relative_fingerprint(existing) == fp:
+            raise SectionDuplicateRecordError(
+                f"Duplicate active relative record for person_id={person_id}: "
+                f"relationship_type={candidate.relationship_type!r}, full_name={candidate.full_name!r}"
+            )
+
+
+def _require_active_relative(uow: UnitOfWork, person_id: int, record_id: int) -> RelativeRecord:
+    loaded = uow.sections.load_record(person_id, SECTION_CODE_PPR_FAMILY, record_id)
+    if loaded is None or not isinstance(loaded, RelativeRecord):
+        raise SectionRecordNotFoundError(
+            f"Relative record not found: person_id={person_id}, record_id={record_id}"
+        )
+    if loaded.lifecycle_status != LIFECYCLE_STATUS_ACTIVE:
+        raise SectionValidationError(
+            f"Relative record {record_id} is not active (status={loaded.lifecycle_status!r})"
+        )
+    return loaded
+
+
+def handle_add_relative_record(
+    command: AddRelativeRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    candidate = _relative_from_add(command)
+    _assert_no_duplicate_relative(uow, person_id=command.person_id, candidate=candidate)
+    inserted = uow.section_mutations().insert_record(candidate)
+    if not isinstance(inserted, RelativeRecord):
+        raise SectionValidationError("insert_record returned unexpected section type")
+    return SectionMutationResult(record=inserted, mutation_kind=MUTATION_KIND_INSERT)
+
+
+def handle_update_relative_record(
+    command: UpdateRelativeRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    current = _require_active_relative(uow, command.person_id, command.record_id)
+
+    updated = replace(
+        current,
+        relationship_type=(
+            command.relationship_type if command.relationship_type is not None else current.relationship_type
+        ),
+        full_name=str(command.full_name).strip() if command.full_name is not None else current.full_name,
+        birth_date=command.birth_date if command.birth_date is not None else current.birth_date,
+        birth_place=command.birth_place if command.birth_place is not None else current.birth_place,
+        organization_name=(
+            command.organization_name if command.organization_name is not None else current.organization_name
+        ),
+        residence_address=(
+            command.residence_address if command.residence_address is not None else current.residence_address
+        ),
+        notes=command.notes if command.notes is not None else current.notes,
+        source_type=command.source_type if command.source_type is not None else current.source_type,
+        metadata=dict(command.metadata) if command.metadata is not None else current.metadata,
+    )
+    validate_relative_record(updated)
+    _assert_no_duplicate_relative(
+        uow,
+        person_id=command.person_id,
+        candidate=updated,
+        exclude_record_id=command.record_id,
+    )
+    persisted = uow.section_mutations().update_record(
+        updated,
+        expected_updated_at=command.expected_updated_at,
+    )
+    if not isinstance(persisted, RelativeRecord):
+        raise SectionValidationError("update_record returned unexpected section type")
+    return SectionMutationResult(record=persisted, mutation_kind=MUTATION_KIND_UPDATE)
+
+
+def handle_void_relative_record(
+    command: VoidRelativeRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    _require_non_empty(command.reason, "reason")
+    _require_active_relative(uow, command.person_id, command.record_id)
+    voided = uow.section_mutations().void_record(
+        command.person_id,
+        SECTION_CODE_PPR_FAMILY,
+        command.record_id,
+        expected_updated_at=command.expected_updated_at,
+    )
+    if not isinstance(voided, RelativeRecord):
+        raise SectionValidationError("void_record returned unexpected section type")
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+
+
+def handle_supersede_relative_record(
+    command: SupersedeRelativeRecord,
+    uow: UnitOfWork,
+) -> SectionMutationResult:
+    _require_positive_person_id(command.person_id)
+    _require_active_relative(uow, command.person_id, command.record_id)
+    if command.replacement.person_id != command.person_id:
+        raise SectionValidationError("replacement.person_id must match supersede person_id")
+
+    replacement = _relative_from_add(command.replacement)
+    old_record, new_record = uow.section_mutations().supersede_pair(
+        command.person_id,
+        SECTION_CODE_PPR_FAMILY,
+        command.record_id,
+        replacement,
+        expected_updated_at=command.expected_updated_at,
+    )
+    if not isinstance(old_record, RelativeRecord) or not isinstance(new_record, RelativeRecord):
         raise SectionValidationError("supersede_pair returned unexpected section types")
     return SectionMutationResult(
         record=new_record,

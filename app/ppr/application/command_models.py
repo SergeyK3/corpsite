@@ -17,6 +17,10 @@ COMMAND_TYPE_ADD_TRAINING = "AddTrainingRecord"
 COMMAND_TYPE_UPDATE_TRAINING = "UpdateTrainingRecord"
 COMMAND_TYPE_VOID_TRAINING = "VoidTrainingRecord"
 COMMAND_TYPE_SUPERSEDE_TRAINING = "SupersedeTrainingRecord"
+COMMAND_TYPE_ADD_RELATIVE = "AddRelativeRecord"
+COMMAND_TYPE_UPDATE_RELATIVE = "UpdateRelativeRecord"
+COMMAND_TYPE_VOID_RELATIVE = "VoidRelativeRecord"
+COMMAND_TYPE_SUPERSEDE_RELATIVE = "SupersedeRelativeRecord"
 
 
 @dataclass(frozen=True, slots=True)

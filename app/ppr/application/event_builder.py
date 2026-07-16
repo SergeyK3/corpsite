@@ -89,6 +89,8 @@ def _section_table_name(section_code: str) -> str:
         return "person_education"
     if section_code == "PPR-TRAINING":
         return "person_training"
+    if section_code == "PPR-FAMILY":
+        return "person_relatives"
     raise ValueError(f"Unsupported section_code: {section_code!r}")
 
 

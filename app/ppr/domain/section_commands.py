@@ -101,3 +101,49 @@ class SupersedeTrainingRecord:
     record_id: int
     expected_updated_at: datetime
     replacement: AddTrainingRecord
+
+
+@dataclass(frozen=True, slots=True)
+class AddRelativeRecord:
+    person_id: int
+    relationship_type: str
+    full_name: str
+    birth_date: date | None = None
+    birth_place: str | None = None
+    organization_name: str | None = None
+    residence_address: str | None = None
+    notes: str | None = None
+    source_type: str | None = None
+    metadata: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateRelativeRecord:
+    person_id: int
+    record_id: int
+    expected_updated_at: datetime
+    relationship_type: str | None = None
+    full_name: str | None = None
+    birth_date: date | None = None
+    birth_place: str | None = None
+    organization_name: str | None = None
+    residence_address: str | None = None
+    notes: str | None = None
+    source_type: str | None = None
+    metadata: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VoidRelativeRecord:
+    person_id: int
+    record_id: int
+    reason: str
+    expected_updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SupersedeRelativeRecord:
+    person_id: int
+    record_id: int
+    expected_updated_at: datetime
+    replacement: AddRelativeRecord
