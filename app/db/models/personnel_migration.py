@@ -198,6 +198,21 @@ EXTERNAL_EMPLOYMENT_LIFECYCLE_STATUSES = (
     LIFECYCLE_STATUS_VOIDED,
 )
 
+MILITARY_RECORD_KIND_REGISTRATION = "registration"
+MILITARY_RECORD_KIND_NOT_APPLICABLE = "not_applicable"
+
+MILITARY_RECORD_KINDS = (
+    MILITARY_RECORD_KIND_REGISTRATION,
+    MILITARY_RECORD_KIND_NOT_APPLICABLE,
+)
+
+# WP-PR-026 §10.1 — no draft on section rows.
+MILITARY_LIFECYCLE_STATUSES = (
+    LIFECYCLE_STATUS_ACTIVE,
+    LIFECYCLE_STATUS_SUPERSEDED,
+    LIFECYCLE_STATUS_VOIDED,
+)
+
 SECTION_SOURCE_TYPES = (
     SECTION_SOURCE_TYPE_ENTERED,
     SECTION_SOURCE_TYPE_IMPORTED,
@@ -592,6 +607,76 @@ class PersonExternalEmployment(Base):
         server_default=text(f"'{LIFECYCLE_STATUS_ACTIVE}'"),
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    employee_context_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+
+
+class PersonMilitaryService(Base):
+    """Military registration record (PPR-MILITARY, person-owned SoT)."""
+
+    __tablename__ = "person_military_service"
+    __table_args__ = (
+        Index("ix_person_military_service_person_id", "person_id"),
+        Index("ix_person_military_service_person_lifecycle", "person_id", "lifecycle_status"),
+    )
+
+    military_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("persons.person_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    record_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    obligation_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registration_category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    military_rank: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    military_specialty_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    personnel_composition: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    fitness_category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registration_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    commissariat_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registered_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    deregistered_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    military_id_book_series: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    military_id_book_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registration_certificate_series: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registration_certificate_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verification_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{VERIFICATION_STATUS_PENDING}'"),
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{LIFECYCLE_STATUS_ACTIVE}'"),
+    )
+    source_type: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text(f"'{SECTION_SOURCE_TYPE_ENTERED}'"),
+    )
+    provenance: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
     employee_context_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

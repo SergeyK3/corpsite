@@ -18,6 +18,7 @@ SECTION_CODE_PPR_EDUCATION = "PPR-EDUCATION"
 SECTION_CODE_PPR_TRAINING = "PPR-TRAINING"
 SECTION_CODE_PPR_FAMILY = "PPR-FAMILY"
 SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY = "PPR-EMPLOYMENT-BIOGRAPHY"
+SECTION_CODE_PPR_MILITARY = "PPR-MILITARY"
 
 SUPPORTED_SECTION_CODES: frozenset[str] = frozenset(
     {
@@ -148,7 +149,43 @@ class ExternalEmploymentRecord:
         return SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY
 
 
-SectionRecord = Union[EducationRecord, TrainingRecord, RelativeRecord, ExternalEmploymentRecord]
+@dataclass(frozen=True, slots=True)
+class MilitaryServiceRecord:
+    """Domain record for person_military_service (not ORM)."""
+
+    person_id: int
+    record_kind: str
+    record_id: int | None = None
+    obligation_status: str | None = None
+    registration_category: str | None = None
+    military_rank: str | None = None
+    military_specialty_code: str | None = None
+    personnel_composition: str | None = None
+    fitness_category: str | None = None
+    registration_status: str | None = None
+    commissariat_name: str | None = None
+    registered_at: date | None = None
+    deregistered_at: date | None = None
+    military_id_book_series: str | None = None
+    military_id_book_number: str | None = None
+    registration_certificate_series: str | None = None
+    registration_certificate_number: str | None = None
+    notes: str | None = None
+    verification_status: str = VERIFICATION_STATUS_PENDING
+    lifecycle_status: str = LIFECYCLE_STATUS_ACTIVE
+    source_type: str = SECTION_SOURCE_TYPE_ENTERED
+    provenance: Mapping[str, Any] | None = None
+    employee_context_id: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None  # temporary optimistic token until record_version exists
+    metadata: Mapping[str, Any] | None = None
+
+    @property
+    def section_code(self) -> str:
+        return SECTION_CODE_PPR_MILITARY
+
+
+SectionRecord = Union[EducationRecord, TrainingRecord, RelativeRecord, ExternalEmploymentRecord, MilitaryServiceRecord]
 
 
 @dataclass(frozen=True, slots=True)
