@@ -25,14 +25,17 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
     SECTION_OPTIMISTIC_TOKEN_FIELD,
     EducationRecord,
     ExternalEmploymentRecord,
+    MilitaryServiceRecord,
     RelativeRecord,
     SectionRecord,
     TrainingRecord,
 )
+from app.ppr.domain.section_record_validation import validate_military_service_record
 
 _SECTION_SPECS: dict[str, dict[str, str]] = {
     SECTION_CODE_PPR_EDUCATION: {
@@ -50,6 +53,10 @@ _SECTION_SPECS: dict[str, dict[str, str]] = {
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: {
         "table": "person_external_employment",
         "id_col": "employment_id",
+    },
+    SECTION_CODE_PPR_MILITARY: {
+        "table": "person_military_service",
+        "id_col": "military_id",
     },
 }
 
@@ -134,11 +141,41 @@ _EXTERNAL_EMPLOYMENT_SELECT = """
     metadata
 """
 
+_MILITARY_SERVICE_SELECT = """
+    military_id,
+    person_id,
+    record_kind,
+    obligation_status,
+    registration_category,
+    military_rank,
+    military_specialty_code,
+    personnel_composition,
+    fitness_category,
+    registration_status,
+    commissariat_name,
+    registered_at,
+    deregistered_at,
+    military_id_book_series,
+    military_id_book_number,
+    registration_certificate_series,
+    registration_certificate_number,
+    notes,
+    verification_status,
+    lifecycle_status,
+    source_type,
+    provenance,
+    employee_context_id,
+    created_at,
+    updated_at,
+    metadata
+"""
+
 _SECTION_SELECTS: dict[str, str] = {
     SECTION_CODE_PPR_EDUCATION: _EDUCATION_SELECT,
     SECTION_CODE_PPR_TRAINING: _TRAINING_SELECT,
     SECTION_CODE_PPR_FAMILY: _RELATIVE_SELECT,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY: _EXTERNAL_EMPLOYMENT_SELECT,
+    SECTION_CODE_PPR_MILITARY: _MILITARY_SERVICE_SELECT,
 }
 
 
@@ -256,6 +293,37 @@ def _mapping_to_external_employment(row: RowMapping) -> ExternalEmploymentRecord
     )
 
 
+def _mapping_to_military_service(row: RowMapping) -> MilitaryServiceRecord:
+    return MilitaryServiceRecord(
+        record_id=int(row["military_id"]),
+        person_id=int(row["person_id"]),
+        record_kind=str(row["record_kind"]),
+        obligation_status=row.get("obligation_status"),
+        registration_category=row.get("registration_category"),
+        military_rank=row.get("military_rank"),
+        military_specialty_code=row.get("military_specialty_code"),
+        personnel_composition=row.get("personnel_composition"),
+        fitness_category=row.get("fitness_category"),
+        registration_status=row.get("registration_status"),
+        commissariat_name=row.get("commissariat_name"),
+        registered_at=row.get("registered_at"),
+        deregistered_at=row.get("deregistered_at"),
+        military_id_book_series=row.get("military_id_book_series"),
+        military_id_book_number=row.get("military_id_book_number"),
+        registration_certificate_series=row.get("registration_certificate_series"),
+        registration_certificate_number=row.get("registration_certificate_number"),
+        notes=row.get("notes"),
+        verification_status=str(row["verification_status"]),
+        lifecycle_status=str(row["lifecycle_status"]),
+        source_type=str(row["source_type"]),
+        provenance=_metadata_dict(row.get("provenance")),
+        employee_context_id=row.get("employee_context_id"),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+        metadata=_metadata_dict(row.get("metadata")),
+    )
+
+
 def _row_to_record(section_code: str, row: RowMapping) -> SectionRecord:
     if section_code == SECTION_CODE_PPR_EDUCATION:
         return _mapping_to_education(row)
@@ -263,6 +331,8 @@ def _row_to_record(section_code: str, row: RowMapping) -> SectionRecord:
         return _mapping_to_training(row)
     if section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY:
         return _mapping_to_external_employment(row)
+    if section_code == SECTION_CODE_PPR_MILITARY:
+        return _mapping_to_military_service(row)
     return _mapping_to_relative(row)
 
 
@@ -336,6 +406,8 @@ class _SectionStore:
             return self._insert_relative(record)
         if isinstance(record, ExternalEmploymentRecord):
             return self._insert_external_employment(record)
+        if isinstance(record, MilitaryServiceRecord):
+            return self._insert_military_service(record)
         raise SectionValidationError(f"Unsupported section record type: {type(record)!r}")
 
     def update_record(
@@ -352,6 +424,10 @@ class _SectionStore:
             return self._update_relative(record, expected_updated_at=expected_updated_at)
         if isinstance(record, ExternalEmploymentRecord):
             return self._update_external_employment(record, expected_updated_at=expected_updated_at)
+        if isinstance(record, MilitaryServiceRecord):
+            raise SectionValidationError(
+                "MilitaryServiceRecord does not support in-place update; use supersede_pair"
+            )
         raise SectionValidationError(f"Unsupported section record type: {type(record)!r}")
 
     def void_record(
@@ -684,6 +760,92 @@ class _SectionStore:
             },
         ).mappings().one()
         return _mapping_to_external_employment(row)
+
+    def _insert_military_service(self, record: MilitaryServiceRecord) -> MilitaryServiceRecord:
+        validate_military_service_record(record)
+        row = self._conn.execute(
+            text(
+                f"""
+                INSERT INTO public.person_military_service (
+                    person_id,
+                    record_kind,
+                    obligation_status,
+                    registration_category,
+                    military_rank,
+                    military_specialty_code,
+                    personnel_composition,
+                    fitness_category,
+                    registration_status,
+                    commissariat_name,
+                    registered_at,
+                    deregistered_at,
+                    military_id_book_series,
+                    military_id_book_number,
+                    registration_certificate_series,
+                    registration_certificate_number,
+                    notes,
+                    verification_status,
+                    lifecycle_status,
+                    source_type,
+                    provenance,
+                    employee_context_id,
+                    metadata
+                )
+                VALUES (
+                    :person_id,
+                    :record_kind,
+                    :obligation_status,
+                    :registration_category,
+                    :military_rank,
+                    :military_specialty_code,
+                    :personnel_composition,
+                    :fitness_category,
+                    :registration_status,
+                    :commissariat_name,
+                    :registered_at,
+                    :deregistered_at,
+                    :military_id_book_series,
+                    :military_id_book_number,
+                    :registration_certificate_series,
+                    :registration_certificate_number,
+                    :notes,
+                    :verification_status,
+                    :lifecycle_status,
+                    :source_type,
+                    CAST(:provenance AS jsonb),
+                    :employee_context_id,
+                    CAST(:metadata AS jsonb)
+                )
+                RETURNING {_MILITARY_SERVICE_SELECT}
+                """
+            ),
+            {
+                "person_id": int(record.person_id),
+                "record_kind": record.record_kind,
+                "obligation_status": record.obligation_status,
+                "registration_category": record.registration_category,
+                "military_rank": record.military_rank,
+                "military_specialty_code": record.military_specialty_code,
+                "personnel_composition": record.personnel_composition,
+                "fitness_category": record.fitness_category,
+                "registration_status": record.registration_status,
+                "commissariat_name": record.commissariat_name,
+                "registered_at": record.registered_at,
+                "deregistered_at": record.deregistered_at,
+                "military_id_book_series": record.military_id_book_series,
+                "military_id_book_number": record.military_id_book_number,
+                "registration_certificate_series": record.registration_certificate_series,
+                "registration_certificate_number": record.registration_certificate_number,
+                "notes": record.notes,
+                "verification_status": record.verification_status or VERIFICATION_STATUS_PENDING,
+                "lifecycle_status": record.lifecycle_status or LIFECYCLE_STATUS_ACTIVE,
+                "source_type": record.source_type,
+                "provenance": _metadata_json(record.provenance),
+                "employee_context_id": record.employee_context_id,
+                "metadata": _metadata_json(record.metadata),
+            },
+        ).mappings().one()
+        return _mapping_to_military_service(row)
 
     def _update_education(
         self,

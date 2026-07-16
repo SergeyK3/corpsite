@@ -8,7 +8,7 @@ from datetime import UTC, datetime, date
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
@@ -18,7 +18,10 @@ from app.db.models.personnel_migration import (
     LIFECYCLE_STATUS_ACTIVE,
     LIFECYCLE_STATUS_SUPERSEDED,
     LIFECYCLE_STATUS_VOIDED,
+    MILITARY_RECORD_KIND_NOT_APPLICABLE,
+    MILITARY_RECORD_KIND_REGISTRATION,
     RELATIONSHIP_TYPE_MOTHER,
+    SECTION_SOURCE_TYPE_ENTERED,
     TRAINING_KIND_COURSE,
 )
 from app.ppr.domain.errors import (
@@ -30,11 +33,13 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_EDUCATION,
     SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
     SECTION_CODE_PPR_FAMILY,
+    SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
     SECTION_OPTIMISTIC_TOKEN_FIELD,
     SUPPORTED_SECTION_CODES,
     EducationRecord,
     ExternalEmploymentRecord,
+    MilitaryServiceRecord,
     RelativeRecord,
     TrainingRecord,
 )
@@ -55,6 +60,8 @@ def _require_section_schema() -> None:
             pytest.skip("person_relatives missing — run: alembic upgrade head")
         if not table_exists(conn, "person_external_employment"):
             pytest.skip("person_external_employment missing — run: alembic upgrade head")
+        if not table_exists(conn, "person_military_service"):
+            pytest.skip("person_military_service missing — run: alembic upgrade head")
 
 
 @pytest.fixture
@@ -321,6 +328,299 @@ def test_supported_section_codes_include_family() -> None:
 
 def test_supported_section_codes_include_employment_biography() -> None:
     assert SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY in SUPPORTED_SECTION_CODES
+
+
+def test_supported_section_codes_include_military() -> None:
+    assert SECTION_CODE_PPR_MILITARY in SUPPORTED_SECTION_CODES
+
+
+def _registration_record(person_id: int, **overrides) -> MilitaryServiceRecord:
+    base = {
+        "person_id": person_id,
+        "record_kind": MILITARY_RECORD_KIND_REGISTRATION,
+        "obligation_status": "liable",
+        "registration_category": "II",
+        "military_rank": "рядовой",
+        "registration_status": "registered",
+        "source_type": SECTION_SOURCE_TYPE_ENTERED,
+    }
+    base.update(overrides)
+    return MilitaryServiceRecord(**base)
+
+
+def _full_registration_record(person_id: int, **overrides) -> MilitaryServiceRecord:
+    base = {
+        "person_id": person_id,
+        "record_kind": MILITARY_RECORD_KIND_REGISTRATION,
+        "obligation_status": "liable",
+        "registration_category": "II",
+        "military_rank": "рядовой",
+        "military_specialty_code": "123456",
+        "personnel_composition": "soldiers",
+        "fitness_category": "A",
+        "registration_status": "registered",
+        "commissariat_name": "Военкомат №1",
+        "registered_at": date(2015, 3, 1),
+        "deregistered_at": date(2017, 6, 30),
+        "military_id_book_series": "АА",
+        "military_id_book_number": "1234567",
+        "registration_certificate_series": "ББ",
+        "registration_certificate_number": "987654",
+        "notes": "Round-trip notes",
+        "source_type": SECTION_SOURCE_TYPE_ENTERED,
+        "provenance": {"import_batch": "test-batch"},
+        "employee_context_id": 42,
+        "metadata": {"restricted_flag": True},
+    }
+    base.update(overrides)
+    return MilitaryServiceRecord(**base)
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_insert_and_load_military_registration_record(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        _registration_record(
+            section_person_id,
+            military_rank="лейтенант",
+            commissariat_name="Военкомат города",
+        )
+    )
+    loaded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        inserted.record_id or 0,
+    )
+
+    assert inserted.record_id is not None
+    assert loaded is not None
+    assert isinstance(loaded, MilitaryServiceRecord)
+    assert loaded.person_id == section_person_id
+    assert loaded.record_kind == MILITARY_RECORD_KIND_REGISTRATION
+    assert loaded.military_rank == "лейтенант"
+    assert loaded.commissariat_name == "Военкомат города"
+    assert loaded.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert not hasattr(loaded, "_sa_instance_state")
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_insert_and_load_military_not_applicable_record(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(
+        MilitaryServiceRecord(
+            person_id=section_person_id,
+            record_kind=MILITARY_RECORD_KIND_NOT_APPLICABLE,
+            notes="Не подлежит воинскому учёту",
+            source_type=SECTION_SOURCE_TYPE_ENTERED,
+        )
+    )
+    loaded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        inserted.record_id or 0,
+    )
+
+    assert inserted.record_id is not None
+    assert loaded is not None
+    assert isinstance(loaded, MilitaryServiceRecord)
+    assert loaded.record_kind == MILITARY_RECORD_KIND_NOT_APPLICABLE
+    assert loaded.notes == "Не подлежит воинскому учёту"
+    assert loaded.obligation_status is None
+    assert loaded.military_rank is None
+    assert loaded.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_load_active_records(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(_registration_record(section_person_id))
+    active_rows = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_MILITARY)
+
+    assert len(active_rows) == 1
+    assert active_rows[0].record_id == inserted.record_id
+    assert active_rows[0].lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_lifecycle_buckets(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    first = mutation_repo.insert_record(
+        _registration_record(section_person_id, military_rank="первый")
+    )
+    assert first.updated_at is not None
+    old_record, replacement = mutation_repo.supersede_pair(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        first.record_id or 0,
+        _registration_record(section_person_id, military_rank="второй"),
+        expected_updated_at=first.updated_at,
+    )
+    assert replacement.updated_at is not None
+    voided = mutation_repo.void_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        replacement.record_id or 0,
+        expected_updated_at=replacement.updated_at,
+    )
+    current = mutation_repo.insert_record(
+        _registration_record(section_person_id, military_rank="третий")
+    )
+
+    active_rows = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_MILITARY)
+    loaded_superseded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        first.record_id or 0,
+    )
+    loaded_voided = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        replacement.record_id or 0,
+    )
+
+    assert old_record.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+    assert voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+    assert current.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert len(active_rows) == 1
+    assert active_rows[0].record_id == current.record_id
+    assert loaded_superseded is not None
+    assert loaded_superseded.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+    assert loaded_voided is not None
+    assert loaded_voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_supersede_pair(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    old = mutation_repo.insert_record(
+        _registration_record(section_person_id, military_rank="до замены")
+    )
+    old_record, new_record = mutation_repo.supersede_pair(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        old.record_id or 0,
+        _registration_record(section_person_id, military_rank="после замены"),
+        expected_updated_at=old.updated_at,
+    )
+    active = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_MILITARY)
+
+    assert old_record.lifecycle_status == LIFECYCLE_STATUS_SUPERSEDED
+    assert new_record.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
+    assert new_record.military_rank == "после замены"
+    assert len(active) == 1
+    assert active[0].record_id == new_record.record_id
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_void_record(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(_registration_record(section_person_id))
+    assert inserted.updated_at is not None
+    voided = mutation_repo.void_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        inserted.record_id or 0,
+        expected_updated_at=inserted.updated_at,
+    )
+    active = read_repo.load_active_records(section_person_id, SECTION_CODE_PPR_MILITARY)
+
+    assert voided.lifecycle_status == LIFECYCLE_STATUS_VOIDED
+    assert len(active) == 0
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_load_wrong_person_id_returns_none(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(_registration_record(section_person_id))
+    wrong_person_id = section_person_id + 99_999
+    loaded = read_repo.load_record(
+        wrong_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        inserted.record_id or 0,
+    )
+
+    assert loaded is None
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_stale_void_raises_concurrency_conflict(section_repos, section_person_id: int) -> None:
+    _, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(_registration_record(section_person_id))
+    assert inserted.updated_at is not None
+    with pytest.raises(SectionOptimisticConcurrencyConflictError):
+        mutation_repo.void_record(
+            section_person_id,
+            SECTION_CODE_PPR_MILITARY,
+            inserted.record_id or 0,
+            expected_updated_at=inserted.updated_at.replace(year=2000),
+        )
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_stale_supersede_raises_concurrency_conflict(section_repos, section_person_id: int) -> None:
+    _, mutation_repo = section_repos
+    inserted = mutation_repo.insert_record(_registration_record(section_person_id))
+    assert inserted.updated_at is not None
+    with pytest.raises(SectionOptimisticConcurrencyConflictError):
+        mutation_repo.supersede_pair(
+            section_person_id,
+            SECTION_CODE_PPR_MILITARY,
+            inserted.record_id or 0,
+            _registration_record(section_person_id, military_rank="replacement"),
+            expected_updated_at=inserted.updated_at.replace(year=2000),
+        )
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_second_active_insert_raises(section_repos, section_person_id: int) -> None:
+    _, mutation_repo = section_repos
+    mutation_repo.insert_record(_registration_record(section_person_id))
+    with pytest.raises(IntegrityError) as exc_info:
+        mutation_repo.insert_record(
+            _registration_record(section_person_id, military_rank="conflict")
+        )
+    orig = getattr(exc_info.value, "orig", None)
+    assert getattr(orig, "pgcode", None) == "23505"
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None) if diag is not None else None
+    if constraint_name is not None:
+        assert constraint_name == "uq_person_military_service_one_active_per_person"
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_military_round_trip_all_fields(section_repos, section_person_id: int) -> None:
+    read_repo, mutation_repo = section_repos
+    source = _full_registration_record(section_person_id)
+    inserted = mutation_repo.insert_record(source)
+    loaded = read_repo.load_record(
+        section_person_id,
+        SECTION_CODE_PPR_MILITARY,
+        inserted.record_id or 0,
+    )
+
+    assert loaded is not None
+    assert isinstance(loaded, MilitaryServiceRecord)
+    assert loaded.record_kind == source.record_kind
+    assert loaded.obligation_status == source.obligation_status
+    assert loaded.registration_category == source.registration_category
+    assert loaded.military_rank == source.military_rank
+    assert loaded.military_specialty_code == source.military_specialty_code
+    assert loaded.personnel_composition == source.personnel_composition
+    assert loaded.fitness_category == source.fitness_category
+    assert loaded.registration_status == source.registration_status
+    assert loaded.commissariat_name == source.commissariat_name
+    assert loaded.registered_at == source.registered_at
+    assert loaded.deregistered_at == source.deregistered_at
+    assert loaded.military_id_book_series == source.military_id_book_series
+    assert loaded.military_id_book_number == source.military_id_book_number
+    assert loaded.registration_certificate_series == source.registration_certificate_series
+    assert loaded.registration_certificate_number == source.registration_certificate_number
+    assert loaded.notes == source.notes
+    assert loaded.source_type == source.source_type
+    assert loaded.provenance == source.provenance
+    assert loaded.employee_context_id == source.employee_context_id
+    assert loaded.metadata == source.metadata
+    assert loaded.lifecycle_status == LIFECYCLE_STATUS_ACTIVE
 
 
 def _episode_record(person_id: int, **overrides) -> ExternalEmploymentRecord:
