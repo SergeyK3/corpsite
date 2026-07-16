@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed two PPR applicants (CANDIDATE) with education and intended employment.
+"""Seed two PPR applicants (CANDIDATE) with education, family and intended employment.
 
 Usage:
   python scripts/dev/seed_ppr_applicants.py
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -21,8 +21,16 @@ if REPO_ROOT not in sys.path:
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
     EDUCATION_KIND_BASIC,
+    RELATIONSHIP_TYPE_FATHER,
+    RELATIONSHIP_TYPE_MOTHER,
+    RELATIONSHIP_TYPE_SON,
+    RELATIONSHIP_TYPE_SPOUSE,
     TRAINING_KIND_CONTINUING_EDUCATION,
 )
+from app.ppr.application.authorization import AllowAllAuthorizationPort
+from app.ppr.application.command_models import COMMAND_TYPE_ADD_RELATIVE, PprCommandEnvelope
+from app.ppr.application.results import RESULT_STATUS_COMMITTED, RESULT_STATUS_IDEMPOTENT_REPLAY
+from app.ppr.application.section_service import PprSectionApplicationService
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
 from app.services.ppr_candidate_service import save_intended_employment
 
@@ -52,6 +60,30 @@ APPLICANTS = [
                 "source_field": "continuing_education",
             },
         ],
+        "relatives": [
+            {
+                "key": "spouse",
+                "relationship_type": RELATIONSHIP_TYPE_SPOUSE,
+                "full_name": "Ахметова Гульнара Сериковна",
+                "birth_date": date(1992, 6, 15),
+                "birth_place": "г. Алматы",
+            },
+            {
+                "key": "son",
+                "relationship_type": RELATIONSHIP_TYPE_SON,
+                "full_name": "Ахметов Дамир Айдарович",
+                "birth_date": date(2015, 3, 20),
+                "birth_place": "г. Алматы",
+            },
+            {
+                "key": "mother",
+                "relationship_type": RELATIONSHIP_TYPE_MOTHER,
+                "full_name": "Ахметова Бикеш Сапаровна",
+                "birth_date": date(1965, 11, 8),
+                "birth_place": "г. Шымкент",
+                "notes": "пенсионер",
+            },
+        ],
     },
     {
         "key": "seitova",
@@ -68,6 +100,23 @@ APPLICANTS = [
         "intended_rate": 0.5,
         "intended_complete": False,
         "training": [],
+        "relatives": [
+            {
+                "key": "father",
+                "relationship_type": RELATIONSHIP_TYPE_FATHER,
+                "full_name": "Сейтов Марат Кайратович",
+                "birth_date": date(1970, 4, 12),
+                "birth_place": "г. Караганда",
+                "organization_name": "ТОО «СтройСервис»",
+            },
+            {
+                "key": "mother",
+                "relationship_type": RELATIONSHIP_TYPE_MOTHER,
+                "full_name": "Сейтова Айгуль Нурлановна",
+                "birth_date": date(1972, 9, 25),
+                "birth_place": "г. Караганда",
+            },
+        ],
     },
 ]
 
@@ -276,6 +325,35 @@ def _replace_training(conn, *, person_id: int, records: list[dict]) -> None:
         )
 
 
+def _seed_relatives(*, person_id: int, applicant_key: str, relatives: list[dict]) -> int:
+    section_service = PprSectionApplicationService(authorization=AllowAllAuthorizationPort())
+    seeded = 0
+    for relative in relatives:
+        rel_key = relative["key"]
+        command_id = f"seed-ppr-family:{applicant_key}:{rel_key}"
+        payload = {
+            key: value
+            for key, value in relative.items()
+            if key != "key" and value is not None
+        }
+        result = section_service.add_relative(
+            PprCommandEnvelope(
+                command_id=command_id,
+                command_type=COMMAND_TYPE_ADD_RELATIVE,
+                actor_id="seed-ppr-applicants",
+                requested_at=datetime.now(UTC),
+                payload=payload,
+                person_id=person_id,
+            )
+        )
+        if result.status not in {RESULT_STATUS_COMMITTED, RESULT_STATUS_IDEMPOTENT_REPLAY}:
+            raise RuntimeError(
+                f"Failed to seed relative {applicant_key}:{rel_key} — status={result.status}"
+            )
+        seeded += 1
+    return seeded
+
+
 def seed(*, dry_run: bool) -> list[dict]:
     if dry_run:
         return [{"dry_run": True, **spec} for spec in APPLICANTS]
@@ -309,6 +387,12 @@ def seed(*, dry_run: bool) -> list[dict]:
             _insert_education(conn, person_id=person_id, education=spec["education"])
             _replace_training(conn, person_id=person_id, records=list(spec.get("training") or []))
 
+        relatives_seeded = _seed_relatives(
+            person_id=person_id,
+            applicant_key=spec["key"],
+            relatives=list(spec.get("relatives") or []),
+        )
+
         created.append(
             {
                 "person_id": person_id,
@@ -320,6 +404,7 @@ def seed(*, dry_run: bool) -> list[dict]:
                 "position_id": intended_position_id,
                 "employment_rate": spec["intended_rate"],
                 "intended_complete": spec.get("intended_complete", True),
+                "relatives_seeded": relatives_seeded,
             }
         )
     return created
