@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; education normalization — **WP-CL-008**; candidate persistence / apply — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; education normalization — **WP-CL-008**; training normalization — **WP-CL-009**; candidate persistence / apply — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -232,6 +232,26 @@ Education Candidate — **temporary normalized import model**, не canonical `p
 | Readiness | `normalization_ready` = person matched + fragment parsed cleanly; **не** apply-ready |
 | Split delimiters | Newline, `;`, `\|` — **не** каждая запятая |
 | Downstream | Education apply / dedup policy — последующие WP |
+
+### 5.8. Training Candidate semantics (WP-CL-009)
+
+Training Candidate — **temporary normalized import model**, не canonical `person_training` record:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Staging row + mapping profile + `PersonMatchResult` → `list[TrainingCandidate]` |
+| Cardinality | **1 staging row → 0..N** TrainingCandidate (composite cell → несколько записей) |
+| In-memory | Temporary domain model; **без** ORM / SQLAlchemy и **без** PPR training writes |
+| Not canonical | **Не является** canonical training record и **не выполняет** dedup с `person_training` |
+| No employee identity | **Не использует** `employee_id` как идентичность человека |
+| Person link | `matched_person_id` только при `exact`/`probable` match с `recommended_person_id` |
+| Empty skip | Пустая / technical-empty training cell → **пустой список** |
+| Raw fragment | Каждый candidate **обязан** сохранять `raw_fragment` и cell provenance |
+| Conservative parse | `provider_name` только по **явным меткам**; title курса **не** становится provider |
+| Incomplete keep | Неполный / неразобранный фрагмент → candidate с issue, **не discard** |
+| Readiness | `normalization_ready` = person matched + fragment parsed cleanly; **не** apply-ready |
+| Split delimiters | Newline, `;`, `\|` — **не** каждая запятая |
+| Downstream | Training apply / dedup policy — последующие WP |
 
 ---
 
@@ -398,5 +418,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-006 — Employment Normalization](../implementation/WP-CL-006-employment-normalization.md)
 - [WP-CL-007 — Contacts Normalization](../implementation/WP-CL-007-contacts-normalization.md)
 - [WP-CL-008 — Education Normalization](../implementation/WP-CL-008-education-normalization.md)
+- [WP-CL-009 — Training Normalization](../implementation/WP-CL-009-training-normalization.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
