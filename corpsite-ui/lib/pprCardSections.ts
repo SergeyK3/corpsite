@@ -10,6 +10,8 @@ export type PprCardSectionId =
   | "intended_employment"
   | "assignment"
   | "orders"
+  | "applications"
+  | "onboarding"
   | "changes";
 
 export type PprCardSectionDef = {
@@ -27,6 +29,8 @@ export const PPR_CARD_SECTIONS: PprCardSectionDef[] = [
   { id: "intended_employment", title: "Предполагаемое трудоустройство" },
   { id: "assignment", title: "Трудовая деятельность" },
   { id: "orders", title: "Кадровые приказы" },
+  { id: "applications", title: "Кадровые обращения" },
+  { id: "onboarding", title: "Адаптация" },
   { id: "changes", title: "История изменений" },
 ];
 

@@ -244,3 +244,37 @@ class PprCompositeSummaryResponse(BaseModel):
     military_active_count: int
     recent_event_count: int
     metadata: PprReadMetadataResponse
+
+
+class PprPersonnelApplicationItemResponse(BaseModel):
+    application_id: int
+    person_id: int
+    status: str
+    application_received_at: date
+    application_source: str
+    vacancy_check_status: str
+    vacancy_checked_at: datetime | None = None
+    vacancy_checked_by_user_id: int | None = None
+    intended_org_group_id: int | None = None
+    intended_org_unit_id: int | None = None
+    intended_position_id: int | None = None
+    intended_employment_rate: Decimal | None = None
+    intended_vacancy_text: str | None = None
+    contact_mobile_phone: str | None = None
+    contact_email: str | None = None
+    director_resolution_status: str | None = None
+    director_resolution_at: datetime | None = None
+    director_resolution_by_user_id: int | None = None
+    director_resolution_note: str | None = None
+    personnel_order_id: int | None = None
+    registered_at: datetime
+    registered_by_user_id: int
+    hr_note: str | None = None
+    idempotency_key: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PprPersonnelApplicationHistoryResponse(BaseModel):
+    person_id: int
+    items: list[PprPersonnelApplicationItemResponse]

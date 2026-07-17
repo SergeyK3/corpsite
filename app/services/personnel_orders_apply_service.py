@@ -661,53 +661,80 @@ def _apply_item_events(
             raise PersonnelOrderValidationError(f"Unsupported event_type mapping: {event_type}")
 
 
+def apply_personnel_order_in_conn(
+    conn,
+    *,
+    order_id: int,
+    created_by: int,
+    complete_linked_application: bool = True,
+) -> None:
+    """Apply a signed/registered personnel order within caller-owned transaction."""
+    order = _fetch_order_row(conn, order_id)
+    assert_order_not_archived(order)
+    status = str(order["status"])
+    if status not in APPLYABLE_ORDER_STATUSES:
+        raise PersonnelOrderConflictError(
+            f"Personnel order {order_id} cannot be applied in status {status}. "
+            f"Allowed: SIGNED, REGISTERED."
+        )
+
+    if _count_linked_events(conn, order_id) > 0:
+        raise PersonnelOrderAlreadyAppliedError(
+            f"Personnel order {order_id} has already been applied."
+        )
+
+    items = _fetch_active_items(conn, order_id)
+    if not items:
+        raise PersonnelOrderValidationError("At least one active order item is required to apply.")
+
+    order_ref = _format_order_ref(str(order["order_number"]), order["order_date"])
+
+    for item in items:
+        if item.get("effective_date") is None:
+            raise PersonnelOrderValidationError(
+                f"Order item {item['item_id']} requires effective_date."
+            )
+
+        from app.services.personnel_order_hire_from_person_service import (
+            resolve_hire_employee_id_for_apply,
+        )
+
+        resolve_hire_employee_id_for_apply(
+            conn,
+            item=item,
+            created_by=int(created_by),
+        )
+
+        _apply_item_events(
+            conn,
+            item=item,
+            order_id=int(order_id),
+            order_ref=order_ref,
+            created_by=int(created_by),
+        )
+
+    if complete_linked_application:
+        from app.personnel_applications.application.application_apply_service import (
+            try_complete_linked_application_after_order_apply,
+        )
+
+        try_complete_linked_application_after_order_apply(
+            conn,
+            order_id=int(order_id),
+            created_by_user_id=int(created_by),
+        )
+
+
 def apply_personnel_order(*, order_id: int, created_by: int) -> Dict[str, Any]:
     """Apply a signed/registered personnel order once, creating employee_events."""
     _require_available()
 
     with engine.begin() as conn:
-        order = _fetch_order_row(conn, order_id)
-        assert_order_not_archived(order)
-        status = str(order["status"])
-        if status not in APPLYABLE_ORDER_STATUSES:
-            raise PersonnelOrderConflictError(
-                f"Personnel order {order_id} cannot be applied in status {status}. "
-                f"Allowed: SIGNED, REGISTERED."
-            )
-
-        if _count_linked_events(conn, order_id) > 0:
-            raise PersonnelOrderAlreadyAppliedError(
-                f"Personnel order {order_id} has already been applied."
-            )
-
-        items = _fetch_active_items(conn, order_id)
-        if not items:
-            raise PersonnelOrderValidationError("At least one active order item is required to apply.")
-
-        order_ref = _format_order_ref(str(order["order_number"]), order["order_date"])
-
-        for item in items:
-            if item.get("effective_date") is None:
-                raise PersonnelOrderValidationError(
-                    f"Order item {item['item_id']} requires effective_date."
-                )
-
-            from app.services.personnel_order_hire_from_person_service import (
-                resolve_hire_employee_id_for_apply,
-            )
-
-            resolve_hire_employee_id_for_apply(
-                conn,
-                item=item,
-                created_by=int(created_by),
-            )
-
-            _apply_item_events(
-                conn,
-                item=item,
-                order_id=int(order_id),
-                order_ref=order_ref,
-                created_by=int(created_by),
-            )
+        apply_personnel_order_in_conn(
+            conn,
+            order_id=int(order_id),
+            created_by=int(created_by),
+            complete_linked_application=True,
+        )
 
     return get_personnel_order(int(order_id))

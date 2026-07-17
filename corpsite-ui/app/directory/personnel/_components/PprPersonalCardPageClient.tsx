@@ -4,9 +4,14 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
-import { PPR_CARD_RETURN_HREF } from "@/lib/pprCardFeature";
+import { parseReturnToFromSearchParams } from "@/lib/taskNav";
+import {
+  isPersonnelApplicationsJournalReturnHref,
+  resolvePersonalCardBackHref,
+} from "../_lib/personnelApplicationsJournalNav";
 import {
   PPR_CARD_DEFAULT_SECTION,
+  PPR_CARD_SECTIONS,
   parsePprCardSection,
   type PprCardSectionId,
 } from "@/lib/pprCardSections";
@@ -40,8 +45,10 @@ import PprCardMilitarySection from "./PprCardMilitarySection";
 import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
+import PprCardApplicationsSection from "./PprCardApplicationsSection";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
+import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
 
 type Props = {
   employeeId?: string;
@@ -76,6 +83,11 @@ export default function PprPersonalCardPageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSection = parsePprCardSection(searchParams.get("section"));
+  const returnToHref = React.useMemo(
+    () => resolvePersonalCardBackHref(parseReturnToFromSearchParams(searchParams)),
+    [searchParams],
+  );
+  const backToJournal = isPersonnelApplicationsJournalReturnHref(returnToHref);
 
   const [loading, setLoading] = React.useState(true);
   const [errorView, setErrorView] = React.useState<ReturnType<typeof mapPprCardError> | null>(null);
@@ -163,6 +175,18 @@ export default function PprPersonalCardPageClient({
     ppr?.general.full_name ||
     (personId ? `Заявитель #${personId}` : `Сотрудник #${employeeId}`);
   const isApplicant = ppr?.materialization.hr_relationship_context === PPR_HR_RELATIONSHIP_CANDIDATE;
+  const visibleCardSections = React.useMemo(
+    () =>
+      PPR_CARD_SECTIONS.filter((section) => {
+        if (section.id === "onboarding") return !isApplicant && resolvedEmployeeId != null;
+        if (section.id === "intended_employment") return isApplicant;
+        if (section.id === "assignment" || section.id === "orders") {
+          return !isApplicant && resolvedEmployeeId != null;
+        }
+        return true;
+      }),
+    [isApplicant, resolvedEmployeeId],
+  );
   const notMaterialized =
     ppr != null &&
     (!ppr.materialization.materialized ||
@@ -215,10 +239,11 @@ export default function PprPersonalCardPageClient({
           </div>
           <button
             type="button"
-            onClick={() => router.push(PPR_CARD_RETURN_HREF)}
+            onClick={() => router.push(returnToHref)}
             className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700"
+            data-testid="ppr-card-back-button"
           >
-            Назад к персоналу
+            {backToJournal ? "Назад к журналу обращений" : "Назад к персоналу"}
           </button>
           {isApplicant && resolvedPersonId != null ? (
             <button
@@ -282,7 +307,7 @@ export default function PprPersonalCardPageClient({
               </div>
             ) : null}
 
-            <PprCardSectionNav />
+            <PprCardSectionNav sections={visibleCardSections} />
 
             <div className="space-y-5">
               <EmployeeImportCardSection
@@ -398,6 +423,26 @@ export default function PprPersonalCardPageClient({
                   description="Юридически значимые кадровые действия."
                 >
                   <EmployeeCardOrdersSection employeeId={resolvedEmployeeId} />
+                </EmployeeImportCardSection>
+              ) : null}
+
+              {!isApplicant && resolvedEmployeeId ? (
+                <EmployeeImportCardSection
+                  id="onboarding"
+                  title="Адаптация"
+                  description="Чек-лист адаптации нового сотрудника."
+                >
+                  <EmployeeOnboardingSection employeeId={resolvedEmployeeId} />
+                </EmployeeImportCardSection>
+              ) : null}
+
+              {resolvedPersonId != null ? (
+                <EmployeeImportCardSection
+                  id="applications"
+                  title="Кадровые обращения"
+                  description="История кадровых обращений по бумажным заявлениям."
+                >
+                  <PprCardApplicationsSection personId={resolvedPersonId} />
                 </EmployeeImportCardSection>
               ) : null}
 

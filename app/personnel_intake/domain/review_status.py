@@ -1,0 +1,85 @@
+"""Intake HR review section and status constants (WP-PPR-INTAKE-002)."""
+from __future__ import annotations
+
+INTAKE_SECTION_PERSONAL = "personal"
+INTAKE_SECTION_CONTACTS = "contacts"
+INTAKE_SECTION_EDUCATION = "education"
+INTAKE_SECTION_TRAINING = "training"
+INTAKE_SECTION_RELATIVES = "relatives"
+INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY = "employment_biography"
+INTAKE_SECTION_MILITARY = "military"
+
+INTAKE_REVIEW_SECTIONS: tuple[str, ...] = (
+    INTAKE_SECTION_PERSONAL,
+    INTAKE_SECTION_CONTACTS,
+    INTAKE_SECTION_EDUCATION,
+    INTAKE_SECTION_TRAINING,
+    INTAKE_SECTION_RELATIVES,
+    INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY,
+    INTAKE_SECTION_MILITARY,
+)
+
+# Sections that must be accepted (not skipped) when non-empty.
+INTAKE_REQUIRED_SECTIONS: frozenset[str] = frozenset(
+    {
+        INTAKE_SECTION_PERSONAL,
+        INTAKE_SECTION_CONTACTS,
+        INTAKE_SECTION_EDUCATION,
+    }
+)
+
+INTAKE_SECTION_REVIEW_PENDING = "pending"
+INTAKE_SECTION_REVIEW_ACCEPTED = "accepted"
+INTAKE_SECTION_REVIEW_REWORK_REQUESTED = "rework_requested"
+INTAKE_SECTION_REVIEW_SKIPPED = "skipped"
+
+INTAKE_SECTION_REVIEW_STATUSES: tuple[str, ...] = (
+    INTAKE_SECTION_REVIEW_PENDING,
+    INTAKE_SECTION_REVIEW_ACCEPTED,
+    INTAKE_SECTION_REVIEW_REWORK_REQUESTED,
+    INTAKE_SECTION_REVIEW_SKIPPED,
+)
+
+INTAKE_SECTION_REVIEW_TERMINAL: frozenset[str] = frozenset(
+    {
+        INTAKE_SECTION_REVIEW_ACCEPTED,
+        INTAKE_SECTION_REVIEW_SKIPPED,
+    }
+)
+
+INTAKE_TRANSFER_STATUS_PENDING = "pending"
+INTAKE_TRANSFER_STATUS_COMPLETED = "completed"
+INTAKE_TRANSFER_STATUS_FAILED = "failed"
+
+INTAKE_TRANSFER_STATUSES: tuple[str, ...] = (
+    INTAKE_TRANSFER_STATUS_PENDING,
+    INTAKE_TRANSFER_STATUS_COMPLETED,
+    INTAKE_TRANSFER_STATUS_FAILED,
+)
+
+INTAKE_TRANSFER_RESULT_SUCCESS = "success"
+INTAKE_TRANSFER_RESULT_FAILURE = "failure"
+
+INTAKE_SECTION_LABELS: dict[str, str] = {
+    INTAKE_SECTION_PERSONAL: "Персональные данные",
+    INTAKE_SECTION_CONTACTS: "Контакты",
+    INTAKE_SECTION_EDUCATION: "Образование",
+    INTAKE_SECTION_TRAINING: "Обучение",
+    INTAKE_SECTION_RELATIVES: "Родственники",
+    INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY: "Трудовая биография",
+    INTAKE_SECTION_MILITARY: "Воинский учёт",
+}
+
+PPR_TRANSFER_SECTION_GENERAL = "general"
+PPR_TRANSFER_SECTIONS: tuple[str, ...] = (
+    PPR_TRANSFER_SECTION_GENERAL,
+    "education",
+    "training",
+    "family",
+    "employment_biography",
+    "military",
+)
+
+
+def is_section_review_terminal(status: str) -> bool:
+    return status in INTAKE_SECTION_REVIEW_TERMINAL

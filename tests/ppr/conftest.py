@@ -121,6 +121,146 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
                 text("DELETE FROM public.person_military_service WHERE person_id = ANY(:ids)"),
                 {"ids": person_ids},
             )
+        if table_exists(conn, "personnel_applications"):
+            if table_exists(conn, "personnel_intake_drafts"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_intake_drafts
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "personnel_intake_links"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_intake_links
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "personnel_intake_section_reviews"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_intake_section_reviews
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "personnel_intake_transfers"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_intake_transfers
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "employee_onboarding_checklist_items"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.employee_onboarding_checklist_items
+                        WHERE onboarding_id IN (
+                            SELECT onboarding_id FROM public.employee_onboardings
+                            WHERE employee_id IN (
+                                SELECT employee_id FROM public.employees WHERE person_id = ANY(:ids)
+                            )
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "employee_onboardings"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.employee_onboardings
+                        WHERE employee_id IN (
+                            SELECT employee_id FROM public.employees WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "personnel_application_lifecycle_audit"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_application_lifecycle_audit
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "personnel_application_resolution_audit"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_application_resolution_audit
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
+            order_ids = conn.execute(
+                text(
+                    """
+                    SELECT personnel_order_id
+                    FROM public.personnel_applications
+                    WHERE person_id = ANY(:ids) AND personnel_order_id IS NOT NULL
+                    """
+                ),
+                {"ids": person_ids},
+            ).scalars().all()
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.personnel_applications
+                    SET personnel_order_id = NULL
+                    WHERE person_id = ANY(:ids)
+                    """
+                ),
+                {"ids": person_ids},
+            )
+            if order_ids and table_exists(conn, "personnel_order_items"):
+                conn.execute(
+                    text("DELETE FROM public.personnel_order_items WHERE order_id = ANY(:oids)"),
+                    {"oids": list(order_ids)},
+                )
+            if order_ids and table_exists(conn, "personnel_orders"):
+                conn.execute(
+                    text("DELETE FROM public.personnel_orders WHERE order_id = ANY(:oids)"),
+                    {"oids": list(order_ids)},
+                )
+            conn.execute(
+                text("DELETE FROM public.personnel_applications WHERE person_id = ANY(:ids)"),
+                {"ids": person_ids},
+            )
     if employee_ids:
         if table_exists(conn, "employee_events"):
             conn.execute(

@@ -1,4 +1,6 @@
 // FILE: corpsite-ui/lib/employeeCardNav.ts
+import { normalizeReturnTo, RETURN_TO_QUERY_PARAM } from "./taskNav";
+
 /** Navigation helpers for the unified HR dossier page (user-facing «Кадровая карточка-досье»). */
 
 export type EmployeeCardSectionId =
@@ -42,6 +44,7 @@ export function buildEmployeeCardHref(
 export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions & {
   personId?: string | number;
   employeeId?: string | number;
+  returnTo?: string | null;
 };
 
 export function buildPersonalCardHref(
@@ -60,6 +63,10 @@ export function buildPersonalCardHref(
   }
   if (options.provisionAccount) {
     params.set("provisionAccount", "1");
+  }
+  const returnTo = normalizeReturnTo(options.returnTo);
+  if (returnTo) {
+    params.set(RETURN_TO_QUERY_PARAM, returnTo);
   }
 
   const qs = params.toString();

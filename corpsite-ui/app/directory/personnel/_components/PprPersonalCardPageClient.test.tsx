@@ -13,7 +13,6 @@ import {
   type PprCompositeReadResponse,
 } from "../_lib/pprQueryTypes";
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
-import { PPR_CARD_RETURN_HREF } from "@/lib/pprCardFeature";
 import { toApiError } from "@/lib/api";
 
 vi.mock("next/link", () => ({
@@ -23,10 +22,11 @@ vi.mock("next/link", () => ({
 }));
 
 const pushMock = vi.fn();
+let currentCardSearchParams = new URLSearchParams("");
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, replace: vi.fn() }),
   usePathname: () => "/directory/personnel/employees/42/card",
-  useSearchParams: () => new URLSearchParams(""),
+  useSearchParams: () => currentCardSearchParams,
 }));
 
 const getPprByEmployeeIdMock = vi.fn();
@@ -48,6 +48,12 @@ vi.mock("./EmployeeOperationalAssignmentSection", () => ({
 
 vi.mock("./EmployeeCardOrdersSection", () => ({
   default: () => <div data-testid="orders-section">Кадровые приказы</div>,
+}));
+
+vi.mock("./PprCardApplicationsSection", () => ({
+  default: ({ personId }: { personId: number }) => (
+    <div data-testid="applications-section">Кадровые обращения #{personId}</div>
+  ),
 }));
 
 function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): PprCompositeReadResponse {
@@ -340,6 +346,7 @@ beforeEach(() => {
   getPprByPersonIdMock.mockReset();
   getEmployeeImportCard2OptionalMock.mockReset();
   pushMock.mockReset();
+  currentCardSearchParams = new URLSearchParams("");
   Element.prototype.scrollIntoView = vi.fn();
 });
 
@@ -416,7 +423,23 @@ describe("PprPersonalCardPageClient", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Назад к персоналу" }));
-    expect(pushMock).toHaveBeenCalledWith(PPR_CARD_RETURN_HREF);
+    expect(pushMock).toHaveBeenCalledWith("/directory/staff");
+  });
+
+  it("returns to personnel applications journal when return_to is present", async () => {
+    currentCardSearchParams = new URLSearchParams(
+      "return_to=%2Fdirectory%2Fpersonnel-applications%3Fq%3Dpetrov%26application_id%3D10",
+    );
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Назад к журналу обращений" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Назад к журналу обращений" }));
+    expect(pushMock).toHaveBeenCalledWith("/directory/personnel-applications?q=petrov&application_id=10");
   });
 
   it("shows NOT_MATERIALIZED as informational banner", async () => {
@@ -969,6 +992,39 @@ describe("PprPersonalCardPageClient", () => {
       expect(screen.getByTestId("military-create-btn")).toBeInTheDocument();
     });
     expect(getPprByPersonIdMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows applications history section on personal card", async () => {
+    getPprByPersonIdMock.mockResolvedValue(
+      buildMaterializedPpr({
+        identity: {
+          requested_person_id: 501,
+          requested_employee_id: null,
+          resolved_person_id: 501,
+          merge_redirected: false,
+          merge_chain: [501],
+          employee_context_id: null,
+          person_status: "active",
+          match_key: "iin:seed",
+          iin: "900101350123",
+        },
+        materialization: {
+          materialized: true,
+          lifecycle_state: "CREATED",
+          hr_relationship_context: PPR_HR_RELATIONSHIP_CANDIDATE,
+          envelope_version: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-02-01T00:00:00Z",
+        },
+      }),
+    );
+
+    render(<PprPersonalCardPageClient personId="501" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("applications-section")).toHaveTextContent("Кадровые обращения #501");
+    });
+    expect(screen.getByRole("link", { name: "Кадровые обращения" })).toBeInTheDocument();
   });
 
   it("does not expose legacy import-card dual-fetch", async () => {

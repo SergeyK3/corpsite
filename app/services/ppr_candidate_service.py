@@ -238,89 +238,134 @@ def list_ppr_applicants(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
+    """Transition-mode applicant roster (001A §17.2): active application OR legacy CANDIDATE."""
     if not _table_exists(conn, "personnel_record_metadata"):
         return [], 0
 
-    where = [
-        "prm.hr_relationship_context = :candidate_ctx",
-        "p.person_status = 'active'",
-        """
-        NOT EXISTS (
-            SELECT 1
-            FROM public.employees e
-            WHERE e.person_id = p.person_id
-              AND COALESCE(e.is_active, TRUE) = TRUE
-        )
-        """,
-    ]
+    has_applications = _table_exists(conn, "personnel_applications")
+
     params: dict[str, Any] = {
         "candidate_ctx": HR_RELATIONSHIP_CANDIDATE,
         "limit": int(limit),
         "offset": int(offset),
     }
-
+    filter_clauses: list[str] = []
     if q:
         params["q"] = f"%{q.strip().lower()}%"
-        where.append(
+        filter_clauses.append(
             "(LOWER(p.full_name) LIKE :q OR LOWER(COALESCE(p.iin, '')) LIKE :q "
             "OR CAST(p.person_id AS TEXT) LIKE :q)"
         )
     if org_group_id is not None:
         params["org_group_id"] = int(org_group_id)
-        where.append("prm.intended_org_group_id = :org_group_id")
+        filter_clauses.append("base.intended_org_group_id = :org_group_id")
     if org_unit_id is not None:
         params["org_unit_id"] = int(org_unit_id)
-        where.append("prm.intended_org_unit_id = :org_unit_id")
+        filter_clauses.append("base.intended_org_unit_id = :org_unit_id")
     if position_id is not None:
         params["position_id"] = int(position_id)
-        where.append("prm.intended_position_id = :position_id")
+        filter_clauses.append("base.intended_position_id = :position_id")
+    extra_filters = ""
+    if filter_clauses:
+        extra_filters = " AND " + " AND ".join(filter_clauses)
 
-    where_sql = " AND ".join(where)
-    total = int(
-        conn.execute(
-            text(
-                f"""
-                SELECT COUNT(*) AS cnt
-                FROM public.persons p
-                JOIN public.personnel_record_metadata prm ON prm.person_id = p.person_id
-                WHERE {where_sql}
-                """
-            ),
-            params,
-        ).mappings().first()["cnt"]
-    )
-
-    rows = conn.execute(
-        text(
-            f"""
+    active_app_branch = ""
+    if has_applications:
+        active_app_branch = """
             SELECT
                 p.person_id,
-                p.full_name,
-                p.iin,
-                p.birth_date,
                 prm.hr_relationship_context,
                 prm.intended_org_group_id,
                 prm.intended_org_unit_id,
                 prm.intended_position_id,
-                prm.intended_employment_rate,
-                dg.group_name AS org_group_name,
-                ou.name AS org_unit_name,
-                pos.name AS position_name
+                prm.intended_employment_rate
             FROM public.persons p
             JOIN public.personnel_record_metadata prm ON prm.person_id = p.person_id
-            LEFT JOIN public.deps_group dg
-              ON dg.group_id = prm.intended_org_group_id
-            LEFT JOIN public.org_units ou
-              ON ou.unit_id = prm.intended_org_unit_id
-            LEFT JOIN public.positions pos
-              ON pos.position_id = prm.intended_position_id
-            WHERE {where_sql}
-            ORDER BY LOWER(p.full_name) ASC, p.person_id ASC
-            LIMIT :limit OFFSET :offset
-            """
-        ),
-        params,
-    ).mappings().all()
+            WHERE p.person_status = 'active'
+              AND EXISTS (
+                  SELECT 1
+                  FROM public.personnel_applications pa
+                  WHERE pa.person_id = p.person_id
+                    AND pa.status NOT IN (
+                        'completed', 'withdrawn', 'cancelled', 'resolution_rejected'
+                    )
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.employees e
+                  WHERE e.person_id = p.person_id
+                    AND COALESCE(e.is_active, TRUE) = TRUE
+              )
+            UNION
+        """
+
+    legacy_branch = f"""
+            SELECT
+                p.person_id,
+                prm.hr_relationship_context,
+                prm.intended_org_group_id,
+                prm.intended_org_unit_id,
+                prm.intended_position_id,
+                prm.intended_employment_rate
+            FROM public.persons p
+            JOIN public.personnel_record_metadata prm ON prm.person_id = p.person_id
+            WHERE prm.hr_relationship_context = :candidate_ctx
+              AND p.person_status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.employees e
+                  WHERE e.person_id = p.person_id
+                    AND COALESCE(e.is_active, TRUE) = TRUE
+              )
+              {"AND NOT EXISTS (SELECT 1 FROM public.personnel_applications pa WHERE pa.person_id = p.person_id)" if has_applications else ""}
+    """
+
+    base_cte = f"""
+        WITH applicant_base AS (
+            {active_app_branch}
+            {legacy_branch}
+        )
+    """
+
+    count_sql = f"""
+        {base_cte}
+        SELECT COUNT(*) AS cnt
+        FROM applicant_base base
+        JOIN public.persons p ON p.person_id = base.person_id
+        WHERE 1=1
+        {extra_filters}
+    """
+    total = int(conn.execute(text(count_sql), params).mappings().first()["cnt"])
+
+    rows_sql = f"""
+        {base_cte}
+        SELECT
+            p.person_id,
+            p.full_name,
+            p.iin,
+            p.birth_date,
+            base.hr_relationship_context,
+            base.intended_org_group_id,
+            base.intended_org_unit_id,
+            base.intended_position_id,
+            base.intended_employment_rate,
+            dg.group_name AS org_group_name,
+            ou.name AS org_unit_name,
+            pos.name AS position_name
+        FROM applicant_base base
+        JOIN public.persons p ON p.person_id = base.person_id
+        LEFT JOIN public.deps_group dg
+          ON dg.group_id = base.intended_org_group_id
+        LEFT JOIN public.org_units ou
+          ON ou.unit_id = base.intended_org_unit_id
+        LEFT JOIN public.positions pos
+          ON pos.position_id = base.intended_position_id
+        WHERE 1=1
+        {extra_filters}
+        ORDER BY LOWER(p.full_name) ASC, p.person_id ASC
+        LIMIT :limit OFFSET :offset
+    """
+    rows = conn.execute(text(rows_sql), params).mappings().all()
 
     items: list[dict[str, Any]] = []
     for row in rows:

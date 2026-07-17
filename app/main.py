@@ -33,6 +33,7 @@ from app.security.directory_scope import is_privileged
 
 # regular tasks
 from app.services.regular_tasks_router import router as internal_regular_tasks_router
+from app.directory.employee_onboarding_internal_routes import router as onboarding_internal_router
 from app.services.regular_tasks_public_router import router as regular_tasks_public_router
 from app.api.regular_tasks import router as regular_tasks_router  # /regular-task-runs, /regular-task-runs/{run_id}/items, /import-xlsx
 from app.api.admin_router import router as admin_router
@@ -40,6 +41,7 @@ from app.api.personnel_admin_router import router as personnel_admin_router
 from app.api.personnel_migration_router import router as personnel_migration_router
 from app.api.ppr_router import router as ppr_router
 from app.api.ppr_command_router import router as ppr_command_router
+from app.api.personnel_intake_public_router import router as personnel_intake_public_router
 from app.operational_orders.router import router as operational_orders_router
 
 
@@ -123,12 +125,14 @@ app.include_router(personnel_admin_router)
 app.include_router(personnel_migration_router)
 app.include_router(ppr_router)
 app.include_router(ppr_command_router)
+app.include_router(personnel_intake_public_router)
 app.include_router(operational_orders_router)
 
 # -----------------------
 # Routers (internal)
 # -----------------------
 app.include_router(internal_regular_tasks_router)
+app.include_router(onboarding_internal_router)
 
 
 # -----------------------

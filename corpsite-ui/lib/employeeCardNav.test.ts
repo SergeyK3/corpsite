@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEmployeeCardAccessHref,
   buildEmployeeCardHref,
+  buildPersonalCardHref,
   parseEmployeeCardSection,
 } from "./employeeCardNav";
 
@@ -17,6 +18,17 @@ describe("employeeCardNav", () => {
     );
     expect(buildEmployeeCardAccessHref(42)).toBe(
       "/directory/personnel/employees/42/card?section=access&provisionAccount=1",
+    );
+  });
+
+  it("builds personal card href with return_to", () => {
+    expect(
+      buildPersonalCardHref(
+        { personId: 5 },
+        { returnTo: "/directory/personnel-applications?application_id=10" },
+      ),
+    ).toBe(
+      "/directory/personnel/persons/5/card?return_to=%2Fdirectory%2Fpersonnel-applications%3Fapplication_id%3D10",
     );
   });
 

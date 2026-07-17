@@ -1,0 +1,24 @@
+"""Onboarding task audit action constants (WP-ONBOARDING-002)."""
+from __future__ import annotations
+
+TASK_AUDIT_CREATED = "created"
+TASK_AUDIT_UPDATED = "updated"
+TASK_AUDIT_ASSIGNEE_CHANGED = "assignee_changed"
+TASK_AUDIT_DUE_DATE_CHANGED = "due_date_changed"
+TASK_AUDIT_PRIORITY_CHANGED = "priority_changed"
+TASK_AUDIT_COMMENT_CHANGED = "comment_changed"
+TASK_AUDIT_ATTACHMENT_ADDED = "attachment_added"
+TASK_AUDIT_COMPLETED = "completed"
+TASK_AUDIT_SKIPPED = "skipped"
+
+TASK_AUDIT_ACTIONS: tuple[str, ...] = (
+    TASK_AUDIT_CREATED,
+    TASK_AUDIT_UPDATED,
+    TASK_AUDIT_ASSIGNEE_CHANGED,
+    TASK_AUDIT_DUE_DATE_CHANGED,
+    TASK_AUDIT_PRIORITY_CHANGED,
+    TASK_AUDIT_COMMENT_CHANGED,
+    TASK_AUDIT_ATTACHMENT_ADDED,
+    TASK_AUDIT_COMPLETED,
+    TASK_AUDIT_SKIPPED,
+)

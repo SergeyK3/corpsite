@@ -13,6 +13,8 @@ from app.api.ppr_schemas import (
     PprHireDefaultsResponse,
     PprIntendedEmploymentResponse,
     PprIntendedEmploymentUpdateRequest,
+    PprPersonnelApplicationHistoryResponse,
+    PprPersonnelApplicationItemResponse,
 )
 from app.auth import get_current_user
 from app.directory.common import as_http500
@@ -170,6 +172,50 @@ def patch_ppr_intended_employment(
     except HTTPException:
         raise
     except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get(
+    "/persons/{person_id}/applications",
+    response_model=PprPersonnelApplicationHistoryResponse,
+)
+def get_ppr_person_applications(
+    person_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprPersonnelApplicationHistoryResponse:
+    """Personnel Application episode history for a person (read-only)."""
+    try:
+        assert_ppr_read_path_activation_allowed()
+        composite = _query_service.load_by_person_id(person_id)
+        assert_ppr_read_allowed_for_person(
+            user,
+            composite.person_id,
+            resolved_employee_id=composite.employee_id,
+        )
+        from app.db.engine import engine
+        from app.directory.personnel_applications_schemas import snapshot_to_detail
+        from app.personnel_applications.infrastructure.repository import (
+            SqlAlchemyPersonnelApplicationRepository,
+        )
+
+        with engine.connect() as conn:
+            repo = SqlAlchemyPersonnelApplicationRepository(conn)
+            items = repo.list_history_by_person_id(composite.person_id)
+        return PprPersonnelApplicationHistoryResponse(
+            person_id=composite.person_id,
+            items=[
+                PprPersonnelApplicationItemResponse.model_validate(
+                    snapshot_to_detail(item).model_dump()
+                )
+                for item in items
+            ],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mapped = map_ppr_query_error(exc)
+        if mapped is not None:
+            raise mapped
         raise as_http500(exc)
 
 

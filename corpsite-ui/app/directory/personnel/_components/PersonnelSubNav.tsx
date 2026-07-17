@@ -16,6 +16,16 @@ const BASE_ITEMS = [
     prefixes: ["/directory/personnel/journal"],
   },
   {
+    href: "/directory/personnel-applications",
+    title: "Кадровые обращения",
+    prefixes: ["/directory/personnel-applications"],
+  },
+  {
+    href: "/directory/personnel/onboarding",
+    title: "Адаптация",
+    prefixes: ["/directory/personnel/onboarding"],
+  },
+  {
     href: "/directory/personnel/orders",
     title: "Приказы",
     prefixes: ["/directory/personnel/orders"],
