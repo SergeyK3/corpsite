@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Описание логической модели **без физической миграции** на текущем этапе.
+Логическая модель Control List Interchange. Физическая staging schema для run / sheet / row / cell реализована в **WP-CL-002**; mapping profiles, candidates и apply events — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -114,6 +114,24 @@ canonical PPR + Employment (+ справочники)
 | `control_list_import_decision` | Решение reviewer: approve, reject, edit, defer, merge |
 | `control_list_apply_event` | Факт применения candidate в canonical store с rollback handle |
 | `control_list_export_profile` | Профиль выгрузки: листы, колонки, фильтры, grouping из canonical |
+
+### 5.1. Staging snapshot semantics (WP-CL-002)
+
+Поля staging фиксируют **состояние профилировщика на момент `import_run`**, а не canonical mapping или истину системы:
+
+| Поле (staging) | Семантика |
+|----------------|-----------|
+| `semantic_hint` (cell) | **Рекомендация** профилировщика WP-CL-001 (header alias). **Не** canonical column mapping; окончательное сопоставление — в `control_list_mapping_profile_column` (WP-CL-003+) после review |
+| `personnel_category` (sheet) | Snapshot классификации листа на момент run |
+| `employment_mode` (sheet) | Snapshot классификации листа на момент run; контекст листа, **не** атрибут Person |
+| `sheet_purpose` (sheet) | Snapshot классификации листа на момент run |
+| `inferred_type`, `issue_codes`, `row_kind` | Snapshot типизации/классификации профилировщика; не normalized canonical value |
+
+**Инварианты:**
+
+- Staging **не является Source of Truth** — canonical данные живут в PPR / Employment после controlled apply.
+- Повторный импорт той же книги (даже с тем же SHA-256) с новой версией профилировщика может дать **другие** snapshot-значения classification / semantic_hint; каждый run хранит свой snapshot.
+- Canonical mapping profile и reviewer decisions **не перезаписывают** staging snapshot retroactively.
 
 ---
 
@@ -252,7 +270,7 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 
 Явно **не решаются** в ADR-057:
 
-- Физическая staging schema (таблицы, индексы) — WP-CL-002
+- Физическая staging schema (таблицы, индексы) — **WP-CL-002** (foundation реализован; mapping/candidates — позже)
 - Конкретный frontend review UI — WP-CL-011
 - Fuzzy matching thresholds — WP-CL-005
 - Точные правила каждого PPR-парсера — WP-CL-004 … WP-CL-010
@@ -266,5 +284,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 ## Связанные документы
 
 - [WP-CL-001 — Source Workbook Audit](../implementation/WP-CL-001-source-workbook-audit.md)
+- [WP-CL-002 — Staging Schema](../implementation/WP-CL-002-staging-schema.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
