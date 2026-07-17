@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema для run / sheet / row / cell реализована в **WP-CL-002**; mapping profiles, candidates и apply events — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema для run / sheet / row / cell реализована в **WP-CL-002**; mapping profiles — в **WP-CL-003**; candidates и apply events — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -132,6 +132,23 @@ canonical PPR + Employment (+ справочники)
 - Staging **не является Source of Truth** — canonical данные живут в PPR / Employment после controlled apply.
 - Повторный импорт той же книги (даже с тем же SHA-256) с новой версией профилировщика может дать **другие** snapshot-значения classification / semantic_hint; каждый run хранит свой snapshot.
 - Canonical mapping profile и reviewer decisions **не перезаписывают** staging snapshot retroactively.
+
+### 5.2. Mapping profile semantics (WP-CL-003)
+
+Mapping profile — **versioned configuration**, отдельный от staging snapshot и canonical PPR:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Profile role | Конфигурация sheet/column → `semantic_field` + `parser_code` для будущего normalization pipeline |
+| Not staging | Profile **не заменяет** staging snapshot; staging остаётся immutable per `import_run` |
+| Not canonical | Profile **не пишет** в PPR / Employment; canonical данные создаются только после review/apply |
+| Versioning | `(profile_code, profile_version)` обязателен; не более одного `active` на `profile_code` |
+| Immutability | После публикации (`status = active` или `archived`) profile version **immutable**; правки только через новую version |
+| Active change | Смена active profile — **только** создание новой version + archive предыдущей active |
+| Import run binding | Будущий `import_run` ссылается на конкретную version (`profile_id` или `profile_code` + `profile_version`) |
+| Historical runs | Существующие `import_run` **всегда** остаются привязаны к своей version; retroactive rebind запрещён |
+| Vocabulary | `semantic_field` и `parser_code` — import-domain controlled vocabulary, **не** имена колонок PPR |
+| vs `semantic_hint` | Staging `semantic_hint` = profiler recommendation; profile column = operator-approved configuration |
 
 ---
 
@@ -270,7 +287,8 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 
 Явно **не решаются** в ADR-057:
 
-- Физическая staging schema (таблицы, индексы) — **WP-CL-002** (foundation реализован; mapping/candidates — позже)
+- Физическая staging schema (таблицы, индексы) — **WP-CL-002** (foundation реализован)
+- Mapping profile persistence — **WP-CL-003** (foundation реализован; application pipeline — позже)
 - Конкретный frontend review UI — WP-CL-011
 - Fuzzy matching thresholds — WP-CL-005
 - Точные правила каждого PPR-парсера — WP-CL-004 … WP-CL-010
@@ -285,5 +303,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 
 - [WP-CL-001 — Source Workbook Audit](../implementation/WP-CL-001-source-workbook-audit.md)
 - [WP-CL-002 — Staging Schema](../implementation/WP-CL-002-staging-schema.md)
+- [WP-CL-003 — Mapping Profiles](../implementation/WP-CL-003-mapping-profiles.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)

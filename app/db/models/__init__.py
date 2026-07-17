@@ -121,6 +121,14 @@ from app.db.models.personnel_migration import (
     VERIFICATION_STATUS_VERIFIED,
     VERIFICATION_STATUSES,
 )
+from app.db.models.control_list_mapping import (
+    ControlListMappingProfile,
+    ControlListMappingProfileColumn,
+    ControlListMappingProfileSheet,
+    PROFILE_STATUS_ACTIVE,
+    PROFILE_STATUS_ARCHIVED,
+    PROFILE_STATUS_DRAFT,
+)
 from app.db.models.control_list_import import (
     ControlListImportCell,
     ControlListImportRow,
@@ -196,6 +204,12 @@ __all__ = [
     "ControlListImportRow",
     "ControlListImportRun",
     "ControlListImportSheet",
+    "ControlListMappingProfile",
+    "ControlListMappingProfileColumn",
+    "ControlListMappingProfileSheet",
+    "PROFILE_STATUS_ACTIVE",
+    "PROFILE_STATUS_ARCHIVED",
+    "PROFILE_STATUS_DRAFT",
     "EMPLOYMENT_MODE_CONCURRENT",
     "EMPLOYMENT_MODE_PRIMARY",
     "EMPLOYMENT_MODE_UNKNOWN",

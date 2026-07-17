@@ -1,0 +1,92 @@
+"""Controlled vocabulary for Control List mapping profiles (WP-CL-003).
+
+Semantic fields describe the import interchange model (dot-notation slices such as
+``person.full_name``). They are intentionally **not** tied to PPR table or column names.
+"""
+from __future__ import annotations
+
+SEMANTIC_FIELD_PERSON_FULL_NAME = "person.full_name"
+SEMANTIC_FIELD_PERSON_BIRTH_DATE = "person.birth_date"
+SEMANTIC_FIELD_PERSON_IIN = "person.iin"
+SEMANTIC_FIELD_PERSON_SEX = "person.sex"
+SEMANTIC_FIELD_PERSON_NATIONALITY_RAW = "person.nationality_raw"
+SEMANTIC_FIELD_PERSON_PHONE = "person.phone"
+SEMANTIC_FIELD_PERSON_AWARDS = "person.awards"
+SEMANTIC_FIELD_PERSON_NOTES = "person.notes"
+SEMANTIC_FIELD_EMPLOYMENT_DEPARTMENT_NAME = "employment.department_name"
+SEMANTIC_FIELD_EMPLOYMENT_POSITION_TITLE = "employment.position_title"
+SEMANTIC_FIELD_EMPLOYMENT_STARTED_AT = "employment.started_at"
+SEMANTIC_FIELD_EDUCATION_RECORDS = "education.records"
+SEMANTIC_FIELD_TRAINING_RECORDS = "training.records"
+SEMANTIC_FIELD_QUALIFICATION_CATEGORY = "qualification.category"
+SEMANTIC_FIELD_QUALIFICATION_DEGREE = "qualification.degree"
+
+SEMANTIC_FIELDS: frozenset[str] = frozenset(
+    {
+        SEMANTIC_FIELD_PERSON_FULL_NAME,
+        SEMANTIC_FIELD_PERSON_BIRTH_DATE,
+        SEMANTIC_FIELD_PERSON_IIN,
+        SEMANTIC_FIELD_PERSON_SEX,
+        SEMANTIC_FIELD_PERSON_NATIONALITY_RAW,
+        SEMANTIC_FIELD_PERSON_PHONE,
+        SEMANTIC_FIELD_PERSON_AWARDS,
+        SEMANTIC_FIELD_PERSON_NOTES,
+        SEMANTIC_FIELD_EMPLOYMENT_DEPARTMENT_NAME,
+        SEMANTIC_FIELD_EMPLOYMENT_POSITION_TITLE,
+        SEMANTIC_FIELD_EMPLOYMENT_STARTED_AT,
+        SEMANTIC_FIELD_EDUCATION_RECORDS,
+        SEMANTIC_FIELD_TRAINING_RECORDS,
+        SEMANTIC_FIELD_QUALIFICATION_CATEGORY,
+        SEMANTIC_FIELD_QUALIFICATION_DEGREE,
+    }
+)
+
+PARSER_CODE_TEXT_PLAIN = "text.plain"
+PARSER_CODE_TEXT_COMPOSITE_NUMBERED = "text.composite_numbered"
+PARSER_CODE_PERSON_FULL_NAME = "person.full_name"
+PARSER_CODE_IDENTITY_IIN = "identity.iin"
+PARSER_CODE_IDENTITY_PHONE = "identity.phone"
+PARSER_CODE_DATE_EXCEL_SERIAL = "date.excel_serial"
+PARSER_CODE_DATE_TEXT = "date.text"
+PARSER_CODE_EMPLOYMENT_DEPARTMENT = "employment.department"
+PARSER_CODE_EMPLOYMENT_POSITION = "employment.position"
+PARSER_CODE_EMPLOYMENT_STARTED_AT = "employment.started_at"
+PARSER_CODE_RECORDS_EDUCATION = "records.education"
+PARSER_CODE_RECORDS_TRAINING = "records.training"
+PARSER_CODE_QUALIFICATION_CATEGORY = "qualification.category"
+PARSER_CODE_QUALIFICATION_DEGREE = "qualification.degree"
+PARSER_CODE_PERSON_SEX = "person.sex"
+PARSER_CODE_PERSON_NATIONALITY = "person.nationality"
+PARSER_CODE_TEXT_AWARDS = "text.awards"
+PARSER_CODE_TEXT_NOTES = "text.notes"
+
+PARSER_CODES: frozenset[str] = frozenset(
+    {
+        PARSER_CODE_TEXT_PLAIN,
+        PARSER_CODE_TEXT_COMPOSITE_NUMBERED,
+        PARSER_CODE_PERSON_FULL_NAME,
+        PARSER_CODE_IDENTITY_IIN,
+        PARSER_CODE_IDENTITY_PHONE,
+        PARSER_CODE_DATE_EXCEL_SERIAL,
+        PARSER_CODE_DATE_TEXT,
+        PARSER_CODE_EMPLOYMENT_DEPARTMENT,
+        PARSER_CODE_EMPLOYMENT_POSITION,
+        PARSER_CODE_EMPLOYMENT_STARTED_AT,
+        PARSER_CODE_RECORDS_EDUCATION,
+        PARSER_CODE_RECORDS_TRAINING,
+        PARSER_CODE_QUALIFICATION_CATEGORY,
+        PARSER_CODE_QUALIFICATION_DEGREE,
+        PARSER_CODE_PERSON_SEX,
+        PARSER_CODE_PERSON_NATIONALITY,
+        PARSER_CODE_TEXT_AWARDS,
+        PARSER_CODE_TEXT_NOTES,
+    }
+)
+
+
+def is_valid_semantic_field(value: str) -> bool:
+    return value in SEMANTIC_FIELDS
+
+
+def is_valid_parser_code(value: str) -> bool:
+    return value in PARSER_CODES
