@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; education normalization — **WP-CL-008**; training normalization — **WP-CL-009**; other PPR fields normalization — **WP-CL-010**; candidate persistence / apply — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; education normalization — **WP-CL-008**; training normalization — **WP-CL-009**; other PPR fields normalization — **WP-CL-010**; review aggregate / apply plan — **WP-CL-011**; candidate persistence / apply execution — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -111,6 +111,8 @@ canonical PPR + Employment (+ справочники)
 | `control_list_mapping_profile_sheet` | Правила листа: personnel_category, employment_mode, header_row override |
 | `control_list_mapping_profile_column` | Столбец → semantic field, parser hints |
 | `control_list_import_candidate` | Нормализованный кандидат (Person slice, Employment slice, section payloads) |
+| `control_list_review_item` | Review aggregate: candidates + match + issues + readiness + decision (WP-CL-011; in-memory foundation) |
+| `control_list_apply_plan` | Декларативный план действий для одной review item (WP-CL-011; immutable, без mutation) |
 | `control_list_import_decision` | Решение reviewer: approve, reject, edit, defer, merge |
 | `control_list_apply_event` | Факт применения candidate в canonical store с rollback handle |
 | `control_list_export_profile` | Профиль выгрузки: листы, колонки, фильтры, grouping из canonical |
@@ -270,6 +272,30 @@ Other PPR Candidate — **temporary normalized import model** for PPR fields not
 | Readiness | `normalization_ready` = person matched + field normalized; **не** apply-ready |
 | Downstream | PPR apply / dedup policy — последующие WP |
 
+### 5.10. Review aggregate and apply plan semantics (WP-CL-011)
+
+Review aggregate — **temporary in-memory assembly**, не canonical PPR/Employment:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Normalization + matching outputs → `ControlListReviewRun` / `ControlListReviewItem` |
+| Cardinality | **1 staging data row → 1 review item**; candidates grouped strictly by provenance (`source_row_id`) |
+| Not canonical | Review item **не является** Person, Employment или PPR record |
+| Not staging | Review **не заменяет** staging snapshot; ссылается на candidates и match results |
+| Issues | `blocking_issues` запрещают approve и executable apply plan; `non_blocking_issues` информируют оператора |
+| Person match | `ambiguous` / `invalid` — **always blocking**; `not_found` — blocking для auto-apply, допускает только explicit `create_person` в plan (`is_ready=false`) |
+| Slice readiness | `normalization_ready` отдельного candidate **не означает** готовность всего review item |
+| Empty sections | Отсутствующие optional slices (employment, contacts, education, …) **не создают** ложные блокировки |
+| Decision | `ReviewDecision` (`pending` / `approved` / `rejected` / `needs_correction`) — **отделено** от apply execution |
+| Blocked + approved | **Запрещено** — blocked item нельзя перевести в `approved` |
+| Approve ≠ apply | `approved` **не выполняет** mutation; только разрешает формирование executable plan |
+| Apply plan | `ApplyPlan` — **immutable declarative** snapshot; `is_executable` **не означает**, что execution уже выполнен |
+| Employment BC | `EmploymentCandidate` (primary **и** concurrent) → `resolve_assignment` в Employment BC; `employment_mode` передаётся в preconditions |
+| Not external employment | `employment_mode=concurrent` на листе Control List = **внутреннее** совместительство / назначение в ММЦ ([ADR-056](../adr/ADR-056-employment-aggregate-architecture.md)); **не** `person_external_employment` |
+| create_external_employment | Vocabulary element для явного источника **внешней** трудовой биографии; WP-CL-011 **не генерирует** его из WP-CL-006 |
+| No mutation | WP-CL-011 **не пишет** в Person/PPR/Employment и **не вызывает** canonical repositories на mutation |
+| Execution deferred | Фактический apply pipeline, transactions, idempotency persistence, rollback — **WP-CL-012+** |
+
 ---
 
 ## 6. Классификация листов
@@ -403,8 +429,9 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 | **WP-CL-008** | Образование |
 | **WP-CL-009** | Повышение квалификации |
 | **WP-CL-010** | Прочие PPR-поля (гражданство, семейное положение, воинский учёт, награды, категории) |
-| **WP-CL-011** | Preview / review / apply UI |
-| **WP-CL-012** | Rollback, audit, повторный импорт |
+| **WP-CL-011** | Review aggregate + declarative apply planning foundation (in-memory; no canonical writes) |
+| **WP-CL-011b** *(planned)* | Preview / review UI |
+| **WP-CL-012** | Apply execution, rollback, audit, повторный импорт |
 | **WP-CL-013** | Configurable Control List export |
 
 ---
@@ -416,7 +443,8 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - Физическая staging schema (таблицы, индексы) — **WP-CL-002** (foundation реализован)
 - Mapping profile persistence — **WP-CL-003** (foundation реализован; application pipeline — позже)
 - Person matching thresholds beyond fixed tiers — **WP-CL-005** (foundation реализован)
-- Конкретный frontend review UI — WP-CL-011
+- Конкретный frontend review UI — WP-CL-011b *(planned)*
+- Apply execution / transaction commit — WP-CL-012
 - Точные правила каждого PPR-парсера — WP-CL-004 … WP-CL-010
 - Формат export templates — WP-CL-013
 - Правила **обновления** существующих canonical записей vs create-only
@@ -437,5 +465,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-008 — Education Normalization](../implementation/WP-CL-008-education-normalization.md)
 - [WP-CL-009 — Training Normalization](../implementation/WP-CL-009-training-normalization.md)
 - [WP-CL-010 — Other PPR Fields Normalization](../implementation/WP-CL-010-other-ppr-fields-normalization.md)
+- [WP-CL-011 — Review and Apply Foundation](../implementation/WP-CL-011-review-and-apply-foundation.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
