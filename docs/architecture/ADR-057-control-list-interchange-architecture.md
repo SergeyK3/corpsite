@@ -296,6 +296,28 @@ Review aggregate — **temporary in-memory assembly**, не canonical PPR/Employ
 | No mutation | WP-CL-011 **не пишет** в Person/PPR/Employment и **не вызывает** canonical repositories на mutation |
 | Execution deferred | Фактический apply pipeline, transactions, idempotency persistence, rollback — **WP-CL-012+** |
 
+### 5.11. Apply execution semantics (WP-CL-012)
+
+Apply execution — **persistent journal + canonical command dispatch**, не прямой ORM write:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Approved `ApplyPlan` → `ApplyExecutionService` → journal + executor outcomes |
+| No direct SQL | **Запрещены** direct INSERT/UPDATE/DELETE в `persons`, `employees`, `person_assignments`, PPR section tables |
+| Canonical boundary | Mutations только через application services / command handlers / UoW |
+| Missing command | Executor возвращает `deferred`, **не** создаёт repository shortcut |
+| Journal | `control_list_apply_runs` + `control_list_apply_actions` — execution state, не canonical SoT |
+| Plan identity | Deterministic `plan_fingerprint` (SHA-256 canonical JSON snapshot) |
+| Idempotency | Persistent: replay terminal success без duplicate mutation; key/fingerprint conflict → fail closed |
+| Transaction | Journal transaction отделён от canonical command transaction; **не** одна длинная TX на run |
+| Failure | Failed action останавливает последующие actions; уже succeeded actions **не** auto-rollback |
+| Deferred | `deferred` **не** считается failed; run может быть `partially_succeeded` |
+| Retry | Silent retry запрещён; failed journal **immutable**; повторный `execute_approved_plan` возвращает `ApplyExecutionRetryRequired`; explicit retry/recovery — **следующий WP** (successor run или attempt history), не reset terminal status |
+| Compensation | Generic rollback **не** реализован; recovery/compensation — последующие WP |
+| Canonical commands | WP-CL-012 **не интегрирует** canonical Person/PPR/Employment command handlers; outcomes ограничены `skipped` / `deferred` |
+| Production apply | Persistent journal **не означает** готовность к массовому production apply |
+| API | HTTP endpoint отложен до persisted review snapshot layer |
+
 ---
 
 ## 6. Классификация листов
@@ -431,7 +453,8 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 | **WP-CL-010** | Прочие PPR-поля (гражданство, семейное положение, воинский учёт, награды, категории) |
 | **WP-CL-011** | Review aggregate + declarative apply planning foundation (in-memory; no canonical writes) |
 | **WP-CL-011b** *(planned)* | Preview / review UI |
-| **WP-CL-012** | Apply execution, rollback, audit, повторный импорт |
+| **WP-CL-012** | Apply execution journal + deferred canonical dispatch foundation |
+| **WP-CL-012b** *(planned)* | Canonical command integration + compensation |
 | **WP-CL-013** | Configurable Control List export |
 
 ---
@@ -444,7 +467,7 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - Mapping profile persistence — **WP-CL-003** (foundation реализован; application pipeline — позже)
 - Person matching thresholds beyond fixed tiers — **WP-CL-005** (foundation реализован)
 - Конкретный frontend review UI — WP-CL-011b *(planned)*
-- Apply execution / transaction commit — WP-CL-012
+- Apply execution / transaction commit — WP-CL-012 (foundation); command integration — WP-CL-012b
 - Точные правила каждого PPR-парсера — WP-CL-004 … WP-CL-010
 - Формат export templates — WP-CL-013
 - Правила **обновления** существующих canonical записей vs create-only
@@ -466,5 +489,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-009 — Training Normalization](../implementation/WP-CL-009-training-normalization.md)
 - [WP-CL-010 — Other PPR Fields Normalization](../implementation/WP-CL-010-other-ppr-fields-normalization.md)
 - [WP-CL-011 — Review and Apply Foundation](../implementation/WP-CL-011-review-and-apply-foundation.md)
+- [WP-CL-012 — Apply Execution Foundation](../implementation/WP-CL-012-apply-execution-foundation.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
