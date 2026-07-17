@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema для run / sheet / row / cell реализована в **WP-CL-002**; mapping profiles — в **WP-CL-003**; candidates и apply events — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; candidate persistence / apply — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -149,6 +149,22 @@ Mapping profile — **versioned configuration**, отдельный от staging
 | Historical runs | Существующие `import_run` **всегда** остаются привязаны к своей version; retroactive rebind запрещён |
 | Vocabulary | `semantic_field` и `parser_code` — import-domain controlled vocabulary, **не** имена колонок PPR |
 | vs `semantic_hint` | Staging `semantic_hint` = profiler recommendation; profile column = operator-approved configuration |
+
+### 5.3. Person Candidate semantics (WP-CL-004)
+
+Person Candidate — **temporary normalized import model**, не canonical Person / PPR:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Результат normalization pipeline: staging + mapping profile → normalized person slice |
+| In-memory | Temporary domain model в памяти; **без** ORM / SQLAlchemy и **без** candidate persistence table |
+| Not staging | Candidate не хранит raw cell snapshot; использует profile-driven mapping поверх staging values |
+| Not canonical | Candidate **не является** Person aggregate и **не пишет** в PPR / Employment |
+| No PPR ids | **Не содержит** `person_id`, `employee_id`, `candidate_id` и других ссылок на canonical PPR |
+| Cardinality | Один `import_run` может породить **множество** Person Candidate (по data-строкам) |
+| No matching | WP-CL-004 не выполняет поиск совпадений с existing Person |
+| Field issues | Normalizers возвращают `issues`; пустые/ошибочные значения не угадываются |
+| Downstream | Сопоставление с Person — **только** WP-CL-005; review, apply — последующие WP |
 
 ---
 
@@ -304,5 +320,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-001 — Source Workbook Audit](../implementation/WP-CL-001-source-workbook-audit.md)
 - [WP-CL-002 — Staging Schema](../implementation/WP-CL-002-staging-schema.md)
 - [WP-CL-003 — Mapping Profiles](../implementation/WP-CL-003-mapping-profiles.md)
+- [WP-CL-004 — Person Normalization](../implementation/WP-CL-004-person-normalization.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
