@@ -166,6 +166,20 @@ Person Candidate — **temporary normalized import model**, не canonical Perso
 | Field issues | Normalizers возвращают `issues`; пустые/ошибочные значения не угадываются |
 | Downstream | Сопоставление с Person — **только** WP-CL-005; review, apply — последующие WP |
 
+### 5.4. Person Match Result semantics (WP-CL-005)
+
+Person matching — **read-only** слой между Person Candidate (WP-CL-004) и review/apply:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | `PersonCandidate` → `PersonMatchResult` с `MatchStatus`, `MatchReason`, score/confidence |
+| Read-only port | Доступ к `public.persons` только через `PersonMatchReadPort`; domain service **без** прямого SQL |
+| No mutation | **Не создаёт** и **не изменяет** Person / PPR; **не выполняет** apply |
+| No employee identity | `employee_id` **не используется** как идентичность человека |
+| Matchable rows | Только `person_status IN ('active','inactive')`; merged — redirect через `resolve_survivor` |
+| Auto recommendation | `recommended_person_id` только для `exact` IIN и single `probable` FIO+DOB; FIO-only — **без** auto-match |
+| Downstream | Reviewer decisions, candidate persistence, apply — WP-CL-011+ |
+
 ---
 
 ## 6. Классификация листов
@@ -227,15 +241,21 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 
 ---
 
-## 7. Сопоставление Person (будущая политика)
+## 7. Сопоставление Person (WP-CL-005)
 
-| Уровень | Политика |
-|---------|----------|
-| **Exact IIN** | Основной идентификатор; автоматическое сопоставление при валидном 12-значном ИИН |
-| **FIO + birth_date** | Дополнительное **точное** сопоставление |
-| **Normalized FIO only** | Только **probable** match; автоматическое подтверждение запрещено |
-| **Ambiguous** | Требует ручного решения reviewer |
-| **Similar FIO only** | **Запрещено** автоматически подтверждать Person |
+Реализовано как read-only matching layer (`PersonMatchingService`). Политика приоритетов:
+
+| Уровень | MatchStatus | Политика |
+|---------|-------------|----------|
+| **Exact IIN** | `exact` | Валидный 12-значный ИИН → точное совпадение; `recommended_person_id` разрешён при отсутствии attribute conflict |
+| **FIO + birth_date** | `probable` | Нормализованное ФИО + дата рождения → вероятное совпадение; `recommended_person_id` только при единственном hit |
+| **Normalized FIO only** | `probable` / `ambiguous` | Слабое совпадение; **автоматический выбор запрещён** (`recommended_person_id = null`) |
+| **Multiple hits** | `ambiguous` | Несколько подходящих Person → ручное решение reviewer |
+| **IIN vs FIO/DOB conflict** | `invalid` | ИИН найден, но ФИО/дата рождения расходятся → без автоматического выбора |
+| **No match** | `not_found` | Нет подходящих Person по доступным ключам |
+| **Similar FIO / fuzzy** | — | **Запрещено** — fuzzy matching и auto-confirm не реализуются |
+
+**Граница:** matching определяет outcome и confidence; финальное решение, правки оператора и apply — последующие WP (review UI, apply events).
 
 ---
 
@@ -305,8 +325,8 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 
 - Физическая staging schema (таблицы, индексы) — **WP-CL-002** (foundation реализован)
 - Mapping profile persistence — **WP-CL-003** (foundation реализован; application pipeline — позже)
+- Person matching thresholds beyond fixed tiers — **WP-CL-005** (foundation реализован)
 - Конкретный frontend review UI — WP-CL-011
-- Fuzzy matching thresholds — WP-CL-005
 - Точные правила каждого PPR-парсера — WP-CL-004 … WP-CL-010
 - Формат export templates — WP-CL-013
 - Правила **обновления** существующих canonical записей vs create-only
@@ -321,5 +341,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-002 — Staging Schema](../implementation/WP-CL-002-staging-schema.md)
 - [WP-CL-003 — Mapping Profiles](../implementation/WP-CL-003-mapping-profiles.md)
 - [WP-CL-004 — Person Normalization](../implementation/WP-CL-004-person-normalization.md)
+- [WP-CL-005 — Person Matching](../implementation/WP-CL-005-person-matching.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
