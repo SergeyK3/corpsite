@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; candidate persistence / apply — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; candidate persistence / apply — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -179,6 +179,24 @@ Person matching — **read-only** слой между Person Candidate (WP-CL-00
 | Matchable rows | Только `person_status IN ('active','inactive')`; merged — redirect через `resolve_survivor` |
 | Auto recommendation | `recommended_person_id` только для `exact` IIN и single `probable` FIO+DOB; FIO-only — **без** auto-match |
 | Downstream | Reviewer decisions, candidate persistence, apply — WP-CL-011+ |
+
+### 5.5. Employment Candidate semantics (WP-CL-006)
+
+Employment Candidate — **temporary normalized import model**, не canonical Employment / assignment:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Staging row + mapping profile + `PersonMatchResult` → `EmploymentCandidate` |
+| In-memory | Temporary domain model; **без** ORM / SQLAlchemy и **без** Employment DB writes |
+| Not canonical | **Не является** current assignment, `employees`, Position или OrgUnit |
+| No employee identity | **Не использует** `employee_id` как идентичность человека |
+| Person link | `matched_person_id` только при `exact`/`probable` match с `recommended_person_id` |
+| Readiness | `normalization_ready` = person matched + source employment fields OK; **не** означает apply в Employment BC |
+| Non-ready match | `ambiguous` / `invalid` / `not_found` **не блокируют** создание candidate |
+| Resolution deferred | OrgUnit/Position lookup, assignment conflicts, rate/policy checks — последующие WP |
+| employment_mode | Берётся из sheet snapshot (`primary` / `concurrent`); **не смешивается** между листами |
+| No lookup | **Без** поиска Position / OrgUnit и **без** fuzzy matching |
+| Downstream | Review / apply — WP-CL-011+ |
 
 ---
 
@@ -342,5 +360,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-003 — Mapping Profiles](../implementation/WP-CL-003-mapping-profiles.md)
 - [WP-CL-004 — Person Normalization](../implementation/WP-CL-004-person-normalization.md)
 - [WP-CL-005 — Person Matching](../implementation/WP-CL-005-person-matching.md)
+- [WP-CL-006 — Employment Normalization](../implementation/WP-CL-006-employment-normalization.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
