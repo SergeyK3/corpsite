@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; education normalization — **WP-CL-008**; training normalization — **WP-CL-009**; candidate persistence / apply — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; education normalization — **WP-CL-008**; training normalization — **WP-CL-009**; other PPR fields normalization — **WP-CL-010**; candidate persistence / apply — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -253,6 +253,23 @@ Training Candidate — **temporary normalized import model**, не canonical `pe
 | Split delimiters | Newline, `;`, `\|` — **не** каждая запятая |
 | Downstream | Training apply / dedup policy — последующие WP |
 
+### 5.9. Other PPR Candidate semantics (WP-CL-010)
+
+Other PPR Candidate — **temporary normalized import model** for PPR fields not covered by WP-CL-004…009:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Staging row + mapping profile + `PersonMatchResult` → `list[OtherPprCandidate]` |
+| Cardinality | **1 staging row → 0..N** candidates (one per populated supported cell) |
+| In-memory | Temporary domain model; **без** ORM / SQLAlchemy и **без** PPR writes |
+| Scope | Citizenship, nationality, marital/military/disability summaries, awards, notes, qualification |
+| Excluded | Employment, Contacts, Education, Training, core Person identity (WP-CL-004…009) |
+| Raw value | Каждый candidate **обязан** сохранять `raw_value` без потери текста |
+| Conservative | Controlled aliases only; **не** выдумывать значения из неоднозначного текста |
+| Unsupported | Unknown semantic fields → candidate с issue, не silent discard |
+| Readiness | `normalization_ready` = person matched + field normalized; **не** apply-ready |
+| Downstream | PPR apply / dedup policy — последующие WP |
+
 ---
 
 ## 6. Классификация листов
@@ -385,7 +402,7 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 | **WP-CL-007** | Контакты |
 | **WP-CL-008** | Образование |
 | **WP-CL-009** | Повышение квалификации |
-| **WP-CL-010** | Категории, степени, награды и примечания |
+| **WP-CL-010** | Прочие PPR-поля (гражданство, семейное положение, воинский учёт, награды, категории) |
 | **WP-CL-011** | Preview / review / apply UI |
 | **WP-CL-012** | Rollback, audit, повторный импорт |
 | **WP-CL-013** | Configurable Control List export |
@@ -419,5 +436,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-007 — Contacts Normalization](../implementation/WP-CL-007-contacts-normalization.md)
 - [WP-CL-008 — Education Normalization](../implementation/WP-CL-008-education-normalization.md)
 - [WP-CL-009 — Training Normalization](../implementation/WP-CL-009-training-normalization.md)
+- [WP-CL-010 — Other PPR Fields Normalization](../implementation/WP-CL-010-other-ppr-fields-normalization.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
