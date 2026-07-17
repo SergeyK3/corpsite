@@ -8,6 +8,12 @@ import {
   intakeLinkStatusLabel,
 } from "@/app/intake/_lib/intakeLabels";
 import {
+  clearPersistedIntakeLinkPath,
+  persistIntakeLinkPath,
+  readPersistedIntakeLinkPath,
+} from "../_lib/personnelApplicantWorkflow";
+import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
+import {
   formatPersonnelApplicationDateTime,
 } from "../_lib/personnelApplicationLabels";
 import {
@@ -30,6 +36,11 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [issuedLinkPath, setIssuedLinkPath] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    const persisted = readPersistedIntakeLinkPath(detail.application_id);
+    if (persisted) setIssuedLinkPath(persisted);
+  }, [detail.application_id]);
+
   const linkStatus = detail.intake_link_status;
   const draftStatus = detail.intake_draft_status;
   const canIssue = !linkStatus || linkStatus === "revoked" || linkStatus === "expired";
@@ -40,6 +51,7 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
     linkStatus === "submitted" ||
     detail.status === "under_review" ||
     detail.status === "review_completed";
+  const activeLinkPath = issuedLinkPath;
 
   async function runAction(action: "issue" | "reissue" | "revoke") {
     setBusy(action);
@@ -48,12 +60,15 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
       if (action === "issue") {
         const result = await issueIntakeLink(detail.application_id);
         setIssuedLinkPath(result.intake_url_path);
+        persistIntakeLinkPath(detail.application_id, result.intake_url_path);
       } else if (action === "reissue") {
         const result = await reissueIntakeLink(detail.application_id);
         setIssuedLinkPath(result.intake_url_path);
+        persistIntakeLinkPath(detail.application_id, result.intake_url_path);
       } else {
         await revokeIntakeLink(detail.application_id);
         setIssuedLinkPath(null);
+        clearPersistedIntakeLinkPath(detail.application_id);
       }
       onRefresh();
     } catch (e) {
@@ -65,7 +80,10 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
 
   return (
     <section className="space-y-3" data-testid="personnel-application-intake-section">
-      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Анкета претендента</h3>
+      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Заполнение личной карточки</h3>
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        Выдайте претенденту ссылку на публичную анкету. После отправки анкеты статус обращения изменится автоматически.
+      </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Статус ссылки</div>
@@ -101,11 +119,11 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>
       ) : null}
 
-      {issuedLinkPath ? (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm dark:border-sky-900 dark:bg-sky-950/30">
-          <p className="font-medium text-sky-900 dark:text-sky-200">Ссылка для претендента</p>
-          <code className="mt-1 block break-all text-xs text-sky-800 dark:text-sky-300">{issuedLinkPath}</code>
-        </div>
+      {activeLinkPath ? (
+        <PersonnelApplicationIntakeLinkPanel
+          intakeUrlPath={activeLinkPath}
+          actionsDisabled={busy != null}
+        />
       ) : null}
 
       {!readOnly ? (
@@ -118,7 +136,7 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
             className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm text-white hover:bg-sky-700 disabled:opacity-50"
             data-testid="intake-issue-link-button"
           >
-            {busy === "issue" ? "Выдача…" : "Выдать ссылку"}
+            {busy === "issue" ? "Создание…" : "Создать ссылку на заполнение личной карточки"}
           </button>
         ) : null}
         {canReissue ? (
@@ -129,7 +147,7 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
             className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
             data-testid="intake-reissue-link-button"
           >
-            {busy === "reissue" ? "Перевыпуск…" : "Перевыпустить ссылку"}
+            {busy === "reissue" ? "Создание…" : "Создать новую"}
           </button>
         ) : null}
         {canRevoke ? (
@@ -140,7 +158,7 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
             className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 dark:border-red-900 dark:text-red-300"
             data-testid="intake-revoke-link-button"
           >
-            {busy === "revoke" ? "Отзыв…" : "Отозвать ссылку"}
+            {busy === "revoke" ? "Аннулирование…" : "Аннулировать ссылку"}
           </button>
         ) : null}
         {canOpenReview ? (

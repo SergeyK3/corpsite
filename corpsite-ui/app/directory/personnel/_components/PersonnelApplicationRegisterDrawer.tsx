@@ -4,12 +4,26 @@ import * as React from "react";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
+import {
+  buildAllowedPositionSelectGroups,
+  isOrgUnitAllowedForGroup,
+  isPositionAllowedInOptions,
+  normalizePositionId,
+} from "@/lib/taskOrgFilters";
+import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
+import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
+import type { PersonnelOrderPositionSelectGroup } from "@/lib/taskOrgFilters";
 import { hrRelationshipLabel } from "../_lib/pprCardPresentation";
 import {
   mapPersonnelApplicationBlockReason,
   formatPersonnelApplicationDate,
 } from "../_lib/personnelApplicationLabels";
 import {
+  persistIntakeLinkPath,
+} from "../_lib/personnelApplicantWorkflow";
+import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
+import {
+  issueIntakeLink,
   mapPersonnelApplicationsApiError,
   previewPersonnelApplication,
   registerPersonnelApplication,
@@ -17,8 +31,6 @@ import {
   type PersonnelApplicationPreviewResponse,
   type PersonnelApplicationRegisterResponse,
 } from "../_lib/personnelApplicationsApi.client";
-import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
-import type { PersonnelOrderPositionSelectGroup } from "@/lib/taskOrgFilters";
 
 type Props = {
   open: boolean;
@@ -59,6 +71,11 @@ export default function PersonnelApplicationRegisterDrawer({
   const [previewLoading, setPreviewLoading] = React.useState(false);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [registrationResult, setRegistrationResult] = React.useState<PersonnelApplicationRegisterResponse | null>(
+    null,
+  );
+  const [intakeLinkPath, setIntakeLinkPath] = React.useState<string | null>(null);
+  const [intakeLinkError, setIntakeLinkError] = React.useState<string | null>(null);
 
   const [fullName, setFullName] = React.useState("");
   const [birthDate, setBirthDate] = React.useState("");
@@ -72,11 +89,26 @@ export default function PersonnelApplicationRegisterDrawer({
   const [email, setEmail] = React.useState("");
   const [hrNote, setHrNote] = React.useState("");
 
-  const { positionGroups, loading: positionsLoading } = usePersonnelOrderPositionOptions({
+  const {
+    options: orgUnitSelectOptions,
+    catalogOptions: orgUnitCatalogOptions,
+    loading: orgUnitsLoading,
+    error: orgUnitsError,
+  } = useOrgUnitScopeOptions(orgGroupId);
+
+  const { scopedOptions, loading: positionsLoading } = usePersonnelOrderPositionOptions({
     enabled: open,
     orgUnitId,
     orgGroupId,
+    allowedOnly: true,
   });
+
+  const allowedPositionGroups = React.useMemo(
+    () => buildAllowedPositionSelectGroups(scopedOptions),
+    [scopedOptions],
+  );
+
+  const allowedPositionOptions = scopedOptions;
 
   React.useEffect(() => {
     if (!open) return;
@@ -103,6 +135,9 @@ export default function PersonnelApplicationRegisterDrawer({
       setMobilePhone("");
       setEmail("");
       setHrNote("");
+      setRegistrationResult(null);
+      setIntakeLinkPath(null);
+      setIntakeLinkError(null);
     }
   }, [open]);
 
@@ -112,8 +147,28 @@ export default function PersonnelApplicationRegisterDrawer({
     }
   }, [preview]);
 
+  React.useEffect(() => {
+    if (orgUnitId == null || positionsLoading) return;
+    if (positionId == null) return;
+    if (!isPositionAllowedInOptions(positionId, allowedPositionOptions)) {
+      setPositionId(null);
+    }
+  }, [orgUnitId, positionId, allowedPositionOptions, positionsLoading]);
+
   const showRegistrationForm =
-    preview != null && preview.can_register && (!preview.person_exists || !preview.has_active_application);
+    preview != null &&
+    preview.can_register &&
+    (!preview.person_exists || !preview.has_active_application) &&
+    registrationResult == null;
+
+  const canSubmitPlacement =
+    orgGroupId != null &&
+    orgUnitId != null &&
+    allowedPositionOptions.length > 0 &&
+    positionId != null &&
+    isPositionAllowedInOptions(positionId, allowedPositionOptions) &&
+    !positionsLoading &&
+    !orgUnitsLoading;
 
   async function handlePreview() {
     setPreviewLoading(true);
@@ -134,6 +189,25 @@ export default function PersonnelApplicationRegisterDrawer({
     }
   }
 
+  function validateIntendedPlacement(): string | null {
+    if (orgGroupId == null) {
+      return "Выберите группу отделений.";
+    }
+    if (orgUnitId == null) {
+      return "Выберите отделение.";
+    }
+    if (positionId == null) {
+      return "Выберите должность.";
+    }
+    if (!isOrgUnitAllowedForGroup(orgUnitId, orgGroupId, orgUnitCatalogOptions)) {
+      return "Отделение не входит в выбранную группу отделений.";
+    }
+    if (!isPositionAllowedInOptions(positionId, allowedPositionOptions)) {
+      return "Выберите должность из списка для выбранного отделения.";
+    }
+    return null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!showRegistrationForm) return;
@@ -145,7 +219,13 @@ export default function PersonnelApplicationRegisterDrawer({
       onToast("Для регистрации требуется подтверждение вакансии", "error");
       return;
     }
+    const placementError = validateIntendedPlacement();
+    if (placementError) {
+      onToast(placementError, "error");
+      return;
+    }
     setSubmitting(true);
+    setIntakeLinkError(null);
     try {
       const result = await registerPersonnelApplication({
         iin: iin.trim(),
@@ -162,12 +242,30 @@ export default function PersonnelApplicationRegisterDrawer({
         hr_note: hrNote.trim() || null,
         idempotency_key: `ui-register:${Date.now()}:${iin.trim()}`,
       });
+      setRegistrationResult(result);
       onRegistered(result);
-      onToast(
-        result.action === "created" ? "Кадровое обращение зарегистрировано" : "Открыто существующее обращение",
-        "success",
-      );
-      onClose();
+
+      try {
+        const link = await issueIntakeLink(result.application_id);
+        setIntakeLinkPath(link.intake_url_path);
+        persistIntakeLinkPath(result.application_id, link.intake_url_path);
+        onToast(
+          result.action === "created"
+            ? "Претендент зарегистрирован, ссылка на анкету создана"
+            : "Обращение открыто, ссылка на анкету создана",
+          "success",
+        );
+      } catch (linkErr) {
+        setIntakeLinkError(
+          mapPersonnelApplicationsApiError(linkErr, "Не удалось создать ссылку на заполнение личной карточки"),
+        );
+        onToast(
+          result.action === "created"
+            ? "Кадровое обращение зарегистрировано, но ссылку создать не удалось"
+            : "Обращение открыто, но ссылку создать не удалось",
+          "error",
+        );
+      }
     } catch (err) {
       onToast(mapPersonnelApplicationsApiError(err, "Не удалось зарегистрировать обращение"), "error");
     } finally {
@@ -247,124 +345,211 @@ export default function PersonnelApplicationRegisterDrawer({
             </section>
 
             {showRegistrationForm ? (
-              <section className="space-y-4" data-testid="register-drawer-form">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Основные данные</h3>
-                <label className="block space-y-1 text-sm">
-                  <span className="text-zinc-600 dark:text-zinc-400">ФИО</span>
-                  <input
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required={!preview?.person_exists}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-                    data-testid="register-drawer-full-name"
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
+              <>
+                <section className="space-y-4" data-testid="register-drawer-form">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Основные данные</h3>
                   <label className="block space-y-1 text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Дата рождения</span>
+                    <span className="text-zinc-600 dark:text-zinc-400">ФИО</span>
                     <input
-                      type="date"
-                      value={birthDate}
-                      onChange={(e) => setBirthDate(e.target.value)}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required={!preview?.person_exists}
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                      data-testid="register-drawer-full-name"
                     />
                   </label>
-                  <label className="block space-y-1 text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Дата поступления заявления</span>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1 text-sm">
+                      <span className="text-zinc-600 dark:text-zinc-400">Дата рождения</span>
+                      <input
+                        type="date"
+                        value={birthDate}
+                        onChange={(e) => setBirthDate(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                      />
+                    </label>
+                    <label className="block space-y-1 text-sm">
+                      <span className="text-zinc-600 dark:text-zinc-400">Дата поступления заявления</span>
+                      <input
+                        type="date"
+                        value={applicationReceivedAt}
+                        onChange={(e) => setApplicationReceivedAt(e.target.value)}
+                        required
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                        data-testid="register-drawer-received-at"
+                      />
+                    </label>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
                     <input
-                      type="date"
-                      value={applicationReceivedAt}
-                      onChange={(e) => setApplicationReceivedAt(e.target.value)}
-                      required
-                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-                      data-testid="register-drawer-received-at"
+                      type="checkbox"
+                      checked={vacancyConfirmed}
+                      onChange={(e) => setVacancyConfirmed(e.target.checked)}
+                      data-testid="register-drawer-vacancy-confirmed"
                     />
+                    <span>Вакансия проверена визуально</span>
                   </label>
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={vacancyConfirmed}
-                    onChange={(e) => setVacancyConfirmed(e.target.checked)}
-                    data-testid="register-drawer-vacancy-confirmed"
-                  />
-                  <span>Вакансия проверена визуально</span>
-                </label>
+                  {preview?.person_exists ? (
+                    <p className="text-xs text-zinc-500">
+                      Будет использован существующий person #{preview.person_id}. Дата заявления:{" "}
+                      {formatPersonnelApplicationDate(applicationReceivedAt)}.
+                    </p>
+                  ) : null}
+                </section>
 
-                <OrgScopeFilter
-                  basePath={PERSONNEL_APPLICATIONS_BASE_PATH}
-                  label="Подразделение"
-                  value={orgGroupId}
-                  onChange={(groupId) => {
-                    setOrgGroupId(groupId);
-                    setOrgUnitId(null);
-                    setPositionId(null);
-                  }}
-                />
-                <OrgUnitScopeFilter
-                  basePath={PERSONNEL_APPLICATIONS_BASE_PATH}
-                  label="Структурное подразделение"
-                  allLabel="Выберите подразделение"
-                  orgGroupId={orgGroupId}
-                  value={orgUnitId}
-                  onChange={(unitId) => {
-                    setOrgUnitId(unitId);
-                    setPositionId(null);
-                  }}
-                />
-                <label className="block space-y-1 text-sm">
-                  <span className="text-zinc-600 dark:text-zinc-400">Должность</span>
-                  <select
-                    value={positionId ?? ""}
-                    onChange={(e) => setPositionId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-                    disabled={positionsLoading}
-                    data-testid="register-drawer-position"
-                  >
-                    <option value="">—</option>
-                    {renderPositionSelectOptions(positionGroups)}
-                  </select>
-                </label>
-                <label className="block space-y-1 text-sm">
-                  <span className="text-zinc-600 dark:text-zinc-400">Ставка</span>
-                  <input
-                    value={employmentRate}
-                    onChange={(e) => setEmploymentRate(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                <section className="space-y-4" data-testid="register-drawer-intended-placement">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Предполагаемое место трудоустройства
+                    </h3>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Сохраняется в кадровом обращении и используется для предзаполнения личной карточки и приказа о
+                      приёме.
+                    </p>
+                  </div>
+
+                  <OrgScopeFilter
+                    basePath={PERSONNEL_APPLICATIONS_BASE_PATH}
+                    label="Группа отделений *"
+                    emptyLabel="Выберите группу отделений"
+                    value={orgGroupId}
+                    onChange={(groupId) => {
+                      setOrgGroupId(groupId);
+                      setOrgUnitId(null);
+                      setPositionId(null);
+                    }}
                   />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
+
+                  <OrgUnitScopeFilter
+                    basePath={PERSONNEL_APPLICATIONS_BASE_PATH}
+                    label="Отделение *"
+                    allLabel="Выберите отделение"
+                    orgGroupId={orgGroupId}
+                    value={orgUnitId}
+                    disabled={orgGroupId == null}
+                    unitOptions={orgUnitSelectOptions}
+                    catalogUnitOptions={orgUnitCatalogOptions}
+                    unitsLoading={orgUnitsLoading}
+                    unitsError={orgUnitsError}
+                    onChange={(unitId) => {
+                      setOrgUnitId(unitId);
+                      setPositionId(null);
+                    }}
+                  />
+
                   <label className="block space-y-1 text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Мобильный телефон</span>
+                    <span className="text-zinc-600 dark:text-zinc-400">Должность *</span>
+                    <select
+                      value={positionId != null ? String(positionId) : ""}
+                      onChange={(e) => {
+                        setPositionId(normalizePositionId(e.target.value));
+                      }}
+                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900 disabled:opacity-60"
+                      disabled={orgUnitId == null || positionsLoading}
+                      required
+                      data-testid="register-drawer-position"
+                    >
+                      <option value="">
+                        {orgUnitId == null
+                          ? "Сначала выберите отделение"
+                          : positionsLoading
+                            ? "Загрузка…"
+                            : allowedPositionOptions.length === 0
+                              ? "Нет разрешённых должностей для отделения"
+                              : "Выберите должность"}
+                      </option>
+                      {renderPositionSelectOptions(allowedPositionGroups)}
+                    </select>
+                    {orgUnitId != null && !positionsLoading && allowedPositionOptions.length === 0 ? (
+                      <p
+                        className="text-xs text-amber-700 dark:text-amber-300"
+                        data-testid="register-drawer-position-empty"
+                      >
+                        Для выбранного отделения не настроены разрешённые должности. Выберите другое отделение или
+                        обратитесь к администратору.
+                      </p>
+                    ) : null}
+                  </label>
+
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-zinc-600 dark:text-zinc-400">Ставка</span>
                     <input
-                      value={mobilePhone}
-                      onChange={(e) => setMobilePhone(e.target.value)}
+                      value={employmentRate}
+                      onChange={(e) => setEmploymentRate(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                      data-testid="register-drawer-employment-rate"
+                    />
+                  </label>
+                </section>
+
+                <section className="space-y-4" data-testid="register-drawer-contacts">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Контакты эпизода</h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1 text-sm">
+                      <span className="text-zinc-600 dark:text-zinc-400">Мобильный телефон</span>
+                      <input
+                        value={mobilePhone}
+                        onChange={(e) => setMobilePhone(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                      />
+                    </label>
+                    <label className="block space-y-1 text-sm">
+                      <span className="text-zinc-600 dark:text-zinc-400">Email</span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-zinc-600 dark:text-zinc-400">Примечание HR</span>
+                    <textarea
+                      value={hrNote}
+                      onChange={(e) => setHrNote(e.target.value)}
+                      rows={3}
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
                     />
                   </label>
-                  <label className="block space-y-1 text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Email</span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-                    />
-                  </label>
+                </section>
+              </>
+            ) : null}
+
+            {registrationResult ? (
+              <section className="space-y-4" data-testid="register-drawer-success">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+                  <p className="font-medium text-emerald-900 dark:text-emerald-200">
+                    {registrationResult.action === "created"
+                      ? "Кадровое обращение зарегистрировано"
+                      : "Открыто существующее кадровое обращение"}
+                  </p>
+                  <p className="mt-1 text-emerald-800 dark:text-emerald-300">
+                    Обращение #{registrationResult.application_id} · person #{registrationResult.person_id}
+                  </p>
                 </div>
-                <label className="block space-y-1 text-sm">
-                  <span className="text-zinc-600 dark:text-zinc-400">Примечание HR</span>
-                  <textarea
-                    value={hrNote}
-                    onChange={(e) => setHrNote(e.target.value)}
-                    rows={3}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-                {preview?.person_exists ? (
-                  <p className="text-xs text-zinc-500">
-                    Будет использован существующий person #{preview.person_id}. Дата заявления:{" "}
-                    {formatPersonnelApplicationDate(applicationReceivedAt)}.
+
+                {intakeLinkPath ? (
+                  <>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      Передайте претенденту ссылку на заполнение личной карточки. В карточке обращения доступны
+                      повторное копирование, аннулирование и перевыпуск ссылки.
+                    </p>
+                    <PersonnelApplicationIntakeLinkPanel
+                      intakeUrlPath={intakeLinkPath}
+                      showOpenFormButton
+                      copyButtonTestId="register-drawer-copy-link"
+                      openFormButtonTestId="register-drawer-open-form"
+                      copyNoticeTestId="register-drawer-copy-notice"
+                    />
+                  </>
+                ) : intakeLinkError ? (
+                  <p className="text-sm text-red-600 dark:text-red-400" data-testid="register-drawer-intake-error">
+                    {intakeLinkError}
+                  </p>
+                ) : submitting ? (
+                  <p className="text-sm text-zinc-500" data-testid="register-drawer-intake-loading">
+                    Создание ссылки…
                   </p>
                 ) : null}
               </section>
@@ -375,11 +560,22 @@ export default function PersonnelApplicationRegisterDrawer({
             <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !canSubmitPlacement}
                 className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
                 data-testid="register-drawer-submit"
               >
-                {submitting ? "Регистрация…" : "Зарегистрировать"}
+                {submitting ? "Регистрация и создание ссылки…" : "Зарегистрировать и создать ссылку"}
+              </button>
+            </div>
+          ) : registrationResult ? (
+            <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
+                data-testid="register-drawer-done"
+              >
+                Готово
               </button>
             </div>
           ) : null}

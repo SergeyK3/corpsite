@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import PersonnelApplicationIntakeSection from "./PersonnelApplicationIntakeSection";
 import * as api from "../_lib/personnelApplicationsApi.client";
+import * as workflow from "../_lib/personnelApplicantWorkflow";
 
 const baseDetail: api.PersonnelApplicationDetail = {
   application_id: 42,
@@ -16,6 +17,15 @@ const baseDetail: api.PersonnelApplicationDetail = {
   created_at: "2026-07-17T10:00:00Z",
   updated_at: "2026-07-17T10:00:00Z",
 };
+
+beforeEach(() => {
+  vi.spyOn(workflow, "readPersistedIntakeLinkPath").mockReturnValue(null);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("PersonnelApplicationIntakeSection", () => {
   it("issues intake link", async () => {
@@ -55,5 +65,28 @@ describe("PersonnelApplicationIntakeSection", () => {
 
     fireEvent.click(screen.getByTestId("intake-open-review-button"));
     expect(onOpenReview).toHaveBeenCalledWith(42);
+  });
+
+  it("copies issued intake link", async () => {
+    vi.spyOn(api, "issueIntakeLink").mockResolvedValue({
+      application_id: 42,
+      link_id: 1,
+      intake_url_path: "/intake/abc123",
+      expires_at: "2026-08-01T00:00:00Z",
+      status: "issued",
+      reissued: false,
+    });
+    vi.spyOn(workflow, "copyTextToClipboard").mockResolvedValue(true);
+
+    render(
+      <PersonnelApplicationIntakeSection detail={baseDetail} onRefresh={() => {}} />,
+    );
+
+    fireEvent.click(screen.getByTestId("intake-issue-link-button"));
+    expect(await screen.findByText(/\/intake\/abc123/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("intake-copy-link-button"));
+    expect(workflow.copyTextToClipboard).toHaveBeenCalled();
+    expect(await screen.findByTestId("intake-copy-notice")).toHaveTextContent("Ссылка скопирована");
   });
 });

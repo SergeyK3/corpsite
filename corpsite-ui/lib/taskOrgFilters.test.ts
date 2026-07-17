@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPersonnelOrderPositionSelectGroups,
+  buildScopedPositionOptionsQuery,
   buildTaskOrgFiltersResetUrl,
   flattenPersonnelOrderPositionGroups,
   filterOrgUnitOptionsForGroup,
@@ -82,6 +83,7 @@ describe("interconnected org filter helpers", () => {
     const positions = [{ id: 5, label: "Врач" }];
     expect(isPositionAllowedInOptions(5, positions)).toBe(true);
     expect(isPositionAllowedInOptions(9, positions)).toBe(false);
+    expect(isPositionAllowedInOptions("5", positions)).toBe(true);
   });
 });
 
@@ -134,6 +136,58 @@ describe("buildPersonnelOrderPositionSelectGroups", () => {
     expect(flattenPersonnelOrderPositionGroups(groups).map((row) => row.id)).toEqual([
       2, 1, 4, 3, 5,
     ]);
+  });
+});
+
+describe("buildScopedPositionOptionsQuery", () => {
+  it("omits org_group_id when org_unit_id is selected (Positions page parity)", () => {
+    expect(
+      buildScopedPositionOptionsQuery({
+        org_group_id: 3,
+        org_unit_id: 73,
+        scope: "allowed",
+      }),
+    ).toEqual({
+      limit: 500,
+      offset: 0,
+      org_unit_id: 73,
+      scope: "allowed",
+    });
+  });
+
+  it("keeps org_group_id when only group scope is requested", () => {
+    expect(
+      buildScopedPositionOptionsQuery({
+        org_group_id: 3,
+        scope: "allowed",
+      }),
+    ).toEqual({
+      limit: 500,
+      offset: 0,
+      org_group_id: 3,
+      scope: "allowed",
+    });
+  });
+
+  it("matches PositionsPageClient allowed query fields for selected unit", async () => {
+    const { buildPositionsListQuery } = await import(
+      "@/app/directory/positions/_components/PositionsPageClient"
+    );
+    const positionsQuery = buildPositionsListQuery({
+      orgGroupId: 3,
+      orgUnitId: 73,
+      positionScope: "allowed",
+    });
+    const scopedQuery = buildScopedPositionOptionsQuery({
+      org_group_id: 3,
+      org_unit_id: 73,
+      scope: "allowed",
+    });
+
+    expect(scopedQuery.org_unit_id).toBe(positionsQuery.org_unit_id);
+    expect(scopedQuery.scope).toBe(positionsQuery.scope);
+    expect(scopedQuery.org_group_id).toBeUndefined();
+    expect(positionsQuery.org_group_id).toBeUndefined();
   });
 });
 

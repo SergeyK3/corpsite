@@ -20,6 +20,8 @@ vi.mock("./taskOrgFilters", async (importOriginal) => {
 describe("usePersonnelOrderPositionOptions", () => {
   beforeEach(() => {
     resetGlobalPositionCatalogCache();
+    vi.mocked(loadGlobalPositionCatalogCached).mockClear();
+    vi.mocked(loadScopedPositionOptions).mockClear();
     vi.mocked(loadGlobalPositionCatalogCached).mockResolvedValue([
       { id: 1, label: "Дворник" },
       { id: 2, label: "Заведующий" },
@@ -47,7 +49,6 @@ describe("usePersonnelOrderPositionOptions", () => {
     });
 
     expect(loadScopedPositionOptions).toHaveBeenCalledWith({
-      org_group_id: 1,
       org_unit_id: 55,
       scope: "allowed",
     });
@@ -55,6 +56,31 @@ describe("usePersonnelOrderPositionOptions", () => {
     expect(result.current.allOptions.map((row) => row.id)).toEqual([1, 2, 4, 3, 5]);
     expect(result.current.positionGroups[0]?.items.map((row) => row.id)).toEqual([1, 2]);
     expect(result.current.positionGroups[1]?.items.map((row) => row.id)).toEqual([4, 3, 5]);
+  });
+
+  it("exposes allowed-only groups without global catalog when allowedOnly is true", async () => {
+    const { result } = renderHook(() =>
+      usePersonnelOrderPositionOptions({
+        enabled: true,
+        orgUnitId: 55,
+        orgGroupId: 1,
+        allowedOnly: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(loadGlobalPositionCatalogCached).not.toHaveBeenCalled();
+    expect(loadScopedPositionOptions).toHaveBeenCalledWith({
+      org_unit_id: 55,
+      scope: "allowed",
+    });
+    expect(result.current.positionGroups).toHaveLength(1);
+    expect(result.current.positionGroups[0]?.key).toBe("allowed_in_unit");
+    expect(result.current.allOptions.map((row) => row.id)).toEqual([1, 2]);
+    expect(result.current.scopedOptions.map((row) => row.id)).toEqual([1, 2]);
   });
 
   it("reloads scoped positions on unit change without reloading global catalog", async () => {

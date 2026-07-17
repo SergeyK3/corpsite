@@ -94,12 +94,24 @@ export function isOrgUnitAllowedForGroup(
   );
 }
 
+export function normalizePositionId(value: number | string | null | undefined): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null;
+}
+
 export function isPositionAllowedInOptions(
-  positionId: number | undefined,
+  positionId: number | string | null | undefined,
   options: readonly TaskOrgFilterOption[],
 ): boolean {
-  if (positionId == null) return true;
-  return options.some((opt) => opt.id === positionId);
+  const targetId = normalizePositionId(positionId);
+  if (targetId == null) return true;
+  return options.some((opt) => normalizePositionId(opt.id) === targetId);
 }
 
 export function positionIdOf(row: PositionRowDto): number | null {
@@ -181,6 +193,13 @@ export function buildPersonnelOrderPositionSelectGroups(
   return groups;
 }
 
+/** Allowed positions for a unit only — no global catalog merge (register drawer, positions page scope=allowed). */
+export function buildAllowedPositionSelectGroups(
+  scoped: readonly TaskOrgFilterOption[],
+): PersonnelOrderPositionSelectGroup[] {
+  return buildPersonnelOrderPositionSelectGroups(scoped, []);
+}
+
 export function flattenPersonnelOrderPositionGroups(
   groups: readonly PersonnelOrderPositionSelectGroup[],
 ): TaskOrgFilterOption[] {
@@ -220,18 +239,44 @@ export function resetGlobalPositionCatalogCache(): void {
   globalPositionCatalogPromise = null;
 }
 
+const SCOPED_POSITIONS_DEFAULT_LIMIT = 500;
+
+/**
+ * Build GET /directory/positions query for scoped position loads.
+ * Matches PositionsPageClient.buildPositionsListQuery org/scope rules:
+ * when org_unit_id is set, do not send org_group_id (allowed/used are unit-scoped).
+ */
+export function buildScopedPositionOptionsQuery(scope: {
+  org_group_id?: number;
+  org_unit_id?: number;
+  scope?: PositionListScope;
+  limit?: number;
+  offset?: number;
+}): Record<string, string | number | undefined> {
+  const query: Record<string, string | number | undefined> = {
+    limit: scope.limit ?? SCOPED_POSITIONS_DEFAULT_LIMIT,
+    offset: scope.offset ?? 0,
+  };
+
+  if (scope.org_unit_id != null) {
+    query.org_unit_id = scope.org_unit_id;
+    if (scope.scope != null) query.scope = scope.scope;
+    return query;
+  }
+
+  if (scope.org_group_id != null) {
+    query.org_group_id = scope.org_group_id;
+  }
+  if (scope.scope != null) query.scope = scope.scope;
+  return query;
+}
+
 export async function loadScopedPositionOptions(scope: {
   org_group_id?: number;
   org_unit_id?: number;
   scope?: PositionListScope;
 }): Promise<TaskOrgFilterOption[]> {
-  const query: Record<string, string | number | undefined> = {
-    limit: 500,
-    offset: 0,
-  };
-  if (scope.org_group_id != null) query.org_group_id = scope.org_group_id;
-  if (scope.org_unit_id != null) query.org_unit_id = scope.org_unit_id;
-  if (scope.scope != null) query.scope = scope.scope;
+  const query = buildScopedPositionOptionsQuery(scope);
 
   const body = await apiFetchJson<{ items?: PositionRowDto[] }>("/directory/positions", {
     query,

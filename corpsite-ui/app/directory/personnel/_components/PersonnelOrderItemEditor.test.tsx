@@ -318,7 +318,6 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
 
     await waitFor(() => {
       expect(loadScopedPositionOptions).toHaveBeenCalledWith({
-        org_group_id: 1,
         org_unit_id: 10,
         scope: "allowed",
       });
@@ -374,7 +373,6 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-position-select")).toHaveValue("");
       expect(loadScopedPositionOptions).toHaveBeenLastCalledWith({
-        org_group_id: 1,
         org_unit_id: 11,
         scope: "allowed",
       });
@@ -423,7 +421,6 @@ describe("PersonnelOrderItemEditor position catalog", () => {
 
     await waitFor(() => {
       expect(loadScopedPositionOptions).toHaveBeenCalledWith({
-        org_group_id: 1,
         org_unit_id: 10,
         scope: "allowed",
       });
@@ -486,7 +483,6 @@ describe("PersonnelOrderItemEditor position catalog", () => {
 
     await waitFor(() => {
       expect(loadScopedPositionOptions).toHaveBeenLastCalledWith({
-        org_group_id: 1,
         org_unit_id: 11,
         scope: "allowed",
       });

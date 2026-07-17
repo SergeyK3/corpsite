@@ -218,7 +218,7 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
     expect(replaceMock).toHaveBeenCalledWith("/directory/personnel-applications?q=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2");
   });
 
-  it("after registration refreshes journal, highlights row, shows toast and keeps filters", async () => {
+  it("after registration refreshes journal, highlights row and opens detail while keeping filters", async () => {
     listPersonnelApplicationsMock
       .mockResolvedValueOnce({ items: [], total: 0, limit: 50, offset: 0 })
       .mockResolvedValueOnce({
@@ -238,10 +238,10 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
     fireEvent.click(screen.getByTestId("mock-register-success"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("personnel-applications-toast")).toHaveTextContent(
-        "Кадровое обращение зарегистрировано",
-      );
+      expect(screen.getByTestId("mock-detail-drawer")).toBeInTheDocument();
     });
+
+    expect(screen.queryByTestId("personnel-applications-toast")).not.toBeInTheDocument();
 
     expect(pushMock).not.toHaveBeenCalled();
     expect(replaceMock).toHaveBeenCalledWith(

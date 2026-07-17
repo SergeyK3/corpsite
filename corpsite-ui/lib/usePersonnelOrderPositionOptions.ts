@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import {
+  buildAllowedPositionSelectGroups,
   buildPersonnelOrderPositionSelectGroups,
   flattenPersonnelOrderPositionGroups,
   loadGlobalPositionCatalogCached,
@@ -15,6 +16,8 @@ type UsePersonnelOrderPositionOptionsArgs = {
   enabled: boolean;
   orgUnitId: number | null;
   orgGroupId: number | null;
+  /** When true, skip global catalog and expose only scope=allowed positions for the unit. */
+  allowedOnly?: boolean;
 };
 
 type UsePersonnelOrderPositionOptionsResult = {
@@ -29,6 +32,7 @@ export function usePersonnelOrderPositionOptions({
   enabled,
   orgUnitId,
   orgGroupId,
+  allowedOnly = false,
 }: UsePersonnelOrderPositionOptionsArgs): UsePersonnelOrderPositionOptionsResult {
   const [globalOptions, setGlobalOptions] = React.useState<TaskOrgFilterOption[]>([]);
   const [globalLoading, setGlobalLoading] = React.useState(false);
@@ -36,7 +40,7 @@ export function usePersonnelOrderPositionOptions({
   const [scopedLoading, setScopedLoading] = React.useState(false);
 
   React.useEffect(() => {
-    if (!enabled) {
+    if (!enabled || allowedOnly) {
       setGlobalOptions([]);
       setGlobalLoading(false);
       return;
@@ -59,7 +63,7 @@ export function usePersonnelOrderPositionOptions({
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, allowedOnly]);
 
   React.useEffect(() => {
     if (!enabled || orgUnitId == null) {
@@ -72,9 +76,9 @@ export function usePersonnelOrderPositionOptions({
     setScopedLoading(true);
 
     void loadScopedPositionOptions({
-      org_group_id: orgGroupId ?? undefined,
       org_unit_id: orgUnitId,
       scope: "allowed",
+      ...(orgUnitId == null && orgGroupId != null ? { org_group_id: orgGroupId } : {}),
     })
       .then((options) => {
         if (!cancelled) setScopedOptions(options);
@@ -92,8 +96,11 @@ export function usePersonnelOrderPositionOptions({
   }, [enabled, orgGroupId, orgUnitId]);
 
   const positionGroups = React.useMemo(
-    () => buildPersonnelOrderPositionSelectGroups(scopedOptions, globalOptions),
-    [scopedOptions, globalOptions],
+    () =>
+      allowedOnly
+        ? buildAllowedPositionSelectGroups(scopedOptions)
+        : buildPersonnelOrderPositionSelectGroups(scopedOptions, globalOptions),
+    [allowedOnly, scopedOptions, globalOptions],
   );
 
   const allOptions = React.useMemo(

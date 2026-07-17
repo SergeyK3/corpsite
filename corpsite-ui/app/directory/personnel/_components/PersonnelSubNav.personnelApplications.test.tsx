@@ -20,7 +20,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/directory/personnel-applications",
+  usePathname: () => "/directory/personnel/applicants",
   useSearchParams: () => new URLSearchParams(""),
 }));
 
@@ -33,11 +33,14 @@ afterEach(() => {
 });
 
 describe("PersonnelSubNav", () => {
-  it("includes Кадровые обращения navigation item", () => {
+  it("includes both Кадровые обращения and Претенденты navigation items", () => {
     render(<PersonnelSubNav />);
 
-    const link = screen.getByRole("link", { name: "Кадровые обращения" });
-    expect(link).toHaveAttribute("href", "/directory/personnel-applications");
-    expect(link.className).toContain("bg-blue-600");
+    const applicationsLink = screen.getByRole("link", { name: "Кадровые обращения" });
+    expect(applicationsLink).toHaveAttribute("href", "/directory/personnel-applications");
+
+    const applicantsLink = screen.getByRole("link", { name: "Претенденты" });
+    expect(applicantsLink).toHaveAttribute("href", "/directory/personnel/applicants");
+    expect(applicantsLink.className).toContain("bg-blue-600");
   });
 });

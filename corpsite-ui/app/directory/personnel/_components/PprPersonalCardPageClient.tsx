@@ -8,7 +8,15 @@ import { parseReturnToFromSearchParams } from "@/lib/taskNav";
 import {
   isPersonnelApplicationsJournalReturnHref,
   resolvePersonalCardBackHref,
+  resolvePersonnelApplicationsJournalBackLabel,
 } from "../_lib/personnelApplicationsJournalNav";
+import {
+  canCreateHireOrderFromApplicantCard,
+} from "../_lib/personnelApplicantWorkflow";
+import {
+  getPersonApplicationsHistory,
+  type PersonnelApplicationDetail,
+} from "../_lib/personnelApplicationsApi.client";
 import {
   PPR_CARD_DEFAULT_SECTION,
   PPR_CARD_SECTIONS,
@@ -88,11 +96,15 @@ export default function PprPersonalCardPageClient({
     [searchParams],
   );
   const backToJournal = isPersonnelApplicationsJournalReturnHref(returnToHref);
+  const backButtonLabel = backToJournal
+    ? resolvePersonnelApplicationsJournalBackLabel(returnToHref)
+    : "Назад к персоналу";
 
   const [loading, setLoading] = React.useState(true);
   const [errorView, setErrorView] = React.useState<ReturnType<typeof mapPprCardError> | null>(null);
   const [ppr, setPpr] = React.useState<PprCompositeReadResponse | null>(null);
   const [intendedEmployment, setIntendedEmployment] = React.useState<PprIntendedEmploymentResponse | null>(null);
+  const [activeApplication, setActiveApplication] = React.useState<PersonnelApplicationDetail | null>(null);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
   const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
@@ -129,6 +141,28 @@ export default function PprPersonalCardPageClient({
     void loadCard(controller.signal);
     return () => controller.abort();
   }, [loadCard]);
+
+  React.useEffect(() => {
+    if (resolvedPersonId == null) {
+      setActiveApplication(null);
+      return;
+    }
+    let cancelled = false;
+    void getPersonApplicationsHistory(resolvedPersonId)
+      .then((body) => {
+        if (cancelled) return;
+        const items = Array.isArray(body.items) ? body.items : [];
+        const active =
+          items.find((item) => !item.is_read_only && item.status !== "completed") ?? items[0] ?? null;
+        setActiveApplication(active);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveApplication(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedPersonId]);
 
   React.useEffect(() => {
     if (loading || errorView || !ppr) return;
@@ -175,6 +209,11 @@ export default function PprPersonalCardPageClient({
     ppr?.general.full_name ||
     (personId ? `Заявитель #${personId}` : `Сотрудник #${employeeId}`);
   const isApplicant = ppr?.materialization.hr_relationship_context === PPR_HR_RELATIONSHIP_CANDIDATE;
+  const canCreateHireOrder =
+    isApplicant &&
+    resolvedPersonId != null &&
+    activeApplication != null &&
+    canCreateHireOrderFromApplicantCard(activeApplication.status);
   const visibleCardSections = React.useMemo(
     () =>
       PPR_CARD_SECTIONS.filter((section) => {
@@ -243,9 +282,9 @@ export default function PprPersonalCardPageClient({
             className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700"
             data-testid="ppr-card-back-button"
           >
-            {backToJournal ? "Назад к журналу обращений" : "Назад к персоналу"}
+            {backButtonLabel}
           </button>
-          {isApplicant && resolvedPersonId != null ? (
+          {canCreateHireOrder ? (
             <button
               type="button"
               onClick={() =>
@@ -262,7 +301,9 @@ export default function PprPersonalCardPageClient({
         </div>
         {isApplicant ? (
           <p className="mt-2 text-sm text-amber-900 dark:text-amber-100">
-            Трудовые отношения ещё не оформлены. Данные личной карточки используются для подготовки приёма на работу.
+            {canCreateHireOrder
+              ? "Личная карточка заполнена. Можно перейти к оформлению приказа о приёме."
+              : "Трудовые отношения ещё не оформлены. Приказ о приёме станет доступен после отправки анкеты претендентом."}
           </p>
         ) : null}
       </div>

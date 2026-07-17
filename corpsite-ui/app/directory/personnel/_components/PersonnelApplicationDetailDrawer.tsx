@@ -5,16 +5,14 @@ import Link from "next/link";
 
 import { buildPersonalCardHref } from "@/lib/employeeCardNav";
 import {
+  canOpenApplicantPersonalCard,
+} from "../_lib/personnelApplicantWorkflow";
+import ApplicantWorkflowStatusBadge from "./ApplicantWorkflowStatusBadge";
+import {
   formatPersonnelApplicationDate,
   formatPersonnelApplicationDateTime,
   personnelApplicationStatusLabel,
 } from "../_lib/personnelApplicationLabels";
-import {
-  getPersonnelApplication,
-  mapPersonnelApplicationsApiError,
-  type PersonnelApplicationDetail,
-} from "../_lib/personnelApplicationsApi.client";
-import PersonnelApplicationStatusBadge from "./PersonnelApplicationStatusBadge";
 import PersonnelApplicationIntakeSection from "./PersonnelApplicationIntakeSection";
 import PersonnelApplicationIntakeReviewDrawer from "./PersonnelApplicationIntakeReviewDrawer";
 import PersonnelApplicationResolutionSection from "./PersonnelApplicationResolutionSection";
@@ -22,6 +20,11 @@ import PersonnelApplicationEmploymentSection from "./PersonnelApplicationEmploym
 import PersonnelApplicationTimelineSection from "./PersonnelApplicationTimelineSection";
 import PersonnelApplicationLifecycleAuditSection from "./PersonnelApplicationLifecycleAuditSection";
 import PersonnelApplicationCancelSection from "./PersonnelApplicationCancelSection";
+import {
+  getPersonnelApplication,
+  mapPersonnelApplicationsApiError,
+  type PersonnelApplicationDetail,
+} from "../_lib/personnelApplicationsApi.client";
 
 type Props = {
   applicationId: number | null;
@@ -148,7 +151,13 @@ export default function PersonnelApplicationDetailDrawer({
                   <Field label="ИИН" value={<span className="font-mono">{detail.iin || "—"}</span>} />
                   <Field
                     label="Статус"
-                    value={<PersonnelApplicationStatusBadge status={detail.status} />}
+                    value={
+                      <ApplicantWorkflowStatusBadge
+                        status={detail.status}
+                        intake_link_status={detail.intake_link_status}
+                        intake_draft_status={detail.intake_draft_status}
+                      />
+                    }
                   />
                   <Field
                     label="Дата поступления заявления"
@@ -229,16 +238,25 @@ export default function PersonnelApplicationDetailDrawer({
                 </div>
               </section>
 
-              <Link
-                href={buildPersonalCardHref(
-                  { personId: detail.person_id },
-                  { returnTo: journalReturnHref },
-                )}
-                className="inline-flex text-sm text-blue-700 underline-offset-2 hover:underline dark:text-blue-300"
-                data-testid="personnel-application-open-person-card"
-              >
-                Открыть личную карточку
-              </Link>
+              {canOpenApplicantPersonalCard(detail.status) ? (
+                <Link
+                  href={buildPersonalCardHref(
+                    { personId: detail.person_id },
+                    { returnTo: journalReturnHref },
+                  )}
+                  className="inline-flex text-sm text-blue-700 underline-offset-2 hover:underline dark:text-blue-300"
+                  data-testid="personnel-application-open-person-card"
+                >
+                  Открыть личную карточку
+                </Link>
+              ) : (
+                <p
+                  className="text-sm text-zinc-500 dark:text-zinc-400"
+                  data-testid="personnel-application-person-card-locked"
+                >
+                  Личная карточка станет доступна после отправки анкеты претендентом.
+                </p>
+              )}
             </div>
           ) : null}
         </div>

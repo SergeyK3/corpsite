@@ -1,7 +1,8 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelApplicationDetailDrawer from "./PersonnelApplicationDetailDrawer";
+import * as workflow from "../_lib/personnelApplicantWorkflow";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -20,6 +21,8 @@ vi.mock("next/link", () => ({
 }));
 
 const getPersonnelApplicationMock = vi.fn();
+const getApplicationTimelineMock = vi.fn();
+const getLifecycleAuditMock = vi.fn();
 
 vi.mock("../_lib/personnelApplicationsApi.client", async () => {
   const actual = await vi.importActual<typeof import("../_lib/personnelApplicationsApi.client")>(
@@ -28,12 +31,20 @@ vi.mock("../_lib/personnelApplicationsApi.client", async () => {
   return {
     ...actual,
     getPersonnelApplication: (...args: unknown[]) => getPersonnelApplicationMock(...args),
+    getApplicationTimeline: (...args: unknown[]) => getApplicationTimelineMock(...args),
+    getLifecycleAudit: (...args: unknown[]) => getLifecycleAuditMock(...args),
   };
+});
+
+beforeEach(() => {
+  getApplicationTimelineMock.mockResolvedValue({ application_id: 10, items: [] });
+  getLifecycleAuditMock.mockResolvedValue({ items: [] });
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("PersonnelApplicationDetailDrawer", () => {
@@ -74,9 +85,8 @@ describe("PersonnelApplicationDetailDrawer", () => {
     expect(screen.getByText("Терапия")).toBeInTheDocument();
     expect(screen.getByText("Медсестра")).toBeInTheDocument();
     expect(screen.getByText("+77001234567")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Открыть личную карточку" })).toHaveAttribute(
-      "href",
-      "/directory/personnel/persons/5/card?return_to=%2Fdirectory%2Fpersonnel-applications%3Fapplication_id%3D10",
+    expect(screen.getByTestId("personnel-application-person-card-locked")).toHaveTextContent(
+      /личная карточка станет доступна/i,
     );
     expect(screen.queryByRole("button", { name: /сохранить/i })).not.toBeInTheDocument();
   });
@@ -127,5 +137,54 @@ describe("PersonnelApplicationDetailDrawer", () => {
     );
     expect(screen.queryByTestId("application-apply-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("intake-issue-link-button")).not.toBeInTheDocument();
+  });
+
+  it("loads detail after registerPersonnelApplication and issueIntakeLink without ReferenceError and shows intake link", async () => {
+    const intakePath = "/intake/abc123";
+    vi.spyOn(workflow, "readPersistedIntakeLinkPath").mockReturnValue(intakePath);
+
+    getPersonnelApplicationMock.mockResolvedValue({
+      application_id: 10,
+      person_id: 5,
+      full_name: "Новый Претендент",
+      iin: "900101300123",
+      status: "registered",
+      application_received_at: "2026-07-17",
+      application_source: "paper",
+      vacancy_check_status: "confirmed_visually",
+      intended_org_unit_name: "Терапия",
+      intended_org_group_name: "Группа",
+      intended_position_name: "Медсестра",
+      intended_employment_rate: 1,
+      contact_mobile_phone: "+77001234567",
+      contact_email: "new@example.com",
+      intake_link_status: "issued",
+      intake_draft_status: null,
+      registered_at: "2026-07-17T10:00:00Z",
+      registered_by_user_id: 7,
+      registered_by_name: "HR User",
+      created_at: "2026-07-17T10:00:00Z",
+      updated_at: "2026-07-17T10:00:00Z",
+    });
+
+    render(
+      <PersonnelApplicationDetailDrawer
+        applicationId={10}
+        open
+        journalReturnHref="/directory/personnel-applications?application_id=10"
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getPersonnelApplicationMock).toHaveBeenCalledWith(10);
+    });
+
+    expect(screen.getByTestId("personnel-application-detail-drawer")).toBeInTheDocument();
+    expect(await screen.findByTestId("personnel-application-intake-link-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-copy-link-button")).toHaveTextContent("Скопировать ссылку");
+    expect(screen.getByText(/\/intake\/abc123/)).toBeInTheDocument();
+    expect(screen.queryByText(/getPersonnelApplication is not defined/i)).not.toBeInTheDocument();
+    expect(workflow.readPersistedIntakeLinkPath).toHaveBeenCalledWith(10);
   });
 });

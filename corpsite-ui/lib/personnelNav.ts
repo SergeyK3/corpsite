@@ -185,6 +185,7 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/directory/positions")) return "/directory/positions";
   if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
   if (pathname.startsWith("/directory/personnel-applications")) return "/directory/personnel-applications";
+  if (pathname.startsWith("/directory/personnel/applicants")) return "/directory/personnel/applicants";
   if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
   if (pathname.startsWith("/directory/operational-orders")) return "/directory/operational-orders";
   if (pathname.startsWith("/directory/working-contacts")) return "/directory/working-contacts";

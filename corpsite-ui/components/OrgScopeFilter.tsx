@@ -16,6 +16,8 @@ type OrgScopeFilterProps = {
   basePath: string;
   className?: string;
   label?: string;
+  /** Placeholder for empty option in controlled/required forms. Default: «Все». */
+  emptyLabel?: string;
   disabled?: boolean;
   resetParamsOnChange?: string[];
   /** Controlled mode: local state instead of URL (e.g. drawer forms). */
@@ -27,6 +29,7 @@ export default function OrgScopeFilter({
   basePath,
   className,
   label = "Группа отделений",
+  emptyLabel = "Все",
   disabled = false,
   resetParamsOnChange = ["offset"],
   value,
@@ -110,7 +113,7 @@ export default function OrgScopeFilter({
         disabled={disabled || loading}
         className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-none disabled:opacity-60"
       >
-        <option value="">Все</option>
+        <option value="">{emptyLabel}</option>
         {groups.map((group) => (
           <option key={group.group_id} value={String(group.group_id)}>
             {group.group_name || `Группа ${group.group_id}`}

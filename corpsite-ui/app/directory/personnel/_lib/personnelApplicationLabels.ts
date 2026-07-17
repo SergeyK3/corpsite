@@ -23,7 +23,7 @@ export type PersonnelApplicationStatus = (typeof PERSONNEL_APPLICATION_STATUSES)
 export const PERSONNEL_APPLICATION_STATUS_LABELS: Record<string, string> = {
   registered: "Зарегистрировано",
   intake_pending: "Ожидает анкету",
-  intake_submitted: "Анкета получена",
+  intake_submitted: "Личная карточка заполнена",
   review_completed: "Проверка завершена",
   resolution_pending: "Ожидает резолюции",
   approved: "Согласовано",

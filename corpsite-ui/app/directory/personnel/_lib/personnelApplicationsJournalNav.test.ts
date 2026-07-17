@@ -8,6 +8,7 @@ import {
   isPersonnelApplicationsJournalReturnHref,
   parsePersonnelApplicationsJournalState,
   resolvePersonalCardBackHref,
+  resolvePersonnelApplicationsJournalBackLabel,
 } from "./personnelApplicationsJournalNav";
 
 describe("personnelApplicationsJournalNav", () => {
@@ -94,6 +95,34 @@ describe("personnelApplicationsJournalNav", () => {
         "/directory/personnel-applications?application_id=10&q=petrov",
       ),
     ).toBe(true);
+    expect(isPersonnelApplicationsJournalReturnHref("/directory/personnel/applicants")).toBe(true);
+    expect(
+      isPersonnelApplicationsJournalReturnHref("/directory/personnel/applicants?application_id=10"),
+    ).toBe(true);
     expect(isPersonnelApplicationsJournalReturnHref("/directory/staff")).toBe(false);
+  });
+
+  it("builds applicants workplace journal href", () => {
+    const href = buildPersonnelApplicationsJournalHref(
+      {
+        q: "",
+        sort: "application_received_at_desc",
+        view: "active",
+        limit: 50,
+        offset: 0,
+        application_id: 10,
+      },
+      { basePath: "/directory/personnel/applicants" },
+    );
+    expect(href).toBe("/directory/personnel/applicants?application_id=10");
+  });
+
+  it("resolves journal back label by return_to", () => {
+    expect(
+      resolvePersonnelApplicationsJournalBackLabel("/directory/personnel/applicants?application_id=10"),
+    ).toBe("Назад к претендентам");
+    expect(
+      resolvePersonnelApplicationsJournalBackLabel("/directory/personnel-applications?application_id=10"),
+    ).toBe("Назад к кадровым обращениям");
   });
 });

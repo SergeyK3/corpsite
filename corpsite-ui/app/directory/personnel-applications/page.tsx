@@ -3,5 +3,5 @@ import PersonnelApplicationsPageClient from "../personnel/_components/PersonnelA
 export const dynamic = "force-dynamic";
 
 export default function PersonnelApplicationsPage() {
-  return <PersonnelApplicationsPageClient />;
+  return <PersonnelApplicationsPageClient workplace="applications" />;
 }

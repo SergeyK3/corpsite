@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
@@ -157,8 +158,6 @@ export default function EmployeesPageClient(props: Props) {
   const orgUnitId = sp.get("org_unit_id") ?? "";
   const limitStr = sp.get("limit") ?? "50";
   const offsetStr = sp.get("offset") ?? "0";
-  const includeApplicants =
-    isStaffRoute && (sp.get("include_applicants") === "1" || sp.get("include_applicants") === "true");
   const deepLinkEmployeeId = (sp.get("employeeId") ?? "").trim();
 
   const limitNum = React.useMemo(() => Math.max(1, toInt(limitStr, 50)), [limitStr]);
@@ -327,7 +326,7 @@ export default function EmployeesPageClient(props: Props) {
         org_group_id: orgGroupId ?? null,
         org_unit_id: orgUnitId || null,
         include_children: Boolean(orgUnitId),
-        include_applicants: includeApplicants,
+        include_applicants: false,
         q: qText || null,
         limit: String(limitNum),
         offset: String(offsetNum),
@@ -346,7 +345,7 @@ export default function EmployeesPageClient(props: Props) {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum, includeApplicants]);
+  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum]);
 
   React.useEffect(() => {
     void loadItems();
@@ -531,20 +530,13 @@ export default function EmployeesPageClient(props: Props) {
               </select>
 
               {isStaffRoute ? (
-                <label className="flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-[13px] text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-                  <input
-                    type="checkbox"
-                    checked={includeApplicants}
-                    onChange={(e) =>
-                      updateUrl(
-                        { include_applicants: e.target.checked ? "1" : "" },
-                        { resetOffset: true },
-                      )
-                    }
-                    data-testid="staff-include-applicants"
-                  />
-                  Показывать заявителей
-                </label>
+                <Link
+                  href="/directory/personnel/applicants"
+                  className="flex h-9 items-center rounded-lg border border-sky-300 bg-sky-50 px-3 text-[13px] text-sky-900 transition hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200"
+                  data-testid="staff-open-applicants-workplace"
+                >
+                  Претенденты
+                </Link>
               ) : null}
 
               <button

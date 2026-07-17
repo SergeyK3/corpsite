@@ -21,6 +21,11 @@ const BASE_ITEMS = [
     prefixes: ["/directory/personnel-applications"],
   },
   {
+    href: "/directory/personnel/applicants",
+    title: "Претенденты",
+    prefixes: ["/directory/personnel/applicants"],
+  },
+  {
     href: "/directory/personnel/onboarding",
     title: "Адаптация",
     prefixes: ["/directory/personnel/onboarding"],
