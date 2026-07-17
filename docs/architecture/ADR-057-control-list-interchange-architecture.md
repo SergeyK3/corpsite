@@ -99,7 +99,7 @@ canonical PPR + Employment (+ справочники)
 
 ## 5. Концептуальные сущности
 
-Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; candidate persistence / apply — в последующих WP.
+Логическая модель Control List Interchange. Физическая staging schema — **WP-CL-002**; mapping profiles — **WP-CL-003**; person normalization — **WP-CL-004**; person matching — **WP-CL-005**; employment normalization — **WP-CL-006**; contacts normalization — **WP-CL-007**; candidate persistence / apply — в последующих WP.
 
 | Сущность | Назначение |
 |----------|------------|
@@ -197,6 +197,22 @@ Employment Candidate — **temporary normalized import model**, не canonical E
 | employment_mode | Берётся из sheet snapshot (`primary` / `concurrent`); **не смешивается** между листами |
 | No lookup | **Без** поиска Position / OrgUnit и **без** fuzzy matching |
 | Downstream | Review / apply — WP-CL-011+ |
+
+### 5.6. Contact Candidate semantics (WP-CL-007)
+
+Contact Candidate — **temporary normalized import model**, не canonical Person contact record:
+
+| Аспект | Формулировка |
+|--------|--------------|
+| Role | Staging row + mapping profile + `PersonMatchResult` → `ContactCandidate` |
+| In-memory | Temporary domain model; **без** ORM / SQLAlchemy и **без** PPR contact writes |
+| Not canonical | **Не является** canonical Person contact и **не выполняет** merge/update existing contacts |
+| No employee identity | **Не использует** `employee_id` как идентичность человека |
+| Person link | `matched_person_id` только при `exact`/`probable` match с `recommended_person_id` |
+| Empty skip | Полностью пустые контактные значения → **no candidate** (skip), не пустая запись |
+| Readiness | `normalization_ready` = person matched + contact fields normalized; **не** apply-ready |
+| Phone reuse | Телефонная нормализация переиспользует WP-CL-004 `normalize_phone` |
+| Downstream | Contact merge/update policy — последующие WP |
 
 ---
 
@@ -361,5 +377,6 @@ Provenance: mode живёт на `control_list_import_sheet`, `control_list_impo
 - [WP-CL-004 — Person Normalization](../implementation/WP-CL-004-person-normalization.md)
 - [WP-CL-005 — Person Matching](../implementation/WP-CL-005-person-matching.md)
 - [WP-CL-006 — Employment Normalization](../implementation/WP-CL-006-employment-normalization.md)
+- [WP-CL-007 — Contacts Normalization](../implementation/WP-CL-007-contacts-normalization.md)
 - [ARCH-002 — Personnel Personal Record Architecture](./ARCH-002-personnel-personal-record-architecture.md)
 - [ADR-054 — PPR Aggregate Model](../adr/ADR-054-personnel-personal-record-aggregate-model.md)
