@@ -169,7 +169,7 @@ function buildQuery(filters: Record<string, string | number | boolean | undefine
 }
 
 export function mapEmployeeOnboardingApiError(error: unknown, fallback: string): string {
-  return formatThrownError(error, fallback);
+  return formatThrownError(error, { fallback });
 }
 
 async function requestJson<T>(method: string, path: string, payload?: Record<string, unknown>): Promise<T> {

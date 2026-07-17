@@ -7,7 +7,7 @@ import {
   formatPersonnelApplicationDate,
   formatPersonnelApplicationDateTime,
 } from "../_lib/personnelApplicationLabels";
-import { buildPersonnelApplicationsJournalHref } from "../_lib/personnelApplicationsJournalNav";
+import { buildPersonnelApplicationsJournalHref, DEFAULT_JOURNAL_VIEW } from "../_lib/personnelApplicationsJournalNav";
 import {
   getPersonApplicationsHistory,
   mapPersonnelApplicationsApiError,
@@ -114,6 +114,7 @@ export default function PprCardApplicationsSection({ personId }: Props) {
                   href={buildPersonnelApplicationsJournalHref({
                     q: "",
                     sort: "application_received_at_desc",
+                    view: DEFAULT_JOURNAL_VIEW,
                     limit: 50,
                     offset: 0,
                     application_id: item.application_id,

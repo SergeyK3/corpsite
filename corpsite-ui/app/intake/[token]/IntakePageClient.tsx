@@ -361,7 +361,7 @@ export default function IntakePageClient() {
             <CardListStep
               title="обучение"
               items={payload.training}
-              emptyItem={{ institution: "", year: "", course_name: "", hours: "" as unknown as never }}
+              emptyItem={{ institution: "", year: "", course_name: "", hours: "" }}
               fields={[
                 { key: "institution", label: "Организация" },
                 { key: "year", label: "Год" },

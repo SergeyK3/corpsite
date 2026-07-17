@@ -8,6 +8,7 @@ export type EmployeeCardSectionId =
   | "assignment"
   | "access"
   | "orders"
+  | "onboarding"
   | "history";
 
 export type EmployeeCardSectionDef = {
@@ -20,6 +21,7 @@ export const EMPLOYEE_CARD_SECTIONS: EmployeeCardSectionDef[] = [
   { id: "assignment", title: "Текущее назначение" },
   { id: "access", title: "Доступ" },
   { id: "orders", title: "Кадровые приказы" },
+  { id: "onboarding", title: "Адаптация" },
   { id: "history", title: "История кадровых событий" },
 ];
 
@@ -28,6 +30,7 @@ export const EMPLOYEE_CARD_DEFAULT_SECTION: EmployeeCardSectionId = "assignment"
 export type BuildEmployeeCardHrefOptions = {
   section?: EmployeeCardSectionId;
   provisionAccount?: boolean;
+  returnTo?: string | null;
 };
 
 function normalizeEmployeeId(employeeId: string | number): string {
@@ -41,15 +44,11 @@ export function buildEmployeeCardHref(
   return buildPersonalCardHref({ employeeId }, options);
 }
 
-export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions & {
-  personId?: string | number;
-  employeeId?: string | number;
-  returnTo?: string | null;
-};
+export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions;
 
 export function buildPersonalCardHref(
   subject: { personId?: string | number; employeeId?: string | number },
-  options: BuildEmployeeCardHrefOptions = {},
+  options: BuildPersonalCardHrefOptions = {},
 ): string {
   const personId = subject.personId != null ? normalizeEmployeeId(subject.personId) : "";
   const employeeId = subject.employeeId != null ? normalizeEmployeeId(subject.employeeId) : "";

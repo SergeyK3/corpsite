@@ -176,7 +176,7 @@ function buildQuery(filters: PersonnelApplicationListFilters): string {
 }
 
 export function mapPersonnelApplicationsApiError(error: unknown, fallback: string): string {
-  return formatThrownError(error, fallback);
+  return formatThrownError(error, { fallback });
 }
 
 export async function listPersonnelApplications(

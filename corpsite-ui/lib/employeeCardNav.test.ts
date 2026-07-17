@@ -34,6 +34,13 @@ describe("employeeCardNav", () => {
 
   it("parses known section ids with assignment fallback", () => {
     expect(parseEmployeeCardSection("history")).toBe("history");
+    expect(parseEmployeeCardSection("onboarding")).toBe("onboarding");
     expect(parseEmployeeCardSection("unknown")).toBe("assignment");
+  });
+
+  it("builds onboarding section href", () => {
+    expect(buildEmployeeCardHref(42, { section: "onboarding" })).toBe(
+      "/directory/personnel/employees/42/card?section=onboarding",
+    );
   });
 });

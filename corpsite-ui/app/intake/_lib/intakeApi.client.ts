@@ -31,7 +31,7 @@ export type IntakeDraftPayload = {
     institution: string;
     year: string;
     course_name: string;
-    hours: number | null;
+    hours: string;
   }>;
   relatives: Array<{
     relationship: string;
@@ -158,7 +158,7 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
 }
 
 export function mapIntakeApiError(error: unknown, fallback: string): string {
-  return formatThrownError(error, fallback);
+  return formatThrownError(error, { fallback });
 }
 
 function publicHeaders(json = false): Record<string, string> {
