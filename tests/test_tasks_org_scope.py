@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 from tests.conftest import (
     auth_headers,
     cleanup_task,
@@ -31,6 +32,24 @@ def _db_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def _admin_user_id(conn) -> int:
+    row = conn.execute(
+        text(
+            """
+            SELECT user_id
+            FROM public.users
+            WHERE role_id = :role_id
+              AND COALESCE(is_active, TRUE) = TRUE
+            LIMIT 1
+            """
+        ),
+        {"role_id": int(SYSTEM_ADMIN_ROLE_ID)},
+    ).first()
+    if row:
+        return int(row[0])
+    return 1
 
 
 def _create_unit_with_group(
@@ -228,9 +247,11 @@ def test_list_tasks_filters_by_org_group_id(client, seed):
     task_ids: List[int] = []
     template_ids: List[int] = []
     created_unit_ids: List[int] = []
+    admin_user_id: Optional[int] = None
 
     try:
         with engine.begin() as conn:
+            admin_user_id = _admin_user_id(conn)
             group_ids = _find_distinct_group_ids(conn, limit=2)
             if len(group_ids) < 2:
                 group_a = 1
@@ -265,8 +286,8 @@ def test_list_tasks_filters_by_org_group_id(client, seed):
 
         filtered_a = _list_tasks(
             client,
-            seed["executor_user_id"],
-            scope="mine",
+            int(admin_user_id),
+            scope="team",
             org_group_id=group_a,
             search=unique_a,
             status_filter="active",
@@ -278,8 +299,8 @@ def test_list_tasks_filters_by_org_group_id(client, seed):
 
         filtered_b = _list_tasks(
             client,
-            seed["executor_user_id"],
-            scope="mine",
+            int(admin_user_id),
+            scope="team",
             org_group_id=group_b,
             search=unique_b,
             status_filter="active",
@@ -291,8 +312,8 @@ def test_list_tasks_filters_by_org_group_id(client, seed):
 
         cross = _list_tasks(
             client,
-            seed["executor_user_id"],
-            scope="mine",
+            int(admin_user_id),
+            scope="team",
             org_group_id=group_a,
             search=unique_b,
             status_filter="active",
@@ -312,9 +333,11 @@ def test_list_tasks_org_group_and_unit_combined_with_and(client, seed):
     task_ids: List[int] = []
     template_ids: List[int] = []
     created_unit_ids: List[int] = []
+    admin_user_id: Optional[int] = None
 
     try:
         with engine.begin() as conn:
+            admin_user_id = _admin_user_id(conn)
             cols = get_columns(conn, "org_units")
             if "parent_unit_id" not in cols:
                 pytest.skip("org_units.parent_unit_id not available")
@@ -366,8 +389,8 @@ def test_list_tasks_org_group_and_unit_combined_with_and(client, seed):
 
         combined = _list_tasks(
             client,
-            seed["executor_user_id"],
-            scope="mine",
+            int(admin_user_id),
+            scope="team",
             org_group_id=group_id,
             org_unit_id=parent_unit,
             status_filter="active",
@@ -380,8 +403,8 @@ def test_list_tasks_org_group_and_unit_combined_with_and(client, seed):
 
         group_only = _list_tasks(
             client,
-            seed["executor_user_id"],
-            scope="mine",
+            int(admin_user_id),
+            scope="team",
             org_group_id=group_id,
             status_filter="active",
             search="PytestOrgScopeAnd",

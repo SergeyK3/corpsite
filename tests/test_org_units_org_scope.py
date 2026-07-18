@@ -14,6 +14,10 @@ from tests.conftest import (
     insert_returning_id,
     table_exists,
 )
+from tests.personnel_visibility_test_helpers import (
+    grant_dept_manager_visibility,
+    revoke_user_access_grants,
+)
 
 
 def _list_org_units_flat(client, user_id: int, **params):
@@ -337,6 +341,11 @@ def test_list_org_units_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
             )
             created_unit_ids.append(outsider_unit)
 
+        grant_dept_manager_visibility(
+            int(seed["executor_user_id"]),
+            granted_by_user_id=int(seed["initiator_user_id"]),
+        )
+
         scoped_resp = _list_org_units_flat(
             client,
             int(seed["executor_user_id"]),
@@ -355,6 +364,7 @@ def test_list_org_units_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
         assert admin_resp.status_code == 200, admin_resp.text
         assert outsider_unit in _flat_unit_ids(admin_resp.json())
     finally:
+        revoke_user_access_grants(int(seed["executor_user_id"]))
         _cleanup_units(created_unit_ids)
 
 

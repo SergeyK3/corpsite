@@ -16,6 +16,10 @@ from tests.conftest import (
     insert_returning_id,
     table_exists,
 )
+from tests.personnel_visibility_test_helpers import (
+    grant_dept_manager_visibility,
+    revoke_user_access_grants,
+)
 
 
 def _list_employees(client, user_id: int, **params):
@@ -485,6 +489,11 @@ def test_list_employees_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
             _insert_employee(conn, full_name=unique_name, org_unit_id=outsider_unit)
             created_names.append(unique_name)
 
+        grant_dept_manager_visibility(
+            int(seed["executor_user_id"]),
+            granted_by_user_id=int(seed["initiator_user_id"]),
+        )
+
         scoped_resp = _list_employees(
             client,
             int(seed["executor_user_id"]),
@@ -508,5 +517,6 @@ def test_list_employees_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
 
         _ = scoped_unit
     finally:
+        revoke_user_access_grants(int(seed["executor_user_id"]))
         _cleanup_employees(created_names)
         _cleanup_units(created_unit_ids)

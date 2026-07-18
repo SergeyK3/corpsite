@@ -17,6 +17,10 @@ from tests.conftest import (
     safe_delete_many,
     table_exists,
 )
+from tests.personnel_visibility_test_helpers import (
+    grant_dept_manager_visibility,
+    revoke_user_access_grants,
+)
 
 
 def _db_available() -> bool:
@@ -237,6 +241,15 @@ def test_transfer_rbac_scoped_employee_visibility(client, seed, privileged_heade
             )
             created_employee_ids.append(transfer_employee_id)
 
+        grant_dept_manager_visibility(
+            int(seed["executor_user_id"]),
+            granted_by_user_id=int(seed["initiator_user_id"]),
+        )
+        grant_dept_manager_visibility(
+            new_unit_viewer_id,
+            granted_by_user_id=int(seed["initiator_user_id"]),
+        )
+
         old_unit_viewer_id = int(seed["executor_user_id"])
         transfer_id = str(transfer_employee_id)
 
@@ -260,6 +273,9 @@ def test_transfer_rbac_scoped_employee_visibility(client, seed, privileged_heade
         assert transfer_id not in after_old
         assert transfer_id in after_new
     finally:
+        revoke_user_access_grants(int(seed["executor_user_id"]))
+        for user_id in created_user_ids:
+            revoke_user_access_grants(user_id)
         _cleanup_employees(created_employee_ids)
         _cleanup_users(created_user_ids)
         _cleanup_roles(created_role_ids)
@@ -350,6 +366,11 @@ def test_transfer_rbac_transferred_linked_user_scope_and_role(client, seed, priv
         assert int(before_user["unit_id"]) == from_unit_id
         assert int(before_user["role_id"]) == role_id
 
+        grant_dept_manager_visibility(
+            linked_user_id,
+            granted_by_user_id=int(seed["initiator_user_id"]),
+        )
+
         before_visible = _employee_ids_visible_to(client, linked_user_id, q=search_q)
         assert str(transfer_employee_id) in before_visible
         assert str(peer_old_id) in before_visible
@@ -387,6 +408,8 @@ def test_transfer_rbac_transferred_linked_user_scope_and_role(client, seed, priv
     finally:
         if login:
             _cleanup_users_by_logins([login])
+        if linked_user_id is not None:
+            revoke_user_access_grants(linked_user_id)
         _cleanup_employees(created_employee_ids)
         _cleanup_positions(created_position_ids)
         _cleanup_units(created_unit_ids)
