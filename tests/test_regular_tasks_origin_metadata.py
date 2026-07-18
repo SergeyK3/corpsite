@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from sqlalchemy import text
@@ -68,14 +68,23 @@ def _db_available() -> bool:
         return False
 
 
-def _insert_due_template(conn, *, title: str, description: str, executor_role_id: int) -> int:
+def _insert_due_template(
+    conn,
+    *,
+    title: str,
+    description: str,
+    executor_role_id: int,
+    created_at: datetime | None = None,
+    bymonthday: list[int] | None = None,
+) -> int:
     cols = get_columns(conn, "regular_tasks")
+    month_day = bymonthday or [date.today().day]
     values = {
         "title": title,
         "description": description,
         "is_active": True,
         "schedule_type": "monthly",
-        "schedule_params": json.dumps({"bymonthday": [date.today().day], "time": "00:00"}, ensure_ascii=False),
+        "schedule_params": json.dumps({"bymonthday": month_day, "time": "00:00"}, ensure_ascii=False),
         "create_offset_days": 0,
         "due_offset_days": 0,
         "executor_role_id": int(executor_role_id),
@@ -97,6 +106,12 @@ def _insert_due_template(conn, *, title: str, description: str, executor_role_id
     if "assignment_scope" in cols:
         values["assignment_scope"] = "functional"
         insert_cols.append("assignment_scope")
+    if "created_at" in cols:
+        values["created_at"] = created_at or datetime(2026, 1, 1, tzinfo=timezone.utc)
+        insert_cols.append("created_at")
+    if "updated_at" in cols:
+        values["updated_at"] = created_at or datetime(2026, 1, 1, tzinfo=timezone.utc)
+        insert_cols.append("updated_at")
 
     values_sql = ", ".join(
         "CAST(:schedule_params AS jsonb)" if c == "schedule_params" else f":{c}" for c in insert_cols
@@ -240,6 +255,8 @@ def test_catch_up_run_writes_catch_up_origin_metadata(seed):
                 title=title,
                 description="Catch-up template body",
                 executor_role_id=seed["executor_role_id"],
+                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                bymonthday=[17],
             )
             run_id, stats, resolved = run_regular_tasks_catch_up_tx(
                 conn,

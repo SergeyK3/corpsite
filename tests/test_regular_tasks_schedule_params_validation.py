@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List
 
 import pytest
@@ -66,9 +66,10 @@ def _insert_template(
     schedule_type: str = "weekly",
     schedule_params: Dict[str, Any] | None = None,
     executor_role_id: int = 1,
+    created_at: datetime | None = None,
 ) -> int:
     cols = get_columns(conn, "regular_tasks")
-    now = utcnow()
+    now = created_at or utcnow()
     code_suffix = int(now.timestamp() * 1_000_000) % 1_000_000_000
     params = schedule_params if schedule_params is not None else {"byweekday": [3], "time": "10:00"}
     values: Dict[str, Any] = {
@@ -247,6 +248,7 @@ def test_catch_up_monthly_valid_template_has_zero_schedule_errors():
                 owner_unit_id=unit_id,
                 schedule_type="monthly",
                 schedule_params={"bymonthday": [1], "time": "00:00"},
+                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
             )
             template_ids.append(template_id)
 

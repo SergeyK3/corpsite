@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -105,6 +105,7 @@ def _insert_due_regular_task(
     executor_role_id: int = 1,
     owner_unit_id: int | None = None,
     schedule_type: str = "monthly",
+    created_at: datetime | None = None,
 ) -> int:
     d = _today().day
     schedule_params = schedule_params or {"bymonthday": [d], "time": "00:00"}
@@ -155,6 +156,14 @@ def _insert_due_regular_task(
     if _col_exists(conn, "regular_tasks", "periodicity"):
         cols.append("periodicity")
         vals["periodicity"] = "MONTH"
+
+    if created_at is not None:
+        if _col_exists(conn, "regular_tasks", "created_at"):
+            cols.append("created_at")
+            vals["created_at"] = created_at
+        if _col_exists(conn, "regular_tasks", "updated_at"):
+            cols.append("updated_at")
+            vals["updated_at"] = created_at
 
     for c in ("initiator_role_id", "target_role_id"):
         if _col_exists(conn, "regular_tasks", c):
@@ -550,10 +559,11 @@ def test_catch_up_two_due_templates_writes_two_item_rows(seed):
                 _insert_due_regular_task(
                     conn,
                     title_suffix=f"catchup_{idx}_{suffix}",
-                    schedule_params={"byweekday": [4], "time": "00:00"},
+                    schedule_params={"byweekday": [3], "time": "00:00"},
                     executor_role_id=int(seed["executor_role_id"]),
                     owner_unit_id=int(unit_id),
                     schedule_type="weekly",
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 )
             )
 
