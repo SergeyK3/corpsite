@@ -2,17 +2,27 @@
 """Schema tests for ADR-043 Phase B2 (personnel lifecycle DDL)."""
 from __future__ import annotations
 
+import importlib.util
 import json
 from contextlib import contextmanager
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from alembic.operations import Operations
+from alembic.runtime.migration import MigrationContext
 from sqlalchemy import text
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 from app.db.engine import engine
+from tests.alembic_test_helpers import (
+    assert_db_revision_unchanged,
+    assert_revision_on_chain,
+    exclusive_migration_cycle,
+    get_current_db_revision,
+)
 from tests.conftest import get_columns, insert_returning_id, table_exists
 
 DDL_REVISION = "x6y7z8a9b0c1"
@@ -64,6 +74,19 @@ def _require_phase_b2() -> None:
         pytest.skip(
             f"ADR-043 Phase B2 tables missing — run: alembic upgrade head (revision {DDL_REVISION})"
         )
+
+
+def _adr043_migration_module():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/x6y7z8a9b0c1_adr043_phase_b2_personnel_lifecycle_schema.py"
+    )
+    spec = importlib.util.spec_from_file_location("_adr043_phase_b2_mod", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load ADR-043 migration from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _expect_sql_failure(sql: str, params: dict | None = None) -> None:
@@ -442,11 +465,24 @@ def test_validation_sql_runs_on_empty_db(seed):
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_migration_downgrade_upgrade():
     _require_phase_b2()
-    from alembic import command
+    assert_revision_on_chain(DDL_REVISION, cfg=_alembic_config())
 
-    cfg = _alembic_config()
-    command.downgrade(cfg, PREVIOUS_REVISION)
-    with engine.begin() as conn:
-        assert not table_exists(conn, "hr_review_overrides")
-    command.upgrade(cfg, DDL_REVISION)
-    _require_phase_b2()
+    revision_before = get_current_db_revision()
+
+    with exclusive_migration_cycle():
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                mod = _adr043_migration_module()
+                with Operations.context(MigrationContext.configure(conn)):
+                    mod.downgrade()
+                assert not table_exists(conn, "hr_review_overrides")
+                with Operations.context(MigrationContext.configure(conn)):
+                    mod.upgrade()
+                for table in PHASE_B2_TABLES:
+                    assert table_exists(conn, table), table
+            finally:
+                trans.rollback()
+
+    revision_after = get_current_db_revision()
+    assert_db_revision_unchanged(revision_before, revision_after)

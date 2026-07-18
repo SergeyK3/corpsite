@@ -1,10 +1,17 @@
 """Shared Alembic characterization helpers for migration tests."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from sqlalchemy import text
+
+from app.db.engine import engine
+from tests.conftest import table_exists
+
+MIGRATION_CYCLE_LOCK_KEY = 430438043001
 
 
 def alembic_config(ini_path: str | None = None) -> Config:
@@ -65,3 +72,31 @@ def assert_revision_on_chain(revision_id: str, *, cfg: Config | None = None) -> 
     if not revision_is_ancestor_of_head(revision_id, head, cfg=cfg):
         raise AssertionError(f"{revision_id} is not an ancestor of head {head!r}")
     return head
+
+
+def get_current_db_revision() -> str | None:
+    with engine.connect() as conn:
+        if not table_exists(conn, "alembic_version"):
+            return None
+        row = conn.execute(text("SELECT version_num FROM public.alembic_version LIMIT 1")).first()
+        return str(row[0]) if row else None
+
+
+def assert_db_revision_unchanged(before: str | None, after: str | None) -> None:
+    if before != after:
+        raise AssertionError(f"alembic_version changed: {before!r} -> {after!r}")
+
+
+@contextmanager
+def exclusive_migration_cycle():
+    """Serialize revision-local DDL cycle tests on a shared disposable DB."""
+    engine.dispose()
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": MIGRATION_CYCLE_LOCK_KEY})
+        conn.commit()
+        try:
+            yield conn
+        finally:
+            conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": MIGRATION_CYCLE_LOCK_KEY})
+            conn.commit()
+    engine.dispose()

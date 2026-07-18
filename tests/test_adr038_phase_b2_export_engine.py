@@ -19,6 +19,7 @@ from app.services.sync.export_service import SyncExportError, export_hr_sync_pac
 from app.services.sync.package_validator import validate_sync_package
 from app.services.sync.package_schema import normalize_full_name
 from tests.conftest import get_columns, insert_returning_id
+from tests.db_sequence_helpers import sync_owned_sequence
 
 
 def _db_available() -> bool:
@@ -204,6 +205,10 @@ def export_fixture(seed, tmp_path: Path):
                     text("DELETE FROM public.hr_import_batches WHERE batch_id = :id"),
                     {"id": batch_id},
                 )
+            sync_owned_sequence(conn, "employees", "employee_id")
+            sync_owned_sequence(conn, "employee_identities", "identity_id")
+            sync_owned_sequence(conn, "hr_import_batches", "batch_id")
+            sync_owned_sequence(conn, "hr_import_rows", "row_id")
 
 
 def _run_export(tmp_path: Path, *, exported_at: datetime | None = None):
@@ -218,15 +223,55 @@ def _run_export(tmp_path: Path, *, exported_at: datetime | None = None):
         )
 
 
+def _read_jsonl_archive(archive: zipfile.ZipFile, member: str) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in archive.read(member).decode("utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _fixture_export_slice(result, export_fixture) -> tuple[list[dict], list[dict], list[dict]]:
+    keyed_employee_ids = {
+        export_fixture["employee_with_iin"],
+        export_fixture["employee_without_iin"],
+    }
+    unkeyed_employee_id = export_fixture["employee_unkeyed"]
+
+    with zipfile.ZipFile(result.output_path) as archive:
+        employees = _read_jsonl_archive(archive, "employees.jsonl")
+        overrides = _read_jsonl_archive(archive, "employee_import_profile_overrides.jsonl")
+
+    fixture_employees = [
+        row for row in employees if row.get("source_employee_id") in keyed_employee_ids
+    ]
+    fixture_overrides = [
+        row for row in overrides if row.get("source_employee_id") in keyed_employee_ids
+    ]
+    unkeyed_overrides = [
+        row for row in overrides if row.get("source_employee_id") == unkeyed_employee_id
+    ]
+    return fixture_employees, fixture_overrides, unkeyed_overrides
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_export_creates_valid_package_from_db_fixtures(export_fixture) -> None:
     result = _run_export(export_fixture["tmp_path"])
 
     assert result.validation_ok is True
-    assert result.employee_count == 2
-    assert result.override_count == 2
-    assert result.skipped_override_count == 1
     assert result.output_path.exists()
+
+    fixture_employees, fixture_overrides, unkeyed_overrides = _fixture_export_slice(
+        result,
+        export_fixture,
+    )
+    assert len(fixture_employees) == 2
+    assert len(fixture_overrides) == 2
+    assert unkeyed_overrides == []
+    assert any(
+        f"employee_id={export_fixture['employee_unkeyed']}" in warning
+        for warning in result.warnings
+    )
 
     validation = validate_sync_package(result.output_path)
     assert validation.ok is True
