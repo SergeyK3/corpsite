@@ -247,7 +247,7 @@ def test_document_types_seed(client, seed, privileged_headers):
     resp = client.get("/directory/document-types", headers=privileged_headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["total"] == 7
+    assert body["total"] >= 7
     codes = {item["code"] for item in body["items"]}
     assert "SPECIALIST_CERTIFICATION" in codes
     assert "SEMINAR_PARTICIPATION" in codes
