@@ -212,6 +212,7 @@ def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_pa
     _build_sample_workbook(source)
     batch_id = None
     employee_ids: list[int] = []
+    duplicate_name = f"Дубликат ФИО Тест {uuid4().hex[:8]}"
     try:
         with engine.begin() as conn:
             seed_department_recoding(conn)
@@ -223,14 +224,14 @@ def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_pa
             employee_ids.append(
                 _create_employee(
                     conn,
-                    full_name="Дубликат ФИО Тест",
+                    full_name=duplicate_name,
                     org_unit_id=seed_user_unit["unit_id"],
                 )
             )
             employee_ids.append(
                 _create_employee(
                     conn,
-                    full_name="Дубликат ФИО Тест",
+                    full_name=duplicate_name,
                     org_unit_id=seed_user_unit["unit_id"],
                 )
             )
@@ -254,13 +255,13 @@ def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_pa
                         SET normalized_payload = jsonb_set(
                             normalized_payload,
                             '{full_name}',
-                            '"Дубликат ФИО Тест"'::jsonb,
+                            to_jsonb(CAST(:duplicate_name AS text)),
                             true
                         )
                         WHERE batch_id = :batch_id AND row_id = :row_id
                         """
                     ),
-                    {"batch_id": batch_id, "row_id": profile_id},
+                    {"batch_id": batch_id, "row_id": profile_id, "duplicate_name": duplicate_name},
                 )
                 update_education_profile(
                     conn,
@@ -271,7 +272,7 @@ def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_pa
                 )
                 resolved = resolve_directory_employee_id(
                     conn,
-                    payload={"full_name": "Дубликат ФИО Тест"},
+                    payload={"full_name": duplicate_name},
                 )
 
             row_override = conn.execute(
