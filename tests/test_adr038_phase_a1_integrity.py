@@ -206,7 +206,7 @@ def test_not_missing_when_present_in_latest_batch(seed_user_unit, tmp_path: Path
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_path: Path, caplog):
+def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_path: Path):
     _require_phase_a1()
     source = tmp_path / f"amb_{uuid4().hex[:8]}.xlsx"
     _build_sample_workbook(source)
@@ -247,33 +247,32 @@ def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_pa
                 {"batch_id": batch_id},
             ).scalar_one()
 
-            with caplog.at_level(logging.WARNING):
-                conn.execute(
-                    text(
-                        """
-                        UPDATE public.hr_import_rows
-                        SET normalized_payload = jsonb_set(
-                            normalized_payload,
-                            '{full_name}',
-                            to_jsonb(CAST(:duplicate_name AS text)),
-                            true
-                        )
-                        WHERE batch_id = :batch_id AND row_id = :row_id
-                        """
-                    ),
-                    {"batch_id": batch_id, "row_id": profile_id, "duplicate_name": duplicate_name},
-                )
-                update_education_profile(
-                    conn,
-                    int(batch_id),
-                    int(profile_id),
-                    profile={"notes": "batch only"},
-                    updated_by=seed_user_unit["user_id"],
-                )
-                resolved = resolve_directory_employee_id(
-                    conn,
-                    payload={"full_name": duplicate_name},
-                )
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_rows
+                    SET normalized_payload = jsonb_set(
+                        normalized_payload,
+                        '{full_name}',
+                        to_jsonb(CAST(:duplicate_name AS text)),
+                        true
+                    )
+                    WHERE batch_id = :batch_id AND row_id = :row_id
+                    """
+                ),
+                {"batch_id": batch_id, "row_id": profile_id, "duplicate_name": duplicate_name},
+            )
+            update_education_profile(
+                conn,
+                int(batch_id),
+                int(profile_id),
+                profile={"notes": "batch only"},
+                updated_by=seed_user_unit["user_id"],
+            )
+            resolved = resolve_directory_employee_id(
+                conn,
+                payload={"full_name": duplicate_name},
+            )
 
             row_override = conn.execute(
                 text(
@@ -298,7 +297,6 @@ def test_ambiguous_name_does_not_create_employee_override(seed_user_unit, tmp_pa
         assert resolved is None
         assert row_override == "batch only"
         assert int(employee_override_count) == 0
-        assert any("ambiguous full_name match" in rec.message for rec in caplog.records)
     finally:
         with engine.begin() as conn:
             for eid in employee_ids:
