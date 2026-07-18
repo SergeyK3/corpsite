@@ -121,14 +121,34 @@ export default function PersonnelImportBatchesPageClient() {
                   <td className="px-4 py-3">{row.total_rows}</td>
                   <td className="px-4 py-3">{row.error_rows}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      disabled={deletingId === row.batch_id}
-                      onClick={() => handleDelete(row.batch_id, row.file_name)}
-                      className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
-                    >
-                      {deletingId === row.batch_id ? "Удаление…" : "Удалить"}
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        href={`/directory/personnel/import/${row.batch_id}`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Аналитика
+                      </Link>
+                      <Link
+                        href={`/directory/personnel/import/${row.batch_id}/review`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Review
+                      </Link>
+                      <Link
+                        href={`/directory/personnel/import/${row.batch_id}/training`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Документы
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={deletingId === row.batch_id}
+                        onClick={() => handleDelete(row.batch_id, row.file_name)}
+                        className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                      >
+                        {deletingId === row.batch_id ? "Удаление…" : "Удалить"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
