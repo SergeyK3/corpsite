@@ -11,9 +11,14 @@ from app.db.engine import engine
 from app.db.models.hr_import import (
     BATCH_STATUS_IN_REVIEW,
     BATCH_STATUS_UPLOADED,
+    CLASSIFICATION_CATEGORY_ROW,
     CLASSIFICATION_DUPLICATE_IIN,
     CLASSIFICATION_INVALID_IIN,
+    CLASSIFICATION_NORMAL,
+    MATCH_STATUS_AUTO,
+    MATCH_STATUS_NO_MATCH,
     MATCH_STATUS_NOT_PROCESSED,
+    MATCH_STATUS_REVIEW,
     SOURCE_TYPE_HR_CONTROL_LIST,
 )
 from app.services.hr_import_service import (
@@ -27,6 +32,23 @@ from app.services.hr_import_service import (
 from scripts.import_hr_control_list import ParsedRow, build_audit, parse_workbook
 from tests.conftest import table_exists
 from tests.test_import_hr_control_list import _build_sample_workbook
+
+CORE_SUMMARY_KEYS = (
+    "total_rows",
+    "valid_iin",
+    "invalid_iin",
+    "duplicate_iin_groups",
+    "duplicate_iin_rows",
+    "missing_full_name",
+    "missing_department",
+    "with_training",
+    "with_certification",
+)
+
+_EMPLOYEE_ROSTER_ROW_FILTER = """
+    normalized_payload->'metadata'->>'is_employee_roster' = 'true'
+    OR normalized_payload->'metadata'->>'classification' = :normal_classification
+"""
 
 
 def _db_available() -> bool:
@@ -65,6 +87,11 @@ def _phase_2b_available() -> bool:
         return row is not None
 
 
+def _normalized_records_available() -> bool:
+    with engine.begin() as conn:
+        return table_exists(conn, "hr_import_normalized_records")
+
+
 def _require_phase_2b() -> None:
     if not _phase_2a_available():
         pytest.skip("Phase 2A tables missing — run: alembic upgrade head")
@@ -95,6 +122,11 @@ def _cleanup_import_batch(batch_id: int | None) -> None:
         ).first()
         if exists:
             _delete_batch(conn, batch_id)
+
+
+def _assert_core_summary(summary: dict, expected: dict) -> None:
+    for key in CORE_SUMMARY_KEYS:
+        assert summary[key] == expected[key], key
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -136,7 +168,8 @@ def test_create_import_batch(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_stage_rows(seed, tmp_path: Path):
+def test_import_control_list_stages_rows_and_resolves_employee_binding(seed, tmp_path: Path):
+    """import_control_list persists rows then runs employee binding during normalization."""
     _require_phase_2b()
 
     source = tmp_path / "control.xlsx"
@@ -164,30 +197,41 @@ def test_stage_rows(seed, tmp_path: Path):
                 text("SELECT COUNT(*) FROM public.hr_import_rows WHERE batch_id = :batch_id"),
                 {"batch_id": batch_id},
             ).scalar_one()
-            sample_row = conn.execute(
+            employee_row = conn.execute(
                 text(
-                    """
+                    f"""
                     SELECT source_sheet, source_row_number, raw_payload, normalized_payload,
                            match_status, review_status, error_codes
                     FROM public.hr_import_rows
                     WHERE batch_id = :batch_id
+                      AND ({_EMPLOYEE_ROSTER_ROW_FILTER})
                     ORDER BY row_id
                     LIMIT 1
                     """
                 ),
-                {"batch_id": batch_id},
+                {"batch_id": batch_id, "normal_classification": CLASSIFICATION_NORMAL},
             ).mappings().one()
 
         assert batch_id > 0
         assert batch["status"] == BATCH_STATUS_REVIEW_READY == BATCH_STATUS_IN_REVIEW
         assert row_count == summary["total_rows"]
         assert batch["total_rows"] == summary["total_rows"]
-        assert sample_row["match_status"] == MATCH_STATUS_NOT_PROCESSED
-        assert sample_row["review_status"] == "PENDING"
-        assert "metadata" in sample_row["normalized_payload"]
-        assert "classification" in sample_row["normalized_payload"]["metadata"]
-        assert isinstance(sample_row["raw_payload"], dict)
+        assert employee_row["review_status"] == "PENDING"
+        assert "metadata" in employee_row["normalized_payload"]
+        assert "classification" in employee_row["normalized_payload"]["metadata"]
+        assert isinstance(employee_row["raw_payload"], dict)
         assert any(w.startswith("skip_unknown_sheet:") for w in warnings)
+
+        metadata = employee_row["normalized_payload"]["metadata"]
+        if _normalized_records_available():
+            assert employee_row["match_status"] in {
+                MATCH_STATUS_NO_MATCH,
+                MATCH_STATUS_AUTO,
+                MATCH_STATUS_REVIEW,
+            }
+            assert metadata.get("employee_binding_status") in {"unbound", "bound", "conflict"}
+        else:
+            assert employee_row["match_status"] == MATCH_STATUS_NOT_PROCESSED
     finally:
         _cleanup_import_batch(batch_id)
 
@@ -223,8 +267,14 @@ def test_batch_summary(seed, tmp_path: Path):
             )
             persisted = summarize_batch(conn, batch_id)
 
-        assert summary == expected_summary
-        assert persisted == expected_summary
+        _assert_core_summary(summary, expected_summary)
+        _assert_core_summary(persisted, expected_summary)
+
+        if "monthly_diff" in summary:
+            diff = summary["monthly_diff"]
+            assert diff["batch_id"] == batch_id
+            assert isinstance(diff.get("summary"), dict)
+            assert "NEW" in diff["summary"]
     finally:
         _cleanup_import_batch(batch_id)
 
@@ -262,6 +312,25 @@ def test_invalid_iin_classification():
     assert classify_row(row, set()) == CLASSIFICATION_INVALID_IIN
 
 
+def test_category_row_classification_takes_priority_over_invalid_iin():
+    row = ParsedRow(
+        data={
+            "full_name": "Невалидный ИИН",
+            "department": "ОТДЕЛ",
+            "source_sheet": "s",
+            "source_row_number": "1",
+            "iin": "12345",
+        },
+        sheet_type="doctors",
+        row_type="CATEGORY_ROW",
+        iin_valid=False,
+        iin_digits="12345",
+        errors=["invalid_iin_length:5"],
+    )
+
+    assert classify_row(row, set()) == CLASSIFICATION_CATEGORY_ROW
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_duplicate_iin_classification_persisted(seed, tmp_path: Path):
     _require_phase_2b()
@@ -296,13 +365,79 @@ def test_duplicate_iin_classification_persisted(seed, tmp_path: Path):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_invalid_iin_classification_persisted(seed, tmp_path: Path):
+def test_invalid_iin_employee_row_classification_and_errors_persisted(seed, tmp_path: Path):
     _require_phase_2b()
 
     from datetime import datetime
     from openpyxl import Workbook
 
     path = tmp_path / "invalid_iin.xlsx"
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("врачи")
+    for _ in range(6):
+        ws.append([""] * 20)
+    ws.append(
+        [
+            "№",
+            "",
+            "Фамилия, имя, отчество",
+            "Год рождения",
+            "ИИН",
+            "пол",
+        ]
+        + [""] * 14
+    )
+    ws.append(
+        [
+            1,
+            "Отдел терапии",
+            "Иванов Иван Иванович",
+            datetime(1990, 1, 1),
+            "12345",
+            "муж",
+        ]
+        + [""] * 14
+    )
+    wb.save(path)
+
+    batch_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            batch_id, _, _ = import_control_list(
+                conn,
+                file_path=path,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            row = conn.execute(
+                text(
+                    """
+                    SELECT normalized_payload->'metadata'->>'classification' AS classification,
+                           error_codes
+                    FROM public.hr_import_rows
+                    WHERE batch_id = :batch_id
+                      AND normalized_payload->>'full_name' = 'Иванов Иван Иванович'
+                    LIMIT 1
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).mappings().one()
+
+        assert row["classification"] == CLASSIFICATION_INVALID_IIN
+        assert row["error_codes"] is not None
+        assert any(str(code).startswith("invalid_iin") for code in row["error_codes"])
+    finally:
+        _cleanup_import_batch(batch_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_category_row_with_invalid_iin_persisted_as_category_row(seed, tmp_path: Path):
+    _require_phase_2b()
+
+    from datetime import datetime
+    from openpyxl import Workbook
+
+    path = tmp_path / "category_invalid_iin.xlsx"
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet("врачи")
@@ -352,6 +487,6 @@ def test_invalid_iin_classification_persisted(seed, tmp_path: Path):
                 {"batch_id": batch_id},
             ).scalar_one()
 
-        assert classification == CLASSIFICATION_INVALID_IIN
+        assert classification == CLASSIFICATION_CATEGORY_ROW
     finally:
         _cleanup_import_batch(batch_id)
