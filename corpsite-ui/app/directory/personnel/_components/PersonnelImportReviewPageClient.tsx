@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import ImportCategoryCardModal from "./ImportCategoryCardModal";
+import ImportBatchContextHeader from "./ImportBatchContextHeader";
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
 import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
-import ImportRosterPromotionPanel from "./ImportRosterPromotionPanel";
+import { parseImportReviewMode, type ImportReviewMode } from "../_lib/importReviewNav";
 import {
   departmentFilterOptionValue,
   getDepartmentRecodingOptions,
@@ -25,7 +26,7 @@ import {
   MEDICAL_CATEGORY_FILTER_OPTIONS,
 } from "../_lib/importCategoryUtils";
 
-type ReviewMode = "personnel" | "declaration" | "technical";
+type ReviewMode = ImportReviewMode;
 
 const DECLARATION_TYPE_LABELS: Record<string, string> = {
   doctors: "Врачи",
@@ -158,7 +159,7 @@ function ReviewFilters({
 
 export default function PersonnelImportReviewPageClient({ batchId }: { batchId: number }) {
   const searchParams = useSearchParams();
-  const mode = (searchParams.get("mode") as ReviewMode) || "personnel";
+  const mode = parseImportReviewMode(searchParams.get("mode"));
 
   const [items, setItems] = React.useState<StagingRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -256,7 +257,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
     q_name: filters.q_name || undefined,
   });
 
-  const pageTitle =
+  const modeLabel =
     mode === "declaration" ? "Декларации" : mode === "technical" ? "Технические" : "Мед. категории";
 
   return (
@@ -268,16 +269,11 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
         onClose={() => setCategoryRowId(null)}
       />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{pageTitle}</h1>
-          <p className="text-sm text-zinc-500">
-            Batch #{batchId} · read-only · без apply
-            {mode === "personnel" ? " · только врачи и медсёстры" : ""}
-          </p>
-        </div>
+      <ImportBatchContextHeader batchId={batchId} className="mb-4" />
+
+      <div className="print:hidden">
         {mode === "declaration" ? (
-          <div className="flex gap-2 print:hidden">
+          <div className="mb-4 flex flex-wrap justify-end gap-2">
             <a
               href={exportUrl}
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700"
@@ -293,18 +289,20 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
             </button>
           </div>
         ) : null}
-      </div>
 
-      <div className="print:hidden">
+        <p className="mb-4 text-sm text-zinc-500">
+          Сравнение с каноническим эталоном · {modeLabel}
+          {mode === "personnel" ? " · только врачи и медсёстры" : ""}
+        </p>
+
         <ImportMonthlyDiffSummaryPanel
           batchId={batchId}
           showUnchanged={showUnchanged}
           onShowUnchangedChange={setShowUnchanged}
           onRecomputed={load}
         />
-        <ImportRosterPromotionPanel batchId={batchId} />
 
-      <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
+        <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
       </div>
 
       {error ? <div className="mb-4 text-sm text-red-600">{error}</div> : null}

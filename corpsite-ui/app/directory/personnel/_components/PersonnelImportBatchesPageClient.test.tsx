@@ -25,9 +25,14 @@ vi.mock("../_lib/importApi.client", () => ({
 }));
 
 describe("PersonnelImportBatchesPageClient batch actions", () => {
-  it("renders open/continue links for each batch row", async () => {
+  it("renders import number column and open/continue links for each batch row", async () => {
     render(<PersonnelImportBatchesPageClient />);
 
+    expect(await screen.findByTestId("import-batch-number-42")).toHaveTextContent("42");
+    expect(screen.getByTestId("import-batch-number-42")).toHaveAttribute(
+      "href",
+      "/directory/personnel/import/42",
+    );
     expect(await screen.findByRole("link", { name: "Аналитика" })).toHaveAttribute(
       "href",
       "/directory/personnel/import/42"
@@ -36,7 +41,7 @@ describe("PersonnelImportBatchesPageClient batch actions", () => {
       "href",
       "/directory/personnel/import/42/review"
     );
-    expect(screen.getByRole("link", { name: "Документы" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Обучение" })).toHaveAttribute(
       "href",
       "/directory/personnel/import/42/training"
     );

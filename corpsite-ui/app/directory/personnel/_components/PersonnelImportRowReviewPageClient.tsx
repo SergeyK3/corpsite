@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
+import ImportBatchContextHeader from "./ImportBatchContextHeader";
 import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import {
   getRowReviewDetail,
@@ -214,7 +215,9 @@ export default function PersonnelImportRowReviewPageClient({
 
   return (
     <div className="px-4 py-3">
-      <div className="mb-4">
+      <ImportBatchContextHeader batchId={batchId} className="mb-4" />
+
+      <div className="mb-4 print:hidden">
         <Link
           href={`/directory/personnel/import/${batchId}/review`}
           className="text-sm text-blue-600 hover:underline"

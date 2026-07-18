@@ -1,28 +1,8 @@
 import { normalizeReturnTo, RETURN_TO_QUERY_PARAM } from "@/lib/taskNav";
 import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
 
-import { PERSONNEL_APPLICATIONS_BASE_PATH } from "./personnelApplicationsApi.client";
-
-/** HR workplace «Претенденты» — same journal UI, applicant-focused presentation. */
+/** HR workplace journal — единая вкладка «Претенденты». */
 export const PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH = "/directory/personnel/applicants";
-
-export type PersonnelApplicationsWorkplace = "applications" | "applicants";
-
-export function workplaceBasePath(workplace: PersonnelApplicationsWorkplace): string {
-  return workplace === "applicants"
-    ? PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH
-    : PERSONNEL_APPLICATIONS_BASE_PATH;
-}
-
-export function resolvePersonnelApplicationsWorkplace(pathname: string): PersonnelApplicationsWorkplace {
-  if (
-    pathname === PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH ||
-    pathname.startsWith(`${PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}/`)
-  ) {
-    return "applicants";
-  }
-  return "applications";
-}
 
 export const PERSONNEL_APPLICATION_ID_PARAM = "application_id";
 export const PERSONNEL_APPLICATION_VIEW_PARAM = "view";
@@ -104,7 +84,7 @@ export function buildPersonnelApplicationsJournalHref(
   state: PersonnelApplicationsJournalState,
   options?: { includeApplicationId?: boolean; basePath?: string },
 ): string {
-  const basePath = options?.basePath ?? PERSONNEL_APPLICATIONS_BASE_PATH;
+  const basePath = options?.basePath ?? PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH;
   const params = buildPersonnelApplicationsJournalQueryParams(state, options);
   const qs = params.toString();
   return qs ? `${basePath}?${qs}` : basePath;
@@ -143,8 +123,6 @@ export function isPersonnelApplicationsJournalReturnHref(href: string | null | u
   const normalized = normalizeReturnTo(href);
   if (!normalized) return false;
   return (
-    normalized === PERSONNEL_APPLICATIONS_BASE_PATH ||
-    normalized.startsWith(`${PERSONNEL_APPLICATIONS_BASE_PATH}?`) ||
     normalized === PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH ||
     normalized.startsWith(`${PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}?`)
   );
@@ -155,17 +133,8 @@ export function resolvePersonnelApplicationsJournalBackLabel(
 ): string {
   const normalized = normalizeReturnTo(returnTo);
   if (!normalized) return "Назад к персоналу";
-  if (
-    normalized === PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH ||
-    normalized.startsWith(`${PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}?`)
-  ) {
+  if (isPersonnelApplicationsJournalReturnHref(normalized)) {
     return "Назад к претендентам";
-  }
-  if (
-    normalized === PERSONNEL_APPLICATIONS_BASE_PATH ||
-    normalized.startsWith(`${PERSONNEL_APPLICATIONS_BASE_PATH}?`)
-  ) {
-    return "Назад к кадровым обращениям";
   }
   return "Назад";
 }

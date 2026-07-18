@@ -62,7 +62,7 @@ describe("personnelNav", () => {
     expect(isPersonnelDirectoryRoute("/directory/staff/42")).toBe(true);
     expect(isHrProcessesRoute("/directory/personnel/journal")).toBe(true);
     expect(isHrProcessesRoute("/directory/personnel/import")).toBe(true);
-    expect(isHrProcessesRoute("/directory/personnel-applications")).toBe(true);
+    expect(isHrProcessesRoute("/directory/personnel/applicants")).toBe(true);
     expect(isPersonnelDirectoryRoute("/directory/personnel/journal")).toBe(false);
     expect(isHrProcessesRoute("/directory/staff")).toBe(false);
   });
@@ -171,14 +171,14 @@ describe("personnelNav", () => {
       expect(resolveDirectoryOrgTreeBasePath("/directory/employees")).toBe("/directory/staff");
       expect(resolveDirectoryOrgTreeBasePath("/directory/staff")).toBe("/directory/staff");
       expect(resolveDirectoryOrgTreeBasePath("/directory/personnel/journal")).toBe("/directory/personnel");
-      expect(resolveDirectoryOrgTreeBasePath("/directory/personnel-applications")).toBe(
-        "/directory/personnel-applications",
+      expect(resolveDirectoryOrgTreeBasePath("/directory/personnel/applicants")).toBe(
+        "/directory/personnel/applicants",
       );
     });
 
-    it("active state highlights HR processes on personnel-applications route", () => {
+    it("active state highlights HR processes on applicants route", () => {
       expect(
-        isDirectorySidebarNavItemActive("/directory/personnel-applications", HR_PROCESSES_NAV_ITEM),
+        isDirectorySidebarNavItemActive("/directory/personnel/applicants", HR_PROCESSES_NAV_ITEM),
       ).toBe(true);
     });
 

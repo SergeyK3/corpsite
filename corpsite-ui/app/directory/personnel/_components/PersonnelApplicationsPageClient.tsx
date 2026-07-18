@@ -11,8 +11,7 @@ import {
   JOURNAL_VIEW_ACTIVE,
   DEFAULT_JOURNAL_SORT,
   parsePersonnelApplicationsJournalState,
-  type PersonnelApplicationsWorkplace,
-  workplaceBasePath,
+  PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH,
 } from "../_lib/personnelApplicationsJournalNav";
 import {
   listPersonnelApplications,
@@ -28,42 +27,20 @@ import { PersonnelApplicationsTable } from "./PersonnelApplicationsTable";
 import PersonnelApplicationDetailDrawer from "./PersonnelApplicationDetailDrawer";
 import PersonnelApplicationRegisterDrawer from "./PersonnelApplicationRegisterDrawer";
 
-const WORKPLACE_COPY: Record<
-  PersonnelApplicationsWorkplace,
-  { title: string; description: string; loadError: string; testId: string }
-> = {
-  applications: {
-    title: "Кадровые обращения",
-    description: "Реестр кадровых обращений по бумажным заявлениям претендентов.",
-    loadError: "Не удалось загрузить журнал кадровых обращений",
-    testId: "personnel-applications-page",
-  },
-  applicants: {
-    title: "Претенденты",
-    description:
-      "Рабочее место HR: регистрация претендентов, выдача ссылки на заполнение личной карточки и контроль этапов до приёма на работу.",
-    loadError: "Не удалось загрузить журнал претендентов",
-    testId: "personnel-applicants-workplace-page",
-  },
-};
-
-type Props = {
-  workplace?: PersonnelApplicationsWorkplace;
-};
-
-export default function PersonnelApplicationsPageClient({ workplace = "applications" }: Props) {
+export default function PersonnelApplicationsPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const copy = WORKPLACE_COPY[workplace];
-  const journalBasePath = workplaceBasePath(workplace);
   const filters = React.useMemo(
     () => parsePersonnelApplicationsJournalState(searchParams),
     [searchParams],
   );
   const listLoadKey = React.useMemo(() => buildPersonnelApplicationsListLoadKey(filters), [filters]);
   const journalReturnHref = React.useMemo(
-    () => buildPersonnelApplicationsJournalHref(filters, { basePath: journalBasePath }),
-    [filters, journalBasePath],
+    () =>
+      buildPersonnelApplicationsJournalHref(filters, {
+        basePath: PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH,
+      }),
+    [filters],
   );
 
   const [items, setItems] = React.useState<PersonnelApplicationListItem[]>([]);
@@ -136,7 +113,7 @@ export default function PersonnelApplicationsPageClient({ workplace = "applicati
     } catch (e) {
       setItems([]);
       setTotal(0);
-      setError(mapPersonnelApplicationsApiError(e, copy.loadError));
+      setError(mapPersonnelApplicationsApiError(e, "Не удалось загрузить журнал претендентов"));
     } finally {
       if (inFlightLoadKeyRef.current === listLoadKey) {
         inFlightLoadKeyRef.current = null;
@@ -153,7 +130,6 @@ export default function PersonnelApplicationsPageClient({ workplace = "applicati
     filters.org_group_id,
     filters.org_unit_id,
     filters.position_id,
-    copy.loadError,
   ]);
 
   React.useEffect(() => {
@@ -162,7 +138,9 @@ export default function PersonnelApplicationsPageClient({ workplace = "applicati
 
   function replaceJournalState(next: Partial<typeof filters>) {
     const merged = { ...filters, ...next };
-    const href = buildPersonnelApplicationsJournalHref(merged, { basePath: journalBasePath });
+    const href = buildPersonnelApplicationsJournalHref(merged, {
+      basePath: PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH,
+    });
     router.replace(href);
   }
 
@@ -191,11 +169,14 @@ export default function PersonnelApplicationsPageClient({ workplace = "applicati
   const pageCount = Math.max(1, Math.ceil(total / filters.limit));
 
   return (
-    <div className="space-y-4 p-4" data-testid={copy.testId}>
+    <div className="space-y-4 p-4" data-testid="personnel-applicants-workplace-page">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{copy.title}</h1>
-          <p className="mt-1 text-sm text-zinc-500">{copy.description}</p>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Претенденты</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Рабочее место HR: регистрация претендентов, выдача ссылки на заполнение личной карточки и контроль
+            этапов до приёма на работу.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -221,7 +202,7 @@ export default function PersonnelApplicationsPageClient({ workplace = "applicati
       </div>
 
       <TaskOrgFiltersBar
-        basePath={journalBasePath}
+        basePath={PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}
         className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800"
       />
 
@@ -317,7 +298,6 @@ export default function PersonnelApplicationsPageClient({ workplace = "applicati
         highlightedApplicationId={highlightedApplicationId}
         onOpen={openDetail}
         onOpenIntake={openDetail}
-        workflowView={workplace === "applicants"}
       />
 
       {!loading && !error ? (

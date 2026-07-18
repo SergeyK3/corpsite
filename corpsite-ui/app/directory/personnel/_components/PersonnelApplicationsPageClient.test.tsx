@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
     },
     push: pushMock,
   }),
-  usePathname: () => "/directory/personnel-applications",
+  usePathname: () => "/directory/personnel/applicants",
   useSearchParams: () => currentSearchParams,
 }));
 
@@ -176,7 +176,7 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
     fireEvent.click(screen.getByTestId("personnel-application-row-10"));
 
     expect(replaceMock).toHaveBeenCalledWith(
-      "/directory/personnel-applications?q=petrov&application_id=10",
+      "/directory/personnel/applicants?q=petrov&application_id=10",
     );
 
     const lastHref = String(replaceMock.mock.calls.at(-1)?.[0]);
@@ -215,7 +215,7 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
     });
     fireEvent.keyDown(screen.getByTestId("personnel-applications-search"), { key: "Enter" });
 
-    expect(replaceMock).toHaveBeenCalledWith("/directory/personnel-applications?q=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2");
+    expect(replaceMock).toHaveBeenCalledWith("/directory/personnel/applicants?q=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2");
   });
 
   it("after registration refreshes journal, highlights row and opens detail while keeping filters", async () => {
@@ -266,7 +266,7 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
 
     expect(screen.getByTestId("mock-detail-drawer")).toHaveAttribute(
       "data-return-href",
-      "/directory/personnel-applications?q=petrov&application_id=10",
+      "/directory/personnel/applicants?q=petrov&application_id=10",
     );
   });
 
@@ -298,7 +298,7 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
     fireEvent.click(screen.getByTestId("personnel-applications-view-archive"));
 
     expect(replaceMock).toHaveBeenCalledWith(
-      "/directory/personnel-applications?view=archive&sort=closed_at_desc",
+      "/directory/personnel/applicants?view=archive&sort=closed_at_desc",
     );
 
     const lastHref = String(replaceMock.mock.calls.at(-1)?.[0]);

@@ -25,10 +25,10 @@ describe("employeeCardNav", () => {
     expect(
       buildPersonalCardHref(
         { personId: 5 },
-        { returnTo: "/directory/personnel-applications?application_id=10" },
+        { returnTo: "/directory/personnel/applicants?application_id=10" },
       ),
     ).toBe(
-      "/directory/personnel/persons/5/card?return_to=%2Fdirectory%2Fpersonnel-applications%3Fapplication_id%3D10",
+      "/directory/personnel/persons/5/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D10",
     );
   });
 

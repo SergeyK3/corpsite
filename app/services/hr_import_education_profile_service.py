@@ -198,6 +198,160 @@ def _recompute_portfolio_totals(profile: dict[str, Any]) -> None:
     }
 
 
+def _join_nonempty(parts: list[Any], sep: str = ", ") -> str:
+    return sep.join(str(part).strip() for part in parts if str(part or "").strip())
+
+
+def _preview_education_record(record: dict[str, Any]) -> dict[str, str]:
+    text = _join_nonempty(
+        [
+            record.get("institution"),
+            record.get("specialty"),
+            record.get("completed_at"),
+        ]
+    )
+    if not text:
+        text = str(record.get("source_text") or "").strip()
+    return {"text": text}
+
+
+def _preview_training_record(record: dict[str, Any]) -> dict[str, str]:
+    title = str(record.get("title") or record.get("source_text") or "").strip()
+    parts = [title]
+    organization = str(record.get("organization") or "").strip()
+    if organization:
+        parts.append(organization)
+    hours = record.get("hours")
+    if hours not in (None, ""):
+        parts.append(f"{hours} ч")
+    completed_at = str(record.get("completed_at") or record.get("started_at") or "").strip()
+    if completed_at:
+        parts.append(completed_at)
+    return {"text": _join_nonempty(parts)}
+
+
+def _preview_certificate_record(record: dict[str, Any]) -> dict[str, str]:
+    topic = str(record.get("topic") or record.get("specialty") or "").strip()
+    parts = [topic]
+    number = str(record.get("certificate_number") or "").strip()
+    if number:
+        parts.append(f"№ {number}")
+    issued_at = str(record.get("issued_at") or "").strip()
+    if issued_at:
+        parts.append(f"выдан {issued_at}")
+    valid_until = str(record.get("valid_until") or "").strip()
+    if valid_until:
+        parts.append(f"до {valid_until}")
+    if not any(parts):
+        parts = [str(record.get("source_text") or "").strip()]
+    return {"text": _join_nonempty(parts)}
+
+
+def _preview_category_record(record: dict[str, Any]) -> dict[str, str]:
+    text = _join_nonempty(
+        [
+            record.get("category"),
+            record.get("specialty"),
+            record.get("issued_at"),
+        ]
+    )
+    if not text:
+        text = str(record.get("source_text") or "").strip()
+    return {"text": text}
+
+
+def _serialize_portfolio_column(
+    records: list[dict[str, Any]],
+    preview_fn,
+    *,
+    preview_limit: int = 2,
+) -> dict[str, Any]:
+    previews = [preview_fn(record) for record in records[:preview_limit] if preview_fn(record).get("text")]
+    extra_count = max(0, len(records) - len(previews))
+    return {
+        "count": len(records),
+        "items": previews,
+        "extra_count": extra_count,
+    }
+
+
+def _portfolio_counts(profile: dict[str, Any]) -> dict[str, int]:
+    totals = profile.get("portfolio_totals") or {}
+    return {
+        "education": int(totals.get("education", len(profile.get("education_records") or []))),
+        "training": int(totals.get("training", len(profile.get("training_records") or []))),
+        "certificates": int(totals.get("certificates", len(profile.get("certificate_records") or []))),
+        "categories": int(totals.get("categories", len(profile.get("category_records") or []))),
+    }
+
+
+def _serialize_portfolio_previews(profile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "education": _serialize_portfolio_column(
+            profile.get("education_records") or [],
+            _preview_education_record,
+        ),
+        "training": _serialize_portfolio_column(
+            profile.get("training_records") or [],
+            _preview_training_record,
+        ),
+        "certificates": _serialize_portfolio_column(
+            profile.get("certificate_records") or [],
+            _preview_certificate_record,
+        ),
+        "categories": _serialize_portfolio_column(
+            profile.get("category_records") or [],
+            _preview_category_record,
+        ),
+    }
+
+
+def _aggregate_has_portfolio_content(group: dict[str, Any], content_filter: Optional[str]) -> bool:
+    if not content_filter:
+        return True
+    counts = _portfolio_counts(group["merged_profile"])
+    if content_filter == "education":
+        return counts["education"] > 0
+    if content_filter == "training":
+        return counts["training"] > 0
+    if content_filter == "certificates":
+        return counts["certificates"] > 0
+    if content_filter == "categories":
+        return counts["categories"] > 0
+    if content_filter == "empty":
+        return all(value == 0 for value in counts.values())
+    return True
+
+
+def _build_portfolio_summary(aggregates: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {
+        "total": len(aggregates),
+        "with_education": 0,
+        "with_training": 0,
+        "with_certificates": 0,
+        "with_categories": 0,
+        "without_portfolio": 0,
+    }
+    for group in aggregates:
+        counts = _portfolio_counts(group["merged_profile"])
+        has_any = False
+        if counts["education"] > 0:
+            summary["with_education"] += 1
+            has_any = True
+        if counts["training"] > 0:
+            summary["with_training"] += 1
+            has_any = True
+        if counts["certificates"] > 0:
+            summary["with_certificates"] += 1
+            has_any = True
+        if counts["categories"] > 0:
+            summary["with_categories"] += 1
+            has_any = True
+        if not has_any:
+            summary["without_portfolio"] += 1
+    return summary
+
+
 def _merge_profiles(profiles: list[dict[str, Any]]) -> dict[str, Any]:
     if not profiles:
         return {}
@@ -354,6 +508,7 @@ def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[
     recoding = primary["recoding"]
     profile = group["merged_profile"]
     totals = profile.get("portfolio_totals") or {}
+    portfolio = _serialize_portfolio_previews(profile)
     iin = str(payload.get("iin", "") or "").strip()
     review_status = group["review_status"]
     summary = {
@@ -376,6 +531,10 @@ def _serialize_profile_summary(group: dict[str, Any], *, batch_id: int) -> dict[
         "certificate_count": int(totals.get("certificates", 0)),
         "category_count": int(totals.get("categories", 0)),
         "award_count": int(totals.get("awards", 0)),
+        "education": portfolio["education"],
+        "training": portfolio["training"],
+        "certificates": portfolio["certificates"],
+        "categories": portfolio["categories"],
         "profile_status": group["profile_status"],
         "review_status": review_status,
         "review_status_label": REVIEW_STATUS_LABELS.get(review_status, review_status),
@@ -427,6 +586,7 @@ def list_education_profiles(
     org_unit_id: Optional[int] = None,
     org_unit_name: Optional[str] = None,
     q_name: Optional[str] = None,
+    content_filter: Optional[str] = None,
     include_archived: bool = False,
     limit: int = 100,
     offset: int = 0,
@@ -471,10 +631,22 @@ def list_education_profiles(
         rows = [r for r in rows if needle in r["full_name"].lower()]
 
     aggregates = _build_group_members(conn, batch_id, rows)
+    portfolio_summary = _build_portfolio_summary(aggregates)
+    if content_filter:
+        aggregates = [
+            group for group in aggregates if _aggregate_has_portfolio_content(group, content_filter)
+        ]
     total = len(aggregates)
     page = aggregates[offset : offset + limit]
     items = [_serialize_profile_summary(group, batch_id=batch_id) for group in page]
-    return {"batch_id": batch_id, "total": total, "limit": limit, "offset": offset, "items": items}
+    return {
+        "batch_id": batch_id,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "summary": portfolio_summary,
+        "items": items,
+    }
 
 
 def get_education_profile(conn: Connection, batch_id: int, profile_id: int) -> dict[str, Any]:

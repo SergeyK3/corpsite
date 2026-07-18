@@ -27,7 +27,7 @@ describe("PersonnelApplicationEmploymentSection", () => {
   it("shows employee and order links for completed application", () => {
     render(
       <PersonnelApplicationEmploymentSection
-        journalReturnHref="/directory/personnel-applications?application_id=10"
+        journalReturnHref="/directory/personnel/applicants?application_id=10"
         detail={{
           application_id: 10,
           person_id: 5,
@@ -53,7 +53,7 @@ describe("PersonnelApplicationEmploymentSection", () => {
     expect(screen.getByTestId("personnel-application-employment-section")).toBeInTheDocument();
     expect(screen.getByTestId("personnel-application-employee-link")).toHaveAttribute(
       "href",
-      "/directory/personnel/employees/42/card?return_to=%2Fdirectory%2Fpersonnel-applications%3Fapplication_id%3D10",
+      "/directory/personnel/employees/42/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D10",
     );
     expect(screen.getByTestId("personnel-application-hire-order-link")).toHaveAttribute(
       "href",
@@ -65,7 +65,7 @@ describe("PersonnelApplicationEmploymentSection", () => {
   it("renders nothing when application is not completed", () => {
     const { container } = render(
       <PersonnelApplicationEmploymentSection
-        journalReturnHref="/directory/personnel-applications"
+        journalReturnHref="/directory/personnel/applicants"
         detail={{
           application_id: 10,
           person_id: 5,

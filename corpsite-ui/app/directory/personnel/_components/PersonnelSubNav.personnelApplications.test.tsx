@@ -33,14 +33,12 @@ afterEach(() => {
 });
 
 describe("PersonnelSubNav", () => {
-  it("includes both Кадровые обращения and Претенденты navigation items", () => {
+  it("includes Претенденты navigation item and not duplicate applications tab", () => {
     render(<PersonnelSubNav />);
-
-    const applicationsLink = screen.getByRole("link", { name: "Кадровые обращения" });
-    expect(applicationsLink).toHaveAttribute("href", "/directory/personnel-applications");
 
     const applicantsLink = screen.getByRole("link", { name: "Претенденты" });
     expect(applicantsLink).toHaveAttribute("href", "/directory/personnel/applicants");
     expect(applicantsLink.className).toContain("bg-blue-600");
+    expect(screen.queryByRole("link", { name: "Кадровые обращения" })).not.toBeInTheDocument();
   });
 });

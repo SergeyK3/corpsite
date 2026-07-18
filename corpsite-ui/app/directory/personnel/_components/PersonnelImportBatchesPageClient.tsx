@@ -11,15 +11,7 @@ import {
   type ImportBatchRow,
 } from "../_lib/importApi.client";
 import CanonicalSnapshotExportButton from "./CanonicalSnapshotExportButton";
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString("ru-RU");
-  } catch {
-    return value;
-  }
-}
+import { formatImportBatchDateTime, formatImportBatchNumber } from "../_lib/importBatchDisplay";
 
 export default function PersonnelImportBatchesPageClient() {
   const [items, setItems] = React.useState<ImportBatchRow[]>([]);
@@ -91,6 +83,7 @@ export default function PersonnelImportBatchesPageClient() {
         <table className="min-w-full text-sm">
           <thead className="bg-zinc-50 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-500 dark:bg-zinc-900">
             <tr>
+              <th className="px-4 py-3">Импорт</th>
               <th className="px-4 py-3">Дата импорта</th>
               <th className="px-4 py-3">Файл</th>
               <th className="px-4 py-3">Статус</th>
@@ -102,20 +95,29 @@ export default function PersonnelImportBatchesPageClient() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
                   Загрузка…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
                   Импорты не найдены. Загрузите файл или выполните CLI stage-import.
                 </td>
               </tr>
             ) : (
               items.map((row) => (
                 <tr key={row.batch_id} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="px-4 py-3">{fmtDate(row.imported_at)}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link
+                      href={`/directory/personnel/import/${row.batch_id}`}
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                      data-testid={`import-batch-number-${row.batch_id}`}
+                    >
+                      {formatImportBatchNumber(row.batch_id)}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">{formatImportBatchDateTime(row.imported_at)}</td>
                   <td className="px-4 py-3">{row.file_name}</td>
                   <td className="px-4 py-3 font-mono text-xs">{row.status}</td>
                   <td className="px-4 py-3">{row.total_rows}</td>
@@ -138,7 +140,7 @@ export default function PersonnelImportBatchesPageClient() {
                         href={`/directory/personnel/import/${row.batch_id}/training`}
                         className="text-blue-600 hover:underline dark:text-blue-400"
                       >
-                        Документы
+                        Обучение
                       </Link>
                       <button
                         type="button"

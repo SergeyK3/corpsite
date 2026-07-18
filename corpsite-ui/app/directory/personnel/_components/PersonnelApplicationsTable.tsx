@@ -4,9 +4,7 @@ import Link from "next/link";
 
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import ApplicantWorkflowStatusBadge from "./ApplicantWorkflowStatusBadge";
-import PersonnelApplicationStatusBadge, {
-  DirectorResolutionBadge,
-} from "./PersonnelApplicationStatusBadge";
+import { DirectorResolutionBadge } from "./PersonnelApplicationStatusBadge";
 import {
   formatPersonnelApplicationDate,
   formatPersonnelApplicationDateTime,
@@ -26,7 +24,6 @@ type Props = {
   highlightedApplicationId?: number | null;
   onOpen: (applicationId: number) => void;
   onOpenIntake?: (applicationId: number) => void;
-  workflowView?: boolean;
 };
 
 function rowClassName(isSelected: boolean, isHighlighted: boolean): string {
@@ -49,7 +46,6 @@ export function PersonnelApplicationsTable({
   highlightedApplicationId = null,
   onOpen,
   onOpenIntake,
-  workflowView = false,
 }: Props) {
   if (loading) {
     return (
@@ -68,20 +64,12 @@ export function PersonnelApplicationsTable({
         data-testid="personnel-applications-empty"
       >
         <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
-          {archiveMode
-            ? workflowView
-              ? "Архивных претендентов пока нет"
-              : "Архивных обращений пока нет"
-            : workflowView
-              ? "Претендентов пока нет"
-              : "Кадровых обращений пока нет"}
+          {archiveMode ? "Архивных претендентов пока нет" : "Претендентов пока нет"}
         </p>
         <p className="mt-2 text-sm text-zinc-500">
           {archiveMode
             ? "Завершённые, отменённые и просроченные обращения появятся здесь."
-            : workflowView
-              ? "Зарегистрируйте первого претендента и выдайте ему ссылку на заполнение личной карточки."
-              : "Зарегистрируйте первое обращение по бумажному заявлению претендента."}
+            : "Зарегистрируйте первого претендента и выдайте ему ссылку на заполнение личной карточки."}
         </p>
       </div>
     );
@@ -130,15 +118,11 @@ export function PersonnelApplicationsTable({
                   {item.iin || "—"}
                 </td>
                 <td className="px-4 py-3">
-                  {workflowView ? (
-                    <ApplicantWorkflowStatusBadge
-                      status={item.status}
-                      intake_link_status={item.intake_link_status}
-                      intake_draft_status={item.intake_draft_status}
-                    />
-                  ) : (
-                    <PersonnelApplicationStatusBadge status={item.status} />
-                  )}
+                  <ApplicantWorkflowStatusBadge
+                    status={item.status}
+                    intake_link_status={item.intake_link_status}
+                    intake_draft_status={item.intake_draft_status}
+                  />
                 </td>
                 <td className="px-4 py-3">
                   {item.employee_id != null ? (

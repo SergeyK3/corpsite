@@ -75,7 +75,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
       updated_at: "2026-07-02T10:00:00Z",
     });
 
-    render(<PersonnelApplicationDetailDrawer applicationId={10} open journalReturnHref="/directory/personnel-applications?application_id=10" onClose={vi.fn()} />);
+    render(<PersonnelApplicationDetailDrawer applicationId={10} open journalReturnHref="/directory/personnel/applicants?application_id=10" onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-application-detail-drawer")).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
       <PersonnelApplicationDetailDrawer
         applicationId={10}
         open
-        journalReturnHref="/directory/personnel-applications?application_id=10"
+        journalReturnHref="/directory/personnel/applicants?application_id=10"
         onClose={vi.fn()}
       />,
     );
@@ -133,7 +133,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
 
     expect(screen.getByTestId("personnel-application-employee-link")).toHaveAttribute(
       "href",
-      "/directory/personnel/employees/42/card?return_to=%2Fdirectory%2Fpersonnel-applications%3Fapplication_id%3D10",
+      "/directory/personnel/employees/42/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D10",
     );
     expect(screen.queryByTestId("application-apply-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("intake-issue-link-button")).not.toBeInTheDocument();
@@ -171,7 +171,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
       <PersonnelApplicationDetailDrawer
         applicationId={10}
         open
-        journalReturnHref="/directory/personnel-applications?application_id=10"
+        journalReturnHref="/directory/personnel/applicants?application_id=10"
         onClose={vi.fn()}
       />,
     );

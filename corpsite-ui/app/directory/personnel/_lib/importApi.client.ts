@@ -261,6 +261,21 @@ export type CertificatePortfolioRecord = PortfolioRecord & {
   certificate_number: string;
 };
 
+export type PortfolioColumnPreview = {
+  count: number;
+  items: { text: string }[];
+  extra_count: number;
+};
+
+export type EducationProfilesSummary = {
+  total: number;
+  with_education: number;
+  with_training: number;
+  with_certificates: number;
+  with_categories: number;
+  without_portfolio: number;
+};
+
 export type EducationProfileSummary = {
   profile_id: number;
   aggregate_key?: string;
@@ -283,6 +298,10 @@ export type EducationProfileSummary = {
   certificate_count: number;
   category_count: number;
   award_count: number;
+  education?: PortfolioColumnPreview;
+  training?: PortfolioColumnPreview;
+  certificates?: PortfolioColumnPreview;
+  categories?: PortfolioColumnPreview;
   profile_status: string;
   review_status: string;
   review_status_label: string;
@@ -608,6 +627,11 @@ export async function listImportBatches(options?: {
   return apiGetJson(path);
 }
 
+export async function getImportBatch(batchId: number): Promise<ImportBatchRow | null> {
+  const data = await listImportBatches();
+  return data.items.find((item) => item.batch_id === batchId) ?? null;
+}
+
 export async function deleteImportBatch(batchId: number): Promise<DeleteBatchResult> {
   return apiDeleteJson(`/directory/personnel/import/batches/${batchId}`);
 }
@@ -724,7 +748,14 @@ export async function runRowAiExtraction(batchId: number, rowId: number): Promis
 export async function listEducationProfiles(
   batchId: number,
   params: Record<string, string | number | boolean | null | undefined> = {}
-): Promise<{ batch_id: number; total: number; items: EducationProfileSummary[]; limit: number; offset: number }> {
+): Promise<{
+  batch_id: number;
+  total: number;
+  items: EducationProfileSummary[];
+  limit: number;
+  offset: number;
+  summary?: EducationProfilesSummary;
+}> {
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/education-profiles`, buildQuery(params));
 }
 

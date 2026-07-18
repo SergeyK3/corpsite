@@ -58,7 +58,7 @@ describe("PprCardApplicationsSection", () => {
     expect(screen.getByTestId("ppr-application-row-10")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Открыть" })).toHaveAttribute(
       "href",
-      "/directory/personnel-applications?application_id=10",
+      "/directory/personnel/applicants?application_id=10",
     );
   });
 

@@ -6,6 +6,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { listImportBatches } from "../_lib/importApi.client";
+import {
+  buildImportReviewModeHref,
+  IMPORT_REVIEW_MODE_TABS,
+  isImportReviewModeNavActive,
+} from "../_lib/importReviewNav";
 
 const IMPORT_LIST_HREF = "/directory/personnel/import";
 
@@ -14,11 +19,6 @@ const BASE_ITEMS = [
     href: "/directory/personnel/journal",
     title: "Кадровый журнал",
     prefixes: ["/directory/personnel/journal"],
-  },
-  {
-    href: "/directory/personnel-applications",
-    title: "Кадровые обращения",
-    prefixes: ["/directory/personnel-applications"],
   },
   {
     href: "/directory/personnel/applicants",
@@ -63,7 +63,7 @@ type ImportNavItem =
       key: string;
       title: string;
       hrefForBatch: (batchId: number) => string;
-      isActive: (pathname: string, batchId: number | null, reviewMode: string) => boolean;
+      isActive: (pathname: string, batchId: number | null) => boolean;
     };
 
 const IMPORT_REVIEW_HREF = "/directory/personnel/import/review";
@@ -92,32 +92,19 @@ const IMPORT_ITEMS: ImportNavItem[] = [
     isActive: (pathname: string, batchId: number | null) =>
       batchId != null && pathname === `/directory/personnel/import/${batchId}`,
   },
+  ...IMPORT_REVIEW_MODE_TABS.map((tab) => ({
+    key: tab.key,
+    title: tab.title,
+    hrefForBatch: (batchId: number) => buildImportReviewModeHref(batchId, tab.mode),
+    isActive: (pathname: string, batchId: number | null) =>
+      isImportReviewModeNavActive(pathname, tab.mode, batchId, new URLSearchParams()),
+  })),
   {
-    key: "import-med-categories",
-    title: "Мед. категории",
-    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}/review?mode=personnel`,
-    isActive: (pathname: string, batchId: number | null, reviewMode: string) => {
-      if (batchId == null || reviewMode === "declaration" || reviewMode === "technical") return false;
-      return isReviewSectionActive(pathname, batchId, reviewMode, "personnel");
-    },
-  },
-  {
-    key: "import-declarations",
-    title: "Декларации",
-    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}/review?mode=declaration`,
-    isActive: (pathname: string, batchId: number | null, reviewMode: string) => {
-      if (batchId == null) return false;
-      return isReviewSectionActive(pathname, batchId, reviewMode, "declaration");
-    },
-  },
-  {
-    key: "import-technical",
-    title: "Технические",
-    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}/review?mode=technical`,
-    isActive: (pathname: string, batchId: number | null, reviewMode: string) => {
-      if (batchId == null) return false;
-      return isReviewSectionActive(pathname, batchId, reviewMode, "technical");
-    },
+    key: "import-training",
+    title: "Обучение",
+    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}/training`,
+    isActive: (pathname: string, batchId: number | null) =>
+      batchId != null && pathname.startsWith(`/directory/personnel/import/${batchId}/training`),
   },
 ];
 
@@ -135,19 +122,22 @@ function parseBatchIdFromPath(pathname: string): number | null {
   return Number.isFinite(batchId) && batchId > 0 ? batchId : null;
 }
 
-function isReviewSectionActive(
-  pathname: string,
-  batchId: number,
-  reviewMode: string,
-  expectedMode: string
-): boolean {
-  if (reviewMode !== expectedMode) return false;
-  const base = `/directory/personnel/import/${batchId}`;
-  return pathname.startsWith(`${base}/review`) || pathname.startsWith(`${base}/rows`);
-}
-
 function resolveImportNavBatchId(pathname: string, latestBatchId: number | null): number | null {
   return parseBatchIdFromPath(pathname) ?? latestBatchId;
+}
+
+function isImportBatchNavItemActive(
+  item: Extract<ImportNavItem, { hrefForBatch: (batchId: number) => string }>,
+  pathname: string,
+  navBatchId: number | null,
+  searchParams: Pick<URLSearchParams, "get">,
+): boolean {
+  if (navBatchId == null) return false;
+  const reviewTab = IMPORT_REVIEW_MODE_TABS.find((tab) => tab.key === item.key);
+  if (reviewTab) {
+    return isImportReviewModeNavActive(pathname, reviewTab.mode, navBatchId, searchParams);
+  }
+  return item.isActive(pathname, navBatchId);
 }
 
 function tabClassName(active: boolean, disabled = false): string {
@@ -165,7 +155,6 @@ function tabClassName(active: boolean, disabled = false): string {
 export default function PersonnelSubNav() {
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();
-  const reviewMode = searchParams.get("mode") || "personnel";
   const [latestBatchId, setLatestBatchId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
@@ -209,7 +198,7 @@ export default function PersonnelSubNav() {
         }
 
         const href = navBatchId != null ? item.hrefForBatch(navBatchId) : IMPORT_LIST_HREF;
-        const active = navBatchId != null ? item.isActive(pathname, navBatchId, reviewMode) : false;
+        const active = isImportBatchNavItemActive(item, pathname, navBatchId, searchParams);
         const disabled = navBatchId == null;
 
         if (disabled) {

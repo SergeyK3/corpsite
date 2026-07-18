@@ -4,6 +4,8 @@
 import * as React from "react";
 import Link from "next/link";
 
+import ImportRosterPromotionPanel from "./ImportRosterPromotionPanel";
+import ImportBatchContextHeader from "./ImportBatchContextHeader";
 import {
   getAgeDistribution,
   getCertificationAnalytics,
@@ -103,10 +105,14 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
 
   return (
     <div className="px-4 py-3">
+      <ImportBatchContextHeader batchId={batchId} className="mb-4" />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Кадровый паспорт</h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Batch #{batchId} — read-only аналитика staging</p>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Аналитика импорта</h1>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Staging-аналитика, диагностика и preview roster promotion
+          </p>
         </div>
         <div className="flex gap-2">
           <Link
@@ -116,16 +122,16 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
             ← Импорты
           </Link>
           <Link
+            href={`/directory/personnel/import/${batchId}/review`}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            Review
+          </Link>
+          <Link
             href={`/directory/personnel/import/${batchId}/training`}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
-            Образовательные профили
-          </Link>
-          <Link
-            href={`/directory/personnel/import/${batchId}/review?mode=personnel`}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Мед. категории
+            Обучение
           </Link>
         </div>
       </div>
@@ -240,6 +246,8 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
               </table>
             </div>
           </section>
+
+          <ImportRosterPromotionPanel batchId={batchId} />
 
           <div className="mb-6 grid gap-4 lg:grid-cols-2">
             <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">

@@ -11,6 +11,7 @@ import {
   SHEET_TYPE_LABELS,
   type StagingRow,
 } from "../_lib/importApi.client";
+import ImportBatchContextHeader from "./ImportBatchContextHeader";
 
 const AGE_OPTIONS = [
   { value: "", label: "Все возраста" },
@@ -101,10 +102,12 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
 
   return (
     <div className="px-4 py-3">
+      <ImportBatchContextHeader batchId={batchId} className="mb-4" />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Строки импорта</h1>
-          <p className="text-sm text-zinc-500">Batch #{batchId} · read-only</p>
+          <p className="text-sm text-zinc-500">Read-only просмотр staging-строк</p>
         </div>
         <Link
           href={`/directory/personnel/import/${batchId}`}

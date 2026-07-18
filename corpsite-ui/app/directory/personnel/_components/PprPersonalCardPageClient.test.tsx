@@ -426,20 +426,20 @@ describe("PprPersonalCardPageClient", () => {
     expect(pushMock).toHaveBeenCalledWith("/directory/staff");
   });
 
-  it("returns to personnel applications journal when return_to is present", async () => {
+  it("returns to applicants journal when return_to is present", async () => {
     currentCardSearchParams = new URLSearchParams(
-      "return_to=%2Fdirectory%2Fpersonnel-applications%3Fq%3Dpetrov%26application_id%3D10",
+      "return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fq%3Dpetrov%26application_id%3D10",
     );
     getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
 
     render(<PprPersonalCardPageClient employeeId="42" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Назад к журналу обращений" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Назад к претендентам" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Назад к журналу обращений" }));
-    expect(pushMock).toHaveBeenCalledWith("/directory/personnel-applications?q=petrov&application_id=10");
+    fireEvent.click(screen.getByRole("button", { name: "Назад к претендентам" }));
+    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/applicants?q=petrov&application_id=10");
   });
 
   it("shows NOT_MATERIALIZED as informational banner", async () => {

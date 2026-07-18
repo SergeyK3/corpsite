@@ -33,9 +33,7 @@ export function isPersonnelDirectoryRoute(pathname: string): boolean {
 export function isHrProcessesRoute(pathname: string): boolean {
   return (
     pathname === "/directory/personnel" ||
-    pathname.startsWith("/directory/personnel/") ||
-    pathname === "/directory/personnel-applications" ||
-    pathname.startsWith("/directory/personnel-applications/")
+    pathname.startsWith("/directory/personnel/")
   );
 }
 
@@ -60,7 +58,7 @@ export const PERSONNEL_DIRECTORY_NAV_ITEM: PersonnelNavItem = {
 export const HR_PROCESSES_NAV_ITEM: PersonnelNavItem = {
   href: HR_PROCESSES_NAV_HREF,
   title: "Кадровые процессы",
-  matchPrefixes: ["/directory/personnel", "/directory/personnel-applications"],
+  matchPrefixes: ["/directory/personnel"],
 };
 
 export function isPersonnelDirectoryNavItem(item: Pick<PersonnelNavItem, "href" | "title">): boolean {
@@ -184,7 +182,6 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/directory/roles")) return "/directory/roles";
   if (pathname.startsWith("/directory/positions")) return "/directory/positions";
   if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
-  if (pathname.startsWith("/directory/personnel-applications")) return "/directory/personnel-applications";
   if (pathname.startsWith("/directory/personnel/applicants")) return "/directory/personnel/applicants";
   if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
   if (pathname.startsWith("/directory/operational-orders")) return "/directory/operational-orders";
