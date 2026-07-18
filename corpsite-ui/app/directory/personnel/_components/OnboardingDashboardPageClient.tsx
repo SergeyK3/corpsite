@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   getOnboardingDashboard,
   mapEmployeeOnboardingApiError,
@@ -51,8 +50,6 @@ export default function OnboardingDashboardPageClient() {
 
   return (
     <div className="space-y-4 p-4" data-testid="onboarding-dashboard-page">
-      <PersonnelSubNav />
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Dashboard адаптации</h1>

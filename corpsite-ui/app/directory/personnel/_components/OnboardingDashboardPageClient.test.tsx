@@ -3,10 +3,6 @@ import { render, screen } from "@testing-library/react";
 
 import OnboardingDashboardPageClient from "./OnboardingDashboardPageClient";
 
-vi.mock("./PersonnelSubNav", () => ({
-  default: () => <div data-testid="personnel-sub-nav" />,
-}));
-
 vi.mock("../_lib/employeeOnboardingApi.client", () => ({
   getOnboardingDashboard: vi.fn(async () => ({
     active_programs_count: 3,

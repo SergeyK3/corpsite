@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { buildPersonalCardHref } from "@/lib/employeeCardNav";
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   listEmployeeOnboardings,
   mapEmployeeOnboardingApiError,
@@ -81,8 +80,6 @@ export default function EmployeeOnboardingJournalPageClient() {
 
   return (
     <div className="space-y-4 p-4" data-testid="employee-onboarding-journal-page">
-      <PersonnelSubNav />
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Журнал адаптации</h1>

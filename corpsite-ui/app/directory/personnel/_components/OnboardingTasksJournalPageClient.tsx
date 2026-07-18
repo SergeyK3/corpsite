@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { buildPersonalCardHref } from "@/lib/employeeCardNav";
-import PersonnelSubNav from "./PersonnelSubNav";
 import {
   bulkAssignOnboardingTasks,
   bulkCompleteOnboardingTasks,
@@ -114,8 +113,6 @@ export default function OnboardingTasksJournalPageClient() {
 
   return (
     <div className="space-y-4 p-4" data-testid="onboarding-tasks-journal-page">
-      <PersonnelSubNav />
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Журнал задач адаптации</h1>
