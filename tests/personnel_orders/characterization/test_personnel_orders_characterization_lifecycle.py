@@ -38,10 +38,12 @@ def _fetch_void_kind(order_id: int) -> str:
 
 
 def test_personnel_orders_characterization_lifecycle_statuses_match_shared_contract() -> None:
-    """PO ORDER_STATUSES is the compatibility authority; shared enum mirrors it."""
+    """PO ORDER_STATUSES is the MVP authority; shared enum is a superset (includes PUBLISHED)."""
     po_statuses = set(ORDER_STATUSES)
     shared_statuses = {state.value for state in DocumentLifecycleState}
-    assert po_statuses == shared_statuses
+    assert po_statuses.issubset(shared_statuses)
+    assert "PUBLISHED" in shared_statuses
+    assert "PUBLISHED" not in po_statuses
 
 
 @pytest.mark.parametrize("status", list(ORDER_STATUSES))
