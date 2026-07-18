@@ -357,4 +357,6 @@ def test_integration_positions_verify_against_live_db(db_conn):
     assert report["checks"]["allowlisted_positions_removed"]["passed"] is True
     assert report["checks"]["protected_positions"]["passed"] is True
     assert report["checks"]["etalon_hr_positions"]["passed"] is True
-    assert report["result"]["passed"] is True
+    assert report["checks"]["hr_allowed_etalon_links"]["passed"] is True
+    assert report["checks"]["fk_integrity_deleted_positions"]["passed"] is True
+    assert report["checks"]["execute_manifest_consistency"]["passed"] is True

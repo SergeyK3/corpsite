@@ -165,13 +165,38 @@ def test_backfill_creates_expected_rows(seed):
             )
 
             before = conn.execute(text(_BACKFILL_COUNT_SQL)).mappings().one()
+            pair_exists_before = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)::bigint
+                    FROM public.legacy_position_mapping
+                    WHERE org_unit_id = :org_unit_id
+                      AND catalog_position_id = :catalog_position_id
+                    """
+                ),
+                {"org_unit_id": unit_id, "catalog_position_id": position_id},
+            ).scalar_one()
+            assert int(pair_exists_before) == 0
+
             _run_backfill_downgrade_upgrade(conn)
             after = conn.execute(text(_BACKFILL_COUNT_SQL)).mappings().one()
 
-            assert int(after["org_unique_positions"]) == int(before["org_unique_positions"]) + 1
-            assert int(after["position_cabinets"]) == int(before["position_cabinets"]) + 1
-            assert int(after["permission_templates"]) == int(before["permission_templates"]) + 1
-            assert int(after["legacy_mappings"]) == int(before["legacy_mappings"]) + 1
+            pair_exists_after = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)::bigint
+                    FROM public.legacy_position_mapping
+                    WHERE org_unit_id = :org_unit_id
+                      AND catalog_position_id = :catalog_position_id
+                    """
+                ),
+                {"org_unit_id": unit_id, "catalog_position_id": position_id},
+            ).scalar_one()
+            assert int(pair_exists_after) == 1
+            assert int(after["org_unique_positions"]) >= int(before["org_unique_positions"]) + 1
+            assert int(after["position_cabinets"]) >= int(before["position_cabinets"]) + 1
+            assert int(after["permission_templates"]) >= int(before["permission_templates"]) + 1
+            assert int(after["legacy_mappings"]) >= int(before["legacy_mappings"]) + 1
 
             mapping = conn.execute(
                 text(

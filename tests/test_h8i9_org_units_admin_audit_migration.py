@@ -17,6 +17,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 from app.db.engine import engine
+from tests.alembic_test_helpers import assert_revision_on_chain, exclusive_migration_cycle, get_current_db_revision
 
 REVISION_H8I9 = "h8i9j0k1l2m3"
 REVISION_D4E5 = "d4e5f6a7b8c9"
@@ -174,23 +175,11 @@ def test_migration_revision_chain() -> None:
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_downgrade_blocked_when_org_unit_audit_rows_exist() -> None:
-    cfg = _alembic_config()
+    assert_revision_on_chain(REVISION_H8I9, cfg=_alembic_config())
     before_count = _org_unit_audit_count()
     assert before_count > 0
-
-    with pytest.raises(RuntimeError, match="Downgrade of revision h8i9j0k1l2m3 is blocked"):
-        command.downgrade(cfg, REVISION_D4E5)
-
-    assert _alembic_version() == REVISION_H8I9
-    assert _org_unit_audit_count() == before_count
-    assert _sal_constraint_has_org_unit_types()
-
-
-@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_downgrade_blocked_preserves_schema_before_constraint_change() -> None:
+    revision_before = get_current_db_revision()
     mod = _migration_module()
-    before_count = _org_unit_audit_count()
-    before_has_org_unit = _sal_constraint_has_org_unit_types()
 
     with engine.connect() as conn:
         ctx = MigrationContext.configure(conn)
@@ -198,23 +187,66 @@ def test_downgrade_blocked_preserves_schema_before_constraint_change() -> None:
             with pytest.raises(RuntimeError, match="Downgrade of revision h8i9j0k1l2m3 is blocked"):
                 mod.downgrade()
 
-    assert _alembic_version() == REVISION_H8I9
+    assert get_current_db_revision() == revision_before
+    assert _org_unit_audit_count() == before_count
+    assert _sal_constraint_has_org_unit_types()
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_downgrade_blocked_preserves_schema_before_constraint_change() -> None:
+    assert_revision_on_chain(REVISION_H8I9, cfg=_alembic_config())
+    mod = _migration_module()
+    before_count = _org_unit_audit_count()
+    before_has_org_unit = _sal_constraint_has_org_unit_types()
+    revision_before = get_current_db_revision()
+
+    with engine.connect() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            with pytest.raises(RuntimeError, match="Downgrade of revision h8i9j0k1l2m3 is blocked"):
+                mod.downgrade()
+
+    assert get_current_db_revision() == revision_before
     assert _org_unit_audit_count() == before_count
     assert _sal_constraint_has_org_unit_types() == before_has_org_unit
 
 
+def _sal_constraint_has_org_unit_types_conn(conn) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conname = 'chk_sal_event_type'
+            """
+        )
+    ).scalar()
+    return bool(row and "ORG_UNIT_CREATED" in str(row))
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_downgrade_succeeds_and_reupgrade_on_isolated_database() -> None:
-    with _ephemeral_database_without_org_unit_audit_rows() as (test_url, _test_engine):
-        with _database_url_override(test_url):
-            cfg = _alembic_config(database_url=test_url)
-            assert _alembic_version(database_url=test_url) == REVISION_H8I9
-            assert _sal_constraint_has_org_unit_types(database_url=test_url)
+    assert_revision_on_chain(REVISION_H8I9, cfg=_alembic_config())
+    mod = _migration_module()
 
-            command.downgrade(cfg, REVISION_D4E5)
-            assert _alembic_version(database_url=test_url) == REVISION_D4E5
-            assert not _sal_constraint_has_org_unit_types(database_url=test_url)
-
-            command.upgrade(cfg, REVISION_H8I9)
-            assert _alembic_version(database_url=test_url) == REVISION_H8I9
-            assert _sal_constraint_has_org_unit_types(database_url=test_url)
+    with exclusive_migration_cycle():
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.security_audit_log
+                        WHERE event_type LIKE 'ORG_UNIT_%'
+                        """
+                    )
+                )
+                assert _sal_constraint_has_org_unit_types_conn(conn)
+                with Operations.context(MigrationContext.configure(conn)):
+                    mod.downgrade()
+                assert not _sal_constraint_has_org_unit_types_conn(conn)
+                with Operations.context(MigrationContext.configure(conn)):
+                    mod.upgrade()
+                assert _sal_constraint_has_org_unit_types_conn(conn)
+            finally:
+                trans.rollback()

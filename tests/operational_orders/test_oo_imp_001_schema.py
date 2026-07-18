@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
+from tests.alembic_test_helpers import assert_revision_on_chain, get_current_db_revision
 from tests.conftest import get_columns, table_exists
 from tests.operational_orders.conftest import DDL_REVISION, _require_schema
 
@@ -59,9 +60,5 @@ def test_personnel_orders_tables_unchanged() -> None:
 
 
 def test_migration_revision_registered() -> None:
-    with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT version_num FROM alembic_version LIMIT 1")
-        ).fetchone()
-    assert row is not None
-    assert row[0] == DDL_REVISION
+    head = assert_revision_on_chain(DDL_REVISION)
+    assert get_current_db_revision() == head

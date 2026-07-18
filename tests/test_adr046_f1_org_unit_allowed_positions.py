@@ -1,14 +1,23 @@
 """Schema and API tests for ADR-046 F1 — org_unit_allowed_positions."""
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
-from alembic import command
 from alembic.config import Config
+from alembic.operations import Operations
+from alembic.runtime.migration import MigrationContext
 from sqlalchemy import text
 
 from app.db.engine import engine
+from tests.alembic_test_helpers import (
+    assert_db_revision_unchanged,
+    assert_revision_on_chain,
+    exclusive_migration_cycle,
+    get_current_db_revision,
+)
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
 DDL_REVISION = "i9j0k1l2m3n4"
@@ -222,19 +231,42 @@ def test_adr046_f1_table_exists_with_constraints():
     assert fk_pos >= 1
 
 
+def _adr046_migration_module():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/i9j0k1l2m3n4_adr046_f1_org_unit_allowed_positions_schema.py"
+    )
+    spec = importlib.util.spec_from_file_location("_adr046_f1_migration_mod", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load migration from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_adr046_f1_migration_downgrade_upgrade_cycle():
     if not _table_available():
         pytest.skip(f"{TABLE_NAME} missing — run alembic upgrade head ({DDL_REVISION})")
+    assert_revision_on_chain(DDL_REVISION, cfg=_alembic_config())
 
-    cfg = _alembic_config()
-    command.downgrade(cfg, PREVIOUS_REVISION)
-    with engine.begin() as conn:
-        assert not table_exists(conn, TABLE_NAME)
+    revision_before = get_current_db_revision()
+    mod = _adr046_migration_module()
 
-    command.upgrade(cfg, DDL_REVISION)
-    with engine.begin() as conn:
-        assert table_exists(conn, TABLE_NAME)
+    with exclusive_migration_cycle():
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                with Operations.context(MigrationContext.configure(conn)):
+                    mod.downgrade()
+                assert not table_exists(conn, TABLE_NAME)
+                with Operations.context(MigrationContext.configure(conn)):
+                    mod.upgrade()
+                assert table_exists(conn, TABLE_NAME)
+            finally:
+                trans.rollback()
+
+    assert_db_revision_unchanged(revision_before, get_current_db_revision())
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

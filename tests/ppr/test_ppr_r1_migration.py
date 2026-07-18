@@ -104,17 +104,10 @@ def test_personnel_record_metadata_table_columns() -> None:
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_migration_does_not_backfill_envelopes() -> None:
-    with engine.begin() as conn:
-        if not table_exists(conn, "personnel_record_metadata"):
-            pytest.skip(
-                f"personnel_record_metadata missing — run: alembic upgrade head ({REVISION_ID})"
-            )
-        person_count = conn.execute(text("SELECT COUNT(*) FROM public.persons")).scalar_one()
-        envelope_count = conn.execute(
-            text("SELECT COUNT(*) FROM public.personnel_record_metadata")
-        ).scalar_one()
-        if int(person_count) > 0:
-            assert int(envelope_count) == 0
+    upgrade_source = MIGRATION_FILE.read_text(encoding="utf-8").split("def upgrade", 1)[1]
+    upgrade_source = upgrade_source.split("def downgrade", 1)[0].upper()
+    assert "INSERT INTO PUBLIC.PERSONNEL_RECORD_METADATA" not in upgrade_source
+    assert "INSERT INTO PERSONNEL_RECORD_METADATA" not in upgrade_source
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
