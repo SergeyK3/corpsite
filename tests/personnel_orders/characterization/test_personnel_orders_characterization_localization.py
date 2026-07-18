@@ -37,12 +37,13 @@ def _find_block(state: dict, *, block_type: str, locale: str, item_id: int | Non
 def test_personnel_orders_characterization_ru_kk_generated_independently(
     client, privileged_headers
 ) -> None:
-    order_id, _item_id = create_draft_with_item(
-        client,
-        privileged_headers,
-        suffix=unique_suffix(),
-    )
+    order_id: int | None = None
     try:
+        order_id, _item_id = create_draft_with_item(
+            client,
+            privileged_headers,
+            suffix=unique_suffix(),
+        )
         gen_resp = client.post(
             f"/directory/personnel-orders/{order_id}/editorial/generate",
             json={},
@@ -63,12 +64,13 @@ def test_personnel_orders_characterization_ru_kk_generated_independently(
 def test_personnel_orders_characterization_override_not_equal_to_generated(
     client, privileged_headers
 ) -> None:
-    order_id, _item_id = create_draft_with_item(
-        client,
-        privileged_headers,
-        suffix=unique_suffix(),
-    )
+    order_id: int | None = None
     try:
+        order_id, _item_id = create_draft_with_item(
+            client,
+            privileged_headers,
+            suffix=unique_suffix(),
+        )
         gen_resp = client.post(
             f"/directory/personnel-orders/{order_id}/editorial/generate",
             json={},
@@ -94,12 +96,13 @@ def test_personnel_orders_characterization_override_not_equal_to_generated(
 def test_personnel_orders_characterization_locale_override_does_not_replace_other_locale(
     client, privileged_headers
 ) -> None:
-    order_id, _item_id = create_draft_with_item(
-        client,
-        privileged_headers,
-        suffix=unique_suffix(),
-    )
+    order_id: int | None = None
     try:
+        order_id, _item_id = create_draft_with_item(
+            client,
+            privileged_headers,
+            suffix=unique_suffix(),
+        )
         gen_resp = client.post(
             f"/directory/personnel-orders/{order_id}/editorial/generate",
             json={},
@@ -125,12 +128,13 @@ def test_personnel_orders_characterization_locale_override_does_not_replace_othe
 def test_personnel_orders_characterization_regenerate_keeps_override(
     client, privileged_headers
 ) -> None:
-    order_id, _item_id = create_draft_with_item(
-        client,
-        privileged_headers,
-        suffix=unique_suffix(),
-    )
+    order_id: int | None = None
     try:
+        order_id, _item_id = create_draft_with_item(
+            client,
+            privileged_headers,
+            suffix=unique_suffix(),
+        )
         gen_resp = client.post(
             f"/directory/personnel-orders/{order_id}/editorial/generate",
             json={},

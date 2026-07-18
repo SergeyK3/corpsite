@@ -14,22 +14,12 @@ from tests.conftest import (
     safe_delete_many,
     table_exists,
 )
-
-
-CONTACTS_WORKING_DDL = """
-CREATE TABLE IF NOT EXISTS public.contacts_working (
-    contact_id BIGINT NOT NULL,
-    person_id BIGINT NULL,
-    dept_code TEXT NULL
+from tests.contacts_bridge_helpers import (
+    cleanup_contacts_bridge,
+    create_test_contact,
+    create_test_person,
+    link_contact_to_dept_code,
 )
-"""
-
-
-@pytest.fixture(scope="module", autouse=True)
-def ensure_contacts_working_bridge():
-    with engine.begin() as conn:
-        conn.execute(text(CONTACTS_WORKING_DDL))
-    yield
 
 
 @pytest.fixture
@@ -136,15 +126,24 @@ def _create_contact(conn, *, full_name: str) -> int:
     )
 
 
-def _link_contact_to_unit(conn, *, contact_id: int, dept_code: str) -> None:
-    conn.execute(
-        text(
-            """
-            INSERT INTO public.contacts_working (contact_id, person_id, dept_code)
-            VALUES (:contact_id, NULL, :dept_code)
-            """
-        ),
-        {"contact_id": int(contact_id), "dept_code": str(dept_code)},
+def _create_scoped_contact(conn, *, full_name: str, dept_code: str) -> tuple[int, int]:
+    person_id = create_test_person(conn, full_name=full_name)
+    contact_id = create_test_contact(conn, full_name=full_name, person_id=person_id)
+    link_contact_to_dept_code(
+        conn,
+        contact_id=contact_id,
+        dept_code=dept_code,
+        person_id=person_id,
+    )
+    return contact_id, person_id
+
+
+def _link_contact_to_unit(conn, *, contact_id: int, dept_code: str, person_id: int | None = None) -> None:
+    link_contact_to_dept_code(
+        conn,
+        contact_id=contact_id,
+        dept_code=dept_code,
+        person_id=person_id,
     )
 
 
@@ -152,16 +151,12 @@ def _contact_names_from_response(body: Dict[str, Any]) -> set[str]:
     return {str(x.get("full_name") or "") for x in body.get("items", [])}
 
 
-def _cleanup_contacts_working(contact_ids: List[int]) -> None:
-    if not contact_ids:
-        return
-    with engine.begin() as conn:
-        if not table_exists(conn, "contacts_working"):
-            return
-        conn.execute(
-            text("DELETE FROM public.contacts_working WHERE contact_id = ANY(:ids)"),
-            {"ids": [int(x) for x in contact_ids]},
-        )
+def _cleanup_contacts_working(
+    contact_ids: List[int],
+    *,
+    person_ids: List[int] | None = None,
+) -> None:
+    cleanup_contacts_bridge(contact_ids=contact_ids, person_ids=person_ids or [])
 
 
 def _cleanup_contacts(contact_ids: List[int]) -> None:
@@ -210,6 +205,7 @@ def test_list_contacts_filters_by_org_group_id(client, seed, privileged_headers)
     unique_a = "PytestContactOrgScopeGroupA"
     unique_b = "PytestContactOrgScopeGroupB"
     created_contact_ids: List[int] = []
+    created_person_ids: List[int] = []
     created_unit_ids: List[int] = []
 
     try:
@@ -235,12 +231,18 @@ def test_list_contacts_filters_by_org_group_id(client, seed, privileged_headers)
             )
             created_unit_ids.extend([unit_a, unit_b])
 
-            contact_a = _create_contact(conn, full_name=unique_a)
-            contact_b = _create_contact(conn, full_name=unique_b)
+            contact_a, person_a = _create_scoped_contact(
+                conn,
+                full_name=unique_a,
+                dept_code="pytest_contact_org_scope_a",
+            )
+            contact_b, person_b = _create_scoped_contact(
+                conn,
+                full_name=unique_b,
+                dept_code="pytest_contact_org_scope_b",
+            )
             created_contact_ids.extend([contact_a, contact_b])
-
-            _link_contact_to_unit(conn, contact_id=contact_a, dept_code="pytest_contact_org_scope_a")
-            _link_contact_to_unit(conn, contact_id=contact_b, dept_code="pytest_contact_org_scope_b")
+            created_person_ids.extend([person_a, person_b])
 
         filtered_a = _list_contacts(
             client,
@@ -271,8 +273,7 @@ def test_list_contacts_filters_by_org_group_id(client, seed, privileged_headers)
         assert cross.status_code == 200, cross.text
         assert cross.json()["total"] == 0
     finally:
-        _cleanup_contacts_working(created_contact_ids)
-        _cleanup_contacts(created_contact_ids)
+        _cleanup_contacts_working(created_contact_ids, person_ids=created_person_ids)
         _cleanup_units(created_unit_ids)
 
 
@@ -280,6 +281,7 @@ def test_list_contacts_filters_by_org_group_id(client, seed, privileged_headers)
 def test_list_contacts_filters_by_org_unit_id_subtree(client, seed, privileged_headers):
     unique_name = "PytestContactOrgScopeSubtreeChild"
     created_contact_ids: List[int] = []
+    created_person_ids: List[int] = []
     created_unit_ids: List[int] = []
 
     try:
@@ -312,13 +314,13 @@ def test_list_contacts_filters_by_org_unit_id_subtree(client, seed, privileged_h
             )
             created_unit_ids.extend([parent_unit, child_unit, sibling_unit])
 
-            contact_id = _create_contact(conn, full_name=unique_name)
-            created_contact_ids.append(contact_id)
-            _link_contact_to_unit(
+            contact_id, person_id = _create_scoped_contact(
                 conn,
-                contact_id=contact_id,
+                full_name=unique_name,
                 dept_code="pytest_contact_org_scope_child",
             )
+            created_contact_ids.append(contact_id)
+            created_person_ids.append(person_id)
 
         filtered_parent = _list_contacts(
             client,
@@ -339,8 +341,7 @@ def test_list_contacts_filters_by_org_unit_id_subtree(client, seed, privileged_h
         assert filtered_sibling.status_code == 200, filtered_sibling.text
         assert filtered_sibling.json()["total"] == 0
     finally:
-        _cleanup_contacts_working(created_contact_ids)
-        _cleanup_contacts(created_contact_ids)
+        _cleanup_contacts_working(created_contact_ids, person_ids=created_person_ids)
         _cleanup_units(created_unit_ids)
 
 
@@ -349,6 +350,7 @@ def test_list_contacts_org_group_id_and_org_unit_id_and(client, seed, privileged
     unique_child = "PytestContactOrgScopeAndChild"
     unique_sibling = "PytestContactOrgScopeAndSibling"
     created_contact_ids: List[int] = []
+    created_person_ids: List[int] = []
     created_unit_ids: List[int] = []
 
     try:
@@ -381,20 +383,18 @@ def test_list_contacts_org_group_id_and_org_unit_id_and(client, seed, privileged
             )
             created_unit_ids.extend([parent_unit, child_unit, sibling_unit])
 
-            contact_child = _create_contact(conn, full_name=unique_child)
-            contact_sibling = _create_contact(conn, full_name=unique_sibling)
-            created_contact_ids.extend([contact_child, contact_sibling])
-
-            _link_contact_to_unit(
+            contact_child, person_child = _create_scoped_contact(
                 conn,
-                contact_id=contact_child,
+                full_name=unique_child,
                 dept_code="pytest_contact_org_scope_and_child",
             )
-            _link_contact_to_unit(
+            contact_sibling, person_sibling = _create_scoped_contact(
                 conn,
-                contact_id=contact_sibling,
+                full_name=unique_sibling,
                 dept_code="pytest_contact_org_scope_and_sibling",
             )
+            created_contact_ids.extend([contact_child, contact_sibling])
+            created_person_ids.extend([person_child, person_sibling])
 
             group_id = _unit_group_id(conn, parent_unit) or group_id
 
@@ -421,6 +421,5 @@ def test_list_contacts_org_group_id_and_org_unit_id_and(client, seed, privileged
         assert unique_child in group_only_names
         assert unique_sibling in group_only_names
     finally:
-        _cleanup_contacts_working(created_contact_ids)
-        _cleanup_contacts(created_contact_ids)
+        _cleanup_contacts_working(created_contact_ids, person_ids=created_person_ids)
         _cleanup_units(created_unit_ids)

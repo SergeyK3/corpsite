@@ -15,7 +15,6 @@ from tests.ppr.conftest import ppr_db_available
 
 REVISION_ID = "l2m3n4o5p6q7"
 PREVIOUS_REVISION = "k1l2m3n4o5p6"
-CURRENT_ALEMBIC_HEAD = "p6q7r8s9t0u1"
 MIGRATION_FILE = (
     Path(__file__).resolve().parents[2]
     / "alembic/versions/l2m3n4o5p6q7_ppr_r5_command_idempotency.py"
@@ -71,9 +70,13 @@ def test_repository_has_single_alembic_head() -> None:
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
-def test_current_alembic_head_is_wp_pr_027() -> None:
+def test_current_alembic_head_is_single_repository_revision() -> None:
     heads = _heads()
-    assert heads == {CURRENT_ALEMBIC_HEAD}
+    assert len(heads) == 1
+    head_revision_id = next(iter(heads))
+    script = ScriptDirectory.from_config(_alembic_config())
+    assert script.get_revision(head_revision_id) is not None
+    assert _revision_is_ancestor_of_head(REVISION_ID, head_revision_id)
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")

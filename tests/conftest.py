@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 from app.auth import create_access_token
 from app.db.engine import engine
 from app.main import app
+from tests.db_sequence_helpers import sync_common_seed_sequences, sync_owned_sequence
 
 
 # =============================
@@ -101,7 +102,7 @@ def insert_returning_id(
         raise RuntimeError(f"No compatible columns to insert into {schema}.{table}. Have cols={sorted(cols)}")
 
     if id_col in cols:
-        _sync_pk_sequence(conn, table=table, id_col=id_col, schema=schema)
+        sync_owned_sequence(conn, table, id_col, schema=schema)
 
     col_list = ", ".join(filtered.keys())
     bind_list = ", ".join(f":{k}" for k in filtered.keys())
@@ -113,29 +114,6 @@ def insert_returning_id(
     """
     row = fetch_one(conn, sql, **filtered)
     return int(row[id_col])
-
-
-def _sync_pk_sequence(conn, *, table: str, id_col: str, schema: str = "public") -> None:
-    row = conn.execute(
-        text("SELECT pg_get_serial_sequence(:table_ref, :id_col) AS seq"),
-        {"table_ref": f"{schema}.{table}", "id_col": id_col},
-    ).mappings().first()
-    seq_name = row.get("seq") if row else None
-    if not seq_name:
-        return
-
-    conn.execute(
-        text(
-            f"""
-            SELECT setval(
-                CAST(:seq_name AS regclass),
-                COALESCE((SELECT MAX({id_col}) FROM {schema}.{table}), 0) + 1,
-                false
-            )
-            """
-        ),
-        {"seq_name": seq_name},
-    )
 
 
 # =============================
@@ -681,9 +659,9 @@ def seed() -> Iterator[Dict[str, Any]]:
     created_unit_id: Optional[int] = None
     created_role_ids: list[int] = []
     created_user_ids: list[int] = []
+    suffix = uuid4().hex[:8]
 
     with engine.begin() as conn:
-        suffix = uuid4().hex[:8]
         unit_name = f"pytest_unit_{suffix}"
         created_unit_id = create_unit(conn, unit_name)
 
@@ -806,3 +784,5 @@ def seed() -> Iterator[Dict[str, Any]]:
                     exec_sql(conn, f"DELETE FROM public.{ut} WHERE org_unit_id = :u", u=created_unit_id)
                 elif "id" in ucols:
                     exec_sql(conn, f"DELETE FROM public.{ut} WHERE id = :u", u=created_unit_id)
+
+            sync_common_seed_sequences(conn)

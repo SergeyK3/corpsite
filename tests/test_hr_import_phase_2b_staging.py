@@ -79,41 +79,60 @@ def _delete_batch(conn, batch_id: int) -> None:
     )
 
 
+def _cleanup_import_batch(batch_id: int | None) -> None:
+    if batch_id is None:
+        return
+    with engine.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1 FROM public.hr_import_batches
+                WHERE batch_id = :batch_id
+                LIMIT 1
+                """
+            ),
+            {"batch_id": batch_id},
+        ).first()
+        if exists:
+            _delete_batch(conn, batch_id)
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_create_import_batch(seed):
     _require_phase_2b()
 
     suffix = uuid4().hex[:8]
-    with engine.begin() as conn:
-        batch_id = create_batch(
-            conn,
-            source_type=SOURCE_TYPE_HR_CONTROL_LIST,
-            file_name=f"pytest_{suffix}.xlsx",
-            imported_by=int(seed["initiator_user_id"]),
-        )
-        batch = conn.execute(
-            text(
-                """
-                SELECT source_type, file_name, imported_by, status,
-                       total_rows, valid_rows, error_rows
-                FROM public.hr_import_batches
-                WHERE batch_id = :batch_id
-                """
-            ),
-            {"batch_id": batch_id},
-        ).mappings().one()
+    batch_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            batch_id = create_batch(
+                conn,
+                source_type=SOURCE_TYPE_HR_CONTROL_LIST,
+                file_name=f"pytest_{suffix}.xlsx",
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            batch = conn.execute(
+                text(
+                    """
+                    SELECT source_type, file_name, imported_by, status,
+                           total_rows, valid_rows, error_rows
+                    FROM public.hr_import_batches
+                    WHERE batch_id = :batch_id
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).mappings().one()
 
-    assert batch_id > 0
-    assert batch["source_type"] == SOURCE_TYPE_HR_CONTROL_LIST
-    assert batch["file_name"] == f"pytest_{suffix}.xlsx"
-    assert int(batch["imported_by"]) == int(seed["initiator_user_id"])
-    assert batch["status"] == BATCH_STATUS_CREATED == BATCH_STATUS_UPLOADED
-    assert batch["total_rows"] == 0
-    assert batch["valid_rows"] == 0
-    assert batch["error_rows"] == 0
-
-    with engine.begin() as conn:
-        _delete_batch(conn, batch_id)
+        assert batch_id > 0
+        assert batch["source_type"] == SOURCE_TYPE_HR_CONTROL_LIST
+        assert batch["file_name"] == f"pytest_{suffix}.xlsx"
+        assert int(batch["imported_by"]) == int(seed["initiator_user_id"])
+        assert batch["status"] == BATCH_STATUS_CREATED == BATCH_STATUS_UPLOADED
+        assert batch["total_rows"] == 0
+        assert batch["valid_rows"] == 0
+        assert batch["error_rows"] == 0
+    finally:
+        _cleanup_import_batch(batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -123,53 +142,54 @@ def test_stage_rows(seed, tmp_path: Path):
     source = tmp_path / "control.xlsx"
     _build_sample_workbook(source)
 
-    with engine.begin() as conn:
-        batch_id, summary, warnings = import_control_list(
-            conn,
-            file_path=source,
-            imported_by=int(seed["initiator_user_id"]),
-        )
-        batch = conn.execute(
-            text(
-                """
-                SELECT status, total_rows, valid_rows, error_rows
-                FROM public.hr_import_batches
-                WHERE batch_id = :batch_id
-                """
-            ),
-            {"batch_id": batch_id},
-        ).mappings().one()
-        row_count = conn.execute(
-            text("SELECT COUNT(*) FROM public.hr_import_rows WHERE batch_id = :batch_id"),
-            {"batch_id": batch_id},
-        ).scalar_one()
-        sample_row = conn.execute(
-            text(
-                """
-                SELECT source_sheet, source_row_number, raw_payload, normalized_payload,
-                       match_status, review_status, error_codes
-                FROM public.hr_import_rows
-                WHERE batch_id = :batch_id
-                ORDER BY row_id
-                LIMIT 1
-                """
-            ),
-            {"batch_id": batch_id},
-        ).mappings().one()
+    batch_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            batch_id, summary, warnings = import_control_list(
+                conn,
+                file_path=source,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            batch = conn.execute(
+                text(
+                    """
+                    SELECT status, total_rows, valid_rows, error_rows
+                    FROM public.hr_import_batches
+                    WHERE batch_id = :batch_id
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).mappings().one()
+            row_count = conn.execute(
+                text("SELECT COUNT(*) FROM public.hr_import_rows WHERE batch_id = :batch_id"),
+                {"batch_id": batch_id},
+            ).scalar_one()
+            sample_row = conn.execute(
+                text(
+                    """
+                    SELECT source_sheet, source_row_number, raw_payload, normalized_payload,
+                           match_status, review_status, error_codes
+                    FROM public.hr_import_rows
+                    WHERE batch_id = :batch_id
+                    ORDER BY row_id
+                    LIMIT 1
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).mappings().one()
 
-    assert batch_id > 0
-    assert batch["status"] == BATCH_STATUS_REVIEW_READY == BATCH_STATUS_IN_REVIEW
-    assert row_count == summary["total_rows"]
-    assert batch["total_rows"] == summary["total_rows"]
-    assert sample_row["match_status"] == MATCH_STATUS_NOT_PROCESSED
-    assert sample_row["review_status"] == "PENDING"
-    assert "metadata" in sample_row["normalized_payload"]
-    assert "classification" in sample_row["normalized_payload"]["metadata"]
-    assert isinstance(sample_row["raw_payload"], dict)
-    assert any(w.startswith("skip_unknown_sheet:") for w in warnings)
-
-    with engine.begin() as conn:
-        _delete_batch(conn, batch_id)
+        assert batch_id > 0
+        assert batch["status"] == BATCH_STATUS_REVIEW_READY == BATCH_STATUS_IN_REVIEW
+        assert row_count == summary["total_rows"]
+        assert batch["total_rows"] == summary["total_rows"]
+        assert sample_row["match_status"] == MATCH_STATUS_NOT_PROCESSED
+        assert sample_row["review_status"] == "PENDING"
+        assert "metadata" in sample_row["normalized_payload"]
+        assert "classification" in sample_row["normalized_payload"]["metadata"]
+        assert isinstance(sample_row["raw_payload"], dict)
+        assert any(w.startswith("skip_unknown_sheet:") for w in warnings)
+    finally:
+        _cleanup_import_batch(batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -193,19 +213,20 @@ def test_batch_summary(seed, tmp_path: Path):
         "with_certification": expected["with_certification"],
     }
 
-    with engine.begin() as conn:
-        batch_id, summary, _ = import_control_list(
-            conn,
-            file_path=source,
-            imported_by=int(seed["initiator_user_id"]),
-        )
-        persisted = summarize_batch(conn, batch_id)
+    batch_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            batch_id, summary, _ = import_control_list(
+                conn,
+                file_path=source,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            persisted = summarize_batch(conn, batch_id)
 
-    assert summary == expected_summary
-    assert persisted == expected_summary
-
-    with engine.begin() as conn:
-        _delete_batch(conn, batch_id)
+        assert summary == expected_summary
+        assert persisted == expected_summary
+    finally:
+        _cleanup_import_batch(batch_id)
 
 
 def test_duplicate_iin_classification():
@@ -248,29 +269,30 @@ def test_duplicate_iin_classification_persisted(seed, tmp_path: Path):
     source = tmp_path / "dup.xlsx"
     _build_sample_workbook(source)
 
-    with engine.begin() as conn:
-        batch_id, _, _ = import_control_list(
-            conn,
-            file_path=source,
-            imported_by=int(seed["initiator_user_id"]),
-        )
-        dup_rows = conn.execute(
-            text(
-                """
-                SELECT normalized_payload->'metadata'->>'classification' AS classification
-                FROM public.hr_import_rows
-                WHERE batch_id = :batch_id
-                  AND normalized_payload->>'iin' = '900101300123'
-                """
-            ),
-            {"batch_id": batch_id},
-        ).scalars().all()
+    batch_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            batch_id, _, _ = import_control_list(
+                conn,
+                file_path=source,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            dup_rows = conn.execute(
+                text(
+                    """
+                    SELECT normalized_payload->'metadata'->>'classification' AS classification
+                    FROM public.hr_import_rows
+                    WHERE batch_id = :batch_id
+                      AND normalized_payload->>'iin' = '900101300123'
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).scalars().all()
 
-    assert len(dup_rows) >= 2
-    assert all(item == CLASSIFICATION_DUPLICATE_IIN for item in dup_rows)
-
-    with engine.begin() as conn:
-        _delete_batch(conn, batch_id)
+        assert len(dup_rows) >= 2
+        assert all(item == CLASSIFICATION_DUPLICATE_IIN for item in dup_rows)
+    finally:
+        _cleanup_import_batch(batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -310,25 +332,26 @@ def test_invalid_iin_classification_persisted(seed, tmp_path: Path):
     )
     wb.save(path)
 
-    with engine.begin() as conn:
-        batch_id, _, _ = import_control_list(
-            conn,
-            file_path=path,
-            imported_by=int(seed["initiator_user_id"]),
-        )
-        classification = conn.execute(
-            text(
-                """
-                SELECT normalized_payload->'metadata'->>'classification' AS classification
-                FROM public.hr_import_rows
-                WHERE batch_id = :batch_id
-                LIMIT 1
-                """
-            ),
-            {"batch_id": batch_id},
-        ).scalar_one()
+    batch_id: int | None = None
+    try:
+        with engine.begin() as conn:
+            batch_id, _, _ = import_control_list(
+                conn,
+                file_path=path,
+                imported_by=int(seed["initiator_user_id"]),
+            )
+            classification = conn.execute(
+                text(
+                    """
+                    SELECT normalized_payload->'metadata'->>'classification' AS classification
+                    FROM public.hr_import_rows
+                    WHERE batch_id = :batch_id
+                    LIMIT 1
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).scalar_one()
 
-    assert classification == CLASSIFICATION_INVALID_IIN
-
-    with engine.begin() as conn:
-        _delete_batch(conn, batch_id)
+        assert classification == CLASSIFICATION_INVALID_IIN
+    finally:
+        _cleanup_import_batch(batch_id)

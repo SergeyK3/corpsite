@@ -103,21 +103,39 @@ def create_draft_with_item(
     suffix: str | None = None,
 ) -> tuple[int, int]:
     order_id = create_draft_order(client, headers, suffix=suffix)
-    if employee_id is None and order_type != "HIRE":
-        with engine.begin() as conn:
-            employee_id = _pick_employee_id(conn)
-    item_id = create_hire_item(
-        client,
-        headers,
-        order_id,
-        employee_id=employee_id,
-        item_type=order_type,
-    )
-    return order_id, item_id
+    try:
+        if employee_id is None and order_type != "HIRE":
+            with engine.begin() as conn:
+                employee_id = _pick_employee_id(conn)
+        item_id = create_hire_item(
+            client,
+            headers,
+            order_id,
+            employee_id=employee_id,
+            item_type=order_type,
+        )
+        return order_id, item_id
+    except Exception:
+        cleanup_order_with_editorial(order_id)
+        raise
 
 
-def cleanup_order_with_editorial(order_id: int) -> None:
+def cleanup_order_with_editorial(order_id: int | None) -> None:
+    if order_id is None:
+        return
     with engine.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1 FROM public.personnel_orders
+                WHERE order_id = :order_id
+                LIMIT 1
+                """
+            ),
+            {"order_id": order_id},
+        ).first()
+        if not exists:
+            return
         _delete_personnel_order_audit_rows(conn, order_id)
         conn.execute(
             text("DELETE FROM public.employee_events WHERE order_id = :order_id"),
