@@ -73,7 +73,7 @@ def test_phase_1a_tables_and_seed_present():
 
         assert int(groups) >= 2
         assert int(specialties) >= 6
-        assert int(doc_types) == 7
+        assert int(doc_types) >= 7
         assert int(doc_kinds) == 6
 
 

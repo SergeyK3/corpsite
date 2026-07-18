@@ -45,10 +45,17 @@ def test_ensure_operational_contact_is_idempotent(seed):
         with engine.begin() as conn:
             if not table_exists(conn, "contacts"):
                 pytest.skip("contacts table missing")
+            position_id = insert_returning_id(
+                conn,
+                table="positions",
+                id_col="position_id",
+                values={"name": "Ops026 Contact Idempotent Position"},
+            )
             employee_id = _create_employee(
                 conn,
                 full_name="Ops026 Contact Idempotent",
                 org_unit_id=int(seed["unit_id"]),
+                position_id=int(position_id),
             )
             first = ensure_operational_contact_for_employee(
                 conn,

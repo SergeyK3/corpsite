@@ -81,8 +81,7 @@ def test_tg_bind_code_forbidden_without_authorization(client: TestClient) -> Non
     resp = client.post("/me/tg-bind-code")
     assert resp.status_code == 403, resp.text
 
-    body = resp.json()
-    assert body.get("code") == "TGBIND_FORBIDDEN_NOT_AUTH"
+    assert _response_error_code(resp.json()) == "TGBIND_FORBIDDEN_NOT_AUTH"
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -97,7 +96,7 @@ def test_tg_bind_code_legacy_x_user_id_blocked_when_disabled(
     user_id = int(seed["executor_user_id"])
     resp = client.post("/me/tg-bind-code", headers={"X-User-Id": str(user_id)})
     assert resp.status_code == 403, resp.text
-    assert resp.json().get("code") == "TGBIND_FORBIDDEN_NOT_AUTH"
+    assert _response_error_code(resp.json()) == "TGBIND_FORBIDDEN_NOT_AUTH"
 
 
 def _response_error_code(body: dict[str, Any]) -> str | None:
@@ -118,7 +117,7 @@ def test_tg_bind_code_regenerate_invalidates_previous_code(
     seed: Dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("BOT_BIND_TOKEN", "test-bot-bind-token")
+    monkeypatch.setattr("app.tg_bind.BOT_BIND_TOKEN", "test-bot-bind-token")
 
     user_id = int(seed["executor_user_id"])
     headers = auth_headers(user_id)

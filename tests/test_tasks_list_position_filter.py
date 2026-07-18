@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import text
 
@@ -104,17 +106,22 @@ def _link_user_employee(
 def test_list_tasks_filters_by_position_id_within_team_scope(client, seed):
     matched_task_id: int | None = None
     other_task_id: int | None = None
+    alt_role_id: int | None = None
+    alt_user_id: int | None = None
+    matched_position_id: int | None = None
+    other_position_id: int | None = None
+    suffix = uuid4().hex[:8]
 
     try:
         with engine.begin() as conn:
             admin_user_id = _admin_user_id(conn)
-            matched_position_id = _create_position(conn, "Pytest Position Matched")
-            other_position_id = _create_position(conn, "Pytest Position Other")
+            matched_position_id = _create_position(conn, f"Pytest Position Matched {suffix}")
+            other_position_id = _create_position(conn, f"Pytest Position Other {suffix}")
 
-            alt_role_id = create_role(conn, "pytest_position_filter_alt")
+            alt_role_id = create_role(conn, f"pytest_position_filter_alt_{suffix}")
             alt_user_id = create_user(
                 conn,
-                full_name="Pytest Position Alt Executor",
+                full_name=f"Pytest Position Alt Executor {suffix}",
                 role_id=alt_role_id,
                 unit_id=seed["unit_id"],
             )
@@ -133,7 +140,7 @@ def test_list_tasks_filters_by_position_id_within_team_scope(client, seed):
 
         matched_task_id = create_task(
             period_id=seed["period_id"],
-            title="Pytest position filter matched",
+            title=f"Pytest position filter matched {suffix}",
             initiator_user_id=seed["initiator_user_id"],
             executor_role_id=seed["executor_role_id"],
             assignment_scope=seed["assignment_scope"],
@@ -142,7 +149,7 @@ def test_list_tasks_filters_by_position_id_within_team_scope(client, seed):
         )
         other_task_id = create_task(
             period_id=seed["period_id"],
-            title="Pytest position filter other",
+            title=f"Pytest position filter other {suffix}",
             initiator_user_id=seed["initiator_user_id"],
             executor_role_id=alt_role_id,
             assignment_scope=seed["assignment_scope"],
@@ -169,28 +176,48 @@ def test_list_tasks_filters_by_position_id_within_team_scope(client, seed):
             cleanup_task(matched_task_id)
         if other_task_id is not None:
             cleanup_task(other_task_id)
+        with engine.begin() as conn:
+            if alt_user_id is not None:
+                conn.execute(
+                    text("UPDATE public.users SET employee_id = NULL WHERE user_id = :uid"),
+                    {"uid": int(alt_user_id)},
+                )
+                conn.execute(text("DELETE FROM public.users WHERE user_id = :uid"), {"uid": int(alt_user_id)})
+            if alt_role_id is not None:
+                conn.execute(text("DELETE FROM public.roles WHERE role_id = :rid"), {"rid": int(alt_role_id)})
+            for position_id in (matched_position_id, other_position_id):
+                if position_id is None:
+                    continue
+                conn.execute(
+                    text("UPDATE public.users SET employee_id = NULL WHERE employee_id IN (SELECT employee_id FROM public.employees WHERE position_id = :pid)"),
+                    {"pid": int(position_id)},
+                )
+                conn.execute(text("DELETE FROM public.employees WHERE position_id = :pid"), {"pid": int(position_id)})
+                conn.execute(text("DELETE FROM public.positions WHERE position_id = :pid"), {"pid": int(position_id)})
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_org_unit_filter_does_not_expand_team_scope(client, seed):
     foreign_task_id: int | None = None
     foreign_unit_id: int | None = None
+    suffix = uuid4().hex[:8]
 
     try:
         with engine.begin() as conn:
             if not table_exists(conn, "org_units"):
                 pytest.skip("org_units table not available")
 
+            admin_user_id = _admin_user_id(conn)
             foreign_unit_id = insert_returning_id(
                 conn,
                 table="org_units",
                 id_col="unit_id",
-                values={"name": "Pytest foreign unit", "code": "pytest_foreign_unit"},
+                values={"name": f"Pytest foreign unit {suffix}", "code": f"pytest_foreign_unit_{suffix}"},
             )
 
         foreign_task_id = create_task(
             period_id=seed["period_id"],
-            title="Pytest foreign unit task",
+            title=f"Pytest foreign unit task {suffix}",
             initiator_user_id=seed["initiator_user_id"],
             executor_role_id=seed["executor_role_id"],
             assignment_scope=seed["assignment_scope"],
@@ -200,7 +227,7 @@ def test_org_unit_filter_does_not_expand_team_scope(client, seed):
 
         resp = _list_tasks(
             client,
-            seed["executor_user_id"],
+            admin_user_id,
             scope="team",
             org_unit_id=foreign_unit_id,
             limit=200,
@@ -212,3 +239,6 @@ def test_org_unit_filter_does_not_expand_team_scope(client, seed):
     finally:
         if foreign_task_id is not None:
             cleanup_task(foreign_task_id)
+        if foreign_unit_id is not None:
+            with engine.begin() as conn:
+                conn.execute(text("DELETE FROM public.org_units WHERE unit_id = :uid"), {"uid": int(foreign_unit_id)})
