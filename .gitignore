@@ -106,6 +106,7 @@ scripts/*.ps1
 # Local runtime state (single source of truth)
 # -----------------------
 .data/
+runtime/hr-import/
 
 
 # -----------------------

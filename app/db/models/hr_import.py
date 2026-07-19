@@ -73,6 +73,7 @@ class HrImportBatch(Base):
     batch_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     source_type: Mapped[str] = mapped_column(Text, nullable=False)
     file_name: Mapped[str] = mapped_column(Text, nullable=False)
+    import_code: Mapped[str] = mapped_column(Text, nullable=False)
     imported_by: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.user_id", ondelete="RESTRICT"),
@@ -87,6 +88,7 @@ class HrImportBatch(Base):
     total_rows: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     valid_rows: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     error_rows: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    source_file_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
 
 class HrImportRow(Base):
