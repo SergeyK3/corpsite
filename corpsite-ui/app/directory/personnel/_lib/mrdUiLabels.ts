@@ -53,6 +53,11 @@ export const MRD_UI = {
   creationWindowHint:
     "Доступны только предыдущий, текущий и следующий календарные месяцы относительно сегодняшней даты.",
 
+  detectedDifferencesTitle: "Обнаруженные изменения",
+  detectedDifferencesLead:
+    "Перед созданием следующего периода можно просмотреть журнал обнаруженных изменений по исходному периоду.",
+  detectedDifferencesLink: "Открыть обнаруженные изменения",
+
   etalonGroupLabel: "Группа отделений",
   etalonDepartmentLabel: "Отделение",
   etalonSearchLabel: "Поиск сотрудника",

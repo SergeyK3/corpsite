@@ -17,7 +17,7 @@ type Props = {
   batchId: number;
   importCode: string;
   batchStatus: string;
-  refreshKey?: number;
+  refreshKey?: string | number;
   onStatusChanged?: () => void;
 };
 
@@ -100,8 +100,6 @@ export default function ImportReviewProgressStrip({
   const blockerSummary =
     assessment && !reviewDone && assessment.blockers.length > 0
       ? formatCompleteImportReviewBlockerSummary(assessment.blockers, {
-          batch_id: batchId,
-          import_code: importCode,
           error_rows: progress?.error_rows ?? 0,
         })
       : null;

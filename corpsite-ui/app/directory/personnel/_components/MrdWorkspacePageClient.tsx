@@ -174,7 +174,17 @@ export default function MrdWorkspacePageClient() {
   const visibleDepartments = React.useMemo(() => {
     if (!review) return [];
     if (!orgGroupValue) return review.departments;
-    const groupId = resolveGroupIdFromOptions({ groups: review.org_groups, departments: review.departments }, orgGroupValue);
+    const groupId = resolveGroupIdFromOptions(
+      {
+        groups: review.org_groups.map(({ value, label, group_id }) => ({
+          value,
+          label,
+          group_id: group_id ?? undefined,
+        })),
+        departments: review.departments,
+      },
+      orgGroupValue,
+    );
     if (groupId) {
       return review.departments.filter((item) => item.org_group_id === groupId);
     }

@@ -264,7 +264,14 @@ export default function ImportHrReviewPageClient() {
     if (!review) return [];
     if (!orgGroupValue) return review.departments;
     const groupId = resolveGroupIdFromOptions(
-      { groups: review.org_groups, departments: review.departments },
+      {
+        groups: review.org_groups.map(({ value, label, group_id }) => ({
+          value,
+          label,
+          group_id: group_id ?? undefined,
+        })),
+        departments: review.departments,
+      },
       orgGroupValue,
     );
     if (groupId) {
