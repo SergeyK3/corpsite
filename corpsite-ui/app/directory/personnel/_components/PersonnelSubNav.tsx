@@ -40,16 +40,6 @@ const BASE_ITEMS = [
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
   },
-  {
-    href: "/directory/personnel/hr-change-events",
-    title: "Изменения реестра",
-    prefixes: ["/directory/personnel/hr-change-events"],
-  },
-  {
-    href: "/directory/personnel/migration",
-    title: "Миграция",
-    prefixes: ["/directory/personnel/migration"],
-  },
 ] as const;
 
 type ImportNavItem =
@@ -71,12 +61,22 @@ const IMPORT_REVIEW_HREF = "/directory/personnel/import/review";
 const IMPORT_ITEMS: ImportNavItem[] = [
   {
     key: "import-list",
-    title: "Импорт / аналитика",
+    title: "Импорт",
     href: IMPORT_LIST_HREF,
     isActive: (pathname: string) =>
       pathname === IMPORT_LIST_HREF ||
       pathname === `${IMPORT_LIST_HREF}/` ||
-      pathname === `${IMPORT_LIST_HREF}/upload`,
+      pathname === `${IMPORT_LIST_HREF}/upload` ||
+      pathname === "/directory/personnel/baselines" ||
+      pathname.startsWith("/directory/personnel/baselines/") ||
+      pathname.startsWith("/directory/personnel/monthly-references/"),
+  },
+  {
+    key: "import-analytics",
+    title: "Аналитика",
+    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}`,
+    isActive: (pathname: string, batchId: number | null) =>
+      batchId != null && pathname === `/directory/personnel/import/${batchId}`,
   },
   {
     key: "import-normalized-review",
@@ -86,11 +86,20 @@ const IMPORT_ITEMS: ImportNavItem[] = [
       pathname === IMPORT_REVIEW_HREF || pathname.startsWith(`${IMPORT_REVIEW_HREF}/`),
   },
   {
-    key: "import-analytics",
-    title: "Аналитика",
-    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}`,
-    isActive: (pathname: string, batchId: number | null) =>
-      batchId != null && pathname === `/directory/personnel/import/${batchId}`,
+    key: "import-hr-change-events",
+    title: "Изменения реестра",
+    href: "/directory/personnel/hr-change-events",
+    isActive: (pathname: string) =>
+      pathname === "/directory/personnel/hr-change-events" ||
+      pathname.startsWith("/directory/personnel/hr-change-events/"),
+  },
+  {
+    key: "import-migration",
+    title: "Миграция",
+    href: "/directory/personnel/migration",
+    isActive: (pathname: string) =>
+      pathname === "/directory/personnel/migration" ||
+      pathname.startsWith("/directory/personnel/migration/"),
   },
   ...IMPORT_REVIEW_MODE_TABS.map((tab) => ({
     key: tab.key,

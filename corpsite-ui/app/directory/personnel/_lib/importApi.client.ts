@@ -98,9 +98,14 @@ async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiDeleteJson<T>(path: string): Promise<T> {
+async function apiDeleteJson<T>(path: string, body?: unknown): Promise<T> {
   const url = resolveApiUrl(path);
-  const res = await fetch(url, { method: "DELETE", headers: authHeaders(), cache: "no-store" });
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: authHeaders(body !== undefined),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw parseErrorBody(res.status, body, "Не удалось удалить.");
@@ -110,7 +115,20 @@ async function apiDeleteJson<T>(path: string): Promise<T> {
 
 export type ImportBatchRow = {
   batch_id: number;
+  import_code: string;
+  is_legacy_import?: boolean;
+  can_delete?: boolean;
+  can_archive?: boolean;
+  is_archived?: boolean;
   file_name: string;
+  original_filename?: string | null;
+  technical_filename?: string | null;
+  storage_ref?: string | null;
+  byte_size?: number | null;
+  content_sha256?: string | null;
+  report_month?: string | null;
+  report_period?: string | null;
+  source_last_modified_at?: string | null;
   imported_at: string | null;
   status: string;
   total_rows: number;
@@ -180,6 +198,7 @@ export type StagingRow = {
   position_raw: string;
   training_raw: string;
   certification_raw: string;
+  education_raw?: string;
   certification_group?: string;
   latest_medical_category?: string;
   latest_medical_category_date?: string;
@@ -189,6 +208,7 @@ export type StagingRow = {
   source_row_number: number;
   sheet_type: string;
   classification: string;
+  error_codes?: string[];
   row_type?: string;
   declaration_group?: string;
   is_employee_roster?: boolean;
@@ -627,13 +647,65 @@ export async function listImportBatches(options?: {
   return apiGetJson(path);
 }
 
+export type InitialBaselineSourceSelectionRow = {
+  report_period: string;
+  source_batch_id: number;
+  import_code?: string | null;
+  selected_by?: number;
+  selected_at?: string | null;
+  updated_at?: string | null;
+  lifecycle_status?: "ACTIVE" | "CONSUMED";
+  consumed_at?: string | null;
+  consumed_mrd_id?: number | null;
+  mutable?: boolean;
+};
+
+export async function listInitialBaselineSourceSelections(): Promise<{
+  items: InitialBaselineSourceSelectionRow[];
+}> {
+  return apiGetJson("/directory/personnel/import/initial-baseline-source");
+}
+
+export async function getInitialBaselineSourceSelection(
+  reportPeriod: string,
+): Promise<{ item: InitialBaselineSourceSelectionRow | null }> {
+  const query = buildQuery({ report_period: reportPeriod.slice(0, 10) });
+  return apiGetJson(`/directory/personnel/import/initial-baseline-source?${query}`);
+}
+
+export async function setInitialBaselineSourceSelection(body: {
+  report_period: string;
+  source_batch_id: number;
+}): Promise<InitialBaselineSourceSelectionRow> {
+  return apiPostJson("/directory/personnel/import/initial-baseline-source", {
+    report_period: body.report_period.slice(0, 10),
+    source_batch_id: body.source_batch_id,
+  });
+}
+
 export async function getImportBatch(batchId: number): Promise<ImportBatchRow | null> {
-  const data = await listImportBatches();
-  return data.items.find((item) => item.batch_id === batchId) ?? null;
+  try {
+    return await apiGetJson<ImportBatchRow>(`/directory/personnel/import/batches/${batchId}`);
+  } catch (error) {
+    if (error instanceof Error && /404/.test(error.message)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function deleteImportBatch(batchId: number): Promise<DeleteBatchResult> {
   return apiDeleteJson(`/directory/personnel/import/batches/${batchId}`);
+}
+
+export type ArchiveBatchResult = {
+  batch_id: number;
+  archived: boolean;
+  status: string;
+};
+
+export async function archiveImportBatch(batchId: number): Promise<ArchiveBatchResult> {
+  return apiPostJson(`/directory/personnel/import/batches/${batchId}/archive`);
 }
 
 export async function rebuildDocumentCandidates(batchId: number): Promise<RebuildCandidatesResult> {
@@ -889,6 +961,7 @@ export async function listStagingRows(
 
 export async function uploadControlList(file: File): Promise<{
   batch_id: number;
+  import_code?: string;
   file_name: string;
   summary: ImportSummary;
   warnings: string[];
@@ -896,6 +969,9 @@ export async function uploadControlList(file: File): Promise<{
   const url = resolveApiUrl("/directory/personnel/import/upload");
   const form = new FormData();
   form.append("file", file);
+  if (file.lastModified > 0) {
+    form.append("source_last_modified_ms", String(file.lastModified));
+  }
   const res = await fetch(url, {
     method: "POST",
     headers: authHeaders(),
@@ -1030,6 +1106,10 @@ export type MonthlyDiffRemoval = {
   payload?: Record<string, unknown> | null;
   diff_status: "REMOVED";
   diff_computed_at?: string | null;
+  decision?: "restore" | "confirm_removal" | null;
+  decided_at?: string | null;
+  decided_by?: number | null;
+  decision_basis?: string | null;
 };
 
 export type ImportBatchReviewVisibility = {
@@ -1045,6 +1125,9 @@ export type ImportBatchDiffSummary = {
   computed_at: string | null;
   summary: Partial<Record<MonthlyDiffStatus, number>>;
   removed: MonthlyDiffRemoval[];
+  restored?: MonthlyDiffRemoval[];
+  confirmed_removals?: MonthlyDiffRemoval[];
+  pending_removals?: number;
   skipped: boolean;
   review_visibility?: ImportBatchReviewVisibility;
 };
@@ -1055,6 +1138,54 @@ export async function getImportBatchDiffSummary(batchId: number): Promise<Import
 
 export async function computeImportBatchDiff(batchId: number): Promise<ImportBatchDiffSummary> {
   return apiPostJson(`/directory/personnel/import/batches/${batchId}/compute-diff`);
+}
+
+export type DiffRemovalDecisionKind = "restore" | "confirm_removal";
+
+export type DiffRemovalDecisionResult = MonthlyDiffRemoval & {
+  auto_review?: {
+    auto_completed?: boolean;
+    batch_status?: string;
+    already_completed?: boolean;
+  };
+};
+
+export async function postDiffRemovalDecision(
+  batchId: number,
+  removalId: number,
+  payload: { decision: DiffRemovalDecisionKind; basis?: string | null },
+): Promise<DiffRemovalDecisionResult> {
+  return apiPostJson(
+    `/directory/personnel/import/batches/${batchId}/diff-removals/${removalId}/decision`,
+    payload,
+  );
+}
+
+export type DiffRemovalRevertResult = MonthlyDiffRemoval & {
+  reopen_review?: {
+    reopened?: boolean;
+    batch_status?: string;
+  };
+};
+
+export async function revertDiffRemovalDecision(
+  batchId: number,
+  removalId: number,
+): Promise<DiffRemovalRevertResult> {
+  return apiPostJson(
+    `/directory/personnel/import/batches/${batchId}/diff-removals/${removalId}/revert`,
+    {},
+  );
+}
+
+export type ImportReviewProgressAssessment = CompleteImportReviewAssessment & {
+  review_progress: ImportReviewProgress;
+};
+
+export async function assessImportReviewProgress(
+  batchId: number,
+): Promise<ImportReviewProgressAssessment> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/review-progress`);
 }
 
 export async function getNormalizedRecordsSummary(batchId?: number): Promise<NormalizedRecordSummary> {
@@ -1414,4 +1545,194 @@ export async function downloadCanonicalSnapshotExport(
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(objectUrl);
+}
+
+export type ControlListBaselineRow = {
+  baseline_id: number;
+  snapshot_id?: number;
+  publication_origin_id: number;
+  report_period: string;
+  published_at: string;
+  published_by: number;
+  /** Legacy alias from snapshot compatibility layer */
+  promoted_at?: string;
+  promoted_by?: number;
+  entry_count: number;
+  deleted_at?: string | null;
+  source_import_code?: string | null;
+  source_batch_id?: number | null;
+  origin_batch_id?: number | null;
+  linked_batch_id?: number | null;
+  batch_import_code?: string | null;
+  source_file_name?: string | null;
+  file_name?: string | null;
+  original_filename?: string | null;
+  is_legacy_import?: boolean;
+  import_display_label?: string;
+};
+
+export type ControlListBaselineListResponse = {
+  items: ControlListBaselineRow[];
+};
+
+export type PublishBaselineRequest = {
+  batch_id: number;
+  force?: boolean;
+  publication_notes?: string | null;
+};
+
+export type PublishBaselineResponse = {
+  created: boolean;
+  baseline_id: number;
+  snapshot_id?: number;
+  publication_origin_id: number;
+  source_batch_id?: number | null;
+  entry_count: number;
+  report_period?: string;
+};
+
+export type BaselinePublishPreviewResponse = {
+  batch_id: number;
+  import_code?: string | null;
+  batch_status?: string | null;
+  total_excel_rows: number;
+  roster_candidate_rows: number;
+  roster_baseline_entries: number;
+  normalized_baseline_entries: number;
+  normalized_approved_or_promoted: number;
+  normalized_pending_excluded: number;
+  excluded_excel_rows: number;
+  duplicate_match_keys_merged: number;
+  baseline_entry_count: number;
+  existing_baseline_id?: number | null;
+  explanation: string;
+  publish_allowed: boolean;
+  blockers: string[];
+};
+
+export type ImportReviewProgress = {
+  pending_normalized: number;
+  error_rows: number;
+  pending_removals: number;
+  ready: boolean;
+};
+
+export type CompleteImportReviewBlocker = {
+  code: string;
+  message: string;
+  batch_id: number;
+  resolve_kind: string;
+  count?: number;
+};
+
+export type CompleteImportReviewAssessment = {
+  import_code: string;
+  batch_id: number;
+  batch_status: string;
+  already_completed: boolean;
+  complete_allowed: boolean;
+  blockers: CompleteImportReviewBlocker[];
+  review_progress?: ImportReviewProgress;
+};
+
+export type CompleteImportReviewResult = {
+  import_code: string;
+  batch_id: number;
+  batch_status: string;
+  completed: boolean;
+  already_completed: boolean;
+  blockers: CompleteImportReviewBlocker[];
+};
+
+export class CompleteImportReviewBlockedError extends Error {
+  blockers: CompleteImportReviewBlocker[];
+
+  constructor(message: string, blockers: CompleteImportReviewBlocker[]) {
+    super(message);
+    this.name = "CompleteImportReviewBlockedError";
+    this.blockers = blockers;
+  }
+}
+
+export async function assessCompleteImportReview(
+  importCode: string,
+): Promise<CompleteImportReviewAssessment> {
+  const encoded = encodeURIComponent(importCode);
+  return apiGetJson(`/directory/personnel/import/batches/${encoded}/complete-review`);
+}
+
+export async function completeImportReview(importCode: string): Promise<CompleteImportReviewResult> {
+  const encoded = encodeURIComponent(importCode);
+  const url = resolveApiUrl(`/directory/personnel/import/batches/${encoded}/complete-review`);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeaders(true),
+    cache: "no-store",
+  });
+  if (res.status === 409) {
+    const raw = (await res.json().catch(() => ({}))) as {
+      detail?: { message?: string; blockers?: CompleteImportReviewBlocker[] };
+    };
+    const detail = raw.detail ?? {};
+    throw new CompleteImportReviewBlockedError(
+      detail.message || "Завершение проверки заблокировано.",
+      detail.blockers ?? [],
+    );
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw parseErrorBody(res.status, text, "Не удалось завершить проверку импорта.");
+  }
+  return res.json() as Promise<CompleteImportReviewResult>;
+}
+
+export async function listControlListBaselines(params?: {
+  report_period?: string;
+  include_deleted?: boolean;
+}): Promise<ControlListBaselineListResponse> {
+  const qs = buildQuery({
+    report_period: params?.report_period,
+    include_deleted: params?.include_deleted,
+  });
+  return apiGetJson("/directory/personnel/baselines", qs || undefined);
+}
+
+export async function getControlListBaseline(
+  baselineId: number,
+  params?: { include_deleted?: boolean },
+): Promise<ControlListBaselineRow> {
+  const qs = buildQuery({ include_deleted: params?.include_deleted });
+  return apiGetJson(`/directory/personnel/baselines/${baselineId}`, qs || undefined);
+}
+
+export async function previewControlListBaselinePublish(
+  batchId: number,
+): Promise<BaselinePublishPreviewResponse> {
+  return apiPostJson("/directory/personnel/baselines/publish/preview", { batch_id: batchId });
+}
+
+export async function publishControlListBaseline(
+  body: PublishBaselineRequest,
+): Promise<PublishBaselineResponse> {
+  return apiPostJson("/directory/personnel/baselines/publish", body);
+}
+
+export async function softDeleteControlListBaseline(
+  baselineId: number,
+  body?: { deletion_reason?: string | null },
+): Promise<{ baseline_id: number; soft_deleted: boolean }> {
+  return apiPostJson(`/directory/personnel/baselines/${baselineId}/soft-delete`, body ?? {});
+}
+
+export async function restoreControlListBaseline(
+  baselineId: number,
+): Promise<{ baseline_id: number; restored: boolean }> {
+  return apiPostJson(`/directory/personnel/baselines/${baselineId}/restore`);
+}
+
+export async function hardDeleteControlListBaseline(
+  baselineId: number,
+  body?: { deletion_reason?: string | null },
+): Promise<{ baseline_id: number; hard_deleted: boolean; publication_origin_id: number }> {
+  return apiDeleteJson(`/directory/personnel/baselines/${baselineId}`, body ?? {});
 }

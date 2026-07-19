@@ -43,6 +43,8 @@ export default function PersonnelImportUploadPageClient() {
         <h1 className="text-xl font-semibold">Загрузка контрольного списка</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
           Файл будет распарсен и сохранён в staging (<code>hr_import_*</code>). Apply не выполняется.
+          Имя файла должно быть вида <code>контрольныйYYMM.xlsx</code>, например{" "}
+          <code>контрольный2606.xlsx</code>.
         </p>
       </div>
 
@@ -64,12 +66,14 @@ export default function PersonnelImportUploadPageClient() {
           >
             {uploading ? "Импорт…" : "Запустить stage-import"}
           </button>
-          <Link
-            href="/directory/personnel/import"
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700"
-          >
-            К списку импортов
-          </Link>
+          {!result ? (
+            <Link
+              href="/directory/personnel/import"
+              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700"
+            >
+              К списку импортов
+            </Link>
+          ) : null}
         </div>
       </form>
 

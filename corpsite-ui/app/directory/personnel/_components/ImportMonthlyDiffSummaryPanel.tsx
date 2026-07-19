@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 
-import ImportMonthlyDiffRemovedSection from "./ImportMonthlyDiffRemovedSection";
+import ImportRemovalDecisionsPanel from "./ImportRemovalDecisionsPanel";
 import ImportReviewByExceptionBanner from "./ImportReviewByExceptionBanner";
 import CanonicalSnapshotExportButton from "./CanonicalSnapshotExportButton";
 import { buildHrChangeEventsHref } from "../_lib/hrChangeEventsApi.client";
@@ -11,13 +11,22 @@ import {
   computeImportBatchDiff,
   getImportBatchDiffSummary,
   mapImportApiError,
+  postDiffRemovalDecision,
+  revertDiffRemovalDecision,
   type ImportBatchDiffSummary,
   type ImportBatchReviewVisibility,
+  type MonthlyDiffRemoval,
 } from "../_lib/importApi.client";
+import type { RemovedEntryDecisionKind } from "../_lib/importRemovedEntryDecisions";
 import {
   MONTHLY_DIFF_STATUSES,
   MONTHLY_DIFF_STATUS_SUMMARY_LABELS,
 } from "../_lib/monthlyDiffLabels";
+import {
+  formatVisibleRecordsFormula,
+  VISIBLE_RECORDS_HELP,
+  VISIBLE_RECORDS_LABEL,
+} from "../_lib/monthlyDiffVisibility";
 
 function SummaryCountCard({
   label,
@@ -54,6 +63,7 @@ type Props = {
   onShowUnchangedChange: (value: boolean) => void;
   onSummaryLoaded?: (summary: ImportBatchDiffSummary | null) => void;
   onRecomputed?: () => void;
+  onRemovalDecision?: () => void;
 };
 
 export default function ImportMonthlyDiffSummaryPanel({
@@ -62,6 +72,7 @@ export default function ImportMonthlyDiffSummaryPanel({
   onShowUnchangedChange,
   onSummaryLoaded,
   onRecomputed,
+  onRemovalDecision,
 }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [recomputing, setRecomputing] = React.useState(false);
@@ -89,6 +100,32 @@ export default function ImportMonthlyDiffSummaryPanel({
       loadSummary();
     }
   }, [batchId, loadSummary]);
+
+  async function handleRemovalDecision(item: MonthlyDiffRemoval, kind: RemovedEntryDecisionKind) {
+    if (!item.removal_id) return;
+    setError(null);
+    try {
+      await postDiffRemovalDecision(batchId, item.removal_id, { decision: kind });
+      await loadSummary();
+      onRemovalDecision?.();
+      onRecomputed?.();
+    } catch (e) {
+      setError(mapImportApiError(e));
+    }
+  }
+
+  async function handleRemovalRevert(item: MonthlyDiffRemoval) {
+    if (!item.removal_id) return;
+    setError(null);
+    try {
+      await revertDiffRemovalDecision(batchId, item.removal_id);
+      await loadSummary();
+      onRemovalDecision?.();
+      onRecomputed?.();
+    } catch (e) {
+      setError(mapImportApiError(e));
+    }
+  }
 
   async function handleRecompute() {
     setRecomputing(true);
@@ -173,7 +210,17 @@ export default function ImportMonthlyDiffSummaryPanel({
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCountCard label="Visible records" value={visibility?.visible_records ?? 0} />
+        <div>
+          <SummaryCountCard label={VISIBLE_RECORDS_LABEL} value={visibility?.visible_records ?? 0} />
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500" title={VISIBLE_RECORDS_HELP}>
+            {formatVisibleRecordsFormula({
+              newCount: counts.NEW ?? 0,
+              changedCount: counts.CHANGED ?? 0,
+              conflictCount: counts.CONFLICT ?? 0,
+              pendingRemovals: summary?.pending_removals ?? 0,
+            })}
+          </p>
+        </div>
         <SummaryCountCard
           label="Hidden unchanged"
           value={visibility?.hidden_unchanged ?? counts.UNCHANGED ?? 0}
@@ -201,7 +248,14 @@ export default function ImportMonthlyDiffSummaryPanel({
         ))}
       </div>
 
-      <ImportMonthlyDiffRemovedSection items={summary?.removed ?? []} />
+      <ImportRemovalDecisionsPanel
+        pending={summary?.removed ?? []}
+        restored={summary?.restored ?? []}
+        confirmed={summary?.confirmed_removals ?? []}
+        decisionsEnabled
+        onDecision={(item, kind) => void handleRemovalDecision(item, kind)}
+        onRevert={(item) => void handleRemovalRevert(item)}
+      />
     </section>
   );
 }

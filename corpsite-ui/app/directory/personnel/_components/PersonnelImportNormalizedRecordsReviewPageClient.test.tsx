@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelImportNormalizedRecordsReviewPageClient from "./PersonnelImportNormalizedRecordsReviewPageClient";
 import { RESTORE_IMPORT_BATCH_BINDINGS_LABEL } from "./RestoreImportBatchBindingsPanel";
@@ -14,6 +14,10 @@ vi.mock("./ImportMonthlyDiffSummaryPanel", () => ({
 
 vi.mock("./NormalizedRecordsPromotionPanel", () => ({
   default: () => null,
+}));
+
+vi.mock("./ImportReviewProgressStrip", () => ({
+  default: () => <div data-testid="import-review-progress-strip" />,
 }));
 
 vi.mock("../_lib/importApi.client", () => ({
@@ -45,9 +49,12 @@ vi.mock("../_lib/importApi.client", () => ({
 }));
 
 describe("PersonnelImportNormalizedRecordsReviewPageClient restore bindings UX", () => {
+  afterEach(() => cleanup());
+
   it("does not render restore bindings button without selected batch", async () => {
     render(<PersonnelImportNormalizedRecordsReviewPageClient />);
 
+    expect(await screen.findByTestId("normalized-review-summary-select-batch")).toBeInTheDocument();
     expect(screen.queryByTestId("restore-import-batch-bindings-button")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: RESTORE_IMPORT_BATCH_BINDINGS_LABEL })).not.toBeInTheDocument();
   });
@@ -58,5 +65,13 @@ describe("PersonnelImportNormalizedRecordsReviewPageClient restore bindings UX",
     expect(await screen.findByTestId("restore-import-batch-bindings-button")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: RESTORE_IMPORT_BATCH_BINDINGS_LABEL })).toBeInTheDocument();
     expect(screen.getByTestId("restore-import-batch-bindings-button")).toHaveAttribute("data-batch-id", "77");
+    expect(screen.getByTestId("import-review-progress-select-batch")).toBeInTheDocument();
+  });
+
+  it("shows batch selection hint when review progress strip is unavailable", async () => {
+    render(<PersonnelImportNormalizedRecordsReviewPageClient />);
+
+    expect(await screen.findByTestId("import-review-progress-select-batch")).toBeInTheDocument();
+    expect(screen.queryByTestId("import-review-progress-strip")).not.toBeInTheDocument();
   });
 });

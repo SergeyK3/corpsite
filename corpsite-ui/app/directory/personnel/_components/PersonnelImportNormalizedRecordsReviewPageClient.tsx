@@ -7,6 +7,7 @@ import ImportFieldDiffPanel from "./ImportFieldDiffPanel";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
 import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
 import NormalizedRecordsPromotionPanel from "./NormalizedRecordsPromotionPanel";
+import ImportReviewProgressStrip from "./ImportReviewProgressStrip";
 import {
   RestoreImportBatchBindingsPanel,
 } from "./RestoreImportBatchBindingsPanel";
@@ -34,6 +35,7 @@ import {
   IMPORT_RECORD_CARD_TITLE,
 } from "@/lib/personnelCardTerminology";
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
+import { formatImportBatchLabel } from "../_lib/importBatchDisplay";
 import { apiAuthMe } from "@/lib/api";
 import { isPrivilegedOperator } from "@/lib/adminNav";
 import { canSeeHrProcessesNav } from "@/lib/personnelNav";
@@ -109,6 +111,10 @@ function NormalizedRecordsReviewHelpPanel({ onCollapse }: { onCollapse: () => vo
         <li>Если требуется повторная проверка — «Вернуть в ожидание».</li>
         <li>После утверждения записей выберите импорт и выполните Dry Run promotion.</li>
         <li>Если dry-run успешен — подтвердите Promote для записи в {HR_DOSSIER_ACCUSATIVE}.</li>
+        <li>
+          Когда все normalized-записи проверены, ошибок парсинга нет и приняты решения по отсутствующим в файле
+          записям — импорт автоматически перейдёт в статус «Проверка завершена».
+        </li>
       </ol>
 
       <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
@@ -241,6 +247,20 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
 
   const selectedBatchId = batchId ? Number(batchId) : null;
 
+  const selectedBatch = React.useMemo(
+    () => batches.find((batch) => String(batch.batch_id) === batchId) ?? null,
+    [batches, batchId],
+  );
+
+  const refreshBatches = React.useCallback(async () => {
+    try {
+      const data = await listImportBatches({ withNormalizedRecords: true });
+      setBatches(data.items);
+    } catch {
+      // keep current list
+    }
+  }, []);
+
   const listParams = React.useMemo(
     () => ({
       batch_id: batchId ? Number(batchId) : undefined,
@@ -261,16 +281,21 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
   }, [batchId, reviewStatus, recordKind, nameQuery, iinQuery, bindingStatus, showUnchanged]);
 
   const loadSummary = React.useCallback(async () => {
+    if (!batchId) {
+      setSummary(null);
+      setSummaryLoading(false);
+      return;
+    }
     setSummaryLoading(true);
     try {
-      const data = await getNormalizedRecordsSummary(listParams.batch_id);
+      const data = await getNormalizedRecordsSummary(Number(batchId));
       setSummary(data);
     } catch (e) {
       setError(mapImportApiError(e));
     } finally {
       setSummaryLoading(false);
     }
-  }, [listParams.batch_id]);
+  }, [batchId]);
 
   const loadList = React.useCallback(async () => {
     setLoading(true);
@@ -313,6 +338,7 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
     setItems((prev) => prev.map((item) => (item.record_id === updated.record_id ? updated : item)));
     setSelected(updated);
     loadSummary();
+    void refreshBatches();
   }
 
   function handlePromotionCompleted() {
@@ -337,6 +363,10 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
     key,
     label: NORMALIZED_RECORD_KIND_SUMMARY_LABELS[key],
   }));
+
+  const reviewProgressRefreshKey = batchId
+    ? `${batchId}:${summary?.pending ?? 0}:${summary?.approved ?? 0}:${summary?.rejected ?? 0}:${selectedBatch?.error_rows ?? 0}:${selectedBatch?.status ?? ""}`
+    : "";
 
   return (
     <div className="px-4 py-3" data-ui-phase={PERSONNEL_IMPORT_NORMALIZED_REVIEW_UI_PHASE}>
@@ -375,50 +405,32 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       ) : null}
 
-      <section className="mb-4 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard label="Всего" value={summary?.total ?? 0} />
-          <SummaryCard label="Ожидают проверки" value={summary?.pending ?? 0} />
-          <SummaryCard label="Утверждено" value={summary?.approved ?? 0} />
-          <SummaryCard label="Отклонено" value={summary?.rejected ?? 0} />
-          <SummaryCard label="Промотировано" value={summary?.promoted ?? 0} />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {kindCards.map((card) => (
-            <SummaryCard
-              key={card.key}
-              label={card.label}
-              value={summary?.by_kind?.[card.key] ?? 0}
-            />
-          ))}
-        </div>
-        {summaryLoading ? <div className="text-xs text-zinc-500">Обновление сводки…</div> : null}
-        {summary?.skipped ? (
-          <div className="text-sm text-amber-700">
-            Таблица нормализованных записей недоступна — примените миграцию ADR-039 Phase 3B.
-          </div>
-        ) : null}
-      </section>
+      <div className="mb-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <label className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          Импорт контрольного списка
+          <select
+            className="mt-2 block w-full rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            value={batchId}
+            onChange={(e) => {
+              setBatchId(e.target.value);
+              setOffset(0);
+            }}
+            data-testid="normalized-review-batch-picker"
+          >
+            <option value="">Выберите импорт…</option>
+            {selectableBatches.map((batch) => {
+              const recordCount = batch.normalized_record_count ?? 0;
+              return (
+                <option key={batch.batch_id} value={String(batch.batch_id)}>
+                  {batch.file_name} (#{batch.batch_id}) — {recordCount} записей
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      </div>
 
-      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-6">
-        <select
-          className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          value={batchId}
-          onChange={(e) => {
-            setBatchId(e.target.value);
-            setOffset(0);
-          }}
-        >
-          <option value="">Все импорты</option>
-          {selectableBatches.map((batch) => {
-            const recordCount = batch.normalized_record_count ?? 0;
-            return (
-              <option key={batch.batch_id} value={String(batch.batch_id)}>
-                {batch.file_name} (#{batch.batch_id}) — {recordCount} записей
-              </option>
-            );
-          })}
-        </select>
+      <div className="mb-4 grid gap-2 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-5">
         <select
           className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           value={reviewStatus}
@@ -489,6 +501,63 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
         </select>
       </div>
 
+      {batchId && selectedBatch ? (
+        <ImportReviewProgressStrip
+          batchId={Number(batchId)}
+          importCode={selectedBatch.import_code}
+          batchStatus={selectedBatch.status}
+          refreshKey={reviewProgressRefreshKey}
+          onStatusChanged={() => {
+            void refreshBatches();
+            void loadSummary();
+          }}
+        />
+      ) : (
+        <div
+          className="mb-4 rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500 dark:border-zinc-700"
+          data-testid="import-review-progress-select-batch"
+        >
+          Выберите импорт, чтобы увидеть готовность проверки и очереди решений.
+        </div>
+      )}
+
+      {batchId && selectedBatch ? (
+        <section className="mb-4 space-y-3" data-testid="normalized-review-batch-summary">
+          <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            Сводка по импорту {formatImportBatchLabel(selectedBatch)}
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <SummaryCard label="Всего" value={summary?.total ?? 0} />
+            <SummaryCard label="Ожидают проверки" value={summary?.pending ?? 0} />
+            <SummaryCard label="Утверждено" value={summary?.approved ?? 0} />
+            <SummaryCard label="Отклонено" value={summary?.rejected ?? 0} />
+            <SummaryCard label="Промотировано" value={summary?.promoted ?? 0} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {kindCards.map((card) => (
+              <SummaryCard
+                key={card.key}
+                label={card.label}
+                value={summary?.by_kind?.[card.key] ?? 0}
+              />
+            ))}
+          </div>
+          {summaryLoading ? <div className="text-xs text-zinc-500">Обновление сводки…</div> : null}
+          {summary?.skipped ? (
+            <div className="text-sm text-amber-700">
+              Таблица нормализованных записей недоступна — примените миграцию ADR-039 Phase 3B.
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <div
+          className="mb-4 rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500 dark:border-zinc-700"
+          data-testid="normalized-review-summary-select-batch"
+        >
+          Выберите импорт, чтобы увидеть статистику normalized-записей по конкретному batch.
+        </div>
+      )}
+
       {batchId ? (
         <div className="mb-4">
           <ImportMonthlyDiffSummaryPanel
@@ -498,6 +567,10 @@ export default function PersonnelImportNormalizedRecordsReviewPageClient({ initi
             onRecomputed={() => {
               loadSummary();
               loadList();
+            }}
+            onRemovalDecision={() => {
+              void refreshBatches();
+              void loadSummary();
             }}
           />
         </div>

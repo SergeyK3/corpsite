@@ -35,10 +35,16 @@ afterEach(() => {
 });
 
 describe("PersonnelSubNav import review tabs", () => {
-  it("renders review mode tabs before Обучение and highlights active mode", async () => {
+  it("renders import tab label and review mode tabs before Обучение", async () => {
     render(<PersonnelSubNav />);
 
-    const medicalLink = await screen.findByRole("link", { name: "Мед. категории" });
+    expect(await screen.findByRole("link", { name: "Импорт" })).toHaveAttribute(
+      "href",
+      "/directory/personnel/import",
+    );
+    expect(screen.queryByRole("link", { name: "Baseline" })).not.toBeInTheDocument();
+
+    const medicalLink = screen.getByRole("link", { name: "Мед. категории" });
     const declarationsLink = screen.getByRole("link", { name: "Декларации" });
     const technicalLink = screen.getByRole("link", { name: "Технические" });
     const trainingLink = screen.getByRole("link", { name: "Обучение" });

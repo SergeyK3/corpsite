@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import ImportRosterPromotionPanel from "./ImportRosterPromotionPanel";
 import ImportBatchContextHeader from "./ImportBatchContextHeader";
@@ -54,7 +55,9 @@ function AgeBarChart({ buckets }: { buckets: AgeBucket[] }) {
   );
 }
 
-export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchId: number }) {
+export default function PersonnelImportAnalyticsPageClient({ batchId: initialBatchId }: { batchId: number }) {
+  const router = useRouter();
+  const [batchId, setBatchId] = React.useState(initialBatchId);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [summary, setSummary] = React.useState<ImportSummary | null>(null);
@@ -65,6 +68,18 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
   const [certTotal, setCertTotal] = React.useState(0);
   const [risks, setRisks] = React.useState<RiskRow[]>([]);
   const [sheetDiagnostics, setSheetDiagnostics] = React.useState<SheetDiagnosticRow[]>([]);
+
+  React.useEffect(() => {
+    setBatchId(initialBatchId);
+  }, [initialBatchId]);
+
+  const handleBatchChange = React.useCallback(
+    (nextBatchId: number) => {
+      setBatchId(nextBatchId);
+      router.replace(`/directory/personnel/import/${nextBatchId}`, { scroll: false });
+    },
+    [router]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -105,7 +120,12 @@ export default function PersonnelImportAnalyticsPageClient({ batchId }: { batchI
 
   return (
     <div className="px-4 py-3">
-      <ImportBatchContextHeader batchId={batchId} className="mb-4" />
+      <ImportBatchContextHeader
+        batchId={batchId}
+        className="mb-4"
+        selectable
+        onBatchChange={handleBatchChange}
+      />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
