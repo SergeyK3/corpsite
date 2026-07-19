@@ -786,3 +786,31 @@ def seed() -> Iterator[Dict[str, Any]]:
                     exec_sql(conn, f"DELETE FROM public.{ut} WHERE id = :u", u=created_unit_id)
 
             sync_common_seed_sequences(conn)
+
+
+@pytest.fixture(autouse=True)
+def hr_import_storage_dir(tmp_path, monkeypatch):
+    storage = tmp_path / "hr-import-runtime"
+    storage.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HR_IMPORT_STORAGE_DIR", str(storage))
+    return storage
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_orphan_hr_baseline_artifacts():
+    """Safety net: remove pytest sample-workbook baselines left in shared dev DB."""
+    yield
+    try:
+        from tests.hr_import_fixtures import (
+            cleanup_orphan_test_import_batches,
+            cleanup_orphan_test_publication_origins,
+            cleanup_sample_workbook_baselines,
+        )
+
+        with engine.begin() as conn:
+            cleanup_sample_workbook_baselines(conn)
+            cleanup_orphan_test_publication_origins(conn)
+            cleanup_orphan_test_import_batches(conn)
+    except Exception:
+        # Never fail the test run because post-test cleanup could not run.
+        pass

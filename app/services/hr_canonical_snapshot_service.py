@@ -164,6 +164,11 @@ def canonical_snapshot_available(conn: Connection) -> bool:
             SELECT 1
             FROM information_schema.tables
             WHERE table_schema = 'public'
+              AND table_name IN ('hr_control_list_baselines', 'hr_canonical_snapshots')
+            UNION ALL
+            SELECT 1
+            FROM information_schema.views
+            WHERE table_schema = 'public'
               AND table_name = 'hr_canonical_snapshots'
             LIMIT 1
             """
@@ -731,52 +736,53 @@ def _collect_snapshot_entries(conn: Connection, batch_id: int) -> list[dict[str,
 
 
 def _get_snapshot_by_batch(conn: Connection, batch_id: int) -> Optional[dict[str, Any]]:
-    row = conn.execute(
-        text(
-            """
-            SELECT snapshot_id, source_batch_id, version, source_type, status,
-                   entry_count, promoted_by, promoted_at
-            FROM public.hr_canonical_snapshots
-            WHERE source_batch_id = :batch_id
-            LIMIT 1
-            """
-        ),
-        {"batch_id": batch_id},
-    ).mappings().first()
-    return dict(row) if row else None
+    from app.services.hr_baseline_service import _get_baseline_by_batch
+
+    baseline = _get_baseline_by_batch(conn, batch_id)
+    if baseline is None:
+        return None
+    return {
+        "snapshot_id": int(baseline["baseline_id"]),
+        "source_batch_id": baseline.get("source_batch_id"),
+        "entry_count": int(baseline["entry_count"]),
+        "promoted_by": int(baseline.get("published_by") or baseline["promoted_by"]),
+        "promoted_at": baseline.get("published_at") or baseline.get("promoted_at"),
+    }
 
 
 def get_active_snapshot(conn: Connection, *, source_type: str = SOURCE_TYPE_HR_CONTROL_LIST) -> Optional[dict[str, Any]]:
-    if not canonical_snapshot_available(conn):
+    from app.services.hr_baseline_service import baseline_tables_available, resolve_effective_baseline
+
+    if not baseline_tables_available(conn):
         return None
     row = conn.execute(
         text(
             """
-            SELECT snapshot_id, source_batch_id, version, source_type, status,
-                   entry_count, promoted_by, promoted_at
-            FROM public.hr_canonical_snapshots
-            WHERE source_type = :source_type
-              AND status = :status
+            SELECT report_period
+            FROM public.hr_control_list_baselines
+            WHERE deleted_at IS NULL
+              AND source_type = :source_type
+            ORDER BY report_period DESC, published_at DESC, baseline_id DESC
             LIMIT 1
-            """
-        ),
-        {"source_type": source_type, "status": SNAPSHOT_STATUS_ACTIVE},
-    ).mappings().first()
-    return dict(row) if row else None
-
-
-def _next_snapshot_version(conn: Connection, source_type: str) -> int:
-    row = conn.execute(
-        text(
-            """
-            SELECT COALESCE(MAX(version), 0) + 1 AS next_version
-            FROM public.hr_canonical_snapshots
-            WHERE source_type = :source_type
             """
         ),
         {"source_type": source_type},
     ).mappings().first()
-    return int(row["next_version"]) if row else 1
+    if row is None:
+        return None
+    period = row["report_period"]
+    if isinstance(period, datetime):
+        period = period.date()
+    baseline = resolve_effective_baseline(conn, period)
+    if baseline is None:
+        return None
+    return {
+        "snapshot_id": int(baseline["baseline_id"]),
+        "source_batch_id": baseline.get("source_batch_id"),
+        "entry_count": int(baseline["entry_count"]),
+        "promoted_by": int(baseline.get("published_by") or baseline["promoted_by"]),
+        "promoted_at": baseline.get("published_at") or baseline.get("promoted_at"),
+    }
 
 
 def build_canonical_snapshot_from_batch(
@@ -786,169 +792,30 @@ def build_canonical_snapshot_from_batch(
     promoted_by: int,
     force: bool = False,
 ) -> dict[str, Any]:
-    if not canonical_snapshot_available(conn):
-        raise CanonicalSnapshotError("hr_canonical_snapshots is not available")
+    from app.services.hr_baseline_service import publish_baseline_from_batch
 
-    _ensure_batch_exists(conn, batch_id)
-    existing = _get_snapshot_by_batch(conn, batch_id)
-    if existing and not force:
+    result = publish_baseline_from_batch(
+        conn,
+        batch_id,
+        published_by=promoted_by,
+        force=force,
+    )
+    if result.get("created"):
         return {
-            "created": False,
-            "snapshot_id": int(existing["snapshot_id"]),
-            "source_batch_id": int(existing["source_batch_id"]),
-            "version": int(existing["version"]),
-            "status": existing["status"],
-            "entry_count": int(existing["entry_count"]),
+            "created": True,
+            "snapshot_id": int(result["baseline_id"]),
+            "source_batch_id": result.get("source_batch_id"),
+            "entry_count": int(result["entry_count"]),
+            "duplicate_match_keys_merged": result.get("duplicate_match_keys_merged", 0),
+            "superseded_snapshot_id": result.get("superseded_snapshot_id"),
+            "change_events": result.get("change_events"),
         }
-
-    batch = conn.execute(
-        text(
-            """
-            SELECT batch_id, source_type
-            FROM public.hr_import_batches
-            WHERE batch_id = :batch_id
-            """
-        ),
-        {"batch_id": batch_id},
-    ).mappings().first()
-    if not batch:
-        raise BatchNotFoundError(f"batch_id={batch_id} not found")
-
-    source_type = str(batch["source_type"] or SOURCE_TYPE_HR_CONTROL_LIST)
-    raw_entries = _collect_snapshot_entries(conn, batch_id)
-    entries, duplicate_match_keys_merged = dedupe_snapshot_entries(raw_entries)
-    version = _next_snapshot_version(conn, source_type)
-
-    prior_active = get_active_snapshot(conn, source_type=source_type)
-    if prior_active and not (existing and force):
-        conn.execute(
-            text(
-                """
-                UPDATE public.hr_canonical_snapshots
-                SET status = :superseded,
-                    superseded_at = NOW()
-                WHERE snapshot_id = :prior_snapshot_id
-                  AND status = :active
-                """
-            ),
-            {
-                "superseded": SNAPSHOT_STATUS_SUPERSEDED,
-                "prior_snapshot_id": int(prior_active["snapshot_id"]),
-                "active": SNAPSHOT_STATUS_ACTIVE,
-            },
-        )
-
-    snapshot_id = conn.execute(
-        text(
-            """
-            INSERT INTO public.hr_canonical_snapshots (
-                source_batch_id,
-                version,
-                source_type,
-                status,
-                entry_count,
-                promoted_by,
-                promoted_at
-            )
-            VALUES (
-                :source_batch_id,
-                :version,
-                :source_type,
-                :status,
-                :entry_count,
-                :promoted_by,
-                NOW()
-            )
-            RETURNING snapshot_id
-            """
-        ),
-        {
-            "source_batch_id": batch_id,
-            "version": version,
-            "source_type": source_type,
-            "status": SNAPSHOT_STATUS_ACTIVE,
-            "entry_count": len(entries),
-            "promoted_by": int(promoted_by),
-        },
-    ).scalar_one()
-
-    for entry in entries:
-        conn.execute(
-            text(
-                """
-                INSERT INTO public.hr_canonical_snapshot_entries (
-                    snapshot_id,
-                    entity_scope,
-                    record_kind,
-                    match_key,
-                    canonical_hash,
-                    employee_id,
-                    iin,
-                    payload,
-                    source_row_id,
-                    source_normalized_record_id
-                )
-                VALUES (
-                    :snapshot_id,
-                    :entity_scope,
-                    :record_kind,
-                    :match_key,
-                    :canonical_hash,
-                    :employee_id,
-                    :iin,
-                    CAST(:payload AS JSONB),
-                    :source_row_id,
-                    :source_normalized_record_id
-                )
-                """
-            ),
-            {
-                "snapshot_id": int(snapshot_id),
-                "entity_scope": entry["entity_scope"],
-                "record_kind": entry["record_kind"],
-                "match_key": entry["match_key"],
-                "canonical_hash": entry["canonical_hash"],
-                "employee_id": entry["employee_id"],
-                "iin": entry["iin"],
-                "payload": _serialize_json(entry["payload"]),
-                "source_row_id": entry["source_row_id"],
-                "source_normalized_record_id": entry["source_normalized_record_id"],
-            },
-        )
-
-    if prior_active and int(prior_active["snapshot_id"]) != int(snapshot_id):
-        conn.execute(
-            text(
-                """
-                UPDATE public.hr_canonical_snapshots
-                SET superseded_by_snapshot_id = :new_snapshot_id
-                WHERE snapshot_id = :prior_snapshot_id
-                """
-            ),
-            {
-                "new_snapshot_id": int(snapshot_id),
-                "prior_snapshot_id": int(prior_active["snapshot_id"]),
-            },
-        )
-
-    result = {
-        "created": True,
-        "snapshot_id": int(snapshot_id),
-        "source_batch_id": batch_id,
-        "version": version,
-        "status": SNAPSHOT_STATUS_ACTIVE,
-        "entry_count": len(entries),
-        "duplicate_match_keys_merged": duplicate_match_keys_merged,
-        "superseded_snapshot_id": int(prior_active["snapshot_id"]) if prior_active else None,
+    return {
+        "created": False,
+        "snapshot_id": int(result["baseline_id"]),
+        "source_batch_id": result.get("source_batch_id"),
+        "entry_count": int(result["entry_count"]),
     }
-
-    from app.services.hr_snapshot_comparison_service import maybe_materialize_change_events_after_snapshot
-
-    change_events_result = maybe_materialize_change_events_after_snapshot(conn, result)
-    if change_events_result is not None:
-        result["change_events"] = change_events_result
-
-    return result
 
 
 def refresh_canonical_snapshot_after_promotion(
@@ -957,10 +824,12 @@ def refresh_canonical_snapshot_after_promotion(
     *,
     promoted_by: int,
 ) -> Optional[dict[str, Any]]:
-    if not canonical_snapshot_available(conn):
+    from app.services.hr_baseline_service import baseline_tables_available, publish_baseline_from_batch
+
+    if not baseline_tables_available(conn):
         return None
     try:
-        return build_canonical_snapshot_from_batch(conn, batch_id, promoted_by=promoted_by)
+        return publish_baseline_from_batch(conn, batch_id, published_by=promoted_by, force=True)
     except Exception:
         logger.exception("failed to refresh canonical snapshot for batch_id=%s", batch_id)
         raise

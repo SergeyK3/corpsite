@@ -21,6 +21,7 @@ from .personnel_applications_routes import router as personnel_applications_rout
 from .personnel_intake_routes import router as personnel_intake_router
 from .employee_onboarding_routes import router as employee_onboarding_router
 from .hr_import_routes import router as hr_import_router
+from .mrd_routes import router as mrd_router
 from .hr_sync_routes import router as hr_sync_router
 
 router = APIRouter(prefix="/directory", tags=["directory"])
@@ -52,4 +53,5 @@ router.include_router(personnel_applications_router)
 router.include_router(personnel_intake_router)
 router.include_router(employee_onboarding_router)
 router.include_router(hr_import_router)
+router.include_router(mrd_router)
 router.include_router(hr_sync_router)

@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
@@ -30,6 +31,10 @@ from app.db.models.hr_import import (
     ROW_TYPE_SUMMARY_ROW,
     SOURCE_TYPE_HR_CONTROL_LIST,
 )
+from app.services.hr_import_control_list_storage import (
+    cleanup_failed_control_list_batch,
+    create_control_list_batch,
+)
 from app.services.hr_import_document_candidate_service import parse_and_persist_document_candidates
 from app.services.hr_import_normalized_record_service import populate_normalized_records
 from scripts.import_hr_control_list import ParsedRow, build_audit, parse_workbook
@@ -46,18 +51,20 @@ def create_batch(
     file_name: str,
     imported_by: int,
     imported_at: Optional[datetime] = None,
+    import_code: Optional[str] = None,
 ) -> int:
     """Create an empty import batch with status CREATED (UPLOADED)."""
     at = imported_at or datetime.now(timezone.utc)
+    resolved_import_code = import_code or f"legacy-{uuid4().hex[:12]}"
     batch_id = conn.execute(
         text(
             """
             INSERT INTO public.hr_import_batches (
-                source_type, file_name, imported_by, imported_at,
+                source_type, file_name, import_code, imported_by, imported_at,
                 status, total_rows, valid_rows, error_rows
             )
             VALUES (
-                :source_type, :file_name, :imported_by, :imported_at,
+                :source_type, :file_name, :import_code, :imported_by, :imported_at,
                 :status, 0, 0, 0
             )
             RETURNING batch_id
@@ -66,6 +73,7 @@ def create_batch(
         {
             "source_type": source_type,
             "file_name": file_name,
+            "import_code": resolved_import_code,
             "imported_by": imported_by,
             "imported_at": at,
             "status": BATCH_STATUS_CREATED,
@@ -252,6 +260,8 @@ def import_control_list(
     file_path: Path | str,
     imported_by: int,
     source_type: str = SOURCE_TYPE_HR_CONTROL_LIST,
+    source_last_modified_at: Optional[datetime] = None,
+    original_filename: Optional[str] = None,
 ) -> tuple[int, dict[str, Any], list[str]]:
     """
     Parse control list Excel, persist batch + rows to staging, return summary.
@@ -260,14 +270,26 @@ def import_control_list(
     is marked FAILED and the exception propagates after the status update.
     """
     path = Path(file_path)
-    batch_id = create_batch(
-        conn,
-        source_type=source_type,
-        file_name=path.name,
-        imported_by=imported_by,
-    )
-
+    content = path.read_bytes()
+    upload_name = (original_filename or path.name).strip()
+    batch_id: Optional[int] = None
+    source_file_id: Optional[int] = None
+    storage_ref: Optional[str] = None
     try:
+        batch_id, import_code, source_file_id = create_control_list_batch(
+            conn,
+            content=content,
+            original_filename=upload_name,
+            imported_by=imported_by,
+            source_last_modified_at=source_last_modified_at,
+            source_type=source_type,
+        )
+        if source_file_id is not None:
+            storage_ref = conn.execute(
+                text("SELECT storage_ref FROM public.hr_source_files WHERE source_file_id = :id"),
+                {"id": source_file_id},
+            ).scalar_one_or_none()
+
         parsed_rows, warnings = parse_workbook(path)
         _persist_rows(conn, batch_id=batch_id, rows=parsed_rows)
         parse_and_persist_document_candidates(conn, batch_id)
@@ -288,19 +310,16 @@ def import_control_list(
             status=BATCH_STATUS_REVIEW_READY,
         )
         summary = summarize_batch(conn, batch_id)
+        summary["import_code"] = import_code
         if diff_result is not None:
             summary["monthly_diff"] = diff_result
         return batch_id, summary, warnings
     except Exception:
-        conn.execute(
-            text(
-                """
-                UPDATE public.hr_import_batches
-                SET status = :status
-                WHERE batch_id = :batch_id
-                """
-            ),
-            {"batch_id": batch_id, "status": BATCH_STATUS_FAILED},
+        cleanup_failed_control_list_batch(
+            conn,
+            batch_id=batch_id,
+            source_file_id=source_file_id,
+            storage_ref=storage_ref,
         )
         raise
 

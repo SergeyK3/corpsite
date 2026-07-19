@@ -6,13 +6,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from openpyxl import Workbook
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.services.hr_baseline_service import resolve_effective_baseline
 from app.services.hr_canonical_snapshot_service import (
-    SNAPSHOT_STATUS_ACTIVE,
-    SNAPSHOT_STATUS_SUPERSEDED,
     build_canonical_snapshot_from_batch,
     canonical_snapshot_available,
     compute_canonical_hash,
@@ -29,7 +27,15 @@ from app.services.hr_import_roster_promotion_service import promote_roster_batch
 from app.services.hr_import_service import import_control_list
 from tests.conftest import table_exists
 from tests.test_employee_documents_routes import _create_employee, _create_position, _phase_1a_available
-from tests.test_import_hr_control_list import _build_doctors_sheet
+from tests.hr_import_fixtures import (
+    cleanup_import_batch_with_baselines,
+    complete_import_review_for_baseline_publish,
+    write_control_list_workbook,
+)
+
+
+def _prepare_batch_for_baseline_publish(conn, batch_id: int) -> None:
+    complete_import_review_for_baseline_publish(conn, batch_id)
 
 
 def _require_phase_040a() -> None:
@@ -90,7 +96,7 @@ def _cleanup_promotion_batch(conn, batch_id: int) -> None:
             ),
             {"batch_id": batch_id},
         )
-    _delete_batch(conn, batch_id)
+    cleanup_import_batch_with_baselines(conn, batch_id)
     for employee_id in employee_ids:
         conn.execute(
             text("DELETE FROM public.employee_identities WHERE employee_id = :employee_id"),
@@ -107,17 +113,6 @@ def _cleanup_promotion_batch(conn, batch_id: int) -> None:
         )
 
 
-def _build_workbook(path: Path, *, full_name: str, iin: str) -> None:
-    wb = Workbook()
-    wb.remove(wb.active)
-    ws = wb.create_sheet("врачи")
-    _build_doctors_sheet(ws)
-    ws.cell(row=8, column=3, value=full_name)
-    ws.cell(row=8, column=5, value=iin)
-    if ws.max_row > 8:
-        ws.delete_rows(9, ws.max_row - 8)
-    wb.save(path)
-    wb.close()
 
 
 def _test_iin(seed: str) -> str:
@@ -245,13 +240,17 @@ def _prepare_roster_row(
     populate_normalized_records(conn, batch_id)
 
 
-def _import_single_employee_batch(seed, tmp_path: Path) -> tuple[int, str, str, str]:
+def _import_single_employee_batch(
+    seed,
+    tmp_path: Path,
+    *,
+    yymm: str = "2606",
+) -> tuple[int, str, str, str]:
     suffix = uuid4().hex[:8]
     full_name = _cyrillic_full_name(f"Snap{suffix}")
     iin = _test_iin(suffix)
     department = f"Pytest Dept {suffix}"
-    source = tmp_path / f"phase040a_{suffix}.xlsx"
-    _build_workbook(source, full_name=full_name, iin=iin)
+    source = write_control_list_workbook(tmp_path, yymm=yymm)
     with engine.begin() as conn:
         batch_id, _, _ = import_control_list(
             conn,
@@ -324,6 +323,7 @@ def test_snapshot_created_after_roster_promotion(seed, tmp_path: Path) -> None:
 
     try:
         with engine.begin() as conn:
+            _prepare_batch_for_baseline_publish(conn, batch_id)
             result = promote_roster_batch(
                 conn,
                 batch_id,
@@ -335,15 +335,15 @@ def test_snapshot_created_after_roster_promotion(seed, tmp_path: Path) -> None:
             snapshot = conn.execute(
                 text(
                     """
-                    SELECT snapshot_id, status, entry_count
+                    SELECT snapshot_id, entry_count, report_period, promoted_at
                     FROM public.hr_canonical_snapshots
                     WHERE source_batch_id = :batch_id
                     """
                 ),
                 {"batch_id": batch_id},
             ).mappings().one()
-            assert snapshot["status"] == SNAPSHOT_STATUS_ACTIVE
             assert int(snapshot["entry_count"]) >= 1
+            assert snapshot["report_period"] is not None
 
             roster_entry = conn.execute(
                 text(
@@ -366,65 +366,67 @@ def test_snapshot_created_after_roster_promotion(seed, tmp_path: Path) -> None:
             _cleanup_promotion_batch(conn, batch_id)
 
 
-def test_second_snapshot_supersedes_first(seed, tmp_path: Path) -> None:
+def test_later_baseline_becomes_effective_for_period(seed, tmp_path: Path) -> None:
     _require_phase_040a()
-    batch_id_1, _, _, _ = _import_single_employee_batch(seed, tmp_path)
-    batch_id_2, _, _, _ = _import_single_employee_batch(seed, tmp_path)
+    batch_id_1, _, _, _ = _import_single_employee_batch(seed, tmp_path, yymm="2607")
+    batch_id_2, _, _, _ = _import_single_employee_batch(seed, tmp_path, yymm="2607")
     promoted_by = int(seed["initiator_user_id"])
 
     try:
         with engine.begin() as conn:
+            _prepare_batch_for_baseline_publish(conn, batch_id_1)
             promote_roster_batch(conn, batch_id_1, created_by=promoted_by, dry_run=False)
         with engine.begin() as conn:
             first = conn.execute(
                 text(
                     """
-                    SELECT snapshot_id, status, version
+                    SELECT snapshot_id, promoted_at
                     FROM public.hr_canonical_snapshots
                     WHERE source_batch_id = :batch_id
                     """
                 ),
                 {"batch_id": batch_id_1},
             ).mappings().one()
-
-            promote_roster_batch(conn, batch_id_2, created_by=promoted_by, dry_run=False)
-            first_after = conn.execute(
+            report_period = conn.execute(
                 text(
                     """
-                    SELECT status, superseded_by_snapshot_id
-                    FROM public.hr_canonical_snapshots
-                    WHERE snapshot_id = :snapshot_id
+                    SELECT report_period
+                    FROM public.hr_control_list_baselines
+                    WHERE baseline_id = :baseline_id
                     """
                 ),
-                {"snapshot_id": int(first["snapshot_id"])},
-            ).mappings().one()
+                {"baseline_id": int(first["snapshot_id"])},
+            ).scalar_one()
+
+            _prepare_batch_for_baseline_publish(conn, batch_id_2)
+            promote_roster_batch(conn, batch_id_2, created_by=promoted_by, dry_run=False)
             second = conn.execute(
                 text(
                     """
-                    SELECT snapshot_id, status, version
+                    SELECT snapshot_id, promoted_at
                     FROM public.hr_canonical_snapshots
                     WHERE source_batch_id = :batch_id
                     """
                 ),
                 {"batch_id": batch_id_2},
             ).mappings().one()
-            active = conn.execute(
+            first_still_exists = conn.execute(
                 text(
                     """
-                    SELECT snapshot_id
-                    FROM public.hr_canonical_snapshots
-                    WHERE status = :active
-                    LIMIT 1
+                    SELECT 1
+                    FROM public.hr_control_list_baselines
+                    WHERE baseline_id = :baseline_id
+                      AND deleted_at IS NULL
                     """
                 ),
-                {"active": SNAPSHOT_STATUS_ACTIVE},
-            ).mappings().one()
+                {"baseline_id": int(first["snapshot_id"])},
+            ).first()
+            effective = resolve_effective_baseline(conn, report_period)
 
-            assert first_after["status"] == SNAPSHOT_STATUS_SUPERSEDED
-            assert int(first_after["superseded_by_snapshot_id"]) == int(second["snapshot_id"])
-            assert second["status"] == SNAPSHOT_STATUS_ACTIVE
-            assert int(second["version"]) > int(first["version"])
-            assert int(active["snapshot_id"]) == int(second["snapshot_id"])
+            assert first_still_exists is not None
+            assert effective is not None
+            assert int(effective["baseline_id"]) == int(second["snapshot_id"])
+            assert second["promoted_at"] >= first["promoted_at"]
     finally:
         with engine.begin() as conn:
             _cleanup_promotion_batch(conn, batch_id_1)
@@ -438,6 +440,7 @@ def test_snapshot_idempotent_for_same_batch(seed, tmp_path: Path) -> None:
 
     try:
         with engine.begin() as conn:
+            _prepare_batch_for_baseline_publish(conn, batch_id)
             first = build_canonical_snapshot_from_batch(conn, batch_id, promoted_by=promoted_by)
             second = build_canonical_snapshot_from_batch(conn, batch_id, promoted_by=promoted_by)
             assert first["created"] is True
@@ -474,6 +477,7 @@ def test_snapshot_after_normalized_promotion(seed, tmp_path: Path) -> None:
 
     try:
         with engine.begin() as conn:
+            _prepare_batch_for_baseline_publish(conn, batch_id)
             created_position_id = _create_position(conn, name=f"pytest_snap_{uuid4().hex[:8]}")
             created_employee_id = _create_employee(
                 conn,
@@ -602,6 +606,7 @@ def test_refresh_helper_builds_snapshot_when_schema_available(seed, tmp_path: Pa
     batch_id, _, _, _ = _import_single_employee_batch(seed, tmp_path)
     try:
         with engine.begin() as conn:
+            _prepare_batch_for_baseline_publish(conn, batch_id)
             result = refresh_canonical_snapshot_after_promotion(
                 conn,
                 batch_id,
@@ -693,15 +698,16 @@ def test_snapshot_build_deduplicates_duplicate_roster_match_key(seed) -> None:
             text(
                 """
                 INSERT INTO public.hr_import_batches (
-                    source_type, file_name, imported_by, status,
+                    source_type, file_name, import_code, imported_by, status,
                     total_rows, valid_rows, error_rows
                 )
-                VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 2, 2, 0)
+                VALUES ('HR_CONTROL_LIST', :file_name, :import_code, :uid, 'PARSED', 2, 2, 0)
                 RETURNING batch_id
                 """
             ),
             {
-                "file_name": f"dup_snapshot_{suffix}.xlsx",
+                "file_name": f"контрольный2608.xlsx",
+                "import_code": f"2608-{int(suffix[:4], 16) % 98 + 1:02d}",
                 "uid": int(seed["initiator_user_id"]),
             },
         ).scalar_one()
@@ -725,6 +731,7 @@ def test_snapshot_build_deduplicates_duplicate_roster_match_key(seed) -> None:
                     "payload": json.dumps(payload),
                 },
             )
+        _prepare_batch_for_baseline_publish(conn, batch_id)
         result = build_canonical_snapshot_from_batch(
             conn,
             batch_id,
@@ -745,7 +752,7 @@ def test_snapshot_build_deduplicates_duplicate_roster_match_key(seed) -> None:
                 "match_key": f"iin:{iin}",
             },
         ).mappings().all()
-        _delete_batch(conn, batch_id)
+        cleanup_import_batch_with_baselines(conn, batch_id)
 
     assert result["created"] is True
     assert result["duplicate_match_keys_merged"] >= 1

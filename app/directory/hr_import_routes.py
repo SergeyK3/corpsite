@@ -4,24 +4,33 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.directory.rbac import require_hr_import_admin_or_403, require_personnel_admin_or_403
+from app.directory.rbac import (
+    require_hr_import_admin_or_403,
+    require_personnel_admin_or_403,
+    require_privileged_or_403,
+)
 from app.services.hr_import_analytics_service import (
+    BatchAlreadyArchivedError,
+    BatchArchiveNotAllowedError,
+    BatchDeleteBlockedError,
     BatchNotFoundError,
     age_distribution,
+    assess_batch_delete,
     batch_summary,
     certification_analytics,
     delete_batch,
     department_analytics,
+    get_batch,
     list_batch_rows,
     list_batches,
     position_analytics,
@@ -29,6 +38,7 @@ from app.services.hr_import_analytics_service import (
     sheet_diagnostics,
     training_analytics,
 )
+from app.services.hr_import_control_list_storage import ControlListFilenameError
 from app.services.hr_import_monthly_diff_service import (
     MonthlyDiffError,
     compute_batch_monthly_diff,
@@ -103,6 +113,43 @@ from app.services.hr_import_enroll_employee_service import (
 )
 from app.ppr.domain.errors import PprReadLegacyAdapterError, PprReadPathConfigError
 from app.services.hr_import_service import import_control_list
+from app.services.hr_import_complete_review_service import (
+    CompleteImportReviewError,
+    assess_complete_import_review,
+    assess_import_review_progress_by_batch,
+    complete_import_review,
+)
+from app.services.hr_import_diff_removal_decision_service import (
+    DiffRemovalAlreadyDecidedError,
+    DiffRemovalNotDecidedError,
+    DiffRemovalNotFoundError,
+    DiffRemovalRevertBlockedError,
+    InvalidDiffRemovalDecisionError,
+    record_diff_removal_decision,
+    revert_diff_removal_decision,
+)
+from app.services.hr_baseline_service import (
+    BaselineDeleteError,
+    BaselineNotFoundError,
+    BaselinePublishError,
+    BaselineRestoreError,
+    get_baseline,
+    hard_delete_baseline,
+    list_baselines,
+    preview_baseline_publish,
+    publish_baseline_from_batch,
+    restore_baseline,
+    soft_delete_baseline,
+)
+from app.services.hr_initial_baseline_source_service import (
+    InitialBaselineSourceBatchPeriodMismatchError,
+    InitialBaselineSourceError,
+    InitialBaselineSourceSelectionFrozenError,
+    assess_batch_delete_initial_baseline_source_block,
+    get_initial_baseline_source_selection,
+    list_initial_baseline_source_selections,
+    set_initial_baseline_source_selection,
+)
 
 from .common import as_http500, call_service
 
@@ -210,6 +257,121 @@ def delete_personnel_employee_import_card(
         raise as_http500(e)
 
 
+def _batch_archive_not_allowed(exc: BatchArchiveNotAllowedError) -> HTTPException:
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+def _batch_already_archived(exc: BatchAlreadyArchivedError) -> HTTPException:
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+def _batch_delete_blocked(exc: BatchDeleteBlockedError) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "message": str(exc),
+            "reasons": exc.reasons,
+            "recommendation": exc.recommendation,
+        },
+    )
+
+
+def _control_list_filename_error(exc: ControlListFilenameError) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+def _complete_import_review_blocked(exc: CompleteImportReviewError) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "message": str(exc),
+            "blockers": exc.blockers,
+        },
+    )
+
+
+def _diff_removal_not_found(exc: DiffRemovalNotFoundError) -> HTTPException:
+    return HTTPException(status_code=404, detail=str(exc))
+
+
+def _diff_removal_conflict(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+def _diff_removal_revert_blocked(exc: DiffRemovalRevertBlockedError) -> HTTPException:
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get("/personnel/import/batches/{import_code}/complete-review")
+def get_import_batch_complete_review(
+    import_code: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(assess_complete_import_review, import_code=import_code)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{import_code}/complete-review")
+def post_import_batch_complete_review(
+    import_code: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            complete_import_review,
+            import_code=import_code,
+            completed_by=int(user["user_id"]),
+        )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except CompleteImportReviewError as e:
+        raise _complete_import_review_blocked(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}")
+def get_import_batch(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(get_batch, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/delete-assessment")
+def get_import_batch_delete_assessment(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(assess_batch_delete, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
 @router.get("/personnel/import/batches")
 def get_import_batches(
     with_normalized_records: bool = Query(default=False),
@@ -227,6 +389,50 @@ def get_import_batches(
         raise as_http500(e)
 
 
+@router.get("/personnel/import/initial-baseline-source")
+def get_initial_baseline_source_selections(
+    report_period: Optional[str] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        if report_period:
+            selection = _with_conn(get_initial_baseline_source_selection, report_period=report_period)
+            return {"item": selection}
+        return _with_conn(list_initial_baseline_source_selections)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/initial-baseline-source")
+def post_initial_baseline_source_selection(
+    payload: Dict[str, Any] = Body(...),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            set_initial_baseline_source_selection,
+            report_period=str(payload["report_period"]),
+            source_batch_id=int(payload["source_batch_id"]),
+            selected_by=int(user["user_id"]),
+        )
+    except InitialBaselineSourceBatchPeriodMismatchError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except InitialBaselineSourceSelectionFrozenError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except InitialBaselineSourceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except KeyError as e:
+        raise HTTPException(status_code=422, detail=f"Missing field: {e.args[0]}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
 @router.delete("/personnel/import/batches/{batch_id}")
 def delete_import_batch(
     batch_id: int,
@@ -237,10 +443,126 @@ def delete_import_batch(
         return _with_conn(delete_batch, batch_id=batch_id)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
+    except BatchAlreadyArchivedError as e:
+        raise _batch_already_archived(e)
     except HTTPException:
         raise
     except Exception as e:
         raise as_http500(e)
+
+
+@router.get("/personnel/baselines")
+def get_control_list_baselines(
+    report_period: Optional[str] = Query(default=None),
+    include_deleted: bool = Query(default=False),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    period = date.fromisoformat(report_period) if report_period else None
+    return _with_conn(list_baselines, report_period=period, include_deleted=include_deleted)
+
+
+@router.get("/personnel/baselines/{baseline_id}")
+def get_control_list_baseline(
+    baseline_id: int,
+    include_deleted: bool = Query(default=False),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(get_baseline, baseline_id=baseline_id, include_deleted=include_deleted)
+    except BaselineNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/personnel/baselines/publish/preview")
+def preview_control_list_baseline_publish(
+    payload: Dict[str, Any] = Body(...),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    batch_id = int(payload["batch_id"])
+    try:
+        return _with_conn(preview_baseline_publish, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+
+
+@router.post("/personnel/baselines/publish")
+def publish_control_list_baseline(
+    payload: Dict[str, Any] = Body(...),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    batch_id = int(payload["batch_id"])
+    force = bool(payload.get("force", False))
+    notes = payload.get("publication_notes")
+    try:
+        return _with_conn(
+            publish_baseline_from_batch,
+            batch_id=batch_id,
+            published_by=int(user["user_id"]),
+            force=force,
+            publication_notes=notes,
+        )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except BaselinePublishError as e:
+        raise HTTPException(status_code=409, detail={"message": str(e), "blockers": e.blockers})
+
+
+@router.post("/personnel/baselines/{baseline_id}/soft-delete")
+def soft_delete_control_list_baseline(
+    baseline_id: int,
+    payload: Dict[str, Any] = Body(default_factory=dict),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_hr_import_admin_or_403(user)
+    try:
+        return _with_conn(
+            soft_delete_baseline,
+            baseline_id=baseline_id,
+            deleted_by=int(user["user_id"]),
+            deletion_reason=payload.get("deletion_reason"),
+        )
+    except BaselineNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except BaselineDeleteError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/personnel/baselines/{baseline_id}/restore")
+def restore_control_list_baseline(
+    baseline_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_hr_import_admin_or_403(user)
+    try:
+        return _with_conn(restore_baseline, baseline_id=baseline_id, restored_by=int(user["user_id"]))
+    except BaselineNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except BaselineRestoreError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/personnel/baselines/{baseline_id}")
+def hard_delete_control_list_baseline(
+    baseline_id: int,
+    payload: Dict[str, Any] = Body(default_factory=dict),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_privileged_or_403(user)
+    try:
+        return _with_conn(
+            hard_delete_baseline,
+            baseline_id=baseline_id,
+            deleted_by=int(user["user_id"]),
+            deletion_reason=payload.get("deletion_reason"),
+        )
+    except BaselineNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except BaselineDeleteError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 def _employee_binding_not_allowed(exc: EmployeeBindingNotAllowedError) -> HTTPException:
@@ -288,6 +610,83 @@ def get_import_batch_diff_summary(
     require_personnel_admin_or_403(user)
     try:
         return _with_conn(get_batch_diff_summary, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/review-progress")
+def get_import_batch_review_progress(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(assess_import_review_progress_by_batch, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/diff-removals/{removal_id}/decision")
+def post_diff_removal_decision(
+    batch_id: int,
+    removal_id: int,
+    body: Dict[str, Any] = Body(...),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    decision = body.get("decision")
+    basis = body.get("basis")
+    try:
+        return _with_conn(
+            record_diff_removal_decision,
+            removal_id=removal_id,
+            decision=str(decision or ""),
+            decided_by=int(user["user_id"]),
+            decision_basis=str(basis).strip() if basis is not None else None,
+            expected_batch_id=batch_id,
+        )
+    except DiffRemovalNotFoundError as e:
+        raise _diff_removal_not_found(e)
+    except DiffRemovalAlreadyDecidedError as e:
+        raise _diff_removal_conflict(e)
+    except InvalidDiffRemovalDecisionError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/diff-removals/{removal_id}/revert")
+def post_diff_removal_decision_revert(
+    batch_id: int,
+    removal_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            revert_diff_removal_decision,
+            removal_id=removal_id,
+            reverted_by=int(user["user_id"]),
+            expected_batch_id=batch_id,
+        )
+    except DiffRemovalNotFoundError as e:
+        raise _diff_removal_not_found(e)
+    except DiffRemovalNotDecidedError as e:
+        raise _diff_removal_conflict(e)
+    except DiffRemovalRevertBlockedError as e:
+        raise _diff_removal_revert_blocked(e)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:
@@ -923,6 +1322,7 @@ def get_import_batch_row_medical_categories(
 @router.post("/personnel/import/upload")
 async def upload_import_control_list(
     file: UploadFile = File(...),
+    source_last_modified_ms: Optional[int] = Form(default=None),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Stage HR control list Excel — no apply, no employee writes."""
@@ -930,6 +1330,16 @@ async def upload_import_control_list(
     filename = (file.filename or "").strip()
     if not filename.lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Expected .xlsx control list file.")
+
+    source_last_modified_at: Optional[datetime] = None
+    if source_last_modified_ms is not None:
+        try:
+            source_last_modified_at = datetime.fromtimestamp(
+                source_last_modified_ms / 1000.0,
+                tz=timezone.utc,
+            )
+        except (OverflowError, OSError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid source_last_modified_ms.")
 
     suffix = Path(filename).suffix or ".xlsx"
     tmp_path: Optional[str] = None
@@ -947,13 +1357,18 @@ async def upload_import_control_list(
                 conn,
                 file_path=tmp_path,
                 imported_by=imported_by,
+                source_last_modified_at=source_last_modified_at,
+                original_filename=filename,
             )
         return {
             "batch_id": batch_id,
+            "import_code": summary.get("import_code"),
             "file_name": filename,
             "summary": summary,
             "warnings": warnings,
         }
+    except ControlListFilenameError as e:
+        raise _control_list_filename_error(e)
     except HTTPException:
         raise
     except Exception as e:

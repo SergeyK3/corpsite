@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.db.models.hr_import import (
+    BATCH_STATUS_CANCELLED,
     CLASSIFICATION_CATEGORY_ROW,
     CLASSIFICATION_DECLARATION,
     CLASSIFICATION_DUPLICATE_IIN,
@@ -19,6 +20,11 @@ from app.db.models.hr_import import (
     SOURCE_TYPE_HR_CONTROL_LIST,
 )
 from app.services.department_recoding_service import load_org_unit_group_ids, lookup_recoding
+from app.services.hr_import_control_list_storage import (
+    is_legacy_import_code,
+    remove_stored_control_list_file,
+    serialize_batch_file_metadata,
+)
 from app.services.hr_import_document_parser import parse_certification_raw
 
 MEDICAL_CATEGORY_KEYS = frozenset({"highest", "first", "second"})
@@ -61,6 +67,130 @@ STAFF_TYPE_LABELS: dict[str, str] = {
 
 class BatchNotFoundError(LookupError):
     pass
+
+
+class BatchDeleteBlockedError(RuntimeError):
+    def __init__(self, message: str, *, reasons: list[str], recommendation: str):
+        super().__init__(message)
+        self.reasons = reasons
+        self.recommendation = recommendation
+
+
+class BatchArchiveNotAllowedError(RuntimeError):
+    pass
+
+
+class BatchAlreadyArchivedError(RuntimeError):
+    pass
+
+
+def _batch_action_flags(conn: Connection, batch_id: int, status: str) -> dict[str, bool]:
+    from app.services.hr_initial_baseline_source_service import (
+        assess_batch_delete_initial_baseline_source_block,
+    )
+
+    archived = status == BATCH_STATUS_CANCELLED
+    if archived:
+        return {"can_delete": True, "can_archive": False, "is_archived": True}
+    delete_blockers = assess_batch_delete_initial_baseline_source_block(conn, batch_id)
+    return {
+        "can_delete": not delete_blockers,
+        "can_archive": False,
+        "is_archived": False,
+    }
+
+
+def _attach_batch_action_flags(conn: Connection, item: dict[str, Any]) -> dict[str, Any]:
+    flags = _batch_action_flags(conn, int(item["batch_id"]), str(item.get("status") or ""))
+    item.update(flags)
+    item["is_legacy_import"] = is_legacy_import_code(str(item.get("import_code") or ""))
+    return item
+
+
+def _batch_list_select_sql(*, with_normalized_record_count: bool) -> str:
+    normalized_join = ""
+    normalized_select = ""
+    if with_normalized_record_count:
+        normalized_select = ", COALESCE(nr.normalized_record_count, 0) AS normalized_record_count"
+        normalized_join = """
+            LEFT JOIN (
+                SELECT batch_id, COUNT(*)::int AS normalized_record_count
+                FROM public.hr_import_normalized_records
+                GROUP BY batch_id
+            ) nr ON nr.batch_id = b.batch_id
+        """
+    return f"""
+        SELECT
+            b.batch_id,
+            b.import_code,
+            b.file_name,
+            b.imported_at,
+            b.status,
+            b.total_rows,
+            b.valid_rows,
+            b.error_rows,
+            sf.original_filename,
+            sf.technical_filename,
+            sf.storage_ref,
+            sf.byte_size,
+            sf.content_sha256,
+            sf.report_month,
+            sf.source_last_modified_at
+            {normalized_select}
+        FROM public.hr_import_batches b
+        LEFT JOIN public.hr_source_files sf
+            ON sf.source_file_id = b.source_file_id
+        {normalized_join}
+        ORDER BY b.imported_at DESC, b.batch_id DESC
+    """
+
+
+def _serialize_batch_list_item(
+    conn: Connection,
+    row: dict[str, Any],
+    *,
+    with_normalized_record_count: bool,
+) -> dict[str, Any]:
+    item = serialize_batch_file_metadata(row)
+    if with_normalized_record_count:
+        item["normalized_record_count"] = int(row.get("normalized_record_count") or 0)
+    return _attach_batch_action_flags(conn, item)
+
+
+def get_batch(conn: Connection, batch_id: int) -> dict[str, Any]:
+    row = conn.execute(
+        text(
+            """
+            SELECT
+                b.batch_id,
+                b.import_code,
+                b.file_name,
+                b.imported_at,
+                b.status,
+                b.total_rows,
+                b.valid_rows,
+                b.error_rows,
+                sf.original_filename,
+                sf.technical_filename,
+                sf.storage_ref,
+                sf.byte_size,
+                sf.content_sha256,
+                sf.report_month,
+                sf.source_last_modified_at,
+                b.source_file_id
+            FROM public.hr_import_batches b
+            LEFT JOIN public.hr_source_files sf
+                ON sf.source_file_id = b.source_file_id
+            WHERE b.batch_id = :batch_id
+            """
+        ),
+        {"batch_id": batch_id},
+    ).mappings().first()
+    if row is None:
+        raise BatchNotFoundError(batch_id)
+    payload = serialize_batch_file_metadata(dict(row))
+    payload["source_file_id"] = int(row["source_file_id"]) if row.get("source_file_id") is not None else None
+    return _attach_batch_action_flags(conn, payload)
 
 
 def _parse_birth_date(value: str) -> Optional[date]:
@@ -491,6 +621,22 @@ def _load_staging_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
     return items
 
 
+def _table_exists(conn: Connection, table_name: str) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = :table_name
+            LIMIT 1
+            """
+        ),
+        {"table_name": table_name},
+    ).first()
+    return row is not None
+
+
 def _normalized_records_table_exists(conn: Connection) -> bool:
     row = conn.execute(
         text(
@@ -511,72 +657,12 @@ def list_batches(
     *,
     with_normalized_record_count: bool = False,
 ) -> dict[str, Any]:
-    if with_normalized_record_count and _normalized_records_table_exists(conn):
-        rows = conn.execute(
-            text(
-                """
-                SELECT
-                    b.batch_id,
-                    b.file_name,
-                    b.imported_at,
-                    b.status,
-                    b.total_rows,
-                    b.valid_rows,
-                    b.error_rows,
-                    COALESCE(nr.normalized_record_count, 0) AS normalized_record_count
-                FROM public.hr_import_batches b
-                LEFT JOIN (
-                    SELECT batch_id, COUNT(*)::int AS normalized_record_count
-                    FROM public.hr_import_normalized_records
-                    GROUP BY batch_id
-                ) nr ON nr.batch_id = b.batch_id
-                ORDER BY b.imported_at DESC, b.batch_id DESC
-                """
-            )
-        ).mappings().all()
-        return {
-            "items": [
-                {
-                    "batch_id": int(r["batch_id"]),
-                    "file_name": r["file_name"],
-                    "imported_at": r["imported_at"].isoformat() if r["imported_at"] else None,
-                    "status": r["status"],
-                    "total_rows": int(r["total_rows"]),
-                    "valid_rows": int(r["valid_rows"]),
-                    "error_rows": int(r["error_rows"]),
-                    "normalized_record_count": int(r["normalized_record_count"]),
-                }
-                for r in rows
-            ]
-        }
-
-    rows = conn.execute(
-        text(
-            """
-            SELECT
-                batch_id, file_name, imported_at, status,
-                total_rows, valid_rows, error_rows
-            FROM public.hr_import_batches
-            ORDER BY imported_at DESC, batch_id DESC
-            """
-        )
-    ).mappings().all()
+    if with_normalized_record_count and not _normalized_records_table_exists(conn):
+        with_normalized_record_count = False
+    rows = conn.execute(text(_batch_list_select_sql(with_normalized_record_count=with_normalized_record_count))).mappings().all()
     return {
         "items": [
-            {
-                "batch_id": int(r["batch_id"]),
-                "file_name": r["file_name"],
-                "imported_at": r["imported_at"].isoformat() if r["imported_at"] else None,
-                "status": r["status"],
-                "total_rows": int(r["total_rows"]),
-                "valid_rows": int(r["valid_rows"]),
-                "error_rows": int(r["error_rows"]),
-                **(
-                    {"normalized_record_count": 0}
-                    if with_normalized_record_count
-                    else {}
-                ),
-            }
+            _serialize_batch_list_item(conn, dict(r), with_normalized_record_count=with_normalized_record_count)
             for r in rows
         ]
     }
@@ -1084,29 +1170,90 @@ def list_batch_rows(
     }
 
 
-def delete_batch(conn: Connection, batch_id: int) -> dict[str, Any]:
-    """Delete import batch; cascades to hr_import_rows and hr_import_document_candidates."""
+def assess_batch_delete(conn: Connection, batch_id: int) -> dict[str, Any]:
+    from app.services.hr_initial_baseline_source_service import (
+        assess_batch_delete_initial_baseline_source_block,
+    )
+
     _ensure_batch_exists(conn, batch_id)
-    row_counts = conn.execute(
+    reasons = assess_batch_delete_initial_baseline_source_block(conn, batch_id)
+    blocked = bool(reasons)
+    recommendation = (
+        "Сначала выберите другой импорт как источник первичного эталона или создайте MRD за период."
+        if blocked
+        else "Batch можно удалить независимо от Baseline. PublicationOrigin сохраняется."
+    )
+    return {
+        "batch_id": batch_id,
+        "blocked": blocked,
+        "reasons": reasons,
+        "recommendation": recommendation,
+    }
+
+
+def delete_batch(conn: Connection, batch_id: int) -> dict[str, Any]:
+    """Delete import batch, staging data, and persisted source file."""
+    assessment = assess_batch_delete(conn, batch_id)
+    if assessment["blocked"]:
+        raise BatchDeleteBlockedError(
+            "Удаление импорта заблокировано.",
+            reasons=list(assessment["reasons"]),
+            recommendation=str(assessment["recommendation"]),
+        )
+    _ensure_batch_exists(conn, batch_id)
+
+    status = conn.execute(
+        text("SELECT status FROM public.hr_import_batches WHERE batch_id = :batch_id"),
+        {"batch_id": batch_id},
+    ).scalar_one_or_none()
+    if status == BATCH_STATUS_CANCELLED:
+        raise BatchAlreadyArchivedError("Архивированный batch нельзя удалить.")
+
+    row = conn.execute(
         text(
             """
             SELECT
+                b.source_file_id,
+                sf.storage_ref,
                 (SELECT COUNT(*) FROM public.hr_import_rows WHERE batch_id = :batch_id) AS rows,
                 (SELECT COUNT(*) FROM public.hr_import_document_candidates WHERE batch_id = :batch_id) AS candidates
+            FROM public.hr_import_batches b
+            LEFT JOIN public.hr_source_files sf
+                ON sf.source_file_id = b.source_file_id
+            WHERE b.batch_id = :batch_id
             """
         ),
         {"batch_id": batch_id},
     ).mappings().one()
+    storage_ref = row.get("storage_ref")
+    source_file_id = row.get("source_file_id")
+
     conn.execute(
         text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
         {"batch_id": batch_id},
     )
+    if source_file_id is not None:
+        conn.execute(
+            text("DELETE FROM public.hr_source_files WHERE source_file_id = :source_file_id"),
+            {"source_file_id": source_file_id},
+        )
+    if storage_ref:
+        remove_stored_control_list_file(str(storage_ref))
+
     return {
         "batch_id": batch_id,
         "deleted": True,
-        "deleted_rows": int(row_counts["rows"]),
-        "deleted_candidates": int(row_counts["candidates"]),
+        "deleted_rows": int(row["rows"]),
+        "deleted_candidates": int(row["candidates"]),
+        "deleted_source_file": source_file_id is not None,
     }
+
+
+def archive_batch(conn: Connection, batch_id: int) -> dict[str, Any]:
+    """Deprecated: archive replaced by independent batch delete + baseline lifecycle."""
+    raise BatchArchiveNotAllowedError(
+        "Archive снят. Удалите Import Batch отдельно; Baseline управляется через soft/hard delete."
+    )
 
 
 def sheet_diagnostics(conn: Connection, batch_id: int) -> dict[str, Any]:

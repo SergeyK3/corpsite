@@ -9,12 +9,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.services.hr_import_analytics_service import delete_batch, sheet_diagnostics
+from app.services.hr_import_analytics_service import (
+    BatchArchiveNotAllowedError,
+    delete_batch,
+    archive_batch,
+    sheet_diagnostics,
+)
 from app.services.hr_import_document_candidate_service import (
     rebuild_document_candidates,
 )
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, table_exists
+from tests.hr_import_fixtures import cleanup_import_batch, write_control_list_workbook
 from tests.test_import_hr_control_list import _build_sample_workbook
 
 
@@ -73,8 +79,7 @@ def privileged_headers(seed, monkeypatch):
 @pytest.fixture
 def staged_batch(seed, tmp_path: Path):
     _require_phase_2c()
-    source = tmp_path / f"phase2e_{uuid4().hex[:8]}.xlsx"
-    _build_sample_workbook(source)
+    source = write_control_list_workbook(tmp_path, yymm="2606")
     with engine.begin() as conn:
         before_employees = _employee_count(conn)
         before_docs = _employee_doc_count(conn)
@@ -85,10 +90,7 @@ def staged_batch(seed, tmp_path: Path):
         )
     yield batch_id, before_employees, before_docs
     with engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
-            {"batch_id": batch_id},
-        )
+        cleanup_import_batch(conn, batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -130,8 +132,7 @@ def test_delete_batch_removes_rows_and_candidates_not_employees(staged_batch):
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_delete_batch_api(client: TestClient, privileged_headers, seed, tmp_path: Path):
     _require_phase_2c()
-    source = tmp_path / f"phase2e_del_{uuid4().hex[:8]}.xlsx"
-    _build_sample_workbook(source)
+    source = write_control_list_workbook(tmp_path, yymm="2607")
     with engine.begin() as conn:
         batch_id, _, _ = import_control_list(
             conn,
@@ -146,6 +147,14 @@ def test_delete_batch_api(client: TestClient, privileged_headers, seed, tmp_path
     body = resp.json()
     assert body["deleted"] is True
     assert body["batch_id"] == batch_id
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_archive_rejects_staging_batch(staged_batch):
+    batch_id, _, _ = staged_batch
+    with engine.begin() as conn:
+        with pytest.raises(BatchArchiveNotAllowedError):
+            archive_batch(conn, batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

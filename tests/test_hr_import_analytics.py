@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,7 +19,7 @@ from app.services.hr_import_analytics_service import (
 )
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, table_exists
-from tests.test_import_hr_control_list import _build_sample_workbook
+from tests.hr_import_fixtures import cleanup_import_batch, write_control_list_workbook
 
 
 def _db_available() -> bool:
@@ -42,13 +41,6 @@ def _require_phase_2b() -> None:
         pytest.skip("HR import staging tables missing — run alembic upgrade head")
 
 
-def _delete_batch(conn, batch_id: int) -> None:
-    conn.execute(
-        text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
-        {"batch_id": batch_id},
-    )
-
-
 @pytest.fixture
 def privileged_headers(seed, monkeypatch):
     monkeypatch.setenv("DIRECTORY_PRIVILEGED_USER_IDS", str(seed["initiator_user_id"]))
@@ -58,8 +50,7 @@ def privileged_headers(seed, monkeypatch):
 @pytest.fixture
 def staged_batch(seed, tmp_path: Path):
     _require_phase_2b()
-    source = tmp_path / f"analytics_{uuid4().hex[:8]}.xlsx"
-    _build_sample_workbook(source)
+    source = write_control_list_workbook(tmp_path, yymm="2606")
     with engine.begin() as conn:
         batch_id, _, _ = import_control_list(
             conn,
@@ -68,7 +59,7 @@ def staged_batch(seed, tmp_path: Path):
         )
     yield batch_id
     with engine.begin() as conn:
-        _delete_batch(conn, batch_id)
+        cleanup_import_batch(conn, batch_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

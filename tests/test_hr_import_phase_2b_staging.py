@@ -31,6 +31,7 @@ from app.services.hr_import_service import (
 )
 from scripts.import_hr_control_list import ParsedRow, build_audit, parse_workbook
 from tests.conftest import table_exists
+from tests.hr_import_fixtures import cleanup_import_batch, write_control_list_workbook
 from tests.test_import_hr_control_list import _build_sample_workbook
 
 CORE_SUMMARY_KEYS = (
@@ -100,10 +101,7 @@ def _require_phase_2b() -> None:
 
 
 def _delete_batch(conn, batch_id: int) -> None:
-    conn.execute(
-        text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
-        {"batch_id": batch_id},
-    )
+    cleanup_import_batch(conn, batch_id)
 
 
 def _cleanup_import_batch(batch_id: int | None) -> None:
@@ -172,7 +170,7 @@ def test_import_control_list_stages_rows_and_resolves_employee_binding(seed, tmp
     """import_control_list persists rows then runs employee binding during normalization."""
     _require_phase_2b()
 
-    source = tmp_path / "control.xlsx"
+    source = write_control_list_workbook(tmp_path, yymm="2606")
     _build_sample_workbook(source)
 
     batch_id: int | None = None
@@ -240,7 +238,7 @@ def test_import_control_list_stages_rows_and_resolves_employee_binding(seed, tmp
 def test_batch_summary(seed, tmp_path: Path):
     _require_phase_2b()
 
-    source = tmp_path / "control.xlsx"
+    source = write_control_list_workbook(tmp_path, yymm="2606")
     _build_sample_workbook(source)
 
     rows, _ = parse_workbook(source)
@@ -335,7 +333,7 @@ def test_category_row_classification_takes_priority_over_invalid_iin():
 def test_duplicate_iin_classification_persisted(seed, tmp_path: Path):
     _require_phase_2b()
 
-    source = tmp_path / "dup.xlsx"
+    source = tmp_path / "контрольный2607.xlsx"
     _build_sample_workbook(source)
 
     batch_id: int | None = None
@@ -371,7 +369,7 @@ def test_invalid_iin_employee_row_classification_and_errors_persisted(seed, tmp_
     from datetime import datetime
     from openpyxl import Workbook
 
-    path = tmp_path / "invalid_iin.xlsx"
+    path = tmp_path / "контрольный2608.xlsx"
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet("врачи")
@@ -437,7 +435,7 @@ def test_category_row_with_invalid_iin_persisted_as_category_row(seed, tmp_path:
     from datetime import datetime
     from openpyxl import Workbook
 
-    path = tmp_path / "category_invalid_iin.xlsx"
+    path = tmp_path / "контрольный2609.xlsx"
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet("врачи")

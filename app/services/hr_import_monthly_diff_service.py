@@ -184,7 +184,10 @@ def _load_active_snapshot_entries(conn: Connection, snapshot_id: int) -> list[di
     return [dict(row) for row in rows]
 
 
-def _clear_batch_diff_state(conn: Connection, batch_id: int) -> None:
+def _clear_batch_diff_state(conn: Connection, batch_id: int) -> dict[int, dict[str, Any]]:
+    from app.services.hr_import_diff_removal_decision_service import stash_removal_decisions
+
+    stashed = stash_removal_decisions(conn, batch_id)
     conn.execute(
         text(
             """
@@ -220,6 +223,7 @@ def _clear_batch_diff_state(conn: Connection, batch_id: int) -> None:
         text("DELETE FROM public.hr_import_diff_removals WHERE batch_id = :batch_id"),
         {"batch_id": batch_id},
     )
+    return stashed
 
 
 def _persist_row_diff(
@@ -418,9 +422,21 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
 
     source_type = str(batch["source_type"] or SOURCE_TYPE_HR_CONTROL_LIST)
     computed_at = datetime.now(timezone.utc)
-    _clear_batch_diff_state(conn, batch_id)
+    stashed_decisions = _clear_batch_diff_state(conn, batch_id)
 
-    active_snapshot = get_active_snapshot(conn, source_type=source_type)
+    from app.services.hr_baseline_service import (
+        baseline_tables_available,
+        resolve_comparison_baseline,
+        update_batch_diff_tracking,
+        _resolve_batch_report_period,
+    )
+
+    if baseline_tables_available(conn):
+        import_report_period = _resolve_batch_report_period(conn, batch_id)
+        comparison_baseline = resolve_comparison_baseline(conn, import_report_period)
+    else:
+        import_report_period = None
+        comparison_baseline = get_active_snapshot(conn, source_type=source_type)
     roster_items = _build_incoming_roster_items(conn, batch_id)
     roster_match_keys = {item["row_id"]: item["match_key"] for item in roster_items}
     normalized_items = _build_incoming_normalized_items(conn, batch_id, roster_match_keys)
@@ -434,8 +450,9 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
         DIFF_STATUS_CONFLICT: 0,
     }
 
-    if active_snapshot is None:
+    if comparison_baseline is None:
         snapshot_id = None
+        publication_origin_id = None
         for item in incoming_items:
             summary[DIFF_STATUS_NEW] += 1
             if item.get("row_id") is not None and "normalized_record_id" not in item:
@@ -460,16 +477,25 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
                     field_diffs=None,
                     computed_at=computed_at,
                 )
+        if baseline_tables_available(conn):
+            update_batch_diff_tracking(
+                conn,
+                batch_id,
+                comparison_baseline_id=None,
+                comparison_publication_origin_id=None,
+            )
         return {
             "batch_id": batch_id,
             "snapshot_id": None,
+            "baseline_id": None,
             "computed_at": computed_at.isoformat(),
             "summary": summary,
             "removed": [],
             "skipped": False,
         }
 
-    snapshot_id = int(active_snapshot["snapshot_id"])
+    snapshot_id = int(comparison_baseline["baseline_id"])
+    publication_origin_id = comparison_baseline.get("publication_origin_id")
     canonical_entries = _load_active_snapshot_entries(conn, snapshot_id)
     canonical_by_key = {str(entry["match_key"]): entry for entry in canonical_entries}
     incoming_key_counts = Counter(str(item["match_key"]) for item in incoming_items)
@@ -594,9 +620,24 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
             }
         )
 
+    if baseline_tables_available(conn):
+        update_batch_diff_tracking(
+            conn,
+            batch_id,
+            comparison_baseline_id=snapshot_id,
+            comparison_publication_origin_id=int(publication_origin_id)
+            if publication_origin_id is not None
+            else None,
+        )
+
+    from app.services.hr_import_diff_removal_decision_service import restore_removal_decisions
+
+    restore_removal_decisions(conn, batch_id, stashed_decisions)
+
     return {
         "batch_id": batch_id,
         "snapshot_id": snapshot_id,
+        "baseline_id": snapshot_id,
         "computed_at": computed_at.isoformat(),
         "summary": summary,
         "removed": removed_items,
@@ -606,6 +647,9 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
 
 def get_batch_diff_summary(conn: Connection, batch_id: int) -> dict[str, Any]:
     _ensure_batch_exists(conn, batch_id)
+    from app.services.hr_baseline_service import ensure_batch_diff_fresh
+
+    ensure_batch_diff_fresh(conn, batch_id)
     if not monthly_diff_available(conn):
         return {"batch_id": batch_id, "skipped": True, "summary": {}, "removed": [], "review_visibility": build_review_visibility({})}
 
@@ -641,39 +685,44 @@ def get_batch_diff_summary(conn: Connection, batch_id: int) -> dict[str, Any]:
         for row in norm_counts:
             summary[str(row["diff_status"])] = summary.get(str(row["diff_status"]), 0) + int(row["cnt"])
 
-    summary[DIFF_STATUS_REMOVED] = summary.get(DIFF_STATUS_REMOVED, 0) + int(
-        conn.execute(
+    from app.services.hr_import_diff_removal_decision_service import (
+        count_pending_diff_removals,
+        diff_removal_decisions_available,
+        list_confirmed_diff_removals,
+        list_pending_diff_removals,
+        list_restored_diff_removals,
+    )
+
+    pending_removed_count = count_pending_diff_removals(conn, batch_id)
+    summary[DIFF_STATUS_REMOVED] = summary.get(DIFF_STATUS_REMOVED, 0) + pending_removed_count
+
+    if diff_removal_decisions_available(conn):
+        removed = list_pending_diff_removals(conn, batch_id)
+        restored = list_restored_diff_removals(conn, batch_id)
+        confirmed_removals = list_confirmed_diff_removals(conn, batch_id)
+    else:
+        removed_rows = conn.execute(
             text(
                 """
-                SELECT COUNT(*)
+                SELECT
+                    removal_id,
+                    canonical_entry_id,
+                    match_key,
+                    record_kind,
+                    canonical_hash,
+                    payload,
+                    diff_status,
+                    diff_computed_at
                 FROM public.hr_import_diff_removals
                 WHERE batch_id = :batch_id
+                ORDER BY removal_id
                 """
             ),
             {"batch_id": batch_id},
-        ).scalar_one()
-        or 0
-    )
-
-    removed = conn.execute(
-        text(
-            """
-            SELECT
-                removal_id,
-                canonical_entry_id,
-                match_key,
-                record_kind,
-                canonical_hash,
-                payload,
-                diff_status,
-                diff_computed_at
-            FROM public.hr_import_diff_removals
-            WHERE batch_id = :batch_id
-            ORDER BY removal_id
-            """
-        ),
-        {"batch_id": batch_id},
-    ).mappings().all()
+        ).mappings().all()
+        removed = [dict(row) for row in removed_rows]
+        restored = []
+        confirmed_removals = []
 
     snapshot_id = conn.execute(
         text(
@@ -717,7 +766,10 @@ def get_batch_diff_summary(conn: Connection, batch_id: int) -> dict[str, Any]:
         "snapshot_id": int(snapshot_id) if snapshot_id is not None else None,
         "computed_at": diff_computed_at.isoformat() if diff_computed_at else None,
         "summary": summary,
-        "removed": [dict(row) for row in removed],
+        "removed": removed,
+        "restored": restored,
+        "confirmed_removals": confirmed_removals,
+        "pending_removals": pending_removed_count,
         "skipped": False,
         "review_visibility": build_review_visibility(summary),
     }
@@ -767,6 +819,17 @@ def load_row_diff_fields(conn: Connection, batch_id: int) -> dict[int, dict[str,
 
 def maybe_compute_batch_monthly_diff(conn: Connection, batch_id: int) -> Optional[dict[str, Any]]:
     if not monthly_diff_available(conn) or not canonical_snapshot_available(conn):
+        return None
+    from app.services.hr_baseline_service import ensure_batch_diff_fresh
+
+    stale_result = ensure_batch_diff_fresh(conn, batch_id)
+    if stale_result is not None:
+        return stale_result
+    row = conn.execute(
+        text("SELECT diff_status FROM public.hr_import_batches WHERE batch_id = :batch_id"),
+        {"batch_id": batch_id},
+    ).mappings().first()
+    if row and row.get("diff_status") == "CURRENT":
         return None
     savepoint = conn.begin_nested()
     try:
