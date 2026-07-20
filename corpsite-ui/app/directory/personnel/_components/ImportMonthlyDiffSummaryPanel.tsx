@@ -64,6 +64,8 @@ type Props = {
   onSummaryLoaded?: (summary: ImportBatchDiffSummary | null) => void;
   onRecomputed?: () => void;
   onRemovalDecision?: () => void;
+  onOpenRemoval?: (removalId: number) => void;
+  refreshKey?: number;
 };
 
 export default function ImportMonthlyDiffSummaryPanel({
@@ -73,6 +75,8 @@ export default function ImportMonthlyDiffSummaryPanel({
   onSummaryLoaded,
   onRecomputed,
   onRemovalDecision,
+  onOpenRemoval,
+  refreshKey = 0,
 }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [recomputing, setRecomputing] = React.useState(false);
@@ -99,7 +103,7 @@ export default function ImportMonthlyDiffSummaryPanel({
     if (batchId > 0) {
       loadSummary();
     }
-  }, [batchId, loadSummary]);
+  }, [batchId, loadSummary, refreshKey]);
 
   async function handleRemovalDecision(item: MonthlyDiffRemoval, kind: RemovedEntryDecisionKind) {
     if (!item.removal_id) return;
@@ -255,6 +259,7 @@ export default function ImportMonthlyDiffSummaryPanel({
         decisionsEnabled
         onDecision={(item, kind) => void handleRemovalDecision(item, kind)}
         onRevert={(item) => void handleRemovalRevert(item)}
+        onOpen={onOpenRemoval}
       />
     </section>
   );

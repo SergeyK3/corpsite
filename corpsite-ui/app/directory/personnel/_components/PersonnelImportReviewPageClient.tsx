@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import ImportCategoryCardModal from "./ImportCategoryCardModal";
 import ImportBatchContextHeader from "./ImportBatchContextHeader";
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
 import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
+import ImportReviewExceptionDrawer from "./ImportReviewExceptionDrawer";
 import { parseImportReviewMode, type ImportReviewMode } from "../_lib/importReviewNav";
 import {
   departmentFilterOptionValue,
@@ -18,9 +18,11 @@ import {
   parseDepartmentFilterValue,
   parseGroupFilterValue,
   resolveGroupIdFromOptions,
+  stagingRowExceptionKey,
   type DepartmentRecodingOptions,
   type StagingRow,
 } from "../_lib/importApi.client";
+import { isReviewExceptionStatus } from "../_lib/monthlyDiffLabels";
 import {
   formatMedicalCategoryLabel,
   MEDICAL_CATEGORY_FILTER_OPTIONS,
@@ -168,6 +170,8 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   const [options, setOptions] = React.useState<DepartmentRecodingOptions | null>(null);
   const [offset, setOffset] = React.useState(0);
   const [categoryRowId, setCategoryRowId] = React.useState<number | null>(null);
+  const [exceptionKey, setExceptionKey] = React.useState<string | null>(null);
+  const [summaryRefreshKey, setSummaryRefreshKey] = React.useState(0);
   const [showUnchanged, setShowUnchanged] = React.useState(false);
   const limit = 50;
 
@@ -183,9 +187,14 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   React.useEffect(() => {
     setOffset(0);
     setCategoryRowId(null);
+    setExceptionKey(null);
   }, [batchId, mode, showUnchanged]);
 
   React.useEffect(() => {
+    const fromQuery = searchParams.get("adr059_exception");
+    if (fromQuery) {
+      setExceptionKey(fromQuery);
+    }
     setFilters({
       org_group_id: searchParams.get("org_group_id") || searchParams.get("department_group") || "",
       org_unit_id: searchParams.get("org_unit_id") || "",
@@ -260,6 +269,21 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   const modeLabel =
     mode === "declaration" ? "Декларации" : mode === "technical" ? "Технические" : "Мед. категории";
 
+  function handleExceptionResolved() {
+    load();
+    setSummaryRefreshKey((value) => value + 1);
+  }
+
+  function openRowReview(row: StagingRow) {
+    if (isReviewExceptionStatus(row.diff_status)) {
+      setExceptionKey(stagingRowExceptionKey(row.row_id));
+      return;
+    }
+    if (mode === "personnel") {
+      setCategoryRowId(row.row_id);
+    }
+  }
+
   return (
     <div className="px-4 py-3">
       <ImportCategoryCardModal
@@ -267,6 +291,13 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
         rowId={categoryRowId}
         open={categoryRowId != null}
         onClose={() => setCategoryRowId(null)}
+      />
+      <ImportReviewExceptionDrawer
+        batchId={batchId}
+        exceptionKey={exceptionKey}
+        open={exceptionKey != null}
+        onClose={() => setExceptionKey(null)}
+        onResolved={handleExceptionResolved}
       />
 
       <ImportBatchContextHeader batchId={batchId} className="mb-4" />
@@ -300,6 +331,9 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
           showUnchanged={showUnchanged}
           onShowUnchangedChange={setShowUnchanged}
           onRecomputed={load}
+          onRemovalDecision={handleExceptionResolved}
+          onOpenRemoval={(removalId) => setExceptionKey(`removals/${removalId}`)}
+          refreshKey={summaryRefreshKey}
         />
 
         <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
@@ -392,12 +426,13 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                     {TECHNICAL_CATEGORY_LABELS[row.certification_group || "none"] || "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Link
-                      href={`/directory/personnel/import/${batchId}/review/${row.row_id}`}
+                    <button
+                      type="button"
+                      onClick={() => openRowReview(row)}
                       className="text-blue-600 hover:underline"
                     >
                       Открыть
-                    </Link>
+                    </button>
                   </td>
                 </tr>
               ))
@@ -424,7 +459,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
-                      onClick={() => setCategoryRowId(row.row_id)}
+                      onClick={() => openRowReview(row)}
                       className="text-blue-600 hover:underline"
                     >
                       Открыть

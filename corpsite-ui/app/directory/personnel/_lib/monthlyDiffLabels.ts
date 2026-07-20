@@ -32,6 +32,19 @@ export function isMonthlyDiffStatus(value: string | null | undefined): value is 
   return Boolean(value && (MONTHLY_DIFF_STATUSES as readonly string[]).includes(value));
 }
 
+export const REVIEW_EXCEPTION_STATUSES: readonly MonthlyDiffStatus[] = [
+  "NEW",
+  "CHANGED",
+  "CONFLICT",
+  "REMOVED",
+] as const;
+
+export function isReviewExceptionStatus(
+  value: string | null | undefined,
+): value is MonthlyDiffStatus {
+  return Boolean(value && (REVIEW_EXCEPTION_STATUSES as readonly string[]).includes(value));
+}
+
 export function monthlyDiffStatusBadgeClass(status: MonthlyDiffStatus): string {
   switch (status) {
     case "UNCHANGED":

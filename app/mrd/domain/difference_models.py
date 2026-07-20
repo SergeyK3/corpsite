@@ -30,6 +30,7 @@ class ConfirmDifferenceCommand:
     confirmed_by: int
     expected_row_version: int
     basis: str | None = None
+    resolve_conflict: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -128,6 +128,16 @@ from app.services.hr_import_diff_removal_decision_service import (
     record_diff_removal_decision,
     revert_diff_removal_decision,
 )
+from app.services.hr_import_review_exception_detail_service import (
+    InvalidReviewExceptionKeyError,
+    InvalidReviewExceptionResolutionError,
+    ReviewExceptionAlreadyResolvedError,
+    ReviewExceptionNotFoundError,
+    get_review_exception_detail,
+    list_review_exceptions,
+    resolve_review_exception,
+    resolve_review_removal_exception,
+)
 from app.services.hr_baseline_service import (
     BaselineDeleteError,
     BaselineNotFoundError,
@@ -300,6 +310,18 @@ def _diff_removal_conflict(exc: Exception) -> HTTPException:
 
 def _diff_removal_revert_blocked(exc: DiffRemovalRevertBlockedError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
+
+
+def _review_exception_not_found(exc: ReviewExceptionNotFoundError) -> HTTPException:
+    return HTTPException(status_code=404, detail=str(exc))
+
+
+def _review_exception_conflict(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+def _review_exception_bad_request(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=422, detail=str(exc))
 
 
 @router.get("/personnel/import/batches/{import_code}/complete-review")
@@ -626,6 +648,153 @@ def get_import_batch_review_progress(
     require_personnel_admin_or_403(user)
     try:
         return _with_conn(assess_import_review_progress_by_batch, batch_id=batch_id)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/review-exceptions")
+def get_import_batch_review_exceptions(
+    batch_id: int,
+    diff_status: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            list_review_exceptions,
+            batch_id=batch_id,
+            diff_status=diff_status,
+            limit=limit,
+            offset=offset,
+        )
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/review-exceptions/{exception_key:path}")
+def get_import_batch_review_exception_detail(
+    batch_id: int,
+    exception_key: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(get_review_exception_detail, batch_id=batch_id, exception_key=exception_key)
+    except ReviewExceptionNotFoundError as e:
+        raise _review_exception_not_found(e)
+    except ReviewExceptionAlreadyResolvedError as e:
+        raise _review_exception_conflict(e)
+    except InvalidReviewExceptionKeyError as e:
+        raise _review_exception_bad_request(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/review-exceptions/{exception_key:path}/accept-import")
+def post_import_batch_review_exception_accept_import(
+    batch_id: int,
+    exception_key: str,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            resolve_review_exception,
+            batch_id=batch_id,
+            exception_key=exception_key,
+            resolution="accept_import",
+            actor_user_id=int(user["user_id"]),
+            basis=str(body.get("basis")).strip() if body.get("basis") is not None else None,
+        )
+    except ReviewExceptionNotFoundError as e:
+        raise _review_exception_not_found(e)
+    except ReviewExceptionAlreadyResolvedError as e:
+        raise _review_exception_conflict(e)
+    except InvalidReviewExceptionKeyError as e:
+        raise _review_exception_bad_request(e)
+    except InvalidReviewExceptionResolutionError as e:
+        raise _review_exception_bad_request(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/review-exceptions/{exception_key:path}/keep-baseline")
+def post_import_batch_review_exception_keep_baseline(
+    batch_id: int,
+    exception_key: str,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            resolve_review_exception,
+            batch_id=batch_id,
+            exception_key=exception_key,
+            resolution="keep_baseline",
+            actor_user_id=int(user["user_id"]),
+            basis=str(body.get("basis")).strip() if body.get("basis") is not None else None,
+        )
+    except ReviewExceptionNotFoundError as e:
+        raise _review_exception_not_found(e)
+    except ReviewExceptionAlreadyResolvedError as e:
+        raise _review_exception_conflict(e)
+    except InvalidReviewExceptionKeyError as e:
+        raise _review_exception_bad_request(e)
+    except InvalidReviewExceptionResolutionError as e:
+        raise _review_exception_bad_request(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/review-exceptions/removals/{removal_id}/decision")
+def post_import_batch_review_removal_exception_decision(
+    batch_id: int,
+    removal_id: int,
+    body: Dict[str, Any] = Body(...),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    decision = body.get("decision")
+    basis = body.get("basis")
+    try:
+        return _with_conn(
+            resolve_review_removal_exception,
+            batch_id=batch_id,
+            removal_id=removal_id,
+            decision=str(decision or ""),
+            actor_user_id=int(user["user_id"]),
+            basis=str(basis).strip() if basis is not None else None,
+        )
+    except ReviewExceptionNotFoundError as e:
+        raise _review_exception_not_found(e)
+    except ReviewExceptionAlreadyResolvedError as e:
+        raise _review_exception_conflict(e)
+    except InvalidReviewExceptionResolutionError as e:
+        raise _review_exception_bad_request(e)
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:

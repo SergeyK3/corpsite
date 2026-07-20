@@ -19,12 +19,14 @@ type Props = {
   /** When true, decisions call onDecision (requires backend API). */
   decisionsEnabled?: boolean;
   onDecision?: (item: MonthlyDiffRemoval, kind: RemovedEntryDecisionKind) => void | Promise<void>;
+  onOpen?: (removalId: number) => void;
 };
 
 export default function ImportMonthlyDiffRemovedSection({
   items,
   decisionsEnabled = false,
   onDecision,
+  onOpen,
 }: Props) {
   if (!items.length) return null;
 
@@ -51,6 +53,7 @@ export default function ImportMonthlyDiffRemovedSection({
               <th className="px-3 py-2">Детали</th>
               <th className="min-w-[12rem] px-3 py-2">Что сделать</th>
               <th className="px-3 py-2">Действия</th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -83,6 +86,17 @@ export default function ImportMonthlyDiffRemovedSection({
                     decisionsEnabled={decisionsEnabled}
                     onDecision={onDecision}
                   />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {item.removal_id && onOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpen(item.removal_id!)}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Открыть
+                    </button>
+                  ) : null}
                 </td>
               </tr>
             ))}

@@ -1178,6 +1178,150 @@ export async function revertDiffRemovalDecision(
   );
 }
 
+export type ReviewExceptionSummary = {
+  exception_key: string;
+  entity_type: "row" | "normalized" | "removal";
+  entity_id: number;
+  diff_status: MonthlyDiffStatus;
+  record_kind: string;
+  title: string;
+  subtitle?: string | null;
+  department?: string | null;
+  resolved: boolean;
+};
+
+export type ReviewExceptionFieldRow = {
+  key: string;
+  label: string;
+  value: string | null;
+};
+
+export type ReviewExceptionDiffRow = {
+  key: string;
+  label: string;
+  baseline_value: string | null;
+  import_value: string | null;
+  changed: boolean;
+};
+
+export type ReviewExceptionDetail = {
+  exception_key: string;
+  entity_type: "row" | "normalized" | "removal";
+  entity_id: number;
+  batch_id: number;
+  diff_status: MonthlyDiffStatus;
+  record_kind: string;
+  match_key?: string | null;
+  title: string;
+  subtitle?: string | null;
+  department?: string | null;
+  baseline: {
+    source_label: string;
+    fields: ReviewExceptionFieldRow[];
+  };
+  import_data: {
+    source_label: string;
+    fields: ReviewExceptionFieldRow[];
+  };
+  diff: {
+    fields: ReviewExceptionDiffRow[];
+  };
+  resolved: boolean;
+  actions_available: boolean;
+  removal_actions_available: boolean;
+};
+
+export type ReviewExceptionListResponse = {
+  batch_id: number;
+  total: number;
+  items: ReviewExceptionSummary[];
+};
+
+export type ReviewExceptionResolutionResult = {
+  exception_key: string;
+  resolution?: string;
+  decision?: DiffRemovalDecisionKind;
+  batch_id: number;
+  resolved: boolean;
+  differences_resolved?: number;
+  auto_review?: {
+    auto_completed?: boolean;
+    batch_status?: string;
+    already_completed?: boolean;
+  };
+  removal?: DiffRemovalDecisionResult;
+};
+
+export function stagingRowExceptionKey(rowId: number): string {
+  return `rows/${rowId}`;
+}
+
+export async function listImportReviewExceptions(
+  batchId: number,
+  params?: { diff_status?: MonthlyDiffStatus; limit?: number; offset?: number },
+): Promise<ReviewExceptionListResponse> {
+  return apiGetJson(
+    `/directory/personnel/import/batches/${batchId}/review-exceptions`,
+    buildQuery({
+      diff_status: params?.diff_status,
+      limit: params?.limit,
+      offset: params?.offset,
+    }),
+  );
+}
+
+export async function getImportReviewExceptionDetail(
+  batchId: number,
+  exceptionKey: string,
+): Promise<ReviewExceptionDetail> {
+  const encoded = exceptionKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}`);
+}
+
+export async function acceptImportReviewException(
+  batchId: number,
+  exceptionKey: string,
+  payload?: { basis?: string | null },
+): Promise<ReviewExceptionResolutionResult> {
+  const encoded = exceptionKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return apiPostJson(
+    `/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}/accept-import`,
+    payload ?? {},
+  );
+}
+
+export async function keepBaselineImportReviewException(
+  batchId: number,
+  exceptionKey: string,
+  payload?: { basis?: string | null },
+): Promise<ReviewExceptionResolutionResult> {
+  const encoded = exceptionKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return apiPostJson(
+    `/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}/keep-baseline`,
+    payload ?? {},
+  );
+}
+
+export async function postImportReviewRemovalExceptionDecision(
+  batchId: number,
+  removalId: number,
+  payload: { decision: DiffRemovalDecisionKind; basis?: string | null },
+): Promise<ReviewExceptionResolutionResult> {
+  return apiPostJson(
+    `/directory/personnel/import/batches/${batchId}/review-exceptions/removals/${removalId}/decision`,
+    payload,
+  );
+}
+
 export type ImportReviewProgressAssessment = CompleteImportReviewAssessment & {
   review_progress: ImportReviewProgress;
 };

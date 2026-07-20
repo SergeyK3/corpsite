@@ -16,6 +16,7 @@ type Props = {
   decisionsEnabled?: boolean;
   onDecision?: (item: MonthlyDiffRemoval, kind: RemovedEntryDecisionKind) => void | Promise<void>;
   onRevert?: (item: MonthlyDiffRemoval) => void | Promise<void>;
+  onOpen?: (removalId: number) => void;
 };
 
 const TAB_LABELS: Record<RemovalDecisionTab, string> = {
@@ -31,6 +32,7 @@ export default function ImportRemovalDecisionsPanel({
   decisionsEnabled = false,
   onDecision,
   onRevert,
+  onOpen,
 }: Props) {
   const [tab, setTab] = React.useState<RemovalDecisionTab>("pending");
   const counts: Record<RemovalDecisionTab, number> = {
@@ -68,6 +70,7 @@ export default function ImportRemovalDecisionsPanel({
           items={pending}
           decisionsEnabled={decisionsEnabled}
           onDecision={onDecision}
+          onOpen={onOpen}
         />
       ) : null}
 

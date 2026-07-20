@@ -35,14 +35,15 @@ class ConfirmDifferenceService:
         if difference.row_version != command.expected_row_version:
             raise DifferenceStateConflictError("Stale Detected Difference row_version")
 
-        if difference.technical_diff_class == TECHNICAL_DIFF_CONFLICT:
-            raise DifferenceConfirmForbiddenError(
-                "CONFLICT technical_diff_class cannot be confirmed until resolved"
-            )
-        if difference.attribute == CONFLICT_ATTRIBUTE:
-            raise DifferenceConfirmForbiddenError(
-                "Conflict attribute differences cannot be confirmed until resolved"
-            )
+        if not command.resolve_conflict:
+            if difference.technical_diff_class == TECHNICAL_DIFF_CONFLICT:
+                raise DifferenceConfirmForbiddenError(
+                    "CONFLICT technical_diff_class cannot be confirmed until resolved"
+                )
+            if difference.attribute == CONFLICT_ATTRIBUTE:
+                raise DifferenceConfirmForbiddenError(
+                    "Conflict attribute differences cannot be confirmed until resolved"
+                )
 
         active_mrd = self._repo.resolve_active_mrd(difference.report_period)
         if active_mrd is None or active_mrd.mrd_id != difference.mrd_id:
