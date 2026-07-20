@@ -98,6 +98,8 @@ export type PersonnelApplicationListItem = {
   intake_draft_status: string | null;
   intake_opened_at: string | null;
   intake_submitted_at: string | null;
+  intake_link_display_state: string | null;
+  intake_url_path: string | null;
   employee_id: number | null;
   employee_full_name: string | null;
   completed_at: string | null;
@@ -244,6 +246,23 @@ export type IntakeLinkIssueResponse = {
   status: string;
   reissued: boolean;
 };
+
+export type IntakeLinkAccessResponse = {
+  application_id: number;
+  display_state: string;
+  link_id: number | null;
+  link_status: string | null;
+  intake_url_path: string | null;
+  expires_at: string | null;
+};
+
+export async function getActiveIntakeLink(applicationId: number): Promise<IntakeLinkAccessResponse> {
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake-link/active`;
+  const res = await fetch(resolveApiUrl(path), { method: "GET", headers: authHeaders(), cache: "no-store" });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "GET", url: path });
+  return body as IntakeLinkAccessResponse;
+}
 
 export type IntakeSummaryResponse = {
   application_id: number;

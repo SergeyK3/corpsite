@@ -83,6 +83,7 @@ def _filled_payload() -> dict:
 def test_intake_routes_registered(client, intake_schema_ready) -> None:
     paths = {route.path for route in app.routes if hasattr(route, "path")}
     assert "/directory/personnel-applications/{application_id}/intake-link" in paths
+    assert "/directory/personnel-applications/{application_id}/intake-link/active" in paths
     assert "/intake/{token}" in paths
     assert "/intake/{token}/submit" in paths
 
@@ -139,6 +140,84 @@ def test_token_lifecycle_issue_open_autosave_submit(
         cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
 
 
+def test_hr_active_intake_link_persists_without_browser_cache(
+    client, intake_schema_ready, privileged_headers
+) -> None:
+    person_ids: list[int] = []
+    reg = _register_application(client, privileged_headers)
+    person_ids.append(reg["person_id"])
+    app_id = reg["application_id"]
+
+    issue = client.post(
+        f"/directory/personnel-applications/{app_id}/intake-link",
+        headers=privileged_headers,
+    )
+    assert issue.status_code == 200, issue.text
+    issue_path = issue.json()["intake_url_path"]
+
+    active = client.get(
+        f"/directory/personnel-applications/{app_id}/intake-link/active",
+        headers=privileged_headers,
+    )
+    assert active.status_code == 200, active.text
+    active_body = active.json()
+    assert active_body["display_state"] == "active"
+    assert active_body["intake_url_path"] == issue_path
+
+    listing = client.get("/directory/personnel-applications", headers=privileged_headers)
+    assert listing.status_code == 200, listing.text
+    row = next(item for item in listing.json()["items"] if item["application_id"] == app_id)
+    assert row["intake_link_display_state"] == "active"
+    assert row["intake_url_path"] == issue_path
+
+    token = issue_path.split("/intake/")[-1]
+    open_res = client.get(f"/intake/{token}")
+    assert open_res.status_code == 200, open_res.text
+    assert open_res.json()["application_id"] == app_id
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
+def test_legacy_hash_only_link_requires_reissue(
+    client, intake_schema_ready, privileged_headers, seed
+) -> None:
+    person_ids: list[int] = []
+    reg = _register_application(client, privileged_headers)
+    person_ids.append(reg["person_id"])
+    app_id = reg["application_id"]
+    raw_token = "legacy-hash-only-token"
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.personnel_intake_links (
+                    application_id, token_hash, status, issued_by_user_id, expires_at
+                )
+                VALUES (
+                    :application_id, :token_hash, 'issued', :issued_by_user_id, NOW() + INTERVAL '7 days'
+                )
+                """
+            ),
+            {
+                "application_id": app_id,
+                "token_hash": _hash_token(raw_token),
+                "issued_by_user_id": seed["initiator_user_id"],
+            },
+        )
+
+    active = client.get(
+        f"/directory/personnel-applications/{app_id}/intake-link/active",
+        headers=privileged_headers,
+    )
+    assert active.status_code == 200, active.text
+    assert active.json()["display_state"] == "reissue_required"
+    assert active.json()["intake_url_path"] is None
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
 def test_revoke_link(client, intake_schema_ready, privileged_headers) -> None:
     person_ids: list[int] = []
     reg = _register_application(client, privileged_headers)
@@ -158,9 +237,54 @@ def test_revoke_link(client, intake_schema_ready, privileged_headers) -> None:
     assert revoke.status_code == 200
     assert revoke.json()["status"] == "revoked"
 
+    active = client.get(
+        f"/directory/personnel-applications/{app_id}/intake-link/active",
+        headers=privileged_headers,
+    )
+    assert active.status_code == 200, active.text
+    assert active.json()["display_state"] == "revoked"
+    assert active.json()["intake_url_path"] is None
+
     denied = client.get(f"/intake/{token}")
     assert denied.status_code == 403
     assert denied.json()["detail"]["code"] == "TOKEN_REVOKED"
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
+def test_revoke_submitted_link(client, intake_schema_ready, privileged_headers) -> None:
+    person_ids: list[int] = []
+    reg = _register_application(client, privileged_headers)
+    person_ids.append(reg["person_id"])
+    app_id = reg["application_id"]
+
+    issue = client.post(
+        f"/directory/personnel-applications/{app_id}/intake-link",
+        headers=privileged_headers,
+    )
+    token = issue.json()["intake_url_path"].split("/intake/")[-1]
+    payload = _filled_payload()
+    client.get(f"/intake/{token}")
+    client.patch(f"/intake/{token}", json={"payload": payload})
+    client.post(f"/intake/{token}/submit", json={"payload": payload})
+
+    revoke = client.post(
+        f"/directory/personnel-applications/{app_id}/intake-link/revoke",
+        headers=privileged_headers,
+    )
+    assert revoke.status_code == 200
+    assert revoke.json()["status"] == "revoked"
+
+    active = client.get(
+        f"/directory/personnel-applications/{app_id}/intake-link/active",
+        headers=privileged_headers,
+    )
+    assert active.json()["display_state"] == "revoked"
+    assert active.json()["intake_url_path"] is None
+
+    denied = client.get(f"/intake/{token}")
+    assert denied.status_code == 403
 
     with engine.begin() as conn:
         cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])

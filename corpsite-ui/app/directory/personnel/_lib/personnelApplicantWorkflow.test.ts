@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   canCreateHireOrderFromApplicantCard,
+  canDisplayApplicantIntakeLink,
   canOpenApplicantPersonalCard,
+  formatApplicantIntakeUrlDisplay,
+  resolveApplicantIntakeUrlPath,
   resolveApplicantWorkflowStatus,
 } from "./personnelApplicantWorkflow";
 
@@ -63,5 +66,25 @@ describe("personnelApplicantWorkflow", () => {
     expect(canCreateHireOrderFromApplicantCard("intake_pending")).toBe(false);
     expect(canCreateHireOrderFromApplicantCard("intake_submitted")).toBe(true);
     expect(canCreateHireOrderFromApplicantCard("review_completed")).toBe(true);
+  });
+
+  it("allows intake link display only for active link statuses", () => {
+    expect(canDisplayApplicantIntakeLink("issued")).toBe(true);
+    expect(canDisplayApplicantIntakeLink("opened")).toBe(true);
+    expect(canDisplayApplicantIntakeLink("submitted")).toBe(true);
+    expect(canDisplayApplicantIntakeLink("revoked")).toBe(false);
+    expect(canDisplayApplicantIntakeLink(null)).toBe(false);
+  });
+
+  it("resolves intake path from session cache for active links", () => {
+    sessionStorage.setItem("personnel-intake-link:42", "/intake/token-1");
+    expect(resolveApplicantIntakeUrlPath(42, "issued")).toBe("/intake/token-1");
+    expect(resolveApplicantIntakeUrlPath(42, "revoked")).toBeNull();
+    sessionStorage.removeItem("personnel-intake-link:42");
+  });
+
+  it("truncates long intake urls for table display", () => {
+    const longUrl = `http://localhost/intake/${"x".repeat(60)}`;
+    expect(formatApplicantIntakeUrlDisplay(longUrl, 20)).toBe(`${longUrl.slice(0, 19)}…`);
   });
 });

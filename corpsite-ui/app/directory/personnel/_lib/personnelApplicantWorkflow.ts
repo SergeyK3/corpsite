@@ -130,6 +130,34 @@ export function buildIntakePublicUrl(intakeUrlPath: string | null | undefined): 
   return path;
 }
 
+const APPLICANT_INTAKE_LINK_STATUSES_WITH_PATH = new Set(["issued", "opened", "submitted"]);
+
+/** Active intake link statuses for which a persisted `/intake/{token}` path may be shown. */
+export function canDisplayApplicantIntakeLink(intakeLinkStatus: string | null | undefined): boolean {
+  return APPLICANT_INTAKE_LINK_STATUSES_WITH_PATH.has(String(intakeLinkStatus || "").trim());
+}
+
+/**
+ * Resolve applicant-facing intake URL path from browser session cache.
+ * Raw token is not stored in DB; path is persisted locally when HR issues/reissues the link.
+ */
+export function resolveApplicantIntakeUrlPath(
+  applicationId: number,
+  intakeLinkStatus: string | null | undefined,
+): string | null {
+  if (!canDisplayApplicantIntakeLink(intakeLinkStatus)) {
+    return null;
+  }
+  const path = readPersistedIntakeLinkPath(applicationId);
+  return path?.trim() ? path.trim() : null;
+}
+
+export function formatApplicantIntakeUrlDisplay(url: string, maxLength = 48): string {
+  const value = url.trim();
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
 const INTAKE_LINK_STORAGE_PREFIX = "personnel-intake-link:";
 
 export function persistIntakeLinkPath(applicationId: number, intakeUrlPath: string): void {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import ApplicantIntakeLinkTableCell from "./ApplicantIntakeLinkTableCell";
 import ApplicantWorkflowStatusBadge from "./ApplicantWorkflowStatusBadge";
 import { DirectorResolutionBadge } from "./PersonnelApplicationStatusBadge";
 import {
@@ -85,6 +86,7 @@ export function PersonnelApplicationsTable({
             <th className="px-4 py-3">Статус</th>
             <th className="px-4 py-3">Сотрудник</th>
             <th className="px-4 py-3">Анкета</th>
+            <th className="px-4 py-3">Адрес ЛК</th>
             <th className="px-4 py-3">Открыта</th>
             <th className="px-4 py-3">Отправлена</th>
             <th className="px-4 py-3">Дата заявления</th>
@@ -146,6 +148,13 @@ export function PersonnelApplicationsTable({
                       ? intakeDraftStatusLabel(item.intake_draft_status)
                       : intakeLinkStatusLabel(item.intake_link_status)}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  <ApplicantIntakeLinkTableCell
+                    applicationId={item.application_id}
+                    displayState={item.intake_link_display_state}
+                    intakeUrlPath={item.intake_url_path}
+                  />
                 </td>
                 <td className="px-4 py-3">{formatPersonnelApplicationDateTime(item.intake_opened_at)}</td>
                 <td className="px-4 py-3">{formatPersonnelApplicationDateTime(item.intake_submitted_at)}</td>

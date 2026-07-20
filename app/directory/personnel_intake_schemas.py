@@ -85,6 +85,15 @@ class IntakeRevokeOut(BaseModel):
     revoked_at: datetime
 
 
+class IntakeLinkAccessOut(BaseModel):
+    application_id: int
+    display_state: str
+    link_id: int | None = None
+    link_status: str | None = None
+    intake_url_path: str | None = None
+    expires_at: datetime | None = None
+
+
 class IntakeLinkRevokeIn(BaseModel):
     pass
 
@@ -218,6 +227,7 @@ def review_state_to_out(state: IntakeReviewState, *, link: IntakeLinkSnapshot | 
             revoked_at=None,
             revoked_by_user_id=None,
             superseded_by_link_id=None,
+            token_ciphertext=None,
             created_at=state.draft.created_at,
             updated_at=state.draft.updated_at,
         ),

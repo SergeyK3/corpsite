@@ -118,7 +118,8 @@ describe("requireEmployeeIdForItemType", () => {
 
   it("does not require employee for legacy HIRE", () => {
     expect(requireEmployeeIdForItemType("HIRE", "")).toBeNull();
-    expect(requireEmployeeIdForItemType("HIRE", "", { pendingNewEmployee: true })).toBeNull();
+    expect(requireEmployeeIdForItemType("HIRE", "", { pendingNewEmployee: true, personId: 77 })).toBeNull();
     expect(requireEmployeeIdForItemType("HIRE", "", { pendingNewEmployee: false })).toBeNull();
+    expect(requireEmployeeIdForItemType("HIRE", "", { pendingNewEmployee: true })).toMatch(/person_id/i);
   });
 });

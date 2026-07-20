@@ -40,6 +40,7 @@ from app.personnel_intake.domain.status import (
     is_intake_link_usable,
 )
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
+from app.personnel_intake.infrastructure.token_encryption import encrypt_intake_raw_token
 
 DEFAULT_INTAKE_LINK_TTL_DAYS = 14
 INTAKE_URL_PATH_PREFIX = "/intake/"
@@ -174,6 +175,7 @@ def issue_intake_link(
     link = repo.create_link(
         application_id=application_id,
         token_hash=_hash_token(raw_token),
+        token_ciphertext=encrypt_intake_raw_token(raw_token),
         issued_by_user_id=issued_by_user_id,
         expires_at=expires_at,
     )
@@ -229,10 +231,10 @@ def revoke_intake_link(
     """Revoke the active intake link for an application."""
     _require_application(conn, application_id)
     repo = SqlAlchemyPersonnelIntakeRepository(conn)
-    active = repo.get_active_link_for_application(application_id)
+    active = repo.get_revocable_link_for_application(application_id)
     if active is None:
         raise PersonnelIntakeNotFoundError(
-            f"No active intake link for application_id={application_id}"
+            f"No revocable intake link for application_id={application_id}"
         )
     now = _now_utc()
     return repo.mark_link_revoked(

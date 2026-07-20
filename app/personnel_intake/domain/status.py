@@ -31,6 +31,15 @@ INTAKE_LINK_ACTIVE_STATUSES: frozenset[str] = frozenset(
     }
 )
 
+# Link statuses HR can revoke from the personnel application card.
+INTAKE_LINK_REVOCABLE_STATUSES: frozenset[str] = frozenset(
+    {
+        INTAKE_LINK_STATUS_ISSUED,
+        INTAKE_LINK_STATUS_OPENED,
+        INTAKE_LINK_STATUS_SUBMITTED,
+    }
+)
+
 
 def is_intake_link_usable(status: str) -> bool:
     return status in INTAKE_LINK_ACTIVE_STATUSES

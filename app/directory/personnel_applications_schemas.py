@@ -136,6 +136,8 @@ class PersonnelApplicationListItemOut(BaseModel):
     intake_draft_status: str | None = None
     intake_opened_at: datetime | None = None
     intake_submitted_at: datetime | None = None
+    intake_link_display_state: str | None = None
+    intake_url_path: str | None = None
     employee_id: int | None = None
     employee_full_name: str | None = None
     completed_at: datetime | None = None
@@ -174,6 +176,8 @@ def list_item_to_out(item) -> PersonnelApplicationListItemOut:
         intake_draft_status=getattr(item, "intake_draft_status", None),
         intake_opened_at=getattr(item, "intake_opened_at", None),
         intake_submitted_at=getattr(item, "intake_submitted_at", None),
+        intake_link_display_state=getattr(item, "intake_link_display_state", None),
+        intake_url_path=getattr(item, "intake_url_path", None),
         employee_id=getattr(item, "employee_id", None),
         employee_full_name=getattr(item, "employee_full_name", None),
         completed_at=getattr(item, "completed_at", None),

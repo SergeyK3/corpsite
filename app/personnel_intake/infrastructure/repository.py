@@ -19,6 +19,7 @@ from app.personnel_intake.domain.models import (
 )
 from app.personnel_intake.domain.status import (
     INTAKE_LINK_ACTIVE_STATUSES,
+    INTAKE_LINK_REVOCABLE_STATUSES,
     INTAKE_LINK_STATUS_EXPIRED,
     INTAKE_LINK_STATUS_ISSUED,
     INTAKE_LINK_STATUS_OPENED,
@@ -38,6 +39,7 @@ _LINK_COLUMNS = (
     PersonnelIntakeLink.revoked_at,
     PersonnelIntakeLink.revoked_by_user_id,
     PersonnelIntakeLink.superseded_by_link_id,
+    PersonnelIntakeLink.token_ciphertext,
     PersonnelIntakeLink.created_at,
     PersonnelIntakeLink.updated_at,
 )
@@ -75,6 +77,11 @@ def _link_from_row(row: RowMapping | dict[str, Any]) -> IntakeLinkSnapshot:
             if row.get("superseded_by_link_id") is not None
             else None
         ),
+        token_ciphertext=(
+            str(row["token_ciphertext"]).strip()
+            if row.get("token_ciphertext") is not None
+            else None
+        ),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -107,6 +114,7 @@ class SqlAlchemyPersonnelIntakeRepository:
         *,
         application_id: int,
         token_hash: str,
+        token_ciphertext: str | None,
         issued_by_user_id: int,
         expires_at: datetime,
     ) -> IntakeLinkSnapshot:
@@ -115,6 +123,7 @@ class SqlAlchemyPersonnelIntakeRepository:
             .values(
                 application_id=int(application_id),
                 token_hash=token_hash,
+                token_ciphertext=token_ciphertext,
                 status=INTAKE_LINK_STATUS_ISSUED,
                 issued_by_user_id=int(issued_by_user_id),
                 expires_at=expires_at,
@@ -144,6 +153,21 @@ class SqlAlchemyPersonnelIntakeRepository:
             .where(
                 PersonnelIntakeLink.application_id == int(application_id),
                 PersonnelIntakeLink.status.in_(tuple(INTAKE_LINK_ACTIVE_STATUSES)),
+            )
+            .order_by(PersonnelIntakeLink.created_at.desc())
+            .limit(1)
+        )
+        row = self._conn.execute(stmt).mappings().one_or_none()
+        if row is None:
+            return None
+        return _link_from_row(row)
+
+    def get_revocable_link_for_application(self, application_id: int) -> IntakeLinkSnapshot | None:
+        stmt = (
+            select(*_LINK_COLUMNS)
+            .where(
+                PersonnelIntakeLink.application_id == int(application_id),
+                PersonnelIntakeLink.status.in_(tuple(INTAKE_LINK_REVOCABLE_STATUSES)),
             )
             .order_by(PersonnelIntakeLink.created_at.desc())
             .limit(1)
@@ -205,6 +229,7 @@ class SqlAlchemyPersonnelIntakeRepository:
             "status": INTAKE_LINK_STATUS_REVOKED,
             "revoked_at": revoked_at,
             "revoked_by_user_id": int(revoked_by_user_id),
+            "token_ciphertext": None,
             "updated_at": revoked_at,
         }
         if superseded_by_link_id is not None:

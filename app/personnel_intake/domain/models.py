@@ -59,6 +59,7 @@ class IntakeLinkSnapshot:
     superseded_by_link_id: int | None
     created_at: datetime
     updated_at: datetime
+    token_ciphertext: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

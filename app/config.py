@@ -57,6 +57,7 @@ def validate_production_secrets() -> None:
         "AUTH_JWT_SECRET": env("AUTH_JWT_SECRET", "dev-secret-change-me"),
         "INTERNAL_API_TOKEN": env("INTERNAL_API_TOKEN"),
         "BOT_BIND_TOKEN": env("BOT_BIND_TOKEN"),
+        "PERSONNEL_INTAKE_TOKEN_ENCRYPTION_KEY": env("PERSONNEL_INTAKE_TOKEN_ENCRYPTION_KEY"),
     }
 
     bad: List[str] = []

@@ -13,6 +13,7 @@ from app.personnel_applications.domain.lifecycle_audit import (
     JOURNAL_VIEWS,
 )
 from app.personnel_applications.domain.status import terminal_statuses_for_partial_index
+from app.personnel_intake.application.hr_link_access_service import batch_hr_intake_link_displays
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 
 _TERMINAL_SQL = ", ".join(f"'{s}'" for s in terminal_statuses_for_partial_index())
@@ -59,6 +60,8 @@ class PersonnelApplicationListItem:
     intake_draft_status: str | None = None
     intake_opened_at: Any | None = None
     intake_submitted_at: Any | None = None
+    intake_link_display_state: str | None = None
+    intake_url_path: str | None = None
 
 
 def list_personnel_applications(
@@ -244,10 +247,12 @@ def list_personnel_applications(
     app_ids = [item.application_id for item in items]
     intake_repo = SqlAlchemyPersonnelIntakeRepository(conn)
     summaries = intake_repo.load_intake_summaries(app_ids)
+    link_displays = batch_hr_intake_link_displays(conn, app_ids)
     enriched: list[PersonnelApplicationListItem] = []
     for item in items:
         summary = summaries.get(item.application_id)
-        if summary is None:
+        link_display = link_displays.get(item.application_id)
+        if summary is None and link_display is None:
             enriched.append(item)
             continue
         enriched.append(
@@ -274,10 +279,12 @@ def list_personnel_applications(
                 employee_full_name=item.employee_full_name,
                 completed_at=item.completed_at,
                 closed_at=item.closed_at,
-                intake_link_status=summary.link_status,
-                intake_draft_status=summary.draft_status,
-                intake_opened_at=summary.opened_at,
-                intake_submitted_at=summary.submitted_at,
+                intake_link_status=summary.link_status if summary else None,
+                intake_draft_status=summary.draft_status if summary else None,
+                intake_opened_at=summary.opened_at if summary else None,
+                intake_submitted_at=summary.submitted_at if summary else None,
+                intake_link_display_state=link_display.display_state if link_display else None,
+                intake_url_path=link_display.intake_url_path if link_display else None,
             )
         )
     return enriched, total

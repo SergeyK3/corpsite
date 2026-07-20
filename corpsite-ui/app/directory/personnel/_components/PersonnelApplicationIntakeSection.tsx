@@ -17,6 +17,7 @@ import {
   formatPersonnelApplicationDateTime,
 } from "../_lib/personnelApplicationLabels";
 import {
+  getActiveIntakeLink,
   issueIntakeLink,
   mapPersonnelApplicationsApiError,
   reissueIntakeLink,
@@ -37,8 +38,20 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
   const [issuedLinkPath, setIssuedLinkPath] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    const persisted = readPersistedIntakeLinkPath(detail.application_id);
-    if (persisted) setIssuedLinkPath(persisted);
+    let cancelled = false;
+    void getActiveIntakeLink(detail.application_id)
+      .then((result) => {
+        if (cancelled || !result.intake_url_path) return;
+        setIssuedLinkPath(result.intake_url_path);
+        persistIntakeLinkPath(detail.application_id, result.intake_url_path);
+      })
+      .catch(() => {
+        const persisted = readPersistedIntakeLinkPath(detail.application_id);
+        if (!cancelled && persisted) setIssuedLinkPath(persisted);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [detail.application_id]);
 
   const linkStatus = detail.intake_link_status;

@@ -10,6 +10,7 @@ from app.db.engine import engine
 from app.directory.common import as_http500
 from app.directory.personnel_intake_schemas import (
     IntakeDraftOut,
+    IntakeLinkAccessOut,
     IntakeLinkIssueOut,
     IntakeReviewStateOut,
     IntakeRevokeOut,
@@ -24,6 +25,7 @@ from app.directory.personnel_intake_schemas import (
 )
 from app.directory.rbac import require_personnel_admin_or_403
 from app.personnel_applications.domain.errors import PersonnelApplicationNotFoundError
+from app.personnel_intake.application.hr_link_access_service import get_hr_intake_link_display
 from app.personnel_intake.application.intake_service import (
     get_hr_intake_draft,
     get_intake_summary,
@@ -93,6 +95,31 @@ def post_intake_link_issue(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelIntakeConflictError as exc:
         raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get("/{application_id}/intake-link/active", response_model=IntakeLinkAccessOut)
+def get_intake_link_active(
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakeLinkAccessOut:
+    require_personnel_admin_or_403(user)
+    try:
+        with engine.connect() as conn:
+            display = get_hr_intake_link_display(conn, application_id)
+        return IntakeLinkAccessOut(
+            application_id=display.application_id,
+            display_state=display.display_state,
+            link_id=display.link_id,
+            link_status=display.link_status,
+            intake_url_path=display.intake_url_path,
+            expires_at=display.expires_at,
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except HTTPException:
         raise
     except Exception as exc:

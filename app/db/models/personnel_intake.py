@@ -18,6 +18,7 @@ class PersonnelIntakeLink(Base):
         nullable=False,
     )
     token_hash = Column(Text, nullable=False, unique=True)
+    token_ciphertext = Column(Text, nullable=True)
     status = Column(Text, nullable=False, server_default=text("'issued'"))
     issued_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     issued_by_user_id = Column(

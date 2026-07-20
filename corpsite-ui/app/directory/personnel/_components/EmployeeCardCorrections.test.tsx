@@ -44,6 +44,7 @@ vi.mock("@/lib/useOrgUnitScopeOptions", () => ({
 
 vi.mock("@/lib/usePersonnelOrderPositionOptions", () => ({
   usePersonnelOrderPositionOptions: vi.fn(() => ({
+    allOptions: [{ id: 501, label: "Врач-терапевт" }],
     scopedOptions: [{ id: 501, label: "Врач-терапевт" }],
     loading: false,
   })),
