@@ -1,4 +1,4 @@
-"""Complete Import Review — transition IN_REVIEW → APPLY_PENDING (ADR-038 Screen 5)."""
+"""Complete Import Review — transition IN_REVIEW → APPLY_PENDING (ADR-038 Screen 5, ADR-059 Phase 1)."""
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -22,6 +22,10 @@ from app.services.hr_import_normalized_record_service import (
     REVIEW_STATUS_PENDING,
     normalized_records_available,
 )
+from app.services.hr_import_review_exception_service import (
+    BLOCKER_UNRESOLVED_EXCEPTIONS,
+    count_unresolved_exceptions,
+)
 from app.services.security_audit_service import write_security_event
 
 EVENT_TYPE_IMPORT_REVIEW_COMPLETED = "HR_IMPORT_REVIEW_COMPLETED"
@@ -38,7 +42,6 @@ COMPLETE_REVIEW_ALREADY_DONE_STATUSES = frozenset(
 
 BLOCKER_BATCH_STATUS = "BATCH_STATUS"
 BLOCKER_ERROR_ROWS = "ERROR_ROWS"
-BLOCKER_PENDING_NORMALIZED = "PENDING_NORMALIZED"
 BLOCKER_PENDING_REMOVED_DECISIONS = "PENDING_REMOVED_DECISIONS"
 
 
@@ -124,18 +127,20 @@ def _count_pending_normalized(conn: Connection, batch_id: int) -> int:
 def build_review_progress(conn: Connection, batch: dict[str, Any]) -> dict[str, Any]:
     batch_id = int(batch["batch_id"])
     pending_normalized = _count_pending_normalized(conn, batch_id)
+    unresolved_exceptions = count_unresolved_exceptions(conn, batch_id)
     error_rows = int(batch.get("error_rows") or 0)
     pending_removals = count_pending_diff_removals(conn, batch_id)
     status = str(batch.get("status") or "")
     already_completed = status in COMPLETE_REVIEW_ALREADY_DONE_STATUSES
     ready = already_completed or (
         status == BATCH_STATUS_IN_REVIEW
-        and pending_normalized == 0
+        and unresolved_exceptions == 0
         and error_rows == 0
         and pending_removals == 0
     )
     return {
         "pending_normalized": pending_normalized,
+        "unresolved_exceptions": unresolved_exceptions,
         "error_rows": error_rows,
         "pending_removals": pending_removals,
         "ready": ready,
@@ -160,18 +165,6 @@ def _collect_review_queue_blockers(conn: Connection, batch: dict[str, Any]) -> l
             )
         )
 
-    pending_normalized = _count_pending_normalized(conn, batch_id)
-    if pending_normalized > 0:
-        blockers.append(
-            _blocker(
-                code=BLOCKER_PENDING_NORMALIZED,
-                message=f"Импорт {import_code} содержит {pending_normalized} normalized-записей в статусе pending.",
-                batch_id=batch_id,
-                count=pending_normalized,
-                resolve_kind="normalized_review",
-            )
-        )
-
     pending_removals = count_pending_diff_removals(conn, batch_id)
     if pending_removals > 0:
         blockers.append(
@@ -181,6 +174,21 @@ def _collect_review_queue_blockers(conn: Connection, batch: dict[str, Any]) -> l
                 batch_id=batch_id,
                 count=pending_removals,
                 resolve_kind="removed_review",
+            )
+        )
+
+    unresolved_exceptions = count_unresolved_exceptions(conn, batch_id)
+    if unresolved_exceptions > 0:
+        blockers.append(
+            _blocker(
+                code=BLOCKER_UNRESOLVED_EXCEPTIONS,
+                message=(
+                    f"Импорт {import_code} содержит {unresolved_exceptions} "
+                    "необработанных исключений review-by-exception."
+                ),
+                batch_id=batch_id,
+                count=unresolved_exceptions,
+                resolve_kind="hr_review",
             )
         )
 
@@ -236,21 +244,6 @@ def _collect_complete_review_blockers(conn: Connection, batch: dict[str, Any]) -
             )
         )
 
-    pending_normalized = _count_pending_normalized(conn, batch_id)
-    if pending_normalized > 0:
-        blockers.append(
-            _blocker(
-                code=BLOCKER_PENDING_NORMALIZED,
-                message=(
-                    f"Импорт {import_code} содержит {pending_normalized} normalized-записей "
-                    "в статусе pending. Утвердите или отклоните их на экране проверки."
-                ),
-                batch_id=batch_id,
-                count=pending_normalized,
-                resolve_kind="normalized_review",
-            )
-        )
-
     pending_removals = count_pending_diff_removals(conn, batch_id)
     if pending_removals > 0:
         blockers.append(
@@ -264,6 +257,22 @@ def _collect_complete_review_blockers(conn: Connection, batch: dict[str, Any]) -
                 batch_id=batch_id,
                 count=pending_removals,
                 resolve_kind="removed_review",
+            )
+        )
+
+    unresolved_exceptions = count_unresolved_exceptions(conn, batch_id)
+    if unresolved_exceptions > 0:
+        blockers.append(
+            _blocker(
+                code=BLOCKER_UNRESOLVED_EXCEPTIONS,
+                message=(
+                    f"Импорт {import_code} содержит {unresolved_exceptions} "
+                    "необработанных исключений (CHANGED / CONFLICT / eligible NEW). "
+                    "Подтвердите или отклоните их в HR review."
+                ),
+                batch_id=batch_id,
+                count=unresolved_exceptions,
+                resolve_kind="hr_review",
             )
         )
 
@@ -358,6 +367,7 @@ def _transition_batch_to_apply_pending(
             "previous_status": BATCH_STATUS_IN_REVIEW,
             "new_status": BATCH_STATUS_APPLY_PENDING,
             "trigger": trigger,
+            "auto_completed": trigger == "auto",
         },
         conn=conn,
     )

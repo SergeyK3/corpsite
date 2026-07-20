@@ -1754,15 +1754,6 @@ def update_normalized_record_review(
     if updated is None:
         raise NormalizedRecordNotFoundError(record_id)
 
-    if review_status in {REVIEW_STATUS_APPROVED, REVIEW_STATUS_REJECTED}:
-        from app.services.hr_import_complete_review_service import maybe_auto_complete_import_review
-
-        maybe_auto_complete_import_review(
-            conn,
-            int(updated["batch_id"]),
-            actor_user_id=int(reviewed_by),
-        )
-
     return _serialize_normalized_record(updated, conn=conn)
 
 

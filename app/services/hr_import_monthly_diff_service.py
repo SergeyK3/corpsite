@@ -484,7 +484,7 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
                 comparison_baseline_id=None,
                 comparison_publication_origin_id=None,
             )
-        return {
+        result = {
             "batch_id": batch_id,
             "snapshot_id": None,
             "baseline_id": None,
@@ -493,6 +493,10 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
             "removed": [],
             "skipped": False,
         }
+        from app.services.hr_import_review_exception_service import run_post_diff_review_completion
+
+        result["auto_complete_review"] = run_post_diff_review_completion(conn, batch_id)
+        return result
 
     snapshot_id = int(comparison_baseline["baseline_id"])
     publication_origin_id = comparison_baseline.get("publication_origin_id")
@@ -634,7 +638,7 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
 
     restore_removal_decisions(conn, batch_id, stashed_decisions)
 
-    return {
+    result = {
         "batch_id": batch_id,
         "snapshot_id": snapshot_id,
         "baseline_id": snapshot_id,
@@ -643,6 +647,12 @@ def compute_batch_monthly_diff(conn: Connection, batch_id: int) -> dict[str, Any
         "removed": removed_items,
         "skipped": False,
     }
+
+    from app.services.hr_import_review_exception_service import run_post_diff_review_completion
+
+    auto_complete = run_post_diff_review_completion(conn, batch_id)
+    result["auto_complete_review"] = auto_complete
+    return result
 
 
 def get_batch_diff_summary(conn: Connection, batch_id: int) -> dict[str, Any]:

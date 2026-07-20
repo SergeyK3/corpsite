@@ -32,6 +32,15 @@ class RejectDifferenceService:
             rejected_at=rejected_at,
             basis=command.basis,
         )
+        batch_id = (difference.origin_context or {}).get("batch_id")
+        if batch_id is not None:
+            from app.services.hr_import_review_exception_service import run_post_difference_review_completion
+
+            run_post_difference_review_completion(
+                self._repo._conn,
+                batch_id=int(batch_id),
+                actor_user_id=int(command.rejected_by),
+            )
         return RejectDifferenceResult(
             difference_id=command.difference_id,
             lifecycle_status=DIFFERENCE_LIFECYCLE_REJECTED,

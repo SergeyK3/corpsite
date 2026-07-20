@@ -1,6 +1,7 @@
 """Tests for Complete Import Review workflow."""
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from app.services.hr_import_normalized_record_service import REVIEW_STATUS_APPRO
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, table_exists
 from tests.hr_import_fixtures import cleanup_import_batch, write_control_list_workbook
+from tests.mrd_helpers import insert_detected_difference, insert_ephemeral_active_mrd, release_test_mrd, unique_report_period
 
 client = TestClient(app)
 
@@ -113,13 +115,23 @@ def _resolve_all_pending_removals(conn, batch_id: int, *, actor_user_id: int) ->
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_assess_complete_review_blocked_with_pending_normalized(staged_batch):
+def test_assess_complete_review_ignores_pending_normalized(staged_batch):
     with engine.connect() as conn:
+        pending = conn.execute(
+            text(
+                """
+                SELECT COUNT(*)::bigint
+                FROM public.hr_import_normalized_records
+                WHERE batch_id = :batch_id
+                  AND review_status = 'pending'
+                """
+            ),
+            {"batch_id": staged_batch["batch_id"]},
+        ).scalar_one()
         result = assess_complete_import_review(conn, staged_batch["import_code"])
-    assert result["complete_allowed"] is False
-    assert result["batch_status"] == BATCH_STATUS_IN_REVIEW
+    assert int(pending or 0) > 0
     codes = {item["code"] for item in result["blockers"]}
-    assert "PENDING_NORMALIZED" in codes
+    assert "PENDING_NORMALIZED" not in codes
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -200,8 +212,8 @@ def test_get_complete_review_api(staged_batch, privileged_headers):
     assert resp.status_code == 200
     body = resp.json()
     assert body["import_code"] == import_code
-    assert body["complete_allowed"] is False
-    assert body["blockers"]
+    assert "PENDING_NORMALIZED" not in {item["code"] for item in body.get("blockers") or []}
+    assert "unresolved_exceptions" in body.get("review_progress", {})
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -223,8 +235,60 @@ def test_post_complete_review_api_success(staged_batch, privileged_headers, seed
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_post_complete_review_api_returns_409_with_blockers(staged_batch, privileged_headers):
+def test_post_complete_review_api_returns_409_with_blockers(staged_batch, privileged_headers, seed):
     import_code = staged_batch["import_code"]
+    batch_id = staged_batch["batch_id"]
+    report_period = unique_report_period()
+    mrd_id: int | None = None
+    with engine.begin() as conn:
+        from app.services.hr_import_review_exception_service import detected_differences_available
+
+        if detected_differences_available(conn):
+            mrd_id = insert_ephemeral_active_mrd(
+                conn,
+                report_period=report_period,
+                created_by=int(seed["initiator_user_id"]),
+            )
+            insert_detected_difference(
+                conn,
+                report_period=report_period,
+                mrd_id=mrd_id,
+                logical_key=f"api-block:{batch_id}",
+                entity_scope="emp:999002",
+                attribute="position_raw",
+                business_type="PERIOD_CHANGED",
+                old_value="A",
+                new_value="B",
+                origin_context={"batch_id": batch_id, "match_key": "emp:999002"},
+            )
+        else:
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_batches
+                    SET comparison_baseline_id = 1
+                    WHERE batch_id = :batch_id
+                    """
+                ),
+                {"batch_id": batch_id},
+            )
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_rows
+                    SET diff_status = 'CHANGED'
+                    WHERE batch_id = :batch_id
+                      AND row_id = (
+                          SELECT row_id FROM public.hr_import_rows
+                          WHERE batch_id = :batch_id
+                          ORDER BY row_id
+                          LIMIT 1
+                      )
+                    """
+                ),
+                {"batch_id": batch_id},
+            )
+
     resp = client.post(
         f"/directory/personnel/import/batches/{import_code}/complete-review",
         headers=privileged_headers,
@@ -232,7 +296,11 @@ def test_post_complete_review_api_returns_409_with_blockers(staged_batch, privil
     assert resp.status_code == 409
     detail = resp.json()["detail"]
     assert detail["blockers"]
-    assert any(item["code"] == "PENDING_NORMALIZED" for item in detail["blockers"])
+    assert not any(item["code"] == "PENDING_NORMALIZED" for item in detail["blockers"])
+
+    if mrd_id is not None:
+        with engine.begin() as conn:
+            release_test_mrd(conn, mrd_id)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

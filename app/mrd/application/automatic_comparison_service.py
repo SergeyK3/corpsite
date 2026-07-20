@@ -1,6 +1,7 @@
 """Automatic IMPORT_COMPARE orchestration for MRD."""
 from __future__ import annotations
 
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.mrd.application.active_mrd_service import require_active_mrd_for_period, resolve_active_mrd
@@ -65,6 +66,22 @@ def run_automatic_import_comparison(
             candidates=candidates,
         )
     )
+
+    from app.services.hr_import_review_exception_service import run_post_difference_review_completion
+
+    actor = int(started_by) if started_by is not None else None
+    if actor is None:
+        row = conn.execute(
+            text("SELECT imported_by FROM public.hr_import_batches WHERE batch_id = :batch_id"),
+            {"batch_id": batch_id},
+        ).scalar_one_or_none()
+        actor = int(row) if row is not None else None
+    if actor is not None:
+        run_post_difference_review_completion(
+            conn,
+            batch_id=int(batch_id),
+            actor_user_id=actor,
+        )
 
     return ComparisonRunResult(
         comparison_run_id=comparison_run_id,

@@ -48,6 +48,58 @@ def seed_active_mrd(
     return int(row)
 
 
+def insert_ephemeral_active_mrd(
+    conn: Connection,
+    *,
+    report_period: date,
+    created_by: int,
+) -> int:
+    """Insert ACTIVE MRD without purging (safe when hr_detected_differences cannot be deleted)."""
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_monthly_references
+            SET status = 'CLOSED',
+                closed_at = NOW(),
+                closed_by = :created_by
+            WHERE report_period = :report_period
+              AND status = 'ACTIVE'
+            """
+        ),
+        {"report_period": report_period, "created_by": created_by},
+    )
+    next_version = int(
+        conn.execute(
+            text(
+                """
+                SELECT COALESCE(MAX(version), 0) + 1
+                FROM public.hr_monthly_references
+                WHERE report_period = :report_period
+                """
+            ),
+            {"report_period": report_period},
+        ).scalar_one()
+    )
+    return int(
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.hr_monthly_references (
+                    report_period, version, status, created_by
+                )
+                VALUES (:report_period, :version, 'ACTIVE', :created_by)
+                RETURNING mrd_id
+                """
+            ),
+            {
+                "report_period": report_period,
+                "version": next_version,
+                "created_by": created_by,
+            },
+        ).scalar_one()
+    )
+
+
 def seed_mrd_entry(
     conn: Connection,
     *,
@@ -425,3 +477,34 @@ def insert_detected_difference(
         )
         return row.difference_id
     raise ValueError("use repo helpers for non-DETECTED seed")
+
+
+def release_test_mrd(conn: Connection, mrd_id: int) -> None:
+    """Test cleanup: supersede differences and detach MRD from ephemeral test user."""
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_detected_differences
+            SET lifecycle_status = 'SUPERSEDED'
+            WHERE mrd_id = :mrd_id
+            """
+        ),
+        {"mrd_id": mrd_id},
+    )
+    fallback_user = conn.execute(
+        text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")
+    ).scalar_one_or_none()
+    if fallback_user is not None:
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_monthly_references
+                SET created_by = :created_by,
+                    status = 'CLOSED',
+                    closed_at = NOW(),
+                    closed_by = :created_by
+                WHERE mrd_id = :mrd_id
+                """
+            ),
+            {"mrd_id": mrd_id, "created_by": int(fallback_user)},
+        )

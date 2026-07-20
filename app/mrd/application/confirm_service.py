@@ -86,6 +86,16 @@ class ConfirmDifferenceService:
         else:
             raise RuntimeError("Confirm must not change MRD version number")
 
+        batch_id = (difference.origin_context or {}).get("batch_id")
+        if batch_id is not None:
+            from app.services.hr_import_review_exception_service import run_post_difference_review_completion
+
+            run_post_difference_review_completion(
+                self._repo._conn,
+                batch_id=int(batch_id),
+                actor_user_id=int(command.confirmed_by),
+            )
+
         return ConfirmDifferenceResult(
             confirmed_change_id=confirmed_change_id,
             difference_id=command.difference_id,
