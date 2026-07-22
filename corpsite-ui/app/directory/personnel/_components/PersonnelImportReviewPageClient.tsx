@@ -270,9 +270,22 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   const modeLabel =
     mode === "declaration" ? "Декларации" : mode === "technical" ? "Технические" : "Мед. категории";
 
-  function handleExceptionResolved() {
+  function refreshReviewPage() {
     load();
     setSummaryRefreshKey((value) => value + 1);
+  }
+
+  function handleExceptionResolved() {
+    refreshReviewPage();
+  }
+
+  const closeExceptionDrawer = React.useCallback(() => {
+    setExceptionKey(null);
+  }, []);
+
+  function handleExceptionCorrected() {
+    closeExceptionDrawer();
+    refreshReviewPage();
   }
 
   function openRowReview(row: StagingRow) {
@@ -297,8 +310,9 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
         batchId={batchId}
         exceptionKey={exceptionKey}
         open={exceptionKey != null}
-        onClose={() => setExceptionKey(null)}
+        onClose={closeExceptionDrawer}
         onResolved={handleExceptionResolved}
+        onCorrected={handleExceptionCorrected}
       />
 
       <ImportBatchContextHeader batchId={batchId} className="mb-4" />

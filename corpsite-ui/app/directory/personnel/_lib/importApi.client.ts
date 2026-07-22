@@ -36,6 +36,41 @@ function authHeaders(json = false): Record<string, string> {
   return buildHeaders(extra) as Record<string, string>;
 }
 
+export class ImportApiHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ImportApiHttpError";
+    this.status = status;
+  }
+}
+
+function formatImportApiErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  }
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg?: unknown }).msg || "");
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  return null;
+}
+
 function parseErrorBody(status: number, body: string, fallback: string): Error {
   if (status === 403) {
     return new Error("Недостаточно прав для HR Import Analytics.");
@@ -44,14 +79,19 @@ function parseErrorBody(status: number, body: string, fallback: string): Error {
   if (trimmed.startsWith("{")) {
     try {
       const parsed = JSON.parse(trimmed) as { detail?: unknown };
-      if (typeof parsed.detail === "string" && parsed.detail.trim()) {
-        return new Error(parsed.detail.trim());
+      const detailMessage = formatImportApiErrorDetail(parsed.detail);
+      if (detailMessage) {
+        return new ImportApiHttpError(status, detailMessage);
       }
     } catch {
       // keep raw body fallback
     }
   }
-  return new Error(trimmed || fallback || `HTTP ${status}`);
+  return new ImportApiHttpError(status, trimmed || fallback || `HTTP ${status}`);
+}
+
+export function isReviewExceptionAlreadyResolvedError(error: unknown): boolean {
+  return error instanceof ImportApiHttpError && error.status === 409;
 }
 
 export function mapImportApiError(e: unknown, fallback = "Ошибка запроса."): string {
@@ -1194,13 +1234,16 @@ export type ReviewExceptionFieldRow = {
   key: string;
   label: string;
   value: string | null;
+  display_value?: string | null;
 };
 
 export type ReviewExceptionDiffRow = {
   key: string;
   label: string;
   baseline_value: string | null;
+  baseline_display_value?: string | null;
   import_value: string | null;
+  import_display_value?: string | null;
   changed: boolean;
 };
 
@@ -1227,7 +1270,11 @@ export type ReviewExceptionDetail = {
     fields: ReviewExceptionDiffRow[];
   };
   quality_remarks?: string[];
+  editable_import_fields?: string[];
+  import_review_override?: Record<string, unknown>;
+  correct_action_available?: boolean;
   resolved: boolean;
+  resolved_by_correction?: boolean;
   actions_available: boolean;
   removal_actions_available: boolean;
 };
@@ -1259,6 +1306,16 @@ export type TrainingDateQualityReport = {
   total: number;
   remark: string;
   items: TrainingDateQualityItem[];
+};
+
+export type ReviewExceptionCorrectionResult = {
+  exception_key: string;
+  batch_id: number;
+  saved_corrections: Record<string, unknown>;
+  detail: ReviewExceptionDetail;
+  diff_summary?: ImportBatchDiffSummary;
+  diff_recomputed?: boolean;
+  mrd_differences_dismissed?: number;
 };
 
 export type ReviewExceptionResolutionResult = {
@@ -1294,14 +1351,18 @@ export async function listImportReviewExceptions(
   );
 }
 
+export function encodeReviewExceptionKey(exceptionKey: string): string {
+  return exceptionKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
 export async function getImportReviewExceptionDetail(
   batchId: number,
   exceptionKey: string,
 ): Promise<ReviewExceptionDetail> {
-  const encoded = exceptionKey
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
+  const encoded = encodeReviewExceptionKey(exceptionKey);
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}`);
 }
 
@@ -1310,10 +1371,7 @@ export async function acceptImportReviewException(
   exceptionKey: string,
   payload?: { basis?: string | null },
 ): Promise<ReviewExceptionResolutionResult> {
-  const encoded = exceptionKey
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
+  const encoded = encodeReviewExceptionKey(exceptionKey);
   return apiPostJson(
     `/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}/accept-import`,
     payload ?? {},
@@ -1325,13 +1383,22 @@ export async function keepBaselineImportReviewException(
   exceptionKey: string,
   payload?: { basis?: string | null },
 ): Promise<ReviewExceptionResolutionResult> {
-  const encoded = exceptionKey
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
+  const encoded = encodeReviewExceptionKey(exceptionKey);
   return apiPostJson(
     `/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}/keep-baseline`,
     payload ?? {},
+  );
+}
+
+export async function correctImportReviewException(
+  batchId: number,
+  exceptionKey: string,
+  corrections: Record<string, unknown>,
+): Promise<ReviewExceptionCorrectionResult> {
+  const encoded = encodeReviewExceptionKey(exceptionKey);
+  return apiPostJson(
+    `/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}/correct-import`,
+    corrections,
   );
 }
 

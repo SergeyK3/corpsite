@@ -5,13 +5,20 @@ import * as React from "react";
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
 import {
   acceptImportReviewException,
+  correctImportReviewException,
   getImportReviewExceptionDetail,
+  isReviewExceptionAlreadyResolvedError,
   keepBaselineImportReviewException,
   mapImportApiError,
   postImportReviewRemovalExceptionDecision,
   type ReviewExceptionDetail,
+  type ReviewExceptionFieldRow,
 } from "../_lib/importApi.client";
-import { formatMonthlyDiffValue } from "../_lib/monthlyDiffLabels";
+import {
+  formatReviewExceptionDiffValue,
+  formatReviewExceptionFieldValue,
+} from "../_lib/monthlyDiffLabels";
+import { getNormalizedRecordKindLabel } from "../_lib/normalizedRecordLabels";
 
 type Props = {
   batchId: number;
@@ -19,19 +26,42 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onResolved: () => void;
+  onCorrected?: () => void;
 };
+
+function draftFromImportFields(
+  fields: ReviewExceptionFieldRow[],
+  editableKeys: string[],
+): Record<string, string> {
+  const draft: Record<string, string> = {};
+  for (const key of editableKeys) {
+    const field = fields.find((item) => item.key === key);
+    draft[key] = field?.value ?? "";
+  }
+  return draft;
+}
 
 function BaselineImportBlock({
   title,
   sourceLabel,
   fields,
   variant,
+  editing,
+  editableKeys,
+  draft,
+  onDraftChange,
 }: {
   title: string;
   sourceLabel: string;
   fields: ReviewExceptionDetail["baseline"]["fields"];
   variant: "baseline" | "import";
+  editing?: boolean;
+  editableKeys?: string[];
+  draft?: Record<string, string>;
+  onDraftChange?: (key: string, value: string) => void;
 }) {
+  const isEditableImport = variant === "import" && editing;
+
   return (
     <section
       className={`rounded-xl border p-4 ${
@@ -48,17 +78,38 @@ function BaselineImportBlock({
         <span className="text-xs text-zinc-500">{sourceLabel}</span>
       </div>
       <dl className="space-y-2">
-        {fields.map((field) => (
-          <div
-            key={field.key}
-            className="grid gap-1 border-t border-zinc-100 pt-2 first:border-t-0 first:pt-0 dark:border-zinc-800"
-          >
-            <dt className="text-xs uppercase tracking-wide text-zinc-500">{field.label}</dt>
-            <dd className="text-sm text-zinc-900 dark:text-zinc-100">
-              {formatMonthlyDiffValue(field.value)}
-            </dd>
-          </div>
-        ))}
+        {fields.map((field) => {
+          const canEdit = isEditableImport && editableKeys?.includes(field.key);
+          return (
+            <div
+              key={field.key}
+              className="grid gap-1 border-t border-zinc-100 pt-2 first:border-t-0 first:pt-0 dark:border-zinc-800"
+            >
+              <dt className="text-xs uppercase tracking-wide text-zinc-500">{field.label}</dt>
+              <dd className="text-sm text-zinc-900 dark:text-zinc-100">
+                {canEdit ? (
+                  field.key.includes("_raw") || field.key === "note_raw" ? (
+                    <textarea
+                      value={draft?.[field.key] ?? ""}
+                      onChange={(e) => onDraftChange?.(field.key, e.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={draft?.[field.key] ?? ""}
+                      onChange={(e) => onDraftChange?.(field.key, e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                    />
+                  )
+                ) : (
+                  formatReviewExceptionFieldValue(field)
+                )}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
     </section>
   );
@@ -106,7 +157,7 @@ function DiffBlock({
                       : "text-zinc-700 dark:text-zinc-300"
                   }`}
                 >
-                  {formatMonthlyDiffValue(row.baseline_value)}
+                  {formatReviewExceptionDiffValue("baseline", row)}
                 </td>
                 <td
                   className={`px-3 py-2 ${
@@ -115,7 +166,7 @@ function DiffBlock({
                       : "text-zinc-900 dark:text-zinc-100"
                   }`}
                 >
-                  {formatMonthlyDiffValue(row.import_value)}
+                  {formatReviewExceptionDiffValue("import", row)}
                 </td>
               </tr>
             ))}
@@ -132,41 +183,48 @@ export default function ImportReviewExceptionDrawer({
   open,
   onClose,
   onResolved,
+  onCorrected,
 }: Props) {
   const [detail, setDetail] = React.useState<ReviewExceptionDetail | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [acting, setActing] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState<Record<string, string>>({});
+
+  const loadDetail = React.useCallback(async () => {
+    if (!exceptionKey) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getImportReviewExceptionDetail(batchId, exceptionKey);
+      setDetail(data);
+      setEditing(false);
+      setDraft(
+        draftFromImportFields(data.import_data.fields, data.editable_import_fields ?? []),
+      );
+    } catch (e) {
+      setDetail(null);
+      if (isReviewExceptionAlreadyResolvedError(e)) {
+        onResolved();
+        onClose();
+        return;
+      }
+      setError(mapImportApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [batchId, exceptionKey, onClose, onResolved]);
 
   React.useEffect(() => {
     if (!open || !exceptionKey) {
       setDetail(null);
       setError(null);
+      setEditing(false);
       return;
     }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    void getImportReviewExceptionDetail(batchId, exceptionKey)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setDetail(null);
-          setError(mapImportApiError(e));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [batchId, exceptionKey, open]);
+    void loadDetail();
+  }, [open, exceptionKey, loadDetail]);
 
   async function runAction(action: string, fn: () => Promise<unknown>) {
     setActing(action);
@@ -176,6 +234,45 @@ export default function ImportReviewExceptionDrawer({
       onResolved();
       onClose();
     } catch (e) {
+      if (isReviewExceptionAlreadyResolvedError(e)) {
+        onResolved();
+        onClose();
+        return;
+      }
+      setError(mapImportApiError(e));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function saveCorrections() {
+    if (!detail || !exceptionKey) return;
+    setActing("correct_import");
+    setError(null);
+    try {
+      const editableKeys = detail.editable_import_fields ?? [];
+      const corrections: Record<string, unknown> = {};
+      for (const key of editableKeys) {
+        if (!(key in draft)) continue;
+        const raw = draft[key].trim();
+        corrections[key] = raw || null;
+      }
+      const result = await correctImportReviewException(batchId, exceptionKey, corrections);
+      setDetail(result.detail);
+      setEditing(false);
+      setDraft(
+        draftFromImportFields(
+          result.detail.import_data.fields,
+          result.detail.editable_import_fields ?? [],
+        ),
+      );
+      (onCorrected ?? onResolved)();
+    } catch (e) {
+      if (isReviewExceptionAlreadyResolvedError(e)) {
+        onResolved();
+        onClose();
+        return;
+      }
       setError(mapImportApiError(e));
     } finally {
       setActing(null);
@@ -183,6 +280,13 @@ export default function ImportReviewExceptionDrawer({
   }
 
   if (!open) return null;
+
+  const editableKeys = detail?.editable_import_fields ?? [];
+  const canCorrect = Boolean(detail?.correct_action_available && editableKeys.length > 0);
+  const subtitle =
+    detail?.record_kind && detail.record_kind !== "roster"
+      ? getNormalizedRecordKindLabel(detail.record_kind, detail.subtitle ?? undefined)
+      : detail?.subtitle;
 
   return (
     <div className="fixed inset-0 z-[70] flex justify-end" data-testid="import-review-exception-drawer">
@@ -202,7 +306,7 @@ export default function ImportReviewExceptionDrawer({
             {detail ? (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
                 <ImportDiffStatusBadge status={detail.diff_status} />
-                {detail.subtitle ? <span>{detail.subtitle}</span> : null}
+                {subtitle ? <span>{subtitle}</span> : null}
                 {detail.department ? <span>{detail.department}</span> : null}
               </div>
             ) : null}
@@ -225,6 +329,15 @@ export default function ImportReviewExceptionDrawer({
             </div>
           ) : detail ? (
             <div className="space-y-4">
+              {detail.resolved_by_correction ? (
+                <div
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+                  data-testid="review-exception-resolved-by-correction"
+                >
+                  Исключение снято, diff совпадает. Сохранённые корректировки в staging остаются до Apply.
+                </div>
+              ) : null}
+
               {detail.quality_remarks && detail.quality_remarks.length > 0 ? (
                 <div
                   className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
@@ -239,6 +352,15 @@ export default function ImportReviewExceptionDrawer({
                 </div>
               ) : null}
 
+              {Object.keys(detail.import_review_override ?? {}).length > 0 && !editing ? (
+                <div
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
+                  data-testid="review-exception-import-override-banner"
+                >
+                  Применены ручные корректировки импортированных данных
+                </div>
+              ) : null}
+
               <BaselineImportBlock
                 title="Канонический эталон"
                 sourceLabel={detail.baseline.source_label}
@@ -246,12 +368,16 @@ export default function ImportReviewExceptionDrawer({
                 variant="baseline"
               />
               <BaselineImportBlock
-                title="Импортируемые данные"
+                title={editing ? "Редактируемые импортные данные" : "Импортируемые данные"}
                 sourceLabel={detail.import_data.source_label}
                 fields={detail.import_data.fields}
                 variant="import"
+                editing={editing}
+                editableKeys={editableKeys}
+                draft={draft}
+                onDraftChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
               />
-              <DiffBlock fields={detail.diff.fields} />
+              {!editing ? <DiffBlock fields={detail.diff.fields} /> : null}
             </div>
           ) : null}
         </div>
@@ -291,6 +417,29 @@ export default function ImportReviewExceptionDrawer({
                   {acting === "confirm_removal" ? "Сохранение…" : "Подтвердить удаление"}
                 </button>
               </div>
+            ) : editing ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={acting != null}
+                  onClick={() => void saveCorrections()}
+                  className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                  data-testid="review-exception-save-corrections"
+                >
+                  {acting === "correct_import" ? "Сохранение…" : "Сохранить"}
+                </button>
+                <button
+                  type="button"
+                  disabled={acting != null}
+                  onClick={() => {
+                    setEditing(false);
+                    setDraft(draftFromImportFields(detail.import_data.fields, editableKeys));
+                  }}
+                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                >
+                  Отмена
+                </button>
+              </div>
             ) : detail.actions_available ? (
               <div className="flex flex-wrap gap-2">
                 <button
@@ -306,6 +455,17 @@ export default function ImportReviewExceptionDrawer({
                 >
                   {acting === "accept_import" ? "Сохранение…" : "Принять импорт"}
                 </button>
+                {canCorrect ? (
+                  <button
+                    type="button"
+                    disabled={acting != null}
+                    onClick={() => setEditing(true)}
+                    className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                    data-testid="review-exception-correct-import"
+                  >
+                    Исправить
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={acting != null}
@@ -320,6 +480,14 @@ export default function ImportReviewExceptionDrawer({
                   {acting === "keep_baseline" ? "Сохранение…" : "Оставить эталон"}
                 </button>
               </div>
+            ) : detail.resolved_by_correction ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              >
+                Закрыть
+              </button>
             ) : null}
           </footer>
         ) : null}
