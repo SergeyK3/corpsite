@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   canCreateHireOrderFromApplicantCard,
   canDisplayApplicantIntakeLink,
+  canOpenApplicantIntakeReview,
   canOpenApplicantPersonalCard,
   formatApplicantIntakeUrlDisplay,
+  isIntakeTransferCompleted,
   resolveApplicantIntakeUrlPath,
   resolveApplicantWorkflowStatus,
 } from "./personnelApplicantWorkflow";
@@ -55,11 +57,34 @@ describe("personnelApplicantWorkflow", () => {
     });
   });
 
-  it("gates personal card until intake submitted", () => {
+  it("gates personal card until intake transfer completed", () => {
     expect(canOpenApplicantPersonalCard("registered")).toBe(false);
     expect(canOpenApplicantPersonalCard("intake_pending")).toBe(false);
-    expect(canOpenApplicantPersonalCard("intake_submitted")).toBe(true);
+    expect(canOpenApplicantPersonalCard("intake_submitted")).toBe(false);
+    expect(canOpenApplicantPersonalCard("under_review")).toBe(false);
     expect(canOpenApplicantPersonalCard("review_completed")).toBe(true);
+    expect(isIntakeTransferCompleted("review_completed")).toBe(true);
+  });
+
+  it("allows intake review after submit and before transfer", () => {
+    expect(
+      canOpenApplicantIntakeReview({
+        status: "intake_submitted",
+        intake_draft_status: "submitted",
+      }),
+    ).toBe(true);
+    expect(
+      canOpenApplicantIntakeReview({
+        status: "under_review",
+        intake_draft_status: "submitted",
+      }),
+    ).toBe(true);
+    expect(
+      canOpenApplicantIntakeReview({
+        status: "review_completed",
+        intake_draft_status: "submitted",
+      }),
+    ).toBe(false);
   });
 
   it("gates hire order until intake submitted", () => {

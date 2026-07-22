@@ -6,13 +6,13 @@ from decimal import Decimal
 from typing import Any
 
 from app.db.models.personnel_migration import (
-    EDUCATION_KIND_BASIC,
     EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
     MILITARY_RECORD_KIND_NOT_APPLICABLE,
     MILITARY_RECORD_KIND_REGISTRATION,
     RELATIONSHIP_TYPE_OTHER_CLOSE,
     TRAINING_KIND_COURSE,
 )
+from app.personnel_intake.domain.education_type import resolve_intake_education_kind
 
 _RELATIONSHIP_MAP = {
     "отец": "father",
@@ -72,7 +72,7 @@ def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in items:
         mapped.append(
             {
-                "education_kind": EDUCATION_KIND_BASIC,
+                "education_kind": resolve_intake_education_kind(item.get("education_type")),
                 "institution_name": str(item.get("institution") or "").strip() or None,
                 "specialty": str(item.get("specialty") or "").strip() or None,
                 "qualification": str(item.get("qualification") or "").strip() or None,

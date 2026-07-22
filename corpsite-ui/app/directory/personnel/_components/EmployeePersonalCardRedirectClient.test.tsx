@@ -24,17 +24,17 @@ describe("EmployeePersonalCardRedirectClient", () => {
     cleanup();
   });
 
-  it("redirects employee 11 to canonical person 100 card", async () => {
+  it("redirects legacy employee route to canonical person card", async () => {
     getPprByEmployeeIdMock.mockResolvedValue({
-      identity: { resolved_person_id: 100, requested_employee_id: 11 },
+      identity: { resolved_person_id: 901, requested_employee_id: 55 },
     });
 
-    render(<EmployeePersonalCardRedirectClient employeeId="11" />);
+    render(<EmployeePersonalCardRedirectClient employeeId="55" />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/directory/personnel/persons/100/card");
+      expect(replaceMock).toHaveBeenCalledWith("/directory/personnel/persons/901/card");
     });
-    expect(getPprByEmployeeIdMock).toHaveBeenCalledWith("11", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(getPprByEmployeeIdMock).toHaveBeenCalledWith("55", expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it("redirects to canonical person route using resolved person_id", async () => {

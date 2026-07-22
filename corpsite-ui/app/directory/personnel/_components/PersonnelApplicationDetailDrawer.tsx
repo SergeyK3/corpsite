@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { buildPersonalCardHref } from "@/lib/employeeCardNav";
 import {
+  canOpenApplicantIntakeReview,
   canOpenApplicantPersonalCard,
 } from "../_lib/personnelApplicantWorkflow";
 import ApplicantWorkflowStatusBadge from "./ApplicantWorkflowStatusBadge";
@@ -238,6 +239,17 @@ export default function PersonnelApplicationDetailDrawer({
                 </div>
               </section>
 
+              {canOpenApplicantIntakeReview(detail) ? (
+                <button
+                  type="button"
+                  onClick={() => setReviewOpen(true)}
+                  className="inline-flex rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-800 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                  data-testid="personnel-application-open-intake-review"
+                >
+                  Открыть анкету для проверки
+                </button>
+              ) : null}
+
               {canOpenApplicantPersonalCard(detail.status) ? (
                 <Link
                   href={buildPersonalCardHref(
@@ -249,12 +261,12 @@ export default function PersonnelApplicationDetailDrawer({
                 >
                   Открыть личную карточку
                 </Link>
-              ) : (
+              ) : canOpenApplicantIntakeReview(detail) ? null : (
                 <p
                   className="text-sm text-zinc-500 dark:text-zinc-400"
                   data-testid="personnel-application-person-card-locked"
                 >
-                  Личная карточка станет доступна после отправки анкеты претендентом.
+                  Личная карточка станет доступна после проверки анкеты и переноса в PPR.
                 </p>
               )}
             </div>

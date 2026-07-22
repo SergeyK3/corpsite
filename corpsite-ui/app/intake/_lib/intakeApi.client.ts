@@ -2,6 +2,19 @@ import { readJsonSafe, toApiError } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
 
+export type IntakeEducationType = "basic" | "internship" | "residency" | "masters" | "phd";
+
+export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
+  value: IntakeEducationType;
+  label: string;
+}> = [
+  { value: "basic", label: "Базовое образование" },
+  { value: "internship", label: "Интернатура" },
+  { value: "residency", label: "Резидентура" },
+  { value: "masters", label: "Магистратура" },
+  { value: "phd", label: "Докторантура" },
+];
+
 export type IntakeDraftPayload = {
   personal: {
     last_name: string;
@@ -20,6 +33,7 @@ export type IntakeDraftPayload = {
     residence_address: string;
   };
   education: Array<{
+    education_type: IntakeEducationType;
     institution: string;
     year_from: string;
     year_to: string;

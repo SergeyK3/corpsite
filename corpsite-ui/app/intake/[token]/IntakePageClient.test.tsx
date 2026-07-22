@@ -57,6 +57,7 @@ describe("IntakePageClient", () => {
     payload.current_step = "review";
     payload.education = [
       {
+        education_type: "basic",
         institution: "ВУЗ",
         year_from: "2020",
         year_to: "2024",

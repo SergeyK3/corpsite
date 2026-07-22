@@ -15,8 +15,6 @@ export type ApplicantWorkflowStatus = {
 };
 
 const PERSONAL_CARD_OPEN_STATUSES = new Set([
-  "intake_submitted",
-  "under_review",
   "review_completed",
   "resolution_pending",
   "awaiting_director_resolution",
@@ -114,7 +112,34 @@ export function applicantWorkflowStatusBadgeClass(input: ApplicantWorkflowStatus
 }
 
 export function canOpenApplicantPersonalCard(status: string | null | undefined): boolean {
+  return isIntakeTransferCompleted(status);
+}
+
+/** True after successful intake transfer (application reaches review_completed or later). */
+export function isIntakeTransferCompleted(status: string | null | undefined): boolean {
   return PERSONAL_CARD_OPEN_STATUSES.has(String(status || "").trim());
+}
+
+export type ApplicantIntakeReviewAccessInput = {
+  status: string;
+  intake_draft_status?: string | null;
+  intake_link_status?: string | null;
+};
+
+/** Intake submitted to HR, but PPR transfer not completed yet. */
+export function canOpenApplicantIntakeReview(input: ApplicantIntakeReviewAccessInput): boolean {
+  if (isIntakeTransferCompleted(input.status)) {
+    return false;
+  }
+  const status = String(input.status || "").trim();
+  const draftStatus = String(input.intake_draft_status || "").trim();
+  const linkStatus = String(input.intake_link_status || "").trim();
+  return (
+    draftStatus === "submitted" ||
+    linkStatus === "submitted" ||
+    status === "intake_submitted" ||
+    status === "under_review"
+  );
 }
 
 export function canCreateHireOrderFromApplicantCard(status: string | null | undefined): boolean {

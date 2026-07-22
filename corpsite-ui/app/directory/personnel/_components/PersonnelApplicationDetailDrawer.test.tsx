@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelApplicationDetailDrawer from "./PersonnelApplicationDetailDrawer";
@@ -23,6 +23,7 @@ vi.mock("next/link", () => ({
 const getPersonnelApplicationMock = vi.fn();
 const getApplicationTimelineMock = vi.fn();
 const getLifecycleAuditMock = vi.fn();
+const getIntakeReviewStateMock = vi.fn();
 
 vi.mock("../_lib/personnelApplicationsApi.client", async () => {
   const actual = await vi.importActual<typeof import("../_lib/personnelApplicationsApi.client")>(
@@ -33,6 +34,7 @@ vi.mock("../_lib/personnelApplicationsApi.client", async () => {
     getPersonnelApplication: (...args: unknown[]) => getPersonnelApplicationMock(...args),
     getApplicationTimeline: (...args: unknown[]) => getApplicationTimelineMock(...args),
     getLifecycleAudit: (...args: unknown[]) => getLifecycleAuditMock(...args),
+    getIntakeReviewState: (...args: unknown[]) => getIntakeReviewStateMock(...args),
   };
 });
 
@@ -86,7 +88,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
     expect(screen.getByText("Медсестра")).toBeInTheDocument();
     expect(screen.getByText("+77001234567")).toBeInTheDocument();
     expect(screen.getByTestId("personnel-application-person-card-locked")).toHaveTextContent(
-      /личная карточка станет доступна/i,
+      /личная карточка станет доступна после проверки анкеты и переноса в ppr/i,
     );
     expect(screen.queryByRole("button", { name: /сохранить/i })).not.toBeInTheDocument();
   });
@@ -186,5 +188,89 @@ describe("PersonnelApplicationDetailDrawer", () => {
     expect(screen.getByText(/\/intake\/abc123/)).toBeInTheDocument();
     expect(screen.queryByText(/getPersonnelApplication is not defined/i)).not.toBeInTheDocument();
     expect(workflow.readPersistedIntakeLinkPath).toHaveBeenCalledWith(10);
+  });
+
+  it("shows intake review action before transfer and hides personal card link", async () => {
+    getPersonnelApplicationMock.mockResolvedValue({
+      application_id: 178,
+      person_id: 534,
+      full_name: "Тестов Тест",
+      iin: "880315350789",
+      status: "intake_submitted",
+      application_received_at: "2026-07-17",
+      application_source: "paper",
+      vacancy_check_status: "confirmed_visually",
+      intake_draft_status: "submitted",
+      intake_link_status: "submitted",
+      registered_at: "2026-07-17T10:00:00Z",
+      registered_by_user_id: 7,
+      registered_by_name: "HR User",
+      created_at: "2026-07-17T10:00:00Z",
+      updated_at: "2026-07-17T10:00:00Z",
+    });
+    getIntakeReviewStateMock.mockResolvedValue({
+      application_id: 178,
+      sections: [],
+      can_transfer: false,
+      transfer_blocked_reason: "Section personal is not finalized.",
+      transfer: null,
+    });
+
+    render(
+      <PersonnelApplicationDetailDrawer
+        applicationId={178}
+        open
+        journalReturnHref="/directory/personnel/applicants?application_id=178"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const reviewButton = await screen.findByTestId("personnel-application-open-intake-review");
+    expect(reviewButton).toHaveTextContent("Открыть анкету для проверки");
+    expect(screen.queryByTestId("personnel-application-open-person-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-application-person-card-locked")).not.toBeInTheDocument();
+
+    fireEvent.click(reviewButton);
+    await waitFor(() => {
+      expect(getIntakeReviewStateMock).toHaveBeenCalledWith(178);
+      expect(screen.getByTestId("intake-review-drawer")).toBeInTheDocument();
+    });
+  });
+
+  it("shows personal card link after transfer completed", async () => {
+    getPersonnelApplicationMock.mockResolvedValue({
+      application_id: 178,
+      person_id: 534,
+      full_name: "Тестов Тест",
+      iin: "880315350789",
+      status: "review_completed",
+      application_received_at: "2026-07-17",
+      application_source: "paper",
+      vacancy_check_status: "confirmed_visually",
+      intake_draft_status: "submitted",
+      intake_link_status: "submitted",
+      registered_at: "2026-07-17T10:00:00Z",
+      registered_by_user_id: 7,
+      registered_by_name: "HR User",
+      created_at: "2026-07-17T10:00:00Z",
+      updated_at: "2026-07-17T10:00:00Z",
+    });
+
+    render(
+      <PersonnelApplicationDetailDrawer
+        applicationId={178}
+        open
+        journalReturnHref="/directory/personnel/applicants?application_id=178"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const cardLink = await screen.findByTestId("personnel-application-open-person-card");
+    expect(cardLink).toHaveTextContent("Открыть личную карточку");
+    expect(cardLink).toHaveAttribute(
+      "href",
+      "/directory/personnel/persons/534/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D178",
+    );
+    expect(screen.queryByTestId("personnel-application-open-intake-review")).not.toBeInTheDocument();
   });
 });

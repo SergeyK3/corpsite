@@ -56,14 +56,16 @@ vi.mock("./PprCardApplicationsSection", () => ({
   ),
 }));
 
+const MOCK_RESOLVED_PERSON_ID = 901;
+
 function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): PprCompositeReadResponse {
   return {
     identity: {
       requested_person_id: null,
       requested_employee_id: 42,
-      resolved_person_id: 100,
+      resolved_person_id: MOCK_RESOLVED_PERSON_ID,
       merge_redirected: false,
-      merge_chain: [100],
+      merge_chain: [MOCK_RESOLVED_PERSON_ID],
       employee_context_id: 42,
       person_status: "active",
       match_key: "iin:123",
@@ -333,7 +335,7 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
       warnings: [],
       transitional: false,
       merge_redirected: false,
-      source_person_id: 100,
+      source_person_id: MOCK_RESOLVED_PERSON_ID,
       requested_input_kind: "employee",
       requested_input_id: 42,
     },

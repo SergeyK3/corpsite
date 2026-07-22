@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import type { PprEducationRecordResponse } from "../_lib/pprQueryTypes";
-import { formatPprDate } from "../_lib/pprCardPresentation";
+import { educationKindLabel, formatPprDate } from "../_lib/pprCardPresentation";
 
 type Props = {
   active: PprEducationRecordResponse[];
@@ -20,7 +20,7 @@ function EducationRecordCard({ record }: { record: PprEducationRecordResponse })
       <dl className="mt-2 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400 sm:grid-cols-2">
         <div>
           <dt className="inline">Вид: </dt>
-          <dd className="inline">{record.education_kind}</dd>
+          <dd className="inline">{educationKindLabel(record.education_kind)}</dd>
         </div>
         {record.specialty ? (
           <div>

@@ -128,6 +128,20 @@ export function externalEmploymentRecordKindLabel(value: string | null | undefin
   return EXTERNAL_EMPLOYMENT_RECORD_KIND_LABELS[value] || value;
 }
 
+const EDUCATION_KIND_LABELS: Record<string, string> = {
+  basic: "Базовое образование",
+  internship: "Интернатура",
+  residency: "Резидентура",
+  masters: "Магистратура",
+  phd: "Докторантура",
+  other: "Прочее",
+};
+
+export function educationKindLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return EDUCATION_KIND_LABELS[value] || value;
+}
+
 const MILITARY_RECORD_KIND_LABELS: Record<string, string> = {
   registration: "Сведения о воинском учёте",
   not_applicable: "Не подлежит воинскому учёту",

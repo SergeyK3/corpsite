@@ -17,6 +17,11 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_REGISTERED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
+from app.personnel_intake.domain.education_type import (
+    INTAKE_EDUCATION_TYPES,
+    intake_education_duplicate_fingerprint,
+    normalize_intake_education_type,
+)
 from app.personnel_intake.domain.errors import (
     PersonnelIntakeConflictError,
     PersonnelIntakeNotFoundError,
@@ -436,6 +441,31 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
     education = payload.get("education") or []
     if not isinstance(education, list) or len(education) == 0:
         errors.append("education")
+    else:
+        seen_fingerprints: dict[tuple[str, str], int] = {}
+        for index, item in enumerate(education):
+            if not isinstance(item, dict):
+                errors.append(f"education[{index}]")
+                continue
+            raw_type = str(item.get("education_type") or "").strip().lower()
+            if raw_type and raw_type not in INTAKE_EDUCATION_TYPES:
+                errors.append(f"education[{index}].education_type")
+                continue
+            education_type = normalize_intake_education_type(item.get("education_type"))
+            try:
+                fingerprint = intake_education_duplicate_fingerprint(item)
+            except ValueError:
+                errors.append(f"education[{index}].education_type")
+                continue
+            if fingerprint in seen_fingerprints:
+                prior = seen_fingerprints[fingerprint]
+                raise PersonnelIntakeValidationError(
+                    "Duplicate education records: same education_type and institution "
+                    f"(education[{prior}], education[{index}], "
+                    f"education_type={education_type!r}, "
+                    f"institution={fingerprint[1]!r})"
+                )
+            seen_fingerprints[fingerprint] = index
     if errors:
         raise PersonnelIntakeValidationError(
             f"Required intake fields missing: {', '.join(errors)}"

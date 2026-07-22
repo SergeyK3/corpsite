@@ -8,13 +8,15 @@ import {
 } from "./pprQueryApi.client";
 import type { PprCompositeReadResponse } from "./pprQueryTypes";
 
+const MOCK_RESOLVED_PERSON_ID = 901;
+
 const sampleResponse: PprCompositeReadResponse = {
   identity: {
     requested_person_id: null,
     requested_employee_id: 42,
-    resolved_person_id: 100,
+    resolved_person_id: MOCK_RESOLVED_PERSON_ID,
     merge_redirected: false,
-    merge_chain: [100],
+    merge_chain: [MOCK_RESOLVED_PERSON_ID],
     employee_context_id: 42,
     person_status: "active",
     match_key: "iin:123",
@@ -47,7 +49,7 @@ const sampleResponse: PprCompositeReadResponse = {
     warnings: [],
     transitional: false,
     merge_redirected: false,
-    source_person_id: 100,
+    source_person_id: MOCK_RESOLVED_PERSON_ID,
     requested_input_kind: "employee",
     requested_input_id: 42,
   },
@@ -95,10 +97,10 @@ describe("pprQueryApi.client", () => {
     const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(sampleResponse));
     vi.stubGlobal("fetch", fetchMock);
 
-    await getPprByPersonId(100);
+    await getPprByPersonId(MOCK_RESOLVED_PERSON_ID);
 
     const [url] = fetchMock.mock.calls[0] as [string];
-    expect(url).toContain("/api/ppr/persons/100");
+    expect(url).toContain(`/api/ppr/persons/${MOCK_RESOLVED_PERSON_ID}`);
   });
 
   it("getPprSummaryByPersonId calls summary endpoint", async () => {
@@ -110,10 +112,10 @@ describe("pprQueryApi.client", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await getPprSummaryByPersonId(100);
+    await getPprSummaryByPersonId(MOCK_RESOLVED_PERSON_ID);
 
     const [url] = fetchMock.mock.calls[0] as [string];
-    expect(url).toContain("/api/ppr/persons/100/summary");
+    expect(url).toContain(`/api/ppr/persons/${MOCK_RESOLVED_PERSON_ID}/summary`);
   });
 
   it("throws APIError on 403", async () => {

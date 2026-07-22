@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams } from "next/navigation";
 
 import {
+  INTAKE_EDUCATION_TYPE_OPTIONS,
   INTAKE_STEPS,
   autosaveIntakeDraft,
   emptyIntakeDraftPayload,
@@ -12,6 +13,43 @@ import {
   submitIntakeDraft,
   type IntakeDraftPayload,
 } from "../_lib/intakeApi.client";
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  readOnly,
+  required = false,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  readOnly?: boolean;
+  required?: boolean;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+        {required ? " *" : ""}
+      </span>
+      <select
+        value={value}
+        disabled={readOnly}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function Field({
   label,
@@ -104,7 +142,12 @@ function CardListStep<T extends Record<string, string>>({
   title: string;
   items: T[];
   emptyItem: T;
-  fields: Array<{ key: keyof T; label: string }>;
+  fields: Array<{
+    key: keyof T;
+    label: string;
+    required?: boolean;
+    options?: ReadonlyArray<{ value: string; label: string }>;
+  }>;
   readOnly?: boolean;
   onChange: (items: T[]) => void;
 }) {
@@ -116,19 +159,36 @@ function CardListStep<T extends Record<string, string>>({
         items.map((item, index) => (
           <div key={index} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
             <div className="grid gap-3 sm:grid-cols-2">
-              {fields.map((f) => (
-                <Field
-                  key={String(f.key)}
-                  label={f.label}
-                  value={String(item[f.key] ?? "")}
-                  readOnly={readOnly}
-                  onChange={(v) => {
-                    const next = [...items];
-                    next[index] = { ...item, [f.key]: v };
-                    onChange(next);
-                  }}
-                />
-              ))}
+              {fields.map((f) =>
+                f.options ? (
+                  <SelectField
+                    key={String(f.key)}
+                    label={f.label}
+                    value={String(item[f.key] ?? f.options[0]?.value ?? "")}
+                    readOnly={readOnly}
+                    required={f.required}
+                    options={f.options}
+                    onChange={(v) => {
+                      const next = [...items];
+                      next[index] = { ...item, [f.key]: v };
+                      onChange(next);
+                    }}
+                  />
+                ) : (
+                  <Field
+                    key={String(f.key)}
+                    label={f.label}
+                    value={String(item[f.key] ?? "")}
+                    readOnly={readOnly}
+                    required={f.required}
+                    onChange={(v) => {
+                      const next = [...items];
+                      next[index] = { ...item, [f.key]: v };
+                      onChange(next);
+                    }}
+                  />
+                ),
+              )}
             </div>
             {!readOnly ? (
               <button
@@ -344,8 +404,22 @@ export default function IntakePageClient() {
             <CardListStep
               title="образование"
               items={payload.education}
-              emptyItem={{ institution: "", year_from: "", year_to: "", specialty: "", qualification: "", diploma_number: "" }}
+              emptyItem={{
+                education_type: "basic",
+                institution: "",
+                year_from: "",
+                year_to: "",
+                specialty: "",
+                qualification: "",
+                diploma_number: "",
+              }}
               fields={[
+                {
+                  key: "education_type",
+                  label: "Вид образования",
+                  required: true,
+                  options: INTAKE_EDUCATION_TYPE_OPTIONS,
+                },
                 { key: "institution", label: "Учебное заведение" },
                 { key: "year_from", label: "Год поступления" },
                 { key: "year_to", label: "Год окончания" },
