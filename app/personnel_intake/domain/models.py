@@ -126,3 +126,23 @@ class IntakeReviewState:
     transfer: IntakeTransferSnapshot | None
     can_transfer: bool
     transfer_blocked_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PersonTelegramBindingSnapshot:
+    binding_id: int
+    person_id: int
+    telegram_user_id: int
+    telegram_username: str | None
+    revoked_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PersonTelegramBotActivationSnapshot:
+    activation_id: int
+    person_id: int
+    bot_code: str
+    first_activated_at: datetime
+    last_activated_at: datetime
