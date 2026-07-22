@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import type { PprTrainingRecordResponse } from "../_lib/pprQueryTypes";
-import { formatPprDate } from "../_lib/pprCardPresentation";
+import { formatPersonnelDateRange } from "@/lib/personnelDateFormat";
 
 type Props = {
   active: PprTrainingRecordResponse[];
@@ -31,7 +31,7 @@ function TrainingRecordCard({ record }: { record: PprTrainingRecordResponse }) {
         <div>
           <dt className="inline">Период: </dt>
           <dd className="inline">
-            {formatPprDate(record.started_at)} — {formatPprDate(record.completed_at)}
+            {formatPersonnelDateRange(record.started_at, record.completed_at, { precision: "year" })}
           </dd>
         </div>
         <div>

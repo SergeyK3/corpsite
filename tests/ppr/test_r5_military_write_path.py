@@ -28,9 +28,11 @@ from app.ppr.application.lifecycle_service import PprLifecycleApplicationService
 from app.ppr.application.results import RESULT_STATUS_COMMITTED, RESULT_STATUS_IDEMPOTENT_REPLAY
 from app.ppr.application.section_service import PprSectionApplicationService
 from app.ppr.domain.errors import (
+    PprLifecycleTransitionError,
     SectionOptimisticConcurrencyConflictError,
     SectionRecordNotFoundError,
 )
+from app.ppr.domain.section_handlers import MILITARY_ACTIVE_RECORD_ALREADY_EXISTS
 from app.ppr.domain.section_models import SECTION_CODE_PPR_MILITARY
 from tests.conftest import table_exists
 from tests.ppr.conftest import (
@@ -352,10 +354,130 @@ def test_second_active_conflict(
 ) -> None:
     _materialize_and_activate(military_person_id, lifecycle_service)
     section_service.create_military_service(_create_envelope(military_person_id))
-    with pytest.raises(IntegrityError):
+    with pytest.raises(PprLifecycleTransitionError, match="действующая запись"):
         section_service.create_military_service(
             _create_envelope(military_person_id, military_rank="conflict")
         )
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_supersede_updates_composition_and_rank_with_single_active(
+    military_person_id: int,
+    lifecycle_service,
+    section_service,
+) -> None:
+    _materialize_and_activate(military_person_id, lifecycle_service)
+    added = section_service.create_military_service(
+        _create_envelope(
+            military_person_id,
+            personnel_composition="officers",
+            military_rank="Старший лейтенант",
+        )
+    )
+    assert added.section_record_id is not None
+    _, updated_at, _ = _load_military_row(added.section_record_id)
+
+    result = section_service.supersede_military_service(
+        PprCommandEnvelope(
+            command_id=f"sup-comp-{uuid4().hex}",
+            command_type=COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE,
+            actor_id="test-actor",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_id": added.section_record_id,
+                "expected_updated_at": updated_at,
+                "replacement": _registration_payload(
+                    personnel_composition="sergeants",
+                    military_rank="Сержант 3 класса",
+                ),
+            },
+            person_id=military_person_id,
+        )
+    )
+    assert result.status == RESULT_STATUS_COMMITTED
+
+    with engine.begin() as conn:
+        old_status = conn.execute(
+            text(
+                "SELECT lifecycle_status FROM public.person_military_service WHERE military_id = :rid"
+            ),
+            {"rid": added.section_record_id},
+        ).scalar_one()
+        active_rows = conn.execute(
+            text(
+                """
+                SELECT military_rank, personnel_composition, lifecycle_status
+                FROM public.person_military_service
+                WHERE person_id = :pid AND lifecycle_status = 'active'
+                """
+            ),
+            {"pid": military_person_id},
+        ).all()
+
+    assert old_status == "superseded"
+    assert len(active_rows) == 1
+    assert active_rows[0][0] == "Сержант 3 класса"
+    assert active_rows[0][1] == "sergeants"
+    assert active_rows[0][2] == "active"
+    assert result.section_record_id != added.section_record_id
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_repeated_supersede_same_active_record_does_not_violate_unique_constraint(
+    military_person_id: int,
+    lifecycle_service,
+    section_service,
+) -> None:
+    _materialize_and_activate(military_person_id, lifecycle_service)
+    added = section_service.create_military_service(_create_envelope(military_person_id))
+    assert added.section_record_id is not None
+    _, updated_at, _ = _load_military_row(added.section_record_id)
+
+    first = section_service.supersede_military_service(
+        PprCommandEnvelope(
+            command_id=f"sup-1-{uuid4().hex}",
+            command_type=COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE,
+            actor_id="test-actor",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_id": added.section_record_id,
+                "expected_updated_at": updated_at,
+                "replacement": _registration_payload(military_rank="ефрейтор"),
+            },
+            person_id=military_person_id,
+        )
+    )
+    assert first.section_record_id is not None
+    _, second_updated_at, _ = _load_military_row(first.section_record_id)
+
+    second = section_service.supersede_military_service(
+        PprCommandEnvelope(
+            command_id=f"sup-2-{uuid4().hex}",
+            command_type=COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE,
+            actor_id="test-actor",
+            requested_at=datetime.now(UTC),
+            payload={
+                "record_id": first.section_record_id,
+                "expected_updated_at": second_updated_at,
+                "replacement": _registration_payload(military_rank="сержант"),
+            },
+            person_id=military_person_id,
+        )
+    )
+    assert second.status == RESULT_STATUS_COMMITTED
+
+    with engine.begin() as conn:
+        active_count = conn.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM public.person_military_service
+                WHERE person_id = :pid AND lifecycle_status = 'active'
+                """
+            ),
+            {"pid": military_person_id},
+        ).scalar_one()
+
+    assert int(active_count) == 1
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")

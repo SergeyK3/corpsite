@@ -43,7 +43,7 @@ import {
 } from "../_lib/pprQueryTypes";
 import { mapPprCardError, lifecycleStatusLabel, hrRelationshipLabel } from "../_lib/pprCardPresentation";
 import type { PprEmploymentBiographyRoute, PprMilitaryServiceRoute } from "../_lib/pprCommandApi.client";
-import { EmployeeImportCardSection } from "./EmployeeImportCardSection";
+import { PprCardSection } from "./PprCardSection";
 import { PprCardSectionNav } from "./PprCardSectionNav";
 import PprCardGeneralSection from "./PprCardGeneralSection";
 import PprCardEducationSection from "./PprCardEducationSection";
@@ -351,15 +351,15 @@ export default function PprPersonalCardPageClient({
             <PprCardSectionNav sections={visibleCardSections} />
 
             <div className="space-y-5">
-              <EmployeeImportCardSection
+              <PprCardSection
                 id="general"
                 title="Общие сведения"
                 description="Основные персональные и кадровые сведения."
               >
                 <PprCardGeneralSection ppr={ppr} />
-              </EmployeeImportCardSection>
+              </PprCardSection>
 
-              <EmployeeImportCardSection
+              <PprCardSection
                 id="education"
                 title="Образование"
                 description="Сведения об образовании из личной карточки."
@@ -369,9 +369,9 @@ export default function PprPersonalCardPageClient({
                   superseded={educationSuperseded}
                   voided={educationVoided}
                 />
-              </EmployeeImportCardSection>
+              </PprCardSection>
 
-              <EmployeeImportCardSection
+              <PprCardSection
                 id="training"
                 title="Обучение и повышение квалификации"
                 description="Сведения о профессиональном обучении."
@@ -381,9 +381,9 @@ export default function PprPersonalCardPageClient({
                   superseded={trainingSuperseded}
                   voided={trainingVoided}
                 />
-              </EmployeeImportCardSection>
+              </PprCardSection>
 
-              <EmployeeImportCardSection
+              <PprCardSection
                 id="family"
                 title="Родственники"
                 description="Сведения о близких родственниках."
@@ -393,10 +393,10 @@ export default function PprPersonalCardPageClient({
                   superseded={familySuperseded}
                   voided={familyVoided}
                 />
-              </EmployeeImportCardSection>
+              </PprCardSection>
 
               {militaryRoute ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="military"
                   title="Воинский учёт"
                   description="Сведения о воинской обязанности и воинском учёте."
@@ -409,11 +409,11 @@ export default function PprPersonalCardPageClient({
                     editable={militaryEditable}
                     onMutated={() => loadCard()}
                   />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
               {employmentBiographyRoute ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="employment_biography"
                   title="Трудовая биография"
                   description="Сведения о трудовой деятельности до поступления в организацию."
@@ -426,11 +426,11 @@ export default function PprPersonalCardPageClient({
                     editable={employmentBiographyEditable}
                     onMutated={() => loadCard()}
                   />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
               {isApplicant && resolvedPersonId != null ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="intended_employment"
                   title="Предполагаемое трудоустройство"
                   description="Намерение работодателя о подразделении, должности и ставке до приказа о приёме."
@@ -440,11 +440,11 @@ export default function PprPersonalCardPageClient({
                     initial={intendedEmployment}
                     onSaved={(value) => setIntendedEmployment(value)}
                   />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
               {!isApplicant && resolvedEmployeeId ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="assignment"
                   title="Трудовая деятельность"
                   description="Текущее назначение и операционный контур занятости."
@@ -454,46 +454,46 @@ export default function PprPersonalCardPageClient({
                     batchId={null}
                     rowId={null}
                   />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
               {!isApplicant && resolvedEmployeeId ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="orders"
                   title="Кадровые приказы"
                   description="Юридически значимые кадровые действия."
                 >
                   <EmployeeCardOrdersSection employeeId={resolvedEmployeeId} />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
               {!isApplicant && resolvedEmployeeId ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="onboarding"
                   title="Адаптация"
                   description="Чек-лист адаптации нового сотрудника."
                 >
                   <EmployeeOnboardingSection employeeId={resolvedEmployeeId} />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
               {resolvedPersonId != null ? (
-                <EmployeeImportCardSection
+                <PprCardSection
                   id="applications"
                   title="Кадровые обращения"
                   description="История кадровых обращений по бумажным заявлениям."
                 >
                   <PprCardApplicationsSection personId={resolvedPersonId} />
-                </EmployeeImportCardSection>
+                </PprCardSection>
               ) : null}
 
-              <EmployeeImportCardSection
+              <PprCardSection
                 id="changes"
                 title="История изменений"
                 description="Краткая хронология событий личной карточки."
               >
                 <PprCardEventHistorySection events={ppr.events} />
-              </EmployeeImportCardSection>
+              </PprCardSection>
 
               {ppr.identity.employee_context_id != null ? (
                 <p className="text-xs text-zinc-500">

@@ -935,8 +935,8 @@ describe("PprPersonalCardPageClient", () => {
     render(<PprPersonalCardPageClient employeeId="42" canEditPprSections />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("military-create-btn")).toBeInTheDocument();
-      expect(screen.getByTestId("military-supersede-btn-301")).toBeInTheDocument();
+      expect(screen.queryByTestId("military-create-btn")).not.toBeInTheDocument();
+      expect(screen.getByTestId("military-edit-btn-301")).toBeInTheDocument();
       expect(screen.getByTestId("military-void-btn-301")).toBeInTheDocument();
     });
   });
@@ -950,7 +950,7 @@ describe("PprPersonalCardPageClient", () => {
       expect(screen.getByTestId("military-record-301")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("military-create-btn")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("military-supersede-btn-301")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("military-edit-btn-301")).not.toBeInTheDocument();
     expect(screen.queryByTestId("military-void-btn-301")).not.toBeInTheDocument();
   });
 

@@ -12,6 +12,7 @@ import {
   type StagingRow,
 } from "../_lib/importApi.client";
 import ImportBatchContextHeader from "./ImportBatchContextHeader";
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
 
 const AGE_OPTIONS = [
   { value: "", label: "Все возраста" },
@@ -253,7 +254,7 @@ export default function PersonnelImportRowsPageClient({ batchId }: { batchId: nu
                 <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">
                   <td className="px-3 py-2">{row.full_name || "—"}</td>
                   <td className="px-3 py-2 font-mono text-xs">{row.iin || "—"}</td>
-                  <td className="px-3 py-2">{row.birth_date || "—"}</td>
+                  <td className="px-3 py-2">{formatPersonnelDate(row.birth_date, { precision: "day" })}</td>
                   <td className="px-3 py-2">{row.age ?? "—"}</td>
                   <td className="max-w-[160px] truncate px-3 py-2" title={row.department}>
                     {row.department || "—"}

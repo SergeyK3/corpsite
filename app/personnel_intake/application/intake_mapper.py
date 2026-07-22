@@ -159,5 +159,6 @@ def map_military_record(block: dict[str, Any]) -> dict[str, Any]:
         "metadata": {
             "source": "personnel_intake",
             "registration_group": str(block.get("registration_group") or "").strip() or None,
+            "specialty_name": str(block.get("specialty_name") or "").strip() or None,
         },
     }

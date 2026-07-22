@@ -34,6 +34,7 @@ from app.personnel_intake.domain.models import (
     IntakeSummary,
     empty_intake_draft_payload,
 )
+from app.personnel_intake.domain.prefill import build_initial_intake_draft_payload
 from app.personnel_intake.domain.status import (
     INTAKE_DRAFT_STATUS_SUBMITTED,
     INTAKE_LINK_STATUS_EXPIRED,
@@ -202,7 +203,7 @@ def issue_intake_link(
         repo.create_draft(
             application_id=application_id,
             link_id=link.link_id,
-            payload=empty_intake_draft_payload(),
+            payload=build_initial_intake_draft_payload(conn, application_id),
         )
     elif draft.status != INTAKE_DRAFT_STATUS_SUBMITTED:
         repo.rebind_draft_link(draft.draft_id, link_id=link.link_id, updated_at=now)
@@ -314,7 +315,7 @@ def open_intake_session(conn: Connection, *, raw_token: str) -> OpenIntakeSessio
         draft = repo.create_draft(
             application_id=link.application_id,
             link_id=link.link_id,
-            payload=empty_intake_draft_payload(),
+            payload=build_initial_intake_draft_payload(conn, link.application_id),
         )
 
     read_only = draft.status == INTAKE_DRAFT_STATUS_SUBMITTED

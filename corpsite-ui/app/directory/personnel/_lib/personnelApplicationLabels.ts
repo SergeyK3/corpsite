@@ -97,27 +97,14 @@ export function personnelApplicationStatusBadgeClass(status: string): string {
   }
 }
 
+import { formatPersonnelDate, formatPersonnelDateTime as formatSharedDateTime } from "@/lib/personnelDateFormat";
+
 export function formatPersonnelApplicationDate(value: string | null | undefined): string {
-  const trimmed = String(value || "").trim();
-  if (!trimmed) return "—";
-  const datePart = trimmed.slice(0, 10);
-  const [year, month, day] = datePart.split("-");
-  if (!year || !month || !day) return trimmed;
-  return `${day}.${month}.${year}`;
+  return formatPersonnelDate(value, { precision: "day" });
 }
 
 export function formatPersonnelApplicationDateTime(value: string | null | undefined): string {
-  const trimmed = String(value || "").trim();
-  if (!trimmed) return "—";
-  const date = new Date(trimmed);
-  if (Number.isNaN(date.getTime())) return formatPersonnelApplicationDate(trimmed);
-  return date.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatSharedDateTime(value);
 }
 
 export function isPersonnelApplicationReadOnly(status: string | null | undefined): boolean {

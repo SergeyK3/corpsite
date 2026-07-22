@@ -60,7 +60,7 @@ async function main() {
     waitUntil: "domcontentloaded",
     timeout: 120000,
   });
-  await page.waitForSelector("text=Адрес ЛК", { timeout: 120000 });
+  await page.waitForSelector("text=Анкета ЛК", { timeout: 120000 });
   checks.push(["column header visible", true]);
 
   const copyBtn = page.locator(`[data-testid="applicant-intake-link-copy-${applicationId}"]`);

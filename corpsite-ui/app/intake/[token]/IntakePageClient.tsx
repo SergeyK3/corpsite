@@ -3,6 +3,21 @@
 import * as React from "react";
 import { useParams } from "next/navigation";
 
+import IntakeDictionaryCombobox from "../_components/IntakeDictionaryCombobox";
+import IntakeMilitaryCombobox from "../_components/IntakeMilitaryCombobox";
+import {
+  INTAKE_CITIZENSHIP_CATALOG,
+  INTAKE_CITIZENSHIP_POPULAR,
+  INTAKE_NATIONALITY_CATALOG,
+  INTAKE_NATIONALITY_POPULAR,
+} from "../_lib/intakePersonalDictionary";
+import {
+  applyIntakeMilitaryCompositionChange,
+  getIntakeMilitaryRankOptions,
+  INTAKE_MILITARY_COMPOSITION_CATALOG,
+  normalizeIntakeMilitaryComposition,
+  reconcileIntakeMilitaryDraftOnLoad,
+} from "../_lib/intakeMilitaryDictionary";
 import {
   INTAKE_EDUCATION_TYPE_OPTIONS,
   INTAKE_STEPS,
@@ -14,6 +29,21 @@ import {
   type IntakeDraftPayload,
   type IntakeEducation,
 } from "../_lib/intakeApi.client";
+import {
+  applyContactsRegistrationAddressChange,
+  applyContactsResidenceMirror,
+  contactsMirrorResidence,
+  formatIntakeFullName,
+} from "../_lib/intakeContactHelpers";
+import {
+  formatIntakeEducationReviewLine,
+  formatIntakePeriodForDisplay,
+  formatIntakeTrainingReviewLine,
+  parseIntakePeriodInput,
+  type IntakePeriodPrecision,
+} from "../_lib/intakePeriodFormat";
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
+import { sanitizeMilitarySpecialtyCodeInput } from "@/lib/militarySpecialtyCode";
 
 function SelectField<V extends string>({
   label,
@@ -62,6 +92,9 @@ function Field({
   readOnly,
   type = "text",
   required = false,
+  testId,
+  maxLength,
+  inputMode,
 }: {
   label: string;
   value: string;
@@ -69,6 +102,9 @@ function Field({
   readOnly?: boolean;
   type?: string;
   required?: boolean;
+  testId?: string;
+  maxLength?: number;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
 }) {
   return (
     <label className="block">
@@ -80,7 +116,68 @@ function Field({
         type={type}
         value={value}
         readOnly={readOnly}
+        data-testid={testId}
+        maxLength={maxLength}
+        inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
+      />
+    </label>
+  );
+}
+
+function IntakePeriodField({
+  label,
+  value,
+  onChange,
+  readOnly,
+  precision,
+  required = false,
+  testId,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  readOnly?: boolean;
+  precision: IntakePeriodPrecision;
+  required?: boolean;
+  testId?: string;
+}) {
+  const [focused, setFocused] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+  const display = formatIntakePeriodForDisplay(value, precision);
+
+  React.useEffect(() => {
+    if (!focused) setDraft(display);
+  }, [display, focused]);
+
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+        {required ? " *" : ""}
+      </span>
+      <input
+        type="text"
+        inputMode={precision === "year" ? "numeric" : "text"}
+        value={focused ? draft : display}
+        readOnly={readOnly}
+        data-testid={testId}
+        placeholder={precision === "year" ? "ГГГГ" : "ДД.ММ.ГГГГ"}
+        onFocus={() => {
+          setDraft(display);
+          setFocused(true);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          if (draft.trim() === display.trim()) return;
+          onChange(parseIntakePeriodInput(draft, precision));
+        }}
+        onChange={(e) => {
+          const nextDraft = e.target.value;
+          setDraft(nextDraft);
+          onChange(parseIntakePeriodInput(nextDraft, precision));
+        }}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
       />
     </label>
@@ -107,8 +204,24 @@ function StepPersonal({
       <Field label="Дата рождения" value={p.birth_date} onChange={(v) => set("birth_date", v)} readOnly={readOnly} type="date" />
       <Field label="Место рождения" value={p.birth_place} onChange={(v) => set("birth_place", v)} readOnly={readOnly} />
       <Field label="Пол" value={p.gender} onChange={(v) => set("gender", v)} readOnly={readOnly} />
-      <Field label="Гражданство" value={p.citizenship} onChange={(v) => set("citizenship", v)} readOnly={readOnly} />
-      <Field label="Национальность" value={p.nationality} onChange={(v) => set("nationality", v)} readOnly={readOnly} />
+      <IntakeDictionaryCombobox
+        label="Гражданство"
+        value={p.citizenship}
+        onChange={(v) => set("citizenship", v)}
+        readOnly={readOnly}
+        popular={INTAKE_CITIZENSHIP_POPULAR}
+        catalog={INTAKE_CITIZENSHIP_CATALOG}
+        testId="intake-citizenship"
+      />
+      <IntakeDictionaryCombobox
+        label="Национальность"
+        value={p.nationality}
+        onChange={(v) => set("nationality", v)}
+        readOnly={readOnly}
+        popular={INTAKE_NATIONALITY_POPULAR}
+        catalog={INTAKE_NATIONALITY_CATALOG}
+        testId="intake-nationality"
+      />
     </div>
   );
 }
@@ -123,14 +236,54 @@ function StepContacts({
   readOnly?: boolean;
 }) {
   const c = payload.contacts;
+  const [mirrorResidence, setMirrorResidence] = React.useState(() => contactsMirrorResidence(c));
+
   const set = (key: keyof typeof c, value: string) =>
     onChange({ ...payload, contacts: { ...c, [key]: value } });
+
   return (
     <div className="grid gap-4">
       <Field label="Мобильный телефон" value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} required />
       <Field label="Email" value={c.email} onChange={(v) => set("email", v)} readOnly={readOnly} type="email" />
-      <Field label="Адрес регистрации" value={c.registration_address} onChange={(v) => set("registration_address", v)} readOnly={readOnly} />
-      <Field label="Адрес проживания" value={c.residence_address} onChange={(v) => set("residence_address", v)} readOnly={readOnly} />
+      <Field
+        label="Адрес регистрации"
+        value={c.registration_address}
+        onChange={(v) =>
+          onChange({
+            ...payload,
+            contacts: applyContactsRegistrationAddressChange(c, v, mirrorResidence),
+          })
+        }
+        readOnly={readOnly}
+      />
+      {!readOnly ? (
+        <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            checked={mirrorResidence}
+            data-testid="intake-residence-mirror"
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setMirrorResidence(checked);
+              onChange({
+                ...payload,
+                contacts: applyContactsResidenceMirror(c, checked),
+              });
+            }}
+          />
+          Адрес проживания совпадает с адресом регистрации
+        </label>
+      ) : null}
+      <Field
+        label="Адрес проживания"
+        value={c.residence_address}
+        testId="intake-residence-address"
+        onChange={(v) => {
+          setMirrorResidence(false);
+          set("residence_address", v);
+        }}
+        readOnly={readOnly || mirrorResidence}
+      />
     </div>
   );
 }
@@ -140,6 +293,8 @@ type CardListFieldDef<T extends Record<string, string>> = {
     key: K;
     label: string;
     required?: boolean;
+    periodPrecision?: IntakePeriodPrecision;
+    testId?: string;
     options?: ReadonlyArray<{ value: Extract<T[K], string>; label: string }>;
   };
 }[keyof T];
@@ -176,6 +331,21 @@ function CardListStep<T extends Record<string, string>>({
                     readOnly={readOnly}
                     required={f.required}
                     options={f.options}
+                    onChange={(v) => {
+                      const next = [...items];
+                      next[index] = { ...item, [f.key]: v };
+                      onChange(next);
+                    }}
+                  />
+                ) : f.periodPrecision ? (
+                  <IntakePeriodField
+                    key={String(f.key)}
+                    label={f.label}
+                    value={String(item[f.key] ?? "")}
+                    readOnly={readOnly}
+                    required={f.required}
+                    precision={f.periodPrecision}
+                    testId={f.testId}
                     onChange={(v) => {
                       const next = [...items];
                       next[index] = { ...item, [f.key]: v };
@@ -223,6 +393,18 @@ function CardListStep<T extends Record<string, string>>({
   );
 }
 
+function reconcileIntakeDraftPayload(payload: IntakeDraftPayload): IntakeDraftPayload {
+  const military = {
+    ...emptyIntakeDraftPayload().military,
+    ...payload.military,
+    specialty_name: payload.military?.specialty_name ?? "",
+  };
+  return {
+    ...payload,
+    military: reconcileIntakeMilitaryDraftOnLoad(military),
+  };
+}
+
 function StepMilitary({
   payload,
   onChange,
@@ -233,15 +415,53 @@ function StepMilitary({
   readOnly?: boolean;
 }) {
   const m = payload.military;
+  const composition = normalizeIntakeMilitaryComposition(m.composition);
+  const rankOptions = React.useMemo(
+    () => getIntakeMilitaryRankOptions(composition),
+    [composition],
+  );
   const set = (key: keyof typeof m, value: string) =>
     onChange({ ...payload, military: { ...m, [key]: value } });
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      <IntakeMilitaryCombobox
+        label="Состав"
+        value={composition}
+        onChange={(nextComposition) =>
+          onChange({
+            ...payload,
+            military: {
+              ...m,
+              ...applyIntakeMilitaryCompositionChange(nextComposition, m.rank),
+            },
+          })
+        }
+        options={INTAKE_MILITARY_COMPOSITION_CATALOG}
+        readOnly={readOnly}
+        testId="intake-military-composition"
+      />
+      <IntakeMilitaryCombobox
+        label="Воинское звание"
+        value={m.rank}
+        onChange={(v) => set("rank", v)}
+        options={rankOptions}
+        readOnly={readOnly}
+        disabled={!composition}
+        allowFreeText={composition === "other"}
+        testId="intake-military-rank"
+      />
       <Field label="Статус" value={m.status} onChange={(v) => set("status", v)} readOnly={readOnly} />
-      <Field label="Звание" value={m.rank} onChange={(v) => set("rank", v)} readOnly={readOnly} />
       <Field label="Категория" value={m.category} onChange={(v) => set("category", v)} readOnly={readOnly} />
-      <Field label="Состав" value={m.composition} onChange={(v) => set("composition", v)} readOnly={readOnly} />
-      <Field label="Военно-учётная специальность" value={m.specialty_code} onChange={(v) => set("specialty_code", v)} readOnly={readOnly} />
+      <Field
+        label="Номер ВУС"
+        value={m.specialty_code}
+        onChange={(v) => set("specialty_code", sanitizeMilitarySpecialtyCodeInput(v))}
+        readOnly={readOnly}
+        testId="intake-military-specialty-code"
+        maxLength={7}
+        inputMode="numeric"
+      />
       <Field label="Категория годности" value={m.fitness_category} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
       <Field label="Военкомат" value={m.commissariat} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
       <Field label="Группа учёта" value={m.registration_group} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
@@ -277,7 +497,7 @@ export default function IntakePageClient() {
     void openIntakeSession(token)
       .then((session) => {
         if (cancelled) return;
-        setPayload(session.payload ?? emptyIntakeDraftPayload());
+        setPayload(reconcileIntakeDraftPayload(session.payload ?? emptyIntakeDraftPayload()));
         setReadOnly(Boolean(session.read_only));
         setSubmitted(session.status === "submitted" || session.read_only);
         const idx = INTAKE_STEPS.findIndex((s) => s.id === session.payload?.current_step);
@@ -386,10 +606,9 @@ export default function IntakePageClient() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <div className="mx-auto max-w-3xl px-4 py-8">
         <header className="mb-6">
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Анкета нового сотрудника</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Шаг {stepIndex + 1} из {INTAKE_STEPS.length}: {currentStep.title}
-          </p>
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+            Анкета сотрудника. Шаг {stepIndex + 1} из {INTAKE_STEPS.length} – {currentStep.title}
+          </h1>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
             <div
               className="h-full bg-sky-600 transition-all"
@@ -429,8 +648,18 @@ export default function IntakePageClient() {
                   options: INTAKE_EDUCATION_TYPE_OPTIONS,
                 },
                 { key: "institution", label: "Учебное заведение" },
-                { key: "year_from", label: "Год поступления" },
-                { key: "year_to", label: "Год окончания" },
+                {
+                  key: "year_from",
+                  label: "Год поступления",
+                  periodPrecision: "year",
+                  testId: "intake-education-year-from",
+                },
+                {
+                  key: "year_to",
+                  label: "Год окончания",
+                  periodPrecision: "year",
+                  testId: "intake-education-year-to",
+                },
                 { key: "specialty", label: "Специальность" },
                 { key: "qualification", label: "Квалификация" },
                 { key: "diploma_number", label: "№ диплома" },
@@ -446,7 +675,7 @@ export default function IntakePageClient() {
               emptyItem={{ institution: "", year: "", course_name: "", hours: "" }}
               fields={[
                 { key: "institution", label: "Организация" },
-                { key: "year", label: "Год" },
+                { key: "year", label: "Год", periodPrecision: "year", testId: "intake-training-year" },
                 { key: "course_name", label: "Курс" },
               ]}
               readOnly={readOnly}
@@ -461,7 +690,7 @@ export default function IntakePageClient() {
               fields={[
                 { key: "relationship", label: "Степень родства" },
                 { key: "full_name", label: "ФИО" },
-                { key: "birth_year", label: "Год рождения" },
+                { key: "birth_year", label: "Год рождения", periodPrecision: "year", testId: "intake-relative-birth-year" },
                 { key: "work_place", label: "Место работы" },
               ]}
               readOnly={readOnly}
@@ -476,8 +705,8 @@ export default function IntakePageClient() {
               fields={[
                 { key: "organization", label: "Организация" },
                 { key: "position", label: "Должность" },
-                { key: "year_from", label: "С" },
-                { key: "year_to", label: "По" },
+                { key: "year_from", label: "С", periodPrecision: "year", testId: "intake-employment-year-from" },
+                { key: "year_to", label: "По", periodPrecision: "year", testId: "intake-employment-year-to" },
                 { key: "reason_for_leaving", label: "Причина увольнения" },
               ]}
               readOnly={readOnly}
@@ -488,14 +717,35 @@ export default function IntakePageClient() {
             <StepMilitary payload={payload} onChange={updatePayload} readOnly={readOnly} />
           ) : null}
           {currentStep.id === "review" ? (
-            <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
+            <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300" data-testid="intake-review-summary">
               <p>Проверьте введённые сведения перед отправкой в отдел кадров.</p>
               <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  ФИО: {payload.personal.last_name} {payload.personal.first_name} {payload.personal.middle_name}
-                </li>
+                <li>ФИО: {formatIntakeFullName(payload.personal) || "—"}</li>
+                <li>Дата рождения: {formatPersonnelDate(payload.personal.birth_date, { precision: "day", empty: "—" })}</li>
                 <li>Телефон: {payload.contacts.mobile_phone || "—"}</li>
-                <li>Образование: {payload.education.length} зап.</li>
+                <li>Email: {payload.contacts.email || "—"}</li>
+                <li>
+                  Образование:{" "}
+                  {payload.education.length === 0
+                    ? "0 зап."
+                    : payload.education.map((item, index) => (
+                        <span key={`education-${index}`} data-testid={`intake-review-education-${index}`}>
+                          {index > 0 ? "; " : ""}
+                          {formatIntakeEducationReviewLine(item)}
+                        </span>
+                      ))}
+                </li>
+                <li>
+                  Обучение:{" "}
+                  {payload.training.length === 0
+                    ? "0 зап."
+                    : payload.training.map((item, index) => (
+                        <span key={`training-${index}`} data-testid={`intake-review-training-${index}`}>
+                          {index > 0 ? "; " : ""}
+                          {formatIntakeTrainingReviewLine(item)}
+                        </span>
+                      ))}
+                </li>
                 <li>Родственники: {payload.relatives.length} зап.</li>
               </ul>
             </div>

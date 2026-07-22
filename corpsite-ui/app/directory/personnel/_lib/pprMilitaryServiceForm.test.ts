@@ -4,6 +4,7 @@ import {
   ALLOWED_MILITARY_SERVICE_WRITE_KEYS,
   assertAllowedMilitaryServiceWritePayload,
   buildMilitaryServiceRecordPayload,
+  militaryRecordToFormState,
   validateMilitaryServiceFormForSubmit,
   type MilitaryServiceFormState,
 } from "./pprMilitaryServiceForm";
@@ -17,7 +18,7 @@ const baseForm: MilitaryServiceFormState = {
   obligation_status: "liable",
   registration_category: "II",
   military_rank: "рядовой",
-  military_specialty_code: "123456",
+  military_specialty_code: "1234567",
   personnel_composition: "soldiers",
   fitness_category: "А",
   registration_status: "registered",
@@ -72,13 +73,25 @@ describe("pprMilitaryServiceForm", () => {
       obligation_status: "liable",
       registration_category: "II",
       military_rank: "рядовой",
-      military_specialty_code: "123456",
+      military_specialty_code: "1234567",
       personnel_composition: "soldiers",
       fitness_category: "А",
       registration_status: "registered",
       commissariat_name: "Алмалинский РВК",
       registered_at: "2015-05-01",
     });
+  });
+
+  it("registration rejects incomplete VUS number", () => {
+    const result = validateMilitaryServiceFormForSubmit({
+      ...baseForm,
+      military_specialty_code: "123456",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toMatch(/7 цифр/i);
+    }
   });
 
   it("registration requires at least one structured field", () => {
@@ -103,5 +116,36 @@ describe("pprMilitaryServiceForm", () => {
       expect(ALLOWED_MILITARY_SERVICE_WRITE_KEYS.has(forbidden)).toBe(false);
       expect(payload).not.toHaveProperty(forbidden);
     }
+  });
+
+  it("maps active military record into editable form state", () => {
+    const form = militaryRecordToFormState({
+      record_id: 201,
+      record_kind: PPR_MILITARY_RECORD_KIND_REGISTRATION,
+      obligation_status: "liable",
+      registration_category: "II",
+      military_rank: "Старший лейтенант",
+      military_specialty_code: "1234567",
+      personnel_composition: "officers",
+      fitness_category: "А",
+      registration_status: "registered",
+      commissariat_name: "Алмалинский РВК",
+      registered_at: "2015-05-01T00:00:00Z",
+      deregistered_at: null,
+      notes: null,
+      source_type: "entered",
+      provenance: null,
+      metadata: null,
+      employee_context_id: null,
+      verification_status: "verified",
+      lifecycle_status: "active",
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-02-01T00:00:00Z",
+    });
+
+    expect(form.personnel_composition).toBe("officers");
+    expect(form.military_rank).toBe("Старший лейтенант");
+    expect(form.obligation_status).toBe("liable");
+    expect(form.registered_at).toBe("2015-05-01");
   });
 });

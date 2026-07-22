@@ -9,6 +9,7 @@ import {
   type TrainingDateQualityItem,
 } from "../_lib/importApi.client";
 import { getNormalizedRecordKindLabel } from "../_lib/normalizedRecordLabels";
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
 
 type Props = {
   batchId: number;
@@ -18,10 +19,7 @@ type Props = {
 };
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("ru-RU");
+  return formatPersonnelDate(value, { precision: "day" });
 }
 
 export default function ImportTrainingDateQualityPanel({

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personnel applications table layout preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { background: #fafafa; }
+    </style>
+  </head>
+  <body class="p-4">
+    <div class="mx-auto w-full max-w-[1440px]">
+      <h1 class="mb-4 text-xl font-semibold text-zinc-900">Претенденты — preview layout</h1>
+      <div class="w-full overflow-x-auto rounded-xl border border-zinc-200" data-testid="personnel-applications-table">
+        <table class="w-full table-fixed border-collapse text-sm">
+          <colgroup>
+            <col style="width: 9%" />
+            <col style="width: 6%" />
+            <col style="width: 7%" />
+            <col style="width: 8%" />
+            <col style="width: 12%" />
+            <col style="width: 6%" />
+            <col style="width: 6%" />
+            <col style="width: 6%" />
+            <col style="width: 8.5%" />
+            <col style="width: 12%" />
+            <col style="width: 8%" />
+            <col style="width: 5.5%" />
+            <col style="width: 6%" />
+            <col style="width: 7%" />
+          </colgroup>
+          <thead class="bg-zinc-50 text-left text-[11px] font-medium leading-snug text-zinc-600">
+            <tr>
+              <th class="px-3 py-2 break-words whitespace-normal">ФИО</th>
+              <th class="px-3 py-2 break-words whitespace-normal">ИИН</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Статус</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Сотрудник</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Анкета ЛК</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Открыта</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Отправлена</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Дата заявления</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Действие</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Подразделение</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Должность</th>
+              <th class="px-3 py-2 break-words whitespace-normal">HR</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Регистрация</th>
+              <th class="px-3 py-2 break-words whitespace-normal">Резолюция</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-100 bg-white">
+            <tr>
+              <td class="px-3 py-2 align-top min-w-0 font-medium break-words">Алиев Али Алиевич</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] font-mono leading-snug text-zinc-700">900101300123</td>
+              <td class="px-3 py-2 align-top min-w-0"><span class="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs">Ожидает заполнения</span></td>
+              <td class="px-3 py-2 align-top min-w-0 break-words">—</td>
+              <td class="px-3 py-2 align-top min-w-0">
+                <div class="flex min-w-0 flex-col gap-1.5">
+                  <code class="block min-w-0 overflow-hidden text-xs leading-snug text-zinc-700 line-clamp-2 break-all">http://localhost:3000/intake/very-long-token-path-for-layout-check-abc123xyz</code>
+                  <span class="inline-flex max-w-full rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium">Ссылка выдана</span>
+                  <div class="flex flex-wrap gap-1">
+                    <button class="inline-flex shrink-0 rounded border border-zinc-300 px-2 py-1 text-xs">Копировать</button>
+                    <button class="inline-flex shrink-0 rounded border border-zinc-300 px-2 py-1 text-xs">Открыть</button>
+                  </div>
+                </div>
+              </td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">01.07.2026<br />10:15</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">—</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">01.07.2026</td>
+              <td class="px-3 py-2 align-top min-w-0">—</td>
+              <td class="px-3 py-2 align-top min-w-0 break-words">Амбулаторно-поликлиническое отделение № 3 корпус Б</td>
+              <td class="px-3 py-2 align-top min-w-0 break-words">Медицинская сестра процедурного кабинета</td>
+              <td class="px-3 py-2 align-top min-w-0 break-words text-xs">HR User</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">02.07.2026<br />10:00</td>
+              <td class="px-3 py-2 align-top min-w-0">—</td>
+            </tr>
+            <tr>
+              <td class="px-3 py-2 align-top min-w-0 font-medium break-words">Петров Пётр Петрович</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] font-mono leading-snug text-zinc-700">850505400456</td>
+              <td class="px-3 py-2 align-top min-w-0"><span class="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs">Личная карточка заполнена</span></td>
+              <td class="px-3 py-2 align-top min-w-0 break-words text-blue-700 underline">Петров П.П.</td>
+              <td class="px-3 py-2 align-top min-w-0">
+                <div class="flex min-w-0 flex-col gap-1.5">
+                  <code class="block min-w-0 break-all text-xs leading-snug text-zinc-700">http://localhost:3000/intake/submitted-token</code>
+                  <span class="inline-flex max-w-full rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium">Анкета заполнена</span>
+                  <div class="flex flex-wrap gap-1">
+                    <button class="inline-flex shrink-0 rounded border border-zinc-300 px-2 py-1 text-xs">Копировать</button>
+                    <button class="inline-flex shrink-0 rounded border border-zinc-300 px-2 py-1 text-xs">Открыть</button>
+                  </div>
+                </div>
+              </td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">28.06.2026<br />09:00</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">30.06.2026<br />18:40</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">25.06.2026</td>
+              <td class="px-3 py-2 align-top min-w-0">
+                <button class="block w-full max-w-full rounded border border-zinc-300 px-1.5 py-1 text-center text-[11px] leading-snug text-blue-700">Открыть анкету</button>
+              </td>
+              <td class="px-3 py-2 align-top min-w-0 break-words">Терапевтическое отделение стационара</td>
+              <td class="px-3 py-2 align-top min-w-0 break-words">Врач-терапевт</td>
+              <td class="px-3 py-2 align-top min-w-0 break-words text-xs">Иванова А.С.</td>
+              <td class="px-3 py-2 align-top min-w-0 overflow-hidden text-[11px] leading-snug text-zinc-700">26.06.2026<br />11:20</td>
+              <td class="px-3 py-2 align-top min-w-0"><span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs">Ожидает</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

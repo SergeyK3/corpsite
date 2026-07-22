@@ -1,4 +1,5 @@
 /** Display helpers for Monthly Reference Dataset UI (WP-MRD-004). */
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
 import type { MonthlyReferenceSummary } from "./mrdApi.client";
 
 export type MrdForkMode = "version" | "period";
@@ -36,13 +37,7 @@ export function mrdJournalStatusClassName(
 }
 
 export function formatMrdReportPeriod(value: string | null | undefined): string {
-  if (!value) return "—";
-  const raw = value.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const [year, month] = raw.split("-");
-    return `${month}.${year}`;
-  }
-  return raw;
+  return formatPersonnelDate(value, { precision: "month" });
 }
 
 export function formatMrdVersionLabel(row: Pick<MonthlyReferenceSummary, "report_period" | "version" | "status">): string {

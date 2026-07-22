@@ -25,6 +25,10 @@ from app.ppr.domain.errors import (
 )
 
 MILITARY_ONE_ACTIVE_PER_PERSON_CONSTRAINT = "uq_person_military_service_one_active_per_person"
+MILITARY_ACTIVE_RECORD_ALREADY_EXISTS = (
+    "У сотрудника уже есть действующая запись воинского учёта. "
+    "Измените существующую запись через замену."
+)
 
 
 def _integrity_error_pgcode(exc: IntegrityError) -> str | None:
@@ -112,5 +116,5 @@ def map_ppr_mutation_error(exc: Exception) -> HTTPException | None:
     if isinstance(exc, PprApplicationValidationError):
         return ppr_validation_http422(exc)
     if isinstance(exc, IntegrityError) and _is_military_second_active_conflict(exc):
-        return ppr_conflict_http409(exc)
+        return HTTPException(status_code=409, detail=MILITARY_ACTIVE_RECORD_ALREADY_EXISTS)
     return None

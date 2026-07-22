@@ -87,18 +87,17 @@ export function lifecycleStatusLabel(materialized: boolean, lifecycleState: stri
   return map[lifecycleState] || lifecycleState;
 }
 
-export function formatPprDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleDateString("ru-RU");
+import { formatPersonnelDate, formatPersonnelDateTime as formatSharedDateTime } from "@/lib/personnelDateFormat";
+
+export function formatPprDate(
+  value: string | null | undefined,
+  precision: "day" | "month" | "year" | "auto" = "day",
+): string {
+  return formatPersonnelDate(value, { precision });
 }
 
 export function formatPprDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleString("ru-RU");
+  return formatSharedDateTime(value);
 }
 
 const RELATIONSHIP_TYPE_LABELS: Record<string, string> = {
@@ -177,16 +176,11 @@ export function registrationStatusLabel(value: string | null | undefined): strin
   return REGISTRATION_STATUS_LABELS[value] || value;
 }
 
-const PERSONNEL_COMPOSITION_LABELS: Record<string, string> = {
-  soldiers: "Рядовой и сержантский состав",
-  sergeants: "Сержантский состав",
-  officers: "Офицерский состав",
-  other: "Иной состав",
-};
+import { intakeMilitaryCompositionLabel } from "@/lib/militaryDictionary";
 
 export function personnelCompositionLabel(value: string | null | undefined): string {
   if (!value) return "—";
-  return PERSONNEL_COMPOSITION_LABELS[value] || value;
+  return intakeMilitaryCompositionLabel(value) || value;
 }
 
 export function isPprDisplayValue(value: unknown): boolean {
@@ -210,8 +204,14 @@ export function mapPprMutationError(error: unknown): string {
   if (status === 403) return "Недостаточно прав для изменения записи.";
   if (status === 404) return "Запись не найдена. Обновите данные и повторите.";
   if (status === 409) {
-    return detail || "Данные были изменены другим пользователем. Обновите карточку и повторите.";
+    if (detail && !/IntegrityError|UniqueViolation|psycopg2|SQL/i.test(detail)) {
+      return detail;
+    }
+    return "Данные были изменены другим пользователем. Обновите карточку и повторите.";
   }
   if (status === 422) return detail || "Проверьте заполнение полей.";
+  if (detail && /IntegrityError|UniqueViolation|psycopg2|SQL/i.test(detail)) {
+    return "Не удалось сохранить запись. Обновите данные и повторите.";
+  }
   return detail || "Не удалось выполнить операцию.";
 }

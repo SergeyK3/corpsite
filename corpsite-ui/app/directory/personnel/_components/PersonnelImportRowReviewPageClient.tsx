@@ -13,6 +13,7 @@ import {
   type RowReviewDetail,
 } from "../_lib/importApi.client";
 import { calcRecordValidityNote } from "../_lib/importProfileEditor";
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
 import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
 
 const EDUCATION_SECTION_LABELS: Record<string, string> = {
@@ -241,7 +242,8 @@ export default function PersonnelImportRowReviewPageClient({
                 <span className="text-zinc-500">ИИН:</span> {detail.iin || "—"}
               </div>
               <div>
-                <span className="text-zinc-500">Дата рождения:</span> {detail.birth_date || "—"}
+                <span className="text-zinc-500">Дата рождения:</span>{" "}
+                {formatPersonnelDate(detail.birth_date, { precision: "day" })}
               </div>
               <div>
                 <span className="text-zinc-500">Пол:</span>{" "}

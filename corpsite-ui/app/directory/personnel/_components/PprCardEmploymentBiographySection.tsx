@@ -9,9 +9,9 @@ import {
   voidExternalEmployment,
   type PprEmploymentBiographyRoute,
 } from "../_lib/pprCommandApi.client";
+import { formatPersonnelDateRange } from "@/lib/personnelDateFormat";
 import {
   externalEmploymentRecordKindLabel,
-  formatPprDate,
   mapPprMutationError,
 } from "../_lib/pprCardPresentation";
 import {
@@ -101,7 +101,7 @@ function EmploymentRecordCard({ record }: { record: PprExternalEmploymentRecordR
           <div>
             <dt className="inline">Период: </dt>
             <dd className="inline">
-              {formatPprDate(record.started_at)} — {formatPprDate(record.ended_at)}
+              {formatPersonnelDateRange(record.started_at, record.ended_at, { precision: "year" })}
             </dd>
           </div>
         ) : null}

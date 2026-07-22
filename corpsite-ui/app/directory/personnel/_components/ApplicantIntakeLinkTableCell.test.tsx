@@ -10,15 +10,18 @@ describe("ApplicantIntakeLinkTableCell", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows dash when link was not issued", () => {
+  it("shows intake status when link was not issued", () => {
     render(
       <ApplicantIntakeLinkTableCell
         applicationId={10}
         displayState="not_issued"
         intakeUrlPath={null}
+        intakeLinkStatus={null}
+        intakeDraftStatus={null}
       />,
     );
-    expect(screen.getByTestId("applicant-intake-link-empty-10")).toHaveTextContent("—");
+    expect(screen.getByTestId("applicant-intake-link-empty-10")).toBeInTheDocument();
+    expect(screen.getByTestId("applicant-intake-link-status-badge-10")).toHaveTextContent("Не выдана");
   });
 
   it("shows reissue hint for legacy hash-only links", () => {
@@ -48,6 +51,7 @@ describe("ApplicantIntakeLinkTableCell", () => {
     expect(screen.getByTestId("applicant-intake-link-url-10")).toHaveTextContent(
       "http://localhost/intake/abc123",
     );
+    expect(screen.getByTestId("applicant-intake-link-status-badge-10")).toBeInTheDocument();
     expect(screen.getByTestId("applicant-intake-link-copy-10")).toBeInTheDocument();
     expect(screen.getByTestId("applicant-intake-link-open-10")).toBeInTheDocument();
   });

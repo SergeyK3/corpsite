@@ -2,6 +2,14 @@
 
 import * as React from "react";
 
+import IntakeMilitaryCombobox from "@/app/intake/_components/IntakeMilitaryCombobox";
+import {
+  applyPprMilitaryCompositionChange,
+  getIntakeMilitaryRankOptions,
+  inferIntakeMilitaryCompositionFromRank,
+  INTAKE_MILITARY_COMPOSITION_CATALOG,
+  normalizeIntakeMilitaryComposition,
+} from "@/lib/militaryDictionary";
 import {
   createMilitaryService,
   newPprCommandId,
@@ -21,9 +29,12 @@ import {
 import {
   buildMilitaryServiceRecordPayload,
   isStaleMutationError,
+  militaryRecordToFormState,
+  MILITARY_CREATE_BLOCKED_WHEN_ACTIVE_MESSAGE,
   validateMilitaryServiceFormForSubmit,
   type MilitaryServiceFormState,
 } from "../_lib/pprMilitaryServiceForm";
+import { sanitizeMilitarySpecialtyCodeInput } from "@/lib/militarySpecialtyCode";
 import type {
   PprMilitaryRecordDetailsResponse,
   PprMilitaryRecordResponse,
@@ -114,14 +125,19 @@ function MilitaryRecordCard({ record }: { record: PprMilitaryRecordResponse }) {
   pushField("Вид", record.record_kind, militaryRecordKindLabel);
   pushField("Воинская обязанность", record.obligation_status, obligationStatusLabel);
   pushField("Категория учёта", record.registration_category);
+  pushField(
+    "Состав",
+    record.personnel_composition ||
+      (record.military_rank ? inferIntakeMilitaryCompositionFromRank(record.military_rank) : null),
+    personnelCompositionLabel,
+  );
   pushField("Воинское звание", record.military_rank);
-  pushField("ВУС", record.military_specialty_code);
-  pushField("Состав", record.personnel_composition, personnelCompositionLabel);
-  pushField("Категория годности", record.fitness_category);
   pushField("Статус учёта", record.registration_status, registrationStatusLabel);
+  pushField("Категория годности", record.fitness_category);
+  pushField("Номер ВУС", record.military_specialty_code);
   pushField("Военкомат", record.commissariat_name);
-  pushField("Дата постановки на учёт", record.registered_at, formatPprDate);
-  pushField("Дата снятия с учёта", record.deregistered_at, formatPprDate);
+  pushField("Дата постановки на учёт", record.registered_at, (value) => formatPprDate(value, "day"));
+  pushField("Дата снятия с учёта", record.deregistered_at, (value) => formatPprDate(value, "day"));
 
   for (const spec of RESTRICTED_FIELD_SPECS) {
     pushField(spec.label, restrictedFieldValue(record, spec.key));
@@ -192,6 +208,12 @@ function RecordFormFields({
   form: RecordFormState;
   onChange: (next: RecordFormState) => void;
 }) {
+  const composition = normalizeIntakeMilitaryComposition(form.personnel_composition);
+  const rankOptions = React.useMemo(
+    () => getIntakeMilitaryRankOptions(composition),
+    [composition],
+  );
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="block text-sm sm:col-span-2">
@@ -241,15 +263,32 @@ function RecordFormFields({
               <option value="other">Иная</option>
             </select>
           </label>
-          <label className="block text-sm">
-            <span className="mb-1 block">Воинское звание</span>
-            <input
-              className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              value={form.military_rank}
-              onChange={(e) => onChange({ ...form, military_rank: e.target.value })}
-              data-testid="military-form-rank"
+          <div className="block text-sm">
+            <IntakeMilitaryCombobox
+              label="Состав"
+              value={composition}
+              onChange={(nextComposition) =>
+                onChange({
+                  ...form,
+                  ...applyPprMilitaryCompositionChange(nextComposition, form.military_rank),
+                })
+              }
+              options={INTAKE_MILITARY_COMPOSITION_CATALOG}
+              testId="military-form-composition"
             />
-          </label>
+          </div>
+          <div className="block text-sm">
+            <IntakeMilitaryCombobox
+              label="Воинское звание"
+              value={form.military_rank}
+              onChange={(nextRank) => onChange({ ...form, military_rank: nextRank })}
+              options={rankOptions}
+              disabled={!composition}
+              allowFreeText={composition === "other"}
+              emptyHint="Сначала выберите состав"
+              testId="military-form-rank"
+            />
+          </div>
           <label className="block text-sm">
             <span className="mb-1 block">Статус учёта</span>
             <select
@@ -267,33 +306,29 @@ function RecordFormFields({
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block">ВУС</span>
-            <input
-              className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              value={form.military_specialty_code}
-              onChange={(e) => onChange({ ...form, military_specialty_code: e.target.value })}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block">Состав</span>
-            <select
-              className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              value={form.personnel_composition}
-              onChange={(e) => onChange({ ...form, personnel_composition: e.target.value })}
-            >
-              <option value="">—</option>
-              <option value="soldiers">Рядовой и сержантский состав</option>
-              <option value="sergeants">Сержантский состав</option>
-              <option value="officers">Офицерский состав</option>
-              <option value="other">Иной состав</option>
-            </select>
-          </label>
-          <label className="block text-sm">
             <span className="mb-1 block">Категория годности</span>
             <input
               className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
               value={form.fitness_category}
               onChange={(e) => onChange({ ...form, fitness_category: e.target.value })}
+              data-testid="military-form-fitness"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block">Номер ВУС</span>
+            <input
+              className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              value={form.military_specialty_code}
+              onChange={(e) =>
+                onChange({
+                  ...form,
+                  military_specialty_code: sanitizeMilitarySpecialtyCodeInput(e.target.value),
+                })
+              }
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={7}
+              data-testid="military-form-specialty-code"
             />
           </label>
           <label className="block text-sm sm:col-span-2">
@@ -302,6 +337,7 @@ function RecordFormFields({
               className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
               value={form.commissariat_name}
               onChange={(e) => onChange({ ...form, commissariat_name: e.target.value })}
+              data-testid="military-form-commissariat"
             />
           </label>
           <label className="block text-sm">
@@ -321,6 +357,7 @@ function RecordFormFields({
               className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
               value={form.deregistered_at}
               onChange={(e) => onChange({ ...form, deregistered_at: e.target.value })}
+              data-testid="military-form-deregistered"
             />
           </label>
           <label className="block text-sm sm:col-span-2">
@@ -373,14 +410,34 @@ export default function PprCardMilitarySection({
   const [supersedeForm, setSupersedeForm] = React.useState<RecordFormState>(EMPTY_FORM);
   const [supersedeLoading, setSupersedeLoading] = React.useState(false);
   const [supersedeError, setSupersedeError] = React.useState<string | null>(null);
+  const [supersedeSuccess, setSupersedeSuccess] = React.useState<string | null>(null);
   const [supersedeStaleConflict, setSupersedeStaleConflict] = React.useState(false);
+
+  const hasActiveRecord = active.length > 0;
 
   const createCommandIdRef = React.useRef<string | null>(null);
   const voidCommandIdRef = React.useRef<string | null>(null);
   const supersedeCommandIdRef = React.useRef<string | null>(null);
 
+  function openSupersedeForm(record: PprMilitaryRecordResponse) {
+    setSupersedeTarget(record);
+    setSupersedeForm(militaryRecordToFormState(record));
+    setSupersedeError(null);
+    setSupersedeSuccess(null);
+    setSupersedeStaleConflict(false);
+    setShowCreate(false);
+    setCreateError(null);
+    setCreateSuccess(null);
+    setVoidTarget(null);
+  }
+
   async function handleCreateSubmit() {
     if (createLoading) return;
+    if (hasActiveRecord) {
+      setCreateError(MILITARY_CREATE_BLOCKED_WHEN_ACTIVE_MESSAGE);
+      setCreateSuccess(null);
+      return;
+    }
     const validation = validateMilitaryServiceFormForSubmit(createForm);
     if (!validation.ok) {
       setCreateError(validation.message);
@@ -447,6 +504,7 @@ export default function PprCardMilitarySection({
     }
     setSupersedeLoading(true);
     setSupersedeError(null);
+    setSupersedeSuccess(null);
     setSupersedeStaleConflict(false);
     const commandId = supersedeCommandIdRef.current ?? newPprCommandId();
     supersedeCommandIdRef.current = commandId;
@@ -457,6 +515,7 @@ export default function PprCardMilitarySection({
         replacement: buildMilitaryServiceRecordPayload(supersedeForm),
       });
       supersedeCommandIdRef.current = null;
+      setSupersedeSuccess("Запись сохранена.");
       setSupersedeTarget(null);
       setSupersedeForm(EMPTY_FORM);
       await onMutated?.();
@@ -491,18 +550,24 @@ export default function PprCardMilitarySection({
     <div className="space-y-4">
       {editable ? (
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
-            onClick={() => {
-              setShowCreate((v) => !v);
-              setCreateError(null);
-              setCreateSuccess(null);
-            }}
-            data-testid="military-create-btn"
-          >
-            {showCreate ? "Скрыть форму" : "Добавить"}
-          </button>
+          {!hasActiveRecord ? (
+            <button
+              type="button"
+              className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
+              onClick={() => {
+                setShowCreate((v) => !v);
+                setCreateError(null);
+                setCreateSuccess(null);
+              }}
+              data-testid="military-create-btn"
+            >
+              {showCreate ? "Скрыть форму" : "Добавить"}
+            </button>
+          ) : (
+            <p className="text-sm text-zinc-500" data-testid="military-edit-hint">
+              Для изменения действующей записи нажмите «Изменить».
+            </p>
+          )}
         </div>
       ) : null}
 
@@ -549,14 +614,10 @@ export default function PprCardMilitarySection({
                   <button
                     type="button"
                     className="rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700"
-                    onClick={() => {
-                      setSupersedeTarget(record);
-                      setSupersedeForm(EMPTY_FORM);
-                      setSupersedeError(null);
-                    }}
-                    data-testid={`military-supersede-btn-${record.record_id}`}
+                    onClick={() => openSupersedeForm(record)}
+                    data-testid={`military-edit-btn-${record.record_id}`}
                   >
-                    Заменить
+                    Изменить
                   </button>
                   <button
                     type="button"
@@ -629,7 +690,7 @@ export default function PprCardMilitarySection({
           className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/20"
           data-testid="military-supersede-form"
         >
-          <p className="text-sm font-medium">Замена записи #{supersedeTarget.record_id}</p>
+          <p className="text-sm font-medium">Изменение записи #{supersedeTarget.record_id}</p>
           <div className="mt-2">
             <RecordFormFields form={supersedeForm} onChange={setSupersedeForm} />
           </div>
@@ -641,20 +702,30 @@ export default function PprCardMilitarySection({
           {supersedeStaleConflict ? (
             <StaleRefreshAction testId="military-supersede-refresh" onRefresh={onMutated} />
           ) : null}
+          {supersedeSuccess ? (
+            <p className="mt-2 text-sm text-green-700 dark:text-green-400" data-testid="military-supersede-success">
+              {supersedeSuccess}
+            </p>
+          ) : null}
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
+              className="rounded border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
               disabled={supersedeLoading}
               onClick={() => void handleSupersedeSubmit()}
               data-testid="military-supersede-submit"
             >
-              {supersedeLoading ? "Замена…" : "Заменить запись"}
+              {supersedeLoading ? "Сохранение…" : "Сохранить"}
             </button>
             <button
               type="button"
               className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
-              onClick={() => setSupersedeTarget(null)}
+              onClick={() => {
+                setSupersedeTarget(null);
+                setSupersedeForm(EMPTY_FORM);
+                setSupersedeError(null);
+                setSupersedeSuccess(null);
+              }}
             >
               Отмена
             </button>

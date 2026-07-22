@@ -35,7 +35,7 @@ export default function PprCardGeneralSection({ ppr }: Props) {
         <Field label="Имя" value={g.first_name ?? ""} />
         <Field label="Отчество" value={g.middle_name ?? ""} />
         <Field label="ИИН" value={g.iin ?? ""} />
-        <Field label="Дата рождения" value={formatPprDate(g.birth_date)} />
+        <Field label="Дата рождения" value={formatPprDate(g.birth_date, "day")} />
         <Field
           label="Статус личной карточки"
           value={lifecycleStatusLabel(mat.materialized, mat.lifecycle_state)}

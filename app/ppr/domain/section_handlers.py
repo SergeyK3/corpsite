@@ -12,6 +12,7 @@ from app.db.models.personnel_migration import (
     TRAINING_KINDS,
 )
 from app.ppr.domain.errors import (
+    PprLifecycleTransitionError,
     SectionDuplicateRecordError,
     SectionRecordNotFoundError,
     SectionValidationError,
@@ -690,6 +691,12 @@ def _military_service_from_create(command: CreateMilitaryServiceRecord) -> Milit
     return record
 
 
+MILITARY_ACTIVE_RECORD_ALREADY_EXISTS = (
+    "У сотрудника уже есть действующая запись воинского учёта. "
+    "Измените существующую запись через замену."
+)
+
+
 def _require_active_military_service(
     uow: UnitOfWork,
     person_id: int,
@@ -712,6 +719,9 @@ def handle_create_military_service_record(
     uow: UnitOfWork,
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
+    active = uow.sections.load_active_records(command.person_id, SECTION_CODE_PPR_MILITARY)
+    if active:
+        raise PprLifecycleTransitionError(MILITARY_ACTIVE_RECORD_ALREADY_EXISTS)
     candidate = _military_service_from_create(command)
     inserted = uow.section_mutations().insert_record(candidate)
     if not isinstance(inserted, MilitaryServiceRecord):

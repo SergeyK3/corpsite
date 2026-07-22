@@ -1,8 +1,14 @@
 import type { PprMilitaryServiceRecordWrite } from "./pprCommandApi.client";
+import { reconcilePprMilitaryFormFields } from "@/lib/militaryDictionary";
+import { militarySpecialtyCodeValidationMessage } from "@/lib/militarySpecialtyCode";
+import type { PprMilitaryRecordDetailsResponse, PprMilitaryRecordResponse } from "./pprQueryTypes";
 import {
   PPR_MILITARY_RECORD_KIND_NOT_APPLICABLE,
   PPR_MILITARY_RECORD_KIND_REGISTRATION,
 } from "./pprQueryTypes";
+
+export const MILITARY_CREATE_BLOCKED_WHEN_ACTIVE_MESSAGE =
+  "У сотрудника уже есть действующая запись воинского учёта. Нажмите «Изменить» у действующей записи.";
 
 export type MilitaryServiceFormState = {
   record_kind: string;
@@ -49,6 +55,45 @@ export const ALLOWED_MILITARY_SERVICE_WRITE_KEYS = new Set([
 function trimOrNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function stringFieldValue(value: string | null | undefined): string {
+  return value?.trim() ?? "";
+}
+
+function dateFieldValue(value: string | null | undefined): string {
+  const trimmed = stringFieldValue(value);
+  if (!trimmed) return "";
+  return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+}
+
+export function militaryRecordToFormState(
+  record: PprMilitaryRecordResponse | PprMilitaryRecordDetailsResponse,
+): MilitaryServiceFormState {
+  const details = record as PprMilitaryRecordDetailsResponse;
+  const reconciled = reconcilePprMilitaryFormFields({
+    personnel_composition: stringFieldValue(record.personnel_composition),
+    military_rank: stringFieldValue(record.military_rank),
+  });
+
+  return {
+    record_kind: record.record_kind || PPR_MILITARY_RECORD_KIND_REGISTRATION,
+    obligation_status: stringFieldValue(record.obligation_status),
+    registration_category: stringFieldValue(record.registration_category),
+    military_rank: reconciled.military_rank,
+    military_specialty_code: stringFieldValue(record.military_specialty_code),
+    personnel_composition: reconciled.personnel_composition,
+    fitness_category: stringFieldValue(record.fitness_category),
+    registration_status: stringFieldValue(record.registration_status),
+    commissariat_name: stringFieldValue(record.commissariat_name),
+    registered_at: dateFieldValue(record.registered_at),
+    deregistered_at: dateFieldValue(record.deregistered_at),
+    military_id_book_series: stringFieldValue(details.military_id_book_series),
+    military_id_book_number: stringFieldValue(details.military_id_book_number),
+    registration_certificate_series: stringFieldValue(details.registration_certificate_series),
+    registration_certificate_number: stringFieldValue(details.registration_certificate_number),
+    notes: stringFieldValue(record.notes),
+  };
 }
 
 export function buildMilitaryServiceRecordPayload(
@@ -124,6 +169,11 @@ export function validateMilitaryServiceFormForSubmit(
     form.deregistered_at < form.registered_at
   ) {
     return { ok: false, message: "Дата снятия с учёта не может быть раньше даты постановки." };
+  }
+
+  const specialtyCodeError = militarySpecialtyCodeValidationMessage(form.military_specialty_code);
+  if (form.record_kind === PPR_MILITARY_RECORD_KIND_REGISTRATION && specialtyCodeError) {
+    return { ok: false, message: specialtyCodeError };
   }
 
   return { ok: true };

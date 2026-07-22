@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
 import EmployeeStatusBadge from "../../employees/_components/EmployeeStatusBadge";
 import { correctEmployee, mapApiErrorToMessage } from "../../employees/_lib/api.client";
 import type { EmployeeDetails } from "../../employees/_lib/types";
@@ -18,10 +19,7 @@ type Props = {
 };
 
 function fmtDate(v: string | null | undefined): string {
-  if (!v) return "—";
-  const dt = new Date(v);
-  if (Number.isNaN(dt.getTime())) return String(v);
-  return dt.toLocaleDateString("ru-RU");
+  return formatPersonnelDate(v, { precision: "day" });
 }
 
 function fieldCard(label: string, value: string) {

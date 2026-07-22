@@ -25,6 +25,7 @@ import {
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 import { MIGRATION_COMMIT_CTA_LABEL } from "../_lib/personnelMigrationHrLabels";
 import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
+import { formatPersonnelDate } from "@/lib/personnelDateFormat";
 import {
   buildMigrationCandidateId,
   buildMigrationSessionHref,
@@ -67,10 +68,7 @@ function reviewStatusBadgeClass(status: NormalizedRecordReviewStatus): string {
 }
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("ru-RU");
+  return formatPersonnelDate(value, { precision: "day" });
 }
 
 function toInputDate(value: string | null | undefined): string {

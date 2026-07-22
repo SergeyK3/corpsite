@@ -7,6 +7,7 @@ import {
   type EmployeeCardSectionDef,
 } from "@/lib/employeeCardNav";
 import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
+import { PprCardSectionHeading } from "./PprCardSectionHeading";
 
 export type EmployeeImportCardSectionDef = {
   id: string;
@@ -26,6 +27,8 @@ type SectionProps = {
   actions?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
+  /** Use PPR accent heading style for personal card sections. */
+  usePprHeading?: boolean;
 };
 
 export function EmployeeImportCardSection({
@@ -36,6 +39,7 @@ export function EmployeeImportCardSection({
   actions,
   footer,
   children,
+  usePprHeading = false,
 }: SectionProps) {
   return (
     <section
@@ -47,9 +51,13 @@ export function EmployeeImportCardSection({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 id={`${id}-heading`} className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                {title}
-              </h2>
+              {usePprHeading ? (
+                <PprCardSectionHeading id={`${id}-heading`}>{title}</PprCardSectionHeading>
+              ) : (
+                <h2 id={`${id}-heading`} className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                  {title}
+                </h2>
+              )}
               {status ? <div className="flex flex-wrap items-center gap-1.5">{status}</div> : null}
             </div>
             <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">{description}</p>

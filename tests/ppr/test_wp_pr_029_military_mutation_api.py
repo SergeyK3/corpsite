@@ -26,6 +26,7 @@ from app.ppr.application.command_models import (
 from app.ppr.application.lifecycle_service import PprLifecycleApplicationService
 from app.ppr.application.results import RESULT_STATUS_COMMITTED, RESULT_STATUS_IDEMPOTENT_REPLAY
 from app.ppr.application.section_service import PprSectionApplicationService
+from app.ppr.domain.section_handlers import MILITARY_ACTIVE_RECORD_ALREADY_EXISTS
 from app.ppr.domain.section_models import SECTION_CODE_PPR_MILITARY
 from tests.conftest import auth_headers, table_exists
 from tests.ppr.conftest import cleanup_person_graph, insert_employee, insert_person, ppr_db_available, require_ppr_schema
@@ -290,3 +291,5 @@ def test_second_active_create_returns_409(
         json=_create_payload(),
     )
     assert second.status_code == 409
+    assert second.json()["detail"] == MILITARY_ACTIVE_RECORD_ALREADY_EXISTS
+    assert "IntegrityError" not in second.json()["detail"]

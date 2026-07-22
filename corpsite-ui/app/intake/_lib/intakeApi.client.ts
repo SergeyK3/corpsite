@@ -68,6 +68,7 @@ export type IntakeDraftPayload = {
     category: string;
     composition: string;
     specialty_code: string;
+    specialty_name: string;
     fitness_category: string;
     commissariat: string;
     registration_group: string;
@@ -164,6 +165,7 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
       category: "",
       composition: "",
       specialty_code: "",
+      specialty_name: "",
       fitness_category: "",
       commissariat: "",
       registration_group: "",

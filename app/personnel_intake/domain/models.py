@@ -35,6 +35,7 @@ def empty_intake_draft_payload() -> dict[str, Any]:
             "category": "",
             "composition": "",
             "specialty_code": "",
+            "specialty_name": "",
             "fitness_category": "",
             "commissariat": "",
             "registration_group": "",

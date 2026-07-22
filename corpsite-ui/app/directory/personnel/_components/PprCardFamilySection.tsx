@@ -26,7 +26,7 @@ function RelativeRecordCard({ record }: { record: PprRelativeRecordResponse }) {
         {record.birth_date ? (
           <div>
             <dt className="inline">Дата рождения: </dt>
-            <dd className="inline">{formatPprDate(record.birth_date)}</dd>
+            <dd className="inline">{formatPprDate(record.birth_date, "day")}</dd>
           </div>
         ) : null}
         {record.birth_place ? (
