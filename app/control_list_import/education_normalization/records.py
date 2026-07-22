@@ -11,10 +11,14 @@ from app.control_list_import.domain.vocabulary import SEMANTIC_FIELD_EDUCATION_R
 from app.control_list_import.normalization.strings import normalize_comparison_key, normalize_plain_string, to_raw_text
 
 EDUCATION_RECORD_SPLIT_RE = re.compile(r"[\n;|]+")
-NUMBERED_SPLIT_RE = re.compile(r"(?<=\n)(?=\d+[\.)]\s)|(?<=[;|])\s*(?=\d+[\.)]\s)")
-YEAR_RE = re.compile(r"\b((?:19|20)\d{2})\b")
+NUMBERED_SPLIT_RE = re.compile(
+    r"(?<=\n)(?=\d+[\.)]\s)"
+    r"|(?<=[;|])\s*(?=\d+[\.)]\s)"
+    r"|(?<=\S)\s+(?=\d+[\.)]\s)"
+)
+YEAR_RE = re.compile(r"\b((?:19|20)\d{2})(?:\s*г\.)?(?=[\s,;.)]|$)")
 EDUCATION_UNIVERSITY_YEAR_RE = re.compile(
-    r"^(.+?)[,\s;]+((?:19|20)\d{2})\b",
+    r"^(.+?)[,\s;]+((?:19|20)\d{2})(?:\s*г\.)?(?=[\s,;.)]|$)",
     re.IGNORECASE,
 )
 EDUCATION_INSTITUTION_RE = re.compile(
@@ -22,9 +26,29 @@ EDUCATION_INSTITUTION_RE = re.compile(
     re.IGNORECASE,
 )
 SPECIALTY_INLINE_RE = re.compile(
-    r"(?:специальност[ьи]\s*(?:по\s*диплому)?[:\s]+)(.+?)(?:[;\n|]|$)",
+    r"(?:специальност[ьи]\s*(?:по\s*диплому)?[:\s«]+)(.+?)(?:[;\n|]|$|(?=\s*квалификац|\s*факультет|\s*форма\s+обучения))",
     re.IGNORECASE,
 )
+QUALIFICATION_INLINE_RE = re.compile(
+    r"квалификац(?:ия|ии)\s*[:\s«]+(.+?)(?:[;\n]|$|(?=\s*специальност|\s*факультет|\s*форма\s+обучения))",
+    re.IGNORECASE,
+)
+FACULTY_INLINE_RE = re.compile(
+    r"факультет\s*[:\s«]+(.+?)(?:[;\n]|$|(?=\s*специальност|\s*квалификац|\s*форма\s+обучения))",
+    re.IGNORECASE,
+)
+STUDY_FORM_INLINE_RE = re.compile(
+    r"форма\s+обучения\s*[:\s«]+(.+?)(?:[;\n]|$|(?=\s*специальност|\s*квалификац|\s*факультет))",
+    re.IGNORECASE,
+)
+SHARED_ATTR_START_RE = re.compile(
+    r"(?:,\s+(?=специальност|квалификац|факультет|форма\s+обучения))"
+    r"|(?:\.\s+(?=специальност|квалификац|факультет|форма\s+обучения))"
+    r"|(?:\s{2,}(?=специальност|квалификац|факультет|форма\s+обучения))"
+    r"|(?<=[^\d]\S)\s+(?=специальност|квалификац|факультет|форма\s+обучения)\b",
+    re.IGNORECASE,
+)
+EDUCATION_SHARED_CONTEXT_ISSUE = "education_shared_context_ambiguous"
 DOCUMENT_NUMBER_RE = re.compile(
     r"(?:№|номер|диплом\s*№?)\s*([\w/-]+)",
     re.IGNORECASE,
@@ -188,11 +212,171 @@ def _extract_specialty(text_val: str) -> NormalizedPlainText:
     return _plain(None)
 
 
-def _extract_qualification(text_val: str) -> NormalizedPlainText:
-    match = QUALIFICATION_RE.search(text_val)
+def _extract_faculty(text_val: str) -> NormalizedPlainText:
+    match = FACULTY_INLINE_RE.search(text_val)
     if not match:
         return _plain(None)
-    qualification_raw = match.group(1).strip()
+    faculty_raw = match.group(1).strip(" ,;.-«»")
+    text, issues = normalize_plain_string(faculty_raw)
+    return _plain(faculty_raw or None, text, issues)
+
+
+def _extract_study_form(text_val: str) -> NormalizedPlainText:
+    match = STUDY_FORM_INLINE_RE.search(text_val)
+    if not match:
+        return _plain(None)
+    study_form_raw = match.group(1).strip(" ,;.-«»")
+    text, issues = normalize_plain_string(study_form_raw)
+    return _plain(study_form_raw or None, text, issues)
+
+
+def _extract_shared_context_values(text_val: str) -> dict[str, NormalizedPlainText]:
+    return {
+        "specialty": _extract_specialty(text_val),
+        "qualification": _extract_qualification(text_val),
+        "faculty": _extract_faculty(text_val),
+        "study_form": _extract_study_form(text_val),
+    }
+
+
+def _split_institution_entry(fragment: str) -> tuple[str, str]:
+    text = fragment.strip()
+    if not text:
+        return "", ""
+    match = SHARED_ATTR_START_RE.search(text)
+    if not match:
+        return text, ""
+    return text[: match.start()].strip(" ,;."), text[match.start() :].strip(" ,;.")
+
+
+def _looks_like_institution_entry(fragment: str) -> bool:
+    institution_part, _ = _split_institution_entry(fragment)
+    body = re.sub(r"^\d+[\.)]\s*", "", institution_part.strip())
+    if not body:
+        return False
+    if EDUCATION_UNIVERSITY_YEAR_RE.match(body):
+        return True
+    if EDUCATION_INSTITUTION_RE.search(body):
+        return True
+    if YEAR_RE.search(body) and len(body.split()) >= 2:
+        return True
+    return bool(re.match(r"^\d+[\.)]\s+\S", fragment.strip()))
+
+
+def split_education_institution_pieces(raw: Any) -> tuple[list[str], str]:
+    pieces = split_education_fragments(raw)
+    institution_entries: list[str] = []
+    shared_tail_parts: list[str] = []
+    for piece in pieces:
+        if _looks_like_institution_entry(piece):
+            institution_part, inline_tail = _split_institution_entry(piece)
+            if institution_part:
+                institution_entries.append(institution_part)
+            if inline_tail:
+                shared_tail_parts.append(inline_tail)
+        else:
+            shared_tail_parts.append(piece)
+    return institution_entries, " ".join(shared_tail_parts).strip()
+
+
+def _merge_plain_field(
+    current: NormalizedPlainText,
+    shared: NormalizedPlainText,
+) -> NormalizedPlainText:
+    if current.text:
+        return current
+    if not shared.text:
+        return current
+    return shared
+
+
+def _append_shared_context_issue(field_issues: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    merged = dict(field_issues)
+    key = SEMANTIC_FIELD_EDUCATION_RECORDS
+    merged[key] = merged.get(key, ()) + (EDUCATION_SHARED_CONTEXT_ISSUE,)
+    merged[key] = tuple(dict.fromkeys(merged[key]))
+    return merged
+
+
+def _apply_shared_context(
+    records: list[ParsedEducationRecord],
+    shared_values: dict[str, NormalizedPlainText],
+    *,
+    ambiguous: bool,
+) -> list[ParsedEducationRecord]:
+    if len(records) < 2:
+        return records
+    if not any(item.text for item in shared_values.values()):
+        return records
+
+    updated: list[ParsedEducationRecord] = []
+    for record in records:
+        applied = False
+        specialty = _merge_plain_field(record.specialty, shared_values["specialty"])
+        qualification = _merge_plain_field(record.qualification, shared_values["qualification"])
+        if specialty is not record.specialty:
+            applied = True
+        if qualification is not record.qualification:
+            applied = True
+
+        extra_parts: list[str] = []
+        if not record.specialty.text and shared_values["faculty"].text:
+            extra_parts.append(f"факультет: {shared_values['faculty'].text}")
+            applied = True
+        if not record.specialty.text and shared_values["study_form"].text:
+            extra_parts.append(f"форма обучения: {shared_values['study_form'].text}")
+            applied = True
+        if extra_parts:
+            merged_text = "; ".join(
+                [part for part in [specialty.text, *extra_parts] if part]
+            )
+            specialty = NormalizedPlainText(raw=merged_text, text=merged_text, issues=specialty.issues)
+
+        field_issues = dict(record.field_issues)
+        if ambiguous and applied:
+            field_issues = _append_shared_context_issue(field_issues)
+        updated.append(
+            ParsedEducationRecord(
+                raw_fragment=record.raw_fragment,
+                fragment_index=record.fragment_index,
+                institution_name=record.institution_name,
+                qualification=qualification,
+                specialty=specialty,
+                graduation_year=record.graduation_year,
+                education_level=record.education_level,
+                document_number=record.document_number,
+                field_issues=field_issues,
+            )
+        )
+    return updated
+
+
+def parse_education_cell(raw: Any) -> list[ParsedEducationRecord]:
+    text_val = to_raw_text(raw)
+    if not text_val or is_technical_empty_education_cell(text_val):
+        return []
+
+    institution_pieces, shared_tail = split_education_institution_pieces(text_val)
+    if not institution_pieces:
+        institution_pieces = split_education_fragments(text_val)
+
+    records = [
+        parse_education_fragment(fragment, fragment_index=index)
+        for index, fragment in enumerate(institution_pieces)
+    ]
+    shared_values = _extract_shared_context_values(shared_tail)
+    if len(records) > 1 and any(item.text for item in shared_values.values()):
+        records = _apply_shared_context(records, shared_values, ambiguous=True)
+    return records
+
+
+def _extract_qualification(text_val: str) -> NormalizedPlainText:
+    match = QUALIFICATION_INLINE_RE.search(text_val)
+    if not match:
+        match = QUALIFICATION_RE.search(text_val)
+    if not match:
+        return _plain(None)
+    qualification_raw = match.group(1).strip(" ,;.-«»")
     text, issues = normalize_plain_string(qualification_raw)
     return _plain(qualification_raw, text, issues)
 

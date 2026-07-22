@@ -17,6 +17,7 @@ from app.control_list_import.domain.person_match_models import MatchReason, Matc
 from app.control_list_import.domain.staging_models import StagingCellInput, StagingRowInput
 from app.control_list_import.domain.vocabulary import PARSER_CODE_RECORDS_EDUCATION, SEMANTIC_FIELD_EDUCATION_RECORDS
 from app.control_list_import.education_normalization.records import (
+    EDUCATION_SHARED_CONTEXT_ISSUE,
     is_technical_empty_education_cell,
     parse_education_fragment,
     split_education_fragments,
@@ -329,6 +330,32 @@ def test_golden_numbered_list_from_control_excel():
     assert candidates[1].source_fragment_index == 1
     assert candidates[1].graduation_year.value == 2015
     assert "университет" in (candidates[1].institution_name.text or "").lower()
+
+
+def test_inline_numbered_education_items_in_one_line():
+    raw = (
+        "1. Семипалатинский бизнес-колледж, 2006г. "
+        "2. Семипалатинская государственная медицинская академия, 2012г. "
+        "Специальность «Лечебное дело», квалификация «врач»"
+    )
+    fragments = split_education_fragments(raw)
+    assert len(fragments) >= 2
+    candidates = EducationNormalizationService().normalize_row(
+        row=_row(education=raw),
+        profile=_profile(),
+        person_match=_match_result(),
+        import_run_id=7,
+    )
+    assert len(candidates) == 2
+    assert candidates[0].source_fragment_index == 0
+    assert candidates[1].source_fragment_index == 1
+    assert "Лечебное дело" in (candidates[0].specialty.text or "")
+    assert "Лечебное дело" in (candidates[1].specialty.text or "")
+    assert "врач" in (candidates[0].qualification.text or "")
+    assert "врач" in (candidates[1].qualification.text or "")
+    assert EDUCATION_SHARED_CONTEXT_ISSUE in candidates[0].field_issues.get(
+        SEMANTIC_FIELD_EDUCATION_RECORDS, ()
+    )
 
 
 def test_golden_institution_specialty_year_from_control_excel():

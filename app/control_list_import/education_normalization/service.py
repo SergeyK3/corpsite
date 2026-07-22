@@ -22,6 +22,7 @@ from app.control_list_import.domain.vocabulary import (
 from app.control_list_import.education_normalization.records import (
     ParsedEducationRecord,
     is_technical_empty_education_cell,
+    parse_education_cell,
     parse_education_fragment,
     split_education_fragments,
 )
@@ -102,12 +103,7 @@ class EducationNormalizationService:
             if raw_value is None or is_technical_empty_education_cell(raw_value):
                 continue
 
-            fragments = split_education_fragments(raw_value)
-            if not fragments:
-                continue
-
-            for fragment_index, fragment in enumerate(fragments):
-                parsed = parse_education_fragment(fragment, fragment_index=fragment_index)
+            for parsed in parse_education_cell(raw_value):
                 candidates.append(
                     self._build_candidate(
                         parsed=parsed,
