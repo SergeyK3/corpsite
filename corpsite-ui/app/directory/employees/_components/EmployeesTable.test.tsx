@@ -24,7 +24,30 @@ describe("EmployeesTable actions", () => {
     onChangePage: vi.fn(),
   };
 
-  it("staff «Персонал»: single «Открыть» link to PPR card, no drawer button, no «Карточка»", () => {
+  it("staff «Персонал»: single «Открыть» link to canonical PPR card when person_id known", () => {
+    const onOpenEmployee = vi.fn();
+    render(
+      <EmployeesTable
+        {...baseProps}
+        items={[{ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 }]}
+        onOpenEmployee={onOpenEmployee}
+        managementView
+        directPersonalCardNav
+      />,
+    );
+
+    const openLink = screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    expect(openLink).toHaveAttribute("href", "/directory/personnel/persons/501/card");
+    expect(openLink).toHaveTextContent("Открыть");
+    expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
+    expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
+
+    fireEvent.click(openLink);
+    expect(onOpenEmployee).not.toHaveBeenCalled();
+  });
+
+  it("staff «Персонал»: falls back to employee compatibility route without person_id", () => {
     const onOpenEmployee = vi.fn();
     render(
       <EmployeesTable

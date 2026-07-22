@@ -4,14 +4,15 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("employee card route guard", () => {
-  it("card page renders canonical PPR client only", () => {
+  it("compatibility card page redirects via EmployeePersonalCardRedirectClient only", () => {
     const pagePath = resolve(
       process.cwd(),
       "app/directory/personnel/employees/[employeeId]/card/page.tsx",
     );
     const source = readFileSync(pagePath, "utf8");
 
-    expect(source).toContain("PprPersonalCardPageClient");
+    expect(source).toContain("EmployeePersonalCardRedirectClient");
+    expect(source).not.toContain("PprPersonalCardPageClient");
     expect(source).not.toContain("EmployeeImportCard2PageClient");
     expect(source).not.toContain("EmployeeCardRouteClient");
     expect(source).not.toContain("isPprCardEnabled");

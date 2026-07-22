@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 
-import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import { buildPersonCardHref } from "@/lib/employeeCardNav";
 import {
   formatPersonnelApplicationDate,
   formatPersonnelApplicationDateTime,
@@ -44,7 +44,7 @@ export default function PersonnelApplicationEmploymentSection({ detail, journalR
           label="Сотрудник"
           value={
             <Link
-              href={buildEmployeeCardHref(detail.employee_id, { returnTo: journalReturnHref })}
+              href={buildPersonCardHref(detail.person_id, { returnTo: journalReturnHref })}
               className="text-blue-700 underline-offset-2 hover:underline dark:text-blue-300"
               data-testid="personnel-application-employee-link"
             >

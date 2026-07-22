@@ -44,7 +44,72 @@ export function buildEmployeeCardHref(
   return buildPersonalCardHref({ employeeId }, options);
 }
 
+/** Canonical UEPC route by `person_id` (preferred entry when person key is known). */
+export function buildPersonCardHref(
+  personId: string | number,
+  options: BuildPersonalCardHrefOptions = {},
+): string {
+  return buildPersonalCardHref({ personId }, options);
+}
+
 export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions;
+
+function normalizePositiveIntRouteId(value: string | null | undefined): string | null {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const numeric = Number(trimmed);
+  if (!Number.isFinite(numeric) || numeric <= 0 || !Number.isInteger(numeric)) return null;
+  return trimmed;
+}
+
+/** Validates dynamic route segment for `/persons/{person_id}/card`. */
+export function parseRoutePersonId(value: string | null | undefined): string | null {
+  return normalizePositiveIntRouteId(value);
+}
+
+/** Validates dynamic route segment for `/employees/{employee_id}/card` compatibility route. */
+export function parseRouteEmployeeId(value: string | null | undefined): string | null {
+  return normalizePositiveIntRouteId(value);
+}
+
+/** Preserve supported legacy card query params when redirecting employee → person route. */
+export function buildPersonCardHrefFromLegacySearchParams(
+  personId: string | number,
+  searchParams: Pick<URLSearchParams, "get">,
+): string {
+  const sectionRaw = searchParams.get("section");
+  const section = sectionRaw ? parseEmployeeCardSection(sectionRaw) : undefined;
+  const provisionAccount = searchParams.get("provisionAccount") === "1";
+  const returnTo = searchParams.get(RETURN_TO_QUERY_PARAM);
+
+  return buildPersonCardHref(personId, {
+    section:
+      section && section !== EMPLOYEE_CARD_DEFAULT_SECTION ? section : undefined,
+    provisionAccount: provisionAccount || undefined,
+    returnTo,
+  });
+}
+
+const LEGACY_CARD_QUERY_KEYS = ["section", "provisionAccount", RETURN_TO_QUERY_PARAM] as const;
+
+/** Serialize App Router page searchParams for employee-card compatibility redirect. */
+export function buildLegacyCardQueryStringFromPageSearchParams(
+  searchParams: Record<string, string | string[] | undefined>,
+): string {
+  const params = new URLSearchParams();
+  for (const key of LEGACY_CARD_QUERY_KEYS) {
+    const raw = searchParams[key];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value != null && String(value).trim()) {
+      params.set(key, String(value).trim());
+    }
+  }
+  return params.toString();
+}
+
+export function legacyCardQueryStringToSearchParams(queryString: string): URLSearchParams {
+  return new URLSearchParams(queryString);
+}
 
 export function buildPersonalCardHref(
   subject: { personId?: string | number; employeeId?: string | number },

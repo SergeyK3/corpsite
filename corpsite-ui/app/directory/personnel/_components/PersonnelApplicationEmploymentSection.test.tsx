@@ -53,7 +53,7 @@ describe("PersonnelApplicationEmploymentSection", () => {
     expect(screen.getByTestId("personnel-application-employment-section")).toBeInTheDocument();
     expect(screen.getByTestId("personnel-application-employee-link")).toHaveAttribute(
       "href",
-      "/directory/personnel/employees/42/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D10",
+      "/directory/personnel/persons/5/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D10",
     );
     expect(screen.getByTestId("personnel-application-hire-order-link")).toHaveAttribute(
       "href",

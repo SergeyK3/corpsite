@@ -65,15 +65,11 @@ function getPersonId(it: any): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function isApplicantRow(it: any): boolean {
-  return String(it?.record_kind ?? it?.status ?? "").toLowerCase() === "applicant";
-}
-
 function PersonalCardOpenAction({ item }: { item: any }) {
   const personId = getPersonId(item);
   const employeeId = getEmployeeId(item);
 
-  if (isApplicantRow(item) && personId != null) {
+  if (personId != null) {
     return (
       <Link
         href={buildPersonalCardHref({ personId })}

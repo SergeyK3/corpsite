@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
+import { buildPersonCardHref } from "@/lib/employeeCardNav";
 import ApplicantIntakeLinkTableCell from "./ApplicantIntakeLinkTableCell";
 import ApplicantWorkflowStatusBadge from "./ApplicantWorkflowStatusBadge";
 import { DirectorResolutionBadge } from "./PersonnelApplicationStatusBadge";
@@ -129,7 +129,7 @@ export function PersonnelApplicationsTable({
                 <td className="px-4 py-3">
                   {item.employee_id != null ? (
                     <Link
-                      href={buildEmployeeCardHref(item.employee_id)}
+                      href={buildPersonCardHref(item.person_id)}
                       className="text-blue-700 underline-offset-2 hover:underline dark:text-blue-300"
                       onClick={(e) => e.stopPropagation()}
                       data-testid={`personnel-application-employee-link-${item.application_id}`}
