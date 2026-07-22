@@ -12,9 +12,10 @@ import {
   openIntakeSession,
   submitIntakeDraft,
   type IntakeDraftPayload,
+  type IntakeEducation,
 } from "../_lib/intakeApi.client";
 
-function SelectField({
+function SelectField<V extends string>({
   label,
   value,
   onChange,
@@ -23,11 +24,11 @@ function SelectField({
   options,
 }: {
   label: string;
-  value: string;
-  onChange: (v: string) => void;
+  value: V;
+  onChange: (v: V) => void;
   readOnly?: boolean;
   required?: boolean;
-  options: ReadonlyArray<{ value: string; label: string }>;
+  options: ReadonlyArray<{ value: V; label: string }>;
 }) {
   return (
     <label className="block">
@@ -38,7 +39,10 @@ function SelectField({
       <select
         value={value}
         disabled={readOnly}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const selected = options.find((option) => option.value === e.target.value);
+          if (selected) onChange(selected.value);
+        }}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
       >
         {options.map((option) => (
@@ -131,6 +135,15 @@ function StepContacts({
   );
 }
 
+type CardListFieldDef<T extends Record<string, string>> = {
+  [K in keyof T]: {
+    key: K;
+    label: string;
+    required?: boolean;
+    options?: ReadonlyArray<{ value: Extract<T[K], string>; label: string }>;
+  };
+}[keyof T];
+
 function CardListStep<T extends Record<string, string>>({
   title,
   items,
@@ -142,12 +155,7 @@ function CardListStep<T extends Record<string, string>>({
   title: string;
   items: T[];
   emptyItem: T;
-  fields: Array<{
-    key: keyof T;
-    label: string;
-    required?: boolean;
-    options?: ReadonlyArray<{ value: string; label: string }>;
-  }>;
+  fields: CardListFieldDef<T>[];
   readOnly?: boolean;
   onChange: (items: T[]) => void;
 }) {
@@ -401,7 +409,7 @@ export default function IntakePageClient() {
             <StepContacts payload={payload} onChange={updatePayload} readOnly={readOnly} />
           ) : null}
           {currentStep.id === "education" ? (
-            <CardListStep
+            <CardListStep<IntakeEducation>
               title="образование"
               items={payload.education}
               emptyItem={{

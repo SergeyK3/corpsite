@@ -4,6 +4,16 @@ import { resolveApiUrl } from "@/lib/apiBase";
 
 export type IntakeEducationType = "basic" | "internship" | "residency" | "masters" | "phd";
 
+export type IntakeEducation = {
+  education_type: IntakeEducationType;
+  institution: string;
+  year_from: string;
+  year_to: string;
+  specialty: string;
+  qualification: string;
+  diploma_number: string;
+};
+
 export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
   value: IntakeEducationType;
   label: string;
@@ -32,15 +42,7 @@ export type IntakeDraftPayload = {
     registration_address: string;
     residence_address: string;
   };
-  education: Array<{
-    education_type: IntakeEducationType;
-    institution: string;
-    year_from: string;
-    year_to: string;
-    specialty: string;
-    qualification: string;
-    diploma_number: string;
-  }>;
+  education: IntakeEducation[];
   training: Array<{
     institution: string;
     year: string;
