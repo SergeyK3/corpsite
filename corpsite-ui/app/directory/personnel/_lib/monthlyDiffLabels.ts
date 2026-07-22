@@ -1,5 +1,7 @@
 // ADR-040 Phase C — monthly diff status labels and field display helpers.
 
+import { getNormalizedRecordKindLabel } from "./normalizedRecordLabels";
+
 import { NORMALIZED_RECORD_KIND_LABELS, type NormalizedRecordKind } from "./normalizedRecordLabels";
 
 export type MonthlyDiffStatus = "UNCHANGED" | "NEW" | "CHANGED" | "REMOVED" | "CONFLICT";
@@ -126,6 +128,49 @@ export function formatMonthlyDiffValue(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+export function formatReviewExceptionFieldValue(
+  field: { value?: string | null; display_value?: string | null },
+): string {
+  const display = field.display_value ?? field.value;
+  return formatMonthlyDiffValue(display);
+}
+
+export function formatReviewExceptionDiffValue(
+  side: "baseline" | "import",
+  row: {
+    baseline_value?: string | null;
+    baseline_display_value?: string | null;
+    import_value?: string | null;
+    import_display_value?: string | null;
+  },
+): string {
+  if (side === "baseline") {
+    return formatMonthlyDiffValue(row.baseline_display_value ?? row.baseline_value);
+  }
+  return formatMonthlyDiffValue(row.import_display_value ?? row.import_value);
+}
+
+const RECORD_KIND_DISPLAY: Record<string, string> = {
+  training: "Обучение",
+  education: "Образование",
+  certificate: "Сертификат",
+  category: "Категория",
+  roster: "Состав",
+};
+
+export function formatMonthlyDiffFieldDisplayValue(
+  field: string,
+  value: unknown,
+  recordKind?: string | null,
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (field === "record_kind") {
+    const raw = String(value);
+    return RECORD_KIND_DISPLAY[raw] || getNormalizedRecordKindLabel(raw, raw);
+  }
+  return formatMonthlyDiffValue(value);
 }
 
 export function removedEntryTitle(payload: Record<string, unknown> | null | undefined): string {

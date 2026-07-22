@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  formatMonthlyDiffValue,
+  formatMonthlyDiffFieldDisplayValue,
   getMonthlyDiffFieldLabel,
   type FieldDiffEntry,
 } from "../_lib/monthlyDiffLabels";
@@ -48,10 +48,10 @@ export default function ImportFieldDiffPanel({
                   {getMonthlyDiffFieldLabel(field, recordKind)}
                 </td>
                 <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
-                  {formatMonthlyDiffValue(diff.canonical)}
+                  {formatMonthlyDiffFieldDisplayValue(field, diff.canonical, recordKind)}
                 </td>
                 <td className="px-3 py-2 text-zinc-900 dark:text-zinc-100">
-                  {formatMonthlyDiffValue(diff.incoming)}
+                  {formatMonthlyDiffFieldDisplayValue(field, diff.incoming, recordKind)}
                 </td>
               </tr>
             ))}
