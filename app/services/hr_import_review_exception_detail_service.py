@@ -11,6 +11,11 @@ from sqlalchemy.engine import Connection
 from app.mrd.domain.candidate_builder import CONFLICT_ATTRIBUTE, RECORD_PRESENCE_ATTRIBUTE
 from app.mrd.domain.difference_models import ConfirmDifferenceCommand, RejectDifferenceCommand
 from app.mrd.domain.field_labels import get_field_label
+from app.services.hr_import_training_date_quality_service import (
+    _effective_roster_training_fields,
+    assess_normalized_record_date_quality,
+    assess_roster_training_raw_quality,
+)
 from app.mrd.domain.types import (
     DIFFERENCE_LIFECYCLE_DETECTED,
     TECHNICAL_DIFF_CONFLICT,
@@ -88,6 +93,34 @@ def _format_field_value(value: Any) -> str | None:
         return None
     text_val = str(normalized).strip()
     return text_val or None
+
+
+def _quality_remarks_for_row(conn: Connection, batch_id: int, row_id: int) -> list[str]:
+    row = conn.execute(
+        text(
+            """
+            SELECT normalized_payload
+            FROM public.hr_import_rows
+            WHERE batch_id = :batch_id
+              AND row_id = :row_id
+            """
+        ),
+        {"batch_id": batch_id, "row_id": row_id},
+    ).mappings().first()
+    if row is None:
+        return []
+    training_raw, education_raw = _effective_roster_training_fields(dict(row))
+    return assess_roster_training_raw_quality(
+        training_raw=training_raw,
+        education_raw=education_raw,
+    )
+
+
+def _quality_remarks_for_normalized(row: dict[str, Any]) -> list[str]:
+    from app.services.hr_import_normalized_record_service import merge_review_override
+
+    effective = merge_review_override(dict(row))
+    return assess_normalized_record_date_quality(effective)
 
 
 def parse_exception_key(exception_key: str) -> tuple[str, int]:
@@ -430,6 +463,7 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
     )
     compare_fields = _compare_fields_for_record_kind(RECORD_KIND_ROSTER)
     payload = row["payload"]
+    quality_remarks = _quality_remarks_for_row(conn, batch_id, row_id)
 
     return {
         "exception_key": build_exception_key(entity_type="row", entity_id=row_id),
@@ -467,6 +501,7 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
                 field_diffs=field_diffs,
             ),
         },
+        "quality_remarks": quality_remarks,
         "resolved": False,
         "actions_available": True,
         "removal_actions_available": False,
@@ -517,6 +552,7 @@ def _load_normalized_exception_detail(
         if row.get("canonical_entry_id") is not None
         else None,
     )
+    quality_remarks = _quality_remarks_for_normalized(dict(row))
 
     return {
         "exception_key": build_exception_key(entity_type="normalized", entity_id=normalized_record_id),
@@ -554,6 +590,7 @@ def _load_normalized_exception_detail(
                 field_diffs=field_diffs,
             ),
         },
+        "quality_remarks": quality_remarks,
         "resolved": False,
         "actions_available": True,
         "removal_actions_available": False,
@@ -622,6 +659,7 @@ def _load_removal_exception_detail(conn: Connection, batch_id: int, removal_id: 
                 field_diffs=None,
             ),
         },
+        "quality_remarks": [],
         "resolved": False,
         "actions_available": False,
         "removal_actions_available": True,

@@ -225,6 +225,20 @@ export default function ImportReviewExceptionDrawer({
             </div>
           ) : detail ? (
             <div className="space-y-4">
+              {detail.quality_remarks && detail.quality_remarks.length > 0 ? (
+                <div
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                  data-testid="review-exception-quality-remarks"
+                >
+                  <p className="font-medium">Замечания по качеству данных</p>
+                  <ul className="mt-1 list-disc pl-5">
+                    {detail.quality_remarks.map((remark) => (
+                      <li key={remark}>{remark}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <BaselineImportBlock
                 title="Канонический эталон"
                 sourceLabel={detail.baseline.source_label}

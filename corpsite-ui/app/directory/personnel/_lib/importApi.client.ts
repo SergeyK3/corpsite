@@ -1226,6 +1226,7 @@ export type ReviewExceptionDetail = {
   diff: {
     fields: ReviewExceptionDiffRow[];
   };
+  quality_remarks?: string[];
   resolved: boolean;
   actions_available: boolean;
   removal_actions_available: boolean;
