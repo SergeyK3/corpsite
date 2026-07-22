@@ -133,6 +133,7 @@ from app.services.hr_import_review_exception_detail_service import (
     InvalidReviewExceptionResolutionError,
     ReviewExceptionAlreadyResolvedError,
     ReviewExceptionNotFoundError,
+    correct_review_exception_import,
     get_review_exception_detail,
     list_review_exceptions,
     resolve_review_exception,
@@ -763,6 +764,42 @@ def post_import_batch_review_exception_keep_baseline(
         raise _review_exception_bad_request(e)
     except InvalidReviewExceptionResolutionError as e:
         raise _review_exception_bad_request(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/batches/{batch_id}/review-exceptions/{exception_key:path}/correct-import")
+def post_import_batch_review_exception_correct_import(
+    batch_id: int,
+    exception_key: str,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            correct_review_exception_import,
+            batch_id=batch_id,
+            exception_key=exception_key,
+            corrections=body,
+            actor_user_id=int(user["user_id"]),
+        )
+    except ReviewExceptionNotFoundError as e:
+        raise _review_exception_not_found(e)
+    except ReviewExceptionAlreadyResolvedError as e:
+        raise _review_exception_conflict(e)
+    except InvalidReviewExceptionKeyError as e:
+        raise _review_exception_bad_request(e)
+    except InvalidReviewExceptionResolutionError as e:
+        raise _review_exception_bad_request(e)
+    except ReviewOverrideNotAllowedError as e:
+        raise _review_override_not_allowed(e)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:

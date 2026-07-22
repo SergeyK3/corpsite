@@ -58,6 +58,28 @@ IMPORT_SOURCE_LABEL = "Current Import"
 RESOLUTION_ACCEPT_IMPORT = "accept_import"
 RESOLUTION_KEEP_BASELINE = "keep_baseline"
 
+RECORD_KIND_LABELS = {
+    "training": "Обучение",
+    "education": "Образование",
+    "certificate": "Сертификат",
+    "category": "Категория",
+    "roster": "Список",
+}
+
+ROSTER_IMPORT_CORRECTABLE_FIELDS = frozenset(
+    {
+        "full_name",
+        "department",
+        "position_raw",
+        "training_raw",
+        "certification_raw",
+        "education_raw",
+        "degree_raw",
+        "experience_raw",
+        "note_raw",
+    }
+)
+
 
 class ReviewExceptionNotFoundError(LookupError):
     def __init__(self, exception_key: str) -> None:
@@ -93,6 +115,120 @@ def _format_field_value(value: Any) -> str | None:
         return None
     text_val = str(normalized).strip()
     return text_val or None
+
+
+def _lookup_org_unit_name(conn: Connection, org_unit_id: Any) -> str | None:
+    try:
+        unit_id = int(org_unit_id)
+    except (TypeError, ValueError):
+        return None
+    if unit_id < 1:
+        return None
+    row = conn.execute(
+        text(
+            """
+            SELECT name
+            FROM public.org_units
+            WHERE unit_id = :unit_id
+            LIMIT 1
+            """
+        ),
+        {"unit_id": unit_id},
+    ).scalar()
+    return str(row).strip() if row else None
+
+
+def _lookup_medical_specialty_name(conn: Connection, specialty_id: Any) -> str | None:
+    try:
+        medical_specialty_id = int(specialty_id)
+    except (TypeError, ValueError):
+        return None
+    if medical_specialty_id < 1:
+        return None
+    row = conn.execute(
+        text(
+            """
+            SELECT name
+            FROM public.medical_specialties
+            WHERE medical_specialty_id = :medical_specialty_id
+            LIMIT 1
+            """
+        ),
+        {"medical_specialty_id": medical_specialty_id},
+    ).scalar()
+    return str(row).strip() if row else None
+
+
+def _resolve_reference_display_value(
+    conn: Connection,
+    *,
+    field: str,
+    value: Any,
+    record_kind: str,
+) -> str | None:
+    raw = _format_field_value(value)
+    if raw is None:
+        return None
+    if field == "org_unit_id":
+        resolved = _lookup_org_unit_name(conn, value)
+        return resolved or raw
+    if field == "medical_specialty_id":
+        resolved = _lookup_medical_specialty_name(conn, value)
+        return resolved or raw
+    if field == "record_kind":
+        return RECORD_KIND_LABELS.get(raw, raw)
+    return raw
+
+
+def _serialize_field_value(
+    conn: Connection,
+    *,
+    field: str,
+    value: Any,
+    record_kind: str,
+) -> dict[str, Any]:
+    raw = _format_field_value(value)
+    display = _resolve_reference_display_value(
+        conn,
+        field=field,
+        value=value,
+        record_kind=record_kind,
+    )
+    return {
+        "value": raw,
+        "display_value": display,
+    }
+
+
+def _load_row_import_review_override(conn: Connection, batch_id: int, row_id: int) -> dict[str, Any]:
+    row = conn.execute(
+        text(
+            """
+            SELECT normalized_payload
+            FROM public.hr_import_rows
+            WHERE batch_id = :batch_id
+              AND row_id = :row_id
+            """
+        ),
+        {"batch_id": batch_id, "row_id": row_id},
+    ).mappings().first()
+    if row is None:
+        return {}
+    payload = dict(row.get("normalized_payload") or {})
+    metadata = dict(payload.get("metadata") or {})
+    override = metadata.get("import_review_override")
+    if isinstance(override, dict):
+        return dict(override)
+    return {}
+
+
+def _editable_import_fields(*, entity_type: str, record_kind: str) -> list[str]:
+    if entity_type == "row":
+        return sorted(ROSTER_IMPORT_CORRECTABLE_FIELDS)
+    from app.services.hr_import_normalized_record_service import OVERRIDABLE_FIELDS_BY_KIND
+
+    allowed = OVERRIDABLE_FIELDS_BY_KIND.get(record_kind, frozenset())
+    return sorted(allowed)
 
 
 def _quality_remarks_for_row(conn: Connection, batch_id: int, row_id: int) -> list[str]:
@@ -177,6 +313,7 @@ def _load_canonical_payload(conn: Connection, *, canonical_entry_id: int | None)
 
 
 def _serialize_field_rows(
+    conn: Connection,
     payload: dict[str, Any],
     *,
     compare_fields: frozenset[str],
@@ -184,17 +321,25 @@ def _serialize_field_rows(
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for field in sorted(compare_fields):
+        serialized = _serialize_field_value(
+            conn,
+            field=field,
+            value=payload.get(field),
+            record_kind=record_kind,
+        )
         rows.append(
             {
                 "key": field,
                 "label": get_field_label(field, record_kind=record_kind),
-                "value": _format_field_value(payload.get(field)),
+                "value": serialized["value"],
+                "display_value": serialized["display_value"],
             }
         )
     return rows
 
 
 def _serialize_diff_rows(
+    conn: Connection,
     *,
     baseline_payload: dict[str, Any],
     import_payload: dict[str, Any],
@@ -209,15 +354,27 @@ def _serialize_diff_rows(
     )
     rows: list[dict[str, Any]] = []
     for field in sorted(compare_fields):
-        baseline_value = _format_field_value(baseline_payload.get(field))
-        import_value = _format_field_value(import_payload.get(field))
-        changed = field in diffs or baseline_value != import_value
+        baseline_serialized = _serialize_field_value(
+            conn,
+            field=field,
+            value=baseline_payload.get(field),
+            record_kind=record_kind,
+        )
+        import_serialized = _serialize_field_value(
+            conn,
+            field=field,
+            value=import_payload.get(field),
+            record_kind=record_kind,
+        )
+        changed = field in diffs or baseline_serialized["value"] != import_serialized["value"]
         rows.append(
             {
                 "key": field,
                 "label": get_field_label(field, record_kind=record_kind),
-                "baseline_value": baseline_value,
-                "import_value": import_value,
+                "baseline_value": baseline_serialized["value"],
+                "baseline_display_value": baseline_serialized["display_value"],
+                "import_value": import_serialized["value"],
+                "import_display_value": import_serialized["display_value"],
                 "changed": changed,
             }
         )
@@ -429,7 +586,13 @@ def list_review_exceptions(
     return {"batch_id": batch_id, "total": total, "items": page}
 
 
-def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> dict[str, Any]:
+def _load_row_exception_detail(
+    conn: Connection,
+    batch_id: int,
+    row_id: int,
+    *,
+    allow_resolved: bool = False,
+) -> dict[str, Any]:
     row = load_row_payload(conn, batch_id, row_id)
     diff_row = conn.execute(
         text(
@@ -447,7 +610,7 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
 
     diff_status = str(diff_row.get("diff_status") or "")
     employee_id = int(diff_row["employee_id"]) if diff_row.get("employee_id") is not None else None
-    if not _row_is_unresolved_exception(diff_status, employee_id=employee_id):
+    if not allow_resolved and not _row_is_unresolved_exception(diff_status, employee_id=employee_id):
         raise ReviewExceptionAlreadyResolvedError(build_exception_key(entity_type="row", entity_id=row_id))
 
     field_diffs = diff_row.get("field_diffs")
@@ -479,6 +642,7 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
         "baseline": {
             "source_label": BASELINE_SOURCE_LABEL,
             "fields": _serialize_field_rows(
+                conn,
                 baseline_payload,
                 compare_fields=compare_fields,
                 record_kind=RECORD_KIND_ROSTER,
@@ -487,6 +651,7 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
         "import_data": {
             "source_label": IMPORT_SOURCE_LABEL,
             "fields": _serialize_field_rows(
+                conn,
                 import_payload,
                 compare_fields=compare_fields,
                 record_kind=RECORD_KIND_ROSTER,
@@ -494,6 +659,7 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
         },
         "diff": {
             "fields": _serialize_diff_rows(
+                conn,
                 baseline_payload=baseline_payload,
                 import_payload=import_payload,
                 compare_fields=compare_fields,
@@ -502,8 +668,15 @@ def _load_row_exception_detail(conn: Connection, batch_id: int, row_id: int) -> 
             ),
         },
         "quality_remarks": quality_remarks,
-        "resolved": False,
-        "actions_available": True,
+        "editable_import_fields": _editable_import_fields(
+            entity_type="row",
+            record_kind=RECORD_KIND_ROSTER,
+        ),
+        "import_review_override": _load_row_import_review_override(conn, batch_id, row_id),
+        "correct_action_available": _row_is_unresolved_exception(diff_status, employee_id=employee_id),
+        "resolved": not _row_is_unresolved_exception(diff_status, employee_id=employee_id),
+        "resolved_by_correction": allow_resolved and diff_status == DIFF_STATUS_UNCHANGED,
+        "actions_available": _row_is_unresolved_exception(diff_status, employee_id=employee_id),
         "removal_actions_available": False,
     }
 
@@ -512,6 +685,8 @@ def _load_normalized_exception_detail(
     conn: Connection,
     batch_id: int,
     normalized_record_id: int,
+    *,
+    allow_resolved: bool = False,
 ) -> dict[str, Any]:
     row = conn.execute(
         text(
@@ -534,7 +709,7 @@ def _load_normalized_exception_detail(
     employee_id = (
         int(row["effective_employee_id"]) if row.get("effective_employee_id") is not None else None
     )
-    if not _row_is_unresolved_exception(diff_status, employee_id=employee_id):
+    if not allow_resolved and not _row_is_unresolved_exception(diff_status, employee_id=employee_id):
         raise ReviewExceptionAlreadyResolvedError(
             build_exception_key(entity_type="normalized", entity_id=normalized_record_id)
         )
@@ -552,7 +727,10 @@ def _load_normalized_exception_detail(
         if row.get("canonical_entry_id") is not None
         else None,
     )
+    from app.services.hr_import_normalized_record_service import _parse_review_override_json
+
     quality_remarks = _quality_remarks_for_normalized(dict(row))
+    unresolved = _row_is_unresolved_exception(diff_status, employee_id=employee_id)
 
     return {
         "exception_key": build_exception_key(entity_type="normalized", entity_id=normalized_record_id),
@@ -563,11 +741,12 @@ def _load_normalized_exception_detail(
         "record_kind": record_kind,
         "match_key": None,
         "title": str(row.get("title") or "").strip() or f"Запись #{normalized_record_id}",
-        "subtitle": record_kind or None,
+        "subtitle": RECORD_KIND_LABELS.get(record_kind, record_kind) or None,
         "department": None,
         "baseline": {
             "source_label": BASELINE_SOURCE_LABEL,
             "fields": _serialize_field_rows(
+                conn,
                 baseline_payload,
                 compare_fields=compare_fields,
                 record_kind=record_kind,
@@ -576,6 +755,7 @@ def _load_normalized_exception_detail(
         "import_data": {
             "source_label": IMPORT_SOURCE_LABEL,
             "fields": _serialize_field_rows(
+                conn,
                 import_payload,
                 compare_fields=compare_fields,
                 record_kind=record_kind,
@@ -583,6 +763,7 @@ def _load_normalized_exception_detail(
         },
         "diff": {
             "fields": _serialize_diff_rows(
+                conn,
                 baseline_payload=baseline_payload,
                 import_payload=import_payload,
                 compare_fields=compare_fields,
@@ -591,13 +772,26 @@ def _load_normalized_exception_detail(
             ),
         },
         "quality_remarks": quality_remarks,
-        "resolved": False,
-        "actions_available": True,
+        "editable_import_fields": _editable_import_fields(
+            entity_type="normalized",
+            record_kind=record_kind,
+        ),
+        "import_review_override": _parse_review_override_json(row.get("review_override_json")),
+        "correct_action_available": unresolved,
+        "resolved": not unresolved,
+        "resolved_by_correction": allow_resolved and diff_status == DIFF_STATUS_UNCHANGED,
+        "actions_available": unresolved,
         "removal_actions_available": False,
     }
 
 
-def _load_removal_exception_detail(conn: Connection, batch_id: int, removal_id: int) -> dict[str, Any]:
+def _load_removal_exception_detail(
+    conn: Connection,
+    batch_id: int,
+    removal_id: int,
+    *,
+    allow_resolved: bool = False,
+) -> dict[str, Any]:
     row = conn.execute(
         text(
             """
@@ -637,6 +831,7 @@ def _load_removal_exception_detail(conn: Connection, batch_id: int, removal_id: 
         "baseline": {
             "source_label": BASELINE_SOURCE_LABEL,
             "fields": _serialize_field_rows(
+                conn,
                 payload,
                 compare_fields=compare_fields,
                 record_kind=record_kind,
@@ -645,6 +840,7 @@ def _load_removal_exception_detail(conn: Connection, batch_id: int, removal_id: 
         "import_data": {
             "source_label": IMPORT_SOURCE_LABEL,
             "fields": _serialize_field_rows(
+                conn,
                 import_payload,
                 compare_fields=compare_fields,
                 record_kind=record_kind,
@@ -652,6 +848,7 @@ def _load_removal_exception_detail(conn: Connection, batch_id: int, removal_id: 
         },
         "diff": {
             "fields": _serialize_diff_rows(
+                conn,
                 baseline_payload=payload,
                 import_payload=import_payload,
                 compare_fields=compare_fields,
@@ -660,21 +857,35 @@ def _load_removal_exception_detail(conn: Connection, batch_id: int, removal_id: 
             ),
         },
         "quality_remarks": [],
+        "editable_import_fields": [],
+        "import_review_override": {},
+        "correct_action_available": False,
         "resolved": False,
         "actions_available": False,
         "removal_actions_available": True,
     }
 
 
-def get_review_exception_detail(conn: Connection, batch_id: int, exception_key: str) -> dict[str, Any]:
+def get_review_exception_detail(
+    conn: Connection,
+    batch_id: int,
+    exception_key: str,
+    *,
+    allow_resolved: bool = False,
+) -> dict[str, Any]:
     _ensure_batch_exists(conn, batch_id)
     entity_type, entity_id = parse_exception_key(exception_key)
     if entity_type == "row":
-        return _load_row_exception_detail(conn, batch_id, entity_id)
+        return _load_row_exception_detail(conn, batch_id, entity_id, allow_resolved=allow_resolved)
     if entity_type == "normalized":
-        return _load_normalized_exception_detail(conn, batch_id, entity_id)
+        return _load_normalized_exception_detail(
+            conn,
+            batch_id,
+            entity_id,
+            allow_resolved=allow_resolved,
+        )
     if entity_type == "removal":
-        return _load_removal_exception_detail(conn, batch_id, entity_id)
+        return _load_removal_exception_detail(conn, batch_id, entity_id, allow_resolved=allow_resolved)
     raise InvalidReviewExceptionKeyError(f"unsupported entity_type {entity_type!r}")
 
 
@@ -897,6 +1108,268 @@ def resolve_review_exception(
         "differences_resolved": len(differences),
         "auto_review": auto_review,
         "detail": detail,
+    }
+
+
+def _build_row_import_review_override(
+    conn: Connection,
+    batch_id: int,
+    row_id: int,
+    submitted: dict[str, Any],
+) -> dict[str, Any]:
+    staging = load_row_payload(conn, batch_id, row_id)
+    payload = staging["payload"]
+    sparse: dict[str, Any] = {}
+    for field in ROSTER_IMPORT_CORRECTABLE_FIELDS:
+        if field not in submitted:
+            continue
+        normalized = _format_field_value(submitted.get(field))
+        base = _format_field_value(payload.get(field))
+        if normalized != base:
+            sparse[field] = normalized
+    return sparse
+
+
+def clear_import_review_overrides_for_batch(conn: Connection, batch_id: int) -> dict[str, int]:
+    """Drop staging review overrides after canonical baseline is published (Apply)."""
+    from app.services.hr_import_normalized_record_service import review_override_available
+
+    normalized_cleared = 0
+    if review_override_available(conn):
+        normalized_cleared = int(
+            conn.execute(
+                text(
+                    """
+                    UPDATE public.hr_import_normalized_records
+                    SET
+                        review_override_json = NULL,
+                        review_override_updated_by = NULL,
+                        review_override_updated_at = NULL,
+                        updated_at = NOW()
+                    WHERE batch_id = :batch_id
+                      AND review_override_json IS NOT NULL
+                    """
+                ),
+                {"batch_id": batch_id},
+            ).rowcount
+            or 0
+        )
+
+    rows_cleared = 0
+    override_rows = conn.execute(
+        text(
+            """
+            SELECT row_id, normalized_payload
+            FROM public.hr_import_rows
+            WHERE batch_id = :batch_id
+              AND normalized_payload->'metadata'->'import_review_override' IS NOT NULL
+            """
+        ),
+        {"batch_id": batch_id},
+    ).mappings().all()
+    for row in override_rows:
+        payload = row["normalized_payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if not isinstance(payload, dict):
+            continue
+        metadata = dict(payload.get("metadata") or {})
+        if "import_review_override" not in metadata:
+            continue
+        metadata.pop("import_review_override")
+        payload["metadata"] = metadata
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_rows
+                SET normalized_payload = CAST(:normalized_payload AS JSONB)
+                WHERE batch_id = :batch_id
+                  AND row_id = :row_id
+                """
+            ),
+            {
+                "batch_id": batch_id,
+                "row_id": int(row["row_id"]),
+                "normalized_payload": json.dumps(payload, ensure_ascii=False, default=str),
+            },
+        )
+        rows_cleared += 1
+
+    return {
+        "normalized_records_cleared": normalized_cleared,
+        "rows_cleared": rows_cleared,
+    }
+
+
+def _auto_dismiss_mrd_differences_when_unchanged(
+    conn: Connection,
+    batch_id: int,
+    *,
+    entity_type: str,
+    entity_id: int,
+    actor_user_id: int,
+) -> int:
+    row_id = entity_id if entity_type == "row" else None
+    normalized_record_id = entity_id if entity_type == "normalized" else None
+
+    if row_id is not None:
+        diff_status = conn.execute(
+            text(
+                """
+                SELECT diff_status
+                FROM public.hr_import_rows
+                WHERE batch_id = :batch_id
+                  AND row_id = :row_id
+                """
+            ),
+            {"batch_id": batch_id, "row_id": row_id},
+        ).scalar_one_or_none()
+    else:
+        diff_status = conn.execute(
+            text(
+                """
+                SELECT diff_status
+                FROM public.hr_import_normalized_records
+                WHERE batch_id = :batch_id
+                  AND normalized_record_id = :normalized_record_id
+                """
+            ),
+            {"batch_id": batch_id, "normalized_record_id": normalized_record_id},
+        ).scalar_one_or_none()
+
+    if diff_status != DIFF_STATUS_UNCHANGED:
+        return 0
+
+    differences = _find_mrd_differences_for_exception(
+        conn,
+        batch_id,
+        row_id=row_id,
+        normalized_record_id=normalized_record_id,
+    )
+    if not differences:
+        return 0
+
+    _resolve_mrd_differences(
+        conn,
+        differences,
+        resolution=RESOLUTION_KEEP_BASELINE,
+        actor_user_id=actor_user_id,
+        batch_id=batch_id,
+    )
+    return len(differences)
+
+
+def _save_row_import_review_override(
+    conn: Connection,
+    batch_id: int,
+    row_id: int,
+    *,
+    submitted: dict[str, Any],
+) -> dict[str, Any]:
+    staging = load_row_payload(conn, batch_id, row_id)
+    payload = dict(staging["payload"])
+    metadata = dict(staging["metadata"])
+    sparse = _build_row_import_review_override(conn, batch_id, row_id, submitted)
+    if sparse:
+        metadata["import_review_override"] = sparse
+    elif "import_review_override" in metadata:
+        metadata.pop("import_review_override")
+
+    full_payload = {**payload, "metadata": metadata}
+    conn.execute(
+        text(
+            """
+            UPDATE public.hr_import_rows
+            SET normalized_payload = CAST(:normalized_payload AS JSONB)
+            WHERE batch_id = :batch_id
+              AND row_id = :row_id
+            """
+        ),
+        {
+            "batch_id": batch_id,
+            "row_id": row_id,
+            "normalized_payload": json.dumps(full_payload, ensure_ascii=False, default=str),
+        },
+    )
+    return sparse
+
+
+def correct_review_exception_import(
+    conn: Connection,
+    batch_id: int,
+    exception_key: str,
+    *,
+    corrections: dict[str, Any],
+    actor_user_id: int,
+) -> dict[str, Any]:
+    _ensure_batch_exists(conn, batch_id)
+    if not isinstance(corrections, dict):
+        raise InvalidReviewExceptionResolutionError("corrections must be an object")
+
+    entity_type, entity_id = parse_exception_key(exception_key)
+    if entity_type == "removal":
+        raise InvalidReviewExceptionResolutionError(
+            "corrections are not supported for REMOVED exceptions"
+        )
+
+    get_review_exception_detail(conn, batch_id, exception_key)
+
+    if entity_type == "row":
+        unknown = set(corrections.keys()) - ROSTER_IMPORT_CORRECTABLE_FIELDS
+        if unknown:
+            raise InvalidReviewExceptionResolutionError(
+                f"unsupported correction fields for roster row: {sorted(unknown)}"
+            )
+        saved = _save_row_import_review_override(
+            conn,
+            batch_id,
+            entity_id,
+            submitted=corrections,
+        )
+    elif entity_type == "normalized":
+        from app.services.hr_import_normalized_record_service import (
+            NormalizedRecordNotFoundError,
+            update_normalized_record_review_override,
+        )
+
+        try:
+            update_normalized_record_review_override(
+                conn,
+                entity_id,
+                review_override=corrections,
+                updated_by=actor_user_id,
+                allow_non_pending=True,
+            )
+        except NormalizedRecordNotFoundError as exc:
+            raise ReviewExceptionNotFoundError(exception_key) from exc
+        saved = corrections
+    else:
+        raise InvalidReviewExceptionKeyError(f"unsupported entity_type {entity_type!r}")
+
+    from app.services.hr_import_monthly_diff_service import compute_batch_monthly_diff
+
+    diff_summary = compute_batch_monthly_diff(conn, batch_id)
+    mrd_dismissed = _auto_dismiss_mrd_differences_when_unchanged(
+        conn,
+        batch_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor_user_id=actor_user_id,
+    )
+    detail = get_review_exception_detail(
+        conn,
+        batch_id,
+        exception_key,
+        allow_resolved=True,
+    )
+    return {
+        "exception_key": exception_key,
+        "batch_id": batch_id,
+        "saved_corrections": saved,
+        "detail": detail,
+        "diff_summary": diff_summary,
+        "diff_recomputed": True,
+        "mrd_differences_dismissed": mrd_dismissed,
     }
 
 

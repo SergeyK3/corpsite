@@ -691,6 +691,13 @@ def publish_baseline_from_batch(
     if documents_updated:
         result["documents_provenance_updated"] = documents_updated
 
+    from app.services.hr_import_review_exception_detail_service import (
+        clear_import_review_overrides_for_batch,
+    )
+
+    overrides_cleared = clear_import_review_overrides_for_batch(conn, batch_id)
+    result["review_overrides_cleared"] = overrides_cleared
+
     return result
 
 

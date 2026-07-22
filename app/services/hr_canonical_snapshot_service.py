@@ -90,6 +90,10 @@ COMBINABLE_ROSTER_FIELDS = frozenset(
     }
 )
 
+ROSTER_IMPORT_CORRECTABLE_FIELDS = COMBINABLE_ROSTER_FIELDS | frozenset(
+    {"full_name", "department", "position_raw"}
+)
+
 ROSTER_COMPARE_FIELDS = frozenset(
     {
         "full_name",
@@ -307,6 +311,7 @@ def build_roster_effective_payload(
 ) -> tuple[dict[str, Any], Optional[int], str]:
     staging = load_row_payload(conn, batch_id, int(row["row_id"]))
     payload = dict(staging["payload"])
+    metadata = dict(staging.get("metadata") or {})
     meta = _load_effective_profile_meta(
         conn,
         batch_id,
@@ -354,6 +359,12 @@ def build_roster_effective_payload(
         "note_raw": str(profile.get("notes_raw") or payload.get("note_raw") or row.get("note_raw") or "").strip(),
         "merged_profile": profile,
     }
+    row_override = metadata.get("import_review_override")
+    if isinstance(row_override, dict) and row_override:
+        for field, value in row_override.items():
+            if field not in ROSTER_IMPORT_CORRECTABLE_FIELDS or value is None:
+                continue
+            effective[field] = str(value).strip()
     correction_fields = compute_correction_fields(
         build_roster_base_payload(conn, batch_id=batch_id, row=row),
         effective,

@@ -100,8 +100,12 @@ PAYLOAD_FIELDS = frozenset(
 )
 
 OVERRIDABLE_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
-    RECORD_KIND_EDUCATION: frozenset({"title", "provider", "issue_date", "document_number"}),
-    RECORD_KIND_TRAINING: frozenset({"title", "provider", "hours", "issue_date"}),
+    RECORD_KIND_EDUCATION: frozenset(
+        {"title", "provider", "issue_date", "start_date", "end_date", "document_number"}
+    ),
+    RECORD_KIND_TRAINING: frozenset(
+        {"title", "provider", "hours", "issue_date", "start_date", "end_date"}
+    ),
     RECORD_KIND_CERTIFICATE: frozenset(
         {"title", "specialty_text", "issue_date", "expiry_date", "document_number"}
     ),
@@ -1805,6 +1809,7 @@ def update_normalized_record_review_override(
     *,
     review_override: dict[str, Any],
     updated_by: int,
+    allow_non_pending: bool = False,
 ) -> dict[str, Any]:
     """ADR-039 Phase 3F.3 — save sparse manual corrections without mutating parsed columns."""
     if not normalized_records_available(conn):
@@ -1817,7 +1822,7 @@ def update_normalized_record_review_override(
         raise NormalizedRecordNotFoundError(record_id)
 
     current_status = str(row["review_status"])
-    if current_status != REVIEW_STATUS_PENDING:
+    if not allow_non_pending and current_status != REVIEW_STATUS_PENDING:
         raise ReviewOverrideNotAllowedError(
             f"review override is allowed only for pending records, got {current_status}"
         )
