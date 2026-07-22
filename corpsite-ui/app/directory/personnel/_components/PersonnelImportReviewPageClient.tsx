@@ -8,6 +8,7 @@ import ImportBatchContextHeader from "./ImportBatchContextHeader";
 import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
 import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
 import ImportReviewExceptionDrawer from "./ImportReviewExceptionDrawer";
+import ImportTrainingDateQualityPanel from "./ImportTrainingDateQualityPanel";
 import { parseImportReviewMode, type ImportReviewMode } from "../_lib/importReviewNav";
 import {
   departmentFilterOptionValue,
@@ -334,6 +335,15 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
           onRemovalDecision={handleExceptionResolved}
           onOpenRemoval={(removalId) => setExceptionKey(`removals/${removalId}`)}
           refreshKey={summaryRefreshKey}
+        />
+
+        <ImportTrainingDateQualityPanel
+          batchId={batchId}
+          refreshKey={summaryRefreshKey}
+          onOpenRow={(rowId) => setExceptionKey(stagingRowExceptionKey(rowId))}
+          onOpenNormalized={(normalizedRecordId) =>
+            setExceptionKey(`normalized/${normalizedRecordId}`)
+          }
         />
 
         <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />

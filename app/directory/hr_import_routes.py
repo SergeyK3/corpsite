@@ -138,6 +138,7 @@ from app.services.hr_import_review_exception_detail_service import (
     resolve_review_exception,
     resolve_review_removal_exception,
 )
+from app.services.hr_import_training_date_quality_service import list_training_date_quality_report
 from app.services.hr_baseline_service import (
     BaselineDeleteError,
     BaselineNotFoundError,
@@ -762,6 +763,29 @@ def post_import_batch_review_exception_keep_baseline(
         raise _review_exception_bad_request(e)
     except InvalidReviewExceptionResolutionError as e:
         raise _review_exception_bad_request(e)
+    except BatchNotFoundError as e:
+        raise _batch_not_found(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/training-date-quality")
+def get_import_batch_training_date_quality(
+    batch_id: int,
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(
+            list_training_date_quality_report,
+            batch_id=batch_id,
+            limit=limit,
+            offset=offset,
+        )
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:

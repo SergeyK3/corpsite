@@ -1237,6 +1237,29 @@ export type ReviewExceptionListResponse = {
   items: ReviewExceptionSummary[];
 };
 
+export type TrainingDateQualityItem = {
+  employee_id: number | null;
+  row_id: number | null;
+  normalized_record_id: number | null;
+  full_name: string | null;
+  department: string | null;
+  position_raw: string | null;
+  record_kind: string;
+  record_title: string | null;
+  source_text: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  issue_date: string | null;
+  remarks: string[];
+};
+
+export type TrainingDateQualityReport = {
+  batch_id: number;
+  total: number;
+  remark: string;
+  items: TrainingDateQualityItem[];
+};
+
 export type ReviewExceptionResolutionResult = {
   exception_key: string;
   resolution?: string;
@@ -1308,6 +1331,19 @@ export async function keepBaselineImportReviewException(
   return apiPostJson(
     `/directory/personnel/import/batches/${batchId}/review-exceptions/${encoded}/keep-baseline`,
     payload ?? {},
+  );
+}
+
+export async function getImportTrainingDateQualityReport(
+  batchId: number,
+  params?: { limit?: number; offset?: number },
+): Promise<TrainingDateQualityReport> {
+  return apiGetJson(
+    `/directory/personnel/import/batches/${batchId}/training-date-quality`,
+    buildQuery({
+      limit: params?.limit,
+      offset: params?.offset,
+    }),
   );
 }
 
