@@ -158,5 +158,6 @@ __tmp__*
 tmp/
 .venv/
 
- Local sync exports
+# Local sync exports
 data/sync/
+runtime/_tmp_inv/
