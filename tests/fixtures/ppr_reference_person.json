@@ -1,0 +1,1078 @@
+{
+  "fixture_meta": {
+    "fixture_key": "ppr_reference_person_v1",
+    "spec_primary": "docs/architecture/WP-PR-003-section-catalog-and-completeness-model.md",
+    "spec_revision": 2,
+    "purpose": "reference_person_for_future_telegram_scenario",
+    "test_data_notice": "Fictional test person only. Names, IIN and document numbers must not be used as real identity data."
+  },
+  "AGGREGATE-ENVELOPE": {
+    "section_code": "AGGREGATE-ENVELOPE",
+    "section_key": "envelope",
+    "storage_target": "personnel_record_metadata",
+    "fields": {
+      "person_id": {
+        "field_key": "envelope.person_id",
+        "required_runtime": true,
+        "value": null,
+        "value_note": "Assigned by system on materialization; fixture uses fixture_person_key for stable references."
+      },
+      "fixture_person_key": {
+        "field_key": "envelope.fixture_person_key",
+        "required_runtime": false,
+        "value": "telegram_ref_person_001"
+      },
+      "lifecycle_state": {
+        "field_key": "envelope.lifecycle_state",
+        "required_runtime": true,
+        "value": "COLLECTING"
+      },
+      "hr_relationship_context": {
+        "field_key": "envelope.hr_relationship_context",
+        "required_runtime": true,
+        "value": "CANDIDATE"
+      },
+      "envelope_version": {
+        "field_key": "envelope.envelope_version",
+        "required_runtime": true,
+        "value": 1
+      }
+    }
+  },
+  "sections": {
+    "PPR-GENERAL": {
+      "section_code": "PPR-GENERAL",
+      "section_key": "general",
+      "mandatory_policy_arch": "UNIVERSAL",
+      "cardinality": "0..1",
+      "fields": {
+        "full_name": {
+          "field_key": "general.full_name",
+          "required_arch": "UNIVERSAL",
+          "value": "Тестов Телеграм Тестович"
+        },
+        "iin": {
+          "field_key": "general.iin",
+          "required_arch": "UNIVERSAL",
+          "value": "880315350789"
+        },
+        "birth_date": {
+          "field_key": "general.birth_date",
+          "required_arch": "UNIVERSAL",
+          "value": "1988-03-15"
+        },
+        "birth_place": {
+          "field_key": "general.birth_place",
+          "required_arch": "UNIVERSAL",
+          "value": "г. Алматы, Республика Казахстан"
+        },
+        "citizenship": {
+          "field_key": "general.citizenship",
+          "required_arch": "UNIVERSAL",
+          "value": "Республика Казахстан"
+        },
+        "nationality": {
+          "field_key": "general.nationality",
+          "required_arch": "UNIVERSAL",
+          "value": "казах"
+        },
+        "sex": {
+          "field_key": "general.sex",
+          "required_arch": "UNIVERSAL",
+          "value": "male"
+        }
+      }
+    },
+    "PPR-NAME-HISTORY": {
+      "section_code": "PPR-NAME-HISTORY",
+      "section_key": "name_history",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "name_history.pre_marriage_surname",
+          "fields": {
+            "previous_full_name": {
+              "field_key": "name_history.previous_full_name",
+              "required_arch": "CONDITIONAL",
+              "value": "Тестов Телеграм Тестов"
+            }
+          },
+          "spec_note": "WP-PR-003 defines append-only previous names and date order, but does not name storage fields; previous_full_name is a fixture alias pending EPIC-4 schema."
+        }
+      ]
+    },
+    "PPR-PHOTO": {
+      "section_code": "PPR-PHOTO",
+      "section_key": "photo",
+      "mandatory_policy_arch": "OPTIONAL",
+      "cardinality": "0..1",
+      "fields": {
+        "file_ref": {
+          "field_key": "photo.file_ref",
+          "required_arch": "OPTIONAL",
+          "value": "fixture://ppr_reference_person_v1/photo.jpg"
+        }
+      }
+    },
+    "PPR-IDENTITY-DOCUMENTS": {
+      "section_code": "PPR-IDENTITY-DOCUMENTS",
+      "section_key": "identity_documents",
+      "mandatory_policy_arch": "PROCESS",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "identity_documents.national_id",
+          "document_role": "national_id_card",
+          "fields": {
+            "title": {
+              "field_key": "identity_documents.title",
+              "required_arch": "PROCESS",
+              "value": "Удостоверение личности гражданина Республики Казахстан"
+            },
+            "document_number": {
+              "field_key": "identity_documents.document_number",
+              "required_arch": "PROCESS",
+              "value": "TEST-ID-880315-001"
+            },
+            "issued_by": {
+              "field_key": "identity_documents.issued_by",
+              "required_arch": "PROCESS",
+              "value": "МВД РК (тестовые реквизиты)"
+            },
+            "issued_at": {
+              "field_key": "identity_documents.issued_at",
+              "required_arch": "PROCESS",
+              "value": "2018-06-01"
+            },
+            "valid_until": {
+              "field_key": "identity_documents.valid_until",
+              "required_arch": "PROCESS",
+              "value": "2028-06-01"
+            },
+            "source_type": {
+              "field_key": "identity_documents.source_type",
+              "required_arch": "PROCESS",
+              "value": "entered"
+            }
+          },
+          "spec_note": "Field names follow WP-PR-003 §15.1 transitional source employee_documents until person_documents identity kind is implemented."
+        },
+        {
+          "record_key": "identity_documents.passport",
+          "document_role": "passport",
+          "fields": {
+            "title": {
+              "field_key": "identity_documents.title",
+              "required_arch": "PROCESS",
+              "value": "Паспорт гражданина Республики Казахстан"
+            },
+            "document_number": {
+              "field_key": "identity_documents.document_number",
+              "required_arch": "PROCESS",
+              "value": "TEST-PASS-N88031501"
+            },
+            "issued_by": {
+              "field_key": "identity_documents.issued_by",
+              "required_arch": "PROCESS",
+              "value": "МВД РК (тестовые реквизиты)"
+            },
+            "issued_at": {
+              "field_key": "identity_documents.issued_at",
+              "required_arch": "PROCESS",
+              "value": "2020-09-10"
+            },
+            "valid_until": {
+              "field_key": "identity_documents.valid_until",
+              "required_arch": "PROCESS",
+              "value": "2030-09-10"
+            },
+            "source_type": {
+              "field_key": "identity_documents.source_type",
+              "required_arch": "PROCESS",
+              "value": "entered"
+            }
+          }
+        },
+        {
+          "record_key": "identity_documents.name_change",
+          "document_role": "name_change_evidence",
+          "fields": {
+            "title": {
+              "field_key": "identity_documents.title",
+              "required_arch": "PROCESS",
+              "value": "Свидетельство о перемене имени (тест)"
+            },
+            "document_number": {
+              "field_key": "identity_documents.document_number",
+              "required_arch": "PROCESS",
+              "value": "TEST-NAME-2015-0042"
+            },
+            "issued_by": {
+              "field_key": "identity_documents.issued_by",
+              "required_arch": "PROCESS",
+              "value": "РАГС г. Алматы (тестовые реквизиты)"
+            },
+            "issued_at": {
+              "field_key": "identity_documents.issued_at",
+              "required_arch": "PROCESS",
+              "value": "2015-08-20"
+            },
+            "source_type": {
+              "field_key": "identity_documents.source_type",
+              "required_arch": "PROCESS",
+              "value": "entered"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-CONTACTS": {
+      "section_code": "PPR-CONTACTS",
+      "section_key": "contacts",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "contacts.mobile_primary",
+          "fields": {
+            "phone_raw": {
+              "field_key": "contacts.phone_raw",
+              "required_arch": "CONDITIONAL",
+              "value": "+7 (777) 000-88-15",
+              "spec_note": "Transitional import field per WP-PR-003 §15.1 until person_contacts is implemented."
+            }
+          }
+        },
+        {
+          "record_key": "contacts.email_personal",
+          "fields": {
+            "email": {
+              "field_key": "contacts.email",
+              "required_arch": "CONDITIONAL",
+              "value": "telegram.ref.person001@example.test",
+              "spec_note": "Email is referenced by WP-PR-003 §3.1 validation rule (phone/email format); target storage schema TBD."
+            }
+          }
+        }
+      ]
+    },
+    "PPR-ADDRESSES": {
+      "section_code": "PPR-ADDRESSES",
+      "section_key": "addresses",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "addresses.registration",
+          "address_kind": "registration",
+          "fields": {
+            "structured_address": {
+              "field_key": "addresses.registration.structured_address",
+              "required_arch": "CONDITIONAL",
+              "value": "050000, г. Алматы, Алмалинский район, пр. Абая, д. 150, кв. 42 (тест)"
+            }
+          },
+          "spec_note": "WP-PR-003 §2.11 distinguishes registration vs residence; structured_address follows §3.1 validation rule label pending person_addresses schema."
+        },
+        {
+          "record_key": "addresses.residence",
+          "address_kind": "residence",
+          "fields": {
+            "structured_address": {
+              "field_key": "addresses.residence.structured_address",
+              "required_arch": "CONDITIONAL",
+              "value": "050000, г. Алматы, Бостандыкский район, ул. Тестовая, д. 7, кв. 15 (тест)"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-EDUCATION": {
+      "section_code": "PPR-EDUCATION",
+      "section_key": "education",
+      "mandatory_policy_arch": "UNIVERSAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "education.basic.kaznmu",
+          "fields": {
+            "education_kind": {
+              "field_key": "education.basic.kaznmu.education_kind",
+              "required_runtime": true,
+              "value": "basic"
+            },
+            "institution_name": {
+              "field_key": "education.basic.kaznmu.institution_name",
+              "required_runtime": false,
+              "value": "КазНМУ им. С.Д. Асфендиярова (тест)"
+            },
+            "specialty": {
+              "field_key": "education.basic.kaznmu.specialty",
+              "required_runtime": false,
+              "value": "Лечебное дело"
+            },
+            "qualification": {
+              "field_key": "education.basic.kaznmu.qualification",
+              "required_runtime": false,
+              "value": "Врач"
+            },
+            "started_at": {
+              "field_key": "education.basic.kaznmu.started_at",
+              "required_runtime": false,
+              "value": "2006-09-01"
+            },
+            "completed_at": {
+              "field_key": "education.basic.kaznmu.completed_at",
+              "required_runtime": false,
+              "value": "2012-06-30"
+            },
+            "diploma_number": {
+              "field_key": "education.basic.kaznmu.diploma_number",
+              "required_runtime": false,
+              "value": "TEST-DIP-BASIC-2012-001"
+            },
+            "document_date": {
+              "field_key": "education.basic.kaznmu.document_date",
+              "required_runtime": false,
+              "value": "2012-07-05"
+            }
+          }
+        },
+        {
+          "record_key": "education.internship.cardiology",
+          "fields": {
+            "education_kind": {
+              "field_key": "education.internship.cardiology.education_kind",
+              "required_runtime": true,
+              "value": "internship"
+            },
+            "institution_name": {
+              "field_key": "education.internship.cardiology.institution_name",
+              "required_runtime": false,
+              "value": "КазНМУ им. С.Д. Асфендиярова (тест)"
+            },
+            "specialty": {
+              "field_key": "education.internship.cardiology.specialty",
+              "required_runtime": false,
+              "value": "Терапия"
+            },
+            "started_at": {
+              "field_key": "education.internship.cardiology.started_at",
+              "required_runtime": false,
+              "value": "2012-07-01"
+            },
+            "completed_at": {
+              "field_key": "education.internship.cardiology.completed_at",
+              "required_runtime": false,
+              "value": "2013-06-30"
+            },
+            "diploma_number": {
+              "field_key": "education.internship.cardiology.diploma_number",
+              "required_runtime": false,
+              "value": "TEST-DIP-INT-2013-002"
+            }
+          }
+        },
+        {
+          "record_key": "education.residency.cardiology",
+          "fields": {
+            "education_kind": {
+              "field_key": "education.residency.cardiology.education_kind",
+              "required_runtime": true,
+              "value": "residency"
+            },
+            "institution_name": {
+              "field_key": "education.residency.cardiology.institution_name",
+              "required_runtime": false,
+              "value": "Республиканский центр кардиохирургии (тест)"
+            },
+            "specialty": {
+              "field_key": "education.residency.cardiology.specialty",
+              "required_runtime": false,
+              "value": "Кардиология"
+            },
+            "started_at": {
+              "field_key": "education.residency.cardiology.started_at",
+              "required_runtime": false,
+              "value": "2013-08-01"
+            },
+            "completed_at": {
+              "field_key": "education.residency.cardiology.completed_at",
+              "required_runtime": false,
+              "value": "2015-06-30"
+            },
+            "diploma_number": {
+              "field_key": "education.residency.cardiology.diploma_number",
+              "required_runtime": false,
+              "value": "TEST-DIP-RES-2015-003"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-TRAINING": {
+      "section_code": "PPR-TRAINING",
+      "section_key": "training",
+      "mandatory_policy_arch": "OPTIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "training.continuing_ecg",
+          "fields": {
+            "training_kind": {
+              "field_key": "training.continuing_ecg.training_kind",
+              "required_runtime": true,
+              "value": "continuing_education"
+            },
+            "title": {
+              "field_key": "training.continuing_ecg.title",
+              "required_runtime": false,
+              "value": "Современные методы ЭКГ-диагностики (тест)"
+            },
+            "organization_name": {
+              "field_key": "training.continuing_ecg.organization_name",
+              "required_runtime": false,
+              "value": "Казахский медицинский университет непрерывного образования (тест)"
+            },
+            "hours": {
+              "field_key": "training.continuing_ecg.hours",
+              "required_runtime": false,
+              "value": "72"
+            },
+            "started_at": {
+              "field_key": "training.continuing_ecg.started_at",
+              "required_runtime": false,
+              "value": "2024-09-01"
+            },
+            "completed_at": {
+              "field_key": "training.continuing_ecg.completed_at",
+              "required_runtime": false,
+              "value": "2025-02-28"
+            },
+            "certificate_number": {
+              "field_key": "training.continuing_ecg.certificate_number",
+              "required_runtime": false,
+              "value": "TEST-CE-2025-0044"
+            }
+          }
+        },
+        {
+          "record_key": "training.certificate.acls",
+          "fields": {
+            "training_kind": {
+              "field_key": "training.certificate.acls.training_kind",
+              "required_runtime": true,
+              "value": "certificate"
+            },
+            "title": {
+              "field_key": "training.certificate.acls.title",
+              "required_runtime": false,
+              "value": "Advanced Cardiovascular Life Support (тест)"
+            },
+            "organization_name": {
+              "field_key": "training.certificate.acls.organization_name",
+              "required_runtime": false,
+              "value": "TEST Medical Training Center"
+            },
+            "completed_at": {
+              "field_key": "training.certificate.acls.completed_at",
+              "required_runtime": false,
+              "value": "2023-11-15"
+            },
+            "certificate_number": {
+              "field_key": "training.certificate.acls.certificate_number",
+              "required_runtime": false,
+              "value": "TEST-CERT-ACLS-2023-009"
+            },
+            "document_date": {
+              "field_key": "training.certificate.acls.document_date",
+              "required_runtime": false,
+              "value": "2023-11-15"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-QUALIFICATIONS": {
+      "section_code": "PPR-QUALIFICATIONS",
+      "section_key": "qualifications",
+      "mandatory_policy_arch": "POSITION",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "qualifications.category.cardiology_first",
+          "fields": {
+            "category": {
+              "field_key": "qualifications.category.cardiology_first.category",
+              "required_arch": "POSITION",
+              "value": "Первая"
+            },
+            "specialty": {
+              "field_key": "qualifications.category.cardiology_first.specialty",
+              "required_arch": "POSITION",
+              "value": "Кардиология"
+            },
+            "issued_at": {
+              "field_key": "qualifications.category.cardiology_first.issued_at",
+              "required_arch": "POSITION",
+              "value": "2018-05-20"
+            }
+          },
+          "spec_note": "Transitional import shape category_records per WP-PR-003 §15.1 until person_qualifications is implemented."
+        },
+        {
+          "record_key": "qualifications.category.cardiology_highest",
+          "fields": {
+            "category": {
+              "field_key": "qualifications.category.cardiology_highest.category",
+              "required_arch": "POSITION",
+              "value": "Высшая"
+            },
+            "specialty": {
+              "field_key": "qualifications.category.cardiology_highest.specialty",
+              "required_arch": "POSITION",
+              "value": "Кардиология"
+            },
+            "issued_at": {
+              "field_key": "qualifications.category.cardiology_highest.issued_at",
+              "required_arch": "POSITION",
+              "value": "2022-03-10"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-ACADEMIC-DEGREES": {
+      "section_code": "PPR-ACADEMIC-DEGREES",
+      "section_key": "academic_degrees",
+      "mandatory_policy_arch": "OPTIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "academic_degrees.candidate_medical_sciences",
+          "fields": {
+            "degree_type": {
+              "field_key": "academic_degrees.candidate_medical_sciences.degree_type",
+              "required_arch": "OPTIONAL",
+              "value": "candidate_medical_sciences"
+            },
+            "label": {
+              "field_key": "academic_degrees.candidate_medical_sciences.label",
+              "required_arch": "OPTIONAL",
+              "value": "Кандидат медицинских наук"
+            },
+            "completed_at": {
+              "field_key": "academic_degrees.candidate_medical_sciences.completed_at",
+              "required_arch": "OPTIONAL",
+              "value": "2020-12-15"
+            }
+          },
+          "spec_note": "Transitional import shape degrees.records per WP-PR-003 §15.1 until person_academic_degrees is implemented."
+        }
+      ]
+    },
+    "PPR-EMPLOYMENT-BIOGRAPHY": {
+      "section_code": "PPR-EMPLOYMENT-BIOGRAPHY",
+      "section_key": "employment_biography",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "employment_biography.episode.city_hospital_1",
+          "fields": {
+            "record_kind": {
+              "field_key": "employment_biography.episode.city_hospital_1.record_kind",
+              "required_runtime": true,
+              "value": "episode"
+            },
+            "employer_name": {
+              "field_key": "employment_biography.episode.city_hospital_1.employer_name",
+              "required_runtime": true,
+              "value": "ГКБ №1 г. Алматы (тест)"
+            },
+            "department_name": {
+              "field_key": "employment_biography.episode.city_hospital_1.department_name",
+              "required_runtime": false,
+              "value": "Терапевтическое отделение"
+            },
+            "position_title": {
+              "field_key": "employment_biography.episode.city_hospital_1.position_title",
+              "required_runtime": true,
+              "value": "Врач-терапевт"
+            },
+            "started_at": {
+              "field_key": "employment_biography.episode.city_hospital_1.started_at",
+              "required_runtime": false,
+              "value": "2015-08-01"
+            },
+            "ended_at": {
+              "field_key": "employment_biography.episode.city_hospital_1.ended_at",
+              "required_runtime": false,
+              "value": "2018-07-31"
+            },
+            "source_system": {
+              "field_key": "employment_biography.episode.city_hospital_1.source_system",
+              "required_runtime": true,
+              "value": "manual"
+            }
+          }
+        },
+        {
+          "record_key": "employment_biography.episode.cardio_center",
+          "fields": {
+            "record_kind": {
+              "field_key": "employment_biography.episode.cardio_center.record_kind",
+              "required_runtime": true,
+              "value": "episode"
+            },
+            "employer_name": {
+              "field_key": "employment_biography.episode.cardio_center.employer_name",
+              "required_runtime": true,
+              "value": "Республиканский центр кардиохирургии (тест)"
+            },
+            "department_name": {
+              "field_key": "employment_biography.episode.cardio_center.department_name",
+              "required_runtime": false,
+              "value": "Отделение кардиологии"
+            },
+            "position_title": {
+              "field_key": "employment_biography.episode.cardio_center.position_title",
+              "required_runtime": true,
+              "value": "Врач-кардиолог"
+            },
+            "started_at": {
+              "field_key": "employment_biography.episode.cardio_center.started_at",
+              "required_runtime": false,
+              "value": "2018-08-15"
+            },
+            "ended_at": {
+              "field_key": "employment_biography.episode.cardio_center.ended_at",
+              "required_runtime": false,
+              "value": "2022-12-31"
+            },
+            "source_system": {
+              "field_key": "employment_biography.episode.cardio_center.source_system",
+              "required_runtime": true,
+              "value": "manual"
+            }
+          }
+        },
+        {
+          "record_key": "employment_biography.episode.private_clinic",
+          "fields": {
+            "record_kind": {
+              "field_key": "employment_biography.episode.private_clinic.record_kind",
+              "required_runtime": true,
+              "value": "episode"
+            },
+            "employer_name": {
+              "field_key": "employment_biography.episode.private_clinic.employer_name",
+              "required_runtime": true,
+              "value": "ТОО «Тестовая клиника Кардио»"
+            },
+            "position_title": {
+              "field_key": "employment_biography.episode.private_clinic.position_title",
+              "required_runtime": true,
+              "value": "Врач-кардиолог"
+            },
+            "started_at": {
+              "field_key": "employment_biography.episode.private_clinic.started_at",
+              "required_runtime": false,
+              "value": "2023-02-01"
+            },
+            "ended_at": {
+              "field_key": "employment_biography.episode.private_clinic.ended_at",
+              "required_runtime": false,
+              "value": "2025-05-31"
+            },
+            "termination_reason": {
+              "field_key": "employment_biography.episode.private_clinic.termination_reason",
+              "required_runtime": false,
+              "value": "Переход на новое место работы (тест)"
+            },
+            "source_system": {
+              "field_key": "employment_biography.episode.private_clinic.source_system",
+              "required_runtime": true,
+              "value": "manual"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-MILITARY": {
+      "section_code": "PPR-MILITARY",
+      "section_key": "military",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..1",
+      "active_record": {
+        "record_key": "military.registration_v1",
+        "fields": {
+          "record_kind": {
+            "field_key": "military.record_kind",
+            "required_runtime": true,
+            "value": "registration"
+          },
+          "obligation_status": {
+            "field_key": "military.obligation_status",
+            "required_runtime": false,
+            "value": "liable"
+          },
+          "registration_category": {
+            "field_key": "military.registration_category",
+            "required_runtime": false,
+            "value": "II"
+          },
+          "military_rank": {
+            "field_key": "military.military_rank",
+            "required_runtime": false,
+            "value": "рядовой"
+          },
+          "military_specialty_code": {
+            "field_key": "military.military_specialty_code",
+            "required_runtime": false,
+            "value": "868123A"
+          },
+          "personnel_composition": {
+            "field_key": "military.personnel_composition",
+            "required_runtime": false,
+            "value": "soldiers"
+          },
+          "fitness_category": {
+            "field_key": "military.fitness_category",
+            "required_runtime": false,
+            "value": "А"
+          },
+          "registration_status": {
+            "field_key": "military.registration_status",
+            "required_runtime": false,
+            "value": "registered"
+          },
+          "commissariat_name": {
+            "field_key": "military.commissariat_name",
+            "required_runtime": false,
+            "value": "Районный военкомат Бостандыкского района г. Алматы (тест)"
+          },
+          "registered_at": {
+            "field_key": "military.registered_at",
+            "required_runtime": false,
+            "value": "2006-06-20"
+          },
+          "military_id_book_series": {
+            "field_key": "military.military_id_book_series",
+            "required_runtime": false,
+            "value": "TEST"
+          },
+          "military_id_book_number": {
+            "field_key": "military.military_id_book_number",
+            "required_runtime": false,
+            "value": "880315001"
+          },
+          "source_type": {
+            "field_key": "military.source_type",
+            "required_runtime": true,
+            "value": "entered"
+          }
+        }
+      }
+    },
+    "PPR-MARITAL-STATUS": {
+      "section_code": "PPR-MARITAL-STATUS",
+      "section_key": "marital_status",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..1",
+      "fields": {
+        "marital_status": {
+          "field_key": "marital_status.marital_status",
+          "required_arch": "CONDITIONAL",
+          "value": "married"
+        }
+      },
+      "spec_note": "Enum values are HR policy TBD (WP-PR-003 OQ-1); married aligns with spouse record in PPR-FAMILY."
+    },
+    "PPR-FAMILY": {
+      "section_code": "PPR-FAMILY",
+      "section_key": "family",
+      "mandatory_policy_arch": "CONDITIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "family.spouse",
+          "fields": {
+            "relationship_type": {
+              "field_key": "family.spouse.relationship_type",
+              "required_runtime": true,
+              "value": "spouse"
+            },
+            "full_name": {
+              "field_key": "family.spouse.full_name",
+              "required_runtime": true,
+              "value": "Тестова Алия Тестовна"
+            },
+            "birth_date": {
+              "field_key": "family.spouse.birth_date",
+              "required_runtime": false,
+              "value": "1990-11-22"
+            },
+            "birth_place": {
+              "field_key": "family.spouse.birth_place",
+              "required_runtime": false,
+              "value": "г. Алматы"
+            },
+            "organization_name": {
+              "field_key": "family.spouse.organization_name",
+              "required_runtime": false,
+              "value": "ТОО «Тестовый маркет» (тест)"
+            },
+            "residence_address": {
+              "field_key": "family.spouse.residence_address",
+              "required_runtime": false,
+              "value": "г. Алматы, пр. Абая, д. 150, кв. 42 (тест)"
+            }
+          }
+        },
+        {
+          "record_key": "family.father",
+          "fields": {
+            "relationship_type": {
+              "field_key": "family.father.relationship_type",
+              "required_runtime": true,
+              "value": "father"
+            },
+            "full_name": {
+              "field_key": "family.father.full_name",
+              "required_runtime": true,
+              "value": "Тестов Тест Тестович"
+            },
+            "birth_date": {
+              "field_key": "family.father.birth_date",
+              "required_runtime": false,
+              "value": "1960-02-10"
+            },
+            "birth_place": {
+              "field_key": "family.father.birth_place",
+              "required_runtime": false,
+              "value": "г. Шымкент"
+            },
+            "notes": {
+              "field_key": "family.father.notes",
+              "required_runtime": false,
+              "value": "пенсионер (тест)"
+            }
+          }
+        },
+        {
+          "record_key": "family.mother",
+          "fields": {
+            "relationship_type": {
+              "field_key": "family.mother.relationship_type",
+              "required_runtime": true,
+              "value": "mother"
+            },
+            "full_name": {
+              "field_key": "family.mother.full_name",
+              "required_runtime": true,
+              "value": "Тестова Тест Тестовна"
+            },
+            "birth_date": {
+              "field_key": "family.mother.birth_date",
+              "required_runtime": false,
+              "value": "1962-07-18"
+            },
+            "birth_place": {
+              "field_key": "family.mother.birth_place",
+              "required_runtime": false,
+              "value": "г. Шымкент"
+            }
+          }
+        },
+        {
+          "record_key": "family.son",
+          "fields": {
+            "relationship_type": {
+              "field_key": "family.son.relationship_type",
+              "required_runtime": true,
+              "value": "son"
+            },
+            "full_name": {
+              "field_key": "family.son.full_name",
+              "required_runtime": true,
+              "value": "Тестов Арман Телеграмович"
+            },
+            "birth_date": {
+              "field_key": "family.son.birth_date",
+              "required_runtime": false,
+              "value": "2014-05-08"
+            },
+            "birth_place": {
+              "field_key": "family.son.birth_place",
+              "required_runtime": false,
+              "value": "г. Алматы"
+            },
+            "organization_name": {
+              "field_key": "family.son.organization_name",
+              "required_runtime": false,
+              "value": "Школа № 95 (тест)"
+            }
+          }
+        },
+        {
+          "record_key": "family.daughter",
+          "fields": {
+            "relationship_type": {
+              "field_key": "family.daughter.relationship_type",
+              "required_runtime": true,
+              "value": "daughter"
+            },
+            "full_name": {
+              "field_key": "family.daughter.full_name",
+              "required_runtime": true,
+              "value": "Тестова Дана Телеграмовна"
+            },
+            "birth_date": {
+              "field_key": "family.daughter.birth_date",
+              "required_runtime": false,
+              "value": "2017-09-14"
+            },
+            "birth_place": {
+              "field_key": "family.daughter.birth_place",
+              "required_runtime": false,
+              "value": "г. Алматы"
+            },
+            "organization_name": {
+              "field_key": "family.daughter.organization_name",
+              "required_runtime": false,
+              "value": "Детский сад «Балапан» (тест)"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-LANGUAGES": {
+      "section_code": "PPR-LANGUAGES",
+      "section_key": "languages",
+      "mandatory_policy_arch": "OPTIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "languages.kazakh",
+          "fields": {
+            "language": {
+              "field_key": "languages.kazakh.language",
+              "required_arch": "OPTIONAL",
+              "value": "казахский"
+            },
+            "proficiency": {
+              "field_key": "languages.kazakh.proficiency",
+              "required_arch": "OPTIONAL",
+              "value": "родной"
+            }
+          },
+          "spec_note": "language and proficiency follow WP-PR-003 §2.9 and §3.1 validation rule; target person_languages schema TBD."
+        },
+        {
+          "record_key": "languages.russian",
+          "fields": {
+            "language": {
+              "field_key": "languages.russian.language",
+              "required_arch": "OPTIONAL",
+              "value": "русский"
+            },
+            "proficiency": {
+              "field_key": "languages.russian.proficiency",
+              "required_arch": "OPTIONAL",
+              "value": "свободно"
+            }
+          }
+        },
+        {
+          "record_key": "languages.english",
+          "fields": {
+            "language": {
+              "field_key": "languages.english.language",
+              "required_arch": "OPTIONAL",
+              "value": "английский"
+            },
+            "proficiency": {
+              "field_key": "languages.english.proficiency",
+              "required_arch": "OPTIONAL",
+              "value": "средний"
+            },
+            "confirmation": {
+              "field_key": "languages.english.confirmation",
+              "required_arch": "OPTIONAL",
+              "value": "TEST-IELTS-6.5-2019"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-AWARDS": {
+      "section_code": "PPR-AWARDS",
+      "section_key": "awards",
+      "mandatory_policy_arch": "OPTIONAL",
+      "cardinality": "0..N",
+      "records": [
+        {
+          "record_key": "awards.honorary_letter_2021",
+          "fields": {
+            "title": {
+              "field_key": "awards.honorary_letter_2021.title",
+              "required_arch": "OPTIONAL",
+              "value": "Почётная грамота (тест)"
+            },
+            "date": {
+              "field_key": "awards.honorary_letter_2021.date",
+              "required_arch": "OPTIONAL",
+              "value": "2021-12-20"
+            }
+          },
+          "spec_note": "Transitional import shape award_records per WP-PR-003 §15.1 until person_awards is implemented."
+        },
+        {
+          "record_key": "awards.excellence_2024",
+          "fields": {
+            "title": {
+              "field_key": "awards.excellence_2024.title",
+              "required_arch": "OPTIONAL",
+              "value": "Благодарность за добросовестный труд (тест)"
+            },
+            "date": {
+              "field_key": "awards.excellence_2024.date",
+              "required_arch": "OPTIONAL",
+              "value": "2024-03-01"
+            }
+          }
+        }
+      ]
+    },
+    "PPR-MISC": {
+      "section_code": "PPR-MISC",
+      "section_key": "misc",
+      "mandatory_policy_arch": "OPTIONAL",
+      "cardinality": "0..N",
+      "deprecated": true,
+      "fields": {
+        "notes_raw": {
+          "field_key": "misc.notes_raw",
+          "required_arch": "OPTIONAL",
+          "value": null
+        }
+      },
+      "spec_note": "WP-PR-003 D-13: transitional legacy import only; intentionally empty in reference fixture."
+    }
+  },
+  "spec_gaps": {
+    "sections_without_normative_field_schema": [
+      "PPR-NAME-HISTORY",
+      "PPR-ADDRESSES",
+      "PPR-CONTACTS.email",
+      "PPR-LANGUAGES",
+      "PPR-MARITAL-STATUS",
+      "PPR-IDENTITY-DOCUMENTS (target person_documents schema pending EPIC-4/WP-PR-070)"
+    ],
+    "sections_not_in_ppr_catalog": [
+      "disciplinary_penalties (взыскания) — ADR-047 appendix: MISSING, no PPR-* section"
+    ]
+  }
+}
