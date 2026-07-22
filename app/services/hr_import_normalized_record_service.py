@@ -110,6 +110,21 @@ OVERRIDABLE_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
 
 DATE_OVERRIDE_FIELDS = frozenset({"start_date", "end_date", "issue_date", "expiry_date"})
 
+ALLOWED_PARSE_METHODS = frozenset(
+    {"regex_v1", "manual_override", "manual", "ai_extraction", "import_promoted"}
+)
+
+
+def sanitize_parse_method_for_storage(value: Any) -> str:
+    """Map parser flags to values allowed by chk_hinr_parse_method."""
+    raw = str(value or "regex_v1").strip() or "regex_v1"
+    if raw in ALLOWED_PARSE_METHODS:
+        return raw
+    base = raw.split("|", 1)[0].strip()
+    if base in ALLOWED_PARSE_METHODS:
+        return base
+    return "regex_v1"
+
 
 def normalized_records_available(conn: Connection) -> bool:
     row = conn.execute(
@@ -132,6 +147,23 @@ def norm_title(value: str) -> str:
 
 def norm_source_text(value: str) -> str:
     return " ".join((value or "").strip().split())
+
+
+def _compose_education_specialty_text(record: dict[str, Any]) -> str:
+    parts: list[str] = []
+    specialty = str(record.get("specialty") or "").strip()
+    qualification = str(record.get("qualification") or "").strip()
+    faculty = str(record.get("faculty") or "").strip()
+    study_form = str(record.get("study_form") or "").strip()
+    if specialty:
+        parts.append(specialty)
+    if qualification:
+        parts.append(f"квалификация: {qualification}")
+    if faculty:
+        parts.append(f"факультет: {faculty}")
+    if study_form:
+        parts.append(f"форма обучения: {study_form}")
+    return "; ".join(parts)
 
 
 def compute_source_record_key(
@@ -581,12 +613,20 @@ def _build_staging_rows_for_profile(
                 issue_date = _coerce_date(record.get("completed_at")) or _coerce_date(
                     enrichment.get("parsed_issued_at")
                 )
-                start_date = None
-                end_date = None
+                start_date = _coerce_date(record.get("started_at")) or _coerce_date(
+                    enrichment.get("parsed_start_at")
+                )
+                end_date = _coerce_date(record.get("completed_at")) or _coerce_date(
+                    enrichment.get("parsed_end_at")
+                ) or issue_date
+                if issue_date is None:
+                    issue_date = end_date
                 expiry_date = None
                 hours = _coerce_hours(enrichment.get("parsed_hours"))
                 document_number = ""
-                specialty_text = str(record.get("specialty") or enrichment.get("specialty") or "")
+                specialty_text = _compose_education_specialty_text(record) or str(
+                    record.get("specialty") or enrichment.get("specialty") or ""
+                )
 
             if not source_field:
                 source_field = {
@@ -607,7 +647,9 @@ def _build_staging_rows_for_profile(
                 else None
             )
 
-            parse_method = str(record.get("parse_method") or enrichment.get("parse_method") or "regex_v1")
+            parse_method = sanitize_parse_method_for_storage(
+                record.get("parse_method") or enrichment.get("parse_method") or "regex_v1"
+            )
             confidence = _coerce_confidence(record.get("confidence"))
             if confidence is None:
                 confidence = _coerce_confidence(enrichment.get("confidence_score"))
