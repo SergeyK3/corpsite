@@ -43,9 +43,9 @@ describe("intakePeriodFormat", () => {
     expect(
       formatIntakeTrainingReviewLine({
         course_name: "Охрана труда",
-        year: "2021-03-10",
+        year_to: "2021-03-10",
       }),
-    ).toBe("Охрана труда (10.03.2021)");
+    ).toBe("Охрана труда; 10.03.2021");
 
     expect(
       formatIntakeRelativeReviewLine({

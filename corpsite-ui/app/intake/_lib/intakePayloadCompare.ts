@@ -1,4 +1,9 @@
-import type { IntakeDraftPayload, IntakeEducation } from "./intakeApi.client";
+import type {
+  IntakeAdditionalPayload,
+  IntakeDraftPayload,
+  IntakeEducation,
+  IntakeTraining,
+} from "./intakeApi.client";
 
 type StringRecord<T> = { [K in keyof T]: string };
 
@@ -6,10 +11,22 @@ export type CanonicalIntakeDraftPayload = {
   personal: StringRecord<IntakeDraftPayload["personal"]>;
   contacts: StringRecord<IntakeDraftPayload["contacts"]>;
   education: StringRecord<IntakeEducation>[];
-  training: StringRecord<IntakeDraftPayload["training"][number]>[];
+  training: StringRecord<
+    Omit<IntakeTraining, "hours_is_manual" | "year"> & { hours_is_manual: string }
+  >[];
   relatives: StringRecord<IntakeDraftPayload["relatives"][number]>[];
   employment_biography: StringRecord<IntakeDraftPayload["employment_biography"][number]>[];
   military: StringRecord<IntakeDraftPayload["military"]>;
+  additional: {
+    foreign_languages: StringRecord<IntakeAdditionalPayload["foreign_languages"][number]>[];
+    foreign_languages_none: string;
+    awards: StringRecord<IntakeAdditionalPayload["awards"][number]>[];
+    awards_none: string;
+    academic_degrees: StringRecord<IntakeAdditionalPayload["academic_degrees"][number]>[];
+    academic_degrees_none: string;
+    academic_titles: StringRecord<IntakeAdditionalPayload["academic_titles"][number]>[];
+    academic_titles_none: string;
+  };
   current_step: string;
 };
 
@@ -29,6 +46,51 @@ function normalizeDict<T extends Record<string, string>>(
     result[key] = normalizeScalar(source[key] ?? template[key] ?? "");
   }
   return result;
+}
+
+function normalizeTrainingItems(
+  items: IntakeTraining[] | undefined,
+): CanonicalIntakeDraftPayload["training"] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    institution: normalizeScalar(item.institution),
+    course_name: normalizeScalar(item.course_name),
+    year_from: normalizeScalar(item.year_from),
+    year_to: normalizeScalar(item.year_to ?? item.year),
+    document_type: normalizeScalar(item.document_type),
+    document_number: normalizeScalar(item.document_number),
+    hours: normalizeScalar(item.hours),
+    hours_is_manual: item.hours_is_manual ? "true" : "false",
+  }));
+}
+
+function normalizeAdditionalBlock(
+  block: IntakeAdditionalPayload | undefined,
+): CanonicalIntakeDraftPayload["additional"] {
+  const source = block ?? emptyIntakeAdditionalDefaults();
+  return {
+    foreign_languages: normalizeListItems(source.foreign_languages),
+    foreign_languages_none: source.foreign_languages_none ? "true" : "false",
+    awards: normalizeListItems(source.awards),
+    awards_none: source.awards_none ? "true" : "false",
+    academic_degrees: normalizeListItems(source.academic_degrees),
+    academic_degrees_none: source.academic_degrees_none ? "true" : "false",
+    academic_titles: normalizeListItems(source.academic_titles),
+    academic_titles_none: source.academic_titles_none ? "true" : "false",
+  };
+}
+
+function emptyIntakeAdditionalDefaults(): IntakeAdditionalPayload {
+  return {
+    foreign_languages: [],
+    foreign_languages_none: false,
+    awards: [],
+    awards_none: false,
+    academic_degrees: [],
+    academic_degrees_none: false,
+    academic_titles: [],
+    academic_titles_none: false,
+  };
 }
 
 function normalizeListItems<T extends Record<string, string>>(
@@ -74,7 +136,7 @@ export function canonicalizeIntakePayloadForCompare(
       payload.contacts,
     ),
     education: normalizeListItems(payload.education),
-    training: normalizeListItems(payload.training),
+    training: normalizeTrainingItems(payload.training),
     relatives: normalizeListItems(payload.relatives),
     employment_biography: normalizeListItems(payload.employment_biography),
     military: normalizeDict(
@@ -92,6 +154,7 @@ export function canonicalizeIntakePayloadForCompare(
       },
       payload.military,
     ),
+    additional: normalizeAdditionalBlock(payload.additional),
     current_step: payload.current_step,
   };
 }

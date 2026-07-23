@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import IntakeDraftFormEditor from "./IntakeDraftFormEditor";
-import { emptyIntakeDraftPayload, INTAKE_STEPS } from "../_lib/intakeApi.client";
+import { emptyIntakeDraftPayload, formatIntakeStepHeaderTitle, INTAKE_STEPS } from "../_lib/intakeApi.client";
 
 vi.mock("./IntakeDictionaryCombobox", () => ({
   default: ({ label, testId }: { label: string; testId?: string }) => (
@@ -18,6 +18,13 @@ vi.mock("./IntakeMilitaryCombobox", () => ({
 
 const personalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "personal");
 const educationStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "education");
+const additionalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "additional");
+
+function expandEducationRow(index = 0) {
+  const desktop = screen.getByTestId("intake-education-desktop-view");
+  fireEvent.click(within(desktop).getByTestId(`intake-education-actions-${index}`));
+  fireEvent.click(within(desktop).getByTestId(`intake-education-row-edit-${index}`));
+}
 
 function renderEditor(
   payload = emptyIntakeDraftPayload(),
@@ -38,6 +45,17 @@ function renderEditor(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("IntakeDraftFormEditor step headers", () => {
+  INTAKE_STEPS.forEach((step, index) => {
+    it(`shows unified header for step ${index + 1} (${step.id})`, () => {
+      renderEditor(emptyIntakeDraftPayload(), index);
+      expect(
+        screen.getByRole("heading", { name: formatIntakeStepHeaderTitle(index) }),
+      ).toBeInTheDocument();
+    });
+  });
 });
 
 describe("IntakeDraftFormEditor date fields", () => {
@@ -76,19 +94,23 @@ describe("IntakeDraftFormEditor date fields", () => {
         year_to: "2018",
         specialty: "",
         qualification: "",
+        document_type: "diploma",
         diploma_number: "",
       },
     ];
 
     renderEditor(payload, educationStepIndex);
 
-    const fromInput = screen.getByTestId("intake-education-year-from-0");
-    const toInput = screen.getByTestId("intake-education-year-to-0");
+    expandEducationRow(0);
+
+    const desktop = screen.getByTestId("intake-education-desktop-view");
+    const fromInput = within(desktop).getByTestId("intake-education-year-from-0");
+    const toInput = within(desktop).getByTestId("intake-education-year-to-0");
 
     expect(fromInput).toHaveAttribute("placeholder", "ДД.ММ.ГГГГ");
     expect(fromInput).toHaveValue("01.09.2014");
     expect(toInput).toHaveValue("2018 (уточните дату)");
-    expect(screen.getByTestId("intake-education-year-to-0-hint")).toHaveTextContent(
+    expect(within(desktop).getByTestId("intake-education-year-to-0-hint")).toHaveTextContent(
       "Укажите полную дату в формате ДД.ММ.ГГГГ",
     );
   });
@@ -103,18 +125,29 @@ describe("IntakeDraftFormEditor date fields", () => {
         year_to: "",
         specialty: "",
         qualification: "",
+        document_type: "diploma",
         diploma_number: "",
       },
     ];
     const onChange = vi.fn();
     renderEditor(payload, educationStepIndex, onChange);
 
-    fireEvent.change(screen.getByTestId("intake-education-year-from-0"), {
+    expandEducationRow(0);
+
+    fireEvent.change(within(screen.getByTestId("intake-education-desktop-view")).getByTestId("intake-education-year-from-0"), {
       target: { value: "01.09.2014" },
     });
 
     expect(onChange).toHaveBeenCalled();
     const nextPayload = onChange.mock.calls.at(-1)?.[0];
     expect(nextPayload.education[0].year_from).toBe("2014-09-01");
+  });
+
+  it("renders additional step sections", () => {
+    renderEditor(emptyIntakeDraftPayload(), additionalStepIndex);
+    expect(screen.getByTestId("intake-additional-step")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-foreign-languages-section")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-awards-section")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-academic-degrees-section")).toBeInTheDocument();
   });
 });

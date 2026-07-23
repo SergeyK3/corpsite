@@ -29,6 +29,7 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_TRAINING,
 )
 from app.ppr.read.models import (
+    PprAdditionalReadSlice,
     PprCompositeReadMetadata,
     PprCompositeReadModel,
     PprCompositeSummary,
@@ -121,6 +122,7 @@ def test_external_employment_record_response_serializes_canonical_fields() -> No
         military=_empty_section(SECTION_CODE_PPR_MILITARY),
         events=None,
         intended_employment=None,
+        additional=PprAdditionalReadSlice.empty(),
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,
             source_person_id=42,
@@ -220,6 +222,7 @@ def test_external_employment_record_response_preserves_per_record_employee_conte
         military=_empty_section(SECTION_CODE_PPR_MILITARY),
         events=None,
         intended_employment=None,
+        additional=PprAdditionalReadSlice.empty(),
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,
             source_person_id=42,
@@ -272,6 +275,7 @@ def test_external_employment_record_response_defaults_source_system() -> None:
         military=_empty_section(SECTION_CODE_PPR_MILITARY),
         events=None,
         intended_employment=None,
+        additional=PprAdditionalReadSlice.empty(),
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,
             source_person_id=42,

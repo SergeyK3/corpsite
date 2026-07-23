@@ -68,6 +68,7 @@ def intake_command_id(application_id: int, section: str, index: int | str = 0) -
 def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     mapped: list[dict[str, Any]] = []
     for item in items:
+        document_type = str(item.get("document_type") or "diploma").strip() or "diploma"
         mapped.append(
             {
                 "education_kind": resolve_intake_education_kind(item.get("education_type")),
@@ -77,7 +78,10 @@ def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "started_at": parse_date_value(item.get("year_from")),
                 "completed_at": parse_date_value(item.get("year_to")),
                 "diploma_number": str(item.get("diploma_number") or "").strip() or None,
-                "metadata": {"source": "personnel_intake"},
+                "metadata": {
+                    "source": "personnel_intake",
+                    "document_type": document_type,
+                },
             }
         )
     return mapped
@@ -92,14 +96,22 @@ def map_training_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             hours = None
         else:
             hours = Decimal(str(hours_raw))
+        year_to = item.get("year_to") or item.get("year")
+        document_type = str(item.get("document_type") or "certificate").strip() or "certificate"
         mapped.append(
             {
                 "training_kind": TRAINING_KIND_COURSE,
                 "title": str(item.get("course_name") or "").strip() or None,
                 "organization_name": str(item.get("institution") or "").strip() or None,
                 "hours": hours,
-                "completed_at": parse_date_value(item.get("year")),
-                "metadata": {"source": "personnel_intake"},
+                "started_at": parse_date_value(item.get("year_from")),
+                "completed_at": parse_date_value(year_to),
+                "certificate_number": str(item.get("document_number") or "").strip() or None,
+                "metadata": {
+                    "source": "personnel_intake",
+                    "document_type": document_type,
+                    "hours_is_manual": bool(item.get("hours_is_manual")),
+                },
             }
         )
     return mapped
@@ -160,3 +172,70 @@ def map_military_record(block: dict[str, Any]) -> dict[str, Any]:
             "specialty_name": str(block.get("specialty_name") or "").strip() or None,
         },
     }
+
+
+def map_foreign_language_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapped: list[dict[str, Any]] = []
+    for item in items:
+        mapped.append(
+            {
+                "language": str(item.get("language") or "").strip() or None,
+                "proficiency": str(item.get("proficiency") or "").strip() or None,
+                "metadata": {"source": "personnel_intake"},
+            }
+        )
+    return mapped
+
+
+def map_award_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapped: list[dict[str, Any]] = []
+    for item in items:
+        mapped.append(
+            {
+                "category": str(item.get("category") or "").strip() or None,
+                "name": str(item.get("name") or "").strip() or None,
+                "issued_by": str(item.get("issued_by") or "").strip() or None,
+                "awarded_at": parse_date_value(item.get("awarded_at") or item.get("date")),
+                "document_number": str(item.get("document_number") or "").strip() or None,
+                "metadata": {"source": "personnel_intake"},
+            }
+        )
+    return mapped
+
+
+def map_academic_degree_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapped: list[dict[str, Any]] = []
+    for item in items:
+        mapped.append(
+            {
+                "degree": str(item.get("degree") or "").strip() or None,
+                "degree_other": str(item.get("degree_other") or "").strip() or None,
+                "field_of_science": str(item.get("field_of_science") or item.get("degree_type") or "").strip()
+                or None,
+                "completed_at": parse_date_value(item.get("completed_at")),
+                "document_number": str(item.get("document_number") or "").strip() or None,
+                "label": str(item.get("label") or "").strip() or None,
+                "degree_type": str(item.get("degree_type") or "").strip() or None,
+                "metadata": {"source": "personnel_intake"},
+            }
+        )
+    return mapped
+
+
+def map_academic_title_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapped: list[dict[str, Any]] = []
+    for item in items:
+        mapped.append(
+            {
+                "academic_title": str(item.get("academic_title") or "").strip() or None,
+                "academic_title_other": str(item.get("academic_title_other") or "").strip() or None,
+                "field_of_science": str(item.get("field_of_science") or item.get("degree_type") or "").strip()
+                or None,
+                "completed_at": parse_date_value(item.get("completed_at")),
+                "document_number": str(item.get("document_number") or "").strip() or None,
+                "label": str(item.get("label") or "").strip() or None,
+                "degree_type": str(item.get("degree_type") or "").strip() or None,
+                "metadata": {"source": "personnel_intake"},
+            }
+        )
+    return mapped

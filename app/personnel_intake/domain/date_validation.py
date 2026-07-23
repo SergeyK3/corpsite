@@ -102,6 +102,16 @@ def validate_document_date_field(value: Any, *, field: str, errors: list[str]) -
         errors.append(f"{field}: {INTAKE_INCOMPLETE_DATE_MESSAGE}")
 
 
+def _parse_period_date(value: Any) -> date | None:
+    iso = _parse_to_iso(value)
+    if not iso or not is_valid_intake_full_date_iso(iso):
+        return None
+    try:
+        return date.fromisoformat(iso)
+    except ValueError:
+        return None
+
+
 def collect_intake_date_validation_errors(payload: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     personal = payload.get("personal") or {}
@@ -123,8 +133,41 @@ def collect_intake_date_validation_errors(payload: dict[str, Any]) -> list[str]:
         for index, item in enumerate(training):
             if not isinstance(item, dict):
                 continue
-            if is_incomplete_intake_period_date(item.get("year")):
-                errors.append(f"training[{index}].year")
+            year_to = item.get("year_to") or item.get("year")
+            if is_incomplete_intake_period_date(item.get("year_from")):
+                errors.append(f"training[{index}].year_from")
+            if is_incomplete_intake_period_date(year_to):
+                errors.append(f"training[{index}].year_to")
+            elif (
+                _parse_period_date(item.get("year_from")) is not None
+                and _parse_period_date(year_to) is not None
+                and _parse_period_date(item.get("year_from")) > _parse_period_date(year_to)
+            ):
+                errors.append(f"training[{index}].year_from")
+
+    additional = payload.get("additional") or {}
+    if isinstance(additional, dict):
+        awards = additional.get("awards") or []
+        if isinstance(awards, list):
+            for index, item in enumerate(awards):
+                if not isinstance(item, dict):
+                    continue
+                if is_incomplete_intake_period_date(item.get("awarded_at") or item.get("date")):
+                    errors.append(f"additional.awards[{index}].awarded_at")
+        degrees = additional.get("academic_degrees") or []
+        if isinstance(degrees, list):
+            for index, item in enumerate(degrees):
+                if not isinstance(item, dict):
+                    continue
+                if is_incomplete_intake_period_date(item.get("completed_at")):
+                    errors.append(f"additional.academic_degrees[{index}].completed_at")
+        titles = additional.get("academic_titles") or []
+        if isinstance(titles, list):
+            for index, item in enumerate(titles):
+                if not isinstance(item, dict):
+                    continue
+                if is_incomplete_intake_period_date(item.get("completed_at")):
+                    errors.append(f"additional.academic_titles[{index}].completed_at")
 
     relatives = payload.get("relatives") or []
     if isinstance(relatives, list):

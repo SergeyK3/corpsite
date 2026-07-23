@@ -48,6 +48,50 @@ class PprIntendedEmploymentUpdateRequest(BaseModel):
     employment_rate: float | None = Field(default=None, gt=0, le=2)
 
 
+class PprForeignLanguageRecordResponse(BaseModel):
+    language: str
+    proficiency: str
+
+
+class PprAwardRecordResponse(BaseModel):
+    category: str = ""
+    name: str = ""
+    issued_by: str = ""
+    awarded_at: str = ""
+    document_number: str = ""
+
+
+class PprAcademicDegreeRecordResponse(BaseModel):
+    degree: str = ""
+    degree_other: str = ""
+    field_of_science: str = ""
+    completed_at: str = ""
+    document_number: str = ""
+    label: str | None = None
+    degree_type: str | None = None
+
+
+class PprAcademicTitleRecordResponse(BaseModel):
+    academic_title: str = ""
+    academic_title_other: str = ""
+    field_of_science: str = ""
+    completed_at: str = ""
+    document_number: str = ""
+    label: str | None = None
+    degree_type: str | None = None
+
+
+class PprAdditionalProfileResponse(BaseModel):
+    foreign_languages: list[PprForeignLanguageRecordResponse] = Field(default_factory=list)
+    foreign_languages_none: bool = False
+    awards: list[PprAwardRecordResponse] = Field(default_factory=list)
+    awards_none: bool = False
+    academic_degrees: list[PprAcademicDegreeRecordResponse] = Field(default_factory=list)
+    academic_degrees_none: bool = False
+    academic_titles: list[PprAcademicTitleRecordResponse] = Field(default_factory=list)
+    academic_titles_none: bool = False
+
+
 class PprHireDefaultsResponse(BaseModel):
     person_id: int
     org_group_id: int | None = None
@@ -230,6 +274,7 @@ class PprCompositeReadResponse(BaseModel):
     sections: dict[str, PprSectionResponse]
     events: PprEventSummaryResponse | None = None
     intended_employment: PprIntendedEmploymentResponse | None = None
+    additional: PprAdditionalProfileResponse
     metadata: PprReadMetadataResponse
 
 

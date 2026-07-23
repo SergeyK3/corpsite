@@ -328,6 +328,16 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
       limit: 20,
     },
     intended_employment: null,
+    additional: {
+      foreign_languages: [],
+      foreign_languages_none: false,
+      awards: [],
+      awards_none: false,
+      academic_degrees: [],
+      academic_degrees_none: false,
+      academic_titles: [],
+      academic_titles_none: false,
+    },
     metadata: {
       read_mode: "composite",
       source: "ppr",
@@ -410,6 +420,7 @@ describe("PprPersonalCardPageClient", () => {
     expect(within(nav).getByRole("link", { name: "Обучение и повышение квалификации" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Родственники" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Воинский учёт" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Дополнительные сведения" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая биография" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая деятельность" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();

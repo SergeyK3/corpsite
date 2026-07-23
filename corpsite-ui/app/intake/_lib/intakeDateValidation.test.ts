@@ -124,7 +124,16 @@ describe("intakeDateValidation", () => {
         diploma_number: "",
       },
     ];
-    payload.training = [{ institution: "Центр", year: "2021-03-10", course_name: "Охрана труда", hours: "" }];
+    payload.training = [
+      {
+        institution: "Центр",
+        year_from: "2021-03-10",
+        year_to: "2021-03-10",
+        course_name: "Охрана труда",
+        hours: "8",
+        hours_is_manual: false,
+      },
+    ];
     payload.relatives = [{ relationship: "мать", full_name: "Иванова", birth_year: "1965-04-12", work_place: "" }];
     payload.employment_biography = [
       {

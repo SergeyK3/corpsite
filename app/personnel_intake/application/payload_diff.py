@@ -15,6 +15,12 @@ def _normalize_scalar(value: Any) -> str:
     return str(value)
 
 
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _normalize_dict(template: dict[str, Any], overlay: dict[str, Any] | None) -> dict[str, str]:
     source = overlay or {}
     return {key: _normalize_scalar(source.get(key, template.get(key, ""))) for key in template}
@@ -43,6 +49,21 @@ def canonicalize_intake_payload_for_diff(payload: dict[str, Any] | None) -> dict
     result["training"] = _normalize_list_items(source.get("training"))
     result["relatives"] = _normalize_list_items(source.get("relatives"))
     result["employment_biography"] = _normalize_list_items(source.get("employment_biography"))
+    additional = source.get("additional") or {}
+    template_additional = template["additional"]
+    result["additional"] = {
+        "foreign_languages": _normalize_list_items(additional.get("foreign_languages")),
+        "foreign_languages_none": _normalize_bool(additional.get("foreign_languages_none")),
+        "awards": _normalize_list_items(additional.get("awards")),
+        "awards_none": _normalize_bool(additional.get("awards_none")),
+        "academic_degrees": _normalize_list_items(additional.get("academic_degrees")),
+        "academic_degrees_none": _normalize_bool(additional.get("academic_degrees_none")),
+        "academic_titles": _normalize_list_items(additional.get("academic_titles")),
+        "academic_titles_none": _normalize_bool(additional.get("academic_titles_none")),
+    }
+    for key in template_additional:
+        if key not in result["additional"]:
+            result["additional"][key] = template_additional[key]
     result["current_step"] = _normalize_scalar(source.get("current_step", template["current_step"]))
     return result
 

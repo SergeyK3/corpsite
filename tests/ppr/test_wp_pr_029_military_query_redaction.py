@@ -603,7 +603,7 @@ def _minimal_composite(military_section: PprSectionAggregation):
     from app.ppr.domain.models import PPR_LIFECYCLE_CREATED
     from app.ppr.domain.person_models import PersonGeneralReadSnapshot
     from app.ppr.domain.section_models import SECTION_CODE_PPR_EDUCATION, SECTION_CODE_PPR_FAMILY, SECTION_CODE_PPR_TRAINING
-    from app.ppr.read.models import PprCompositeReadMetadata, PprCompositeReadModel
+    from app.ppr.read.models import PprAdditionalReadSlice, PprCompositeReadMetadata, PprCompositeReadModel
 
     now = datetime.now(UTC)
     identity = PersonIdentitySnapshot(
@@ -653,6 +653,7 @@ def _minimal_composite(military_section: PprSectionAggregation):
         military=military_section,
         events=None,
         intended_employment=None,
+        additional=PprAdditionalReadSlice.empty(),
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,
             source_person_id=1,

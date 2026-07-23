@@ -4,6 +4,8 @@ import { resolveApiUrl } from "@/lib/apiBase";
 
 export type IntakeEducationType = "basic" | "internship" | "residency" | "masters" | "phd";
 
+export type IntakeEducationDocumentType = "diploma" | "certificate";
+
 export type IntakeEducation = {
   education_type: IntakeEducationType;
   institution: string;
@@ -11,7 +13,96 @@ export type IntakeEducation = {
   year_to: string;
   specialty: string;
   qualification: string;
+  document_type: IntakeEducationDocumentType;
   diploma_number: string;
+};
+
+export const INTAKE_EDUCATION_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
+  value: IntakeEducationDocumentType;
+  label: string;
+}> = [
+  { value: "diploma", label: "Диплом" },
+  { value: "certificate", label: "Сертификат" },
+];
+
+export type IntakeTrainingDocumentType = "certificate" | "witness";
+
+export type IntakeTraining = {
+  institution: string;
+  course_name: string;
+  year_from: string;
+  year_to: string;
+  document_type: IntakeTrainingDocumentType;
+  document_number: string;
+  hours: string;
+  hours_is_manual: boolean;
+  /** Legacy single end-date field kept for backward-compatible reads. */
+  year?: string;
+};
+
+export const INTAKE_TRAINING_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
+  value: IntakeTrainingDocumentType;
+  label: string;
+}> = [
+  { value: "certificate", label: "Сертификат" },
+  { value: "witness", label: "Свидетельство" },
+];
+
+/** Import profile contract exposes degrees.records — safe to collect in intake additional step. */
+export const INTAKE_SUPPORTS_ACADEMIC_DEGREES = true;
+
+/** No driver_license field exists in import/PPR contracts yet. */
+export const INTAKE_SUPPORTS_DRIVER_LICENSE = false;
+
+export type IntakeForeignLanguage = {
+  language: string;
+  proficiency: string;
+};
+
+/** Aligns with import profile award_records core fields plus issued_by/document_number. */
+export type IntakeAward = {
+  category: string;
+  name: string;
+  issued_by: string;
+  awarded_at: string;
+  document_number: string;
+  /** Legacy merged value — migrated to category/name on read. */
+  title?: string;
+};
+
+/** Degree-only academic record. */
+export type IntakeAcademicDegree = {
+  degree: string;
+  degree_other: string;
+  field_of_science: string;
+  completed_at: string;
+  document_number: string;
+  /** Legacy combined label — migrated on read. */
+  label?: string;
+  /** Legacy free-form type — migrated to field_of_science when structured fields empty. */
+  degree_type?: string;
+};
+
+/** Title-only academic record. */
+export type IntakeAcademicTitle = {
+  academic_title: string;
+  academic_title_other: string;
+  field_of_science: string;
+  completed_at: string;
+  document_number: string;
+  label?: string;
+  degree_type?: string;
+};
+
+export type IntakeAdditionalPayload = {
+  foreign_languages: IntakeForeignLanguage[];
+  foreign_languages_none: boolean;
+  awards: IntakeAward[];
+  awards_none: boolean;
+  academic_degrees: IntakeAcademicDegree[];
+  academic_degrees_none: boolean;
+  academic_titles: IntakeAcademicTitle[];
+  academic_titles_none: boolean;
 };
 
 export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
@@ -43,12 +134,7 @@ export type IntakeDraftPayload = {
     residence_address: string;
   };
   education: IntakeEducation[];
-  training: Array<{
-    institution: string;
-    year: string;
-    course_name: string;
-    hours: string;
-  }>;
+  training: IntakeTraining[];
   relatives: Array<{
     relationship: string;
     full_name: string;
@@ -74,6 +160,7 @@ export type IntakeDraftPayload = {
     registration_group: string;
     registration_category: string;
   };
+  additional: IntakeAdditionalPayload;
   current_step: string;
 };
 
@@ -134,10 +221,17 @@ export const INTAKE_STEPS = [
   { id: "relatives", title: "Родственники" },
   { id: "employment_biography", title: "Трудовая биография" },
   { id: "military", title: "Воинский учёт" },
+  { id: "additional", title: "Дополнительные сведения" },
   { id: "review", title: "Проверка" },
 ] as const;
 
 export const INTAKE_ON_BEHALF_INITIAL_STEP_ID = "employment_biography";
+
+export function formatIntakeStepHeaderTitle(stepIndex: number): string {
+  const safeIndex = Math.min(Math.max(stepIndex, 0), INTAKE_STEPS.length - 1);
+  const step = INTAKE_STEPS[safeIndex];
+  return `Анкета претендента · шаг ${safeIndex + 1} из ${INTAKE_STEPS.length} — ${step.title}`;
+}
 
 /** HR on-behalf edit opens on employment biography, not the applicant's saved step. */
 export function resolveIntakeOnBehalfInitialStepIndex(): number {
@@ -180,6 +274,16 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
       commissariat: "",
       registration_group: "",
       registration_category: "",
+    },
+    additional: {
+      foreign_languages: [],
+      foreign_languages_none: false,
+      awards: [],
+      awards_none: false,
+      academic_degrees: [],
+      academic_degrees_none: false,
+      academic_titles: [],
+      academic_titles_none: false,
     },
     current_step: "personal",
   };

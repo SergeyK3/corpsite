@@ -41,6 +41,16 @@ def empty_intake_draft_payload() -> dict[str, Any]:
             "registration_group": "",
             "registration_category": "",
         },
+        "additional": {
+            "foreign_languages": [],
+            "foreign_languages_none": False,
+            "awards": [],
+            "awards_none": False,
+            "academic_degrees": [],
+            "academic_degrees_none": False,
+            "academic_titles": [],
+            "academic_titles_none": False,
+        },
         "current_step": "personal",
     }
 
