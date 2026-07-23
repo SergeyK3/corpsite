@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatPersonnelDayDateForDisplay,
+  isIncompletePersonnelBirthDate,
   isIncompletePersonnelDocumentDate,
   isLegacyYearOnlyDocumentDate,
   isValidPersonnelDayDateIso,
@@ -32,6 +33,14 @@ describe("personnelDayDate", () => {
     expect(parsePersonnelDayDateInput("15.09.2022")).toBe("2022-09-15");
     expect(normalizePersonnelDocumentDateInput("15.09.2022")).toBe("2022-09-15");
     expect(normalizePersonnelDocumentDateInput("2018")).toBe("2018");
+  });
+
+  it("uses day precision when checking incomplete parsed document and birth dates", () => {
+    expect(parsePersonnelDayDateInput("15.09.2018")).toBe("2018-09-15");
+    expect(isIncompletePersonnelDocumentDate("15.09.2018")).toBe(false);
+    expect(isIncompletePersonnelDocumentDate("15.09")).toBe(true);
+    expect(isIncompletePersonnelBirthDate("1990-01-01")).toBe(false);
+    expect(isIncompletePersonnelBirthDate("1990")).toBe(true);
   });
 
   it("validates document dates for save", () => {

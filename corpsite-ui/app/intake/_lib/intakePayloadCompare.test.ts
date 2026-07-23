@@ -37,4 +37,46 @@ describe("intakePayloadCompare", () => {
     right.current_step = "review";
     expect(intakePayloadsEqual(left, right)).toBe(true);
   });
+
+  it("canonicalizes typed personal section with stable keys and empty defaults", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+
+    const canonical = canonicalizeIntakePayloadForCompare(payload);
+
+    expect(canonical.personal).toEqual({
+      last_name: "Петров",
+      first_name: "Пётр",
+      middle_name: "",
+      birth_date: "1990-05-20",
+      birth_place: "",
+      gender: "",
+      citizenship: "",
+      nationality: "",
+    });
+    expect(Object.keys(canonical.personal)).toEqual([
+      "last_name",
+      "first_name",
+      "middle_name",
+      "birth_date",
+      "birth_place",
+      "gender",
+      "citizenship",
+      "nationality",
+    ]);
+  });
+
+  it("treats equivalent payloads as equal after scalar normalization", () => {
+    const left = emptyIntakeDraftPayload();
+    left.personal.last_name = "Петров";
+    left.contacts.email = "petrov@example.com";
+
+    const right = structuredClone(left);
+    right.personal = { ...left.personal, middle_name: "" };
+    right.contacts = { ...left.contacts, mobile_phone: "" };
+
+    expect(intakePayloadsEqual(left, right)).toBe(true);
+  });
 });

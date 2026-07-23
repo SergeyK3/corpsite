@@ -1,30 +1,55 @@
-import type { IntakeDraftPayload } from "./intakeApi.client";
+import type { IntakeDraftPayload, IntakeEducation } from "./intakeApi.client";
 
-function normalizeScalar(value: unknown): string {
+type StringRecord<T> = { [K in keyof T]: string };
+
+export type CanonicalIntakeDraftPayload = {
+  personal: StringRecord<IntakeDraftPayload["personal"]>;
+  contacts: StringRecord<IntakeDraftPayload["contacts"]>;
+  education: StringRecord<IntakeEducation>[];
+  training: StringRecord<IntakeDraftPayload["training"][number]>[];
+  relatives: StringRecord<IntakeDraftPayload["relatives"][number]>[];
+  employment_biography: StringRecord<IntakeDraftPayload["employment_biography"][number]>[];
+  military: StringRecord<IntakeDraftPayload["military"]>;
+  current_step: string;
+};
+
+function normalizeScalar(value: string | null | undefined): string {
   if (value == null) return "";
   return String(value);
 }
 
-function normalizeDict(
-  template: Record<string, string>,
-  overlay: Record<string, string> | undefined,
-): Record<string, string> {
-  const source = overlay ?? {};
-  return Object.fromEntries(
-    Object.keys(template).map((key) => [key, normalizeScalar(source[key] ?? template[key] ?? "")]),
-  );
+function normalizeDict<T extends Record<string, string>>(
+  template: T,
+  overlay: Partial<T> | undefined,
+): StringRecord<T> {
+  const source: Partial<T> = overlay ?? {};
+  const result: StringRecord<T> = { ...template };
+  for (const key in template) {
+    if (!Object.prototype.hasOwnProperty.call(template, key)) continue;
+    result[key] = normalizeScalar(source[key] ?? template[key] ?? "");
+  }
+  return result;
 }
 
-function normalizeListItems(items: unknown): Array<Record<string, string>> {
+function normalizeListItems<T extends Record<string, string>>(
+  items: T[] | undefined,
+): Array<StringRecord<T>> {
   if (!Array.isArray(items)) return [];
   return items
-    .filter((item): item is Record<string, string> => typeof item === "object" && item != null)
-    .map((item) =>
-      Object.fromEntries(Object.entries(item).map(([key, value]) => [key, normalizeScalar(value)])),
-    );
+    .filter((item): item is T => typeof item === "object" && item != null)
+    .map((item) => {
+      const normalized: StringRecord<T> = { ...item };
+      for (const key in item) {
+        if (!Object.prototype.hasOwnProperty.call(item, key)) continue;
+        normalized[key] = normalizeScalar(item[key] ?? "");
+      }
+      return normalized;
+    });
 }
 
-export function canonicalizeIntakePayloadForCompare(payload: IntakeDraftPayload): IntakeDraftPayload {
+export function canonicalizeIntakePayloadForCompare(
+  payload: IntakeDraftPayload,
+): CanonicalIntakeDraftPayload {
   return {
     personal: normalizeDict(
       {
@@ -48,12 +73,10 @@ export function canonicalizeIntakePayloadForCompare(payload: IntakeDraftPayload)
       },
       payload.contacts,
     ),
-    education: normalizeListItems(payload.education) as IntakeDraftPayload["education"],
-    training: normalizeListItems(payload.training) as IntakeDraftPayload["training"],
-    relatives: normalizeListItems(payload.relatives) as IntakeDraftPayload["relatives"],
-    employment_biography: normalizeListItems(
-      payload.employment_biography,
-    ) as IntakeDraftPayload["employment_biography"],
+    education: normalizeListItems(payload.education),
+    training: normalizeListItems(payload.training),
+    relatives: normalizeListItems(payload.relatives),
+    employment_biography: normalizeListItems(payload.employment_biography),
     military: normalizeDict(
       {
         status: "",

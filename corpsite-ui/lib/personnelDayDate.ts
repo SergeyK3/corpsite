@@ -46,7 +46,7 @@ export function isIncompletePersonnelDocumentDate(value: string | null | undefin
   if (PARTIAL_YEAR_RE.test(text) || YEAR_RE.test(text)) return true;
   if (isLegacyYearOnlyDocumentDate(text)) return true;
   if (ISO_DATE_RE.test(text)) return isYearOnlyIsoDate(text);
-  return !isValidPersonnelDayDateIso(parsePersonnelDayDateInput(text, "day"));
+  return !isValidPersonnelDayDateIso(parsePersonnelDayDateInput(text));
 }
 
 /** Incomplete birth-style dates where January 1 remains valid. */
@@ -54,7 +54,7 @@ export function isIncompletePersonnelBirthDate(value: string | null | undefined)
   const text = normalizeText(value);
   if (!text) return false;
   if (PARTIAL_YEAR_RE.test(text) || YEAR_RE.test(text)) return true;
-  return !isValidPersonnelDayDateIso(parsePersonnelDayDateInput(text, "day"));
+  return !isValidPersonnelDayDateIso(parsePersonnelDayDateInput(text));
 }
 
 export function isIncompletePersonnelDayDate(

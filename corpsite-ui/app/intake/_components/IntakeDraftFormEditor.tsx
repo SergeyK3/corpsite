@@ -35,11 +35,16 @@ import {
   formatIntakeBirthDateForDisplay,
   formatIntakeEducationReviewLine,
   formatIntakeEmploymentReviewLine,
+  formatIntakePeriodForDisplay,
   formatIntakeRelativeReviewLine,
   formatIntakeTrainingReviewLine,
+  parseIntakePeriodInput,
 } from "../_lib/intakePeriodFormat";
 import {
   collectIntakeDateValidationIssues,
+  INTAKE_DATE_PLACEHOLDER,
+  INTAKE_INCOMPLETE_DATE_HINT,
+  isIncompleteIntakePeriodDate,
   resolveIntakeDateIssueStepIndex,
   type IntakeDateFieldKind,
   type IntakeDateValidationIssue,
@@ -127,6 +132,80 @@ function Field({
   );
 }
 
+function isIntakeBirthDateKind(kind: IntakeDateFieldKind): kind is "birth" {
+  return kind === "birth";
+}
+
+function IntakePeriodDateField({
+  label,
+  value,
+  onChange,
+  readOnly,
+  required = false,
+  testId,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  readOnly?: boolean;
+  required?: boolean;
+  testId?: string;
+}) {
+  const [focused, setFocused] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+  const display = formatIntakePeriodForDisplay(value);
+  const incomplete = isIncompleteIntakePeriodDate(value);
+
+  React.useEffect(() => {
+    if (!focused) setDraft(display);
+  }, [display, focused]);
+
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+        {required ? " *" : ""}
+      </span>
+      <input
+        type="text"
+        inputMode="text"
+        value={focused ? draft : display}
+        readOnly={readOnly}
+        data-testid={testId}
+        aria-invalid={incomplete || undefined}
+        placeholder={INTAKE_DATE_PLACEHOLDER}
+        onFocus={() => {
+          setDraft(display);
+          setFocused(true);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          if (draft.trim() === display.trim()) return;
+          onChange(parseIntakePeriodInput(draft));
+        }}
+        onChange={(e) => {
+          const nextDraft = e.target.value;
+          setDraft(nextDraft);
+          onChange(parseIntakePeriodInput(nextDraft));
+        }}
+        className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:bg-zinc-950 dark:read-only:bg-zinc-900 ${
+          incomplete
+            ? "border-amber-400 text-amber-900 dark:border-amber-700 dark:text-amber-200"
+            : "border-zinc-300 dark:border-zinc-700"
+        }`}
+      />
+      {incomplete ? (
+        <span
+          className="mt-1 block text-xs text-amber-700 dark:text-amber-300"
+          data-testid={testId ? `${testId}-hint` : undefined}
+        >
+          {INTAKE_INCOMPLETE_DATE_HINT}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
 function IntakeDateField({
   label,
   value,
@@ -144,15 +223,28 @@ function IntakeDateField({
   required?: boolean;
   testId?: string;
 }) {
+  if (isIntakeBirthDateKind(kind)) {
+    return (
+      <PersonnelDayDateField
+        label={label}
+        value={value}
+        onChange={onChange}
+        readOnly={readOnly}
+        required={required}
+        testId={testId}
+        mode="birth"
+      />
+    );
+  }
+
   return (
-    <PersonnelDayDateField
+    <IntakePeriodDateField
       label={label}
       value={value}
       onChange={onChange}
       readOnly={readOnly}
       required={required}
       testId={testId}
-      mode={kind}
     />
   );
 }
