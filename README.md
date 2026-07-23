@@ -53,6 +53,23 @@ npm run dev
 | `npm run backend` | Только FastAPI backend |
 | `npm run frontend` | Только Next.js UI |
 
+### Backend pytest (отдельная БД)
+
+Pytest использует **только** `TEST_DATABASE_URL` (обязательно, без fallback на `DATABASE_URL`). Подробности: [tests/README.md](tests/README.md).
+
+Кратко:
+
+```bash
+# создать БД (один раз)
+psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE corpsite_test;"
+
+# миграции на test DB
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/corpsite_test alembic upgrade head
+
+# тесты (TEST_DATABASE_URL в .env)
+python -m pytest -q
+```
+
 ## Использование
 
 (Добавьте инструкции по использованию)

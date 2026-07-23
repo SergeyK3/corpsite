@@ -1,7 +1,9 @@
 # tests/conftest.py
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 from uuid import uuid4
 
@@ -9,8 +11,25 @@ import pytest
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
+_probe_dir = os.environ.get("PYTEST_DB_GUARD_PROBE_DIR")
+if _probe_dir:
+    _probe_path = Path(_probe_dir)
+    _probe_path.mkdir(parents=True, exist_ok=True)
+    (_probe_path / "03_conftest_import_started").write_text("1", encoding="utf-8")
+    with (_probe_path / "load_order.txt").open("a", encoding="utf-8") as _handle:
+        _handle.write("03_conftest_import_started\n")
+
 from app.auth import create_access_token
 from app.db.engine import engine
+
+if _probe_dir:
+    (_probe_path / "04_engine_imported_in_conftest").write_text(
+        str(engine.url.database or ""),
+        encoding="utf-8",
+    )
+    with (_probe_path / "load_order.txt").open("a", encoding="utf-8") as _handle:
+        _handle.write("04_engine_imported_in_conftest\n")
+
 from app.main import app
 from tests.db_sequence_helpers import sync_common_seed_sequences, sync_owned_sequence
 
