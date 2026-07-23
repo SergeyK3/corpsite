@@ -1,14 +1,14 @@
 """ADR-042 Phase E1 — personnel visibility scope assignments.
 
 Revision ID: b0c1d2e3f4a5
-Revises: z8a9b0c1d2e3
+Revises: a0b1c2d3e4f6
 """
 from __future__ import annotations
 
 from alembic import op
 
 revision = "b0c1d2e3f4a5"
-down_revision = "z8a9b0c1d2e3"
+down_revision = "a0b1c2d3e4f6"
 branch_labels = None
 depends_on = None
 
