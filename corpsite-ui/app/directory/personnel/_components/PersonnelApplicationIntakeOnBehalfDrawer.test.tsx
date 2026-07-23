@@ -28,8 +28,8 @@ function buildSessionPayload(): IntakeDraftPayload {
       birth_date: "1990-01-01",
       birth_place: "",
       gender: "",
-      citizenship: "",
-      nationality: "",
+      citizenship: "Республика Казахстан",
+      nationality: "казах",
     },
     contacts: {
       mobile_phone: "+77001234567",
@@ -98,6 +98,14 @@ function drawerScope() {
   return within(screen.getByTestId("intake-on-behalf-drawer"));
 }
 
+function expandEmploymentRow(index = 0) {
+  const desktop = within(screen.getByTestId("intake-on-behalf-drawer")).getByTestId(
+    "intake-employment-desktop-view",
+  );
+  fireEvent.click(within(desktop).getByTestId(`intake-employment-actions-${index}`));
+  fireEvent.click(within(desktop).getByTestId(`intake-employment-row-edit-${index}`));
+}
+
 async function openReviewStep() {
   await waitFor(() => {
     expect(screen.queryByTestId("intake-on-behalf-loading")).not.toBeInTheDocument();
@@ -113,6 +121,18 @@ function formButton(name: RegExp) {
   return drawerScope().getByRole("button", { name });
 }
 
+async function openPersonalStep() {
+  await waitFor(() => {
+    expect(screen.queryByTestId("intake-on-behalf-loading")).not.toBeInTheDocument();
+  });
+  for (let step = 0; step < 5; step += 1) {
+    fireEvent.click(formButton(/назад/i));
+  }
+  await waitFor(() => {
+    expect(screen.getByTestId("intake-citizenship")).toBeInTheDocument();
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -122,6 +142,32 @@ afterEach(() => {
 });
 
 describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
+  it("shows citizenship and nationality dropdowns on personal step in on-behalf mode", async () => {
+    mockEditableSession();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await openPersonalStep();
+
+    expect(screen.getByTestId("intake-citizenship-chevron")).toHaveTextContent("▼");
+    expect(screen.getByTestId("intake-nationality-chevron")).toHaveTextContent("▼");
+
+    fireEvent.click(screen.getByTestId("intake-citizenship"));
+    const citizenshipOptions = screen.getAllByRole("option").map((node) => node.textContent);
+    expect(citizenshipOptions).toContain("Россия");
+    expect(citizenshipOptions.length).toBeGreaterThanOrEqual(10);
+    expect(screen.getByTestId("intake-citizenship")).toHaveValue("Республика Казахстан");
+
+    fireEvent.click(screen.getByTestId("intake-nationality"));
+    expect(screen.getByTestId("intake-nationality-option-0")).toHaveTextContent("казахи");
+  });
+
   it("opens on employment biography step with existing data, not review summary", async () => {
     mockEditableSession();
 
@@ -140,8 +186,14 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     expect(screen.queryByTestId("intake-review-summary")).not.toBeInTheDocument();
     expect(screen.queryByText(/шаг 8 из 8/i)).not.toBeInTheDocument();
     expect(screen.getByText(/шаг 6 из 8/i)).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Клиника А")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Медсестра")).toBeInTheDocument();
+    const drawer = within(screen.getByTestId("intake-on-behalf-drawer"));
+    expect(drawer.getByTestId("intake-employment-biography-table")).toBeInTheDocument();
+    expect(
+      within(drawer.getByTestId("intake-employment-desktop-view")).getByTestId("intake-employment-row-0"),
+    ).toHaveTextContent("Клиника А");
+    expect(
+      within(drawer.getByTestId("intake-employment-desktop-view")).getByTestId("intake-employment-row-0"),
+    ).toHaveTextContent("Медсестра");
     expect(screen.getByRole("button", { name: /далее/i })).toBeInTheDocument();
     expect(screen.queryByTestId("intake-on-behalf-save-button")).not.toBeInTheDocument();
   });
@@ -213,7 +265,10 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
 
     fireEvent.click(formButton(/назад/i));
     fireEvent.click(formButton(/назад/i));
-    const organizationInput = screen.getByDisplayValue("Клиника А");
+    expandEmploymentRow(0);
+    const organizationInput = within(
+      within(screen.getByTestId("intake-on-behalf-drawer")).getByTestId("intake-employment-desktop-view"),
+    ).getByTestId("intake-employment-organization-0");
     fireEvent.change(organizationInput, { target: { value: "Клиника Б" } });
 
     fireEvent.click(formButton(/далее/i));

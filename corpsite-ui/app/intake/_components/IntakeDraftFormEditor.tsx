@@ -3,7 +3,12 @@
 import * as React from "react";
 
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
+import IntakeEducationTable from "./IntakeEducationTable";
+import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
+import { IntakeDateField, IntakeTextField } from "./IntakeFormFields";
 import IntakeMilitaryCombobox from "./IntakeMilitaryCombobox";
+import IntakeRelativesTable from "./IntakeRelativesTable";
+import IntakeTrainingTable from "./IntakeTrainingTable";
 import {
   INTAKE_CITIZENSHIP_CATALOG,
   INTAKE_CITIZENSHIP_POPULAR,
@@ -18,236 +23,35 @@ import {
   reconcileIntakeMilitaryDraftOnLoad,
 } from "../_lib/intakeMilitaryDictionary";
 import {
-  INTAKE_EDUCATION_TYPE_OPTIONS,
   INTAKE_STEPS,
   emptyIntakeDraftPayload,
+  formatIntakeStepHeaderTitle,
   type IntakeDraftPayload,
-  type IntakeEducation,
 } from "../_lib/intakeApi.client";
+import { normalizeIntakeEducationEntry } from "../_lib/intakeEducation";
+import {
+  normalizeIntakeTrainingEntry,
+  reconcileTrainingEntryHours,
+} from "../_lib/intakeTraining";
 import {
   applyContactsRegistrationAddressChange,
   applyContactsResidenceMirror,
   contactsMirrorResidence,
   formatIntakeFullName,
 } from "../_lib/intakeContactHelpers";
-import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
 import {
   formatIntakeBirthDateForDisplay,
   formatIntakeEducationReviewLine,
   formatIntakeEmploymentReviewLine,
-  formatIntakePeriodForDisplay,
   formatIntakeRelativeReviewLine,
   formatIntakeTrainingReviewLine,
-  parseIntakePeriodInput,
 } from "../_lib/intakePeriodFormat";
 import {
   collectIntakeDateValidationIssues,
-  INTAKE_DATE_PLACEHOLDER,
-  INTAKE_INCOMPLETE_DATE_HINT,
-  isIncompleteIntakePeriodDate,
   resolveIntakeDateIssueStepIndex,
-  type IntakeDateFieldKind,
   type IntakeDateValidationIssue,
 } from "../_lib/intakeDateValidation";
 import { sanitizeMilitarySpecialtyCodeInput } from "@/lib/militarySpecialtyCode";
-
-function SelectField<V extends string>({
-  label,
-  value,
-  onChange,
-  readOnly,
-  required = false,
-  options,
-}: {
-  label: string;
-  value: V;
-  onChange: (v: V) => void;
-  readOnly?: boolean;
-  required?: boolean;
-  options: ReadonlyArray<{ value: V; label: string }>;
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        {label}
-        {required ? " *" : ""}
-      </span>
-      <select
-        value={value}
-        disabled={readOnly}
-        onChange={(e) => {
-          const selected = options.find((option) => option.value === e.target.value);
-          if (selected) onChange(selected.value);
-        }}
-        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  readOnly,
-  type = "text",
-  required = false,
-  testId,
-  maxLength,
-  inputMode,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  readOnly?: boolean;
-  type?: string;
-  required?: boolean;
-  testId?: string;
-  maxLength?: number;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        {label}
-        {required ? " *" : ""}
-      </span>
-      <input
-        type={type}
-        value={value}
-        readOnly={readOnly}
-        data-testid={testId}
-        maxLength={maxLength}
-        inputMode={inputMode}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
-      />
-    </label>
-  );
-}
-
-function isIntakeBirthDateKind(kind: IntakeDateFieldKind): kind is "birth" {
-  return kind === "birth";
-}
-
-function IntakePeriodDateField({
-  label,
-  value,
-  onChange,
-  readOnly,
-  required = false,
-  testId,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  readOnly?: boolean;
-  required?: boolean;
-  testId?: string;
-}) {
-  const [focused, setFocused] = React.useState(false);
-  const [draft, setDraft] = React.useState("");
-  const display = formatIntakePeriodForDisplay(value);
-  const incomplete = isIncompleteIntakePeriodDate(value);
-
-  React.useEffect(() => {
-    if (!focused) setDraft(display);
-  }, [display, focused]);
-
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        {label}
-        {required ? " *" : ""}
-      </span>
-      <input
-        type="text"
-        inputMode="text"
-        value={focused ? draft : display}
-        readOnly={readOnly}
-        data-testid={testId}
-        aria-invalid={incomplete || undefined}
-        placeholder={INTAKE_DATE_PLACEHOLDER}
-        onFocus={() => {
-          setDraft(display);
-          setFocused(true);
-        }}
-        onBlur={() => {
-          setFocused(false);
-          if (draft.trim() === display.trim()) return;
-          onChange(parseIntakePeriodInput(draft));
-        }}
-        onChange={(e) => {
-          const nextDraft = e.target.value;
-          setDraft(nextDraft);
-          onChange(parseIntakePeriodInput(nextDraft));
-        }}
-        className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:bg-zinc-950 dark:read-only:bg-zinc-900 ${
-          incomplete
-            ? "border-amber-400 text-amber-900 dark:border-amber-700 dark:text-amber-200"
-            : "border-zinc-300 dark:border-zinc-700"
-        }`}
-      />
-      {incomplete ? (
-        <span
-          className="mt-1 block text-xs text-amber-700 dark:text-amber-300"
-          data-testid={testId ? `${testId}-hint` : undefined}
-        >
-          {INTAKE_INCOMPLETE_DATE_HINT}
-        </span>
-      ) : null}
-    </label>
-  );
-}
-
-function IntakeDateField({
-  label,
-  value,
-  onChange,
-  readOnly,
-  kind,
-  required = false,
-  testId,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  readOnly?: boolean;
-  kind: IntakeDateFieldKind;
-  required?: boolean;
-  testId?: string;
-}) {
-  if (isIntakeBirthDateKind(kind)) {
-    return (
-      <PersonnelDayDateField
-        label={label}
-        value={value}
-        onChange={onChange}
-        readOnly={readOnly}
-        required={required}
-        testId={testId}
-        mode="birth"
-      />
-    );
-  }
-
-  return (
-    <IntakePeriodDateField
-      label={label}
-      value={value}
-      onChange={onChange}
-      readOnly={readOnly}
-      required={required}
-      testId={testId}
-    />
-  );
-}
 
 function StepPersonal({
   payload,
@@ -263,9 +67,9 @@ function StepPersonal({
     onChange({ ...payload, personal: { ...p, [key]: value } });
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
-      <Field label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
-      <Field label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
+      <IntakeTextField label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
+      <IntakeTextField label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
+      <IntakeTextField label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
       <IntakeDateField
         label="Дата рождения"
         value={p.birth_date}
@@ -274,8 +78,8 @@ function StepPersonal({
         kind="birth"
         testId="intake-birth-date"
       />
-      <Field label="Место рождения" value={p.birth_place} onChange={(v) => set("birth_place", v)} readOnly={readOnly} />
-      <Field label="Пол" value={p.gender} onChange={(v) => set("gender", v)} readOnly={readOnly} />
+      <IntakeTextField label="Место рождения" value={p.birth_place} onChange={(v) => set("birth_place", v)} readOnly={readOnly} />
+      <IntakeTextField label="Пол" value={p.gender} onChange={(v) => set("gender", v)} readOnly={readOnly} />
       <IntakeDictionaryCombobox
         label="Гражданство"
         value={p.citizenship}
@@ -315,9 +119,9 @@ function StepContacts({
 
   return (
     <div className="grid gap-4">
-      <Field label="Мобильный телефон" value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} required />
-      <Field label="Email" value={c.email} onChange={(v) => set("email", v)} readOnly={readOnly} type="email" />
-      <Field
+      <IntakeTextField label="Мобильный телефон" value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} required />
+      <IntakeTextField label="Email" value={c.email} onChange={(v) => set("email", v)} readOnly={readOnly} type="email" />
+      <IntakeTextField
         label="Адрес регистрации"
         value={c.registration_address}
         onChange={(v) =>
@@ -346,7 +150,7 @@ function StepContacts({
           Адрес проживания совпадает с адресом регистрации
         </label>
       ) : null}
-      <Field
+      <IntakeTextField
         label="Адрес проживания"
         value={c.residence_address}
         testId="intake-residence-address"
@@ -360,111 +164,6 @@ function StepContacts({
   );
 }
 
-type CardListFieldDef<T extends Record<string, string>> = {
-  [K in keyof T]: {
-    key: K;
-    label: string;
-    required?: boolean;
-    dateKind?: IntakeDateFieldKind;
-    testId?: string;
-    options?: ReadonlyArray<{ value: Extract<T[K], string>; label: string }>;
-  };
-}[keyof T];
-
-function CardListStep<T extends Record<string, string>>({
-  title,
-  items,
-  emptyItem,
-  fields,
-  readOnly,
-  onChange,
-}: {
-  title: string;
-  items: T[];
-  emptyItem: T;
-  fields: CardListFieldDef<T>[];
-  readOnly?: boolean;
-  onChange: (items: T[]) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      {items.length === 0 ? (
-        <p className="text-sm text-zinc-500">Записей пока нет.</p>
-      ) : (
-        items.map((item, index) => (
-          <div key={index} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fields.map((f) =>
-                f.options ? (
-                  <SelectField
-                    key={String(f.key)}
-                    label={f.label}
-                    value={String(item[f.key] ?? f.options[0]?.value ?? "")}
-                    readOnly={readOnly}
-                    required={f.required}
-                    options={f.options}
-                    onChange={(v) => {
-                      const next = [...items];
-                      next[index] = { ...item, [f.key]: v };
-                      onChange(next);
-                    }}
-                  />
-                ) : f.dateKind ? (
-                  <IntakeDateField
-                    key={String(f.key)}
-                    label={f.label}
-                    value={String(item[f.key] ?? "")}
-                    readOnly={readOnly}
-                    required={f.required}
-                    kind={f.dateKind}
-                    testId={f.testId ? `${f.testId}-${index}` : undefined}
-                    onChange={(v) => {
-                      const next = [...items];
-                      next[index] = { ...item, [f.key]: v };
-                      onChange(next);
-                    }}
-                  />
-                ) : (
-                  <Field
-                    key={String(f.key)}
-                    label={f.label}
-                    value={String(item[f.key] ?? "")}
-                    readOnly={readOnly}
-                    required={f.required}
-                    onChange={(v) => {
-                      const next = [...items];
-                      next[index] = { ...item, [f.key]: v };
-                      onChange(next);
-                    }}
-                  />
-                ),
-              )}
-            </div>
-            {!readOnly ? (
-              <button
-                type="button"
-                className="mt-3 text-sm text-red-600 hover:underline"
-                onClick={() => onChange(items.filter((_, i) => i !== index))}
-              >
-                Удалить
-              </button>
-            ) : null}
-          </div>
-        ))
-      )}
-      {!readOnly ? (
-        <button
-          type="button"
-          className="rounded-lg border border-dashed border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
-          onClick={() => onChange([...items, { ...emptyItem }])}
-        >
-          Добавить {title.toLowerCase()}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 export function reconcileIntakeDraftPayload(payload: IntakeDraftPayload): IntakeDraftPayload {
   const military = {
     ...emptyIntakeDraftPayload().military,
@@ -473,6 +172,10 @@ export function reconcileIntakeDraftPayload(payload: IntakeDraftPayload): Intake
   };
   return {
     ...payload,
+    education: (payload.education ?? []).map((item) => normalizeIntakeEducationEntry(item)),
+    training: (payload.training ?? []).map((item) =>
+      reconcileTrainingEntryHours(normalizeIntakeTrainingEntry(item)),
+    ),
     military: reconcileIntakeMilitaryDraftOnLoad(military),
   };
 }
@@ -523,9 +226,9 @@ function StepMilitary({
         allowFreeText={composition === "other"}
         testId="intake-military-rank"
       />
-      <Field label="Статус" value={m.status} onChange={(v) => set("status", v)} readOnly={readOnly} />
-      <Field label="Категория" value={m.category} onChange={(v) => set("category", v)} readOnly={readOnly} />
-      <Field
+      <IntakeTextField label="Статус" value={m.status} onChange={(v) => set("status", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория" value={m.category} onChange={(v) => set("category", v)} readOnly={readOnly} />
+      <IntakeTextField
         label="Номер ВУС"
         value={m.specialty_code}
         onChange={(v) => set("specialty_code", sanitizeMilitarySpecialtyCodeInput(v))}
@@ -534,10 +237,10 @@ function StepMilitary({
         maxLength={7}
         inputMode="numeric"
       />
-      <Field label="Категория годности" value={m.fitness_category} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
-      <Field label="Военкомат" value={m.commissariat} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
-      <Field label="Группа учёта" value={m.registration_group} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
-      <Field label="Категория учёта" value={m.registration_category} onChange={(v) => set("registration_category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория годности" value={m.fitness_category} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Военкомат" value={m.commissariat} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
+      <IntakeTextField label="Группа учёта" value={m.registration_group} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория учёта" value={m.registration_category} onChange={(v) => set("registration_category", v)} readOnly={readOnly} />
     </div>
   );
 }
@@ -626,13 +329,11 @@ export default function IntakeDraftFormEditor({
     onChange({ ...payload, current_step: INTAKE_STEPS[nextIndex].id });
   }
 
-  const title =
-    headerTitle ??
-    `Анкета сотрудника. Шаг ${stepIndex + 1} из ${INTAKE_STEPS.length} – ${currentStep.title}`;
+  const title = headerTitle ?? formatIntakeStepHeaderTitle(stepIndex);
 
   return (
     <div className={compact ? "space-y-4" : "min-h-screen bg-zinc-50 dark:bg-zinc-950"}>
-      <div className={compact ? "" : "mx-auto max-w-3xl px-4 py-8"}>
+      <div className={compact ? "" : "mx-auto w-full max-w-[min(96vw,1400px)] px-4 py-8"}>
         <header className="mb-6">
           <h1 className={compact ? "text-lg font-semibold text-zinc-900 dark:text-zinc-50" : "text-2xl font-semibold text-zinc-900 dark:text-zinc-50"}>
             {title}
@@ -656,87 +357,32 @@ export default function IntakeDraftFormEditor({
             <StepContacts payload={payload} onChange={onChange} readOnly={readOnly} />
           ) : null}
           {currentStep.id === "education" ? (
-            <CardListStep<IntakeEducation>
-              title="образование"
+            <IntakeEducationTable
               items={payload.education}
-              emptyItem={{
-                education_type: "basic",
-                institution: "",
-                year_from: "",
-                year_to: "",
-                specialty: "",
-                qualification: "",
-                diploma_number: "",
-              }}
-              fields={[
-                {
-                  key: "education_type",
-                  label: "Вид образования",
-                  required: true,
-                  options: INTAKE_EDUCATION_TYPE_OPTIONS,
-                },
-                { key: "institution", label: "Учебное заведение" },
-                {
-                  key: "year_from",
-                  label: "Дата поступления",
-                  dateKind: "period",
-                  testId: "intake-education-year-from",
-                },
-                {
-                  key: "year_to",
-                  label: "Дата окончания",
-                  dateKind: "period",
-                  testId: "intake-education-year-to",
-                },
-                { key: "specialty", label: "Специальность" },
-                { key: "qualification", label: "Квалификация" },
-                { key: "diploma_number", label: "№ диплома" },
-              ]}
               readOnly={readOnly}
+              focusTestId={pendingFocusTestId}
               onChange={(items) => onChange({ ...payload, education: items })}
             />
           ) : null}
           {currentStep.id === "training" ? (
-            <CardListStep
-              title="обучение"
+            <IntakeTrainingTable
               items={payload.training}
-              emptyItem={{ institution: "", year: "", course_name: "", hours: "" }}
-              fields={[
-                { key: "institution", label: "Организация" },
-                { key: "year", label: "Дата окончания", dateKind: "period", testId: "intake-training-year" },
-                { key: "course_name", label: "Курс" },
-              ]}
               readOnly={readOnly}
+              focusTestId={pendingFocusTestId}
               onChange={(items) => onChange({ ...payload, training: items })}
             />
           ) : null}
           {currentStep.id === "relatives" ? (
-            <CardListStep
-              title="родственника"
+            <IntakeRelativesTable
               items={payload.relatives}
-              emptyItem={{ relationship: "", full_name: "", birth_year: "", work_place: "" }}
-              fields={[
-                { key: "relationship", label: "Степень родства" },
-                { key: "full_name", label: "ФИО" },
-                { key: "birth_year", label: "Дата рождения", dateKind: "period", testId: "intake-relative-birth-year" },
-                { key: "work_place", label: "Место работы" },
-              ]}
               readOnly={readOnly}
+              focusTestId={pendingFocusTestId}
               onChange={(items) => onChange({ ...payload, relatives: items })}
             />
           ) : null}
           {currentStep.id === "employment_biography" ? (
-            <CardListStep
-              title="место работы"
+            <IntakeEmploymentBiographyTable
               items={payload.employment_biography}
-              emptyItem={{ organization: "", position: "", year_from: "", year_to: "", reason_for_leaving: "" }}
-              fields={[
-                { key: "organization", label: "Организация" },
-                { key: "position", label: "Должность" },
-                { key: "year_from", label: "Дата начала", dateKind: "period", testId: "intake-employment-year-from" },
-                { key: "year_to", label: "Дата окончания", dateKind: "period", testId: "intake-employment-year-to" },
-                { key: "reason_for_leaving", label: "Причина увольнения" },
-              ]}
               readOnly={readOnly}
               onChange={(items) => onChange({ ...payload, employment_biography: items })}
             />
@@ -836,7 +482,7 @@ export default function IntakeDraftFormEditor({
               type="button"
               disabled={stepIndex === 0 || readOnly}
               onClick={goBack}
-              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700"
+              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
             >
               Назад
             </button>

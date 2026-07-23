@@ -68,6 +68,7 @@ def intake_command_id(application_id: int, section: str, index: int | str = 0) -
 def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     mapped: list[dict[str, Any]] = []
     for item in items:
+        document_type = str(item.get("document_type") or "diploma").strip() or "diploma"
         mapped.append(
             {
                 "education_kind": resolve_intake_education_kind(item.get("education_type")),
@@ -77,7 +78,10 @@ def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "started_at": parse_date_value(item.get("year_from")),
                 "completed_at": parse_date_value(item.get("year_to")),
                 "diploma_number": str(item.get("diploma_number") or "").strip() or None,
-                "metadata": {"source": "personnel_intake"},
+                "metadata": {
+                    "source": "personnel_intake",
+                    "document_type": document_type,
+                },
             }
         )
     return mapped
@@ -92,14 +96,22 @@ def map_training_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             hours = None
         else:
             hours = Decimal(str(hours_raw))
+        year_to = item.get("year_to") or item.get("year")
+        document_type = str(item.get("document_type") or "certificate").strip() or "certificate"
         mapped.append(
             {
                 "training_kind": TRAINING_KIND_COURSE,
                 "title": str(item.get("course_name") or "").strip() or None,
                 "organization_name": str(item.get("institution") or "").strip() or None,
                 "hours": hours,
-                "completed_at": parse_date_value(item.get("year")),
-                "metadata": {"source": "personnel_intake"},
+                "started_at": parse_date_value(item.get("year_from")),
+                "completed_at": parse_date_value(year_to),
+                "certificate_number": str(item.get("document_number") or "").strip() or None,
+                "metadata": {
+                    "source": "personnel_intake",
+                    "document_type": document_type,
+                    "hours_is_manual": bool(item.get("hours_is_manual")),
+                },
             }
         )
     return mapped

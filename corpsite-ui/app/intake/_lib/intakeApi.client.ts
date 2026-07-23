@@ -4,6 +4,8 @@ import { resolveApiUrl } from "@/lib/apiBase";
 
 export type IntakeEducationType = "basic" | "internship" | "residency" | "masters" | "phd";
 
+export type IntakeEducationDocumentType = "diploma" | "certificate";
+
 export type IntakeEducation = {
   education_type: IntakeEducationType;
   institution: string;
@@ -11,8 +13,40 @@ export type IntakeEducation = {
   year_to: string;
   specialty: string;
   qualification: string;
+  document_type: IntakeEducationDocumentType;
   diploma_number: string;
 };
+
+export const INTAKE_EDUCATION_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
+  value: IntakeEducationDocumentType;
+  label: string;
+}> = [
+  { value: "diploma", label: "Диплом" },
+  { value: "certificate", label: "Сертификат" },
+];
+
+export type IntakeTrainingDocumentType = "certificate" | "witness";
+
+export type IntakeTraining = {
+  institution: string;
+  course_name: string;
+  year_from: string;
+  year_to: string;
+  document_type: IntakeTrainingDocumentType;
+  document_number: string;
+  hours: string;
+  hours_is_manual: boolean;
+  /** Legacy single end-date field kept for backward-compatible reads. */
+  year?: string;
+};
+
+export const INTAKE_TRAINING_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
+  value: IntakeTrainingDocumentType;
+  label: string;
+}> = [
+  { value: "certificate", label: "Сертификат" },
+  { value: "witness", label: "Свидетельство" },
+];
 
 export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
   value: IntakeEducationType;
@@ -43,12 +77,7 @@ export type IntakeDraftPayload = {
     residence_address: string;
   };
   education: IntakeEducation[];
-  training: Array<{
-    institution: string;
-    year: string;
-    course_name: string;
-    hours: string;
-  }>;
+  training: IntakeTraining[];
   relatives: Array<{
     relationship: string;
     full_name: string;
@@ -138,6 +167,12 @@ export const INTAKE_STEPS = [
 ] as const;
 
 export const INTAKE_ON_BEHALF_INITIAL_STEP_ID = "employment_biography";
+
+export function formatIntakeStepHeaderTitle(stepIndex: number): string {
+  const safeIndex = Math.min(Math.max(stepIndex, 0), INTAKE_STEPS.length - 1);
+  const step = INTAKE_STEPS[safeIndex];
+  return `Анкета претендента · шаг ${safeIndex + 1} из ${INTAKE_STEPS.length} — ${step.title}`;
+}
 
 /** HR on-behalf edit opens on employment biography, not the applicant's saved step. */
 export function resolveIntakeOnBehalfInitialStepIndex(): number {

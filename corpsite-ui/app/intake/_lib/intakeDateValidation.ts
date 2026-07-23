@@ -2,6 +2,10 @@ import type { IntakeDraftPayload } from "./intakeApi.client";
 import { INTAKE_STEPS } from "./intakeApi.client";
 import { formatIntakeFullName } from "./intakeContactHelpers";
 import {
+  isInvalidIntakeTrainingPeriodRange,
+  resolveIntakeTrainingYearTo,
+} from "./intakeTraining";
+import {
   formatPersonnelDayDateForDisplay,
   isIncompletePersonnelBirthDate,
   isIncompletePersonnelDocumentDate,
@@ -110,12 +114,29 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
 
   payload.training?.forEach((item, index) => {
     const record = recordLabel(item.course_name || item.institution, `Запись ${index + 1}`);
-    if (isIncompletePersonnelDocumentDate(item.year)) {
+    const yearTo = resolveIntakeTrainingYearTo(item);
+    if (isIncompletePersonnelDocumentDate(item.year_from)) {
       pushIssue(issues, {
-        field: `training[${index}].year`,
+        field: `training[${index}].year_from`,
         stepId: "training",
-        focusTestId: `intake-training-year-${index}`,
+        focusTestId: `intake-training-year-from-${index}`,
+        message: formatIssueMessage("Обучение", record, "дата начала"),
+      });
+    }
+    if (isIncompletePersonnelDocumentDate(yearTo)) {
+      pushIssue(issues, {
+        field: `training[${index}].year_to`,
+        stepId: "training",
+        focusTestId: `intake-training-year-to-${index}`,
         message: formatIssueMessage("Обучение", record, "дата окончания"),
+      });
+    }
+    if (isInvalidIntakeTrainingPeriodRange(item)) {
+      pushIssue(issues, {
+        field: `training[${index}].year_from`,
+        stepId: "training",
+        focusTestId: `intake-training-year-from-${index}`,
+        message: formatIssueMessage("Обучение", record, "некорректный период"),
       });
     }
   });

@@ -1,4 +1,4 @@
-import type { IntakeDraftPayload, IntakeEducation } from "./intakeApi.client";
+import type { IntakeDraftPayload, IntakeEducation, IntakeTraining } from "./intakeApi.client";
 
 type StringRecord<T> = { [K in keyof T]: string };
 
@@ -6,7 +6,9 @@ export type CanonicalIntakeDraftPayload = {
   personal: StringRecord<IntakeDraftPayload["personal"]>;
   contacts: StringRecord<IntakeDraftPayload["contacts"]>;
   education: StringRecord<IntakeEducation>[];
-  training: StringRecord<IntakeDraftPayload["training"][number]>[];
+  training: StringRecord<
+    Omit<IntakeTraining, "hours_is_manual" | "year"> & { hours_is_manual: string }
+  >[];
   relatives: StringRecord<IntakeDraftPayload["relatives"][number]>[];
   employment_biography: StringRecord<IntakeDraftPayload["employment_biography"][number]>[];
   military: StringRecord<IntakeDraftPayload["military"]>;
@@ -29,6 +31,22 @@ function normalizeDict<T extends Record<string, string>>(
     result[key] = normalizeScalar(source[key] ?? template[key] ?? "");
   }
   return result;
+}
+
+function normalizeTrainingItems(
+  items: IntakeTraining[] | undefined,
+): CanonicalIntakeDraftPayload["training"] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    institution: normalizeScalar(item.institution),
+    course_name: normalizeScalar(item.course_name),
+    year_from: normalizeScalar(item.year_from),
+    year_to: normalizeScalar(item.year_to ?? item.year),
+    document_type: normalizeScalar(item.document_type),
+    document_number: normalizeScalar(item.document_number),
+    hours: normalizeScalar(item.hours),
+    hours_is_manual: item.hours_is_manual ? "true" : "false",
+  }));
 }
 
 function normalizeListItems<T extends Record<string, string>>(
@@ -74,7 +92,7 @@ export function canonicalizeIntakePayloadForCompare(
       payload.contacts,
     ),
     education: normalizeListItems(payload.education),
-    training: normalizeListItems(payload.training),
+    training: normalizeTrainingItems(payload.training),
     relatives: normalizeListItems(payload.relatives),
     employment_biography: normalizeListItems(payload.employment_biography),
     military: normalizeDict(

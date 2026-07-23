@@ -178,7 +178,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
   return (
     <div className="fixed inset-0 z-[60] flex justify-end" data-testid="intake-on-behalf-drawer">
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-3xl flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+      <aside className="relative flex h-full w-full max-w-[min(96vw,1400px)] flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
           <div>
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -232,7 +232,6 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               primaryActionDisabled={primaryActionDisabled}
               reviewNotice={reviewNotice}
               compact
-              headerTitle={`Анкета претендента · шаг ${stepIndex + 1} из ${INTAKE_STEPS.length}`}
             />
           ) : null}
           {!loading && !editable && error ? (

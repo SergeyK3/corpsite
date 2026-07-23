@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import IntakePageClient from "./IntakePageClient";
 import * as intakeApi from "../_lib/intakeApi.client";
@@ -7,6 +7,18 @@ import * as intakeApi from "../_lib/intakeApi.client";
 vi.mock("next/navigation", () => ({
   useParams: () => ({ token: "test-token-abc" }),
 }));
+
+function expandEducationRow(index = 0) {
+  const desktop = screen.getByTestId("intake-education-desktop-view");
+  fireEvent.click(within(desktop).getByTestId(`intake-education-actions-${index}`));
+  fireEvent.click(within(desktop).getByTestId(`intake-education-row-edit-${index}`));
+}
+
+function expandTrainingRow(index = 0) {
+  const desktop = screen.getByTestId("intake-training-desktop-view");
+  fireEvent.click(within(desktop).getByTestId(`intake-training-actions-${index}`));
+  fireEvent.click(within(desktop).getByTestId(`intake-training-row-edit-${index}`));
+}
 
 describe("IntakePageClient", () => {
   beforeEach(() => {
@@ -32,7 +44,7 @@ describe("IntakePageClient", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Анкета сотрудника. Шаг 7 из 8 – Воинский учёт",
+        name: intakeApi.formatIntakeStepHeaderTitle(6),
       }),
     ).toBeInTheDocument();
   });
@@ -92,9 +104,9 @@ describe("IntakePageClient", () => {
     const rank = await screen.findByTestId("intake-military-rank");
     expect(rank).toHaveValue("Полковник");
 
-    fireEvent.focus(rank);
+    fireEvent.click(rank);
     fireEvent.change(rank, { target: { value: "лейт" } });
-    expect(screen.getByTestId("intake-military-rank-option-0")).toHaveTextContent("Лейтенант");
+    expect(await screen.findByTestId("intake-military-rank-option-0")).toHaveTextContent("Лейтенант");
 
     const composition = screen.getByTestId("intake-military-composition");
     fireEvent.click(composition);
@@ -328,7 +340,7 @@ describe("IntakePageClient", () => {
     render(<IntakePageClient />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Анкета сотрудника\. Шаг 1 из/i)).toBeInTheDocument();
+      expect(screen.getByText(/Анкета претендента · шаг 1 из/i)).toBeInTheDocument();
     });
 
     const lastName = screen.getByLabelText(/Фамилия/i);
@@ -363,6 +375,7 @@ describe("IntakePageClient", () => {
     render(<IntakePageClient />);
 
     const citizenship = await screen.findByTestId("intake-citizenship");
+    expect(screen.getByTestId("intake-citizenship-chevron")).toHaveTextContent("▼");
     fireEvent.focus(citizenship);
 
     expect(await screen.findByTestId("intake-citizenship-option-0")).toHaveTextContent("Казахстан");
@@ -370,6 +383,7 @@ describe("IntakePageClient", () => {
     fireEvent.blur(citizenship);
 
     const nationality = screen.getByTestId("intake-nationality");
+    expect(screen.getByTestId("intake-nationality-chevron")).toHaveTextContent("▼");
     fireEvent.focus(nationality);
 
     expect(await screen.findByTestId("intake-nationality-option-0")).toHaveTextContent("казахи");
@@ -522,7 +536,9 @@ describe("IntakePageClient", () => {
     render(<IntakePageClient />);
 
     expect(await screen.findByTestId("intake-citizenship")).toHaveValue("Республика Казахстан");
+    expect(screen.getByTestId("intake-citizenship-chevron")).toHaveTextContent("▼");
     expect(screen.getByTestId("intake-nationality")).toHaveValue("казах");
+    expect(screen.getByTestId("intake-nationality-chevron")).toHaveTextContent("▼");
   });
 
   it("mirrors residence address from registration when checkbox is enabled", async () => {
@@ -626,8 +642,12 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveValue("01.09.2014");
-    expect(screen.getByTestId("intake-education-year-to-0")).toHaveValue("30.06.2018");
+    await screen.findByTestId("intake-education-row-0");
+    expandEducationRow(0);
+
+    const desktop = screen.getByTestId("intake-education-desktop-view");
+    expect(within(desktop).getByTestId("intake-education-year-from-0")).toHaveValue("01.09.2014");
+    expect(within(desktop).getByTestId("intake-education-year-to-0")).toHaveValue("30.06.2018");
   });
 
   it("shows legacy year-only education values as needing clarification", async () => {
@@ -657,8 +677,12 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveValue("2014 (уточните дату)");
-    expect(screen.getByTestId("intake-education-year-from-0-hint")).toHaveTextContent("ДД.ММ.ГГГГ");
+    await screen.findByTestId("intake-education-row-0");
+    expandEducationRow(0);
+
+    const desktop = screen.getByTestId("intake-education-desktop-view");
+    expect(within(desktop).getByTestId("intake-education-year-from-0")).toHaveValue("2014 (уточните дату)");
+    expect(within(desktop).getByTestId("intake-education-year-from-0-hint")).toHaveTextContent("ДД.ММ.ГГГГ");
   });
 
   it("autosaves edited education date as canonical ISO without day shift", async () => {
@@ -694,7 +718,11 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    const yearTo = await screen.findByTestId("intake-education-year-to-0");
+    await screen.findByTestId("intake-education-row-0");
+    expandEducationRow(0);
+
+    const desktop = screen.getByTestId("intake-education-desktop-view");
+    const yearTo = within(desktop).getByTestId("intake-education-year-to-0");
     fireEvent.focus(yearTo);
     fireEvent.change(yearTo, { target: { value: "15.09.2022" } });
     fireEvent.blur(yearTo);
@@ -733,7 +761,11 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-training-year-0")).toHaveValue("");
+    await screen.findByTestId("intake-training-row-0");
+    expandTrainingRow(0);
+
+    const desktop = screen.getByTestId("intake-training-desktop-view");
+    expect(within(desktop).getByTestId("intake-training-year-to-0")).toHaveValue("");
   });
 
   it("shows education and training periods on review step", async () => {
@@ -770,7 +802,9 @@ describe("IntakePageClient", () => {
     expect(await screen.findByTestId("intake-review-education-0")).toHaveTextContent(
       "КазНУ: 01.09.2014 — 30.06.2018",
     );
-    expect(screen.getByTestId("intake-review-training-0")).toHaveTextContent("Охрана труда (10.03.2021)");
+    expect(screen.getByTestId("intake-review-training-0")).toHaveTextContent(
+      "Охрана труда; 10.03.2021",
+    );
   });
 
   it("blocks submit on review step when legacy year-only dates remain", async () => {
@@ -850,10 +884,11 @@ describe("IntakePageClient", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Анкета сотрудника. Шаг 3 из 8 – Образование",
+        name: intakeApi.formatIntakeStepHeaderTitle(2),
       }),
     ).toBeInTheDocument();
-    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveFocus();
+    const desktop = screen.getByTestId("intake-education-desktop-view");
+    expect(await within(desktop).findByTestId("intake-education-year-from-0")).toHaveFocus();
   });
 
   it("opens rework session on first incomplete date field", async () => {
@@ -890,10 +925,11 @@ describe("IntakePageClient", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Анкета сотрудника. Шаг 3 из 8 – Образование",
+        name: intakeApi.formatIntakeStepHeaderTitle(2),
       }),
     ).toBeInTheDocument();
-    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveFocus();
+    const desktop = screen.getByTestId("intake-education-desktop-view");
+    expect(await within(desktop).findByTestId("intake-education-year-from-0")).toHaveFocus();
   });
 
   it("opens editable form after rework instead of submitted screen", async () => {

@@ -42,6 +42,7 @@ from app.api.personnel_migration_router import router as personnel_migration_rou
 from app.api.ppr_router import router as ppr_router
 from app.api.ppr_command_router import router as ppr_command_router
 from app.api.personnel_intake_public_router import router as personnel_intake_public_router
+from app.api.personnel_intake_tenure_router import router as personnel_intake_tenure_router
 from app.operational_orders.router import router as operational_orders_router
 
 
@@ -126,6 +127,7 @@ app.include_router(personnel_migration_router)
 app.include_router(ppr_router)
 app.include_router(ppr_command_router)
 app.include_router(personnel_intake_public_router)
+app.include_router(personnel_intake_tenure_router)
 app.include_router(operational_orders_router)
 
 # -----------------------

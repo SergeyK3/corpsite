@@ -9,7 +9,7 @@ import {
 } from "../_lib/intakePersonalDictionary";
 
 const INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900";
+  "w-full rounded-lg border border-zinc-300 bg-white py-2 pl-3 pr-9 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900";
 
 type IntakeDictionaryComboboxProps = {
   label: string;
@@ -34,54 +34,71 @@ export default function IntakeDictionaryCombobox({
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState(value);
+  const [query, setQuery] = React.useState("");
+  const [isSearching, setIsSearching] = React.useState(false);
   const [highlightIndex, setHighlightIndex] = React.useState(0);
 
+  const filterQuery = open && !isSearching ? "" : query;
   const options = React.useMemo(
-    () => filterIntakeDictionaryOptions(catalog, popular, query),
-    [catalog, popular, query],
+    () => filterIntakeDictionaryOptions(catalog, popular, filterQuery),
+    [catalog, popular, filterQuery],
   );
 
   React.useEffect(() => {
     if (!open) return;
     setHighlightIndex(0);
-  }, [open, query]);
+  }, [open, filterQuery]);
 
   React.useEffect(() => {
-    if (!open) {
-      setQuery(value);
-    }
-  }, [open, value]);
-
-  function closeList(revertToValue = true) {
+    setIsSearching(false);
+    setQuery("");
     setOpen(false);
-    if (revertToValue) {
-      setQuery(value);
-    }
+  }, [value]);
+
+  function openDropdown() {
+    if (readOnly) return;
+    setIsSearching(false);
+    setQuery("");
+    setOpen(true);
+  }
+
+  function closeList() {
+    setOpen(false);
+    setIsSearching(false);
+    setQuery("");
   }
 
   function commitSelection(nextValue: string) {
     onChange(nextValue);
-    setQuery(nextValue);
-    setOpen(false);
+    closeList();
   }
 
   function tryCommitQuery() {
-    const resolved = resolveIntakeDictionarySelection(query, catalog);
+    if (open && !isSearching) {
+      closeList();
+      return;
+    }
+
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      closeList();
+      return;
+    }
+
+    const resolved = resolveIntakeDictionarySelection(trimmedQuery, catalog);
     if (resolved) {
-      if (normalizeIntakeDictionaryQuery(query) === normalizeIntakeDictionaryQuery(value)) {
-        setQuery(value);
-        setOpen(false);
+      if (normalizeIntakeDictionaryQuery(trimmedQuery) === normalizeIntakeDictionaryQuery(value)) {
+        closeList();
         return;
       }
       commitSelection(resolved);
       return;
     }
-    setQuery(value);
-    setOpen(false);
+    closeList();
   }
 
   function handleInputChange(nextQuery: string) {
+    setIsSearching(true);
     setQuery(nextQuery);
     setOpen(true);
   }
@@ -91,14 +108,14 @@ export default function IntakeDictionaryCombobox({
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      if (!open) setOpen(true);
+      openDropdown();
       setHighlightIndex((index) => Math.min(index + 1, Math.max(options.length - 1, 0)));
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (!open) setOpen(true);
+      openDropdown();
       setHighlightIndex((index) => Math.max(index - 1, 0));
       return;
     }
@@ -115,48 +132,75 @@ export default function IntakeDictionaryCombobox({
 
     if (event.key === "Escape") {
       event.preventDefault();
-      closeList(true);
+      closeList();
       inputRef.current?.blur();
     }
   }
 
   const showList = open && !readOnly && options.length > 0;
+  const inputValue = open && isSearching ? query : value;
 
   return (
     <label className="block">
       <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
-      <input
-        ref={inputRef}
-        type="text"
-        role="combobox"
-        aria-expanded={showList}
-        aria-controls={showList ? listId : undefined}
-        aria-autocomplete="list"
-        aria-label={label}
-        data-testid={testId}
-        value={query}
-        readOnly={readOnly}
-        autoComplete="off"
-        onFocus={() => {
+      <div
+        className={`relative mt-1 ${readOnly ? "" : "cursor-pointer"}`}
+        data-testid={testId ? `${testId}-trigger` : undefined}
+        onMouseDown={(event) => {
           if (readOnly) return;
-          setQuery(value);
-          setOpen(true);
+          if (event.target === inputRef.current) return;
+          event.preventDefault();
+          openDropdown();
+          inputRef.current?.focus();
         }}
-        onChange={(event) => handleInputChange(event.target.value)}
-        onBlur={() => {
-          window.setTimeout(() => {
-            tryCommitQuery();
-          }, 0);
-        }}
-        onKeyDown={handleKeyDown}
-        className={INPUT_CLASS}
-      />
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-expanded={showList}
+          aria-controls={showList ? listId : undefined}
+          aria-autocomplete="list"
+          aria-label={label}
+          data-testid={testId}
+          value={inputValue}
+          readOnly={readOnly}
+          autoComplete="off"
+          onClick={() => {
+            if (readOnly) return;
+            openDropdown();
+          }}
+          onFocus={() => {
+            if (readOnly) return;
+            openDropdown();
+          }}
+          onChange={(event) => handleInputChange(event.target.value)}
+          onBlur={() => {
+            window.setTimeout(() => {
+              tryCommitQuery();
+            }, 0);
+          }}
+          onKeyDown={handleKeyDown}
+          className={INPUT_CLASS}
+        />
+        {!readOnly ? (
+          <span
+            aria-hidden="true"
+            data-testid={testId ? `${testId}-chevron` : undefined}
+            className={`pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-center text-xs text-zinc-500 transition-transform dark:text-zinc-400 ${
+              showList ? "rotate-180" : ""
+            }`}
+          >
+            ▼
+          </span>
+        ) : null}
+      </div>
       {showList ? (
         <ul
           id={listId}
           role="listbox"
           data-testid={testId ? `${testId}-list` : undefined}
-          className="mt-1 max-h-60 overflow-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+          className="relative z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
         >
           {options.map((option, index) => (
             <li key={option} role="presentation">

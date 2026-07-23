@@ -1,7 +1,4 @@
-import {
-  formatIntakeDateForDisplay,
-  INTAKE_INCOMPLETE_DATE_REVIEW_SUFFIX,
-} from "./intakeDateValidation";
+import { formatIntakeDateForDisplay } from "./intakeDateValidation";
 import {
   formatPersonnelDateRange,
   parsePersonnelDateInput,
@@ -43,15 +40,19 @@ export function formatIntakeEducationReviewLine(item: {
 export function formatIntakeTrainingReviewLine(item: {
   institution?: string;
   course_name?: string;
+  year_from?: string;
+  year_to?: string;
   year?: string;
+  hours?: string;
 }): string {
   const title = String(item.course_name ?? item.institution ?? "").trim() || "—";
-  const dateLabel = formatIntakePeriodForDisplay(item.year);
-  if (!dateLabel) return title;
-  if (dateLabel.includes(INTAKE_INCOMPLETE_DATE_REVIEW_SUFFIX)) {
-    return `${title} (${dateLabel})`;
-  }
-  return `${title} (${dateLabel})`;
+  const yearTo = String(item.year_to ?? item.year ?? "").trim();
+  const period = formatIntakePeriodRange(item.year_from, yearTo);
+  const hours = String(item.hours ?? "").trim();
+  const parts = [title];
+  if (period && period !== "—") parts.push(period);
+  if (hours) parts.push(`${hours} ч.`);
+  return parts.join("; ");
 }
 
 export function formatIntakeRelativeReviewLine(item: {

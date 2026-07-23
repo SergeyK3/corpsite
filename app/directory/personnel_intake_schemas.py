@@ -1,10 +1,12 @@
 """Pydantic schemas for Personnel Intake API."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from app.personnel_intake.domain.employment_tenure import EmploymentTenureCalculation
 
 from app.personnel_intake.domain.models import (
     IntakeDraftSnapshot,
@@ -267,4 +269,72 @@ def review_state_to_out(state: IntakeReviewState, *, link: IntakeLinkSnapshot | 
         transfer=transfer_to_out(state.transfer) if state.transfer else None,
         can_transfer=state.can_transfer,
         transfer_blocked_reason=state.transfer_blocked_reason,
+    )
+
+
+class EmploymentTenureRecordIn(BaseModel):
+    record_id: str = ""
+    organization: str = ""
+    position: str = ""
+    year_from: str | None = None
+    year_to: str | None = None
+    reason_for_leaving: str = ""
+
+
+class EmploymentTenureCalculateIn(BaseModel):
+    records: list[EmploymentTenureRecordIn] = Field(default_factory=list)
+
+
+class EmploymentTenureYmdOut(BaseModel):
+    years: int
+    months: int
+    days: int
+
+
+class EmploymentTenureRecordOut(BaseModel):
+    record_id: str
+    index: int
+    label: str
+    days: int | None = None
+    included: bool
+    is_open_ended: bool
+    overlaps_other: bool
+    warning: str | None = None
+
+
+class EmploymentTenureCalculateOut(BaseModel):
+    calculation_date: date
+    records: list[EmploymentTenureRecordOut]
+    arithmetic_sum_days: int
+    overlap_excluded_days: int
+    total_days: int
+    total_decimal_years: float
+    total_ymd: EmploymentTenureYmdOut
+
+
+def employment_tenure_to_out(result: EmploymentTenureCalculation) -> EmploymentTenureCalculateOut:
+    return EmploymentTenureCalculateOut(
+        calculation_date=result.calculation_date,
+        records=[
+            EmploymentTenureRecordOut(
+                record_id=row.record_id,
+                index=row.index,
+                label=row.label,
+                days=row.days,
+                included=row.included,
+                is_open_ended=row.is_open_ended,
+                overlaps_other=row.overlaps_other,
+                warning=row.warning,
+            )
+            for row in result.records
+        ],
+        arithmetic_sum_days=result.arithmetic_sum_days,
+        overlap_excluded_days=result.overlap_excluded_days,
+        total_days=result.total_days,
+        total_decimal_years=result.decimal_years,
+        total_ymd=EmploymentTenureYmdOut(
+            years=result.total_ymd.years,
+            months=result.total_ymd.months,
+            days=result.total_ymd.days,
+        ),
     )

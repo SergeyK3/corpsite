@@ -34,6 +34,21 @@ def test_incomplete_birth_date_allows_january_first() -> None:
     assert is_incomplete_intake_birth_date("1990") is True
 
 
+def test_collect_intake_date_validation_errors_training_period() -> None:
+    payload = empty_intake_draft_payload()
+    payload["training"] = [
+        {
+            "institution": "Центр",
+            "course_name": "Охрана труда",
+            "year_from": "2021-03-12",
+            "year_to": "2021-03-10",
+            "hours": "",
+        }
+    ]
+
+    assert "training[0].year_from" in collect_intake_date_validation_errors(payload)
+
+
 def test_collect_intake_date_validation_errors() -> None:
     payload = empty_intake_draft_payload()
     payload["personal"]["birth_date"] = "1990-05-20"
