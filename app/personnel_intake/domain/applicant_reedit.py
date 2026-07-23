@@ -5,7 +5,11 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_REVISION_REQUESTED,
     APPLICATION_STATUS_UNDER_REVIEW,
 )
-from app.personnel_intake.domain.on_behalf_edit import has_rework_requested_sections
+from app.personnel_intake.domain.review_status import INTAKE_SECTION_REVIEW_REWORK_REQUESTED
+
+
+def has_rework_requested_sections(section_statuses: list[str]) -> bool:
+    return INTAKE_SECTION_REVIEW_REWORK_REQUESTED in section_statuses
 
 
 def can_applicant_reedit_submitted_intake(

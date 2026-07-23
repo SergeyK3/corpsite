@@ -237,6 +237,40 @@ describe("PersonnelApplicationDetailDrawer", () => {
     });
   });
 
+  it("shows on-behalf edit button enabled for Petrov filling editable draft", async () => {
+    getPersonnelApplicationMock.mockResolvedValue({
+      application_id: 10,
+      person_id: 5,
+      full_name: "Петров Пётр Петрович",
+      iin: "900101300123",
+      status: "intake_pending",
+      application_received_at: "2026-07-17",
+      application_source: "paper",
+      vacancy_check_status: "confirmed_visually",
+      intake_draft_status: "editable",
+      intake_link_status: "opened",
+      registered_at: "2026-07-17T10:00:00Z",
+      registered_by_user_id: 7,
+      registered_by_name: "HR User",
+      created_at: "2026-07-17T10:00:00Z",
+      updated_at: "2026-07-17T10:00:00Z",
+    });
+
+    render(
+      <PersonnelApplicationDetailDrawer
+        applicationId={10}
+        open
+        journalReturnHref="/directory/personnel/applicants?application_id=10"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const button = await screen.findByTestId("intake-on-behalf-edit-button");
+    expect(button).toHaveTextContent("Редактировать анкету от имени претендента");
+    expect(button).toBeEnabled();
+    expect(screen.queryByTestId("intake-on-behalf-edit-blocked")).not.toBeInTheDocument();
+  });
+
   it("shows on-behalf edit button blocked until section rework", async () => {
     getPersonnelApplicationMock.mockResolvedValue({
       application_id: 178,

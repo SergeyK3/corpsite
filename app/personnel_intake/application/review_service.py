@@ -31,7 +31,8 @@ from app.personnel_intake.domain.review_status import (
     INTAKE_TRANSFER_STATUS_COMPLETED,
     is_section_review_terminal,
 )
-from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_SUBMITTED
+from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_EDITABLE, INTAKE_DRAFT_STATUS_SUBMITTED
+from app.personnel_intake.domain.applicant_reedit import can_applicant_reedit_submitted_intake
 from app.personnel_intake.application.intake_service import reopen_intake_for_applicant_rework
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 from app.personnel_intake.infrastructure.review_repository import SqlAlchemyPersonnelIntakeReviewRepository
@@ -84,9 +85,19 @@ def _require_submitted_draft(conn: Connection, application_id: int, *, allow_com
         )
     intake_repo = SqlAlchemyPersonnelIntakeRepository(conn)
     draft = intake_repo.get_draft_by_application_id(application_id)
-    if draft is None or draft.status != INTAKE_DRAFT_STATUS_SUBMITTED:
+    if draft is None:
         raise PersonnelIntakeNotFoundError("Submitted intake draft not found.")
-    return app, draft
+    if draft.status == INTAKE_DRAFT_STATUS_SUBMITTED:
+        return app, draft
+    if draft.status == INTAKE_DRAFT_STATUS_EDITABLE:
+        review_repo = SqlAlchemyPersonnelIntakeReviewRepository(conn)
+        sections = review_repo.list_section_reviews(application_id)
+        if can_applicant_reedit_submitted_intake(
+            application_status=app.status,
+            section_statuses=[section.status for section in sections],
+        ):
+            return app, draft
+    raise PersonnelIntakeNotFoundError("Submitted intake draft not found.")
 
 
 def _evaluate_can_transfer(

@@ -48,6 +48,27 @@ describe("PersonnelApplicationIntakeSection", () => {
     expect(await screen.findByText(/\/intake\/abc123/)).toBeInTheDocument();
   });
 
+  it("shows on-behalf edit button for intake pending editable draft", () => {
+    const onOpenOnBehalfEdit = vi.fn();
+    render(
+      <PersonnelApplicationIntakeSection
+        detail={{
+          ...baseDetail,
+          status: "intake_pending",
+          intake_link_status: "opened",
+          intake_draft_status: "editable",
+        }}
+        onRefresh={() => {}}
+        onOpenOnBehalfEdit={onOpenOnBehalfEdit}
+      />,
+    );
+
+    const button = screen.getByTestId("intake-on-behalf-edit-button");
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(onOpenOnBehalfEdit).toHaveBeenCalledWith(42);
+  });
+
   it("shows open review button when submitted", () => {
     const onOpenReview = vi.fn();
     render(

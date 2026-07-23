@@ -54,10 +54,16 @@ class IntakeDraftOut(BaseModel):
     opened_at: datetime | None = None
     submitted_at: datetime | None = None
     expires_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class IntakeAutosaveIn(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class IntakeOnBehalfSaveIn(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+    expected_updated_at: datetime
 
 
 class IntakeAutosaveOut(BaseModel):
@@ -158,6 +164,7 @@ class IntakeOnBehalfSaveOut(BaseModel):
     draft_id: int
     status: str
     saved_at: datetime
+    draft_updated_at: datetime
     changed_fields: list[str]
 
 
@@ -193,6 +200,7 @@ def draft_session_to_out(
         opened_at=link.opened_at,
         submitted_at=draft.submitted_at or link.submitted_at,
         expires_at=link.expires_at,
+        updated_at=draft.updated_at,
     )
 
 

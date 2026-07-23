@@ -380,6 +380,7 @@ export type IntakeOnBehalfEditSession = {
     payload: Record<string, unknown>;
     read_only: boolean;
     link_status: string;
+    updated_at?: string | null;
   };
   editable: boolean;
   blocked_reason: string | null;
@@ -391,6 +392,7 @@ export type IntakeOnBehalfSaveResponse = {
   draft_id: number;
   status: string;
   saved_at: string;
+  draft_updated_at: string;
   changed_fields: string[];
 };
 
@@ -402,15 +404,30 @@ export async function getIntakeOnBehalfEditSession(applicationId: number): Promi
   return body as IntakeOnBehalfEditSession;
 }
 
+export function isIntakeOnBehalfDraftVersionConflict(error: unknown): boolean {
+  const candidate = error as { status?: number; details?: { detail?: { code?: string } } };
+  if (candidate.status !== 409) return false;
+  const code = candidate.details?.detail?.code;
+  return code === "DRAFT_VERSION_CONFLICT";
+}
+
 export async function saveIntakeOnBehalfDraft(
   applicationId: number,
   payload: Record<string, unknown>,
+  expectedUpdatedAt: string,
 ): Promise<IntakeOnBehalfSaveResponse> {
+  const normalizedExpectedUpdatedAt = expectedUpdatedAt.trim();
+  if (!normalizedExpectedUpdatedAt) {
+    throw new Error("expectedUpdatedAt is required for on-behalf draft save.");
+  }
   const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/draft/on-behalf`;
   const res = await fetch(resolveApiUrl(path), {
     method: "PATCH",
     headers: authHeaders(true),
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify({
+      payload,
+      expected_updated_at: normalizedExpectedUpdatedAt,
+    }),
     cache: "no-store",
   });
   const body = await readJsonSafe(res);

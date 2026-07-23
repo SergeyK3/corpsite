@@ -301,6 +301,28 @@ class SqlAlchemyPersonnelIntakeRepository:
         row = self._conn.execute(stmt).mappings().one()
         return _draft_from_row(row)
 
+    def update_draft_payload_if_updated_at(
+        self,
+        draft_id: int,
+        *,
+        payload: dict[str, Any],
+        updated_at: datetime,
+        expected_updated_at: datetime,
+    ) -> IntakeDraftSnapshot | None:
+        stmt = (
+            update(PersonnelIntakeDraft)
+            .where(
+                PersonnelIntakeDraft.draft_id == int(draft_id),
+                PersonnelIntakeDraft.updated_at == expected_updated_at,
+            )
+            .values(payload=payload, updated_at=updated_at)
+            .returning(*_DRAFT_COLUMNS)
+        )
+        row = self._conn.execute(stmt).mappings().one_or_none()
+        if row is None:
+            return None
+        return _draft_from_row(row)
+
     def mark_draft_submitted(self, draft_id: int, *, submitted_at: datetime) -> IntakeDraftSnapshot:
         stmt = (
             update(PersonnelIntakeDraft)

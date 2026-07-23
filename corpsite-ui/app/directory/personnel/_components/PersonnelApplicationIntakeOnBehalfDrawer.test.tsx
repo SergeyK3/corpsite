@@ -75,7 +75,7 @@ function buildSessionPayload(): IntakeDraftPayload {
   };
 }
 
-function mockEditableSession() {
+function mockEditableSession(updatedAt = "2026-07-23T09:00:00Z") {
   getIntakeOnBehalfEditSessionMock.mockResolvedValue({
     application_id: 42,
     editable: true,
@@ -88,6 +88,7 @@ function mockEditableSession() {
       status: "submitted",
       read_only: false,
       link_status: "submitted",
+      updated_at: updatedAt,
       payload: buildSessionPayload(),
     },
   });
@@ -152,6 +153,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
       draft_id: 7,
       status: "submitted",
       saved_at: "2026-07-23T10:00:00Z",
+      draft_updated_at: "2026-07-23T10:00:00Z",
       changed_fields: ["employment_biography[0].organization", "military.status"],
     });
 
@@ -171,6 +173,11 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
 
     await waitFor(() => {
       expect(saveIntakeOnBehalfDraftMock).toHaveBeenCalledTimes(1);
+      expect(saveIntakeOnBehalfDraftMock).toHaveBeenCalledWith(
+        42,
+        expect.any(Object),
+        "2026-07-23T09:00:00Z",
+      );
     });
 
     expect(saveButton).toHaveTextContent("Данные сохранены");
@@ -185,6 +192,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
       draft_id: 7,
       status: "submitted",
       saved_at: "2026-07-23T10:00:00Z",
+      draft_updated_at: "2026-07-23T10:00:00Z",
       changed_fields: ["employment_biography[0].organization"],
     });
 
@@ -232,6 +240,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
         status: "submitted",
         read_only: false,
         link_status: "submitted",
+        updated_at: "2026-07-23T09:00:00Z",
         payload: {
           ...buildSessionPayload(),
           education: [
@@ -282,5 +291,41 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     const saveButton = screen.getByTestId("intake-on-behalf-save-button");
     expect(saveButton).toHaveTextContent("Сохранить от имени претендента");
     expect(saveButton).toBeEnabled();
+  });
+
+  it("shows version conflict when stale expected_updated_at is rejected", async () => {
+    mockEditableSession();
+    saveIntakeOnBehalfDraftMock.mockRejectedValue({
+      status: 409,
+      details: {
+        detail: {
+          code: "DRAFT_VERSION_CONFLICT",
+          message: "Intake draft was changed by another session.",
+        },
+      },
+    });
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await openReviewStep();
+    fireEvent.click(screen.getByTestId("intake-on-behalf-save-button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("intake-on-behalf-save-error")).toHaveTextContent(/другой вкладке/i);
+    });
+    expect(saveIntakeOnBehalfDraftMock).toHaveBeenCalledWith(
+      42,
+      expect.any(Object),
+      "2026-07-23T09:00:00Z",
+    );
+    expect(screen.getByTestId("intake-on-behalf-save-button")).toHaveTextContent(
+      "Сохранить от имени претендента",
+    );
   });
 });

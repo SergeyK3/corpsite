@@ -12,6 +12,7 @@ import {
 import { intakePayloadsEqual } from "@/app/intake/_lib/intakePayloadCompare";
 import {
   getIntakeOnBehalfEditSession,
+  isIntakeOnBehalfDraftVersionConflict,
   mapPersonnelApplicationsApiError,
   saveIntakeOnBehalfDraft,
 } from "../_lib/personnelApplicationsApi.client";
@@ -47,6 +48,9 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
   const [saving, setSaving] = React.useState(false);
   const [saveCommitted, setSaveCommitted] = React.useState(false);
   const payloadRef = React.useRef(payload);
+  const expectedUpdatedAtRef = React.useRef<string | null>(null);
+  const sessionLoadSeqRef = React.useRef(0);
+  const sessionHydratedRef = React.useRef(false);
 
   React.useEffect(() => {
     payloadRef.current = payload;
@@ -60,21 +64,33 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
       setBlockedReason(null);
       setEditable(false);
       setSaveCommitted(false);
+      expectedUpdatedAtRef.current = null;
+      sessionHydratedRef.current = false;
       return;
     }
     let cancelled = false;
+    const loadSeq = ++sessionLoadSeqRef.current;
+    sessionHydratedRef.current = false;
+    expectedUpdatedAtRef.current = null;
     setLoading(true);
     setError(null);
     setSaveCommitted(false);
     void getIntakeOnBehalfEditSession(applicationId)
       .then((session) => {
-        if (cancelled) return;
+        if (cancelled || loadSeq !== sessionLoadSeqRef.current) return;
+        const draftUpdatedAt = session.draft.updated_at?.trim() ?? "";
+        if (!draftUpdatedAt) {
+          setEditable(false);
+          setError("Не удалось определить версию черновика для безопасного сохранения.");
+          return;
+        }
         const reconciled = reconcileIntakeDraftPayload(
           (session.draft.payload as IntakeDraftPayload | undefined) ?? emptyIntakeDraftPayload(),
         );
-        const nextPayload = withInitialOnBehalfStep(reconciled);
+        expectedUpdatedAtRef.current = draftUpdatedAt;
+        sessionHydratedRef.current = true;
         setBaselinePayload(reconciled);
-        setPayload(nextPayload);
+        setPayload(withInitialOnBehalfStep(reconciled));
         setEditable(session.editable);
         setBlockedReason(session.blocked_reason);
         setStepIndex(resolveIntakeOnBehalfInitialStepIndex());
@@ -110,7 +126,10 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
   }
 
   async function handleSave() {
-    if (applicationId == null || !editable || saving) return;
+    const expectedUpdatedAt = expectedUpdatedAtRef.current?.trim() ?? "";
+    if (applicationId == null || !editable || saving || !sessionHydratedRef.current || !expectedUpdatedAt) {
+      return;
+    }
     const currentPayload = payloadRef.current;
     setSaving(true);
     setError(null);
@@ -118,17 +137,25 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
       const result = await saveIntakeOnBehalfDraft(
         applicationId,
         currentPayload as unknown as Record<string, unknown>,
+        expectedUpdatedAt,
       );
       if (result.changed_fields.length === 0 && !intakePayloadsEqual(baselinePayload, currentPayload)) {
         setSaveCommitted(false);
         setError("Изменения не были сохранены. Проверьте данные и попробуйте снова.");
         return;
       }
+      expectedUpdatedAtRef.current = result.draft_updated_at;
       setBaselinePayload(currentPayload);
       setSaveCommitted(true);
       onSaved?.();
     } catch (e) {
       setSaveCommitted(false);
+      if (isIntakeOnBehalfDraftVersionConflict(e)) {
+        setError(
+          "Черновик был изменён в другой вкладке или другим пользователем. Обновите страницу и проверьте актуальные данные перед повторным сохранением.",
+        );
+        return;
+      }
       setError(mapPersonnelApplicationsApiError(e, "Не удалось сохранить анкету"));
     } finally {
       setSaving(false);

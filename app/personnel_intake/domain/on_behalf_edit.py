@@ -5,13 +5,18 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_APPROVED,
     APPLICATION_STATUS_AWAITING_DIRECTOR_RESOLUTION,
     APPLICATION_STATUS_COMPLETED,
+    APPLICATION_STATUS_INTAKE_PENDING,
     APPLICATION_STATUS_ORDER_DRAFT_CREATED,
     APPLICATION_STATUS_RESOLUTION_PENDING,
     APPLICATION_STATUS_REVISION_REQUESTED,
     APPLICATION_STATUS_UNDER_REVIEW,
     is_terminal_application_status,
 )
-from app.personnel_intake.domain.review_status import INTAKE_SECTION_REVIEW_REWORK_REQUESTED
+from app.personnel_intake.domain.applicant_reedit import (
+    can_applicant_reedit_submitted_intake,
+    has_rework_requested_sections,
+)
+from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_EDITABLE, INTAKE_DRAFT_STATUS_SUBMITTED
 
 APPROVAL_STAGE_STATUSES: frozenset[str] = frozenset(
     {
@@ -37,19 +42,33 @@ ON_BEHALF_EDIT_BLOCKED_NO_REWORK = (
 ON_BEHALF_EDIT_BLOCKED_NO_DRAFT = "Анкета претендента ещё не создана или не отправлена."
 
 
-def has_rework_requested_sections(section_statuses: list[str]) -> bool:
-    return INTAKE_SECTION_REVIEW_REWORK_REQUESTED in section_statuses
+def _draft_open_for_post_submit_on_behalf(
+    *,
+    draft_status: str,
+    application_status: str,
+    section_statuses: list[str] | None,
+) -> bool:
+    draft_status_value = str(draft_status or "").strip()
+    if draft_status_value == INTAKE_DRAFT_STATUS_SUBMITTED:
+        return True
+    if draft_status_value == INTAKE_DRAFT_STATUS_EDITABLE:
+        return can_applicant_reedit_submitted_intake(
+            application_status=application_status,
+            section_statuses=section_statuses or [],
+        )
+    return False
 
 
 def evaluate_on_behalf_edit_eligibility(
     *,
     application_status: str,
     draft_exists: bool,
-    draft_submitted: bool,
+    draft_status: str | None = None,
     section_statuses: list[str] | None = None,
 ) -> tuple[bool, str | None, str | None]:
     """Return (allowed, blocked_reason, reason_code)."""
     status = str(application_status or "").strip()
+    draft_status_value = str(draft_status or "").strip()
 
     if not draft_exists:
         return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_FOUND"
@@ -60,15 +79,28 @@ def evaluate_on_behalf_edit_eligibility(
     if status in APPROVAL_STAGE_STATUSES:
         return False, ON_BEHALF_EDIT_BLOCKED_APPROVAL, "APPROVAL_STAGE"
 
+    if status == APPLICATION_STATUS_INTAKE_PENDING:
+        if draft_status_value == INTAKE_DRAFT_STATUS_EDITABLE:
+            return True, None, None
+        return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_EDITABLE"
+
     if status == APPLICATION_STATUS_REVISION_REQUESTED:
-        if not draft_submitted:
+        if not _draft_open_for_post_submit_on_behalf(
+            draft_status=draft_status_value,
+            application_status=status,
+            section_statuses=section_statuses,
+        ):
             return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_SUBMITTED"
         return True, None, None
 
     if status == APPLICATION_STATUS_UNDER_REVIEW:
-        if not draft_submitted:
-            return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_SUBMITTED"
         sections = section_statuses or []
+        if not _draft_open_for_post_submit_on_behalf(
+            draft_status=draft_status_value,
+            application_status=status,
+            section_statuses=sections,
+        ):
+            return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_SUBMITTED"
         if has_rework_requested_sections(sections):
             return True, None, None
         return False, ON_BEHALF_EDIT_BLOCKED_NO_REWORK, "NO_REWORK_SECTIONS"

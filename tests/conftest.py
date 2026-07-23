@@ -101,6 +101,35 @@ def safe_delete_many(conn, table: str, col: str, ids: list[int], schema: str = "
     conn.execute(text(f"DELETE FROM {schema}.{table} WHERE {col} = ANY(:ids)"), {"ids": ids})
 
 
+def cleanup_seed_personnel_applications(conn, user_ids: list[int]) -> None:
+    """Remove personnel applications created by tests that reference seed users."""
+    if not user_ids or not table_exists(conn, "personnel_applications"):
+        return
+    pa_cols = get_columns(conn, "personnel_applications")
+    conditions: list[str] = []
+    if "registered_by_user_id" in pa_cols:
+        conditions.append("registered_by_user_id = ANY(:uids)")
+    if "vacancy_checked_by_user_id" in pa_cols:
+        conditions.append("vacancy_checked_by_user_id = ANY(:uids)")
+    if not conditions:
+        return
+    person_ids = conn.execute(
+        text(
+            f"""
+            SELECT DISTINCT person_id
+            FROM public.personnel_applications
+            WHERE {" OR ".join(conditions)}
+            """
+        ),
+        {"uids": user_ids},
+    ).scalars().all()
+    if not person_ids:
+        return
+    from tests.ppr.conftest import cleanup_person_graph
+
+    cleanup_person_graph(conn, person_ids=list(person_ids), employee_ids=[])
+
+
 def insert_returning_id(
     conn,
     *,
@@ -738,6 +767,9 @@ def seed() -> Iterator[Dict[str, Any]]:
                         text("DELETE FROM public.task_reports WHERE submitted_by = ANY(:uids)"),
                         {"uids": created_user_ids},
                     )
+
+            # personnel applications created by API tests using seed users
+            cleanup_seed_personnel_applications(conn, created_user_ids)
 
             # users
             if table_exists(conn, "users"):

@@ -276,6 +276,17 @@ export function resolveIntakeOnBehalfEditAccess(
     };
   }
 
+  if (status === "intake_pending") {
+    if (draftStatus === "editable") {
+      return { visible: true, enabled: true, blockedReason: null };
+    }
+    return {
+      visible: true,
+      enabled: false,
+      blockedReason: "Анкета претендента ещё не создана или недоступна для редактирования.",
+    };
+  }
+
   if (status === "revision_requested") {
     if (draftStatus !== "submitted") {
       return {

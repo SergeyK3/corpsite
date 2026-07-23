@@ -12,18 +12,44 @@ from app.personnel_applications.application.lifecycle_service import append_life
 from app.personnel_applications.domain.errors import PersonnelApplicationNotFoundError
 from app.personnel_applications.domain.lifecycle_audit import LIFECYCLE_ACTION_INTAKE_EDITED_ON_BEHALF
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
+from app.personnel_applications.domain.status import APPLICATION_STATUS_INTAKE_PENDING
 from app.personnel_intake.application.intake_service import _validate_submit_payload
+from app.personnel_intake.domain.date_validation import collect_intake_date_validation_errors
 from app.personnel_intake.application.payload_diff import compute_intake_payload_field_changes
-from app.personnel_intake.domain.errors import PersonnelIntakeNotFoundError, PersonnelIntakeOnBehalfEditError
+from app.personnel_intake.domain.errors import (
+    PersonnelIntakeConflictError,
+    PersonnelIntakeNotFoundError,
+    PersonnelIntakeOnBehalfEditError,
+    PersonnelIntakeValidationError,
+)
 from app.personnel_intake.domain.models import IntakeDraftSnapshot, IntakeLinkSnapshot
 from app.personnel_intake.domain.on_behalf_edit import evaluate_on_behalf_edit_eligibility
-from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_SUBMITTED
+from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_EDITABLE
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 from app.personnel_intake.infrastructure.review_repository import SqlAlchemyPersonnelIntakeReviewRepository
 
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _assert_expected_draft_updated_at(
+    *,
+    expected_updated_at: datetime,
+    current_updated_at: datetime,
+) -> None:
+    if _as_utc(expected_updated_at) == _as_utc(current_updated_at):
+        return
+    raise PersonnelIntakeConflictError(
+        "Intake draft was changed by another session.",
+        code="DRAFT_VERSION_CONFLICT",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +68,26 @@ class SaveOnBehalfEditResult:
     draft: IntakeDraftSnapshot
     saved_at: datetime
     changed_fields: tuple[str, ...]
+
+
+def _validate_on_behalf_save_payload(
+    *,
+    application_status: str,
+    draft_status: str,
+    payload: dict[str, Any],
+) -> None:
+    if (
+        application_status == APPLICATION_STATUS_INTAKE_PENDING
+        and draft_status == INTAKE_DRAFT_STATUS_EDITABLE
+    ):
+        date_errors = collect_intake_date_validation_errors(payload)
+        if date_errors:
+            raise PersonnelIntakeValidationError(
+                "Intake dates must be full day precision (ДД.ММ.ГГГГ): "
+                + ", ".join(date_errors)
+            )
+        return
+    _validate_submit_payload(payload)
 
 
 def _load_eligibility_context(
@@ -64,17 +110,17 @@ def load_on_behalf_edit_session(conn: Connection, application_id: int) -> OnBeha
     status, draft, section_statuses = _load_eligibility_context(conn, application_id)
 
     if draft is None:
-        _, blocked_reason, reason_code = evaluate_on_behalf_edit_eligibility(
+        evaluate_on_behalf_edit_eligibility(
             application_status=status,
             draft_exists=False,
-            draft_submitted=False,
+            draft_status=None,
         )
         raise PersonnelIntakeNotFoundError("Intake draft not found.")
 
     allowed, blocked_reason, reason_code = evaluate_on_behalf_edit_eligibility(
         application_status=status,
         draft_exists=True,
-        draft_submitted=draft.status == INTAKE_DRAFT_STATUS_SUBMITTED,
+        draft_status=draft.status,
         section_statuses=section_statuses,
     )
 
@@ -99,6 +145,7 @@ def save_on_behalf_intake_draft(
     application_id: int,
     payload: dict[str, Any],
     actor_user_id: int,
+    expected_updated_at: datetime,
 ) -> SaveOnBehalfEditResult:
     session = load_on_behalf_edit_session(conn, application_id)
     if not session.editable:
@@ -107,7 +154,14 @@ def save_on_behalf_intake_draft(
             code=session.reason_code or "EDIT_NOT_ALLOWED",
         )
 
-    _validate_submit_payload(payload)
+    app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
+    app = app_repo.require_by_id(application_id)
+
+    _validate_on_behalf_save_payload(
+        application_status=app.status,
+        draft_status=session.draft.status,
+        payload=payload,
+    )
 
     now = _now_utc()
     before_payload = deepcopy(session.draft.payload)
@@ -120,15 +174,23 @@ def save_on_behalf_intake_draft(
             changed_fields=(),
         )
 
+    _assert_expected_draft_updated_at(
+        expected_updated_at=expected_updated_at,
+        current_updated_at=session.draft.updated_at,
+    )
+
     intake_repo = SqlAlchemyPersonnelIntakeRepository(conn)
-    updated = intake_repo.update_draft_payload(
+    updated = intake_repo.update_draft_payload_if_updated_at(
         session.draft.draft_id,
         payload=payload,
         updated_at=now,
+        expected_updated_at=expected_updated_at,
     )
-
-    app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
-    app = app_repo.require_by_id(application_id)
+    if updated is None:
+        raise PersonnelIntakeConflictError(
+            "Intake draft was changed by another session.",
+            code="DRAFT_VERSION_CONFLICT",
+        )
 
     append_lifecycle_audit(
         conn,

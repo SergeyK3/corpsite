@@ -14,6 +14,7 @@ from app.directory.personnel_intake_schemas import (
     IntakeLinkAccessOut,
     IntakeLinkIssueOut,
     IntakeOnBehalfEditSessionOut,
+    IntakeOnBehalfSaveIn,
     IntakeOnBehalfSaveOut,
     IntakeReviewStateOut,
     IntakeRevokeOut,
@@ -275,7 +276,7 @@ def get_intake_on_behalf_edit_session(
 
 @router.patch("/{application_id}/intake/draft/on-behalf", response_model=IntakeOnBehalfSaveOut)
 def patch_intake_on_behalf_draft(
-    body: IntakeAutosaveIn,
+    body: IntakeOnBehalfSaveIn,
     application_id: int = Path(..., ge=1),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> IntakeOnBehalfSaveOut:
@@ -288,12 +289,14 @@ def patch_intake_on_behalf_draft(
                 application_id=application_id,
                 payload=body.payload,
                 actor_user_id=user_id,
+                expected_updated_at=body.expected_updated_at,
             )
         return IntakeOnBehalfSaveOut(
             application_id=result.application_id,
             draft_id=result.draft.draft_id,
             status=result.draft.status,
             saved_at=result.saved_at,
+            draft_updated_at=result.draft.updated_at,
             changed_fields=list(result.changed_fields),
         )
     except PersonnelApplicationNotFoundError as exc:
@@ -302,6 +305,8 @@ def patch_intake_on_behalf_draft(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelIntakeOnBehalfEditError as exc:
         raise _on_behalf_edit_error_http422(exc)
+    except PersonnelIntakeConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)})
     except PersonnelIntakeValidationError as exc:
         raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": str(exc)})
     except HTTPException:
