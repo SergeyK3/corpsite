@@ -49,19 +49,44 @@ export type AdminOrgUnitUpdatePayload = {
   allow_duplicate?: boolean;
 };
 
-export type BulkDeleteResultItem = {
-  unit_id: number;
-  ok: boolean;
-  error_code?: string;
+export type BulkDeleteFailedItem = {
+  id: number;
+  name: string;
+  reason_code: string;
+  message: string;
   dependencies?: Record<string, number>;
-  detail?: string;
+  blocked_units?: BulkDeleteBlockedUnit[];
+};
+
+export type BulkDeleteBlockedUnit = {
+  id: number;
+  name: string;
+  dependencies: Record<string, number>;
+};
+
+export type BulkDeletePreviewDescendant = {
+  id: number;
+  name: string;
+};
+
+export type BulkDeletePreviewRoot = {
+  id: number;
+  name: string;
+  descendants: BulkDeletePreviewDescendant[];
+  subtree_size: number;
+};
+
+export type BulkDeletePreviewResponse = {
+  requested: number;
+  roots: BulkDeletePreviewRoot[];
+  skipped_as_covered: Array<{ id: number; covered_by: number | null }>;
+  not_found: number[];
 };
 
 export type BulkDeleteResponse = {
-  results: BulkDeleteResultItem[];
+  deleted_ids: number[];
+  failed: BulkDeleteFailedItem[];
   requested: number;
-  deleted: number;
-  failed: number;
 };
 
 export type AdminOrgUnitListParams = {
@@ -150,6 +175,15 @@ export async function deleteAdminOrgUnit(unitId: number): Promise<{ ok: boolean;
   return apiFetchJson(`/admin/org-units/${unitId}`, { method: "DELETE" });
 }
 
+export async function previewBulkDeleteAdminOrgUnits(
+  unitIds: number[],
+): Promise<BulkDeletePreviewResponse> {
+  return apiFetchJson("/admin/org-units/bulk-delete/preview", {
+    method: "POST",
+    body: { unit_ids: unitIds },
+  });
+}
+
 export async function bulkDeleteAdminOrgUnits(
   unitIds: number[],
 ): Promise<BulkDeleteResponse> {
@@ -232,30 +266,103 @@ export type BulkDeleteResultRow = {
   unit_id: number;
   name: string;
   ok: boolean;
-  error_code?: string;
-  detail?: string;
+  reason_code?: string;
+  message?: string;
   dependencies?: Record<string, number>;
+  blocked_units?: BulkDeleteBlockedUnit[];
 };
 
+export function collectDescendantIds(items: AdminOrgUnit[], rootId: number): Set<number> {
+  const childrenByParent = new Map<number, number[]>();
+  for (const item of items) {
+    const pid = item.parent_unit_id;
+    if (pid == null) continue;
+    const list = childrenByParent.get(pid) ?? [];
+    list.push(item.unit_id);
+    childrenByParent.set(pid, list);
+  }
+  const out = new Set<number>();
+  const stack = [rootId];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    for (const ch of childrenByParent.get(cur) ?? []) {
+      if (!out.has(ch)) {
+        out.add(ch);
+        stack.push(ch);
+      }
+    }
+  }
+  return out;
+}
+
+export function normalizeBulkDeleteSelection(
+  items: AdminOrgUnit[],
+  selectedIds: Iterable<number>,
+): { roots: number[]; covered: Array<{ id: number; coveredBy: number }> } {
+  const selected = new Set(selectedIds);
+  const covered: Array<{ id: number; coveredBy: number }> = [];
+  const roots: number[] = [];
+
+  for (const id of selected) {
+    let current = items.find((unit) => unit.unit_id === id)?.parent_unit_id ?? null;
+    let covering: number | null = null;
+    const seen = new Set<number>();
+    while (current != null && !seen.has(current)) {
+      seen.add(current);
+      if (selected.has(current)) {
+        covering = current;
+        break;
+      }
+      current = items.find((unit) => unit.unit_id === current)?.parent_unit_id ?? null;
+    }
+    if (covering != null && covering !== id) {
+      covered.push({ id, coveredBy: covering });
+    } else if (!roots.includes(id)) {
+      roots.push(id);
+    }
+  }
+
+  return { roots, covered };
+}
+
+export function buildBulkDeleteConfirmMessage(preview: BulkDeletePreviewResponse): string {
+  const rootCount = preview.roots.length;
+  const descendantCount = preview.roots.reduce((sum, root) => sum + root.descendants.length, 0);
+  if (descendantCount > 0) {
+    return `Удалить ${rootCount} выбранных подразделений вместе с ${descendantCount} дочерними? Действие необратимо.`;
+  }
+  return `Удалить ${preview.requested} выбранных подразделений? Действие необратимо.`;
+}
+
 export function buildBulkDeleteResultRows(
-  results: BulkDeleteResultItem[],
+  response: BulkDeleteResponse,
   nameById: Map<number, string>,
 ): { deleted: BulkDeleteResultRow[]; failed: BulkDeleteResultRow[] } {
-  const deleted: BulkDeleteResultRow[] = [];
-  const failed: BulkDeleteResultRow[] = [];
-  for (const row of results) {
-    const entry: BulkDeleteResultRow = {
-      unit_id: row.unit_id,
-      name: nameById.get(row.unit_id) ?? `ID ${row.unit_id}`,
-      ok: row.ok,
-      error_code: row.error_code,
-      detail: row.detail,
-      dependencies: row.dependencies,
-    };
-    if (row.ok) deleted.push(entry);
-    else failed.push(entry);
-  }
+  const deleted: BulkDeleteResultRow[] = response.deleted_ids.map((unitId) => ({
+    unit_id: unitId,
+    name: nameById.get(unitId) ?? `ID ${unitId}`,
+    ok: true,
+  }));
+  const failed: BulkDeleteResultRow[] = response.failed.map((row) => ({
+    unit_id: row.id,
+    name: row.name || nameById.get(row.id) || `ID ${row.id}`,
+    ok: false,
+    reason_code: row.reason_code,
+    message: row.message,
+    dependencies: row.dependencies,
+    blocked_units: row.blocked_units,
+  }));
   return { deleted, failed };
+}
+
+export function formatBulkDeleteSummary(response: BulkDeleteResponse): string {
+  const deletedCount = response.deleted_ids.length;
+  const summary = `Удалено ${deletedCount} из ${response.requested}.`;
+  if (response.failed.length === 0) {
+    return summary;
+  }
+  const skipLines = response.failed.map((row) => `${row.name} (ID ${row.id}): ${row.message}`);
+  return `${summary} Пропущено: ${skipLines.join("; ")}.`;
 }
 
 export function findRootUnits(items: AdminOrgUnit[]): AdminOrgUnit[] {
@@ -282,7 +389,7 @@ export function canOfferNoParentOption(params: {
   activeUnit: AdminOrgUnit | null;
 }): boolean {
   if (params.mode === "create") {
-    return !params.rootExists;
+    return true;
   }
   return params.activeUnit?.parent_unit_id == null;
 }

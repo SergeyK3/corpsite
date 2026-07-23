@@ -18,6 +18,7 @@ from app.services.org_units_admin_service import (
     delete_admin_org_unit,
     get_admin_org_unit,
     list_admin_org_units,
+    preview_bulk_delete_admin_org_units,
     update_admin_org_unit,
 )
 
@@ -102,6 +103,14 @@ def admin_create_org_unit(
         raise _lookup_to_404(exc) from exc
     except ValueError as exc:
         raise _value_to_400(exc) from exc
+
+
+@router.post("/bulk-delete/preview")
+def admin_preview_bulk_delete_org_units(
+    body: AdminOrgUnitBulkDeleteIn,
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    return preview_bulk_delete_admin_org_units(unit_ids=body.unit_ids)
 
 
 @router.post("/bulk-delete")

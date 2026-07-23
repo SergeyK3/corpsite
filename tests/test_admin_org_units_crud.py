@@ -181,29 +181,43 @@ def _create_child_unit(conn, *, name: str, parent_unit_id: int, group_id: int | 
     if "code" in cols:
         values["code"] = name
     if "group_id" in cols:
-        values["group_id"] = group_id if group_id is not None else _ensure_org_group(conn)
+        values["group_id"] = group_id if group_id is not None else _ensure_deps_group_id(conn)
     return insert_returning_id(conn, table="org_units", id_col="unit_id", values=values)
 
 
-def _ensure_org_group(conn) -> int:
-    if not table_exists(conn, "org_unit_groups"):
-        return 1
+def _ensure_deps_group_id(conn) -> int:
+    if not table_exists(conn, "deps_group"):
+        pytest.skip("deps_group missing")
     row = conn.execute(
-        text("SELECT group_id FROM public.org_unit_groups ORDER BY group_id LIMIT 1")
+        text("SELECT group_id FROM public.deps_group ORDER BY group_id LIMIT 1")
     ).scalar_one_or_none()
-    if row is not None:
-        return int(row)
-    cols = get_columns(conn, "org_unit_groups")
-    values: dict = {"name": f"pytest_group_{uuid4().hex[:6]}"}
-    if "is_active" in cols:
-        values["is_active"] = True
-    return insert_returning_id(conn, table="org_unit_groups", id_col="group_id", values=values)
+    if row is None:
+        pytest.skip("deps_group is empty")
+    return int(row)
+
+
+def _alternate_deps_group_id(conn, *, skip_group_id: int) -> int:
+    row = conn.execute(
+        text(
+            """
+            SELECT group_id
+            FROM public.deps_group
+            WHERE group_id <> :skip_group_id
+            ORDER BY group_id
+            LIMIT 1
+            """
+        ),
+        {"skip_group_id": int(skip_group_id)},
+    ).scalar_one_or_none()
+    if row is None:
+        pytest.skip("need alternate deps_group row")
+    return int(row)
 
 
 @pytest.fixture
 def org_group_id(seed):
     with engine.begin() as conn:
-        return _ensure_org_group(conn)
+        return _ensure_deps_group_id(conn)
 
 
 def _audit_count(event_type: str, *, org_unit_id: int) -> int:
@@ -262,6 +276,77 @@ def test_create_valid_org_unit(client: TestClient, sysadmin_headers, seed, org_g
         audit_n = _audit_count("ORG_UNIT_CREATED", org_unit_id=unit_id)
         if audit_n >= 0:
             assert audit_n >= 1
+    finally:
+        _cleanup_unit(unit_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_create_root_org_unit_without_parent(client: TestClient, sysadmin_headers):
+    with engine.begin() as conn:
+        root_exists = conn.execute(
+            text("SELECT 1 FROM public.org_units WHERE parent_unit_id IS NULL LIMIT 1")
+        ).first()
+        if root_exists:
+            pytest.skip("single-root DB already has a root org unit")
+        group_id = _ensure_deps_group_id(conn)
+
+    suffix = uuid4().hex[:8]
+    name = f"pytest_root_ou_{suffix}"
+    resp = client.post(
+        "/admin/org-units",
+        headers=sysadmin_headers,
+        json={
+            "name": name,
+            "group_id": group_id,
+            "code": f"pytest_{suffix}",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["item"]
+    unit_id = int(item["unit_id"])
+    try:
+        assert item["name"] == name
+        assert item["parent_unit_id"] is None
+        assert int(item["group_id"]) == group_id
+    finally:
+        _cleanup_unit(unit_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_create_child_org_unit_inherits_parent_group(client: TestClient, sysadmin_headers, seed):
+    with engine.begin() as conn:
+        parent_id = int(seed["unit_id"])
+        parent_group = conn.execute(
+            text("SELECT group_id FROM public.org_units WHERE unit_id = :uid"),
+            {"uid": parent_id},
+        ).scalar_one_or_none()
+        if parent_group is None:
+            parent_group = _ensure_deps_group_id(conn)
+            conn.execute(
+                text("UPDATE public.org_units SET group_id = :gid WHERE unit_id = :uid"),
+                {"gid": int(parent_group), "uid": parent_id},
+            )
+        parent_group = int(parent_group)
+        alternate_group_id = _alternate_deps_group_id(conn, skip_group_id=parent_group)
+
+    suffix = uuid4().hex[:8]
+    name = f"pytest_child_inherit_{suffix}"
+    resp = client.post(
+        "/admin/org-units",
+        headers=sysadmin_headers,
+        json={
+            "name": name,
+            "parent_unit_id": parent_id,
+            "group_id": alternate_group_id,
+            "code": f"pytest_{suffix}",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["item"]
+    unit_id = int(item["unit_id"])
+    try:
+        assert item["parent_unit_id"] == parent_id
+        assert int(item["group_id"]) == parent_group
     finally:
         _cleanup_unit(unit_id)
 
@@ -441,6 +526,8 @@ def test_delete_with_task_forbidden(client: TestClient, sysadmin_headers, seed):
             values["owner_unit_id"] = unit_id
         if "is_active" in tcols:
             values["is_active"] = True
+        if "code" in tcols:
+            values["code"] = f"pytest_del_task_{suffix}"
         id_col = "task_id"
         if "task_id" not in tcols:
             if "regular_task_id" in tcols:
@@ -545,7 +632,7 @@ def test_bulk_delete_per_item_results(client: TestClient, sysadmin_headers, seed
     suffix = uuid4().hex[:8]
     deletable_id: int | None = None
     blocked_id: int | None = None
-    child_id: int | None = None
+    blocked_user_id: int | None = None
     with engine.begin() as conn:
         deletable_id = _create_child_unit(
             conn, name=f"pytest_bulk_ok_{suffix}", parent_unit_id=int(seed["unit_id"])
@@ -553,7 +640,12 @@ def test_bulk_delete_per_item_results(client: TestClient, sysadmin_headers, seed
         blocked_id = _create_child_unit(
             conn, name=f"pytest_bulk_block_{suffix}", parent_unit_id=int(seed["unit_id"])
         )
-        child_id = _create_child_unit(conn, name=f"pytest_bulk_child_{suffix}", parent_unit_id=blocked_id)
+        blocked_user_id = create_user(
+            conn,
+            full_name=f"pytest_bulk_block_user_{suffix}",
+            role_id=int(seed["executor_role_id"]),
+            unit_id=blocked_id,
+        )
     try:
         resp = client.post(
             "/admin/org-units/bulk-delete",
@@ -563,17 +655,231 @@ def test_bulk_delete_per_item_results(client: TestClient, sysadmin_headers, seed
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["requested"] == 3
-        assert body["deleted"] == 1
-        assert body["failed"] == 2
-        by_id = {int(r["unit_id"]): r for r in body["results"]}
-        assert by_id[deletable_id]["ok"] is True
-        assert by_id[blocked_id]["ok"] is False
-        assert by_id[blocked_id]["error_code"] == "ORG_UNIT_HAS_DEPENDENCIES"
-        assert by_id[999999999]["ok"] is False
+        assert body["deleted_ids"] == [deletable_id]
+        assert len(body["failed"]) == 2
+        by_id = {int(r["id"]): r for r in body["failed"]}
+        assert by_id[blocked_id]["reason_code"] == "SUBTREE_HAS_DEPENDENCIES"
+        assert by_id[blocked_id]["name"]
+        assert by_id[blocked_id]["message"]
+        assert by_id[blocked_id]["blocked_units"]
+        assert by_id[999999999]["reason_code"] == "NOT_FOUND"
     finally:
-        if child_id is not None:
-            _cleanup_unit_artifacts(child_id)
+        if blocked_user_id is not None:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM public.users WHERE user_id = :uid"),
+                    {"uid": int(blocked_user_id)},
+                )
         if blocked_id is not None:
             _cleanup_unit_artifacts(blocked_id)
         if deletable_id is not None:
             _cleanup_unit_artifacts(deletable_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_parent_with_children_after_confirmation(client: TestClient, sysadmin_headers, seed):
+    suffix = uuid4().hex[:8]
+    parent_id: int | None = None
+    child_id: int | None = None
+    with engine.begin() as conn:
+        parent_id = _create_child_unit(
+            conn, name=f"pytest_bulk_parent_{suffix}", parent_unit_id=int(seed["unit_id"])
+        )
+        child_id = _create_child_unit(conn, name=f"pytest_bulk_child_{suffix}", parent_unit_id=parent_id)
+    try:
+        preview = client.post(
+            "/admin/org-units/bulk-delete/preview",
+            headers=sysadmin_headers,
+            json={"unit_ids": [parent_id]},
+        )
+        assert preview.status_code == 200, preview.text
+        preview_body = preview.json()
+        assert preview_body["roots"][0]["id"] == parent_id
+        assert {row["id"] for row in preview_body["roots"][0]["descendants"]} == {child_id}
+
+        resp = client.post(
+            "/admin/org-units/bulk-delete",
+            headers=sysadmin_headers,
+            json={"unit_ids": [parent_id]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert set(body["deleted_ids"]) == {parent_id, child_id}
+        assert body["failed"] == []
+    finally:
+        if child_id is not None:
+            _cleanup_unit_artifacts(child_id)
+        if parent_id is not None:
+            _cleanup_unit_artifacts(parent_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_multilevel_subtree(client: TestClient, sysadmin_headers, seed):
+    suffix = uuid4().hex[:8]
+    root_id: int | None = None
+    child_id: int | None = None
+    grandchild_id: int | None = None
+    with engine.begin() as conn:
+        root_id = _create_child_unit(
+            conn, name=f"pytest_bulk_root_{suffix}", parent_unit_id=int(seed["unit_id"])
+        )
+        child_id = _create_child_unit(conn, name=f"pytest_bulk_mid_{suffix}", parent_unit_id=root_id)
+        grandchild_id = _create_child_unit(
+            conn, name=f"pytest_bulk_leaf_{suffix}", parent_unit_id=child_id
+        )
+    try:
+        resp = client.post(
+            "/admin/org-units/bulk-delete",
+            headers=sysadmin_headers,
+            json={"unit_ids": [root_id]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert set(body["deleted_ids"]) == {root_id, child_id, grandchild_id}
+    finally:
+        for unit_id in (grandchild_id, child_id, root_id):
+            if unit_id is not None:
+                _cleanup_unit_artifacts(unit_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_child_dependency_blocks_parent_subtree(client: TestClient, sysadmin_headers, seed):
+    suffix = uuid4().hex[:8]
+    parent_id: int | None = None
+    child_id: int | None = None
+    child_user_id: int | None = None
+    with engine.begin() as conn:
+        parent_id = _create_child_unit(
+            conn, name=f"pytest_bulk_dep_parent_{suffix}", parent_unit_id=int(seed["unit_id"])
+        )
+        child_id = _create_child_unit(
+            conn, name=f"pytest_bulk_dep_child_{suffix}", parent_unit_id=parent_id
+        )
+        child_user_id = create_user(
+            conn,
+            full_name=f"pytest_bulk_dep_user_{suffix}",
+            role_id=int(seed["executor_role_id"]),
+            unit_id=child_id,
+        )
+    try:
+        resp = client.post(
+            "/admin/org-units/bulk-delete",
+            headers=sysadmin_headers,
+            json={"unit_ids": [parent_id]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["deleted_ids"] == []
+        assert len(body["failed"]) == 1
+        failed = body["failed"][0]
+        assert failed["reason_code"] == "SUBTREE_HAS_DEPENDENCIES"
+        assert failed["id"] == parent_id
+        blocked = {row["id"]: row for row in failed["blocked_units"]}
+        assert child_id in blocked
+        assert blocked[child_id]["dependencies"].get("users", 0) >= 1
+
+        with engine.connect() as conn:
+            assert conn.execute(
+                text("SELECT 1 FROM public.org_units WHERE unit_id = :uid"),
+                {"uid": parent_id},
+            ).first()
+            assert conn.execute(
+                text("SELECT 1 FROM public.org_units WHERE unit_id = :uid"),
+                {"uid": child_id},
+            ).first()
+    finally:
+        if child_user_id is not None:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM public.users WHERE user_id = :uid"),
+                    {"uid": int(child_user_id)},
+                )
+        if child_id is not None:
+            _cleanup_unit_artifacts(child_id)
+        if parent_id is not None:
+            _cleanup_unit_artifacts(parent_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_parent_and_child_selected_once(client: TestClient, sysadmin_headers, seed):
+    suffix = uuid4().hex[:8]
+    parent_id: int | None = None
+    child_id: int | None = None
+    with engine.begin() as conn:
+        parent_id = _create_child_unit(
+            conn, name=f"pytest_bulk_dedupe_parent_{suffix}", parent_unit_id=int(seed["unit_id"])
+        )
+        child_id = _create_child_unit(
+            conn, name=f"pytest_bulk_dedupe_child_{suffix}", parent_unit_id=parent_id
+        )
+    try:
+        preview = client.post(
+            "/admin/org-units/bulk-delete/preview",
+            headers=sysadmin_headers,
+            json={"unit_ids": [parent_id, child_id]},
+        )
+        assert preview.status_code == 200, preview.text
+        preview_body = preview.json()
+        assert len(preview_body["roots"]) == 1
+        assert preview_body["roots"][0]["id"] == parent_id
+        assert preview_body["skipped_as_covered"] == [{"id": child_id, "covered_by": parent_id}]
+
+        resp = client.post(
+            "/admin/org-units/bulk-delete",
+            headers=sysadmin_headers,
+            json={"unit_ids": [parent_id, child_id]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert set(body["deleted_ids"]) == {parent_id, child_id}
+        assert body["failed"] == []
+        assert body["requested"] == 2
+    finally:
+        if child_id is not None:
+            _cleanup_unit_artifacts(child_id)
+        if parent_id is not None:
+            _cleanup_unit_artifacts(parent_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_non_admin_denied(client: TestClient, observer_headers, seed):
+    resp = client.post(
+        "/admin/org-units/bulk-delete",
+        headers=observer_headers,
+        json={"unit_ids": [int(seed["unit_id"])]},
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_deduplicates_ids(client: TestClient, sysadmin_headers, seed):
+    suffix = uuid4().hex[:8]
+    deletable_id: int | None = None
+    with engine.begin() as conn:
+        deletable_id = _create_child_unit(
+            conn, name=f"pytest_bulk_dedupe_{suffix}", parent_unit_id=int(seed["unit_id"])
+        )
+    try:
+        resp = client.post(
+            "/admin/org-units/bulk-delete",
+            headers=sysadmin_headers,
+            json={"unit_ids": [deletable_id, deletable_id, deletable_id]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["requested"] == 1
+        assert body["deleted_ids"] == [deletable_id]
+        assert body["failed"] == []
+    finally:
+        if deletable_id is not None:
+            _cleanup_unit_artifacts(deletable_id)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_delete_rejects_empty_payload(client: TestClient, sysadmin_headers):
+    resp = client.post(
+        "/admin/org-units/bulk-delete",
+        headers=sysadmin_headers,
+        json={"unit_ids": []},
+    )
+    assert resp.status_code == 422

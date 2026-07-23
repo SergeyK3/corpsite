@@ -9,21 +9,26 @@ import ErrorBanner, { SuccessBanner } from "../../_components/shared/ErrorBanner
 import {
   activateAdminOrgUnit,
   bulkDeleteAdminOrgUnits,
+  buildBulkDeleteConfirmMessage,
   buildBulkDeleteResultRows,
   canOfferNoParentOption,
+  collectDescendantIds,
   createAdminOrgUnit,
   deactivateAdminOrgUnit,
   deleteAdminOrgUnit,
   fetchAdminOrgUnitDependencies,
   fetchAdminOrgUnits,
   findRootUnits,
+  formatBulkDeleteSummary,
   formatDependencyList,
   isOrgUnitHasDependenciesError,
   mapAdminOrgUnitsApiError,
+  previewBulkDeleteAdminOrgUnits,
   resolveGroupLabel,
   updateAdminOrgUnit,
   type AdminOrgUnit,
   type AdminOrgUnitListParams,
+  type BulkDeletePreviewResponse,
   type BulkDeleteResultRow,
   type OrgUnitDependencySummary,
 } from "../_lib/adminOrgUnitsApi.client";
@@ -55,28 +60,7 @@ const ACTION_BTN =
 const ACTION_BTN_DANGER =
   "rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40";
 
-function collectDescendantIds(items: AdminOrgUnit[], rootId: number): Set<number> {
-  const childrenByParent = new Map<number, number[]>();
-  for (const item of items) {
-    const pid = item.parent_unit_id;
-    if (pid == null) continue;
-    const list = childrenByParent.get(pid) ?? [];
-    list.push(item.unit_id);
-    childrenByParent.set(pid, list);
-  }
-  const out = new Set<number>();
-  const stack = [rootId];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    for (const ch of childrenByParent.get(cur) ?? []) {
-      if (!out.has(ch)) {
-        out.add(ch);
-        stack.push(ch);
-      }
-    }
-  }
-  return out;
-}
+const PAGE_SIZE = 50;
 
 export default function OrgUnitsAdminClient() {
   const [items, setItems] = useState<AdminOrgUnit[]>([]);
@@ -93,6 +77,7 @@ export default function OrgUnitsAdminClient() {
   const [rootsOnly, setRootsOnly] = useState(false);
   const [withoutEmployees, setWithoutEmployees] = useState(false);
   const [deletableOnly, setDeletableOnly] = useState(false);
+  const [offset, setOffset] = useState(0);
 
   const [groups, setGroups] = useState<DepartmentGroupRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -109,6 +94,8 @@ export default function OrgUnitsAdminClient() {
   } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<AdminOrgUnit | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState<BulkDeletePreviewResponse | null>(null);
+  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
   const [bulkResults, setBulkResults] = useState<{
     deleted: BulkDeleteResultRow[];
     failed: BulkDeleteResultRow[];
@@ -120,14 +107,15 @@ export default function OrgUnitsAdminClient() {
       roots_only: rootsOnly,
       without_employees: withoutEmployees,
       deletable_only: deletableOnly,
-      limit: 500,
+      limit: PAGE_SIZE,
+      offset,
     };
     const trimmed = q.trim();
     if (trimmed) params.q = trimmed;
     if (orgGroupId) params.org_group_id = Number(orgGroupId);
     if (parentFilter) params.parent_unit_id = Number(parentFilter);
     return params;
-  }, [q, status, orgGroupId, parentFilter, rootsOnly, withoutEmployees, deletableOnly]);
+  }, [q, status, orgGroupId, parentFilter, rootsOnly, withoutEmployees, deletableOnly, offset]);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -147,6 +135,10 @@ export default function OrgUnitsAdminClient() {
     const timer = window.setTimeout(() => setQ(qInput), 300);
     return () => window.clearTimeout(timer);
   }, [qInput]);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [q, status, orgGroupId, parentFilter, rootsOnly, withoutEmployees, deletableOnly]);
 
   useEffect(() => {
     void loadItems();
@@ -170,7 +162,6 @@ export default function OrgUnitsAdminClient() {
 
   const rootUnits = useMemo(() => findRootUnits(items), [items]);
   const rootExists = rootUnits.length > 0;
-  const defaultParentId = rootUnits[0]?.unit_id ?? null;
 
   const allowNoParent = useMemo(
     () =>
@@ -182,8 +173,6 @@ export default function OrgUnitsAdminClient() {
     [drawerMode, rootExists, activeUnit],
   );
 
-  const parentRequiresSelection = drawerMode === "create" && rootExists;
-
   const groupInheritedFromParent = useMemo(() => {
     const parentId = Number(form.parent_unit_id);
     if (!Number.isFinite(parentId) || parentId <= 0) return null;
@@ -192,6 +181,22 @@ export default function OrgUnitsAdminClient() {
   }, [form.parent_unit_id, items]);
 
   const unitNameById = useMemo(() => new Map(items.map((u) => [u.unit_id, u.name])), [items]);
+
+  const currentPageIds = useMemo(() => items.map((unit) => unit.unit_id), [items]);
+  const allCurrentPageSelected =
+    currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.has(id));
+  const someCurrentPageSelected =
+    currentPageIds.some((id) => selectedIds.has(id)) && !allCurrentPageSelected;
+
+  const selectedUnitsForConfirm = useMemo(() => {
+    const byId = new Map(items.map((unit) => [unit.unit_id, unit]));
+    return Array.from(selectedIds)
+      .map((id) => byId.get(id) ?? { unit_id: id, name: `ID ${id}` })
+      .sort((a, b) => a.unit_id - b.unit_id);
+  }, [items, selectedIds]);
+
+  const page = Math.floor(offset / PAGE_SIZE) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const parentOptions = useMemo(() => {
     if (!activeUnit) return items;
@@ -203,16 +208,10 @@ export default function OrgUnitsAdminClient() {
   function openCreate() {
     setActiveUnit(null);
     const defaultGroupId = groups[0] ? String(groups[0].group_id) : "";
-    const defaultParent =
-      defaultParentId != null ? String(defaultParentId) : "";
-    const inheritedGroup =
-      defaultParentId != null
-        ? items.find((u) => u.unit_id === defaultParentId)?.group_id
-        : null;
     setForm({
       ...EMPTY_FORM,
-      group_id: inheritedGroup != null ? String(inheritedGroup) : defaultGroupId,
-      parent_unit_id: defaultParent,
+      group_id: defaultGroupId,
+      parent_unit_id: "",
     });
     setDrawerMode("create");
     setError(null);
@@ -249,9 +248,6 @@ export default function OrgUnitsAdminClient() {
   }
 
   function validateFormBeforeSave(): string | null {
-    if (drawerMode === "create" && rootExists && !form.parent_unit_id.trim()) {
-      return "Выберите родительское подразделение.";
-    }
     if (drawerMode === "edit" && activeUnit && activeUnit.parent_unit_id != null && !form.parent_unit_id.trim()) {
       return "Выберите родительское подразделение.";
     }
@@ -397,17 +393,57 @@ export default function OrgUnitsAdminClient() {
     });
   }
 
+  function toggleSelectAllCurrentPage() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allCurrentPageSelected) {
+        for (const id of currentPageIds) next.delete(id);
+      } else {
+        for (const id of currentPageIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function openBulkConfirm() {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    setBulkConfirm(true);
+    setBulkPreview(null);
+    setBulkPreviewLoading(true);
+    setError(null);
+    try {
+      const preview = await previewBulkDeleteAdminOrgUnits(ids);
+      setBulkPreview(preview);
+    } catch (err) {
+      setBulkConfirm(false);
+      setError(mapAdminOrgUnitsApiError(err, "Не удалось подготовить массовое удаление."));
+    } finally {
+      setBulkPreviewLoading(false);
+    }
+  }
+
+  function closeBulkConfirm() {
+    setBulkConfirm(false);
+    setBulkPreview(null);
+    setBulkPreviewLoading(false);
+  }
+
   async function confirmBulkDelete() {
     const ids = Array.from(selectedIds);
     if (!ids.length) return;
-    setBulkConfirm(false);
+    closeBulkConfirm();
     setError(null);
     try {
       const result = await bulkDeleteAdminOrgUnits(ids);
-      const rows = buildBulkDeleteResultRows(result.results, unitNameById);
+      const rows = buildBulkDeleteResultRows(result, unitNameById);
       setBulkResults(rows);
-      setSuccess(`Массовое удаление: удалено ${result.deleted} из ${result.requested}.`);
-      setSelectedIds(new Set());
+      setSuccess(formatBulkDeleteSummary(result));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const deletedId of result.deleted_ids) next.delete(deletedId);
+        return next;
+      });
       await loadItems();
     } catch (err) {
       setError(mapAdminOrgUnitsApiError(err, "Массовое удаление не выполнено."));
@@ -527,16 +563,18 @@ export default function OrgUnitsAdminClient() {
           >
             Обновить
           </button>
-          {selectedIds.size > 0 ? (
-            <button
-              type="button"
-              onClick={() => setBulkConfirm(true)}
-              className="rounded-lg bg-red-600 px-3 py-1 text-sm text-white"
-              data-testid="org-units-bulk-delete-btn"
-            >
-              Удалить выбранные ({selectedIds.size})
-            </button>
-          ) : null}
+          <span className="text-sm text-zinc-600 dark:text-zinc-400" data-testid="org-units-selected-count">
+            Выбрано: {selectedIds.size}
+          </span>
+          <button
+            type="button"
+            onClick={() => void openBulkConfirm()}
+            disabled={selectedIds.size === 0}
+            className="rounded-lg bg-red-600 px-3 py-1 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="org-units-bulk-delete-btn"
+          >
+            Удалить выбранные ({selectedIds.size})
+          </button>
         </div>
       </div>
 
@@ -593,14 +631,33 @@ export default function OrgUnitsAdminClient() {
                       {row.name} <span className="text-zinc-500">(ID {row.unit_id})</span>
                     </div>
                     <div className="text-amber-800 dark:text-amber-200">
-                      {row.error_code === "ORG_UNIT_HAS_DEPENDENCIES"
-                        ? "Заблокировано: есть зависимости"
-                        : `Ошибка: ${row.detail ?? row.error_code ?? "неизвестная ошибка"}`}
+                      {row.message ??
+                        (row.reason_code === "ORG_UNIT_HAS_DEPENDENCIES"
+                          ? "Заблокировано: есть зависимости"
+                          : row.reason_code === "SUBTREE_HAS_DEPENDENCIES"
+                            ? "Заблокировано: есть зависимости в поддереве"
+                            : `Ошибка: ${row.reason_code ?? "неизвестная ошибка"}`)}
                     </div>
                     {row.dependencies && Object.keys(row.dependencies).length > 0 ? (
                       <ul className="mt-1 list-disc pl-5 text-zinc-700 dark:text-zinc-300">
                         {formatDependencyList(row.dependencies).map((line) => (
                           <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {row.blocked_units && row.blocked_units.length > 0 ? (
+                      <ul className="mt-2 space-y-2 text-xs">
+                        {row.blocked_units.map((blocked) => (
+                          <li key={`blocked-${row.unit_id}-${blocked.id}`}>
+                            <div className="font-medium">
+                              {blocked.name} <span className="text-zinc-500">(ID {blocked.id})</span>
+                            </div>
+                            <ul className="mt-1 list-disc pl-5">
+                              {formatDependencyList(blocked.dependencies).map((line) => (
+                                <li key={`${blocked.id}-${line}`}>{line}</li>
+                              ))}
+                            </ul>
+                          </li>
                         ))}
                       </ul>
                     ) : null}
@@ -617,7 +674,16 @@ export default function OrgUnitsAdminClient() {
           <thead className="bg-zinc-100 text-left dark:bg-zinc-900">
             <tr>
               <th className="px-2 py-2">
-                <span className="sr-only">Выбор</span>
+                <input
+                  type="checkbox"
+                  checked={allCurrentPageSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someCurrentPageSelected;
+                  }}
+                  onChange={toggleSelectAllCurrentPage}
+                  aria-label="Выбрать все на текущей странице"
+                  data-testid="org-units-select-all-page"
+                />
               </th>
               <th className="px-2 py-2">ID</th>
               <th className="px-2 py-2">Наименование</th>
@@ -709,6 +775,32 @@ export default function OrgUnitsAdminClient() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span data-testid="org-units-pagination-info">
+          Страница {page} из {totalPages} (всего {total})
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={offset === 0 || loading}
+            onClick={() => setOffset((value) => Math.max(0, value - PAGE_SIZE))}
+            className="rounded-lg border border-zinc-300 px-3 py-1 disabled:opacity-50 dark:border-zinc-600"
+            data-testid="org-units-page-prev"
+          >
+            Назад
+          </button>
+          <button
+            type="button"
+            disabled={offset + PAGE_SIZE >= total || loading}
+            onClick={() => setOffset((value) => value + PAGE_SIZE)}
+            className="rounded-lg border border-zinc-300 px-3 py-1 disabled:opacity-50 dark:border-zinc-600"
+            data-testid="org-units-page-next"
+          >
+            Вперёд
+          </button>
+        </div>
       </div>
 
       {drawerMode ? (
@@ -810,18 +902,18 @@ export default function OrgUnitsAdminClient() {
                   ) : null}
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block">
-                    Родительское подразделение{parentRequiresSelection ? " *" : ""}
-                  </span>
+                  <span className="mb-1 block">Родительское подразделение</span>
                   <select
-                    required={parentRequiresSelection || (drawerMode === "edit" && activeUnit?.parent_unit_id != null)}
+                    required={drawerMode === "edit" && activeUnit?.parent_unit_id != null}
                     value={form.parent_unit_id}
                     onChange={(e) => handleParentChange(e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
                     data-testid="org-unit-form-parent"
                   >
                     {allowNoParent ? (
-                      <option value="">— корень / без родителя —</option>
+                      <option value="">
+                        {drawerMode === "create" ? "— выберите родителя —" : "— корень / без родителя —"}
+                      </option>
                     ) : (
                       <option value="" disabled>
                         — выберите родителя —
@@ -915,10 +1007,72 @@ export default function OrgUnitsAdminClient() {
       <ConfirmDialog
         open={bulkConfirm}
         title="Массовое удаление"
-        message={`Удалить ${selectedIds.size} выбранных подразделений? Для каждой записи будет выполнена проверка зависимостей.`}
+        message={
+          bulkPreviewLoading
+            ? "Подготовка списка подразделений для удаления…"
+            : bulkPreview
+              ? buildBulkDeleteConfirmMessage(bulkPreview)
+              : `Удалить ${selectedIds.size} выбранных подразделений? Действие необратимо.`
+        }
+        details={
+          bulkPreview && !bulkPreviewLoading ? (
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-medium text-zinc-800 dark:text-zinc-200">Выбранные подразделения</h4>
+                <ul
+                  className="mt-1 max-h-32 list-disc space-y-1 overflow-y-auto pl-5 text-zinc-700 dark:text-zinc-300"
+                  data-testid="org-units-bulk-confirm-list"
+                >
+                  {bulkPreview.roots.map((root) => (
+                    <li key={root.id}>
+                      {root.name} <span className="text-zinc-500">(ID {root.id})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {bulkPreview.roots.some((root) => root.descendants.length > 0) ? (
+                <div>
+                  <h4 className="font-medium text-red-700 dark:text-red-400">
+                    Также будут удалены дочерние подразделения
+                  </h4>
+                  <ul
+                    className="mt-1 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-zinc-700 dark:text-zinc-300"
+                    data-testid="org-units-bulk-confirm-descendants"
+                  >
+                    {bulkPreview.roots.flatMap((root) =>
+                      root.descendants.map((child) => (
+                        <li key={`${root.id}-${child.id}`}>
+                          {child.name} <span className="text-zinc-500">(ID {child.id})</span>
+                        </li>
+                      )),
+                    )}
+                  </ul>
+                </div>
+              ) : null}
+              {bulkPreview.skipped_as_covered.length > 0 ? (
+                <p className="text-xs text-zinc-500" data-testid="org-units-bulk-confirm-covered-note">
+                  {bulkPreview.skipped_as_covered.length} подразделений будут удалены вместе с выбранным
+                  родителем и не обрабатываются отдельно.
+                </p>
+              ) : null}
+            </div>
+          ) : selectedUnitsForConfirm.length > 0 && !bulkPreviewLoading ? (
+            <ul
+              className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-zinc-700 dark:text-zinc-300"
+              data-testid="org-units-bulk-confirm-list"
+            >
+              {selectedUnitsForConfirm.map((unit) => (
+                <li key={unit.unit_id}>
+                  {unit.name} <span className="text-zinc-500">(ID {unit.unit_id})</span>
+                </li>
+              ))}
+            </ul>
+          ) : null
+        }
         confirmLabel="Удалить выбранные"
+        confirmDisabled={bulkPreviewLoading || bulkPreview == null}
         onConfirm={() => void confirmBulkDelete()}
-        onCancel={() => setBulkConfirm(false)}
+        onCancel={closeBulkConfirm}
       />
     </div>
   );

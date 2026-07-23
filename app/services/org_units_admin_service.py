@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
@@ -38,10 +38,38 @@ def _active_filter_sql(conn: Connection, table: str) -> str:
     return ""
 
 
+def _child_unit_ids(conn: Connection, unit_id: int) -> List[int]:
+    rows = conn.execute(
+        text("SELECT unit_id FROM public.org_units WHERE parent_unit_id = :uid ORDER BY unit_id"),
+        {"uid": int(unit_id)},
+    ).scalars().all()
+    return [int(row) for row in rows]
+
+
+def _apply_subtree_child_dependency_filter(
+    dependencies: Dict[str, int],
+    *,
+    unit_id: int,
+    subtree_unit_ids: Optional[Set[int]],
+    conn: Connection,
+) -> Dict[str, int]:
+    filtered = dict(dependencies)
+    if not subtree_unit_ids or int(filtered.get("child_org_units", 0)) <= 0:
+        return filtered
+    child_ids = _child_unit_ids(conn, unit_id)
+    external_children = [cid for cid in child_ids if cid not in subtree_unit_ids]
+    if external_children:
+        filtered["child_org_units"] = len(external_children)
+    else:
+        filtered["child_org_units"] = 0
+    return filtered
+
+
 def check_org_unit_dependencies(
     unit_id: int,
     *,
     db_engine: Engine = engine,
+    subtree_unit_ids: Optional[Set[int]] = None,
 ) -> OrgUnitDependencySummary:
     deps: Dict[str, int] = {}
     static_queries = {
@@ -161,7 +189,15 @@ def check_org_unit_dependencies(
                 unit_id=int(unit_id),
             )
 
-    total = sum(deps.values())
+        if subtree_unit_ids is not None:
+            deps = _apply_subtree_child_dependency_filter(
+                deps,
+                unit_id=int(unit_id),
+                subtree_unit_ids=subtree_unit_ids,
+                conn=conn,
+            )
+
+    total = sum(int(v) for v in deps.values())
     return OrgUnitDependencySummary(can_delete=total == 0, dependencies=deps)
 
 
@@ -278,14 +314,14 @@ def _find_duplicate_sibling(
 
 def _validate_group_exists(group_id: int, *, db_engine: Engine = engine) -> None:
     with db_engine.begin() as conn:
-        if not _table_exists(conn, "org_unit_groups"):
+        if not _table_exists(conn, "deps_group"):
             return
         row = conn.execute(
-            text("SELECT 1 FROM public.org_unit_groups WHERE group_id = :gid LIMIT 1"),
+            text("SELECT 1 FROM public.deps_group WHERE group_id = :gid LIMIT 1"),
             {"gid": int(group_id)},
         ).first()
         if not row:
-            raise LookupError(f"org unit group not found: group_id={group_id}")
+            raise LookupError(f"deps_group not found: group_id={group_id}")
 
 
 def _resolve_group_inheritance(
@@ -699,48 +735,319 @@ def delete_admin_org_unit(*, actor_user_id: int, unit_id: int) -> Dict[str, Any]
     return {"ok": True, "unit_id": int(unit_id)}
 
 
+def _bulk_delete_failure_message(
+    *,
+    reason_code: str,
+    dependencies: Optional[Dict[str, int]] = None,
+    detail: Optional[str] = None,
+) -> str:
+    if reason_code == "NOT_FOUND":
+        return "Подразделение не найдено"
+    if reason_code == "ORG_UNIT_HAS_DEPENDENCIES":
+        blocked = {k: v for k, v in (dependencies or {}).items() if int(v) > 0}
+        if not blocked:
+            return "Подразделение используется в системе"
+        total = sum(int(v) for v in blocked.values())
+        return f"Подразделение используется в системе ({total} связанных записей)"
+    if reason_code == "SUBTREE_HAS_DEPENDENCIES":
+        return "Удаление поддерева заблокировано: есть внешние зависимости"
+    if reason_code == "VALIDATION_ERROR":
+        return detail or "Удаление отклонено"
+    return detail or "Удаление не выполнено"
+
+
+def _fetch_subtree_units(
+    conn: Connection,
+    root_id: int,
+) -> List[Dict[str, Any]]:
+    rows = conn.execute(
+        text(
+            """
+            WITH RECURSIVE subtree AS (
+                SELECT
+                    ou.unit_id,
+                    ou.parent_unit_id,
+                    ou.name,
+                    0 AS depth
+                FROM public.org_units ou
+                WHERE ou.unit_id = :root_id
+                UNION ALL
+                SELECT
+                    child.unit_id,
+                    child.parent_unit_id,
+                    child.name,
+                    subtree.depth + 1 AS depth
+                FROM public.org_units child
+                JOIN subtree ON child.parent_unit_id = subtree.unit_id
+            )
+            SELECT unit_id, parent_unit_id, name, depth
+            FROM subtree
+            ORDER BY depth DESC, unit_id
+            """
+        ),
+        {"root_id": int(root_id)},
+    ).mappings().all()
+    return [
+        {
+            "unit_id": int(row["unit_id"]),
+            "parent_unit_id": int(row["parent_unit_id"]) if row["parent_unit_id"] is not None else None,
+            "name": row["name"],
+            "depth": int(row["depth"]),
+        }
+        for row in rows
+    ]
+
+
+def _nearest_selected_ancestor(
+    conn: Connection,
+    unit_id: int,
+    selected: Set[int],
+) -> Optional[int]:
+    current = int(unit_id)
+    seen: Set[int] = set()
+    while current not in seen:
+        seen.add(current)
+        row = conn.execute(
+            text("SELECT parent_unit_id FROM public.org_units WHERE unit_id = :uid LIMIT 1"),
+            {"uid": current},
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        parent_id = int(row)
+        if parent_id in selected:
+            return parent_id
+        current = parent_id
+    return None
+
+
+def _normalize_bulk_delete_roots(
+    conn: Connection,
+    unit_ids: List[int],
+) -> Tuple[List[int], List[Tuple[int, int]]]:
+    """Return effective roots and (covered_id, covering_root_id) pairs preserving input order."""
+    selected = set(int(uid) for uid in unit_ids)
+    if not selected:
+        return [], []
+
+    covered: List[Tuple[int, int]] = []
+    roots: List[int] = []
+    for uid in unit_ids:
+        uid_int = int(uid)
+        ancestor = _nearest_selected_ancestor(conn, uid_int, selected)
+        if ancestor is not None and ancestor != uid_int:
+            covered.append((uid_int, ancestor))
+        elif uid_int not in {covered_id for covered_id, _ in covered}:
+            if uid_int not in roots:
+                roots.append(uid_int)
+    return roots, covered
+
+
+def _blocking_dependencies_for_subtree_unit(
+    unit_id: int,
+    *,
+    subtree_unit_ids: Set[int],
+    db_engine: Engine,
+) -> Dict[str, int]:
+    deps = check_org_unit_dependencies(
+        int(unit_id),
+        db_engine=db_engine,
+        subtree_unit_ids=subtree_unit_ids,
+    )
+    return {k: int(v) for k, v in deps.dependencies.items() if int(v) > 0}
+
+
+def _delete_org_unit_in_conn(conn: Connection, *, unit_id: int) -> None:
+    uid = int(unit_id)
+    deleted = conn.execute(
+        text("DELETE FROM public.org_units WHERE unit_id = :unit_id"),
+        {"unit_id": uid},
+    )
+    if not deleted.rowcount:
+        raise LookupError(f"org unit not found: unit_id={uid}")
+
+
+def preview_bulk_delete_admin_org_units(
+    *,
+    unit_ids: List[int],
+    db_engine: Engine = engine,
+) -> Dict[str, Any]:
+    unique_ids = list(dict.fromkeys(int(raw_id) for raw_id in unit_ids))
+    targets: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    not_found: List[int] = []
+
+    with db_engine.connect() as conn:
+        roots, covered = _normalize_bulk_delete_roots(conn, unique_ids)
+        for covered_id, covering_root_id in covered:
+            skipped.append({"id": int(covered_id), "covered_by": int(covering_root_id)})
+
+        for root_id in roots:
+            current = _ORG_UNITS.get_org_unit(unit_id=int(root_id), include_inactive=True)
+            if current is None:
+                not_found.append(int(root_id))
+                continue
+            subtree = _fetch_subtree_units(conn, int(root_id))
+            descendants = [
+                {"id": int(node["unit_id"]), "name": str(node["name"] or f"ID {node['unit_id']}")}
+                for node in subtree
+                if int(node["unit_id"]) != int(root_id)
+            ]
+            targets.append(
+                {
+                    "id": int(root_id),
+                    "name": str(current.name or f"ID {root_id}"),
+                    "descendants": descendants,
+                    "subtree_size": len(subtree),
+                }
+            )
+
+    return {
+        "requested": len(unique_ids),
+        "roots": targets,
+        "skipped_as_covered": skipped,
+        "not_found": not_found,
+    }
+
+
 def bulk_delete_admin_org_units(
     *,
     actor_user_id: int,
     unit_ids: List[int],
+    db_engine: Engine = engine,
 ) -> Dict[str, Any]:
-    results: List[Dict[str, Any]] = []
-    for raw_id in unit_ids:
-        uid = int(raw_id)
-        try:
-            delete_admin_org_unit(actor_user_id=int(actor_user_id), unit_id=uid)
-            results.append({"unit_id": uid, "ok": True})
-        except OrgUnitDeleteRejected as exc:
-            results.append(
-                {
-                    "unit_id": uid,
-                    "ok": False,
-                    "error_code": "ORG_UNIT_HAS_DEPENDENCIES",
-                    "dependencies": exc.dependencies,
-                }
-            )
-        except LookupError as exc:
-            results.append(
-                {
-                    "unit_id": uid,
-                    "ok": False,
-                    "error_code": "NOT_FOUND",
-                    "detail": str(exc),
-                }
-            )
-        except ValueError as exc:
-            results.append(
-                {
-                    "unit_id": uid,
-                    "ok": False,
-                    "error_code": "VALIDATION_ERROR",
-                    "detail": str(exc),
-                }
-            )
-    deleted = sum(1 for r in results if r.get("ok"))
+    unique_ids = list(dict.fromkeys(int(raw_id) for raw_id in unit_ids))
+    failed: List[Dict[str, Any]] = []
+    subtrees_to_delete: List[Tuple[int, str, List[Dict[str, Any]]]] = []
+
+    with db_engine.connect() as conn:
+        roots, covered = _normalize_bulk_delete_roots(conn, unique_ids)
+        covered_ids = {int(covered_id) for covered_id, _ in covered}
+
+        for uid in unique_ids:
+            uid_int = int(uid)
+            if uid_int in covered_ids or uid_int not in roots:
+                continue
+            if _ORG_UNITS.get_org_unit(unit_id=uid_int, include_inactive=True) is None:
+                failed.append(
+                    {
+                        "id": uid_int,
+                        "name": f"ID {uid_int}",
+                        "reason_code": "NOT_FOUND",
+                        "message": _bulk_delete_failure_message(reason_code="NOT_FOUND"),
+                    }
+                )
+
+        for root_id in roots:
+            current = _ORG_UNITS.get_org_unit(unit_id=int(root_id), include_inactive=True)
+            if current is None:
+                continue
+
+            root_name = str(current.name or f"ID {root_id}")
+            subtree = _fetch_subtree_units(conn, int(root_id))
+            if not subtree:
+                failed.append(
+                    {
+                        "id": int(root_id),
+                        "name": root_name,
+                        "reason_code": "NOT_FOUND",
+                        "message": _bulk_delete_failure_message(reason_code="NOT_FOUND"),
+                    }
+                )
+                continue
+
+            subtree_ids = {int(node["unit_id"]) for node in subtree}
+            blocked_units: List[Dict[str, Any]] = []
+            for node in subtree:
+                unit_id = int(node["unit_id"])
+                blocked = _blocking_dependencies_for_subtree_unit(
+                    unit_id,
+                    subtree_unit_ids=subtree_ids,
+                    db_engine=db_engine,
+                )
+                if blocked:
+                    blocked_units.append(
+                        {
+                            "id": unit_id,
+                            "name": str(node["name"] or f"ID {unit_id}"),
+                            "dependencies": blocked,
+                        }
+                    )
+
+            if blocked_units:
+                before = _org_unit_to_dict(current)
+                _audit_org_unit_event(
+                    event_type="ORG_UNIT_DELETE_REJECTED",
+                    actor_user_id=int(actor_user_id),
+                    org_unit_id=int(root_id),
+                    before=before,
+                    dependencies=blocked_units[0]["dependencies"],
+                    reason="dependencies_present",
+                )
+                failed.append(
+                    {
+                        "id": int(root_id),
+                        "name": root_name,
+                        "reason_code": "SUBTREE_HAS_DEPENDENCIES",
+                        "message": _bulk_delete_failure_message(reason_code="SUBTREE_HAS_DEPENDENCIES"),
+                        "blocked_units": blocked_units,
+                    }
+                )
+                continue
+
+            subtrees_to_delete.append((int(root_id), root_name, subtree))
+
+    deleted_ids: List[int] = []
+    if subtrees_to_delete:
+        with db_engine.begin() as conn:
+            for _root_id, _root_name, subtree in subtrees_to_delete:
+                for node in subtree:
+                    unit_id = int(node["unit_id"])
+                    unit = _ORG_UNITS.get_org_unit(unit_id=unit_id, include_inactive=True)
+                    before = _org_unit_to_dict(unit) if unit is not None else {
+                        "unit_id": unit_id,
+                        "id": unit_id,
+                        "parent_unit_id": node["parent_unit_id"],
+                        "parent_id": node["parent_unit_id"],
+                        "name": node["name"],
+                        "code": None,
+                        "group_id": None,
+                        "is_active": True,
+                        "status": "active",
+                    }
+                    try:
+                        _delete_org_unit_in_conn(conn, unit_id=unit_id)
+                        _audit_org_unit_event(
+                            event_type="ORG_UNIT_DELETED",
+                            actor_user_id=int(actor_user_id),
+                            org_unit_id=unit_id,
+                            before=before,
+                            conn=conn,
+                        )
+                        deleted_ids.append(unit_id)
+                    except LookupError:
+                        failed.append(
+                            {
+                                "id": unit_id,
+                                "name": str(node["name"] or f"ID {unit_id}"),
+                                "reason_code": "NOT_FOUND",
+                                "message": _bulk_delete_failure_message(reason_code="NOT_FOUND"),
+                            }
+                        )
+                    except Exception as exc:
+                        failed.append(
+                            {
+                                "id": unit_id,
+                                "name": str(node["name"] or f"ID {unit_id}"),
+                                "reason_code": "VALIDATION_ERROR",
+                                "message": _bulk_delete_failure_message(
+                                    reason_code="VALIDATION_ERROR",
+                                    detail=str(exc),
+                                ),
+                            }
+                        )
+
     return {
-        "results": results,
-        "requested": len(unit_ids),
-        "deleted": deleted,
-        "failed": len(unit_ids) - deleted,
+        "deleted_ids": deleted_ids,
+        "failed": failed,
+        "requested": len(unique_ids),
     }
