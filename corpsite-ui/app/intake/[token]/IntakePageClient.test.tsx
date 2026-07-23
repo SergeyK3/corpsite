@@ -436,7 +436,7 @@ describe("IntakePageClient", () => {
     expect(await screen.findByLabelText(/Фамилия/i)).toHaveValue("Петров");
     expect(screen.getByLabelText(/Имя/i)).toHaveValue("Пётр");
     expect(screen.getByLabelText(/Отчество/i)).toHaveValue("Петрович");
-    expect(screen.getByLabelText(/Дата рождения/i)).toHaveValue("1990-05-20");
+    expect(screen.getByLabelText(/Дата рождения/i)).toHaveValue("20.05.1990");
   });
 
   it("shows prefilled phone and email on contacts step without re-entry", async () => {
@@ -599,38 +599,7 @@ describe("IntakePageClient", () => {
     expect(screen.queryByLabelText(/Мобильный телефон/i)).not.toBeInTheDocument();
   });
 
-  it("loads saved education year values in year-only display format", async () => {
-    const payload = intakeApi.emptyIntakeDraftPayload();
-    payload.current_step = "education";
-    payload.education = [
-      {
-        education_type: "basic",
-        institution: "КазНУ",
-        year_from: "2014",
-        year_to: "2018",
-        specialty: "",
-        qualification: "",
-        diploma_number: "",
-      },
-    ];
-
-    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
-      application_id: 1,
-      draft_id: 1,
-      link_id: 1,
-      status: "editable",
-      payload,
-      read_only: false,
-      link_status: "opened",
-    });
-
-    render(<IntakePageClient />);
-
-    expect(await screen.findByTestId("intake-education-year-from")).toHaveValue("2014");
-    expect(screen.getByTestId("intake-education-year-to")).toHaveValue("2018");
-  });
-
-  it("displays saved ISO education period using year semantics in year fields", async () => {
+  it("loads saved education dates in DD.MM.YYYY display format", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "education";
     payload.education = [
@@ -657,11 +626,11 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-education-year-from")).toHaveValue("2014");
-    expect(screen.getByTestId("intake-education-year-to")).toHaveValue("2018");
+    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveValue("01.09.2014");
+    expect(screen.getByTestId("intake-education-year-to-0")).toHaveValue("30.06.2018");
   });
 
-  it("autosaves edited education year without inventing a fake full date", async () => {
+  it("shows legacy year-only education values as needing clarification", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "education";
     payload.education = [
@@ -670,6 +639,37 @@ describe("IntakePageClient", () => {
         institution: "КазНУ",
         year_from: "2014",
         year_to: "2018",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+    });
+
+    render(<IntakePageClient />);
+
+    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveValue("2014 (уточните дату)");
+    expect(screen.getByTestId("intake-education-year-from-0-hint")).toHaveTextContent("ДД.ММ.ГГГГ");
+  });
+
+  it("autosaves edited education date as canonical ISO without day shift", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.current_step = "education";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНУ",
+        year_from: "2014-09-01",
+        year_to: "2018-06-30",
         specialty: "",
         qualification: "",
         diploma_number: "",
@@ -694,9 +694,9 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    const yearTo = await screen.findByTestId("intake-education-year-to");
+    const yearTo = await screen.findByTestId("intake-education-year-to-0");
     fireEvent.focus(yearTo);
-    fireEvent.change(yearTo, { target: { value: "2022" } });
+    fireEvent.change(yearTo, { target: { value: "15.09.2022" } });
     fireEvent.blur(yearTo);
 
     await waitFor(
@@ -706,7 +706,7 @@ describe("IntakePageClient", () => {
           expect.objectContaining({
             education: [
               expect.objectContaining({
-                year_to: "2022",
+                year_to: "2022-09-15",
               }),
             ],
           }),
@@ -733,7 +733,7 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-training-year")).toHaveValue("");
+    expect(await screen.findByTestId("intake-training-year-0")).toHaveValue("");
   });
 
   it("shows education and training periods on review step", async () => {
@@ -744,14 +744,16 @@ describe("IntakePageClient", () => {
       {
         education_type: "basic",
         institution: "КазНУ",
-        year_from: "2014",
-        year_to: "2018",
+        year_from: "2014-09-01",
+        year_to: "2018-06-30",
         specialty: "",
         qualification: "",
         diploma_number: "",
       },
     ];
-    payload.training = [{ institution: "Центр", year: "2021", course_name: "Охрана труда", hours: "" }];
+    payload.training = [
+      { institution: "Центр", year: "2021-03-10", course_name: "Охрана труда", hours: "" },
+    ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
       application_id: 1,
@@ -765,22 +767,183 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-review-education-0")).toHaveTextContent("КазНУ: 2014 — 2018");
-    expect(screen.getByTestId("intake-review-training-0")).toHaveTextContent("Охрана труда (2021)");
+    expect(await screen.findByTestId("intake-review-education-0")).toHaveTextContent(
+      "КазНУ: 01.09.2014 — 30.06.2018",
+    );
+    expect(screen.getByTestId("intake-review-training-0")).toHaveTextContent("Охрана труда (10.03.2021)");
+  });
+
+  it("blocks submit on review step when legacy year-only dates remain", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+    payload.contacts.mobile_phone = "+77005554433";
+    payload.current_step = "review";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНМУ",
+        year_from: "2014",
+        year_to: "2018-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+    });
+    const submit = vi.spyOn(intakeApi, "submitIntakeDraft");
+
+    render(<IntakePageClient />);
+
+    expect(await screen.findByTestId("intake-review-date-issues")).toBeInTheDocument();
+    expect(screen.getByText("Образование → КазНМУ → дата поступления")).toBeInTheDocument();
+
+    const submitButton = screen.getByTestId("intake-submit-button");
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.click(submitButton);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the date field when a review issue is clicked", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+    payload.contacts.mobile_phone = "+77005554433";
+    payload.current_step = "review";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНМУ",
+        year_from: "2014",
+        year_to: "2018-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+    });
+
+    render(<IntakePageClient />);
+
+    fireEvent.click(await screen.findByText("Образование → КазНМУ → дата поступления"));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Анкета сотрудника. Шаг 3 из 8 – Образование",
+      }),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveFocus();
+  });
+
+  it("opens rework session on first incomplete date field", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+    payload.contacts.mobile_phone = "+77005554433";
+    payload.current_step = "review";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНМУ",
+        year_from: "2014",
+        year_to: "2018-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+      submitted_at: "2026-07-01T10:00:00Z",
+    });
+
+    render(<IntakePageClient />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Анкета сотрудника. Шаг 3 из 8 – Образование",
+      }),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("intake-education-year-from-0")).toHaveFocus();
+  });
+
+  it("opens editable form after rework instead of submitted screen", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+    payload.contacts.mobile_phone = "+77005554433";
+    payload.current_step = "review";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНМУ",
+        year_from: "2014-09-01",
+        year_to: "2018-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+    });
+
+    render(<IntakePageClient />);
+
+    expect(await screen.findByTestId("intake-submit-button")).toBeInTheDocument();
+    expect(screen.queryByText(/Анкета отправлена/i)).not.toBeInTheDocument();
   });
 
   it("shows success screen after submit", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.personal.last_name = "Сидоров";
     payload.personal.first_name = "Сидор";
+    payload.personal.birth_date = "1990-05-20";
     payload.contacts.mobile_phone = "+77001112233";
     payload.current_step = "review";
     payload.education = [
       {
         education_type: "basic",
         institution: "ВУЗ",
-        year_from: "2020",
-        year_to: "2024",
+        year_from: "2020-09-01",
+        year_to: "2024-06-30",
         specialty: "X",
         qualification: "Y",
         diploma_number: "1",

@@ -137,6 +137,16 @@ export const INTAKE_STEPS = [
   { id: "review", title: "Проверка" },
 ] as const;
 
+export const INTAKE_ON_BEHALF_INITIAL_STEP_ID = "employment_biography";
+
+/** HR on-behalf edit opens on employment biography, not the applicant's saved step. */
+export function resolveIntakeOnBehalfInitialStepIndex(): number {
+  const preferredIndex = INTAKE_STEPS.findIndex((step) => step.id === INTAKE_ON_BEHALF_INITIAL_STEP_ID);
+  if (preferredIndex >= 0) return preferredIndex;
+  const firstEditableIndex = INTAKE_STEPS.findIndex((step) => step.id !== "review");
+  return firstEditableIndex >= 0 ? firstEditableIndex : 0;
+}
+
 export function emptyIntakeDraftPayload(): IntakeDraftPayload {
   return {
     personal: {

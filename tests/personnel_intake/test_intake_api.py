@@ -15,6 +15,7 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_INTAKE_PENDING,
     APPLICATION_STATUS_INTAKE_SUBMITTED,
     APPLICATION_STATUS_REGISTERED,
+    APPLICATION_STATUS_UNDER_REVIEW,
     VACANCY_CHECK_CONFIRMED_VISUALLY,
 )
 from app.personnel_intake.application.intake_service import _hash_token
@@ -70,8 +71,8 @@ def _filled_payload() -> dict:
     payload["education"] = [
         {
             "institution": "КазНУ",
-            "year_from": "2018",
-            "year_to": "2022",
+            "year_from": "2018-09-01",
+            "year_to": "2022-06-30",
             "specialty": "IT",
             "qualification": "Бакалавр",
             "diploma_number": "123",
@@ -382,6 +383,67 @@ def test_reopen_preserves_draft(client, intake_schema_ready, privileged_headers)
     assert second.status_code == 200
     assert second.json()["payload"]["personal"]["last_name"] == "Иванов"
     assert second.json()["link_status"] == "opened"
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
+def test_public_intake_reopens_after_section_rework(
+    client, intake_schema_ready, privileged_headers
+) -> None:
+    person_ids: list[int] = []
+    reg = _register_application(client, privileged_headers)
+    person_ids.append(reg["person_id"])
+    app_id = reg["application_id"]
+
+    issue = client.post(
+        f"/directory/personnel-applications/{app_id}/intake-link",
+        headers=privileged_headers,
+    )
+    assert issue.status_code == 200, issue.text
+    token = issue.json()["intake_url_path"].split("/intake/")[-1]
+    payload = _filled_payload()
+
+    client.patch(f"/intake/{token}", json={"payload": payload})
+    submit = client.post(f"/intake/{token}/submit", json={"payload": payload})
+    assert submit.status_code == 200, submit.text
+
+    closed = client.get(f"/intake/{token}")
+    assert closed.status_code == 200
+    assert closed.json()["read_only"] is True
+
+    review = client.get(
+        f"/directory/personnel-applications/{app_id}/intake/review",
+        headers=privileged_headers,
+    )
+    assert review.status_code == 200, review.text
+
+    detail = client.get(f"/directory/personnel-applications/{app_id}", headers=privileged_headers)
+    assert detail.json()["status"] == APPLICATION_STATUS_UNDER_REVIEW
+
+    rework = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/review/sections/education/rework",
+        json={"comment": "Уточните дату поступления"},
+        headers=privileged_headers,
+    )
+    assert rework.status_code == 200, rework.text
+
+    reopened = client.get(f"/intake/{token}")
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["read_only"] is False
+    assert reopened.json()["link_status"] == "opened"
+    assert reopened.json()["status"] == "editable"
+
+    payload["education"][0]["year_from"] = "2014-09-01"
+    save = client.patch(f"/intake/{token}", json={"payload": payload})
+    assert save.status_code == 200, save.text
+
+    resubmit = client.post(f"/intake/{token}/submit", json={"payload": payload})
+    assert resubmit.status_code == 200, resubmit.text
+
+    closed_again = client.get(f"/intake/{token}")
+    assert closed_again.status_code == 200
+    assert closed_again.json()["read_only"] is True
 
     with engine.begin() as conn:
         cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])

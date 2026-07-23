@@ -17,6 +17,8 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_REGISTERED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
+from app.personnel_intake.domain.applicant_reedit import can_applicant_reedit_submitted_intake
+from app.personnel_intake.domain.date_validation import collect_intake_date_validation_errors
 from app.personnel_intake.domain.education_type import (
     INTAKE_EDUCATION_TYPES,
     intake_education_duplicate_fingerprint,
@@ -36,6 +38,7 @@ from app.personnel_intake.domain.models import (
 )
 from app.personnel_intake.domain.prefill import build_initial_intake_draft_payload
 from app.personnel_intake.domain.status import (
+    INTAKE_DRAFT_STATUS_EDITABLE,
     INTAKE_DRAFT_STATUS_SUBMITTED,
     INTAKE_LINK_STATUS_EXPIRED,
     INTAKE_LINK_STATUS_ISSUED,
@@ -46,6 +49,7 @@ from app.personnel_intake.domain.status import (
     is_intake_link_usable,
 )
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
+from app.personnel_intake.infrastructure.review_repository import SqlAlchemyPersonnelIntakeReviewRepository
 from app.personnel_intake.infrastructure.token_encryption import encrypt_intake_raw_token
 
 DEFAULT_INTAKE_LINK_TTL_DAYS = 14
@@ -276,6 +280,47 @@ def _resolve_link_by_token(
     return repo, link
 
 
+def _applicant_reedit_allowed(conn: Connection, application_id: int) -> bool:
+    app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
+    app = app_repo.get_by_id(application_id)
+    if app is None:
+        return False
+    review_repo = SqlAlchemyPersonnelIntakeReviewRepository(conn)
+    sections = review_repo.list_section_reviews(application_id)
+    return can_applicant_reedit_submitted_intake(
+        application_status=app.status,
+        section_statuses=[section.status for section in sections],
+    )
+
+
+def _reopen_intake_for_applicant_edit(
+    repo: SqlAlchemyPersonnelIntakeRepository,
+    *,
+    link: IntakeLinkSnapshot,
+    draft: IntakeDraftSnapshot,
+    now: datetime,
+) -> tuple[IntakeLinkSnapshot, IntakeDraftSnapshot]:
+    next_link = link
+    next_draft = draft
+    if link.status == INTAKE_LINK_STATUS_SUBMITTED:
+        next_link = repo.mark_link_reopened_for_rework(link.link_id, opened_at=now)
+    if draft.status == INTAKE_DRAFT_STATUS_SUBMITTED:
+        next_draft = repo.mark_draft_editable_for_rework(draft.draft_id, updated_at=now)
+    return next_link, next_draft
+
+
+def reopen_intake_for_applicant_rework(conn: Connection, application_id: int) -> None:
+    """Reopen submitted intake link/draft when applicant must edit after HR rework."""
+    if not _applicant_reedit_allowed(conn, application_id):
+        return
+    repo = SqlAlchemyPersonnelIntakeRepository(conn)
+    link = repo.get_latest_link_for_application(application_id)
+    draft = repo.get_draft_by_application_id(application_id)
+    if link is None or draft is None:
+        return
+    _reopen_intake_for_applicant_edit(repo, link=link, draft=draft, now=_now_utc())
+
+
 def open_intake_session(conn: Connection, *, raw_token: str) -> OpenIntakeSessionResult:
     """Open or resume an intake session by token."""
     repo, link = _resolve_link_by_token(conn, raw_token)
@@ -286,6 +331,19 @@ def open_intake_session(conn: Connection, *, raw_token: str) -> OpenIntakeSessio
         if draft is None:
             raise PersonnelIntakeNotFoundError(
                 f"Draft missing for application_id={link.application_id}"
+            )
+        if _applicant_reedit_allowed(conn, link.application_id):
+            link, draft = _reopen_intake_for_applicant_edit(
+                repo,
+                link=link,
+                draft=draft,
+                now=now,
+            )
+            return OpenIntakeSessionResult(
+                application_id=link.application_id,
+                link=link,
+                draft=draft,
+                read_only=False,
             )
         return OpenIntakeSessionResult(
             application_id=link.application_id,
@@ -338,11 +396,12 @@ def autosave_intake_draft(
     now = _now_utc()
 
     if link.status == INTAKE_LINK_STATUS_SUBMITTED:
-        raise PersonnelIntakeTokenError(
-            "Intake form has already been submitted.",
-            code="ALREADY_SUBMITTED",
-        )
-    if not is_intake_link_usable(link.status):
+        if not _applicant_reedit_allowed(conn, link.application_id):
+            raise PersonnelIntakeTokenError(
+                "Intake form has already been submitted.",
+                code="ALREADY_SUBMITTED",
+            )
+    elif not is_intake_link_usable(link.status):
         raise PersonnelIntakeTokenError(
             f"Intake link is not editable (status={link.status}).",
             code="TOKEN_NOT_EDITABLE",
@@ -359,6 +418,14 @@ def autosave_intake_draft(
             payload=payload,
         )
         return AutosaveIntakeDraftResult(draft=draft, saved_at=now)
+
+    if link.status == INTAKE_LINK_STATUS_SUBMITTED and draft.status == INTAKE_DRAFT_STATUS_SUBMITTED:
+        link, draft = _reopen_intake_for_applicant_edit(
+            repo,
+            link=link,
+            draft=draft,
+            now=now,
+        )
 
     if not is_intake_draft_editable(draft.status):
         raise PersonnelIntakeTokenError(
@@ -381,11 +448,12 @@ def submit_intake_draft(
     now = _now_utc()
 
     if link.status == INTAKE_LINK_STATUS_SUBMITTED:
-        raise PersonnelIntakeTokenError(
-            "Intake form has already been submitted.",
-            code="ALREADY_SUBMITTED",
-        )
-    if not is_intake_link_usable(link.status):
+        if not _applicant_reedit_allowed(conn, link.application_id):
+            raise PersonnelIntakeTokenError(
+                "Intake form has already been submitted.",
+                code="ALREADY_SUBMITTED",
+            )
+    elif not is_intake_link_usable(link.status):
         raise PersonnelIntakeTokenError(
             f"Intake link cannot accept submission (status={link.status}).",
             code="TOKEN_NOT_SUBMITTABLE",
@@ -404,6 +472,16 @@ def submit_intake_draft(
     elif payload is not None and is_intake_draft_editable(draft.status):
         draft = repo.update_draft_payload(draft.draft_id, payload=payload, updated_at=now)
 
+    if link.status == INTAKE_LINK_STATUS_SUBMITTED and draft.status == INTAKE_DRAFT_STATUS_SUBMITTED:
+        link, draft = _reopen_intake_for_applicant_edit(
+            repo,
+            link=link,
+            draft=draft,
+            now=now,
+        )
+        if payload is not None:
+            draft = repo.update_draft_payload(draft.draft_id, payload=payload, updated_at=now)
+
     if not is_intake_draft_editable(draft.status):
         raise PersonnelIntakeTokenError(
             "Intake draft is already submitted.",
@@ -414,12 +492,15 @@ def submit_intake_draft(
 
     draft = repo.mark_draft_submitted(draft.draft_id, submitted_at=now)
     link = repo.mark_link_submitted(link.link_id, submitted_at=now)
-    _transition_application_status(
-        conn,
-        application_id=link.application_id,
-        new_status=APPLICATION_STATUS_INTAKE_SUBMITTED,
-        now=now,
-    )
+    app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
+    app = app_repo.require_by_id(link.application_id)
+    if app.status == APPLICATION_STATUS_INTAKE_PENDING:
+        _transition_application_status(
+            conn,
+            application_id=link.application_id,
+            new_status=APPLICATION_STATUS_INTAKE_SUBMITTED,
+            now=now,
+        )
 
     return SubmitIntakeDraftResult(
         application_id=link.application_id,
@@ -467,7 +548,14 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
                     f"institution={fingerprint[1]!r})"
                 )
             seen_fingerprints[fingerprint] = index
+    date_errors = collect_intake_date_validation_errors(payload)
+    errors.extend(date_errors)
     if errors:
+        if date_errors:
+            raise PersonnelIntakeValidationError(
+                "Intake dates must be full day precision (ДД.ММ.ГГГГ): "
+                + ", ".join(date_errors)
+            )
         raise PersonnelIntakeValidationError(
             f"Required intake fields missing: {', '.join(errors)}"
         )

@@ -53,8 +53,6 @@ def parse_date_value(raw: Any) -> date | None:
             return date.fromisoformat(text[:10])
         except ValueError:
             return None
-    if text.isdigit() and len(text) == 4:
-        return date(int(text), 1, 1)
     return None
 
 

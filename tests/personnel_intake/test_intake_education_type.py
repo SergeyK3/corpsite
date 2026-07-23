@@ -41,8 +41,8 @@ def _education_row(
 ) -> dict[str, str]:
     row = {
         "institution": institution,
-        "year_from": "2010",
-        "year_to": "2015",
+        "year_from": "2010-09-01",
+        "year_to": "2015-06-30",
         "specialty": specialty,
         "qualification": "Spec",
         "diploma_number": "1",
