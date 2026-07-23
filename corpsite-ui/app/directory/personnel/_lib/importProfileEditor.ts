@@ -5,6 +5,13 @@ import type {
   ImportProfile,
   TrainingPortfolioRecord,
 } from "./importApi.client";
+import {
+  formatPersonnelDayDateForDisplay,
+  isLegacyYearOnlyDocumentDate,
+  normalizePersonnelDocumentDateInput,
+  parsePersonnelDayDateInput,
+  validatePersonnelDocumentDate,
+} from "@/lib/personnelDayDate";
 
 export const CATEGORY_OPTIONS = [
   "Высшая",
@@ -18,7 +25,6 @@ export const CATEGORY_OPTIONS = [
 const YEAR_RE = /^\d{4}$/;
 const DATE_RE = /^(\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})$/i;
 const YEAR_IN_TEXT_RE = /\b(19|20)\d{2}\b/;
-const YEAR_ONLY_DATE_RE = /^01\.01\.\d{4}$/;
 
 export function yearToDefaultDate(year: string): string {
   return `01.01.${year}`;
@@ -26,17 +32,20 @@ export function yearToDefaultDate(year: string): string {
 
 /** True when the date is the default 01.01.YYYY placeholder (exact day/month unknown). */
 export function isYearOnlyDate(value: string): boolean {
-  return YEAR_ONLY_DATE_RE.test((value || "").trim());
+  return isLegacyYearOnlyDocumentDate(value);
 }
 
+export function normalizeDocumentDateInput(value: string): string {
+  return normalizePersonnelDocumentDateInput(value);
+}
+
+export function formatDocumentDateForDisplay(value: string): string {
+  return formatPersonnelDayDateForDisplay(value, "document");
+}
+
+/** @deprecated use normalizeDocumentDateInput */
 export function normalizeDateInput(value: string): string {
-  const text = (value || "").trim();
-  if (!text) return "";
-  if (text.toLowerCase() === "постоянно") return text;
-  if (YEAR_RE.test(text)) return yearToDefaultDate(text);
-  if (DATE_RE.test(text)) return text;
-  const match = text.match(YEAR_IN_TEXT_RE);
-  return match ? yearToDefaultDate(match[0]) : text;
+  return normalizeDocumentDateInput(value);
 }
 
 export function getDegreeRecords(degrees: ImportProfile["degrees"]): DegreePortfolioRecord[] {
@@ -105,11 +114,12 @@ export function normalizeEditableProfile(profile: ImportProfile): ImportProfile 
     })),
     category_records: (profile.category_records ?? []).map((row) => ({
       ...row,
-      issued_at: normalizeDateInput(String(row.issued_at ?? "")),
+      issued_at: normalizeDocumentDateInput(String(row.issued_at ?? "")),
     })),
     certificate_records: (profile.certificate_records ?? []).map((row) => ({
       ...row,
-      issued_at: normalizeDateInput(String(row.issued_at ?? "")),
+      issued_at: normalizeDocumentDateInput(String(row.issued_at ?? "")),
+      valid_until: normalizeDocumentDateInput(String(row.valid_until ?? "")),
     })),
     award_records: (profile.award_records ?? []).map((row) => ({
       ...row,
@@ -160,13 +170,14 @@ export function extractEditableSectionsOverride(profile: ImportProfile): Record<
     })),
     categories: (profile.category_records ?? []).map((row) => ({
       category: categoryDisplayLabel(String(row.category ?? "")),
-      date: normalizeDateInput(String(row.issued_at ?? "")),
+      date: normalizeDocumentDateInput(String(row.issued_at ?? "")),
       specialty: row.specialty || "",
     })),
     certificates: (profile.certificate_records ?? []).map((row) => ({
       kind: row.kind || "",
       topic: row.topic || row.specialty || "",
-      date: normalizeDateInput(String(row.issued_at ?? "")),
+      date: normalizeDocumentDateInput(String(row.issued_at ?? "")),
+      valid_until: normalizeDocumentDateInput(String(row.valid_until ?? "")),
       hours: row.hours ?? null,
       link: row.link || "",
     })),
@@ -204,12 +215,13 @@ export function categoryDisplayLabel(value: string): string {
   return CATEGORY_CODE_LABELS[lowered] ?? text;
 }
 
+export function validateDocumentDate(value: string): string | null {
+  return validatePersonnelDocumentDate(value);
+}
+
+/** @deprecated use validateDocumentDate */
 export function validateDate(value: string): string | null {
-  const text = value.trim();
-  if (!text) return null;
-  if (text.toLowerCase() === "постоянно") return null;
-  if (DATE_RE.test(text) || isYearOnlyDate(text)) return null;
-  return "Дата: YYYY-MM-DD, DD.MM.YYYY или «постоянно»";
+  return validateDocumentDate(value);
 }
 
 export function validateHours(value: string): string | null {
@@ -233,22 +245,24 @@ export function validateEditableProfile(profile: ImportProfile): string[] {
   const errors: string[] = [];
   const educationRecords = getProfessionalEducationRecords(profile);
   for (const [idx, row] of educationRecords.entries()) {
-    const dateErr = validateDate(String(row.completed_at ?? ""));
+    const dateErr = validateDocumentDate(String(row.completed_at ?? ""));
     if (dateErr) errors.push(`Учебное заведение, строка ${idx + 1}: ${dateErr}`);
   }
   for (const [idx, row] of (profile.training_records ?? []).entries()) {
-    const dateErr = validateDate(String(row.completed_at ?? ""));
+    const dateErr = validateDocumentDate(String(row.completed_at ?? ""));
     if (dateErr) errors.push(`Повышение квалификации, строка ${idx + 1}: ${dateErr}`);
     const hoursErr = validateHours(row.hours != null ? String(row.hours) : "");
     if (hoursErr) errors.push(`Повышение квалификации, строка ${idx + 1}: ${hoursErr}`);
   }
   for (const [idx, row] of (profile.category_records ?? []).entries()) {
-    const dateErr = validateDate(String(row.issued_at ?? ""));
+    const dateErr = validateDocumentDate(String(row.issued_at ?? ""));
     if (dateErr) errors.push(`Категория, строка ${idx + 1}: ${dateErr}`);
   }
   for (const [idx, row] of (profile.certificate_records ?? []).entries()) {
-    const dateErr = validateDate(String(row.issued_at ?? ""));
+    const dateErr = validateDocumentDate(String(row.issued_at ?? ""));
     if (dateErr) errors.push(`Сертификат, строка ${idx + 1}: ${dateErr}`);
+    const validUntilErr = validateDocumentDate(String(row.valid_until ?? ""));
+    if (validUntilErr) errors.push(`Сертификат, строка ${idx + 1}, действует до: ${validUntilErr}`);
     const hoursErr = validateHours(row.hours != null ? String(row.hours) : "");
     if (hoursErr) errors.push(`Сертификат, строка ${idx + 1}: ${hoursErr}`);
     const urlErr = validateUrl(String(row.link ?? ""));
@@ -260,11 +274,11 @@ export function validateEditableProfile(profile: ImportProfile): string[] {
     raw_text: "",
     records: [],
   }).entries()) {
-    const dateErr = validateDate(String(row.completed_at ?? ""));
+    const dateErr = validateDocumentDate(String(row.completed_at ?? ""));
     if (dateErr) errors.push(`Степень, строка ${idx + 1}: ${dateErr}`);
   }
   for (const [idx, row] of (profile.award_records ?? []).entries()) {
-    const dateErr = validateDate(String(row.date ?? ""));
+    const dateErr = validateDocumentDate(String(row.date ?? ""));
     if (dateErr) errors.push(`Награда, строка ${idx + 1}: ${dateErr}`);
   }
   return errors;
@@ -421,11 +435,20 @@ export const EXPERIENCE_CALC_NOTE =
   "Стаж рассчитывается приблизительно по дате окончания первого профессионального учебного заведения на текущую дату";
 
 function parseProfileDate(value: string): Date | null {
-  const text = normalizeDateInput(value);
+  const text = normalizeDocumentDateInput(value);
   if (!text || text.toLowerCase() === "постоянно") return null;
   const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoMatch) {
     const date = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const parsed = parsePersonnelDayDateInput(text);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+    const date = new Date(
+      Number(parsed.slice(0, 4)),
+      Number(parsed.slice(5, 7)) - 1,
+      Number(parsed.slice(8, 10)),
+    );
     return Number.isNaN(date.getTime()) ? null : date;
   }
   const dmyMatch = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
@@ -479,7 +502,7 @@ export const CATEGORY_VALIDITY_TERM_YEARS = RECORD_VALIDITY_TERM_YEARS;
 export const CATEGORY_VALIDITY_EXPIRED_NOTE = RECORD_VALIDITY_EXPIRED_NOTE;
 
 export function calcRecordValidityNote(issuedAt: string, to: Date = new Date()): string | null {
-  const from = parseProfileDate(normalizeDateInput(issuedAt));
+  const from = parseProfileDate(normalizeDocumentDateInput(issuedAt));
   if (!from) return null;
   const elapsed = calcExperienceYears(from, to);
   if (elapsed > RECORD_VALIDITY_TERM_YEARS) {

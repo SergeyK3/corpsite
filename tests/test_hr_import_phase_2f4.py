@@ -116,13 +116,13 @@ def test_patch_saves_training_override(staged_batch):
             {
                 "title": "Менеджмент здравоохранения",
                 "organization": "Стратегический менеджмент",
-                "year": "2018",
+                "year": "15.03.2018",
                 "hours": 54,
             },
             {
                 "title": "Риск менеджмент",
                 "organization": "КазНМУ",
-                "year": "2020",
+                "year": "20.06.2020",
                 "hours": 108,
             },
         ]
@@ -130,8 +130,8 @@ def test_patch_saves_training_override(staged_batch):
     with engine.begin() as conn:
         update_education_profile(conn, staged_batch, profile_id, profile=training_override)
     stored = _stored_override(staged_batch, profile_id)
-    assert stored["training"][0]["date"] == "01.01.2018"
-    assert stored["training"][1]["date"] == "01.01.2020"
+    assert stored["training"][0]["date"] == "2018-03-15"
+    assert stored["training"][1]["date"] == "2020-06-20"
     assert "year" not in stored["training"][0]
     with engine.connect() as conn:
         detail = get_education_profile(conn, staged_batch, profile_id)
@@ -144,18 +144,18 @@ def test_patch_saves_categories_override(staged_batch):
     profile_id = _profile_id(staged_batch)
     categories_override = {
         "categories": [
-            {"category": "Высшая", "date": "2019", "specialty": "Терапия"},
+            {"category": "Высшая", "date": "15.03.2019", "specialty": "Терапия"},
         ]
     }
     with engine.begin() as conn:
         update_education_profile(conn, staged_batch, profile_id, profile=categories_override)
     stored = _stored_override(staged_batch, profile_id)
     assert stored["categories"][0]["category"] == "Высшая"
-    assert stored["categories"][0]["date"] == "01.01.2019"
+    assert stored["categories"][0]["date"] == "2019-03-15"
     with engine.connect() as conn:
         detail = get_education_profile(conn, staged_batch, profile_id)
     assert detail["profile"]["category_records"][0]["category"] == "Высшая"
-    assert detail["profile"]["category_records"][0]["issued_at"] == "01.01.2019"
+    assert detail["profile"]["category_records"][0]["issued_at"] == "2019-03-15"
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -185,25 +185,25 @@ def test_patch_saves_certificates_override(staged_batch):
 def test_patch_saves_degree_awards_notes_override(staged_batch):
     profile_id = _profile_id(staged_batch)
     override = {
-        "degree": [{"label": "Кандидат медицинских наук", "date": "2015"}],
-        "awards": [{"title": "Почётная грамота", "date": "2022"}],
+        "degree": [{"label": "Кандидат медицинских наук", "date": "15.03.2015"}],
+        "awards": [{"title": "Почётная грамота", "date": "01.05.2022"}],
         "notes": "декрет до 2026",
     }
     with engine.begin() as conn:
         update_education_profile(conn, staged_batch, profile_id, profile=override)
     stored = _stored_override(staged_batch, profile_id)
     assert stored["degree"][0]["label"] == "Кандидат медицинских наук"
-    assert stored["degree"][0]["date"] == "01.01.2015"
+    assert stored["degree"][0]["date"] == "2015-03-15"
     assert stored["awards"][0]["title"] == "Почётная грамота"
-    assert stored["awards"][0]["date"] == "01.01.2022"
+    assert stored["awards"][0]["date"] == "2022-05-01"
     assert stored["notes"] == "декрет до 2026"
     with engine.connect() as conn:
         detail = get_education_profile(conn, staged_batch, profile_id)
     assert "Кандидат" in detail["profile"]["degrees"]["raw_text"]
     assert detail["profile"]["degrees"]["records"][0]["label"] == "Кандидат медицинских наук"
-    assert detail["profile"]["degrees"]["records"][0]["completed_at"] == "01.01.2015"
+    assert detail["profile"]["degrees"]["records"][0]["completed_at"] == "2015-03-15"
     assert detail["profile"]["award_records"][0]["title"] == "Почётная грамота"
-    assert detail["profile"]["award_records"][0]["date"] == "01.01.2022"
+    assert detail["profile"]["award_records"][0]["date"] == "2022-05-01"
     assert detail["profile"]["notes_raw"] == "декрет до 2026"
 
 

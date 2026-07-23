@@ -202,11 +202,12 @@ export function matchesDocumentQuickFilter(
   return key === quickFilter;
 }
 
+import { formatPersonnelDayDateForDisplay } from "@/lib/personnelDayDate";
+
 export function fmtProfileDate(v: string | null | undefined): string {
   if (!v) return "—";
-  const dt = new Date(v);
-  if (Number.isNaN(dt.getTime())) return v;
-  return dt.toLocaleDateString("ru-RU");
+  const formatted = formatPersonnelDayDateForDisplay(v, "document");
+  return formatted || "—";
 }
 
 export function expiryStatusMeta(status: string) {

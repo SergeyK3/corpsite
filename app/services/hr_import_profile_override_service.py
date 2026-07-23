@@ -6,6 +6,12 @@ import re
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from app.personnel_intake.domain.date_validation import (
+    is_incomplete_document_date,
+    normalize_document_date_for_storage,
+    validate_document_date_field,
+)
+
 _CATEGORY_CODE_TO_LABEL = {
     "highest": "Высшая",
     "first": "Первая",
@@ -72,23 +78,11 @@ def is_section_override(override: Any) -> bool:
 
 
 def is_year_only_date(value: str) -> bool:
-    return bool(_YEAR_ONLY_DATE_RE.match((value or "").strip()))
+    return is_incomplete_document_date(value)
 
 
 def _normalize_date_value(value: Any) -> str:
-    text_val = str(value or "").strip()
-    if not text_val:
-        return ""
-    if text_val.lower() == "постоянно":
-        return text_val
-    if _YEAR_RE.match(text_val):
-        return f"01.01.{text_val}"
-    if _DATE_RE.match(text_val):
-        return text_val
-    match = re.search(r"\b(19|20)\d{2}\b", text_val)
-    if match:
-        return f"01.01.{match.group(0)}"
-    return text_val
+    return normalize_document_date_for_storage(value)
 
 
 def _validate_year(value: Any, *, field: str, errors: list[str]) -> None:
@@ -137,7 +131,11 @@ def validate_profile_override(override: dict[str, Any]) -> None:
                 if not isinstance(row, dict):
                     errors.append(f"training[{idx}]: must be an object")
                     continue
-                _validate_date(row.get("date") or row.get("year") or row.get("completed_at"), field=f"training[{idx}].date", errors=errors)
+                validate_document_date_field(
+                    row.get("date") or row.get("year") or row.get("completed_at"),
+                    field=f"training[{idx}].date",
+                    errors=errors,
+                )
                 _validate_hours(row.get("hours"), field=f"training[{idx}].hours", errors=errors)
 
     categories = override.get("categories")
@@ -149,7 +147,11 @@ def validate_profile_override(override: dict[str, Any]) -> None:
                 if not isinstance(row, dict):
                     errors.append(f"categories[{idx}]: must be an object")
                     continue
-                _validate_date(row.get("date") or row.get("issued_at"), field=f"categories[{idx}].date", errors=errors)
+                validate_document_date_field(
+                    row.get("date") or row.get("issued_at"),
+                    field=f"categories[{idx}].date",
+                    errors=errors,
+                )
 
     certificates = override.get("certificates")
     if certificates is not None:
@@ -160,7 +162,16 @@ def validate_profile_override(override: dict[str, Any]) -> None:
                 if not isinstance(row, dict):
                     errors.append(f"certificates[{idx}]: must be an object")
                     continue
-                _validate_date(row.get("date") or row.get("issued_at"), field=f"certificates[{idx}].date", errors=errors)
+                validate_document_date_field(
+                    row.get("date") or row.get("issued_at"),
+                    field=f"certificates[{idx}].date",
+                    errors=errors,
+                )
+                validate_document_date_field(
+                    row.get("valid_until"),
+                    field=f"certificates[{idx}].valid_until",
+                    errors=errors,
+                )
                 _validate_hours(row.get("hours"), field=f"certificates[{idx}].hours", errors=errors)
                 _validate_url(row.get("link"), field=f"certificates[{idx}].link", errors=errors)
 
@@ -173,7 +184,7 @@ def validate_profile_override(override: dict[str, Any]) -> None:
                 if not isinstance(row, dict):
                     errors.append(f"awards[{idx}]: must be an object")
                     continue
-                _validate_date(row.get("date"), field=f"awards[{idx}].date", errors=errors)
+                validate_document_date_field(row.get("date"), field=f"awards[{idx}].date", errors=errors)
 
     degree = override.get("degree")
     if isinstance(degree, list):
@@ -181,7 +192,11 @@ def validate_profile_override(override: dict[str, Any]) -> None:
             if not isinstance(row, dict):
                 errors.append(f"degree[{idx}]: must be an object")
                 continue
-            _validate_date(row.get("date") or row.get("completed_at"), field=f"degree[{idx}].date", errors=errors)
+            validate_document_date_field(
+                row.get("date") or row.get("completed_at"),
+                field=f"degree[{idx}].date",
+                errors=errors,
+            )
 
     education = override.get("education")
     if education is not None:
@@ -192,7 +207,7 @@ def validate_profile_override(override: dict[str, Any]) -> None:
                 if not isinstance(row, dict):
                     errors.append(f"education[{idx}]: must be an object")
                     continue
-                _validate_date(
+                validate_document_date_field(
                     row.get("date") or row.get("completed_at"),
                     field=f"education[{idx}].date",
                     errors=errors,
@@ -232,7 +247,7 @@ def _categories_to_override(records: list[dict[str, Any]]) -> list[dict[str, Any
         items.append(
             {
                 "category": category_display_label(str(record.get("category") or "")),
-                "date": _normalize_date_value(record.get("issued_at") or record.get("date") or ""),
+                "date": normalize_document_date_for_storage(record.get("issued_at") or record.get("date") or ""),
                 "specialty": str(record.get("specialty") or ""),
             }
         )
@@ -246,7 +261,8 @@ def _certificates_to_override(records: list[dict[str, Any]]) -> list[dict[str, A
             {
                 "kind": str(record.get("kind") or ""),
                 "topic": str(record.get("topic") or record.get("specialty") or ""),
-                "date": _normalize_date_value(record.get("issued_at") or record.get("date") or ""),
+                "date": normalize_document_date_for_storage(record.get("issued_at") or record.get("date") or ""),
+                "valid_until": normalize_document_date_for_storage(record.get("valid_until") or ""),
                 "hours": _hours_value(record.get("hours")),
                 "link": str(record.get("link") or ""),
             }
@@ -356,7 +372,7 @@ def _categories_from_override(items: list[dict[str, Any]]) -> list[dict[str, Any
             {
                 "category": category_display_label(str(item.get("category") or "")),
                 "specialty": str(item.get("specialty") or ""),
-                "issued_at": _normalize_date_value(item.get("date") or item.get("issued_at") or ""),
+                "issued_at": normalize_document_date_for_storage(item.get("date") or item.get("issued_at") or ""),
                 "source_field": "profile_override",
                 "source_text": "",
                 "confidence": 1.0,
@@ -375,8 +391,8 @@ def _certificates_from_override(items: list[dict[str, Any]]) -> list[dict[str, A
                 "kind": str(item.get("kind") or ""),
                 "topic": str(item.get("topic") or ""),
                 "specialty": str(item.get("topic") or ""),
-                "issued_at": _normalize_date_value(item.get("date") or item.get("issued_at") or ""),
-                "valid_until": "",
+                "issued_at": normalize_document_date_for_storage(item.get("date") or item.get("issued_at") or ""),
+                "valid_until": normalize_document_date_for_storage(item.get("valid_until") or ""),
                 "hours": _hours_value(item.get("hours")),
                 "link": str(item.get("link") or ""),
                 "certificate_number": "",
@@ -564,11 +580,12 @@ def prepare_profile_override_for_storage(profile_input: dict[str, Any]) -> dict[
     if isinstance(override.get("categories"), list):
         for row in override["categories"]:
             if isinstance(row, dict):
-                row["date"] = _normalize_date_value(row.get("date"))
+                row["date"] = normalize_document_date_for_storage(row.get("date"))
     if isinstance(override.get("certificates"), list):
         for row in override["certificates"]:
             if isinstance(row, dict):
-                row["date"] = _normalize_date_value(row.get("date"))
+                row["date"] = normalize_document_date_for_storage(row.get("date"))
+                row["valid_until"] = normalize_document_date_for_storage(row.get("valid_until"))
     if isinstance(override.get("awards"), list):
         for row in override["awards"]:
             if isinstance(row, dict):

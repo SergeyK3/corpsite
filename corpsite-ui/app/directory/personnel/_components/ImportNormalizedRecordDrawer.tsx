@@ -25,7 +25,8 @@ import {
 import { displayNormalizedRecordIin } from "../_lib/normalizedRecordIin";
 import { MIGRATION_COMMIT_CTA_LABEL } from "../_lib/personnelMigrationHrLabels";
 import { IMPORT_RECORD_CARD_TITLE } from "@/lib/personnelCardTerminology";
-import { formatPersonnelDate } from "@/lib/personnelDateFormat";
+import { formatPersonnelDayDateForDisplay, isValidPersonnelDayDateIso, parsePersonnelDayDateInput } from "@/lib/personnelDayDate";
+import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
 import {
   buildMigrationCandidateId,
   buildMigrationSessionHref,
@@ -68,12 +69,21 @@ function reviewStatusBadgeClass(status: NormalizedRecordReviewStatus): string {
 }
 
 function formatDate(value: string | null | undefined): string {
-  return formatPersonnelDate(value, { precision: "day" });
+  const formatted = formatPersonnelDayDateForDisplay(value, "document");
+  return formatted || "—";
 }
 
 function toInputDate(value: string | null | undefined): string {
   if (!value) return "";
-  return value.slice(0, 10);
+  const parsed = parsePersonnelDayDateInput(value);
+  return isValidPersonnelDayDateIso(parsed) ? parsed : value;
+}
+
+function toStorageDate(value: string | null | undefined): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parsed = parsePersonnelDayDateInput(text);
+  return isValidPersonnelDayDateIso(parsed) ? parsed : text;
 }
 
 function draftFromRecord(record: NormalizedRecord): EditDraft {
@@ -101,23 +111,23 @@ function buildOverridePayload(
   }
   if (kind === "training") {
     payload.hours = draft.hours.trim() ? Number(draft.hours) : null;
-    payload.issue_date = draft.issue_date || null;
+    payload.issue_date = toStorageDate(draft.issue_date);
   }
   if (kind === "education") {
-    payload.issue_date = draft.issue_date || null;
+    payload.issue_date = toStorageDate(draft.issue_date);
     payload.document_number = draft.document_number.trim() || null;
   }
   if (kind === "certificate") {
     payload.specialty_text = draft.specialty_text.trim() || null;
-    payload.issue_date = draft.issue_date || null;
-    payload.expiry_date = draft.expiry_date || null;
+    payload.issue_date = toStorageDate(draft.issue_date);
+    payload.expiry_date = toStorageDate(draft.expiry_date);
     payload.document_number = draft.document_number.trim() || null;
   }
   if (kind === "category") {
     payload.title = draft.title.trim() || null;
     payload.specialty_text = draft.specialty_text.trim() || null;
-    payload.issue_date = draft.issue_date || null;
-    payload.expiry_date = draft.expiry_date || null;
+    payload.issue_date = toStorageDate(draft.issue_date);
+    payload.expiry_date = toStorageDate(draft.expiry_date);
   }
   return payload;
 }
@@ -140,6 +150,38 @@ function FieldRow({
           <div className="mt-0.5 text-xs text-zinc-500">Исходный парсинг: {parsedHint}</div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function EditDateField({
+  label,
+  value,
+  onChange,
+  parsedHint,
+  testId,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  parsedHint?: string | null;
+  testId?: string;
+}) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[140px_1fr] sm:items-start sm:gap-3">
+      <span className="pt-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
+      <span>
+        <PersonnelDayDateField
+          value={value}
+          onChange={onChange}
+          testId={testId}
+          className="block"
+          inputClassName="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+        />
+        {parsedHint ? (
+          <span className="mt-0.5 block text-xs text-zinc-500">Исходный парсинг: {parsedHint}</span>
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -265,7 +307,7 @@ function EditPayloadSection({
         <EditField label="Название курса" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
         <EditField label="Организация" value={draft.provider} onChange={(v) => set("provider", v)} parsedHint={parsedHint(record, "provider")} />
         <EditField label="Часы" value={draft.hours} onChange={(v) => set("hours", v)} type="number" parsedHint={parsedHint(record, "hours", (v) => (v != null ? String(v) : "—"))} />
-        <EditField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
+        <EditDateField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} parsedHint={parsedHint(record, "issue_date", formatDate)} testId="normalized-record-issue-date" />
       </div>
     );
   }
@@ -275,8 +317,8 @@ function EditPayloadSection({
       <div className="space-y-3">
         <EditField label="Название" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
         <EditField label="Специальность" value={draft.specialty_text} onChange={(v) => set("specialty_text", v)} parsedHint={parsedHint(record, "specialty_text")} />
-        <EditField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
-        <EditField label="Действует до" value={draft.expiry_date} onChange={(v) => set("expiry_date", v)} type="date" parsedHint={parsedHint(record, "expiry_date", formatDate)} />
+        <EditDateField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} parsedHint={parsedHint(record, "issue_date", formatDate)} testId="normalized-record-issue-date" />
+        <EditDateField label="Действует до" value={draft.expiry_date} onChange={(v) => set("expiry_date", v)} parsedHint={parsedHint(record, "expiry_date", formatDate)} testId="normalized-record-expiry-date" />
         <EditField label="Номер документа" value={draft.document_number} onChange={(v) => set("document_number", v)} parsedHint={parsedHint(record, "document_number")} />
       </div>
     );
@@ -287,8 +329,8 @@ function EditPayloadSection({
       <div className="space-y-3">
         <EditField label="Категория" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
         <EditField label="Специальность" value={draft.specialty_text} onChange={(v) => set("specialty_text", v)} parsedHint={parsedHint(record, "specialty_text")} />
-        <EditField label="Дата присвоения" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
-        <EditField label="Действует до" value={draft.expiry_date} onChange={(v) => set("expiry_date", v)} type="date" parsedHint={parsedHint(record, "expiry_date", formatDate)} />
+        <EditDateField label="Дата присвоения" value={draft.issue_date} onChange={(v) => set("issue_date", v)} parsedHint={parsedHint(record, "issue_date", formatDate)} testId="normalized-record-category-issue-date" />
+        <EditDateField label="Действует до" value={draft.expiry_date} onChange={(v) => set("expiry_date", v)} parsedHint={parsedHint(record, "expiry_date", formatDate)} testId="normalized-record-expiry-date" />
       </div>
     );
   }
@@ -297,7 +339,7 @@ function EditPayloadSection({
     <div className="space-y-3">
       <EditField label="Название" value={draft.title} onChange={(v) => set("title", v)} parsedHint={parsedHint(record, "title")} />
       <EditField label="Организация" value={draft.provider} onChange={(v) => set("provider", v)} parsedHint={parsedHint(record, "provider")} />
-      <EditField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} type="date" parsedHint={parsedHint(record, "issue_date", formatDate)} />
+      <EditDateField label="Дата выдачи" value={draft.issue_date} onChange={(v) => set("issue_date", v)} parsedHint={parsedHint(record, "issue_date", formatDate)} testId="normalized-record-education-issue-date" />
       <EditField label="Номер документа" value={draft.document_number} onChange={(v) => set("document_number", v)} parsedHint={parsedHint(record, "document_number")} />
     </div>
   );

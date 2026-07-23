@@ -4,6 +4,12 @@
 import * as React from "react";
 
 import { loadOrgUnitSelectOptions } from "@/lib/orgUnitsSelect";
+import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
+import {
+  isIncompletePersonnelDocumentDate,
+  isValidPersonnelDayDateIso,
+  parsePersonnelDayDateInput,
+} from "@/lib/personnelDayDate";
 import { getEmployees } from "../../employees/_lib/api.client";
 import type { EmployeeListItem } from "../../employees/_lib/types";
 import type {
@@ -75,7 +81,15 @@ const EMPLOYEES_PAGE_LIMIT = 200;
 
 function toDateInput(value: string | null | undefined): string {
   if (!value) return "";
-  return value.slice(0, 10);
+  const parsed = parsePersonnelDayDateInput(value);
+  return isValidPersonnelDayDateIso(parsed) ? parsed : value;
+}
+
+function toStorageDate(value: string): string | null {
+  const text = value.trim();
+  if (!text) return null;
+  const parsed = parsePersonnelDayDateInput(text);
+  return isValidPersonnelDayDateIso(parsed) ? parsed : null;
 }
 
 export default function EmployeeDocumentFormModal({
@@ -267,6 +281,10 @@ export default function EmployeeDocumentFormModal({
           setError("Укажите дату выдачи для документа с учётом часов.");
           return;
         }
+        if (isIncompletePersonnelDocumentDate(form.issued_at)) {
+          setError("Укажите полную дату выдачи в формате ДД.ММ.ГГГГ.");
+          return;
+        }
         const hoursVal = Number(form.hours);
         if (!Number.isFinite(hoursVal) || hoursVal <= 0) {
           setError("Укажите количество часов (целое число больше 0).");
@@ -277,6 +295,22 @@ export default function EmployeeDocumentFormModal({
           return;
         }
       }
+
+      if (form.issued_at && isIncompletePersonnelDocumentDate(form.issued_at)) {
+        setError("Укажите полную дату выдачи в формате ДД.ММ.ГГГГ.");
+        return;
+      }
+      if (selectedType?.has_valid_until && form.valid_until && isIncompletePersonnelDocumentDate(form.valid_until)) {
+        setError("Укажите полную дату «Действует до» в формате ДД.ММ.ГГГГ.");
+        return;
+      }
+      if (selectedType?.has_valid_until && !form.valid_until) {
+        setError("Укажите дату «Действует до».");
+        return;
+      }
+
+      const issuedAtStorage = toStorageDate(form.issued_at);
+      const validUntilStorage = selectedType?.has_valid_until ? toStorageDate(form.valid_until) : null;
 
       const kindCode = selectedKind?.code;
       const titleValue =
@@ -300,9 +334,9 @@ export default function EmployeeDocumentFormModal({
           training_title: form.training_title.trim() || null,
           document_number: form.document_number.trim() || null,
           issued_by: form.issued_by.trim() || null,
-          issued_at: form.issued_at || null,
+          issued_at: issuedAtStorage,
           hours: hoursRequired ? Number(form.hours) : null,
-          valid_until: selectedType?.has_valid_until ? form.valid_until || null : null,
+          valid_until: validUntilStorage,
           file_url: form.file_url.trim() || null,
           comment: form.comment.trim() || null,
         });
@@ -326,7 +360,7 @@ export default function EmployeeDocumentFormModal({
           payload.issued_by = form.issued_by.trim() || null;
         }
         if (form.issued_at !== initialForm.issued_at) {
-          payload.issued_at = form.issued_at || null;
+          payload.issued_at = issuedAtStorage;
         }
         if (form.hours !== initialForm.hours) {
           payload.hours = hoursRequired ? Number(form.hours) : null;
@@ -348,7 +382,7 @@ export default function EmployeeDocumentFormModal({
           if (!form.valid_until && initialForm.valid_until) {
             payload.clear_valid_until = true;
           } else {
-            payload.valid_until = typeForUpdate?.has_valid_until ? form.valid_until || null : null;
+            payload.valid_until = typeForUpdate?.has_valid_until ? validUntilStorage : null;
           }
         }
 
@@ -607,15 +641,13 @@ export default function EmployeeDocumentFormModal({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                Дата выдачи{hoursRequired ? " *" : ""}
-              </label>
-              <input
-                type="date"
-                required={hoursRequired}
+              <PersonnelDayDateField
+                label={`Дата выдачи${hoursRequired ? " *" : ""}`}
                 value={form.issued_at}
-                onChange={(e) => setField("issued_at", e.target.value)}
-                className={selectClass}
+                onChange={(v) => setField("issued_at", v)}
+                required={hoursRequired}
+                testId="employee-document-issued-at"
+                inputClassName={selectClass}
               />
             </div>
             {hoursRequired ? (
@@ -637,15 +669,13 @@ export default function EmployeeDocumentFormModal({
             ) : null}
             {selectedType?.has_valid_until ? (
               <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Действует до *
-                </label>
-                <input
-                  type="date"
-                  required
+                <PersonnelDayDateField
+                  label="Действует до *"
                   value={form.valid_until}
-                  onChange={(e) => setField("valid_until", e.target.value)}
-                  className={selectClass}
+                  onChange={(v) => setField("valid_until", v)}
+                  required
+                  testId="employee-document-valid-until"
+                  inputClassName={selectClass}
                 />
               </div>
             ) : null}

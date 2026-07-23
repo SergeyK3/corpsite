@@ -7,7 +7,7 @@ import {
   mapImportApiError,
   type RowMedicalCategoryHistory,
 } from "../_lib/importApi.client";
-import { calcRecordValidityNote } from "../_lib/importProfileEditor";
+import { calcRecordValidityNote, formatDocumentDateForDisplay } from "../_lib/importProfileEditor";
 
 type Props = {
   batchId: number;
@@ -106,7 +106,7 @@ export default function ImportCategoryCardModal({ batchId, rowId, open, onClose 
                 ) : (
                   detail.items.map((item, index) => (
                     <tr key={`${item.date}-${item.category}-${index}`} className="border-t border-zinc-100 dark:border-zinc-800">
-                      <td className="px-3 py-2">{item.date || "—"}</td>
+                      <td className="px-3 py-2">{formatDocumentDateForDisplay(item.date) || "—"}</td>
                       <td className="px-3 py-2">{item.category_label || "—"}</td>
                       <td className="px-3 py-2">{item.specialty || "—"}</td>
                       <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">

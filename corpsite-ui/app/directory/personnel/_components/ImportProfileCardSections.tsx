@@ -18,16 +18,16 @@ import {
   RECORD_VALIDITY_EXPIRED_NOTE,
   EXPERIENCE_CALC_NOTE,
   extractYearFromText,
+  formatDocumentDateForDisplay,
   getDegreeRecords,
   getProfessionalEducationRecords,
-  isYearOnlyDate,
-  normalizeDateInput,
   splitCertificateRow,
   splitDegreeRow,
   splitEducationRow,
   splitTrainingRow,
   stripYearFromText,
 } from "../_lib/importProfileEditor";
+import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
 
 const SEX_LABELS: Record<string, string> = {
   M: "Мужской",
@@ -39,10 +39,51 @@ const inputClass =
 
 const yearOnlyDateClass = "text-red-600 dark:text-red-400";
 
-function DateText({ value }: { value: string }) {
-  const text = value || "—";
-  if (!value) return <>{text}</>;
-  return <span className={isYearOnlyDate(value) ? yearOnlyDateClass : undefined}>{text}</span>;
+function DocumentDateText({ value }: { value: string }) {
+  const formatted = formatDocumentDateForDisplay(value);
+  if (!formatted) return <>—</>;
+  return (
+    <span className={formatted.includes("(уточните дату)") ? yearOnlyDateClass : undefined}>{formatted}</span>
+  );
+}
+
+function LabeledDocumentDateField({
+  label,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  testId?: string;
+}) {
+  return (
+    <label className="block text-sm">
+      {label ? <span className="mb-1 block text-xs text-zinc-500">{label}</span> : null}
+      <DocumentDateField value={value} onChange={onChange} testId={testId} />
+    </label>
+  );
+}
+
+function DocumentDateField({
+  value,
+  onChange,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  testId?: string;
+}) {
+  return (
+    <PersonnelDayDateField
+      value={value}
+      onChange={onChange}
+      testId={testId}
+      className="block text-sm"
+      inputClassName={inputClass}
+    />
+  );
 }
 
 function RecordValidityNote({ issuedAt }: { issuedAt: string }) {
@@ -109,38 +150,6 @@ function Field({
         />
       )}
     </label>
-  );
-}
-
-function DateField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const displayValue = value || "";
-  return (
-    <Field
-      label={label}
-      value={displayValue}
-      yearOnlyDate={isYearOnlyDate(displayValue)}
-      onChange={onChange}
-      onBlur={() => {
-        const normalized = normalizeDateInput(displayValue);
-        if (normalized !== displayValue.trim()) onChange(normalized);
-      }}
-      onPaste={(e) => {
-        const pasted = e.clipboardData.getData("text");
-        const normalized = normalizeDateInput(pasted);
-        if (normalized && normalized !== pasted.trim()) {
-          e.preventDefault();
-          onChange(normalized);
-        }
-      }}
-    />
   );
 }
 
@@ -266,7 +275,7 @@ export default function ImportProfileCardSections({
     if (!year) return;
     updateTraining(index, {
       title: stripYearFromText(title),
-      completed_at: normalizeDateInput(year),
+      completed_at: year,
     });
   }
 
@@ -276,7 +285,7 @@ export default function ImportProfileCardSections({
     if (!year) return;
     updateEducation(index, {
       institution: stripYearFromText(institution),
-      completed_at: normalizeDateInput(year),
+      completed_at: year,
     });
   }
 
@@ -315,7 +324,7 @@ export default function ImportProfileCardSections({
     updateCertificate(index, {
       topic: cleaned,
       specialty: cleaned,
-      issued_at: normalizeDateInput(year),
+      issued_at: year,
     });
   }
 
@@ -325,7 +334,7 @@ export default function ImportProfileCardSections({
     if (!year) return;
     updateDegreeRow(index, {
       label: stripYearFromText(label),
-      completed_at: normalizeDateInput(year),
+      completed_at: year,
     });
   }
 
@@ -409,7 +418,7 @@ export default function ImportProfileCardSections({
                   <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                     <td className="py-2 pr-2">{row.institution || "—"}</td>
                     <td className="py-2 pr-2">{row.specialty || "—"}</td>
-                    <td className="py-2"><DateText value={row.completed_at || ""} /></td>
+                    <td className="py-2"><DocumentDateText value={row.completed_at || ""} /></td>
                   </tr>
                 ))
               )}
@@ -430,7 +439,7 @@ export default function ImportProfileCardSections({
                     onBlur={() => handleEducationInstitutionBlur(i, row.institution || "", row.completed_at || "")}
                   />
                   <Field label="Специальность" value={row.specialty || ""} onChange={(v) => updateEducation(i, { specialty: v })} />
-                  <DateField
+                  <LabeledDocumentDateField
                     label="Дата окончания"
                     value={row.completed_at || ""}
                     onChange={(v) => updateEducation(i, { completed_at: v })}
@@ -499,7 +508,7 @@ export default function ImportProfileCardSections({
                   <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                     <td className="py-2 pr-2">{row.title || "—"}</td>
                     <td className="py-2 pr-2">{row.organization || "—"}</td>
-                    <td className="py-2 pr-2"><DateText value={row.completed_at || ""} /></td>
+                    <td className="py-2 pr-2"><DocumentDateText value={row.completed_at || ""} /></td>
                     <td className="py-2">{row.hours ?? "—"}</td>
                   </tr>
                 ))
@@ -521,7 +530,7 @@ export default function ImportProfileCardSections({
                     onBlur={() => handleTrainingTitleBlur(i, row.title || "", row.completed_at || "")}
                   />
                   <Field label="Организация" value={row.organization || ""} onChange={(v) => updateTraining(i, { organization: v })} />
-                  <DateField
+                  <LabeledDocumentDateField
                     label="Дата"
                     value={row.completed_at || ""}
                     onChange={(v) => updateTraining(i, { completed_at: v })}
@@ -582,9 +591,13 @@ export default function ImportProfileCardSections({
                     </td>
                     <td className="py-2 pr-2 align-top">
                       {portfolioEditable ? (
-                        <DateField label="" value={row.issued_at || ""} onChange={(v) => updateCategory(i, { issued_at: v })} />
+                        <DocumentDateField
+                          value={row.issued_at || ""}
+                          testId={`import-category-date-${i}`}
+                          onChange={(v) => updateCategory(i, { issued_at: v })}
+                        />
                       ) : (
-                        <DateText value={row.issued_at || ""} />
+                        <DocumentDateText value={row.issued_at || ""} />
                       )}
                     </td>
                     <td className="py-2 pr-2 align-top">
@@ -634,7 +647,8 @@ export default function ImportProfileCardSections({
               <tr>
                 <th className="py-1 pr-2">Вид</th>
                 <th className="py-1 pr-2">Название</th>
-                <th className="py-1 pr-2">дата</th>
+                <th className="py-1 pr-2">Дата выдачи</th>
+                <th className="py-1 pr-2">Действует до</th>
                 <th className="py-1 pr-2">часы</th>
                 <th className="py-1 pr-2">Ссылка</th>
                 <th className="py-1 pr-2">Примечание</th>
@@ -643,7 +657,7 @@ export default function ImportProfileCardSections({
             </thead>
             <tbody>
               {certificateRecords.length === 0 ? (
-                <tr><td colSpan={portfolioEditable ? 7 : 6} className="py-2 text-zinc-500">—</td></tr>
+                <tr><td colSpan={portfolioEditable ? 8 : 7} className="py-2 text-zinc-500">—</td></tr>
               ) : (
                 certificateRecords.map((row, i) => (
                   <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
@@ -668,9 +682,24 @@ export default function ImportProfileCardSections({
                     </td>
                     <td className="py-2 pr-2 align-top">
                       {portfolioEditable ? (
-                        <DateField label="" value={row.issued_at || ""} onChange={(v) => updateCertificate(i, { issued_at: v })} />
+                        <DocumentDateField
+                          value={row.issued_at || ""}
+                          testId={`import-certificate-issued-${i}`}
+                          onChange={(v) => updateCertificate(i, { issued_at: v })}
+                        />
                       ) : (
-                        <DateText value={row.issued_at || ""} />
+                        <DocumentDateText value={row.issued_at || ""} />
+                      )}
+                    </td>
+                    <td className="py-2 pr-2 align-top">
+                      {portfolioEditable ? (
+                        <DocumentDateField
+                          value={row.valid_until || ""}
+                          testId={`import-certificate-valid-until-${i}`}
+                          onChange={(v) => updateCertificate(i, { valid_until: v })}
+                        />
+                      ) : (
+                        <DocumentDateText value={row.valid_until || ""} />
                       )}
                     </td>
                     <td className="py-2 pr-2 align-top">
@@ -746,7 +775,7 @@ export default function ImportProfileCardSections({
                 degreeRecords.map((row, i) => (
                   <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                     <td className="py-2 pr-2 align-top whitespace-pre-wrap">{row.label || "—"}</td>
-                    <td className="py-2 align-top"><DateText value={row.completed_at || ""} /></td>
+                    <td className="py-2 align-top"><DocumentDateText value={row.completed_at || ""} /></td>
                   </tr>
                 ))
               )}
@@ -766,7 +795,7 @@ export default function ImportProfileCardSections({
                     onChange={(v) => updateDegreeRow(i, { label: v })}
                     onBlur={() => handleDegreeLabelBlur(i, row.label || "", row.completed_at || "")}
                   />
-                  <DateField
+                  <LabeledDocumentDateField
                     label="дата"
                     value={row.completed_at || ""}
                     onChange={(v) => updateDegreeRow(i, { completed_at: v })}
@@ -818,7 +847,7 @@ export default function ImportProfileCardSections({
                 awardRecords.map((row, i) => (
                   <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                     <td className="py-2 pr-2">{row.title || "—"}</td>
-                    <td className="py-2"><DateText value={row.date || ""} /></td>
+                    <td className="py-2"><DocumentDateText value={row.date || ""} /></td>
                   </tr>
                 ))
               )}
@@ -830,7 +859,7 @@ export default function ImportProfileCardSections({
               <div key={i} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Field label="Вид награды" value={row.title || ""} onChange={(v) => updateAward(i, { title: v })} />
-                  <DateField label="Дата" value={row.date || ""} onChange={(v) => updateAward(i, { date: v })} />
+                  <LabeledDocumentDateField label="Дата" value={row.date || ""} onChange={(v) => updateAward(i, { date: v })} />
                 </div>
                 <button type="button" className="mt-2 rounded border border-red-300 px-2 py-1 text-xs text-red-700 dark:border-red-900" onClick={() => updateProfile({ ...profile, award_records: awardRecords.filter((_, idx) => idx !== i) })}>
                   Удалить
