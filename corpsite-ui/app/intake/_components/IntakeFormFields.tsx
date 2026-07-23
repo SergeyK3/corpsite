@@ -18,6 +18,16 @@ function isIntakeBirthDateKind(kind: IntakeDateFieldKind): kind is "birth" {
   return kind === "birth";
 }
 
+function intakeFieldLabelClass(compact?: boolean) {
+  return compact ? "sr-only" : "text-sm font-medium text-zinc-700 dark:text-zinc-300";
+}
+
+function intakeFieldControlClass(compact?: boolean, extra = "") {
+  const spacing = compact ? "" : "mt-1 ";
+  const shape = compact ? "rounded-md px-2 py-1.5" : "rounded-lg px-3 py-2";
+  return `${spacing}w-full ${shape} border border-zinc-300 bg-white text-sm disabled:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:disabled:bg-zinc-900 ${extra}`.trim();
+}
+
 export function IntakeSelectField<V extends string>({
   label,
   value,
@@ -26,6 +36,7 @@ export function IntakeSelectField<V extends string>({
   required = false,
   options,
   testId,
+  compact = false,
 }: {
   label: string;
   value: V;
@@ -34,10 +45,11 @@ export function IntakeSelectField<V extends string>({
   required?: boolean;
   options: ReadonlyArray<{ value: V; label: string }>;
   testId?: string;
+  compact?: boolean;
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <span className={intakeFieldLabelClass(compact)}>
         {label}
         {required ? " *" : ""}
       </span>
@@ -49,7 +61,7 @@ export function IntakeSelectField<V extends string>({
           const selected = options.find((option) => option.value === e.target.value);
           if (selected) onChange(selected.value);
         }}
-        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
+        className={intakeFieldControlClass(compact, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -71,6 +83,7 @@ export function IntakeTextField({
   testId,
   maxLength,
   inputMode,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -81,10 +94,11 @@ export function IntakeTextField({
   testId?: string;
   maxLength?: number;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  compact?: boolean;
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <span className={intakeFieldLabelClass(compact)}>
         {label}
         {required ? " *" : ""}
       </span>
@@ -96,7 +110,7 @@ export function IntakeTextField({
         maxLength={maxLength}
         inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
+        className={intakeFieldControlClass(compact, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")}
       />
     </label>
   );
@@ -109,6 +123,7 @@ export function IntakePeriodDateField({
   readOnly,
   required = false,
   testId,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -116,6 +131,7 @@ export function IntakePeriodDateField({
   readOnly?: boolean;
   required?: boolean;
   testId?: string;
+  compact?: boolean;
 }) {
   const [focused, setFocused] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -128,7 +144,7 @@ export function IntakePeriodDateField({
 
   return (
     <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <span className={intakeFieldLabelClass(compact)}>
         {label}
         {required ? " *" : ""}
       </span>
@@ -154,11 +170,11 @@ export function IntakePeriodDateField({
           setDraft(nextDraft);
           onChange(parseIntakePeriodInput(nextDraft));
         }}
-        className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:bg-zinc-950 dark:read-only:bg-zinc-900 ${
+        className={`${intakeFieldControlClass(compact, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")} ${
           incomplete
             ? "border-amber-400 text-amber-900 dark:border-amber-700 dark:text-amber-200"
-            : "border-zinc-300 dark:border-zinc-700"
-        }`}
+            : ""
+        }`.trim()}
       />
       {incomplete ? (
         <span
@@ -180,6 +196,7 @@ export function IntakeDateField({
   kind,
   required = false,
   testId,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -188,6 +205,7 @@ export function IntakeDateField({
   kind: IntakeDateFieldKind;
   required?: boolean;
   testId?: string;
+  compact?: boolean;
 }) {
   if (isIntakeBirthDateKind(kind)) {
     return (
@@ -211,6 +229,7 @@ export function IntakeDateField({
       readOnly={readOnly}
       required={required}
       testId={testId}
+      compact={compact}
     />
   );
 }

@@ -26,6 +26,7 @@ from app.personnel_intake.application.review_service import load_intake_review_s
 from app.personnel_intake.domain.errors import PersonnelIntakeTransferError
 from app.personnel_intake.domain.models import IntakeTransferSnapshot
 from app.personnel_intake.domain.review_status import (
+    INTAKE_SECTION_ADDITIONAL,
     INTAKE_SECTION_CONTACTS,
     INTAKE_SECTION_EDUCATION,
     INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY,
@@ -56,6 +57,7 @@ from app.ppr.application.results import (
 )
 from app.ppr.application.section_service import PprSectionApplicationService
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
+from app.ppr.read.additional_reader import save_person_additional_profile
 
 
 def _now_utc() -> datetime:
@@ -359,6 +361,15 @@ def transfer_intake_to_ppr(
         )
         transferred_sections.extend(section_transferred)
         all_command_ids.extend(section_command_ids)
+
+        if section_statuses.get(INTAKE_SECTION_ADDITIONAL) == INTAKE_SECTION_REVIEW_ACCEPTED:
+            save_person_additional_profile(
+                conn,
+                person_id=app.person_id,
+                profile=payload.get("additional") or {},
+            )
+            transferred_sections.append("additional")
+            all_command_ids.append(intake_command_id(application_id, "additional", 0))
 
         # Record skipped sections in audit metadata only (no PPR writes).
         for code, status in section_statuses.items():

@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 
 from app.ppr.domain.identity_models import IdentityResolution
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE, PprEnvelope
+from app.ppr.read.additional_reader import load_person_additional_profile
 from app.ppr.read.event_summary_reader import PprEventSummaryReader
 from app.ppr.read.models import (
+    PprAdditionalReadSlice,
     PprCompositeReadMetadata,
     PprCompositeReadModel,
     PprCompositeSummary,
@@ -91,6 +93,22 @@ class PprCompositeReadOrchestrator:
                     position_name=intended.position_name,
                 )
 
+        additional_raw = load_person_additional_profile(
+            uow.connection,
+            person_id=resolved_person_id,
+            employee_id=identity_resolution.employee_id,
+        )
+        additional = PprAdditionalReadSlice(
+            foreign_languages=tuple(additional_raw.get("foreign_languages") or []),
+            foreign_languages_none=bool(additional_raw.get("foreign_languages_none")),
+            awards=tuple(additional_raw.get("awards") or []),
+            awards_none=bool(additional_raw.get("awards_none")),
+            academic_degrees=tuple(additional_raw.get("academic_degrees") or []),
+            academic_degrees_none=bool(additional_raw.get("academic_degrees_none")),
+            academic_titles=tuple(additional_raw.get("academic_titles") or []),
+            academic_titles_none=bool(additional_raw.get("academic_titles_none")),
+        )
+
         return PprCompositeReadModel(
             person_id=resolved_person_id,
             employee_id=identity_resolution.employee_id,
@@ -110,6 +128,7 @@ class PprCompositeReadOrchestrator:
             military=military,
             events=events,
             intended_employment=intended_slice,
+            additional=additional,
             metadata=PprCompositeReadMetadata(
                 evaluated_at=datetime.now(UTC),
                 source_person_id=identity_resolution.source_person_id,

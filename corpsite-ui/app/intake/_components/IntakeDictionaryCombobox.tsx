@@ -11,14 +11,19 @@ import {
 const INPUT_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white py-2 pl-3 pr-9 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900";
 
+const COMPACT_INPUT_CLASS =
+  "w-full rounded-md border border-zinc-300 bg-white py-1.5 pl-2 pr-8 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900";
+
 type IntakeDictionaryComboboxProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  allowFreeText?: boolean;
   popular: readonly string[];
   catalog: readonly string[];
   testId?: string;
+  compact?: boolean;
 };
 
 export default function IntakeDictionaryCombobox({
@@ -26,9 +31,11 @@ export default function IntakeDictionaryCombobox({
   value,
   onChange,
   readOnly = false,
+  allowFreeText = false,
   popular,
   catalog,
   testId,
+  compact = false,
 }: IntakeDictionaryComboboxProps) {
   const listId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -94,6 +101,10 @@ export default function IntakeDictionaryCombobox({
       commitSelection(resolved);
       return;
     }
+    if (allowFreeText) {
+      commitSelection(trimmedQuery);
+      return;
+    }
     closeList();
   }
 
@@ -142,9 +153,9 @@ export default function IntakeDictionaryCombobox({
 
   return (
     <label className="block">
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
+      <span className={compact ? "sr-only" : "text-sm font-medium text-zinc-700 dark:text-zinc-300"}>{label}</span>
       <div
-        className={`relative mt-1 ${readOnly ? "" : "cursor-pointer"}`}
+        className={`relative ${compact ? "" : "mt-1"} ${readOnly ? "" : "cursor-pointer"}`}
         data-testid={testId ? `${testId}-trigger` : undefined}
         onMouseDown={(event) => {
           if (readOnly) return;
@@ -181,13 +192,13 @@ export default function IntakeDictionaryCombobox({
             }, 0);
           }}
           onKeyDown={handleKeyDown}
-          className={INPUT_CLASS}
+          className={compact ? COMPACT_INPUT_CLASS : INPUT_CLASS}
         />
         {!readOnly ? (
           <span
             aria-hidden="true"
             data-testid={testId ? `${testId}-chevron` : undefined}
-            className={`pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-center text-xs text-zinc-500 transition-transform dark:text-zinc-400 ${
+            className={`pointer-events-none absolute inset-y-0 right-0 flex ${compact ? "w-8" : "w-9"} items-center justify-center text-xs text-zinc-500 transition-transform dark:text-zinc-400 ${
               showList ? "rotate-180" : ""
             }`}
           >

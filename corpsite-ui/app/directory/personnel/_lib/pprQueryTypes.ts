@@ -182,6 +182,50 @@ export type PprIntendedEmploymentResponse = {
   position_name: string | null;
 };
 
+export type PprAdditionalForeignLanguageResponse = {
+  language: string;
+  proficiency: string;
+};
+
+export type PprAdditionalAwardResponse = {
+  category: string;
+  name: string;
+  issued_by: string;
+  awarded_at: string;
+  document_number: string;
+};
+
+export type PprAdditionalAcademicDegreeResponse = {
+  degree: string;
+  degree_other: string;
+  field_of_science: string;
+  completed_at: string;
+  document_number: string;
+  label?: string | null;
+  degree_type?: string | null;
+};
+
+export type PprAdditionalAcademicTitleResponse = {
+  academic_title: string;
+  academic_title_other: string;
+  field_of_science: string;
+  completed_at: string;
+  document_number: string;
+  label?: string | null;
+  degree_type?: string | null;
+};
+
+export type PprAdditionalProfileResponse = {
+  foreign_languages: PprAdditionalForeignLanguageResponse[];
+  foreign_languages_none: boolean;
+  awards: PprAdditionalAwardResponse[];
+  awards_none: boolean;
+  academic_degrees: PprAdditionalAcademicDegreeResponse[];
+  academic_degrees_none: boolean;
+  academic_titles: PprAdditionalAcademicTitleResponse[];
+  academic_titles_none: boolean;
+};
+
 export type PprHireDefaultsResponse = PprIntendedEmploymentResponse & {
   person_id: number;
 };
@@ -193,6 +237,7 @@ export type PprCompositeReadResponse = {
   sections: Record<string, PprSectionResponse>;
   events: PprEventSummaryResponse | null;
   intended_employment: PprIntendedEmploymentResponse | null;
+  additional: PprAdditionalProfileResponse;
   metadata: PprReadMetadataResponse;
 };
 

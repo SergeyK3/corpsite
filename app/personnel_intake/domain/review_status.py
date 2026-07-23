@@ -8,6 +8,7 @@ INTAKE_SECTION_TRAINING = "training"
 INTAKE_SECTION_RELATIVES = "relatives"
 INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY = "employment_biography"
 INTAKE_SECTION_MILITARY = "military"
+INTAKE_SECTION_ADDITIONAL = "additional"
 
 INTAKE_REVIEW_SECTIONS: tuple[str, ...] = (
     INTAKE_SECTION_PERSONAL,
@@ -17,6 +18,7 @@ INTAKE_REVIEW_SECTIONS: tuple[str, ...] = (
     INTAKE_SECTION_RELATIVES,
     INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY,
     INTAKE_SECTION_MILITARY,
+    INTAKE_SECTION_ADDITIONAL,
 )
 
 # Sections that must be accepted (not skipped) when non-empty.
@@ -68,6 +70,7 @@ INTAKE_SECTION_LABELS: dict[str, str] = {
     INTAKE_SECTION_RELATIVES: "Родственники",
     INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY: "Трудовая биография",
     INTAKE_SECTION_MILITARY: "Воинский учёт",
+    INTAKE_SECTION_ADDITIONAL: "Дополнительные сведения",
 }
 
 PPR_TRANSFER_SECTION_GENERAL = "general"
@@ -78,6 +81,7 @@ PPR_TRANSFER_SECTIONS: tuple[str, ...] = (
     "family",
     "employment_biography",
     "military",
+    "additional",
 )
 
 

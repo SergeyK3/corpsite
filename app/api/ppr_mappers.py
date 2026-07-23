@@ -4,12 +4,17 @@ from __future__ import annotations
 from datetime import date
 
 from app.api.ppr_schemas import (
+    PprAdditionalProfileResponse,
+    PprAcademicDegreeRecordResponse,
+    PprAcademicTitleRecordResponse,
+    PprAwardRecordResponse,
     PprCompositeReadResponse,
     PprCompositeSummaryResponse,
     PprEducationRecordResponse,
     PprEventSummaryItemResponse,
     PprEventSummaryResponse,
     PprExternalEmploymentRecordResponse,
+    PprForeignLanguageRecordResponse,
     PprGeneralResponse,
     PprIdentityResponse,
     PprIntendedEmploymentResponse,
@@ -34,7 +39,7 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_TRAINING,
     TrainingRecord,
 )
-from app.ppr.read.models import PprCompositeReadModel, PprCompositeSummary, PprSectionAggregation
+from app.ppr.read.models import PprCompositeReadModel, PprCompositeSummary, PprSectionAggregation, PprAdditionalReadSlice
 
 RELATIONSHIP_TYPE_LABELS: dict[str, str] = {
     "father": "Отец",
@@ -228,6 +233,56 @@ def _section_response(
     )
 
 
+def _additional_response(additional: PprAdditionalReadSlice) -> PprAdditionalProfileResponse:
+    return PprAdditionalProfileResponse(
+        foreign_languages=[
+            PprForeignLanguageRecordResponse(
+                language=str(item.get("language") or ""),
+                proficiency=str(item.get("proficiency") or ""),
+            )
+            for item in additional.foreign_languages
+        ],
+        foreign_languages_none=additional.foreign_languages_none,
+        awards=[
+            PprAwardRecordResponse(
+                category=str(item.get("category") or ""),
+                name=str(item.get("name") or ""),
+                issued_by=str(item.get("issued_by") or ""),
+                awarded_at=str(item.get("awarded_at") or ""),
+                document_number=str(item.get("document_number") or ""),
+            )
+            for item in additional.awards
+        ],
+        awards_none=additional.awards_none,
+        academic_degrees=[
+            PprAcademicDegreeRecordResponse(
+                degree=str(item.get("degree") or ""),
+                degree_other=str(item.get("degree_other") or ""),
+                field_of_science=str(item.get("field_of_science") or ""),
+                completed_at=str(item.get("completed_at") or ""),
+                document_number=str(item.get("document_number") or ""),
+                label=str(item.get("label")) if item.get("label") else None,
+                degree_type=str(item.get("degree_type")) if item.get("degree_type") else None,
+            )
+            for item in additional.academic_degrees
+        ],
+        academic_degrees_none=additional.academic_degrees_none,
+        academic_titles=[
+            PprAcademicTitleRecordResponse(
+                academic_title=str(item.get("academic_title") or ""),
+                academic_title_other=str(item.get("academic_title_other") or ""),
+                field_of_science=str(item.get("field_of_science") or ""),
+                completed_at=str(item.get("completed_at") or ""),
+                document_number=str(item.get("document_number") or ""),
+                label=str(item.get("label")) if item.get("label") else None,
+                degree_type=str(item.get("degree_type")) if item.get("degree_type") else None,
+            )
+            for item in additional.academic_titles
+        ],
+        academic_titles_none=additional.academic_titles_none,
+    )
+
+
 def composite_to_response(
     composite: PprCompositeReadModel,
     *,
@@ -317,6 +372,7 @@ def composite_to_response(
             else None
         ),
         intended_employment=intended_response,
+        additional=_additional_response(composite.additional),
         metadata=PprReadMetadataResponse(
             read_mode=read_mode,
             source=source,

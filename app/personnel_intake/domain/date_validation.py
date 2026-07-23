@@ -145,6 +145,30 @@ def collect_intake_date_validation_errors(payload: dict[str, Any]) -> list[str]:
             ):
                 errors.append(f"training[{index}].year_from")
 
+    additional = payload.get("additional") or {}
+    if isinstance(additional, dict):
+        awards = additional.get("awards") or []
+        if isinstance(awards, list):
+            for index, item in enumerate(awards):
+                if not isinstance(item, dict):
+                    continue
+                if is_incomplete_intake_period_date(item.get("awarded_at") or item.get("date")):
+                    errors.append(f"additional.awards[{index}].awarded_at")
+        degrees = additional.get("academic_degrees") or []
+        if isinstance(degrees, list):
+            for index, item in enumerate(degrees):
+                if not isinstance(item, dict):
+                    continue
+                if is_incomplete_intake_period_date(item.get("completed_at")):
+                    errors.append(f"additional.academic_degrees[{index}].completed_at")
+        titles = additional.get("academic_titles") or []
+        if isinstance(titles, list):
+            for index, item in enumerate(titles):
+                if not isinstance(item, dict):
+                    continue
+                if is_incomplete_intake_period_date(item.get("completed_at")):
+                    errors.append(f"additional.academic_titles[{index}].completed_at")
+
     relatives = payload.get("relatives") or []
     if isinstance(relatives, list):
         for index, item in enumerate(relatives):

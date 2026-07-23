@@ -1,4 +1,9 @@
-import type { IntakeDraftPayload, IntakeEducation, IntakeTraining } from "./intakeApi.client";
+import type {
+  IntakeAdditionalPayload,
+  IntakeDraftPayload,
+  IntakeEducation,
+  IntakeTraining,
+} from "./intakeApi.client";
 
 type StringRecord<T> = { [K in keyof T]: string };
 
@@ -12,6 +17,16 @@ export type CanonicalIntakeDraftPayload = {
   relatives: StringRecord<IntakeDraftPayload["relatives"][number]>[];
   employment_biography: StringRecord<IntakeDraftPayload["employment_biography"][number]>[];
   military: StringRecord<IntakeDraftPayload["military"]>;
+  additional: {
+    foreign_languages: StringRecord<IntakeAdditionalPayload["foreign_languages"][number]>[];
+    foreign_languages_none: string;
+    awards: StringRecord<IntakeAdditionalPayload["awards"][number]>[];
+    awards_none: string;
+    academic_degrees: StringRecord<IntakeAdditionalPayload["academic_degrees"][number]>[];
+    academic_degrees_none: string;
+    academic_titles: StringRecord<IntakeAdditionalPayload["academic_titles"][number]>[];
+    academic_titles_none: string;
+  };
   current_step: string;
 };
 
@@ -47,6 +62,35 @@ function normalizeTrainingItems(
     hours: normalizeScalar(item.hours),
     hours_is_manual: item.hours_is_manual ? "true" : "false",
   }));
+}
+
+function normalizeAdditionalBlock(
+  block: IntakeAdditionalPayload | undefined,
+): CanonicalIntakeDraftPayload["additional"] {
+  const source = block ?? emptyIntakeAdditionalDefaults();
+  return {
+    foreign_languages: normalizeListItems(source.foreign_languages),
+    foreign_languages_none: source.foreign_languages_none ? "true" : "false",
+    awards: normalizeListItems(source.awards),
+    awards_none: source.awards_none ? "true" : "false",
+    academic_degrees: normalizeListItems(source.academic_degrees),
+    academic_degrees_none: source.academic_degrees_none ? "true" : "false",
+    academic_titles: normalizeListItems(source.academic_titles),
+    academic_titles_none: source.academic_titles_none ? "true" : "false",
+  };
+}
+
+function emptyIntakeAdditionalDefaults(): IntakeAdditionalPayload {
+  return {
+    foreign_languages: [],
+    foreign_languages_none: false,
+    awards: [],
+    awards_none: false,
+    academic_degrees: [],
+    academic_degrees_none: false,
+    academic_titles: [],
+    academic_titles_none: false,
+  };
 }
 
 function normalizeListItems<T extends Record<string, string>>(
@@ -110,6 +154,7 @@ export function canonicalizeIntakePayloadForCompare(
       },
       payload.military,
     ),
+    additional: normalizeAdditionalBlock(payload.additional),
     current_step: payload.current_step,
   };
 }

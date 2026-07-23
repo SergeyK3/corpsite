@@ -18,6 +18,7 @@ vi.mock("./IntakeMilitaryCombobox", () => ({
 
 const personalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "personal");
 const educationStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "education");
+const additionalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "additional");
 
 function expandEducationRow(index = 0) {
   const desktop = screen.getByTestId("intake-education-desktop-view");
@@ -140,5 +141,13 @@ describe("IntakeDraftFormEditor date fields", () => {
     expect(onChange).toHaveBeenCalled();
     const nextPayload = onChange.mock.calls.at(-1)?.[0];
     expect(nextPayload.education[0].year_from).toBe("2014-09-01");
+  });
+
+  it("renders additional step sections", () => {
+    renderEditor(emptyIntakeDraftPayload(), additionalStepIndex);
+    expect(screen.getByTestId("intake-additional-step")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-foreign-languages-section")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-awards-section")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-academic-degrees-section")).toBeInTheDocument();
   });
 });

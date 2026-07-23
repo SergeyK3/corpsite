@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from typing import Any
+
 from app.ppr.domain.event_models import PprEventRecord
 from app.ppr.domain.identity_models import IdentityResolution, PersonIdentitySnapshot
 from app.ppr.domain.models import PPR_LIFECYCLE_NOT_MATERIALIZED
@@ -92,6 +94,31 @@ class PprIntendedEmploymentReadSlice:
 
 
 @dataclass(frozen=True, slots=True)
+class PprAdditionalReadSlice:
+    foreign_languages: tuple[dict[str, str], ...]
+    foreign_languages_none: bool
+    awards: tuple[dict[str, str], ...]
+    awards_none: bool
+    academic_degrees: tuple[dict[str, Any], ...]
+    academic_degrees_none: bool
+    academic_titles: tuple[dict[str, Any], ...]
+    academic_titles_none: bool
+
+    @classmethod
+    def empty(cls) -> PprAdditionalReadSlice:
+        return cls(
+            foreign_languages=(),
+            foreign_languages_none=False,
+            awards=(),
+            awards_none=False,
+            academic_degrees=(),
+            academic_degrees_none=False,
+            academic_titles=(),
+            academic_titles_none=False,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PprCompositeReadMetadata:
     """Assembly metadata attached to every composite read."""
 
@@ -124,6 +151,7 @@ class PprCompositeReadModel:
     military: PprSectionAggregation
     events: PprEventSummary | None
     intended_employment: PprIntendedEmploymentReadSlice | None
+    additional: PprAdditionalReadSlice
     metadata: PprCompositeReadMetadata
 
 

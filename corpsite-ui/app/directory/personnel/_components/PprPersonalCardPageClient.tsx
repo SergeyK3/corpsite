@@ -51,6 +51,7 @@ import PprCardTrainingSection from "./PprCardTrainingSection";
 import PprCardFamilySection from "./PprCardFamilySection";
 import PprCardMilitarySection from "./PprCardMilitarySection";
 import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySection";
+import PprCardAdditionalSection from "./PprCardAdditionalSection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
@@ -411,6 +412,14 @@ export default function PprPersonalCardPageClient({
                   />
                 </PprCardSection>
               ) : null}
+
+              <PprCardSection
+                id="additional"
+                title="Дополнительные сведения"
+                description="Иностранные языки, награды, учёные степени и звания."
+              >
+                <PprCardAdditionalSection additional={ppr.additional} />
+              </PprCardSection>
 
               {employmentBiographyRoute ? (
                 <PprCardSection

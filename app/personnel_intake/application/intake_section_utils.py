@@ -5,6 +5,7 @@ from typing import Any
 
 from app.personnel_intake.domain.review_status import (
     INTAKE_REVIEW_SECTIONS,
+    INTAKE_SECTION_ADDITIONAL,
     INTAKE_SECTION_CONTACTS,
     INTAKE_SECTION_EDUCATION,
     INTAKE_SECTION_EMPLOYMENT_BIOGRAPHY,
@@ -17,6 +18,18 @@ from app.personnel_intake.domain.review_status import (
 
 def _has_text(value: Any) -> bool:
     return bool(str(value or "").strip())
+
+
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_additional_subsection_empty(items: Any, declared_empty: Any) -> bool:
+    if _normalize_bool(declared_empty):
+        return True
+    return not isinstance(items, list) or len(items) == 0
 
 
 def is_intake_section_empty(section_code: str, payload: dict[str, Any]) -> bool:
@@ -41,6 +54,12 @@ def is_intake_section_empty(section_code: str, payload: dict[str, Any]) -> bool:
     if section_code == INTAKE_SECTION_MILITARY:
         block = payload.get("military") or {}
         return not any(_has_text(block.get(k)) for k in block)
+    if section_code == INTAKE_SECTION_ADDITIONAL:
+        block = payload.get("additional") or {}
+        return all(
+            _is_additional_subsection_empty(block.get(key), block.get(f"{key}_none"))
+            for key in ("foreign_languages", "awards", "academic_degrees", "academic_titles")
+        )
     return True
 
 
@@ -51,6 +70,8 @@ def extract_section_payload(section_code: str, payload: dict[str, Any]) -> Any:
         return payload.get("contacts") or {}
     if section_code == INTAKE_SECTION_MILITARY:
         return payload.get("military") or {}
+    if section_code == INTAKE_SECTION_ADDITIONAL:
+        return payload.get("additional") or {}
     return payload.get(section_code) or []
 
 

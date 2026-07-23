@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import IntakeAdditionalStep from "./IntakeAdditionalStep";
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import IntakeEducationTable from "./IntakeEducationTable";
 import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
@@ -28,6 +29,14 @@ import {
   formatIntakeStepHeaderTitle,
   type IntakeDraftPayload,
 } from "../_lib/intakeApi.client";
+import { normalizeIntakeAdditionalPayload } from "../_lib/intakeAdditional";
+import {
+  formatIntakeAcademicDegreeReviewLine,
+  formatIntakeAcademicTitleReviewLine,
+  formatIntakeAdditionalSubsectionReviewSummary,
+  formatIntakeAwardReviewLine,
+  formatIntakeForeignLanguageReviewLine,
+} from "../_lib/intakeAdditional";
 import { normalizeIntakeEducationEntry } from "../_lib/intakeEducation";
 import {
   normalizeIntakeTrainingEntry,
@@ -176,6 +185,7 @@ export function reconcileIntakeDraftPayload(payload: IntakeDraftPayload): Intake
     training: (payload.training ?? []).map((item) =>
       reconcileTrainingEntryHours(normalizeIntakeTrainingEntry(item)),
     ),
+    additional: normalizeIntakeAdditionalPayload(payload.additional),
     military: reconcileIntakeMilitaryDraftOnLoad(military),
   };
 }
@@ -390,6 +400,14 @@ export default function IntakeDraftFormEditor({
           {currentStep.id === "military" ? (
             <StepMilitary payload={payload} onChange={onChange} readOnly={readOnly} />
           ) : null}
+          {currentStep.id === "additional" ? (
+            <IntakeAdditionalStep
+              value={payload.additional}
+              readOnly={readOnly}
+              focusTestId={pendingFocusTestId}
+              onChange={(additional) => onChange({ ...payload, additional })}
+            />
+          ) : null}
           {currentStep.id === "review" ? (
             <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300" data-testid="intake-review-summary">
               <p>
@@ -450,6 +468,38 @@ export default function IntakeDraftFormEditor({
                           {formatIntakeEmploymentReviewLine(item)}
                         </span>
                       ))}
+                </li>
+                <li data-testid="intake-review-additional-languages">
+                  Иностранные языки:{" "}
+                  {formatIntakeAdditionalSubsectionReviewSummary(
+                    payload.additional.foreign_languages,
+                    payload.additional.foreign_languages_none,
+                    (item) => formatIntakeForeignLanguageReviewLine(item),
+                  )}
+                </li>
+                <li data-testid="intake-review-additional-awards">
+                  Награды:{" "}
+                  {formatIntakeAdditionalSubsectionReviewSummary(
+                    payload.additional.awards,
+                    payload.additional.awards_none,
+                    (item) => formatIntakeAwardReviewLine(item),
+                  )}
+                </li>
+                <li data-testid="intake-review-additional-degrees">
+                  Учёные степени:{" "}
+                  {formatIntakeAdditionalSubsectionReviewSummary(
+                    payload.additional.academic_degrees,
+                    payload.additional.academic_degrees_none,
+                    (item) => formatIntakeAcademicDegreeReviewLine(item),
+                  )}
+                </li>
+                <li data-testid="intake-review-additional-titles">
+                  Учёные звания:{" "}
+                  {formatIntakeAdditionalSubsectionReviewSummary(
+                    payload.additional.academic_titles,
+                    payload.additional.academic_titles_none,
+                    (item) => formatIntakeAcademicTitleReviewLine(item),
+                  )}
                 </li>
               </ul>
               {hasDateValidationIssues ? (

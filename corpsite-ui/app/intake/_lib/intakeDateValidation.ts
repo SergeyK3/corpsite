@@ -1,5 +1,6 @@
 import type { IntakeDraftPayload } from "./intakeApi.client";
 import { INTAKE_STEPS } from "./intakeApi.client";
+import { resolveIntakeAcademicDegreeDisplay, resolveIntakeAcademicTitleDisplay, resolveIntakeAwardNameDisplay, normalizeIntakeAcademicDegreeEntry, normalizeIntakeAcademicTitleEntry, normalizeIntakeAwardEntry } from "./intakeAdditional";
 import { formatIntakeFullName } from "./intakeContactHelpers";
 import {
   isInvalidIntakeTrainingPeriodRange,
@@ -169,6 +170,54 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
         stepId: "employment_biography",
         focusTestId: `intake-employment-year-to-${index}`,
         message: formatIssueMessage("Трудовая биография", record, "дата окончания"),
+      });
+    }
+  });
+
+  payload.additional?.awards?.forEach((item, index) => {
+    const normalized = normalizeIntakeAwardEntry(item);
+    const record = recordLabel(
+      resolveIntakeAwardNameDisplay(normalized) !== "—"
+        ? resolveIntakeAwardNameDisplay(normalized)
+        : normalized.category,
+      `Запись ${index + 1}`,
+    );
+    if (isIncompletePersonnelDocumentDate(item.awarded_at)) {
+      pushIssue(issues, {
+        field: `additional.awards[${index}].awarded_at`,
+        stepId: "additional",
+        focusTestId: `intake-award-awarded-at-${index}`,
+        message: formatIssueMessage("Награды", record, "дата награждения"),
+      });
+    }
+  });
+
+  payload.additional?.academic_degrees?.forEach((item, index) => {
+    const record = recordLabel(
+      resolveIntakeAcademicDegreeDisplay(normalizeIntakeAcademicDegreeEntry(item)),
+      `Запись ${index + 1}`,
+    );
+    if (isIncompletePersonnelDocumentDate(item.completed_at)) {
+      pushIssue(issues, {
+        field: `additional.academic_degrees[${index}].completed_at`,
+        stepId: "additional",
+        focusTestId: `intake-academic-degree-completed-at-${index}`,
+        message: formatIssueMessage("Учёные степени", record, "дата присуждения"),
+      });
+    }
+  });
+
+  payload.additional?.academic_titles?.forEach((item, index) => {
+    const record = recordLabel(
+      resolveIntakeAcademicTitleDisplay(normalizeIntakeAcademicTitleEntry(item)),
+      `Запись ${index + 1}`,
+    );
+    if (isIncompletePersonnelDocumentDate(item.completed_at)) {
+      pushIssue(issues, {
+        field: `additional.academic_titles[${index}].completed_at`,
+        stepId: "additional",
+        focusTestId: `intake-academic-title-completed-at-${index}`,
+        message: formatIssueMessage("Учёные звания", record, "дата присвоения"),
       });
     }
   });

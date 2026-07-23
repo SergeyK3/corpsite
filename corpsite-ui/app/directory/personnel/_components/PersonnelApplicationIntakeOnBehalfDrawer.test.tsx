@@ -71,6 +71,16 @@ function buildSessionPayload(): IntakeDraftPayload {
       registration_group: "",
       registration_category: "",
     },
+    additional: {
+      foreign_languages: [],
+      foreign_languages_none: false,
+      awards: [],
+      awards_none: false,
+      academic_degrees: [],
+      academic_degrees_none: false,
+      academic_titles: [],
+      academic_titles_none: false,
+    },
     current_step: "review",
   };
 }
@@ -110,6 +120,7 @@ async function openReviewStep() {
   await waitFor(() => {
     expect(screen.queryByTestId("intake-on-behalf-loading")).not.toBeInTheDocument();
   });
+  fireEvent.click(drawerScope().getByRole("button", { name: /далее/i }));
   fireEvent.click(drawerScope().getByRole("button", { name: /далее/i }));
   fireEvent.click(drawerScope().getByRole("button", { name: /далее/i }));
   await waitFor(() => {
@@ -184,8 +195,8 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     });
 
     expect(screen.queryByTestId("intake-review-summary")).not.toBeInTheDocument();
-    expect(screen.queryByText(/шаг 8 из 8/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/шаг 6 из 8/i)).toBeInTheDocument();
+    expect(screen.queryByText(/шаг 9 из 9/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/шаг 6 из 9/i)).toBeInTheDocument();
     const drawer = within(screen.getByTestId("intake-on-behalf-drawer"));
     expect(drawer.getByTestId("intake-employment-biography-table")).toBeInTheDocument();
     expect(
@@ -265,12 +276,14 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
 
     fireEvent.click(formButton(/назад/i));
     fireEvent.click(formButton(/назад/i));
+    fireEvent.click(formButton(/назад/i));
     expandEmploymentRow(0);
     const organizationInput = within(
       within(screen.getByTestId("intake-on-behalf-drawer")).getByTestId("intake-employment-desktop-view"),
     ).getByTestId("intake-employment-organization-0");
     fireEvent.change(organizationInput, { target: { value: "Клиника Б" } });
 
+    fireEvent.click(formButton(/далее/i));
     fireEvent.click(formButton(/далее/i));
     fireEvent.click(formButton(/далее/i));
 

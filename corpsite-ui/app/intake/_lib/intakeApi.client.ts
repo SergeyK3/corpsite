@@ -48,6 +48,63 @@ export const INTAKE_TRAINING_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
   { value: "witness", label: "Свидетельство" },
 ];
 
+/** Import profile contract exposes degrees.records — safe to collect in intake additional step. */
+export const INTAKE_SUPPORTS_ACADEMIC_DEGREES = true;
+
+/** No driver_license field exists in import/PPR contracts yet. */
+export const INTAKE_SUPPORTS_DRIVER_LICENSE = false;
+
+export type IntakeForeignLanguage = {
+  language: string;
+  proficiency: string;
+};
+
+/** Aligns with import profile award_records core fields plus issued_by/document_number. */
+export type IntakeAward = {
+  category: string;
+  name: string;
+  issued_by: string;
+  awarded_at: string;
+  document_number: string;
+  /** Legacy merged value — migrated to category/name on read. */
+  title?: string;
+};
+
+/** Degree-only academic record. */
+export type IntakeAcademicDegree = {
+  degree: string;
+  degree_other: string;
+  field_of_science: string;
+  completed_at: string;
+  document_number: string;
+  /** Legacy combined label — migrated on read. */
+  label?: string;
+  /** Legacy free-form type — migrated to field_of_science when structured fields empty. */
+  degree_type?: string;
+};
+
+/** Title-only academic record. */
+export type IntakeAcademicTitle = {
+  academic_title: string;
+  academic_title_other: string;
+  field_of_science: string;
+  completed_at: string;
+  document_number: string;
+  label?: string;
+  degree_type?: string;
+};
+
+export type IntakeAdditionalPayload = {
+  foreign_languages: IntakeForeignLanguage[];
+  foreign_languages_none: boolean;
+  awards: IntakeAward[];
+  awards_none: boolean;
+  academic_degrees: IntakeAcademicDegree[];
+  academic_degrees_none: boolean;
+  academic_titles: IntakeAcademicTitle[];
+  academic_titles_none: boolean;
+};
+
 export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
   value: IntakeEducationType;
   label: string;
@@ -103,6 +160,7 @@ export type IntakeDraftPayload = {
     registration_group: string;
     registration_category: string;
   };
+  additional: IntakeAdditionalPayload;
   current_step: string;
 };
 
@@ -163,6 +221,7 @@ export const INTAKE_STEPS = [
   { id: "relatives", title: "Родственники" },
   { id: "employment_biography", title: "Трудовая биография" },
   { id: "military", title: "Воинский учёт" },
+  { id: "additional", title: "Дополнительные сведения" },
   { id: "review", title: "Проверка" },
 ] as const;
 
@@ -215,6 +274,16 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
       commissariat: "",
       registration_group: "",
       registration_category: "",
+    },
+    additional: {
+      foreign_languages: [],
+      foreign_languages_none: false,
+      awards: [],
+      awards_none: false,
+      academic_degrees: [],
+      academic_degrees_none: false,
+      academic_titles: [],
+      academic_titles_none: false,
     },
     current_step: "personal",
   };

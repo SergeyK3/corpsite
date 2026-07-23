@@ -24,7 +24,7 @@ from app.ppr.domain.section_models import (
     SECTION_CODE_PPR_MILITARY,
     SECTION_CODE_PPR_TRAINING,
 )
-from app.ppr.read.models import PprCompositeReadMetadata, PprCompositeReadModel, PprSectionAggregation
+from app.ppr.read.models import PprAdditionalReadSlice, PprCompositeReadMetadata, PprCompositeReadModel, PprSectionAggregation
 from app.ppr.read.query_service import PprQueryApplicationService
 from app.services.personnel_card_read_dispatcher import PersonnelCardReadDispatcher
 
@@ -81,6 +81,7 @@ def _fake_composite(person_id: int = 1, employee_id: int = 2) -> PprCompositeRea
         military=PprSectionAggregation(section_code=SECTION_CODE_PPR_MILITARY, active=()),
         events=None,
         intended_employment=None,
+        additional=PprAdditionalReadSlice.empty(),
         metadata=PprCompositeReadMetadata(
             evaluated_at=now,
             source_person_id=person_id,
