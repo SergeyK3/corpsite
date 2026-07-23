@@ -224,3 +224,97 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
   return false;
 }
+
+const INTAKE_ON_BEHALF_APPROVAL_STATUSES = new Set([
+  "resolution_pending",
+  "awaiting_director_resolution",
+  "approved",
+  "order_draft_created",
+]);
+
+const INTAKE_ON_BEHALF_TERMINAL_STATUSES = new Set([
+  "completed",
+  "withdrawn",
+  "cancelled",
+  "expired",
+  "rejected",
+  "resolution_rejected",
+]);
+
+export type IntakeOnBehalfEditAccessInput = {
+  status: string;
+  intake_draft_status?: string | null;
+  is_read_only?: boolean;
+};
+
+export type IntakeOnBehalfEditAccess = {
+  visible: boolean;
+  enabled: boolean;
+  blockedReason: string | null;
+};
+
+export function resolveIntakeOnBehalfEditAccess(
+  input: IntakeOnBehalfEditAccessInput,
+  reviewSections?: Array<{ status: string }>,
+): IntakeOnBehalfEditAccess {
+  const status = String(input.status || "").trim();
+  const draftStatus = String(input.intake_draft_status || "").trim();
+
+  if (input.is_read_only || INTAKE_ON_BEHALF_TERMINAL_STATUSES.has(status)) {
+    return {
+      visible: false,
+      enabled: false,
+      blockedReason: "Редактирование недоступно: обращение завершено или закрыто.",
+    };
+  }
+
+  if (INTAKE_ON_BEHALF_APPROVAL_STATUSES.has(status)) {
+    return {
+      visible: true,
+      enabled: false,
+      blockedReason: "Редактирование недоступно: обращение на этапе согласования.",
+    };
+  }
+
+  if (status === "revision_requested") {
+    if (draftStatus !== "submitted") {
+      return {
+        visible: true,
+        enabled: false,
+        blockedReason: "Анкета претендента ещё не отправлена.",
+      };
+    }
+    return { visible: true, enabled: true, blockedReason: null };
+  }
+
+  if (status === "under_review") {
+    if (draftStatus !== "submitted") {
+      return {
+        visible: true,
+        enabled: false,
+        blockedReason: "Анкета претендента ещё не отправлена.",
+      };
+    }
+    const hasRework = (reviewSections ?? []).some((section) => section.status === "rework_requested");
+    if (hasRework) {
+      return { visible: true, enabled: true, blockedReason: null };
+    }
+    return {
+      visible: true,
+      enabled: false,
+      blockedReason:
+        "Редактирование доступно только для разделов, возвращённых на уточнение.",
+    };
+  }
+
+  if (draftStatus === "submitted") {
+    return {
+      visible: true,
+      enabled: false,
+      blockedReason:
+        "Редактирование доступно только после возврата обращения HR или претенденту на уточнение.",
+    };
+  }
+
+  return { visible: false, enabled: false, blockedReason: null };
+}

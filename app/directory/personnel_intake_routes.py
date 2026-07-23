@@ -9,9 +9,12 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.common import as_http500
 from app.directory.personnel_intake_schemas import (
+    IntakeAutosaveIn,
     IntakeDraftOut,
     IntakeLinkAccessOut,
     IntakeLinkIssueOut,
+    IntakeOnBehalfEditSessionOut,
+    IntakeOnBehalfSaveOut,
     IntakeReviewStateOut,
     IntakeRevokeOut,
     IntakeSectionReworkIn,
@@ -32,6 +35,10 @@ from app.personnel_intake.application.intake_service import (
     issue_intake_link,
     revoke_intake_link,
 )
+from app.personnel_intake.application.on_behalf_edit_service import (
+    load_on_behalf_edit_session,
+    save_on_behalf_intake_draft,
+)
 from app.personnel_intake.application.review_service import (
     accept_intake_section,
     load_intake_review_state,
@@ -45,8 +52,10 @@ from app.personnel_intake.application.transfer_service import (
 from app.personnel_intake.domain.errors import (
     PersonnelIntakeConflictError,
     PersonnelIntakeNotFoundError,
+    PersonnelIntakeOnBehalfEditError,
     PersonnelIntakeReviewError,
     PersonnelIntakeTransferError,
+    PersonnelIntakeValidationError,
 )
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 
@@ -65,6 +74,10 @@ def _review_error_http422(exc: PersonnelIntakeReviewError) -> HTTPException:
 
 
 def _transfer_error_http422(exc: PersonnelIntakeTransferError) -> HTTPException:
+    return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
+
+
+def _on_behalf_edit_error_http422(exc: PersonnelIntakeOnBehalfEditError) -> HTTPException:
     return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
 
 
@@ -224,6 +237,73 @@ def get_intake_draft_for_hr(
         return draft_session_to_out(draft=draft, link=link, read_only=read_only)
     except PersonnelApplicationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get("/{application_id}/intake/draft/on-behalf-edit", response_model=IntakeOnBehalfEditSessionOut)
+def get_intake_on_behalf_edit_session(
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakeOnBehalfEditSessionOut:
+    require_personnel_admin_or_403(user)
+    try:
+        with engine.connect() as conn:
+            session = load_on_behalf_edit_session(conn, application_id)
+        return IntakeOnBehalfEditSessionOut(
+            application_id=session.application_id,
+            draft=draft_session_to_out(
+                draft=session.draft,
+                link=session.link,
+                read_only=not session.editable,
+            ),
+            editable=session.editable,
+            blocked_reason=session.blocked_reason,
+            reason_code=session.reason_code,
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.patch("/{application_id}/intake/draft/on-behalf", response_model=IntakeOnBehalfSaveOut)
+def patch_intake_on_behalf_draft(
+    body: IntakeAutosaveIn,
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakeOnBehalfSaveOut:
+    require_personnel_admin_or_403(user)
+    user_id = _require_user_id(user)
+    try:
+        with engine.begin() as conn:
+            result = save_on_behalf_intake_draft(
+                conn,
+                application_id=application_id,
+                payload=body.payload,
+                actor_user_id=user_id,
+            )
+        return IntakeOnBehalfSaveOut(
+            application_id=result.application_id,
+            draft_id=result.draft.draft_id,
+            status=result.draft.status,
+            saved_at=result.saved_at,
+            changed_fields=list(result.changed_fields),
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeOnBehalfEditError as exc:
+        raise _on_behalf_edit_error_http422(exc)
+    except PersonnelIntakeValidationError as exc:
+        raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": str(exc)})
     except HTTPException:
         raise
     except Exception as exc:

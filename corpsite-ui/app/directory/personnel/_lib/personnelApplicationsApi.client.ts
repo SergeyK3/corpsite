@@ -370,6 +370,54 @@ export async function getIntakeReviewState(applicationId: number): Promise<Intak
   return body as IntakeReviewState;
 }
 
+export type IntakeOnBehalfEditSession = {
+  application_id: number;
+  draft: {
+    application_id: number;
+    draft_id: number;
+    link_id: number;
+    status: string;
+    payload: Record<string, unknown>;
+    read_only: boolean;
+    link_status: string;
+  };
+  editable: boolean;
+  blocked_reason: string | null;
+  reason_code: string | null;
+};
+
+export type IntakeOnBehalfSaveResponse = {
+  application_id: number;
+  draft_id: number;
+  status: string;
+  saved_at: string;
+  changed_fields: string[];
+};
+
+export async function getIntakeOnBehalfEditSession(applicationId: number): Promise<IntakeOnBehalfEditSession> {
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/draft/on-behalf-edit`;
+  const res = await fetch(resolveApiUrl(path), { method: "GET", headers: authHeaders(), cache: "no-store" });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "GET", url: path });
+  return body as IntakeOnBehalfEditSession;
+}
+
+export async function saveIntakeOnBehalfDraft(
+  applicationId: number,
+  payload: Record<string, unknown>,
+): Promise<IntakeOnBehalfSaveResponse> {
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/draft/on-behalf`;
+  const res = await fetch(resolveApiUrl(path), {
+    method: "PATCH",
+    headers: authHeaders(true),
+    body: JSON.stringify({ payload }),
+    cache: "no-store",
+  });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "PATCH", url: path });
+  return body as IntakeOnBehalfSaveResponse;
+}
+
 async function postReviewAction(
   applicationId: number,
   sectionCode: string,

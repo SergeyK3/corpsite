@@ -44,3 +44,11 @@ class PersonnelIntakeTransferError(PersonnelIntakeError):
     def __init__(self, message: str, *, code: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+class PersonnelIntakeOnBehalfEditError(PersonnelIntakeError):
+    """HR on-behalf intake edit violation."""
+
+    def __init__(self, message: str, *, code: str) -> None:
+        super().__init__(message)
+        self.code = code

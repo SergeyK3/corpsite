@@ -237,6 +237,47 @@ describe("PersonnelApplicationDetailDrawer", () => {
     });
   });
 
+  it("shows on-behalf edit button blocked until section rework", async () => {
+    getPersonnelApplicationMock.mockResolvedValue({
+      application_id: 178,
+      person_id: 534,
+      full_name: "Тестов Тест",
+      iin: "880315350789",
+      status: "under_review",
+      application_received_at: "2026-07-17",
+      application_source: "paper",
+      vacancy_check_status: "confirmed_visually",
+      intake_draft_status: "submitted",
+      intake_link_status: "submitted",
+      registered_at: "2026-07-17T10:00:00Z",
+      registered_by_user_id: 7,
+      registered_by_name: "HR User",
+      created_at: "2026-07-17T10:00:00Z",
+      updated_at: "2026-07-17T10:00:00Z",
+    });
+    getIntakeReviewStateMock.mockResolvedValue({
+      application_id: 178,
+      sections: [{ section_code: "personal", status: "accepted" }],
+      can_transfer: false,
+      transfer_blocked_reason: "Section contacts is not finalized.",
+      transfer: null,
+    });
+
+    render(
+      <PersonnelApplicationDetailDrawer
+        applicationId={178}
+        open
+        journalReturnHref="/directory/personnel/applicants?application_id=178"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const button = await screen.findByTestId("intake-on-behalf-edit-button");
+    expect(button).toHaveTextContent("Редактировать анкету от имени претендента");
+    expect(button).toBeDisabled();
+    expect(screen.getByTestId("intake-on-behalf-edit-blocked")).toHaveTextContent(/уточнение/i);
+  });
+
   it("shows personal card link after transfer completed", async () => {
     getPersonnelApplicationMock.mockResolvedValue({
       application_id: 178,

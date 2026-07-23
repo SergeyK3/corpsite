@@ -145,6 +145,22 @@ class IntakeTransferAuditListOut(BaseModel):
     total: int
 
 
+class IntakeOnBehalfEditSessionOut(BaseModel):
+    application_id: int
+    draft: IntakeDraftOut
+    editable: bool
+    blocked_reason: str | None = None
+    reason_code: str | None = None
+
+
+class IntakeOnBehalfSaveOut(BaseModel):
+    application_id: int
+    draft_id: int
+    status: str
+    saved_at: datetime
+    changed_fields: list[str]
+
+
 def summary_to_out(summary: IntakeSummary, *, intake_url_path: str | None = None) -> IntakeSummaryOut:
     return IntakeSummaryOut(
         application_id=summary.application_id,

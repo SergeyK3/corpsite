@@ -32,6 +32,7 @@ from app.personnel_intake.domain.review_status import (
     is_section_review_terminal,
 )
 from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_SUBMITTED
+from app.personnel_intake.application.intake_service import reopen_intake_for_applicant_rework
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 from app.personnel_intake.infrastructure.review_repository import SqlAlchemyPersonnelIntakeReviewRepository
 
@@ -204,6 +205,7 @@ def rework_intake_section(
         reviewed_at=now,
         rework_comment=comment_text,
     )
+    reopen_intake_for_applicant_rework(conn, application_id)
     state = load_intake_review_state(conn, application_id)
     return SectionReviewActionResult(section=section, review_state=state)
 

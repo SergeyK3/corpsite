@@ -16,6 +16,7 @@ import {
 } from "../_lib/personnelApplicationLabels";
 import PersonnelApplicationIntakeSection from "./PersonnelApplicationIntakeSection";
 import PersonnelApplicationIntakeReviewDrawer from "./PersonnelApplicationIntakeReviewDrawer";
+import PersonnelApplicationIntakeOnBehalfDrawer from "./PersonnelApplicationIntakeOnBehalfDrawer";
 import PersonnelApplicationResolutionSection from "./PersonnelApplicationResolutionSection";
 import PersonnelApplicationEmploymentSection from "./PersonnelApplicationEmploymentSection";
 import PersonnelApplicationTimelineSection from "./PersonnelApplicationTimelineSection";
@@ -23,7 +24,9 @@ import PersonnelApplicationLifecycleAuditSection from "./PersonnelApplicationLif
 import PersonnelApplicationCancelSection from "./PersonnelApplicationCancelSection";
 import {
   getPersonnelApplication,
+  getIntakeReviewState,
   mapPersonnelApplicationsApiError,
+  type IntakeReviewSection,
   type PersonnelApplicationDetail,
 } from "../_lib/personnelApplicationsApi.client";
 
@@ -53,6 +56,8 @@ export default function PersonnelApplicationDetailDrawer({
   const [error, setError] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<PersonnelApplicationDetail | null>(null);
   const [reviewOpen, setReviewOpen] = React.useState(false);
+  const [onBehalfEditOpen, setOnBehalfEditOpen] = React.useState(false);
+  const [reviewSections, setReviewSections] = React.useState<IntakeReviewSection[]>([]);
 
   const reloadDetail = React.useCallback(() => {
     if (applicationId == null) return;
@@ -97,6 +102,24 @@ export default function PersonnelApplicationDetailDrawer({
     };
   }, [applicationId, open]);
 
+  React.useEffect(() => {
+    if (!open || !detail || detail.status !== "under_review") {
+      setReviewSections([]);
+      return;
+    }
+    let cancelled = false;
+    void getIntakeReviewState(detail.application_id)
+      .then((state) => {
+        if (!cancelled) setReviewSections(state.sections);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewSections([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, open]);
+
   if (!open) return null;
 
   return (
@@ -106,6 +129,12 @@ export default function PersonnelApplicationDetailDrawer({
         open={reviewOpen}
         onClose={() => setReviewOpen(false)}
         onTransferred={reloadDetail}
+      />
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={applicationId}
+        open={onBehalfEditOpen}
+        onClose={() => setOnBehalfEditOpen(false)}
+        onSaved={reloadDetail}
       />
       <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-application-detail-drawer">
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/30" onClick={onClose} />
@@ -193,6 +222,8 @@ export default function PersonnelApplicationDetailDrawer({
                   detail={detail}
                   onRefresh={reloadDetail}
                   onOpenReview={() => setReviewOpen(true)}
+                  onOpenOnBehalfEdit={() => setOnBehalfEditOpen(true)}
+                  reviewSections={reviewSections}
                   readOnly={Boolean(detail.is_read_only)}
                 />
               ) : null}

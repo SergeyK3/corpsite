@@ -18,6 +18,7 @@ from app.personnel_intake.domain.models import (
     empty_intake_draft_payload,
 )
 from app.personnel_intake.domain.status import (
+    INTAKE_DRAFT_STATUS_EDITABLE,
     INTAKE_LINK_ACTIVE_STATUSES,
     INTAKE_LINK_REVOCABLE_STATUSES,
     INTAKE_LINK_STATUS_EXPIRED,
@@ -313,6 +314,33 @@ class SqlAlchemyPersonnelIntakeRepository:
         )
         row = self._conn.execute(stmt).mappings().one()
         return _draft_from_row(row)
+
+    def mark_draft_editable_for_rework(self, draft_id: int, *, updated_at: datetime) -> IntakeDraftSnapshot:
+        stmt = (
+            update(PersonnelIntakeDraft)
+            .where(PersonnelIntakeDraft.draft_id == int(draft_id))
+            .values(
+                status=INTAKE_DRAFT_STATUS_EDITABLE,
+                updated_at=updated_at,
+            )
+            .returning(*_DRAFT_COLUMNS)
+        )
+        row = self._conn.execute(stmt).mappings().one()
+        return _draft_from_row(row)
+
+    def mark_link_reopened_for_rework(self, link_id: int, *, opened_at: datetime) -> IntakeLinkSnapshot:
+        stmt = (
+            update(PersonnelIntakeLink)
+            .where(PersonnelIntakeLink.link_id == int(link_id))
+            .values(
+                status=INTAKE_LINK_STATUS_OPENED,
+                opened_at=opened_at,
+                updated_at=opened_at,
+            )
+            .returning(*_LINK_COLUMNS)
+        )
+        row = self._conn.execute(stmt).mappings().one()
+        return _link_from_row(row)
 
     def rebind_draft_link(self, draft_id: int, *, link_id: int, updated_at: datetime) -> None:
         self._conn.execute(

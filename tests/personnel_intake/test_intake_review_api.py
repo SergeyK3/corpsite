@@ -70,8 +70,8 @@ def _filled_payload() -> dict:
     payload["education"] = [
         {
             "institution": "КазНУ",
-            "year_from": "2018",
-            "year_to": "2022",
+            "year_from": "2018-09-01",
+            "year_to": "2022-06-30",
             "specialty": "IT",
             "qualification": "Бакалавр",
             "diploma_number": "123",

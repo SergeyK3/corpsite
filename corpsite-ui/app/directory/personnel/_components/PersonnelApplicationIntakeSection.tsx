@@ -11,6 +11,7 @@ import {
   clearPersistedIntakeLinkPath,
   persistIntakeLinkPath,
   readPersistedIntakeLinkPath,
+  resolveIntakeOnBehalfEditAccess,
 } from "../_lib/personnelApplicantWorkflow";
 import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
 import {
@@ -22,6 +23,7 @@ import {
   mapPersonnelApplicationsApiError,
   reissueIntakeLink,
   revokeIntakeLink,
+  type IntakeReviewSection,
   type PersonnelApplicationDetail,
 } from "../_lib/personnelApplicationsApi.client";
 
@@ -29,10 +31,19 @@ type Props = {
   detail: PersonnelApplicationDetail;
   onRefresh: () => void;
   onOpenReview?: (applicationId: number) => void;
+  onOpenOnBehalfEdit?: (applicationId: number) => void;
+  reviewSections?: IntakeReviewSection[];
   readOnly?: boolean;
 };
 
-export default function PersonnelApplicationIntakeSection({ detail, onRefresh, onOpenReview, readOnly = false }: Props) {
+export default function PersonnelApplicationIntakeSection({
+  detail,
+  onRefresh,
+  onOpenReview,
+  onOpenOnBehalfEdit,
+  reviewSections,
+  readOnly = false,
+}: Props) {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [issuedLinkPath, setIssuedLinkPath] = React.useState<string | null>(null);
@@ -64,6 +75,7 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
     linkStatus === "submitted" ||
     detail.status === "under_review" ||
     detail.status === "review_completed";
+  const onBehalfAccess = resolveIntakeOnBehalfEditAccess(detail, reviewSections);
   const activeLinkPath = issuedLinkPath;
 
   async function runAction(action: "issue" | "reissue" | "revoke") {
@@ -183,6 +195,24 @@ export default function PersonnelApplicationIntakeSection({ detail, onRefresh, o
           >
             Открыть анкету
           </button>
+        ) : null}
+        {onBehalfAccess.visible ? (
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              disabled={!onBehalfAccess.enabled}
+              onClick={() => onOpenOnBehalfEdit?.(detail.application_id)}
+              className="rounded-lg border border-violet-300 px-3 py-1.5 text-sm text-violet-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900 dark:text-violet-300"
+              data-testid="intake-on-behalf-edit-button"
+            >
+              Редактировать анкету от имени претендента
+            </button>
+            {!onBehalfAccess.enabled && onBehalfAccess.blockedReason ? (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400" data-testid="intake-on-behalf-edit-blocked">
+                {onBehalfAccess.blockedReason}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
       ) : null}
