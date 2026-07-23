@@ -19,7 +19,6 @@ type Props = {
   selectedApplicationId?: number | null;
   highlightedApplicationId?: number | null;
   onOpen: (applicationId: number) => void;
-  onOpenIntake?: (applicationId: number) => void;
 };
 
 const TABLE_HEAD_CLASS =
@@ -27,6 +26,9 @@ const TABLE_HEAD_CLASS =
 const TABLE_CELL_CLASS = "px-3 py-2 align-top min-w-0 overflow-hidden";
 const TABLE_CELL_MONO_CLASS = `${TABLE_CELL_CLASS} font-mono text-[11px] leading-snug text-zinc-700 dark:text-zinc-300`;
 const TABLE_CELL_DATE_CLASS = `${TABLE_CELL_CLASS} text-[11px] leading-snug text-zinc-700 break-words dark:text-zinc-300`;
+
+const ACTION_HEADER_CLASS =
+  "sticky right-0 z-[1] border-l border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-[11px] font-medium leading-snug tracking-normal text-zinc-600 break-words whitespace-normal dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400";
 
 /** Percent widths for table-fixed layout (must sum to 100). */
 const ACTIVE_COLUMN_WIDTHS = [
@@ -38,12 +40,12 @@ const ACTIVE_COLUMN_WIDTHS = [
   "6%", // Открыта
   "6%", // Отправлена
   "6%", // Дата заявления
-  "8.5%", // Действие
   "12%", // Подразделение
   "8%", // Должность
   "5.5%", // HR
   "6%", // Регистрация
   "7%", // Резолюция
+  "8.5%", // Действия (sticky)
 ] as const;
 
 const ARCHIVE_COLUMN_WIDTHS = [
@@ -56,12 +58,12 @@ const ARCHIVE_COLUMN_WIDTHS = [
   "5%", // Отправлена
   "5%", // Дата заявления
   "5%", // Закрыто
-  "6.5%", // Действие
   "11.5%", // Подразделение
   "7.5%", // Должность
   "5.5%", // HR
   "6%", // Регистрация
   "7%", // Резолюция
+  "6.5%", // Действия (sticky)
 ] as const;
 
 function rowClassName(isSelected: boolean, isHighlighted: boolean): string {
@@ -74,6 +76,18 @@ function rowClassName(isSelected: boolean, isHighlighted: boolean): string {
     parts.push("hover:bg-zinc-50 dark:hover:bg-zinc-900/40");
   }
   return parts.join(" ");
+}
+
+function actionCellClassName(isSelected: boolean, isHighlighted: boolean): string {
+  const base =
+    "sticky right-0 z-[1] whitespace-nowrap border-l border-zinc-200 px-3 py-2 align-top dark:border-zinc-800";
+  if (isSelected) {
+    return `${base} bg-blue-50 dark:bg-blue-950/30`;
+  }
+  if (isHighlighted) {
+    return `${base} bg-emerald-50 dark:bg-emerald-950/30`;
+  }
+  return `${base} bg-white dark:bg-zinc-950`;
 }
 
 function TableColGroup({ widths }: { widths: readonly string[] }) {
@@ -93,7 +107,6 @@ export function PersonnelApplicationsTable({
   selectedApplicationId = null,
   highlightedApplicationId = null,
   onOpen,
-  onOpenIntake,
 }: Props) {
   if (loading) {
     return (
@@ -143,12 +156,12 @@ export function PersonnelApplicationsTable({
             <th className={TABLE_HEAD_CLASS}>Отправлена</th>
             <th className={TABLE_HEAD_CLASS}>Дата заявления</th>
             {archiveMode ? <th className={TABLE_HEAD_CLASS}>Закрыто</th> : null}
-            <th className={TABLE_HEAD_CLASS}>Действие</th>
             <th className={TABLE_HEAD_CLASS}>Подразделение</th>
             <th className={TABLE_HEAD_CLASS}>Должность</th>
             <th className={TABLE_HEAD_CLASS}>HR</th>
             <th className={TABLE_HEAD_CLASS}>Регистрация</th>
             <th className={TABLE_HEAD_CLASS}>Резолюция</th>
+            <th className={ACTION_HEADER_CLASS}>Действия</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
@@ -215,23 +228,6 @@ export function PersonnelApplicationsTable({
                     {formatPersonnelApplicationDateTime(item.closed_at)}
                   </td>
                 ) : null}
-                <td className={TABLE_CELL_CLASS}>
-                  {!archiveMode && item.intake_draft_status === "submitted" && onOpenIntake ? (
-                    <button
-                      type="button"
-                      className="block w-full max-w-full rounded border border-zinc-300 px-1.5 py-1 text-center text-[11px] leading-snug text-blue-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-blue-300 dark:hover:bg-zinc-900"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenIntake(item.application_id);
-                      }}
-                      data-testid={`open-intake-button-${item.application_id}`}
-                    >
-                      Открыть анкету
-                    </button>
-                  ) : (
-                    "—"
-                  )}
-                </td>
                 <td className={`${TABLE_CELL_CLASS} break-words`}>
                   {item.intended_org_unit_name || item.intended_org_group_name || "—"}
                 </td>
@@ -246,6 +242,19 @@ export function PersonnelApplicationsTable({
                 </td>
                 <td className={TABLE_CELL_CLASS}>
                   <DirectorResolutionBadge status={item.director_resolution_status} />
+                </td>
+                <td className={actionCellClassName(isSelected, isHighlighted)}>
+                  <button
+                    type="button"
+                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(item.application_id);
+                    }}
+                    data-testid={`personnel-application-open-${item.application_id}`}
+                  >
+                    Открыть
+                  </button>
                 </td>
               </tr>
             );

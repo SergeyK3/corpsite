@@ -186,6 +186,27 @@ describe("PersonnelApplicationsPageClient journal UX", () => {
     expect(screen.getByTestId("mock-detail-drawer")).toBeInTheDocument();
   });
 
+  it("writes application_id to URL when sticky Open button is clicked", async () => {
+    listPersonnelApplicationsMock.mockResolvedValue({ items: [sampleItem], total: 1, limit: 50, offset: 0 });
+    const view = renderJournal("q=petrov");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-application-open-10")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("personnel-application-open-10"));
+
+    expect(replaceMock).toHaveBeenCalledWith(
+      "/directory/personnel/applicants?q=petrov&application_id=10",
+    );
+
+    const lastHref = String(replaceMock.mock.calls.at(-1)?.[0]);
+    currentSearchParams = new URL(lastHref, "http://localhost").searchParams;
+    view.rerender(<PersonnelApplicationsPageClient />);
+
+    expect(screen.getByTestId("mock-detail-drawer")).toHaveTextContent("detail #10");
+  });
+
   it("closes drawer when URL loses application_id (browser Back simulation)", async () => {
     listPersonnelApplicationsMock.mockResolvedValue({ items: [sampleItem], total: 1, limit: 50, offset: 0 });
     const view = renderJournal("q=petrov&application_id=10");

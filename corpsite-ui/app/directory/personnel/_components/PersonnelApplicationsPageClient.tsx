@@ -297,7 +297,6 @@ export default function PersonnelApplicationsPageClient() {
         selectedApplicationId={selectedApplicationId}
         highlightedApplicationId={highlightedApplicationId}
         onOpen={openDetail}
-        onOpenIntake={openDetail}
       />
 
       {!loading && !error ? (
