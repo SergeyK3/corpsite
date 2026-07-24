@@ -116,6 +116,30 @@ describe("IntakeTrainingTable", () => {
     ]);
   });
 
+  it("renders training summary blocks above the table", () => {
+    render(
+      <IntakeTrainingTable
+        items={[
+          normalizeIntakeTrainingEntry({
+            course_name: "Охрана труда",
+            institution: "Учебный центр",
+            year_from: "2021-03-10",
+            year_to: "2021-03-12",
+            document_type: "certificate",
+            document_number: "СТ-001",
+            hours: "72",
+            hours_is_manual: true,
+          }),
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("intake-training-summary-hours-block")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-training-summary-expiring-block")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-training-summary-hours-value")).toHaveTextContent(/\d+/);
+  });
+
   it("shows period validation instead of calculated hours for incomplete dates", () => {
     render(
       <IntakeTrainingTable

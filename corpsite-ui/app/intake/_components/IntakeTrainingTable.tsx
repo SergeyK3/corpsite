@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import TrainingSummaryBlocks from "@/components/TrainingSummaryBlocks";
+import { trainingSummaryRecordFromIntakeEntry } from "@/lib/trainingSummary";
 import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
 import IntakeListRowActionsMenu from "./IntakeListRowActionsMenu";
 import { INTAKE_TRAINING_DOCUMENT_TYPE_OPTIONS } from "../_lib/intakeApi.client";
@@ -206,6 +208,10 @@ export default function IntakeTrainingTable({
     [items],
   );
   const rows = React.useMemo(() => sortIntakeTrainingRows(normalizedItems), [normalizedItems]);
+  const summaryRecords = React.useMemo(
+    () => normalizedItems.map((item) => trainingSummaryRecordFromIntakeEntry(item)),
+    [normalizedItems],
+  );
   const focusRowIndex = parseIntakeTrainingFocusRowIndex(focusTestId);
   const visibleExpandedIndex = expandedIndex ?? focusRowIndex;
 
@@ -241,6 +247,8 @@ export default function IntakeTrainingTable({
 
   return (
     <div className="space-y-4" data-testid="intake-training-table">
+      <TrainingSummaryBlocks records={summaryRecords} testIdPrefix="intake-training-summary" />
+
       {items.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="intake-training-empty">
           Записей пока нет.

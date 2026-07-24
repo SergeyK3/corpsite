@@ -139,6 +139,7 @@ class PprTrainingRecordResponse(BaseModel):
     completed_at: date | None = None
     certificate_number: str | None = None
     document_date: date | None = None
+    document_type: str | None = None
     verification_status: str
     lifecycle_status: str
 

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import TrainingSummaryBlocks from "@/components/TrainingSummaryBlocks";
+import { trainingSummaryRecordFromPprRecord } from "@/lib/trainingSummary";
 import type { PprTrainingRecordResponse } from "../_lib/pprQueryTypes";
 import { formatPersonnelDateRange } from "@/lib/personnelDateFormat";
 
@@ -74,12 +76,24 @@ function CollapsibleGroup({
 }
 
 export default function PprCardTrainingSection({ active, superseded, voided }: Props) {
+  const summaryRecords = React.useMemo(
+    () => active.map((record) => trainingSummaryRecordFromPprRecord(record)),
+    [active],
+  );
+
   if (active.length === 0 && superseded.length === 0 && voided.length === 0) {
-    return <p className="text-sm text-zinc-500">Записи об обучении отсутствуют.</p>;
+    return (
+      <div className="space-y-4" data-testid="ppr-training-section">
+        <TrainingSummaryBlocks records={[]} testIdPrefix="ppr-training-summary" />
+        <p className="text-sm text-zinc-500">Записи об обучении отсутствуют.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="ppr-training-section">
+      <TrainingSummaryBlocks records={summaryRecords} testIdPrefix="ppr-training-summary" />
+
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Действующие записи</h3>
         {active.length === 0 ? (

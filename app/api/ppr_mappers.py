@@ -84,6 +84,8 @@ def _education_record(record: EducationRecord) -> PprEducationRecordResponse:
 
 
 def _training_record(record: TrainingRecord) -> PprTrainingRecordResponse:
+    metadata = dict(record.metadata) if record.metadata is not None else {}
+    document_type = metadata.get("document_type")
     return PprTrainingRecordResponse(
         record_id=record.record_id,
         training_kind=record.training_kind,
@@ -94,6 +96,7 @@ def _training_record(record: TrainingRecord) -> PprTrainingRecordResponse:
         completed_at=record.completed_at,
         certificate_number=record.certificate_number,
         document_date=record.document_date,
+        document_type=str(document_type).strip().lower() if document_type else None,
         verification_status=record.verification_status,
         lifecycle_status=record.lifecycle_status,
     )

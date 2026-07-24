@@ -57,6 +57,7 @@ export type PprTrainingRecordResponse = {
   completed_at: string | null;
   certificate_number: string | null;
   document_date: string | null;
+  document_type?: string | null;
   verification_status: string;
   lifecycle_status: string;
 };
