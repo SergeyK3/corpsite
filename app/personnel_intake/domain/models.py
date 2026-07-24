@@ -18,6 +18,7 @@ def empty_intake_draft_payload() -> dict[str, Any]:
             "gender": "",
             "citizenship": "",
             "nationality": "",
+            "photo_file_id": "",
         },
         "contacts": {
             "mobile_phone": "",

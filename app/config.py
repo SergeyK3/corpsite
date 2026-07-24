@@ -58,6 +58,7 @@ def validate_production_secrets() -> None:
         "INTERNAL_API_TOKEN": env("INTERNAL_API_TOKEN"),
         "BOT_BIND_TOKEN": env("BOT_BIND_TOKEN"),
         "PERSONNEL_INTAKE_TOKEN_ENCRYPTION_KEY": env("PERSONNEL_INTAKE_TOKEN_ENCRYPTION_KEY"),
+        "PERSONNEL_PHOTO_STORAGE_ROOT": env("PERSONNEL_PHOTO_STORAGE_ROOT"),
     }
 
     bad: List[str] = []

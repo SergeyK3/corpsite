@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, UploadFile, File
+from fastapi.responses import Response
 
 from app.auth import get_current_user
 from app.db.engine import engine
@@ -16,6 +17,7 @@ from app.directory.personnel_intake_schemas import (
     IntakeOnBehalfEditSessionOut,
     IntakeOnBehalfSaveIn,
     IntakeOnBehalfSaveOut,
+    IntakePhotoMutationOut,
     IntakeReviewStateOut,
     IntakeRevokeOut,
     IntakeSectionReworkIn,
@@ -40,6 +42,12 @@ from app.personnel_intake.application.on_behalf_edit_service import (
     load_on_behalf_edit_session,
     save_on_behalf_intake_draft,
 )
+from app.personnel_intake.application.photo_service import (
+    delete_intake_photo_on_behalf,
+    get_intake_photo_on_behalf,
+    upload_intake_photo_on_behalf,
+)
+from app.personnel_intake.domain.photo_archive_name import build_intake_photo_content_disposition
 from app.personnel_intake.application.review_service import (
     accept_intake_section,
     load_intake_review_state,
@@ -309,6 +317,102 @@ def patch_intake_on_behalf_draft(
         raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)})
     except PersonnelIntakeValidationError as exc:
         raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": str(exc)})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.put("/{application_id}/intake/photo", response_model=IntakePhotoMutationOut)
+async def put_intake_photo_on_behalf(
+    application_id: int = Path(..., ge=1),
+    file: UploadFile = File(...),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakePhotoMutationOut:
+    require_personnel_admin_or_403(user)
+    user_id = _require_user_id(user)
+    try:
+        content = await file.read()
+        with engine.begin() as conn:
+            result = upload_intake_photo_on_behalf(
+                conn,
+                application_id=application_id,
+                actor_user_id=user_id,
+                content=content,
+                content_type=file.content_type,
+            )
+        return IntakePhotoMutationOut(
+            application_id=result.application_id,
+            photo_file_id=result.photo_file_id,
+            payload=result.payload,
+            saved_at=result.saved_at,
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeOnBehalfEditError as exc:
+        raise _on_behalf_edit_error_http422(exc)
+    except PersonnelIntakeValidationError as exc:
+        raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": str(exc)})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.delete("/{application_id}/intake/photo", response_model=IntakePhotoMutationOut)
+def delete_intake_photo_on_behalf_route(
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakePhotoMutationOut:
+    require_personnel_admin_or_403(user)
+    user_id = _require_user_id(user)
+    try:
+        with engine.begin() as conn:
+            result = delete_intake_photo_on_behalf(
+                conn,
+                application_id=application_id,
+                actor_user_id=user_id,
+            )
+        return IntakePhotoMutationOut(
+            application_id=result.application_id,
+            photo_file_id=result.photo_file_id,
+            payload=result.payload,
+            saved_at=result.saved_at,
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeOnBehalfEditError as exc:
+        raise _on_behalf_edit_error_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get("/{application_id}/intake/photo")
+def get_intake_photo_on_behalf_route(
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    require_personnel_admin_or_403(user)
+    try:
+        with engine.begin() as conn:
+            result = get_intake_photo_on_behalf(conn, application_id=application_id)
+        return Response(
+            content=result.content,
+            media_type="image/jpeg",
+            headers={
+                "Content-Disposition": build_intake_photo_content_disposition(result.archive_filename),
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except HTTPException:
         raise
     except Exception as exc:

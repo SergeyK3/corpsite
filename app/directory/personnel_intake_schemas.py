@@ -75,6 +75,13 @@ class IntakeAutosaveOut(BaseModel):
     saved_at: datetime
 
 
+class IntakePhotoMutationOut(BaseModel):
+    application_id: int
+    photo_file_id: str
+    payload: dict[str, Any]
+    saved_at: datetime
+
+
 class IntakeSubmitIn(BaseModel):
     payload: dict[str, Any] | None = None
 
