@@ -142,7 +142,7 @@ describe("personnelNav", () => {
         "Кадровые процессы",
         "Производственные приказы",
       ]);
-      expect(withOo[2]?.iconId).toBe("operational-orders");
+      expect(withOo[2]?.iconId).toBeUndefined();
     });
 
     it("visibility user with OO read sees OO after personnel and before contacts", () => {

@@ -358,17 +358,30 @@ export default function IntakeDraftFormEditor({
     setPendingFocusTestId(issue.focusTestId);
   }
 
-  function goNext() {
-    const nextIndex = Math.min(stepIndex + 1, INTAKE_STEPS.length - 1);
+  function navigateToStep(nextIndex: number) {
     onStepIndexChange(nextIndex);
     onChange({ ...payload, current_step: INTAKE_STEPS[nextIndex].id });
   }
 
-  function goBack() {
-    const nextIndex = Math.max(stepIndex - 1, 0);
-    onStepIndexChange(nextIndex);
-    onChange({ ...payload, current_step: INTAKE_STEPS[nextIndex].id });
+  function goNext() {
+    navigateToStep(Math.min(stepIndex + 1, INTAKE_STEPS.length - 1));
   }
+
+  function goBack() {
+    navigateToStep(Math.max(stepIndex - 1, 0));
+  }
+
+  function goToStart() {
+    navigateToStep(0);
+  }
+
+  function goToEnd() {
+    navigateToStep(INTAKE_STEPS.length - 1);
+  }
+
+  const reviewStepIndex = INTAKE_STEPS.length - 1;
+  const navButtonClassName =
+    "rounded-lg bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50 sm:px-4 sm:text-sm";
 
   const title = headerTitle ?? formatIntakeStepHeaderTitle(stepIndex);
 
@@ -570,54 +583,89 @@ export default function IntakeDraftFormEditor({
             </div>
           ) : null}
 
-          <div className="mt-8 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              disabled={stepIndex === 0 || readOnly}
-              onClick={goBack}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
-            >
-              Назад
-            </button>
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={stepIndex === 0 || readOnly}
+                onClick={goToStart}
+                className={navButtonClassName}
+                data-testid="intake-nav-start"
+              >
+                Начало
+              </button>
+              <button
+                type="button"
+                disabled={stepIndex === 0 || readOnly}
+                onClick={goBack}
+                className={navButtonClassName}
+                data-testid="intake-nav-back"
+              >
+                Назад
+              </button>
+            </div>
             {currentStep.id === "review" ? (
-              <div className="flex items-center gap-3">
-                {onGeneratePdf ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {onGeneratePdf ? (
+                    <button
+                      type="button"
+                      disabled={pdfGenerating}
+                      onClick={() => onGeneratePdf()}
+                      className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:px-4 sm:text-sm"
+                      data-testid="intake-generate-pdf-button"
+                    >
+                      {pdfGenerating ? "Формирование PDF…" : "Сформировать PDF"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    disabled={pdfGenerating}
-                    onClick={() => onGeneratePdf()}
-                    className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                    data-testid="intake-generate-pdf-button"
+                    disabled={readOnly || primaryActionDisabled || primaryActionBusy || submitBlockedByDates}
+                    onClick={() => onPrimaryAction?.()}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:px-4 sm:text-sm"
+                    data-testid={mode === "hr-on-behalf" ? "intake-on-behalf-save-button" : "intake-submit-button"}
                   >
-                    {pdfGenerating ? "Формирование PDF…" : "Сформировать PDF"}
+                    {primaryActionBusy
+                      ? mode === "hr-on-behalf"
+                        ? "Сохранение…"
+                        : "Отправка…"
+                      : primaryActionLabel ??
+                        (mode === "hr-on-behalf"
+                          ? "Сохранить от имени претендента"
+                          : "Отправить в отдел кадров")}
                   </button>
-                ) : null}
+                </div>
                 <button
                   type="button"
-                  disabled={readOnly || primaryActionDisabled || primaryActionBusy || submitBlockedByDates}
-                  onClick={() => onPrimaryAction?.()}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                  data-testid={mode === "hr-on-behalf" ? "intake-on-behalf-save-button" : "intake-submit-button"}
+                  disabled={stepIndex === reviewStepIndex || readOnly}
+                  onClick={goToEnd}
+                  className={navButtonClassName}
+                  data-testid="intake-nav-end"
                 >
-                  {primaryActionBusy
-                    ? mode === "hr-on-behalf"
-                      ? "Сохранение…"
-                      : "Отправка…"
-                    : primaryActionLabel ??
-                      (mode === "hr-on-behalf"
-                        ? "Сохранить от имени претендента"
-                        : "Отправить в отдел кадров")}
+                  Конец
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                disabled={readOnly}
-                onClick={goNext}
-                className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
-              >
-                Далее
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  onClick={goNext}
+                  className={navButtonClassName}
+                  data-testid="intake-nav-next"
+                >
+                  Далее
+                </button>
+                <button
+                  type="button"
+                  disabled={stepIndex === reviewStepIndex || readOnly}
+                  onClick={goToEnd}
+                  className={navButtonClassName}
+                  data-testid="intake-nav-end"
+                >
+                  Конец
+                </button>
+              </div>
             )}
           </div>
         </main>

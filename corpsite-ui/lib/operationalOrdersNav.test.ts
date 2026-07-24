@@ -21,8 +21,8 @@ describe("operationalOrdersNav", () => {
     expect(isOperationalOrdersRoute("/directory/personnel/journal")).toBe(false);
   });
 
-  it("includes icon id on nav item", () => {
-    expect(OPERATIONAL_ORDERS_NAV_ITEM.iconId).toBe("operational-orders");
+  it("does not attach a sidebar icon to operational orders nav item", () => {
+    expect(OPERATIONAL_ORDERS_NAV_ITEM.iconId).toBeUndefined();
   });
 
   it("route access matches nav visibility", () => {

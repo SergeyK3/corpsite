@@ -198,3 +198,90 @@ describe("IntakeDraftFormEditor date fields", () => {
     expect(onGeneratePdf).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("IntakeDraftFormEditor step navigation", () => {
+  function renderAtStep(stepIndex: number, onStepIndexChange = vi.fn(), onChange = vi.fn()) {
+    render(
+      <IntakeDraftFormEditor
+        payload={emptyIntakeDraftPayload()}
+        onChange={onChange}
+        stepIndex={stepIndex}
+        onStepIndexChange={onStepIndexChange}
+        compact
+      />,
+    );
+    return { onStepIndexChange, onChange };
+  }
+
+  it("navigates to the first step via Начало", () => {
+    const onStepIndexChange = vi.fn();
+    const onChange = vi.fn();
+    renderAtStep(educationStepIndex, onStepIndexChange, onChange);
+
+    fireEvent.click(screen.getByTestId("intake-nav-start"));
+
+    expect(onStepIndexChange).toHaveBeenCalledWith(personalStepIndex);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ current_step: "personal" }),
+    );
+  });
+
+  it("navigates to the review step via Конец", () => {
+    const onStepIndexChange = vi.fn();
+    const onChange = vi.fn();
+    renderAtStep(personalStepIndex, onStepIndexChange, onChange);
+
+    fireEvent.click(screen.getByTestId("intake-nav-end"));
+
+    expect(onStepIndexChange).toHaveBeenCalledWith(reviewStepIndex);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ current_step: "review" }),
+    );
+  });
+
+  it("keeps Назад working to the previous step", () => {
+    const onStepIndexChange = vi.fn();
+    const onChange = vi.fn();
+    renderAtStep(educationStepIndex, onStepIndexChange, onChange);
+
+    fireEvent.click(screen.getByTestId("intake-nav-back"));
+
+    expect(onStepIndexChange).toHaveBeenCalledWith(educationStepIndex - 1);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ current_step: INTAKE_STEPS[educationStepIndex - 1].id }),
+    );
+  });
+
+  it("keeps Далее working to the next step", () => {
+    const onStepIndexChange = vi.fn();
+    const onChange = vi.fn();
+    renderAtStep(educationStepIndex, onStepIndexChange, onChange);
+
+    fireEvent.click(screen.getByTestId("intake-nav-next"));
+
+    expect(onStepIndexChange).toHaveBeenCalledWith(educationStepIndex + 1);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ current_step: INTAKE_STEPS[educationStepIndex + 1].id }),
+    );
+  });
+
+  it("works in HR on-behalf mode", () => {
+    const onStepIndexChange = vi.fn();
+    render(
+      <IntakeDraftFormEditor
+        payload={emptyIntakeDraftPayload()}
+        onChange={vi.fn()}
+        stepIndex={educationStepIndex}
+        onStepIndexChange={onStepIndexChange}
+        mode="hr-on-behalf"
+        compact
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("intake-nav-start"));
+    expect(onStepIndexChange).toHaveBeenCalledWith(personalStepIndex);
+
+    fireEvent.click(screen.getByTestId("intake-nav-end"));
+    expect(onStepIndexChange).toHaveBeenCalledWith(reviewStepIndex);
+  });
+});
