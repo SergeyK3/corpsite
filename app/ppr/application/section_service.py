@@ -440,6 +440,20 @@ class PprSectionApplicationService(PprCommandApplicationService):
             section_code="PPR-EDUCATION",
         )
 
+    def update_education_participating(
+        self, uow: PprApplicationUnitOfWork, envelope: PprCommandEnvelope
+    ) -> PprApplicationResult:
+        return self._run_section_participating(
+            uow,
+            envelope,
+            command_type=COMMAND_TYPE_UPDATE_EDUCATION,
+            domain_factory=lambda person_id, payload: UpdateEducationRecord(
+                person_id=person_id, **payload
+            ),
+            handler=handle_update_education_record,
+            section_code="PPR-EDUCATION",
+        )
+
     def void_education_participating(
         self, uow: PprApplicationUnitOfWork, envelope: PprCommandEnvelope
     ) -> PprApplicationResult:

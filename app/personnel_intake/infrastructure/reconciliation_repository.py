@@ -134,6 +134,19 @@ class SqlAlchemyReconciliationDecisionRepository:
             )
         return record
 
+    def lock_for_update(self, decision_id: int) -> ReconcileDecisionRecord:
+        """Load decision row under SELECT … FOR UPDATE (caller owns the transaction)."""
+        row = self._conn.execute(
+            select(*_COLUMNS)
+            .where(PersonnelIntakeReconciliationDecision.decision_id == int(decision_id))
+            .with_for_update()
+        ).mappings().first()
+        if row is None:
+            raise ReconciliationNotFoundError(
+                f"Reconciliation decision {decision_id} not found."
+            )
+        return _from_row(row)
+
     def get_by_idempotency_key(self, idempotency_key: str) -> ReconcileDecisionRecord | None:
         row = self._conn.execute(
             select(*_COLUMNS).where(

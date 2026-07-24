@@ -15,6 +15,11 @@ from app.personnel_intake.application.reconciliation.engine import (
     SECTION_APPLY_MODE_PER_RECORD,
     ReconciliationDecisionEngine,
 )
+from app.personnel_intake.application.reconciliation.executor import (
+    ApplyDecisionResult,
+    ApplyEducationDecisionCommand,
+    EducationReconciliationDecisionExecutor,
+)
 from app.personnel_intake.application.reconciliation.idempotency import build_idempotency_key
 from app.personnel_intake.application.reconciliation.normalizer import (
     NormalizeMatchResult,
@@ -29,11 +34,14 @@ from app.personnel_intake.application.reconciliation.plugins import (
 from app.personnel_intake.application.reconciliation.registry import SectionReconciliationRegistry
 
 __all__ = [
+    "ApplyDecisionResult",
+    "ApplyEducationDecisionCommand",
     "CanonicalRecordRef",
     "DecideDecisionOutcome",
     "DecideSectionCommand",
     "DecideSectionResult",
     "DecideSectionSummary",
+    "EducationReconciliationDecisionExecutor",
     "EducationReconciliationPlugin",
     "MatchOutcome",
     "NormalizeMatchResult",
