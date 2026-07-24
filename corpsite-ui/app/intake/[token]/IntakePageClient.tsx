@@ -157,6 +157,7 @@ export default function IntakePageClient() {
       onPrimaryAction={() => void handleSubmit()}
       primaryActionBusy={submitting}
       initialFocusTestId={initialFocusTestId}
+      intakeToken={token}
     />
   );
 }

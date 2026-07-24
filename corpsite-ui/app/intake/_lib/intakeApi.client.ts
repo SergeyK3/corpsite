@@ -126,6 +126,8 @@ export type IntakeDraftPayload = {
     gender: string;
     citizenship: string;
     nationality: string;
+    /** Server-side photo file id; empty when no photo uploaded. */
+    photo_file_id: string;
   };
   contacts: {
     mobile_phone: string;
@@ -252,6 +254,7 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
       gender: "",
       citizenship: "",
       nationality: "",
+      photo_file_id: "",
     },
     contacts: {
       mobile_phone: "",

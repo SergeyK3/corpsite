@@ -232,6 +232,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               primaryActionDisabled={primaryActionDisabled}
               reviewNotice={reviewNotice}
               compact
+              applicationId={applicationId ?? undefined}
             />
           ) : null}
           {!loading && !editable && error ? (

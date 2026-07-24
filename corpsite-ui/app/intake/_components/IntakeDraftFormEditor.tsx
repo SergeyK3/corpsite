@@ -8,6 +8,7 @@ import IntakeEducationTable from "./IntakeEducationTable";
 import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
 import { IntakeDateField, IntakeTextField } from "./IntakeFormFields";
 import IntakeMilitaryCombobox from "./IntakeMilitaryCombobox";
+import IntakePhotoUpload from "./IntakePhotoUpload";
 import IntakeRelativesTable from "./IntakeRelativesTable";
 import IntakeTrainingTable from "./IntakeTrainingTable";
 import {
@@ -66,16 +67,30 @@ function StepPersonal({
   payload,
   onChange,
   readOnly,
+  mode = "public",
+  intakeToken,
+  applicationId,
 }: {
   payload: IntakeDraftPayload;
   onChange: (p: IntakeDraftPayload) => void;
   readOnly?: boolean;
+  mode?: "public" | "hr-on-behalf";
+  intakeToken?: string;
+  applicationId?: number;
 }) {
   const p = payload.personal;
   const set = (key: keyof typeof p, value: string) =>
     onChange({ ...payload, personal: { ...p, [key]: value } });
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      <IntakePhotoUpload
+        mode={mode}
+        intakeToken={intakeToken}
+        applicationId={applicationId}
+        payload={payload}
+        readOnly={readOnly}
+        onPayloadChange={onChange}
+      />
       <IntakeTextField label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
       <IntakeTextField label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
       <IntakeTextField label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
@@ -274,6 +289,8 @@ export type IntakeDraftFormEditorProps = {
   footerHint?: string | null;
   compact?: boolean;
   initialFocusTestId?: string | null;
+  intakeToken?: string;
+  applicationId?: number;
 };
 
 export default function IntakeDraftFormEditor({
@@ -295,6 +312,8 @@ export default function IntakeDraftFormEditor({
   footerHint,
   compact = false,
   initialFocusTestId = null,
+  intakeToken,
+  applicationId,
 }: IntakeDraftFormEditorProps) {
   const currentStep = INTAKE_STEPS[stepIndex];
   const dateValidationIssues = React.useMemo(
@@ -361,7 +380,14 @@ export default function IntakeDraftFormEditor({
           {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
 
           {currentStep.id === "personal" ? (
-            <StepPersonal payload={payload} onChange={onChange} readOnly={readOnly} />
+            <StepPersonal
+              payload={payload}
+              onChange={onChange}
+              readOnly={readOnly}
+              mode={mode}
+              intakeToken={intakeToken}
+              applicationId={applicationId}
+            />
           ) : null}
           {currentStep.id === "contacts" ? (
             <StepContacts payload={payload} onChange={onChange} readOnly={readOnly} />
