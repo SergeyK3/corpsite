@@ -283,6 +283,8 @@ export type IntakeDraftFormEditorProps = {
   primaryActionBusy?: boolean;
   primaryActionLabel?: string;
   primaryActionDisabled?: boolean;
+  onGeneratePdf?: () => void;
+  pdfGenerating?: boolean;
   reviewNotice?: string | null;
   headerTitle?: string;
   footerHint?: string | null;
@@ -306,6 +308,8 @@ export default function IntakeDraftFormEditor({
   primaryActionBusy = false,
   primaryActionLabel,
   primaryActionDisabled = false,
+  onGeneratePdf,
+  pdfGenerating = false,
   reviewNotice,
   headerTitle,
   footerHint,
@@ -567,22 +571,35 @@ export default function IntakeDraftFormEditor({
               Назад
             </button>
             {currentStep.id === "review" ? (
-              <button
-                type="button"
-                disabled={readOnly || primaryActionDisabled || primaryActionBusy || submitBlockedByDates}
-                onClick={() => onPrimaryAction?.()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                data-testid={mode === "hr-on-behalf" ? "intake-on-behalf-save-button" : "intake-submit-button"}
-              >
-                {primaryActionBusy
-                  ? mode === "hr-on-behalf"
-                    ? "Сохранение…"
-                    : "Отправка…"
-                  : primaryActionLabel ??
-                    (mode === "hr-on-behalf"
-                      ? "Сохранить от имени претендента"
-                      : "Отправить в отдел кадров")}
-              </button>
+              <div className="flex items-center gap-3">
+                {onGeneratePdf ? (
+                  <button
+                    type="button"
+                    disabled={pdfGenerating}
+                    onClick={() => onGeneratePdf()}
+                    className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                    data-testid="intake-generate-pdf-button"
+                  >
+                    {pdfGenerating ? "Формирование PDF…" : "Сформировать PDF"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={readOnly || primaryActionDisabled || primaryActionBusy || submitBlockedByDates}
+                  onClick={() => onPrimaryAction?.()}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  data-testid={mode === "hr-on-behalf" ? "intake-on-behalf-save-button" : "intake-submit-button"}
+                >
+                  {primaryActionBusy
+                    ? mode === "hr-on-behalf"
+                      ? "Сохранение…"
+                      : "Отправка…"
+                    : primaryActionLabel ??
+                      (mode === "hr-on-behalf"
+                        ? "Сохранить от имени претендента"
+                        : "Отправить в отдел кадров")}
+                </button>
+              </div>
             ) : (
               <button
                 type="button"

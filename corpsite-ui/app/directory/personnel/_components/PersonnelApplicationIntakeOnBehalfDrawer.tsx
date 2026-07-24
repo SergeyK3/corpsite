@@ -17,6 +17,7 @@ import {
   mapPersonnelApplicationsApiError,
   saveIntakeOnBehalfDraft,
 } from "../_lib/personnelApplicationsApi.client";
+import { openIntakePdfByApplicationId } from "@/app/intake/_lib/intakePdfOpen.client";
 
 type Props = {
   applicationId: number | null;
@@ -47,6 +48,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
   const [stepIndex, setStepIndex] = React.useState(0);
   const [editable, setEditable] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [pdfGenerating, setPdfGenerating] = React.useState(false);
   const [saveCommitted, setSaveCommitted] = React.useState(false);
   const payloadRef = React.useRef(payload);
   const expectedUpdatedAtRef = React.useRef<string | null>(null);
@@ -163,6 +165,20 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
     }
   }
 
+  async function handleGeneratePdf() {
+    if (applicationId == null || pdfGenerating) return;
+    setPdfGenerating(true);
+    setError(null);
+    try {
+      const result = await openIntakePdfByApplicationId(applicationId);
+      if (!result.ok) {
+        setError(result.error);
+      }
+    } finally {
+      setPdfGenerating(false);
+    }
+  }
+
   const primaryActionLabel = saving
     ? "Сохранение…"
     : saveCommitted && !isDirty
@@ -231,6 +247,8 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               primaryActionBusy={saving}
               primaryActionLabel={primaryActionLabel}
               primaryActionDisabled={primaryActionDisabled}
+              onGeneratePdf={() => void handleGeneratePdf()}
+              pdfGenerating={pdfGenerating}
               reviewNotice={reviewNotice}
               compact
               applicationId={applicationId ?? undefined}

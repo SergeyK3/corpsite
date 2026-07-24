@@ -26,6 +26,8 @@ function expandEducationRow(index = 0) {
   fireEvent.click(within(desktop).getByTestId(`intake-education-row-edit-${index}`));
 }
 
+const reviewStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "review");
+
 function renderEditor(
   payload = emptyIntakeDraftPayload(),
   stepIndex = personalStepIndex,
@@ -176,5 +178,23 @@ describe("IntakeDraftFormEditor date fields", () => {
     );
 
     expect(screen.getByTestId("intake-personnel-number")).toBeInTheDocument();
+  });
+
+  it("shows generate PDF button on review step", () => {
+    const onGeneratePdf = vi.fn();
+    render(
+      <IntakeDraftFormEditor
+        payload={emptyIntakeDraftPayload()}
+        onChange={vi.fn()}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={vi.fn()}
+        compact
+        onGeneratePdf={onGeneratePdf}
+      />,
+    );
+    const button = screen.getByTestId("intake-generate-pdf-button");
+    expect(button).toHaveTextContent("Сформировать PDF");
+    fireEvent.click(button);
+    expect(onGeneratePdf).toHaveBeenCalledTimes(1);
   });
 });

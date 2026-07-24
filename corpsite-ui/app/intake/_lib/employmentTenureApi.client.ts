@@ -41,7 +41,7 @@ export function prepareEmploymentTenureRecords(
 
 export async function calculateEmploymentTenure(
   items: readonly IntakeEmploymentBiographyEntry[],
-  opts?: { calculationDate?: string | null },
+  opts?: { calculationDate?: string | null; serverSide?: boolean },
 ): Promise<EmploymentTenureCalculation> {
   const path = "/intake/employment-tenure/calculate";
   const records = prepareEmploymentTenureRecords(items);
@@ -50,7 +50,7 @@ export async function calculateEmploymentTenure(
   if (calculationDate) {
     requestBody.calculation_date = calculationDate;
   }
-  const res = await fetch(resolveApiUrl(path), {
+  const res = await fetch(resolveApiUrl(path, { serverSide: opts?.serverSide }), {
     method: "POST",
     headers: publicHeaders(),
     body: JSON.stringify(requestBody),

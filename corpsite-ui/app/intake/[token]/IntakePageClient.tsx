@@ -15,6 +15,7 @@ import {
   type IntakeDraftPayload,
 } from "../_lib/intakeApi.client";
 import { collectIntakeDateValidationIssues, resolveIntakeDateIssueStepIndex } from "../_lib/intakeDateValidation";
+import { openIntakePdfByToken } from "../_lib/intakePdfOpen.client";
 
 export default function IntakePageClient() {
   const params = useParams<{ token: string }>();
@@ -29,6 +30,7 @@ export default function IntakePageClient() {
   const [saving, setSaving] = React.useState(false);
   const [saveNotice, setSaveNotice] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [pdfGenerating, setPdfGenerating] = React.useState(false);
   const [initialFocusTestId, setInitialFocusTestId] = React.useState<string | null>(null);
 
   const autosaveTimer = React.useRef<number | null>(null);
@@ -112,6 +114,20 @@ export default function IntakePageClient() {
     }
   }
 
+  async function handleGeneratePdf() {
+    if (!token || pdfGenerating) return;
+    setPdfGenerating(true);
+    setError(null);
+    try {
+      const result = await openIntakePdfByToken(token);
+      if (!result.ok) {
+        setError(result.error);
+      }
+    } finally {
+      setPdfGenerating(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
@@ -157,6 +173,8 @@ export default function IntakePageClient() {
       mode="public"
       onPrimaryAction={() => void handleSubmit()}
       primaryActionBusy={submitting}
+      onGeneratePdf={() => void handleGeneratePdf()}
+      pdfGenerating={pdfGenerating}
       initialFocusTestId={initialFocusTestId}
       intakeToken={token}
     />
