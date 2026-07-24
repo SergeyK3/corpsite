@@ -21,6 +21,11 @@ from app.personnel_intake.application.reconciliation.normalizer import (
     normalize_match_outcome,
 )
 from app.personnel_intake.application.reconciliation.plugin import SectionReconciliationPlugin
+from app.personnel_intake.application.reconciliation.plugins import (
+    EducationReconciliationPlugin,
+    register_default_section_plugins,
+    register_education_plugin,
+)
 from app.personnel_intake.application.reconciliation.registry import SectionReconciliationRegistry
 
 __all__ = [
@@ -29,6 +34,7 @@ __all__ = [
     "DecideSectionCommand",
     "DecideSectionResult",
     "DecideSectionSummary",
+    "EducationReconciliationPlugin",
     "MatchOutcome",
     "NormalizeMatchResult",
     "ProposalRecordRef",
@@ -39,4 +45,6 @@ __all__ = [
     "SectionReconciliationRegistry",
     "build_idempotency_key",
     "normalize_match_outcome",
+    "register_default_section_plugins",
+    "register_education_plugin",
 ]
