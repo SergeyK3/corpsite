@@ -3,7 +3,6 @@
 import * as React from "react";
 
 import {
-  intakeDraftStatusLabel,
   intakeLinkStatusBadgeClass,
   intakeLinkStatusLabel,
 } from "@/app/intake/_lib/intakeLabels";
@@ -11,6 +10,7 @@ import {
   clearPersistedIntakeLinkPath,
   persistIntakeLinkPath,
   readPersistedIntakeLinkPath,
+  resolveIntakeDraftStatusDisplayLabel,
   resolveIntakeOnBehalfEditAccess,
 } from "../_lib/personnelApplicantWorkflow";
 import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
@@ -123,7 +123,11 @@ export default function PersonnelApplicationIntakeSection({
         <div>
           <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Статус анкеты</div>
           <div className="mt-0.5 text-sm text-zinc-800 dark:text-zinc-200">
-            {intakeDraftStatusLabel(draftStatus)}
+            {resolveIntakeDraftStatusDisplayLabel({
+              draftStatus,
+              applicationStatus: detail.status,
+              submittedAt: detail.intake_submitted_at,
+            })}
           </div>
         </div>
         <div>

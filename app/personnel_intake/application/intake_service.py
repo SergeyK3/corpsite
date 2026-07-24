@@ -17,7 +17,10 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_REGISTERED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
-from app.personnel_intake.domain.applicant_reedit import can_applicant_reedit_submitted_intake
+from app.personnel_intake.domain.applicant_reedit import (
+    can_applicant_reedit_submitted_intake,
+    should_reopen_submitted_intake_for_applicant_edit,
+)
 from app.personnel_intake.domain.date_validation import collect_intake_date_validation_errors
 from app.personnel_intake.domain.education_type import (
     INTAKE_EDUCATION_TYPES,
@@ -293,6 +296,29 @@ def _applicant_reedit_allowed(conn: Connection, application_id: int) -> bool:
     )
 
 
+def _should_reopen_submitted_intake_for_applicant_edit(
+    conn: Connection,
+    *,
+    application_id: int,
+    link: IntakeLinkSnapshot,
+    draft: IntakeDraftSnapshot,
+) -> bool:
+    app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
+    app = app_repo.get_by_id(application_id)
+    if app is None:
+        return False
+    review_repo = SqlAlchemyPersonnelIntakeReviewRepository(conn)
+    sections = review_repo.list_section_reviews(application_id)
+    return should_reopen_submitted_intake_for_applicant_edit(
+        application_status=app.status,
+        draft_status=draft.status,
+        link_status=link.status,
+        draft_submitted_at=draft.submitted_at,
+        director_resolution_at=app.director_resolution_at,
+        section_reviews=sections,
+    )
+
+
 def _reopen_intake_for_applicant_edit(
     repo: SqlAlchemyPersonnelIntakeRepository,
     *,
@@ -333,17 +359,29 @@ def open_intake_session(conn: Connection, *, raw_token: str) -> OpenIntakeSessio
                 f"Draft missing for application_id={link.application_id}"
             )
         if _applicant_reedit_allowed(conn, link.application_id):
-            link, draft = _reopen_intake_for_applicant_edit(
-                repo,
+            if _should_reopen_submitted_intake_for_applicant_edit(
+                conn,
+                application_id=link.application_id,
                 link=link,
                 draft=draft,
-                now=now,
-            )
+            ):
+                link, draft = _reopen_intake_for_applicant_edit(
+                    repo,
+                    link=link,
+                    draft=draft,
+                    now=now,
+                )
+                return OpenIntakeSessionResult(
+                    application_id=link.application_id,
+                    link=link,
+                    draft=draft,
+                    read_only=False,
+                )
             return OpenIntakeSessionResult(
                 application_id=link.application_id,
                 link=link,
                 draft=draft,
-                read_only=False,
+                read_only=True,
             )
         return OpenIntakeSessionResult(
             application_id=link.application_id,
@@ -420,12 +458,23 @@ def autosave_intake_draft(
         return AutosaveIntakeDraftResult(draft=draft, saved_at=now)
 
     if link.status == INTAKE_LINK_STATUS_SUBMITTED and draft.status == INTAKE_DRAFT_STATUS_SUBMITTED:
-        link, draft = _reopen_intake_for_applicant_edit(
-            repo,
+        if _should_reopen_submitted_intake_for_applicant_edit(
+            conn,
+            application_id=link.application_id,
             link=link,
             draft=draft,
-            now=now,
-        )
+        ):
+            link, draft = _reopen_intake_for_applicant_edit(
+                repo,
+                link=link,
+                draft=draft,
+                now=now,
+            )
+        else:
+            raise PersonnelIntakeTokenError(
+                "Intake draft is read-only.",
+                code="DRAFT_READ_ONLY",
+            )
 
     if not is_intake_draft_editable(draft.status):
         raise PersonnelIntakeTokenError(

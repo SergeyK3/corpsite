@@ -2,6 +2,7 @@ import {
   personnelApplicationStatusBadgeClass,
   personnelApplicationStatusLabel,
 } from "./personnelApplicationLabels";
+import { intakeDraftStatusLabel } from "@/app/intake/_lib/intakeLabels";
 
 export type ApplicantWorkflowStatusInput = {
   status: string;
@@ -253,6 +254,26 @@ export type IntakeOnBehalfEditAccess = {
   blockedReason: string | null;
 };
 
+function isDraftOpenForPostSubmitOnBehalf(
+  applicationStatus: string,
+  draftStatus: string,
+  reviewSections?: Array<{ status: string }>,
+): boolean {
+  if (draftStatus === "submitted") {
+    return true;
+  }
+  if (draftStatus !== "editable") {
+    return false;
+  }
+  if (applicationStatus === "revision_requested") {
+    return true;
+  }
+  if (applicationStatus === "under_review") {
+    return (reviewSections ?? []).some((section) => section.status === "rework_requested");
+  }
+  return false;
+}
+
 export function resolveIntakeOnBehalfEditAccess(
   input: IntakeOnBehalfEditAccessInput,
   reviewSections?: Array<{ status: string }>,
@@ -288,7 +309,7 @@ export function resolveIntakeOnBehalfEditAccess(
   }
 
   if (status === "revision_requested") {
-    if (draftStatus !== "submitted") {
+    if (!isDraftOpenForPostSubmitOnBehalf(status, draftStatus, reviewSections)) {
       return {
         visible: true,
         enabled: false,
@@ -299,7 +320,7 @@ export function resolveIntakeOnBehalfEditAccess(
   }
 
   if (status === "under_review") {
-    if (draftStatus !== "submitted") {
+    if (!isDraftOpenForPostSubmitOnBehalf(status, draftStatus, reviewSections)) {
       return {
         visible: true,
         enabled: false,
@@ -307,15 +328,15 @@ export function resolveIntakeOnBehalfEditAccess(
       };
     }
     const hasRework = (reviewSections ?? []).some((section) => section.status === "rework_requested");
-    if (hasRework) {
-      return { visible: true, enabled: true, blockedReason: null };
+    if (!hasRework) {
+      return {
+        visible: true,
+        enabled: false,
+        blockedReason:
+          "Редактирование доступно только для разделов, возвращённых на уточнение.",
+      };
     }
-    return {
-      visible: true,
-      enabled: false,
-      blockedReason:
-        "Редактирование доступно только для разделов, возвращённых на уточнение.",
-    };
+    return { visible: true, enabled: true, blockedReason: null };
   }
 
   if (draftStatus === "submitted") {
@@ -328,4 +349,24 @@ export function resolveIntakeOnBehalfEditAccess(
   }
 
   return { visible: false, enabled: false, blockedReason: null };
+}
+
+const INTAKE_DRAFT_REWORK_STATUS_LABEL = "На доработке";
+
+export function resolveIntakeDraftStatusDisplayLabel(input: {
+  draftStatus?: string | null;
+  applicationStatus?: string | null;
+  submittedAt?: string | null;
+}): string {
+  const draftStatus = String(input.draftStatus ?? "").trim();
+  const applicationStatus = String(input.applicationStatus ?? "").trim();
+  const hasSubmittedAt = Boolean(String(input.submittedAt ?? "").trim());
+  if (
+    draftStatus === "editable" &&
+    hasSubmittedAt &&
+    (applicationStatus === "revision_requested" || applicationStatus === "under_review")
+  ) {
+    return INTAKE_DRAFT_REWORK_STATUS_LABEL;
+  }
+  return intakeDraftStatusLabel(draftStatus);
 }

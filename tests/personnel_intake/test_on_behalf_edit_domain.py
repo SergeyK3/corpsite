@@ -64,6 +64,18 @@ def test_evaluate_on_behalf_edit_allows_revision_requested() -> None:
     assert code is None
 
 
+def test_evaluate_on_behalf_edit_allows_revision_requested_with_editable_draft() -> None:
+    allowed, reason, code = evaluate_on_behalf_edit_eligibility(
+        application_status="revision_requested",
+        draft_exists=True,
+        draft_status="editable",
+        section_statuses=["accepted"],
+    )
+    assert allowed is True
+    assert reason is None
+    assert code is None
+
+
 def test_evaluate_on_behalf_edit_allows_under_review_with_editable_draft_after_rework() -> None:
     allowed, reason, code = evaluate_on_behalf_edit_eligibility(
         application_status="under_review",
