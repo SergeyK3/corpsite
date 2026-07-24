@@ -39,6 +39,13 @@ from app.personnel_intake.domain.reconciliation.invariants import (
     compute_intent_fingerprint,
     is_terminal_apply_status,
 )
+from app.personnel_intake.domain.reconciliation.digest import (
+    DIGEST_ALGORITHM_CANON_JSON_V1,
+    CanonJsonV1DigestBuilder,
+    DEFAULT_DIGEST_BUILDER_REGISTRY,
+    DigestBuilder,
+    DigestBuilderRegistry,
+)
 from app.personnel_intake.domain.reconciliation.models import (
     BatchTerminalFinalizationCommand,
     BatchTerminalFinalizationResult,
@@ -50,6 +57,11 @@ from app.personnel_intake.domain.reconciliation.models import (
 )
 
 __all__ = [
+    "DIGEST_ALGORITHM_CANON_JSON_V1",
+    "CanonJsonV1DigestBuilder",
+    "DEFAULT_DIGEST_BUILDER_REGISTRY",
+    "DigestBuilder",
+    "DigestBuilderRegistry",
     "APPLY_STATUSES",
     "APPLY_STATUS_APPLIED",
     "APPLY_STATUS_BLOCKED",
