@@ -263,6 +263,13 @@ from app.db.models.personnel_verification import (
     VerificationPolicy,
     VerificationTask,
 )
+from app.db.models.personnel_intake import (
+    PersonnelIntakeDraft,
+    PersonnelIntakeLink,
+    PersonnelIntakeReconciliationDecision,
+    PersonnelIntakeSectionReview,
+    PersonnelIntakeTransfer,
+)
 
 __all__ = [
     "Base",
@@ -496,4 +503,9 @@ __all__ = [
     "ATTESTATION_DECISION_VERIFIED",
     "ATTESTATION_DECISION_REJECTED",
     "ATTESTATION_DECISIONS",
+    "PersonnelIntakeDraft",
+    "PersonnelIntakeLink",
+    "PersonnelIntakeReconciliationDecision",
+    "PersonnelIntakeSectionReview",
+    "PersonnelIntakeTransfer",
 ]

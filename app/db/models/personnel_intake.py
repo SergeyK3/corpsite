@@ -1,7 +1,7 @@
-"""ORM models for Personnel Intake (WP-PPR-INTAKE-001/002)."""
+"""ORM models for Personnel Intake (WP-PPR-INTAKE-001/002, WP-PPR-CARD-COORDINATION-003)."""
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Text, text
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base import Base
@@ -112,5 +112,47 @@ class PersonnelIntakeTransfer(Base):
     sections_transferred = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     command_ids = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class PersonnelIntakeReconciliationDecision(Base):
+    """Durable per-decision reconciliation store (WP-PPR-CARD-COORDINATION-003)."""
+
+    __tablename__ = "personnel_intake_reconciliation_decisions"
+    __table_args__ = {"schema": "public"}
+
+    decision_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    application_id = Column(
+        BigInteger,
+        ForeignKey("public.personnel_applications.application_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    person_id = Column(
+        BigInteger,
+        ForeignKey("public.persons.person_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    section_code = Column(Text, nullable=False)
+    proposal_index = Column(Integer, nullable=False)
+    proposal_fingerprint = Column(Text, nullable=False)
+    proposal_payload_digest = Column(Text, nullable=False)
+    action = Column(Text, nullable=False)
+    reason_code = Column(Text, nullable=False)
+    evidence = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    target_canonical_record_id = Column(BigInteger, nullable=True)
+    expected_row_version = Column(Text, nullable=True)
+    expected_canonical_precondition = Column(Text, nullable=False)
+    decision_source = Column(Text, nullable=False, server_default=text("'system'"))
+    override_token = Column(Text, nullable=True)
+    matcher_rule_id = Column(Text, nullable=False)
+    matcher_version = Column(Text, nullable=False)
+    policy_version = Column(Text, nullable=False)
+    digest_algorithm_version = Column(Text, nullable=False)
+    idempotency_key = Column(Text, nullable=False, unique=True)
+    intent_fingerprint = Column(Text, nullable=False)
+    apply_status = Column(Text, nullable=False, server_default=text("'pending'"))
+    failure_evidence = Column(JSONB, nullable=True)
+    row_version = Column(BigInteger, nullable=False, server_default=text("1"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
