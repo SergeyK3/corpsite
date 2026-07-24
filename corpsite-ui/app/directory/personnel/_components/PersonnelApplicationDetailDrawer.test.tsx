@@ -275,7 +275,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
     );
 
     const button = await screen.findByTestId("intake-on-behalf-edit-button");
-    expect(button).toHaveTextContent("Редактировать анкету от имени претендента");
+    expect(button).toHaveTextContent("Открыть для редактирования");
     expect(button).toBeEnabled();
     expect(screen.queryByTestId("intake-on-behalf-edit-blocked")).not.toBeInTheDocument();
   });
@@ -316,7 +316,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
     );
 
     const button = await screen.findByTestId("intake-on-behalf-edit-button");
-    expect(button).toHaveTextContent("Редактировать анкету от имени претендента");
+    expect(button).toHaveTextContent("Открыть для редактирования");
     expect(button).toBeDisabled();
     expect(screen.getByTestId("intake-on-behalf-edit-blocked")).toHaveTextContent(/уточнение/i);
   });
@@ -421,7 +421,7 @@ describe("PersonnelApplicationDetailDrawer", () => {
     const reviewButton = await screen.findByTestId("personnel-application-open-intake-review");
     expect(reviewButton).toHaveTextContent("Открыть анкету для проверки");
     expect(screen.getByTestId("intake-on-behalf-edit-button")).toHaveTextContent(
-      "Редактировать анкету от имени претендента",
+      "Открыть для редактирования",
     );
 
     fireEvent.click(reviewButton);

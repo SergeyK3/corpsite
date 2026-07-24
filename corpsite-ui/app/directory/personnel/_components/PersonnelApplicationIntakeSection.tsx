@@ -211,7 +211,7 @@ export default function PersonnelApplicationIntakeSection({
               className="rounded-lg border border-violet-300 px-3 py-1.5 text-sm text-violet-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900 dark:text-violet-300"
               data-testid="intake-on-behalf-edit-button"
             >
-              Редактировать анкету от имени претендента
+              Открыть для редактирования
             </button>
             {!onBehalfAccess.enabled && onBehalfAccess.blockedReason ? (
               <p className="text-xs text-zinc-500 dark:text-zinc-400" data-testid="intake-on-behalf-edit-blocked">
