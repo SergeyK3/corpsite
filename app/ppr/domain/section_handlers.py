@@ -11,9 +11,22 @@ from app.db.models.personnel_migration import (
     SECTION_SOURCE_TYPE_ENTERED,
     TRAINING_KINDS,
 )
+from app.db.models.personnel_verification import CONTROL_POINT_EMPLOYMENT_EPISODE
+from app.personnel_verification.application.employment_revision_service import (
+    EmploymentRevisionService,
+)
+from app.personnel_verification.domain.errors import (
+    ControlledRecordNotFoundError,
+    PolicyNotFoundError,
+    PolicyValidationError,
+    RevisionConflictError,
+    TaskValidationError,
+)
+from app.personnel_verification.infrastructure.repository import PersonnelVerificationRepository
 from app.ppr.domain.errors import (
     PprLifecycleTransitionError,
     SectionDuplicateRecordError,
+    SectionOptimisticConcurrencyConflictError,
     SectionRecordNotFoundError,
     SectionValidationError,
 )
@@ -641,21 +654,70 @@ def handle_supersede_external_employment_record(
     command: SupersedeExternalEmploymentRecord,
     uow: UnitOfWork,
 ) -> SectionMutationResult:
+    """WP-VER-005A: create pending revision + task; do not supersede prior until confirm."""
     _require_positive_person_id(command.person_id)
     _require_active_external_employment(uow, command.person_id, command.record_id)
     if command.replacement.person_id != command.person_id:
         raise SectionValidationError("replacement.person_id must match supersede person_id")
 
     replacement = _external_employment_from_add(command.replacement)
-    old_record, new_record = uow.section_mutations().supersede_pair(
+    policy = PersonnelVerificationRepository(uow.connection).get_active_policy(
+        CONTROL_POINT_EMPLOYMENT_EPISODE
+    )
+    if policy is None:
+        raise SectionValidationError(
+            "No active employment_episode verification policy; "
+            "publish a policy before replacing external employment"
+        )
+
+    try:
+        created = EmploymentRevisionService(uow.connection).create_pending_revision(
+            person_id=command.person_id,
+            prior_employment_id=command.record_id,
+            policy_id=policy.policy_id,
+            expected_prior_updated_at=command.expected_updated_at,
+            employer_name=replacement.employer_name,
+            department_name=replacement.department_name,
+            position_title=replacement.position_title,
+            employment_type=replacement.employment_type,
+            started_at=replacement.started_at,
+            ended_at=replacement.ended_at,
+            termination_reason=replacement.termination_reason,
+            document_reference=replacement.document_reference,
+            notes=replacement.notes,
+            source_system=replacement.source_system or EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
+            source_id=replacement.source_id,
+            provenance=replacement.provenance,
+            metadata=replacement.metadata,
+            employee_context_id=replacement.employee_context_id,
+            copy_material_fields_from_prior=False,
+        )
+    except RevisionConflictError as exc:
+        raise SectionOptimisticConcurrencyConflictError(str(exc)) from exc
+    except ControlledRecordNotFoundError as exc:
+        raise SectionRecordNotFoundError(str(exc)) from exc
+    except (TaskValidationError, PolicyValidationError, PolicyNotFoundError) as exc:
+        raise SectionValidationError(str(exc)) from exc
+
+    new_record = uow.sections.load_record(
+        command.person_id,
+        SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
+        created.revision_employment_id,
+    )
+    old_record = uow.sections.load_record(
         command.person_id,
         SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
         command.record_id,
-        replacement,
-        expected_updated_at=command.expected_updated_at,
     )
-    if not isinstance(old_record, ExternalEmploymentRecord) or not isinstance(new_record, ExternalEmploymentRecord):
-        raise SectionValidationError("supersede_pair returned unexpected section types")
+    if not isinstance(old_record, ExternalEmploymentRecord) or not isinstance(
+        new_record, ExternalEmploymentRecord
+    ):
+        raise SectionValidationError("pending revision load returned unexpected section types")
+    if old_record.lifecycle_status != LIFECYCLE_STATUS_ACTIVE:
+        raise SectionValidationError(
+            f"prior employment_id={command.record_id} left active state unexpectedly"
+        )
+    # Event kind stays SUPERSEDE (proposed replacement); prior remains effective-active.
     return SectionMutationResult(
         record=new_record,
         mutation_kind=MUTATION_KIND_SUPERSEDE,

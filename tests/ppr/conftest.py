@@ -100,6 +100,29 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
             text("DELETE FROM public.personnel_record_events WHERE person_id = ANY(:ids)"),
             {"ids": person_ids},
         )
+        if table_exists(conn, "verification_attestations") or table_exists(
+            conn, "verification_tasks"
+        ):
+            # Attestation DELETE is blocked by immutability trigger; bypass for test cleanup.
+            conn.execute(text("SET LOCAL session_replication_role = replica"))
+            try:
+                if table_exists(conn, "verification_attestations"):
+                    conn.execute(
+                        text(
+                            "DELETE FROM public.verification_attestations "
+                            "WHERE person_id = ANY(:ids)"
+                        ),
+                        {"ids": person_ids},
+                    )
+                if table_exists(conn, "verification_tasks"):
+                    conn.execute(
+                        text(
+                            "DELETE FROM public.verification_tasks WHERE person_id = ANY(:ids)"
+                        ),
+                        {"ids": person_ids},
+                    )
+            finally:
+                conn.execute(text("SET LOCAL session_replication_role = origin"))
         conn.execute(
             text("DELETE FROM public.person_education WHERE person_id = ANY(:ids)"),
             {"ids": person_ids},

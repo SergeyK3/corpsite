@@ -4,6 +4,11 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
+from app.personnel_verification.domain.errors import (
+    ControlledRecordNotFoundError,
+    RevisionConflictError,
+    TaskValidationError,
+)
 from app.ppr.domain.errors import (
     PprApplicationValidationError,
     PprAuthorizationDeniedError,
@@ -99,7 +104,7 @@ def map_ppr_mutation_error(exc: Exception) -> HTTPException | None:
         return mapped
     if isinstance(exc, SectionValidationError):
         return ppr_validation_http422(exc)
-    if isinstance(exc, SectionRecordNotFoundError):
+    if isinstance(exc, (SectionRecordNotFoundError, ControlledRecordNotFoundError)):
         return ppr_not_found_http404(exc)
     if isinstance(
         exc,
@@ -110,10 +115,11 @@ def map_ppr_mutation_error(exc: Exception) -> HTTPException | None:
             PprCommandIdConflictError,
             PprCommandInProgressError,
             PprLifecycleTransitionError,
+            RevisionConflictError,
         ),
     ):
         return ppr_conflict_http409(exc)
-    if isinstance(exc, PprApplicationValidationError):
+    if isinstance(exc, (PprApplicationValidationError, TaskValidationError)):
         return ppr_validation_http422(exc)
     if isinstance(exc, IntegrityError) and _is_military_second_active_conflict(exc):
         return HTTPException(status_code=409, detail=MILITARY_ACTIVE_RECORD_ALREADY_EXISTS)

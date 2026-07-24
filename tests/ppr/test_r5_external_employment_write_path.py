@@ -14,6 +14,8 @@ from app.db.models.personnel_migration import (
     EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
     EXTERNAL_EMPLOYMENT_RECORD_KIND_NARRATIVE_SUMMARY,
 )
+from app.db.models.personnel_verification import CONTROL_POINT_EMPLOYMENT_EPISODE
+from app.personnel_verification.infrastructure.repository import PersonnelVerificationRepository
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
     COMMAND_TYPE_ACTIVATE_PPR,
@@ -42,6 +44,24 @@ def _require_r5_schema() -> None:
             pytest.skip("ppr_command_executions missing — run: alembic upgrade head")
         if not table_exists(conn, "person_external_employment"):
             pytest.skip("person_external_employment missing — run: alembic upgrade head")
+        if not table_exists(conn, "verification_policies"):
+            pytest.skip("verification_policies missing — run: alembic upgrade head")
+
+
+def _ensure_employment_policy(*, user_id: int) -> None:
+    """Publish active employment_episode policy required by WP-VER-005A supersede."""
+    with engine.begin() as conn:
+        repo = PersonnelVerificationRepository(conn)
+        active = repo.get_active_policy(CONTROL_POINT_EMPLOYMENT_EPISODE)
+        if active is not None:
+            return
+        draft = repo.create_policy_draft(
+            control_point=CONTROL_POINT_EMPLOYMENT_EPISODE,
+            effective_from=date(2026, 1, 1),
+            decision_basis=f"WP-VER-005A test policy {uuid4().hex[:8]}",
+            created_by_user_id=user_id,
+        )
+        repo.publish_policy(policy_id=draft.policy_id, published_by_user_id=user_id)
 
 
 @pytest.fixture
@@ -441,7 +461,9 @@ def test_supersede_stale_expected_updated_at_raises_and_rolls_back(
     employment_person_id: int,
     lifecycle_service,
     section_service,
+    seed,
 ) -> None:
+    _ensure_employment_policy(user_id=int(seed["initiator_user_id"]))
     _materialize_and_activate(employment_person_id, lifecycle_service)
     added = section_service.add_external_employment(_add_episode_envelope(employment_person_id))
     assert added.section_record_id is not None
@@ -534,7 +556,9 @@ def test_supersede_active_record_commits_with_canonical_event(
     employment_person_id: int,
     lifecycle_service,
     section_service,
+    seed,
 ) -> None:
+    _ensure_employment_policy(user_id=int(seed["initiator_user_id"]))
     _materialize_and_activate(employment_person_id, lifecycle_service)
     added = section_service.add_external_employment(_add_episode_envelope(employment_person_id))
     assert added.section_record_id is not None
@@ -586,6 +610,15 @@ def test_supersede_active_record_commits_with_canonical_event(
             ),
             {"rid": added.section_record_id},
         ).scalar_one()
+        task_count = conn.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM public.verification_tasks
+                WHERE object_version_id = :revision_id AND status = 'pending'
+                """
+            ),
+            {"revision_id": result.section_record_id},
+        ).scalar_one()
 
     assert event[3] == "PPR_SECTION_SUPERSEDED"
     assert int(event[0]) == employment_person_id
@@ -595,7 +628,9 @@ def test_supersede_active_record_commits_with_canonical_event(
     assert event[5] == "PPR-EMPLOYMENT-BIOGRAPHY"
     assert int(event[6]) == result.section_record_id
     assert int(event[7]) == added.section_record_id
-    assert old_status == "superseded"
+    # WP-VER-005A: prior stays active until confirm; revision is pending.
+    assert old_status == "active"
+    assert int(task_count) == 1
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -603,7 +638,9 @@ def test_supersede_idempotent_replay(
     employment_person_id: int,
     lifecycle_service,
     section_service,
+    seed,
 ) -> None:
+    _ensure_employment_policy(user_id=int(seed["initiator_user_id"]))
     _materialize_and_activate(employment_person_id, lifecycle_service)
     added = section_service.add_external_employment(_add_episode_envelope(employment_person_id))
     assert added.section_record_id is not None
@@ -653,7 +690,8 @@ def test_supersede_idempotent_replay(
             {"pid": employment_person_id},
         ).scalar_one()
 
-    assert int(active_count) == 1
+    # Prior + pending revision both lifecycle=active until confirm.
+    assert int(active_count) == 2
     assert int(supersede_events) == 1
 
 

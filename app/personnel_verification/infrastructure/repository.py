@@ -490,6 +490,44 @@ class PersonnelVerificationRepository:
         ).mappings().first()
         return _map_task(row) if row is not None else None
 
+    def list_pending_employment_tasks(
+        self,
+        *,
+        person_id: int | None = None,
+        limit: int = 100,
+    ) -> list[VerificationTaskSnapshot]:
+        """List pending employment_episode tasks (WP-VER-005A; not a universal queue)."""
+        if limit < 1:
+            raise TaskValidationError("limit must be >= 1")
+        clauses = [
+            "control_point = :control_point",
+            "object_type = :object_type",
+            "status = :status",
+        ]
+        params: dict[str, object] = {
+            "control_point": CONTROL_POINT_EMPLOYMENT_EPISODE,
+            "object_type": OBJECT_TYPE_PERSON_EXTERNAL_EMPLOYMENT,
+            "status": TASK_STATUS_PENDING,
+            "limit": int(limit),
+        }
+        if person_id is not None:
+            clauses.append("person_id = :person_id")
+            params["person_id"] = int(person_id)
+        where_sql = " AND ".join(clauses)
+        rows = self._conn.execute(
+            text(
+                f"""
+                SELECT {_TASK_SELECT}
+                FROM public.verification_tasks
+                WHERE {where_sql}
+                ORDER BY created_at ASC, task_id ASC
+                LIMIT :limit
+                """
+            ),
+            params,
+        ).mappings().all()
+        return [_map_task(row) for row in rows]
+
     def cancel_task(self, task_id: int, *, closed_at: datetime | None = None) -> VerificationTaskSnapshot:
         task = self.get_task(task_id)
         validate_task_not_terminal(task.status)

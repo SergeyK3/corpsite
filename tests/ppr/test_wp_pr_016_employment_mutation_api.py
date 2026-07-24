@@ -13,7 +13,9 @@ from app.db.engine import engine
 from app.db.models.personnel_migration import (
     EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
 )
+from app.db.models.personnel_verification import CONTROL_POINT_EMPLOYMENT_EPISODE
 from app.main import app
+from app.personnel_verification.infrastructure.repository import PersonnelVerificationRepository
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
     COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
@@ -33,6 +35,22 @@ def _require_metadata_schema() -> None:
     with engine.begin() as conn:
         if not table_exists(conn, "personnel_record_metadata"):
             pytest.skip("personnel_record_metadata missing — run: alembic upgrade head")
+
+
+def _ensure_employment_policy(*, user_id: int) -> None:
+    with engine.begin() as conn:
+        if not table_exists(conn, "verification_policies"):
+            pytest.skip("verification_policies missing — run: alembic upgrade head")
+        repo = PersonnelVerificationRepository(conn)
+        if repo.get_active_policy(CONTROL_POINT_EMPLOYMENT_EPISODE) is not None:
+            return
+        draft = repo.create_policy_draft(
+            control_point=CONTROL_POINT_EMPLOYMENT_EPISODE,
+            effective_from=date(2026, 1, 1),
+            decision_basis=f"WP-VER-005A wp16 policy {uuid4().hex[:8]}",
+            created_by_user_id=user_id,
+        )
+        repo.publish_policy(policy_id=draft.policy_id, published_by_user_id=user_id)
 
 
 @pytest.fixture
@@ -226,7 +244,9 @@ def test_supersede_by_person(
     client: TestClient,
     bare_person: int,
     privileged_headers,
+    seed,
 ) -> None:
+    _ensure_employment_policy(user_id=int(seed["initiator_user_id"]))
     _materialize(bare_person)
     record_id, updated_at = _seed_record(bare_person)
     resp = client.post(
@@ -250,8 +270,10 @@ def test_supersede_by_person(
 
     read_resp = client.get(f"/api/ppr/persons/{bare_person}", headers=privileged_headers)
     section = read_resp.json()["sections"][SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY]
-    assert any(row["employer_name"] == "Replacement Employer" for row in section["active"])
-    assert any(row["record_id"] == record_id for row in section["superseded"])
+    # WP-VER-005A: prior stays effective-active; pending replacement is hidden until confirm.
+    assert any(row["record_id"] == record_id for row in section["active"])
+    assert not any(row["employer_name"] == "Replacement Employer" for row in section["active"])
+    assert not any(row["record_id"] == record_id for row in section["superseded"])
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
@@ -519,9 +541,11 @@ def test_supersede_replacement_rejects_forbidden_fields_422(
     client: TestClient,
     bare_person: int,
     privileged_headers,
+    seed,
     forbidden_field: str,
     forbidden_value,
 ) -> None:
+    _ensure_employment_policy(user_id=int(seed["initiator_user_id"]))
     _materialize(bare_person)
     record_id, updated_at = _seed_record(bare_person)
     replacement = {

@@ -101,9 +101,10 @@ class EmploymentRevisionService:
         metadata: dict[str, Any] | None = None,
         employee_context_id: int | None = None,
         copy_material_fields_from_prior: bool = True,
+        expected_prior_updated_at: datetime | None = None,
     ) -> PendingRevisionResult:
         """Insert active pending revision without superseding prior; create pending task."""
-        prior = self._load_employment(prior_employment_id)
+        prior = self._load_employment_for_update(prior_employment_id)
         if prior is None or int(prior["person_id"]) != person_id:
             raise ControlledRecordNotFoundError(
                 f"prior employment_id={prior_employment_id} not found for person_id={person_id}"
@@ -113,6 +114,13 @@ class EmploymentRevisionService:
                 f"prior employment_id={prior_employment_id} must be active "
                 f"(got {prior['lifecycle_status']!r})"
             )
+        if expected_prior_updated_at is not None and prior["updated_at"] != expected_prior_updated_at:
+            raise RevisionConflictError(
+                f"CAS conflict on prior employment_id={prior_employment_id}: stale updated_at"
+            )
+        # Material fields needed after FOR UPDATE (narrow select); reload full row.
+        prior = self._load_employment(prior_employment_id)
+        assert prior is not None
         if not self._is_effective_active_employment(prior):
             raise TaskValidationError(
                 f"prior employment_id={prior_employment_id} is not the effective active record"

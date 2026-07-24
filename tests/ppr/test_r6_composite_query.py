@@ -17,6 +17,8 @@ from app.db.models.personnel_migration import (
     RELATIONSHIP_TYPE_MOTHER,
     TRAINING_KIND_COURSE,
 )
+from app.db.models.personnel_verification import CONTROL_POINT_EMPLOYMENT_EPISODE
+from app.personnel_verification.infrastructure.repository import PersonnelVerificationRepository
 from app.ppr.application.authorization import AllowAllAuthorizationPort
 from app.ppr.application.command_models import (
     COMMAND_TYPE_ADD_EXTERNAL_EMPLOYMENT,
@@ -645,13 +647,31 @@ def test_26_summary_external_employment_active_count(
     assert summary.external_employment_active_count == 1
 
 
+def _ensure_employment_policy(*, user_id: int) -> None:
+    with engine.begin() as conn:
+        if not table_exists(conn, "verification_policies"):
+            pytest.skip("verification_policies missing — run: alembic upgrade head")
+        repo = PersonnelVerificationRepository(conn)
+        if repo.get_active_policy(CONTROL_POINT_EMPLOYMENT_EPISODE) is not None:
+            return
+        draft = repo.create_policy_draft(
+            control_point=CONTROL_POINT_EMPLOYMENT_EPISODE,
+            effective_from=date(2026, 1, 1),
+            decision_basis=f"WP-VER-005A r6 policy {uuid4().hex[:8]}",
+            created_by_user_id=user_id,
+        )
+        repo.publish_policy(policy_id=draft.policy_id, published_by_user_id=user_id)
+
+
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_27_external_employment_lifecycle_buckets(
     bare_person_id: int,
     lifecycle_service: PprLifecycleApplicationService,
     section_service: PprSectionApplicationService,
     query_service: PprQueryApplicationService,
+    seed,
 ) -> None:
+    _ensure_employment_policy(user_id=int(seed["initiator_user_id"]))
     _materialize(bare_person_id, lifecycle_service)
     active_id = _add_external_employment_episode(bare_person_id, section_service, employer_name="Active Co")
     void_id = _add_external_employment_episode(bare_person_id, section_service, employer_name="Void Co")
@@ -697,12 +717,13 @@ def test_27_external_employment_lifecycle_buckets(
     composite = query_service.load_by_person_id(bare_person_id)
     section = composite.external_employment
     assert section.section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY
+    # WP-VER-005A: pending Replacement Co is hidden; prior Supersede Co stays effective-active.
     assert len(section.active) == 2
-    assert {row.employer_name for row in section.active} == {"Active Co", "Replacement Co"}
-    assert len(section.superseded) == 1
-    assert section.superseded[0].employer_name == "Supersede Co"
+    assert {row.employer_name for row in section.active} == {"Active Co", "Supersede Co"}
+    assert len(section.superseded) == 0
     assert len(section.voided) == 1
     assert section.voided[0].employer_name == "Void Co"
+    assert active_id is not None
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
