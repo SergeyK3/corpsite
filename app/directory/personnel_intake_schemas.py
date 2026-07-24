@@ -160,6 +160,31 @@ class IntakeTransferAuditListOut(BaseModel):
     total: int
 
 
+class ApplyEducationReconciliationDecisionIn(BaseModel):
+    """Re-supply accepted education slice for digest verify (WP-008 OQ-008-EDU-PROP)."""
+
+    section_payload: dict[str, Any]
+    correlation_id: str | None = None
+    digest_algorithm_version: str = "canon-json-v1"
+
+
+class ApplyEducationReconciliationDecisionOut(BaseModel):
+    application_id: int
+    decision_id: int
+    section_code: str
+    action: str
+    apply_status: str
+    reason_code: str
+    result_status: str
+    idempotent_replay: bool = False
+    redecide_required: bool = False
+    ppr_command_id: str | None = None
+    section_record_id: int | None = None
+    failure_evidence: dict[str, Any] | None = None
+    expected_row_version: str | None = None
+    target_canonical_record_id: int | None = None
+
+
 class IntakeOnBehalfEditSessionOut(BaseModel):
     application_id: int
     draft: IntakeDraftOut

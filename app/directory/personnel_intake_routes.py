@@ -10,6 +10,8 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.common import as_http500
 from app.directory.personnel_intake_schemas import (
+    ApplyEducationReconciliationDecisionIn,
+    ApplyEducationReconciliationDecisionOut,
     IntakeAutosaveIn,
     IntakeDraftOut,
     IntakeLinkAccessOut,
@@ -54,6 +56,10 @@ from app.personnel_intake.application.review_service import (
     rework_intake_section,
     skip_intake_section,
 )
+from app.personnel_intake.application.reconciliation_apply_service import (
+    ApplyEducationReconciliationDecisionCommand,
+    apply_education_reconciliation_decision,
+)
 from app.personnel_intake.application.transfer_service import (
     list_intake_transfer_audit,
     transfer_intake_to_ppr,
@@ -65,6 +71,10 @@ from app.personnel_intake.domain.errors import (
     PersonnelIntakeReviewError,
     PersonnelIntakeTransferError,
     PersonnelIntakeValidationError,
+)
+from app.personnel_intake.domain.reconciliation.errors import (
+    ReconciliationNotFoundError,
+    ReconciliationValidationError,
 )
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 
@@ -87,6 +97,10 @@ def _transfer_error_http422(exc: PersonnelIntakeTransferError) -> HTTPException:
 
 
 def _on_behalf_edit_error_http422(exc: PersonnelIntakeOnBehalfEditError) -> HTTPException:
+    return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
+
+
+def _reconciliation_error_http422(exc: ReconciliationValidationError) -> HTTPException:
     return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
 
 
@@ -537,6 +551,59 @@ def post_intake_section_skip(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelIntakeReviewError as exc:
         raise _review_error_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post(
+    "/{application_id}/intake/reconciliation/decisions/{decision_id}/apply",
+    response_model=ApplyEducationReconciliationDecisionOut,
+)
+def post_apply_education_reconciliation_decision(
+    body: ApplyEducationReconciliationDecisionIn,
+    application_id: int = Path(..., ge=1),
+    decision_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> ApplyEducationReconciliationDecisionOut:
+    """Apply one saved education reconciliation decision via U2 executor."""
+    require_personnel_admin_or_403(user)
+    user_id = _require_user_id(user)
+    try:
+        with engine.begin() as conn:
+            result = apply_education_reconciliation_decision(
+                conn,
+                ApplyEducationReconciliationDecisionCommand(
+                    application_id=application_id,
+                    decision_id=decision_id,
+                    section_payload=body.section_payload,
+                    actor_id=f"user:{user_id}",
+                    correlation_id=body.correlation_id,
+                    digest_algorithm_version=body.digest_algorithm_version,
+                ),
+            )
+        decision = result.decision
+        return ApplyEducationReconciliationDecisionOut(
+            application_id=int(decision.application_id),
+            decision_id=int(decision.decision_id),
+            section_code=decision.section_code,
+            action=decision.action,
+            apply_status=decision.apply_status,
+            reason_code=decision.reason_code,
+            result_status=result.result_status,
+            idempotent_replay=result.idempotent_replay,
+            redecide_required=result.redecide_required,
+            ppr_command_id=result.ppr_command_id,
+            section_record_id=result.section_record_id,
+            failure_evidence=decision.failure_evidence,
+            expected_row_version=decision.expected_row_version,
+            target_canonical_record_id=decision.target_canonical_record_id,
+        )
+    except ReconciliationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": exc.code, "message": str(exc)})
+    except ReconciliationValidationError as exc:
+        raise _reconciliation_error_http422(exc)
     except HTTPException:
         raise
     except Exception as exc:
