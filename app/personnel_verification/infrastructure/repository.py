@@ -315,21 +315,11 @@ class PersonnelVerificationRepository:
         object_id: int,
         object_version_id: int,
     ) -> None:
-        """Validate task→PPR binding for WP-VER-002 foundation identity.
-
-        Until WP-VER-003 introduces physical lineage:
-        - ``object_version_id`` = ``person_external_employment.employment_id``
-        - ``object_id`` = ``object_version_id``
-        - target row must be ``lifecycle_status='active'``
-        """
-        validate_employment_episode_object_identity(
-            object_id=object_id,
-            object_version_id=object_version_id,
-        )
+        """Validate task→PPR binding for root rows and WP-VER-003 revisions."""
         version = self._conn.execute(
             text(
                 """
-                SELECT employment_id, person_id, lifecycle_status
+                SELECT employment_id, person_id, lifecycle_status, supersedes_employment_id
                 FROM public.person_external_employment
                 WHERE employment_id = :employment_id
                 """
@@ -349,6 +339,37 @@ class PersonnelVerificationRepository:
                 "employment_episode tasks require lifecycle_status='active'; "
                 f"got {version['lifecycle_status']!r} for employment_id={object_version_id}"
             )
+        supersedes = version["supersedes_employment_id"]
+        supersedes_id = int(supersedes) if supersedes is not None else None
+        validate_employment_episode_object_identity(
+            object_id=object_id,
+            object_version_id=object_version_id,
+            supersedes_employment_id=supersedes_id,
+        )
+        if supersedes_id is not None:
+            prior = self._conn.execute(
+                text(
+                    """
+                    SELECT employment_id, person_id, lifecycle_status
+                    FROM public.person_external_employment
+                    WHERE employment_id = :employment_id
+                    """
+                ),
+                {"employment_id": supersedes_id},
+            ).mappings().first()
+            if prior is None:
+                raise ControlledRecordNotFoundError(
+                    f"prior employment_id={supersedes_id} not found for revision"
+                )
+            if int(prior["person_id"]) != person_id:
+                raise ControlledRecordNotFoundError(
+                    f"prior employment_id={supersedes_id} does not belong to person_id={person_id}"
+                )
+            if str(prior["lifecycle_status"]) != "active":
+                raise TaskValidationError(
+                    "employment_episode revision prior must be lifecycle_status='active'; "
+                    f"got {prior['lifecycle_status']!r} for employment_id={supersedes_id}"
+                )
 
     def create_pending_task(
         self,

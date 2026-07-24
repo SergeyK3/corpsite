@@ -134,6 +134,7 @@ _EXTERNAL_EMPLOYMENT_SELECT = """
     provenance,
     verification_status,
     lifecycle_status,
+    supersedes_employment_id,
     notes,
     employee_context_id,
     created_at,
@@ -268,6 +269,7 @@ def _mapping_to_relative(row: RowMapping) -> RelativeRecord:
 
 
 def _mapping_to_external_employment(row: RowMapping) -> ExternalEmploymentRecord:
+    supersedes = row.get("supersedes_employment_id")
     return ExternalEmploymentRecord(
         record_id=int(row["employment_id"]),
         person_id=int(row["person_id"]),
@@ -285,6 +287,7 @@ def _mapping_to_external_employment(row: RowMapping) -> ExternalEmploymentRecord
         provenance=_metadata_dict(row.get("provenance")),
         verification_status=str(row["verification_status"]),
         lifecycle_status=str(row["lifecycle_status"]),
+        supersedes_employment_id=int(supersedes) if supersedes is not None else None,
         notes=row.get("notes"),
         employee_context_id=row.get("employee_context_id"),
         created_at=row.get("created_at"),
@@ -349,6 +352,26 @@ class _SectionStore:
     def load_active_records(self, person_id: int, section_code: str) -> tuple[SectionRecord, ...]:
         spec = _resolve_section(section_code)
         select_cols = _select_cols(section_code)
+        # WP-VER-003: employment revisions (supersedes_employment_id IS NOT NULL) stay
+        # lifecycle=active but are excluded from effective active reads until a verified
+        # attestation exists for that object_version_id (via task→attestation).
+        if section_code == SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY:
+            where_extra = """
+                      AND (
+                        supersedes_employment_id IS NULL
+                        OR EXISTS (
+                            SELECT 1
+                            FROM public.verification_tasks vt
+                            JOIN public.verification_attestations va
+                              ON va.task_id = vt.task_id
+                            WHERE vt.object_type = 'person_external_employment'
+                              AND vt.object_version_id = person_external_employment.employment_id
+                              AND va.decision = 'verified'
+                        )
+                      )
+            """
+        else:
+            where_extra = ""
         rows = (
             self._conn.execute(
                 text(
@@ -357,6 +380,7 @@ class _SectionStore:
                     FROM public.{spec['table']}
                     WHERE person_id = :person_id
                       AND lifecycle_status = :lifecycle_status
+                      {where_extra}
                     ORDER BY {section_records_order_by(section_code, spec['id_col'])}
                     """
                 ),
@@ -711,6 +735,7 @@ class _SectionStore:
                     provenance,
                     verification_status,
                     lifecycle_status,
+                    supersedes_employment_id,
                     notes,
                     employee_context_id,
                     metadata
@@ -731,6 +756,7 @@ class _SectionStore:
                     CAST(:provenance AS jsonb),
                     :verification_status,
                     :lifecycle_status,
+                    :supersedes_employment_id,
                     :notes,
                     :employee_context_id,
                     CAST(:metadata AS jsonb)
@@ -754,6 +780,7 @@ class _SectionStore:
                 "provenance": _metadata_json(record.provenance),
                 "verification_status": record.verification_status or VERIFICATION_STATUS_PENDING,
                 "lifecycle_status": record.lifecycle_status or LIFECYCLE_STATUS_ACTIVE,
+                "supersedes_employment_id": record.supersedes_employment_id,
                 "notes": record.notes,
                 "employee_context_id": record.employee_context_id,
                 "metadata": _metadata_json(record.metadata),

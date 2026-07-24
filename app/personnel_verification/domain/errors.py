@@ -40,3 +40,7 @@ class AttestationImmutableError(PersonnelVerificationError):
 
 class ControlledRecordNotFoundError(PersonnelVerificationError):
     """Referenced controlled record/version does not exist for person."""
+
+
+class RevisionConflictError(PersonnelVerificationError):
+    """Confirm/reject lost a race or violated revision preconditions (full rollback)."""

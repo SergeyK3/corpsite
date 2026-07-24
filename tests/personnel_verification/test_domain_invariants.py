@@ -95,10 +95,17 @@ def test_catalog_allows_both_control_points_but_blocks_medical_tasks() -> None:
         require_task_creation_supported(CONTROL_POINT_MEDICAL_CATEGORY)
 
 
-def test_employment_episode_requires_object_id_equals_object_version_id() -> None:
+def test_employment_episode_object_identity_root_and_revision() -> None:
     validate_employment_episode_object_identity(object_id=10, object_version_id=10)
     with pytest.raises(TaskValidationError, match="object_id = object_version_id"):
         validate_employment_episode_object_identity(object_id=10, object_version_id=11)
+    validate_employment_episode_object_identity(
+        object_id=10, object_version_id=20, supersedes_employment_id=10
+    )
+    with pytest.raises(TaskValidationError, match="supersedes_employment_id"):
+        validate_employment_episode_object_identity(
+            object_id=11, object_version_id=20, supersedes_employment_id=10
+        )
 
 
 def test_policy_date_and_publish_guards() -> None:

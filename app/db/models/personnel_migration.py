@@ -568,6 +568,11 @@ class PersonExternalEmployment(Base):
     __table_args__ = (
         Index("ix_person_external_employment_person_id", "person_id"),
         Index("ix_person_external_employment_person_lifecycle", "person_id", "lifecycle_status"),
+        Index(
+            "ix_pee_supersedes_employment_id",
+            "supersedes_employment_id",
+            postgresql_where=text("supersedes_employment_id IS NOT NULL"),
+        ),
     )
 
     employment_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -575,6 +580,11 @@ class PersonExternalEmployment(Base):
         BigInteger,
         ForeignKey("persons.person_id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    supersedes_employment_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("person_external_employment.employment_id", ondelete="RESTRICT"),
+        nullable=True,
     )
     record_kind: Mapped[str] = mapped_column(Text, nullable=False)
     employer_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

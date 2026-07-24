@@ -139,6 +139,7 @@ class ExternalEmploymentRecord:
     provenance: Mapping[str, Any] | None = None
     verification_status: str = VERIFICATION_STATUS_PENDING
     lifecycle_status: str = LIFECYCLE_STATUS_ACTIVE
+    supersedes_employment_id: int | None = None
     notes: str | None = None
     employee_context_id: int | None = None
     created_at: datetime | None = None

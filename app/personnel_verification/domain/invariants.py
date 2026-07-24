@@ -98,18 +98,29 @@ def validate_employment_episode_object_identity(
     *,
     object_id: int,
     object_version_id: int,
+    supersedes_employment_id: int | None = None,
 ) -> None:
-    """WP-VER-002 foundation: object_id must equal object_version_id.
+    """Employment task identity for root rows and WP-VER-003 revisions.
 
-    Physical lineage and related verified/pending revision coexistence are
-    designed in WP-VER-003; same-person existence of another employment row is
-    not lineage proof.
+    - Root (no supersedes): object_id = object_version_id = employment_id
+    - Revision: object_version_id = new employment_id,
+      object_id = supersedes_employment_id
     """
-    if object_id != object_version_id:
+    if supersedes_employment_id is None:
+        if object_id != object_version_id:
+            raise TaskValidationError(
+                "employment_episode root requires object_id = object_version_id "
+                f"(got object_id={object_id}, object_version_id={object_version_id})"
+            )
+        return
+    if object_id != supersedes_employment_id:
         raise TaskValidationError(
-            "employment_episode foundation requires object_id = object_version_id "
-            f"(got object_id={object_id}, object_version_id={object_version_id}); "
-            "physical lineage arrives in WP-VER-003"
+            "employment_episode revision requires object_id = supersedes_employment_id "
+            f"(got object_id={object_id}, supersedes_employment_id={supersedes_employment_id})"
+        )
+    if object_version_id == object_id:
+        raise TaskValidationError(
+            "employment_episode revision requires object_version_id distinct from object_id"
         )
 
 
