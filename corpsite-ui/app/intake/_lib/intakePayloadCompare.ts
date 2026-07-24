@@ -123,6 +123,7 @@ export function canonicalizeIntakePayloadForCompare(
         gender: "",
         citizenship: "",
         nationality: "",
+        personnel_number: "",
         photo_file_id: "",
       },
       payload.personal,

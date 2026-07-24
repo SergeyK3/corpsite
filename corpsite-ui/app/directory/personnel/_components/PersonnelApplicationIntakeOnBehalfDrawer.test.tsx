@@ -30,6 +30,7 @@ function buildSessionPayload(): IntakeDraftPayload {
       gender: "",
       citizenship: "Республика Казахстан",
       nationality: "казах",
+      personnel_number: "",
     },
     contacts: {
       mobile_phone: "+77001234567",

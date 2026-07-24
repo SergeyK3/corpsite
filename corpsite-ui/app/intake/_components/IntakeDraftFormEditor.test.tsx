@@ -150,4 +150,31 @@ describe("IntakeDraftFormEditor date fields", () => {
     expect(screen.getByTestId("intake-awards-section")).toBeInTheDocument();
     expect(screen.getByTestId("intake-academic-degrees-section")).toBeInTheDocument();
   });
+
+  it("renders personal card fields on personal step", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.personal.last_name = "Иванов";
+    payload.personal.birth_place = "г. Алматы";
+
+    renderEditor(payload, personalStepIndex);
+
+    expect(screen.getByTestId("intake-birth-place")).toHaveValue("г. Алматы");
+    expect(screen.getByTestId("intake-alphabet")).toHaveValue("И");
+    expect(screen.queryByTestId("intake-personnel-number")).not.toBeInTheDocument();
+  });
+
+  it("shows personnel number field for HR on-behalf even when empty", () => {
+    render(
+      <IntakeDraftFormEditor
+        payload={emptyIntakeDraftPayload()}
+        onChange={vi.fn()}
+        stepIndex={personalStepIndex}
+        onStepIndexChange={vi.fn()}
+        mode="hr-on-behalf"
+        compact
+      />,
+    );
+
+    expect(screen.getByTestId("intake-personnel-number")).toBeInTheDocument();
+  });
 });

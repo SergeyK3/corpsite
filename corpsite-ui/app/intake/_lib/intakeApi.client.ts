@@ -126,6 +126,8 @@ export type IntakeDraftPayload = {
     gender: string;
     citizenship: string;
     nationality: string;
+    /** Assigned by HR; hidden in public intake until set. */
+    personnel_number: string;
     /** Server-side photo file id; empty when no photo uploaded. */
     photo_file_id: string;
   };
@@ -254,6 +256,7 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
       gender: "",
       citizenship: "",
       nationality: "",
+      personnel_number: "",
       photo_file_id: "",
     },
     contacts: {

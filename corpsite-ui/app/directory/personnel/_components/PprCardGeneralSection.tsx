@@ -6,6 +6,7 @@ import {
   hrRelationshipLabel,
   lifecycleStatusLabel,
 } from "../_lib/pprCardPresentation";
+import { deriveIntakeSurnameAlphabet } from "@/app/intake/_lib/intakePersonalFields";
 
 type Props = {
   ppr: PprCompositeReadResponse;
@@ -23,6 +24,7 @@ function Field({ label, value }: { label: string; value: string }) {
 export default function PprCardGeneralSection({ ppr }: Props) {
   const g = ppr.general;
   const mat = ppr.materialization;
+  const alphabet = deriveIntakeSurnameAlphabet(g.last_name);
 
   return (
     <div className="space-y-4">
@@ -36,6 +38,7 @@ export default function PprCardGeneralSection({ ppr }: Props) {
         <Field label="Отчество" value={g.middle_name ?? ""} />
         <Field label="ИИН" value={g.iin ?? ""} />
         <Field label="Дата рождения" value={formatPprDate(g.birth_date, "day")} />
+        <Field label="Алфавит" value={alphabet} />
         <Field
           label="Статус личной карточки"
           value={lifecycleStatusLabel(mat.materialized, mat.lifecycle_state)}

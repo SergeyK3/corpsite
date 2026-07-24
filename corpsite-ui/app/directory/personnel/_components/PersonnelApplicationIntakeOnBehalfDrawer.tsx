@@ -2,7 +2,8 @@
 
 import * as React from "react";
 
-import IntakeDraftFormEditor, { reconcileIntakeDraftPayload } from "@/app/intake/_components/IntakeDraftFormEditor";
+import IntakeDraftFormEditor from "@/app/intake/_components/IntakeDraftFormEditor";
+import { reconcileIntakeDraftPayload } from "@/app/intake/_lib/intakeDraftReconcile";
 import {
   INTAKE_STEPS,
   emptyIntakeDraftPayload,

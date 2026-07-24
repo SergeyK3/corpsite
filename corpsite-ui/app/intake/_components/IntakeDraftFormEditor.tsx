@@ -22,15 +22,12 @@ import {
   getIntakeMilitaryRankOptions,
   INTAKE_MILITARY_COMPOSITION_CATALOG,
   normalizeIntakeMilitaryComposition,
-  reconcileIntakeMilitaryDraftOnLoad,
 } from "../_lib/intakeMilitaryDictionary";
 import {
   INTAKE_STEPS,
-  emptyIntakeDraftPayload,
   formatIntakeStepHeaderTitle,
   type IntakeDraftPayload,
 } from "../_lib/intakeApi.client";
-import { normalizeIntakeAdditionalPayload } from "../_lib/intakeAdditional";
 import {
   formatIntakeAcademicDegreeReviewLine,
   formatIntakeAcademicTitleReviewLine,
@@ -38,11 +35,6 @@ import {
   formatIntakeAwardReviewLine,
   formatIntakeForeignLanguageReviewLine,
 } from "../_lib/intakeAdditional";
-import { normalizeIntakeEducationEntry } from "../_lib/intakeEducation";
-import {
-  normalizeIntakeTrainingEntry,
-  reconcileTrainingEntryHours,
-} from "../_lib/intakeTraining";
 import {
   applyContactsRegistrationAddressChange,
   applyContactsResidenceMirror,
@@ -62,6 +54,11 @@ import {
   type IntakeDateValidationIssue,
 } from "../_lib/intakeDateValidation";
 import { sanitizeMilitarySpecialtyCodeInput } from "@/lib/militarySpecialtyCode";
+import {
+  deriveIntakeSurnameAlphabet,
+  isIntakePersonnelNumberEditable,
+  shouldShowIntakePersonnelNumberField,
+} from "../_lib/intakePersonalFields";
 
 function StepPersonal({
   payload,
@@ -81,6 +78,9 @@ function StepPersonal({
   const p = payload.personal;
   const set = (key: keyof typeof p, value: string) =>
     onChange({ ...payload, personal: { ...p, [key]: value } });
+  const alphabet = deriveIntakeSurnameAlphabet(p.last_name);
+  const showPersonnelNumber = shouldShowIntakePersonnelNumberField(mode, p.personnel_number);
+  const personnelNumberEditable = isIntakePersonnelNumberEditable(mode, readOnly);
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <IntakePhotoUpload
@@ -102,7 +102,23 @@ function StepPersonal({
         kind="birth"
         testId="intake-birth-date"
       />
-      <IntakeTextField label="Место рождения" value={p.birth_place} onChange={(v) => set("birth_place", v)} readOnly={readOnly} />
+      <IntakeTextField label="Место рождения" value={p.birth_place} onChange={(v) => set("birth_place", v)} readOnly={readOnly} testId="intake-birth-place" />
+      {showPersonnelNumber ? (
+        <IntakeTextField
+          label="Табельный номер"
+          value={p.personnel_number}
+          onChange={(v) => set("personnel_number", v)}
+          readOnly={!personnelNumberEditable}
+          testId="intake-personnel-number"
+        />
+      ) : null}
+      <IntakeTextField
+        label="Алфавит"
+        value={alphabet}
+        onChange={() => undefined}
+        readOnly
+        testId="intake-alphabet"
+      />
       <IntakeTextField label="Пол" value={p.gender} onChange={(v) => set("gender", v)} readOnly={readOnly} />
       <IntakeDictionaryCombobox
         label="Гражданство"
@@ -186,23 +202,6 @@ function StepContacts({
       />
     </div>
   );
-}
-
-export function reconcileIntakeDraftPayload(payload: IntakeDraftPayload): IntakeDraftPayload {
-  const military = {
-    ...emptyIntakeDraftPayload().military,
-    ...payload.military,
-    specialty_name: payload.military?.specialty_name ?? "",
-  };
-  return {
-    ...payload,
-    education: (payload.education ?? []).map((item) => normalizeIntakeEducationEntry(item)),
-    training: (payload.training ?? []).map((item) =>
-      reconcileTrainingEntryHours(normalizeIntakeTrainingEntry(item)),
-    ),
-    additional: normalizeIntakeAdditionalPayload(payload.additional),
-    military: reconcileIntakeMilitaryDraftOnLoad(military),
-  };
 }
 
 function StepMilitary({
@@ -449,6 +448,11 @@ export default function IntakeDraftFormEditor({
               <ul className="list-disc space-y-1 pl-5">
                 <li>ФИО: {formatIntakeFullName(payload.personal) || "—"}</li>
                 <li>Дата рождения: {formatIntakeBirthDateForDisplay(payload.personal.birth_date) || "—"}</li>
+                <li>Место рождения: {payload.personal.birth_place || "—"}</li>
+                <li>Алфавит: {deriveIntakeSurnameAlphabet(payload.personal.last_name) || "—"}</li>
+                {shouldShowIntakePersonnelNumberField(mode, payload.personal.personnel_number) ? (
+                  <li>Табельный номер: {payload.personal.personnel_number || "—"}</li>
+                ) : null}
                 <li>Телефон: {payload.contacts.mobile_phone || "—"}</li>
                 <li>Email: {payload.contacts.email || "—"}</li>
                 <li>

@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useParams } from "next/navigation";
 
-import IntakeDraftFormEditor, { reconcileIntakeDraftPayload } from "../_components/IntakeDraftFormEditor";
+import IntakeDraftFormEditor from "../_components/IntakeDraftFormEditor";
+import { reconcileIntakeDraftPayload } from "../_lib/intakeDraftReconcile";
 import {
   INTAKE_STEPS,
   autosaveIntakeDraft,
