@@ -485,6 +485,114 @@ export async function transferIntakeToPpr(applicationId: number): Promise<{
   return body as { application_id: number; transfer: IntakeTransferAudit; idempotent_replay: boolean };
 }
 
+export type IntakeReconciliationDecision = {
+  decision_id: number;
+  application_id: number;
+  person_id: number;
+  section_code: string;
+  proposal_index: number;
+  action: string;
+  reason_code: string;
+  apply_status: string;
+  target_canonical_record_id: number | null;
+  expected_row_version: string | null;
+  failure_evidence: Record<string, unknown> | null;
+  row_version: number;
+};
+
+export type IntakeReconciliationDecisionList = {
+  application_id: number;
+  section_code: string | null;
+  items: IntakeReconciliationDecision[];
+  total: number;
+};
+
+export type ApplyEducationReconciliationDecisionResponse = {
+  application_id: number;
+  decision_id: number;
+  section_code: string;
+  action: string;
+  apply_status: string;
+  reason_code: string;
+  result_status: string;
+  idempotent_replay: boolean;
+  redecide_required: boolean;
+  ppr_command_id: string | null;
+  section_record_id: number | null;
+  failure_evidence: Record<string, unknown> | null;
+  expected_row_version: string | null;
+  target_canonical_record_id: number | null;
+};
+
+export function buildEducationReconciliationSectionPayload(
+  educationPayload: Record<string, unknown> | unknown[],
+): { records: unknown[] } {
+  if (Array.isArray(educationPayload)) {
+    return { records: educationPayload };
+  }
+  if (Array.isArray((educationPayload as { records?: unknown[] }).records)) {
+    return { records: (educationPayload as { records: unknown[] }).records };
+  }
+  if (Array.isArray((educationPayload as { education?: unknown[] }).education)) {
+    return { records: (educationPayload as { education: unknown[] }).education };
+  }
+  if (Object.keys(educationPayload).length > 0) {
+    return { records: [educationPayload] };
+  }
+  return { records: [] };
+}
+
+export async function listIntakeReconciliationDecisions(
+  applicationId: number,
+  sectionCode = "education",
+): Promise<IntakeReconciliationDecisionList> {
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/reconciliation/decisions?section_code=${encodeURIComponent(sectionCode)}`;
+  const res = await fetch(resolveApiUrl(path), { method: "GET", headers: authHeaders(), cache: "no-store" });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "GET", url: path });
+  return body as IntakeReconciliationDecisionList;
+}
+
+export async function applyEducationReconciliationDecision(
+  applicationId: number,
+  decisionId: number,
+  sectionPayload: Record<string, unknown>,
+): Promise<ApplyEducationReconciliationDecisionResponse> {
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/reconciliation/decisions/${decisionId}/apply`;
+  const res = await fetch(resolveApiUrl(path), {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify({ section_payload: sectionPayload }),
+    cache: "no-store",
+  });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "POST", url: path });
+  return body as ApplyEducationReconciliationDecisionResponse;
+}
+
+export function getPersonnelApplicationsApiErrorCode(error: unknown): string | null {
+  const candidate = error as {
+    status?: number;
+    code?: string;
+    details?: { code?: string; detail?: { code?: string } | string };
+  };
+  if (typeof candidate?.details?.detail === "object" && candidate.details.detail?.code) {
+    return String(candidate.details.detail.code);
+  }
+  if (typeof candidate?.details?.code === "string") {
+    return candidate.details.code;
+  }
+  if (typeof candidate?.code === "string") {
+    return candidate.code;
+  }
+  return null;
+}
+
+export function isProposalDigestMismatchError(error: unknown): boolean {
+  const candidate = error as { status?: number };
+  return candidate.status === 422 && getPersonnelApplicationsApiErrorCode(error) === "PROPOSAL_DIGEST_MISMATCH";
+}
+
 export type DirectorResolutionAuditItem = {
   audit_id: number;
   application_id: number;

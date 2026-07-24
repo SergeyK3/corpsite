@@ -155,6 +155,31 @@ class SqlAlchemyReconciliationDecisionRepository:
         ).mappings().first()
         return _from_row(row) if row is not None else None
 
+    def list_for_application(
+        self,
+        application_id: int,
+        *,
+        section_code: str | None = None,
+    ) -> tuple[ReconcileDecisionRecord, ...]:
+        """List durable decisions for an application (optional section filter)."""
+        stmt = (
+            select(*_COLUMNS)
+            .where(
+                PersonnelIntakeReconciliationDecision.application_id == int(application_id)
+            )
+            .order_by(
+                PersonnelIntakeReconciliationDecision.section_code,
+                PersonnelIntakeReconciliationDecision.proposal_index,
+                PersonnelIntakeReconciliationDecision.decision_id,
+            )
+        )
+        if section_code is not None:
+            stmt = stmt.where(
+                PersonnelIntakeReconciliationDecision.section_code == str(section_code)
+            )
+        rows = self._conn.execute(stmt).mappings().all()
+        return tuple(_from_row(row) for row in rows)
+
     def _assert_application_belongs_to_person(
         self, *, application_id: int, person_id: int
     ) -> None:

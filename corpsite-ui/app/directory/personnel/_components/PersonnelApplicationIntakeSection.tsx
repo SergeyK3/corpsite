@@ -12,6 +12,7 @@ import {
   readPersistedIntakeLinkPath,
   resolveIntakeDraftStatusDisplayLabel,
   resolveIntakeOnBehalfEditAccess,
+  canOpenApplicantIntakeReview,
 } from "../_lib/personnelApplicantWorkflow";
 import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
 import {
@@ -70,11 +71,12 @@ export default function PersonnelApplicationIntakeSection({
   const canIssue = !linkStatus || linkStatus === "revoked" || linkStatus === "expired";
   const canReissue = linkStatus === "issued" || linkStatus === "opened";
   const canRevoke = linkStatus === "issued" || linkStatus === "opened";
-  const canOpenReview =
-    draftStatus === "submitted" ||
-    linkStatus === "submitted" ||
-    detail.status === "under_review" ||
-    detail.status === "review_completed";
+  const canOpenReview = canOpenApplicantIntakeReview({
+    status: detail.status,
+    intake_draft_status: draftStatus,
+    intake_link_status: linkStatus,
+    intake_submitted_at: detail.intake_submitted_at,
+  });
   const onBehalfAccess = resolveIntakeOnBehalfEditAccess(detail, reviewSections);
   const activeLinkPath = issuedLinkPath;
 
@@ -197,7 +199,7 @@ export default function PersonnelApplicationIntakeSection({
             className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-800 dark:border-emerald-900 dark:text-emerald-300"
             data-testid="intake-open-review-button"
           >
-            Открыть анкету
+            Открыть анкету для проверки
           </button>
         ) : null}
         {onBehalfAccess.visible ? (

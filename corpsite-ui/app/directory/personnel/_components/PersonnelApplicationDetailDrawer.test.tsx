@@ -24,6 +24,7 @@ const getPersonnelApplicationMock = vi.fn();
 const getApplicationTimelineMock = vi.fn();
 const getLifecycleAuditMock = vi.fn();
 const getIntakeReviewStateMock = vi.fn();
+const listIntakeReconciliationDecisionsMock = vi.fn();
 
 vi.mock("../_lib/personnelApplicationsApi.client", async () => {
   const actual = await vi.importActual<typeof import("../_lib/personnelApplicationsApi.client")>(
@@ -35,12 +36,20 @@ vi.mock("../_lib/personnelApplicationsApi.client", async () => {
     getApplicationTimeline: (...args: unknown[]) => getApplicationTimelineMock(...args),
     getLifecycleAudit: (...args: unknown[]) => getLifecycleAuditMock(...args),
     getIntakeReviewState: (...args: unknown[]) => getIntakeReviewStateMock(...args),
+    listIntakeReconciliationDecisions: (...args: unknown[]) =>
+      listIntakeReconciliationDecisionsMock(...args),
   };
 });
 
 beforeEach(() => {
   getApplicationTimelineMock.mockResolvedValue({ application_id: 10, items: [] });
   getLifecycleAuditMock.mockResolvedValue({ items: [] });
+  listIntakeReconciliationDecisionsMock.mockResolvedValue({
+    application_id: 178,
+    section_code: "education",
+    items: [],
+    total: 0,
+  });
 });
 
 afterEach(() => {
@@ -347,5 +356,84 @@ describe("PersonnelApplicationDetailDrawer", () => {
       "/directory/personnel/persons/534/card?return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fapplication_id%3D178",
     );
     expect(screen.queryByTestId("personnel-application-open-intake-review")).not.toBeInTheDocument();
+  });
+
+  it("opens intake review drawer with education reconciliation from revision_requested", async () => {
+    getPersonnelApplicationMock.mockResolvedValue({
+      application_id: 178,
+      person_id: 534,
+      full_name: "Тестов Тест",
+      iin: "880315350789",
+      status: "revision_requested",
+      application_received_at: "2026-07-17",
+      application_source: "paper",
+      vacancy_check_status: "confirmed_visually",
+      intake_draft_status: "editable",
+      intake_link_status: "opened",
+      intake_submitted_at: "2026-07-23T05:28:59Z",
+      registered_at: "2026-07-17T10:00:00Z",
+      registered_by_user_id: 7,
+      registered_by_name: "HR User",
+      created_at: "2026-07-17T10:00:00Z",
+      updated_at: "2026-07-17T10:00:00Z",
+    });
+    getIntakeReviewStateMock.mockResolvedValue({
+      application_id: 178,
+      draft: {
+        application_id: 178,
+        draft_id: 1,
+        payload: {},
+        status: "editable",
+        read_only: false,
+      },
+      sections: [
+        {
+          section_code: "education",
+          section_label: "Образование",
+          status: "accepted",
+          rework_comment: null,
+          reviewed_by_user_id: 1,
+          reviewed_at: "2026-07-17T10:00:00Z",
+          is_empty: false,
+          payload: [{ institution: "КазНУ" }],
+        },
+      ],
+      can_transfer: false,
+      transfer_blocked_reason: "Transfer not ready.",
+      transfer: null,
+    });
+    listIntakeReconciliationDecisionsMock.mockResolvedValue({
+      application_id: 178,
+      section_code: "education",
+      items: [],
+      total: 0,
+    });
+
+    render(
+      <PersonnelApplicationDetailDrawer
+        applicationId={178}
+        open
+        journalReturnHref="/directory/personnel/applicants?application_id=178"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const reviewButton = await screen.findByTestId("personnel-application-open-intake-review");
+    expect(reviewButton).toHaveTextContent("Открыть анкету для проверки");
+    expect(screen.getByTestId("intake-on-behalf-edit-button")).toHaveTextContent(
+      "Редактировать анкету от имени претендента",
+    );
+
+    fireEvent.click(reviewButton);
+
+    await waitFor(() => {
+      expect(getIntakeReviewStateMock).toHaveBeenCalledWith(178);
+      expect(listIntakeReconciliationDecisionsMock).toHaveBeenCalledWith(178, "education");
+      expect(screen.getByTestId("intake-review-drawer")).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("intake-review-section-education")).toBeInTheDocument();
+    expect(await screen.findByTestId("education-recon-decisions-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("education-recon-decisions-empty")).toHaveTextContent("Решений сверки нет");
+    expect(screen.queryByRole("button", { name: /применить решение/i })).not.toBeInTheDocument();
   });
 });

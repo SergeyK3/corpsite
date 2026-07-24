@@ -87,6 +87,24 @@ describe("personnelApplicantWorkflow", () => {
     ).toBe(false);
   });
 
+  it("allows intake review during revision_requested after intake was submitted", () => {
+    expect(
+      canOpenApplicantIntakeReview({
+        status: "revision_requested",
+        intake_draft_status: "editable",
+        intake_link_status: "opened",
+        intake_submitted_at: "2026-07-23T05:28:59Z",
+      }),
+    ).toBe(true);
+    expect(
+      canOpenApplicantIntakeReview({
+        status: "revision_requested",
+        intake_draft_status: "editable",
+        intake_link_status: "opened",
+      }),
+    ).toBe(false);
+  });
+
   it("gates hire order until intake submitted", () => {
     expect(canCreateHireOrderFromApplicantCard("intake_pending")).toBe(false);
     expect(canCreateHireOrderFromApplicantCard("intake_submitted")).toBe(true);

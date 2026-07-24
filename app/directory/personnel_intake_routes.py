@@ -12,6 +12,8 @@ from app.directory.common import as_http500
 from app.directory.personnel_intake_schemas import (
     ApplyEducationReconciliationDecisionIn,
     ApplyEducationReconciliationDecisionOut,
+    IntakeReconciliationDecisionListOut,
+    IntakeReconciliationDecisionOut,
     IntakeAutosaveIn,
     IntakeDraftOut,
     IntakeLinkAccessOut,
@@ -75,6 +77,9 @@ from app.personnel_intake.domain.errors import (
 from app.personnel_intake.domain.reconciliation.errors import (
     ReconciliationNotFoundError,
     ReconciliationValidationError,
+)
+from app.personnel_intake.infrastructure.reconciliation_repository import (
+    SqlAlchemyReconciliationDecisionRepository,
 )
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 
@@ -551,6 +556,51 @@ def post_intake_section_skip(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelIntakeReviewError as exc:
         raise _review_error_http422(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get(
+    "/{application_id}/intake/reconciliation/decisions",
+    response_model=IntakeReconciliationDecisionListOut,
+)
+def get_intake_reconciliation_decisions(
+    application_id: int = Path(..., ge=1),
+    section_code: str | None = Query(None, min_length=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakeReconciliationDecisionListOut:
+    """List saved reconciliation decisions for an application (education UI read path)."""
+    require_personnel_admin_or_403(user)
+    try:
+        with engine.connect() as conn:
+            items = SqlAlchemyReconciliationDecisionRepository(conn).list_for_application(
+                application_id,
+                section_code=section_code,
+            )
+        return IntakeReconciliationDecisionListOut(
+            application_id=application_id,
+            section_code=section_code,
+            items=[
+                IntakeReconciliationDecisionOut(
+                    decision_id=int(item.decision_id),
+                    application_id=int(item.application_id),
+                    person_id=int(item.person_id),
+                    section_code=item.section_code,
+                    proposal_index=int(item.proposal_index),
+                    action=item.action,
+                    reason_code=item.reason_code,
+                    apply_status=item.apply_status,
+                    target_canonical_record_id=item.target_canonical_record_id,
+                    expected_row_version=item.expected_row_version,
+                    failure_evidence=item.failure_evidence,
+                    row_version=int(item.row_version),
+                )
+                for item in items
+            ],
+            total=len(items),
+        )
     except HTTPException:
         raise
     except Exception as exc:

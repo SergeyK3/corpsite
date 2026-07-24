@@ -11,6 +11,7 @@ from app.personnel_applications.domain.errors import PersonnelApplicationNotFoun
 from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_INTAKE_SUBMITTED,
     APPLICATION_STATUS_REVIEW_COMPLETED,
+    APPLICATION_STATUS_REVISION_REQUESTED,
     APPLICATION_STATUS_UNDER_REVIEW,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
@@ -78,6 +79,7 @@ def _require_submitted_draft(conn: Connection, application_id: int, *, allow_com
     if app.status not in {
         APPLICATION_STATUS_INTAKE_SUBMITTED,
         APPLICATION_STATUS_UNDER_REVIEW,
+        APPLICATION_STATUS_REVISION_REQUESTED,
     }:
         raise PersonnelIntakeReviewError(
             f"Review is only available after intake submission (status={app.status}).",
@@ -87,6 +89,16 @@ def _require_submitted_draft(conn: Connection, application_id: int, *, allow_com
     draft = intake_repo.get_draft_by_application_id(application_id)
     if draft is None:
         raise PersonnelIntakeNotFoundError("Submitted intake draft not found.")
+    if app.status == APPLICATION_STATUS_REVISION_REQUESTED:
+        summary = intake_repo.load_intake_summary(application_id)
+        has_submitted_intake = draft.submitted_at is not None or (
+            summary is not None and summary.submitted_at is not None
+        )
+        if not has_submitted_intake:
+            raise PersonnelIntakeReviewError(
+                f"Review is only available after intake submission (status={app.status}).",
+                code="REVIEW_NOT_AVAILABLE",
+            )
     if draft.status == INTAKE_DRAFT_STATUS_SUBMITTED:
         return app, draft
     if draft.status == INTAKE_DRAFT_STATUS_EDITABLE:

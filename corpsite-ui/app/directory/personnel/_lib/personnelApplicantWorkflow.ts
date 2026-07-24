@@ -125,6 +125,7 @@ export type ApplicantIntakeReviewAccessInput = {
   status: string;
   intake_draft_status?: string | null;
   intake_link_status?: string | null;
+  intake_submitted_at?: string | null;
 };
 
 /** Intake submitted to HR, but PPR transfer not completed yet. */
@@ -135,6 +136,12 @@ export function canOpenApplicantIntakeReview(input: ApplicantIntakeReviewAccessI
   const status = String(input.status || "").trim();
   const draftStatus = String(input.intake_draft_status || "").trim();
   const linkStatus = String(input.intake_link_status || "").trim();
+  const hasSubmittedIntake = Boolean(String(input.intake_submitted_at || "").trim());
+
+  if (status === "revision_requested") {
+    return hasSubmittedIntake || draftStatus === "submitted" || linkStatus === "submitted";
+  }
+
   return (
     draftStatus === "submitted" ||
     linkStatus === "submitted" ||

@@ -185,6 +185,28 @@ class ApplyEducationReconciliationDecisionOut(BaseModel):
     target_canonical_record_id: int | None = None
 
 
+class IntakeReconciliationDecisionOut(BaseModel):
+    decision_id: int
+    application_id: int
+    person_id: int
+    section_code: str
+    proposal_index: int
+    action: str
+    reason_code: str
+    apply_status: str
+    target_canonical_record_id: int | None = None
+    expected_row_version: str | None = None
+    failure_evidence: dict[str, Any] | None = None
+    row_version: int
+
+
+class IntakeReconciliationDecisionListOut(BaseModel):
+    application_id: int
+    section_code: str | None = None
+    items: list[IntakeReconciliationDecisionOut]
+    total: int
+
+
 class IntakeOnBehalfEditSessionOut(BaseModel):
     application_id: int
     draft: IntakeDraftOut

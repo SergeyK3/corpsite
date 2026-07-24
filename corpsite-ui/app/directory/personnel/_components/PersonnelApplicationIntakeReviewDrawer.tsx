@@ -13,6 +13,7 @@ import {
   type IntakeReviewSection,
   type IntakeReviewState,
 } from "../_lib/personnelApplicationsApi.client";
+import EducationReconciliationDecisionsPanel from "./EducationReconciliationDecisionsPanel";
 
 type Props = {
   applicationId: number | null;
@@ -227,6 +228,13 @@ export default function PersonnelApplicationIntakeReviewDrawer({
                     ) : null}
                   </div>
                   <div className="mt-3">{renderPayload(section.payload as Record<string, unknown> | unknown[])}</div>
+                  {section.section_code === "education" && applicationId != null ? (
+                    <EducationReconciliationDecisionsPanel
+                      applicationId={applicationId}
+                      educationPayload={section.payload as Record<string, unknown> | unknown[]}
+                      onReviewDataChanged={reload}
+                    />
+                  ) : null}
                   {reworkSection === section.section_code ? (
                     <div className="mt-3 space-y-2">
                       <textarea

@@ -12,6 +12,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.main import app
 from app.personnel_applications.domain.status import (
+    APPLICATION_STATUS_REVISION_REQUESTED,
     APPLICATION_STATUS_REVIEW_COMPLETED,
     APPLICATION_STATUS_UNDER_REVIEW,
     VACANCY_CHECK_CONFIRMED_VISUALLY,
@@ -295,6 +296,80 @@ def test_review_not_available_before_submit(client, intake_review_schema_ready, 
     reg = _register_application(client, privileged_headers)
     person_ids.append(reg["person_id"])
     app_id = reg["application_id"]
+
+    res = client.get(
+        f"/directory/personnel-applications/{app_id}/intake/review",
+        headers=privileged_headers,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "REVIEW_NOT_AVAILABLE"
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
+def test_review_available_for_revision_requested_after_intake_submitted(
+    client, intake_review_schema_ready, privileged_headers
+) -> None:
+    person_ids: list[int] = []
+    reg, _ = _submit_intake(client, privileged_headers)
+    person_ids.append(reg["person_id"])
+    app_id = reg["application_id"]
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.personnel_applications
+                SET status = :status, updated_at = now()
+                WHERE application_id = :application_id
+                """
+            ),
+            {
+                "status": APPLICATION_STATUS_REVISION_REQUESTED,
+                "application_id": app_id,
+            },
+        )
+
+    res = client.get(
+        f"/directory/personnel-applications/{app_id}/intake/review",
+        headers=privileged_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert any(section["section_code"] == "education" for section in res.json()["sections"])
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
+def test_review_not_available_for_revision_requested_without_intake_submitted(
+    client, intake_review_schema_ready, privileged_headers
+) -> None:
+    person_ids: list[int] = []
+    reg = _register_application(client, privileged_headers)
+    person_ids.append(reg["person_id"])
+    app_id = reg["application_id"]
+
+    issue = client.post(
+        f"/directory/personnel-applications/{app_id}/intake-link",
+        headers=privileged_headers,
+    )
+    assert issue.status_code == 200, issue.text
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.personnel_applications
+                SET status = :status, updated_at = now()
+                WHERE application_id = :application_id
+                """
+            ),
+            {
+                "status": APPLICATION_STATUS_REVISION_REQUESTED,
+                "application_id": app_id,
+            },
+        )
 
     res = client.get(
         f"/directory/personnel-applications/{app_id}/intake/review",

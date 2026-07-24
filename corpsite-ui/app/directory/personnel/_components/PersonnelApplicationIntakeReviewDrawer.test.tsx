@@ -93,6 +93,12 @@ const reviewState: api.IntakeReviewState = {
 describe("PersonnelApplicationIntakeReviewDrawer", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, "listIntakeReconciliationDecisions").mockResolvedValue({
+      application_id: 42,
+      section_code: "education",
+      items: [],
+      total: 0,
+    });
   });
 
   it("loads review sections and shows transfer button", async () => {
