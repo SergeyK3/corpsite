@@ -157,6 +157,7 @@ def _prior_updated_at(employment_id: int) -> datetime:
 def test_openapi_has_employment_verification_routes(client: TestClient) -> None:
     paths = client.get("/openapi.json").json().get("paths", {})
     assert "/api/personnel-verification/employment/pending-tasks" in paths
+    assert "/api/personnel-verification/employment/tasks/{task_id}/review" in paths
     assert "/api/personnel-verification/employment/revisions/{revision_id}/state" in paths
     assert "/api/personnel-verification/employment/tasks/{task_id}/confirm" in paths
     assert "/api/personnel-verification/employment/tasks/{task_id}/reject" in paths

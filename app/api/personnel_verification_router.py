@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from app.api.personnel_verification_employment_api import (
     confirm_employment_revision,
     get_employment_revision_state,
+    get_employment_task_review,
     list_pending_employment_tasks,
     reject_employment_revision,
 )
@@ -16,6 +17,7 @@ from app.api.personnel_verification_schemas import (
     DerivedVerificationStateResponse,
     EmploymentPendingTaskListResponse,
     EmploymentRevisionDecisionResponse,
+    EmploymentTaskReviewResponse,
     EmploymentVerificationDecisionRequest,
 )
 from app.auth import get_current_user
@@ -69,6 +71,24 @@ def list_employment_pending_tasks(
     return _run(
         lambda: list_pending_employment_tasks(person_id=person_id, limit=limit)
     )
+
+
+@router.get(
+    "/employment/tasks/{task_id}/review",
+    response_model=EmploymentTaskReviewResponse,
+)
+def get_employment_pending_task_review(
+    task_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> EmploymentTaskReviewResponse:
+    """HR-facing prior/revision comparison payload for a verification task."""
+    require_hr_import_admin_or_403(user)
+
+    def _handler():
+        _assert_task_person_visible(user, task_id)
+        return get_employment_task_review(task_id=task_id)
+
+    return _run(_handler)
 
 
 @router.get(

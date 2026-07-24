@@ -40,6 +40,11 @@ const BASE_ITEMS = [
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
   },
+  {
+    href: "/directory/personnel/employment-verification",
+    title: "Проверка биографии",
+    prefixes: ["/directory/personnel/employment-verification"],
+  },
 ] as const;
 
 type ImportNavItem =

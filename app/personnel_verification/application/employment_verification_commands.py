@@ -15,6 +15,7 @@ from app.db.engine import engine as default_engine
 from app.db.models.personnel_verification import (
     CONTROL_POINT_EMPLOYMENT_EPISODE,
     OBJECT_TYPE_PERSON_EXTERNAL_EMPLOYMENT,
+    TASK_STATUS_PENDING,
 )
 from app.personnel_verification.application.employment_revision_service import (
     EmploymentRevisionService,
@@ -25,6 +26,7 @@ from app.personnel_verification.application.verification_state_service import (
 )
 from app.personnel_verification.domain.errors import (
     ControlledRecordNotFoundError,
+    RevisionConflictError,
     TaskValidationError,
 )
 from app.personnel_verification.domain.models import (
@@ -54,6 +56,71 @@ _EMPLOYMENT_REVISION_SQL = text(
 class EmploymentPendingTaskView:
     task: VerificationTaskSnapshot
     prior_updated_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class EmploymentRecordSnapshot:
+    employment_id: int
+    record_kind: str
+    employer_name: str | None
+    department_name: str | None
+    position_title: str | None
+    employment_type: str | None
+    started_at: Any
+    ended_at: Any
+    termination_reason: str | None
+    document_reference: str | None
+    notes: str | None
+    lifecycle_status: str
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class EmploymentTaskReview:
+    task: VerificationTaskSnapshot
+    person_id: int
+    person_full_name: str
+    prior: EmploymentRecordSnapshot
+    revision: EmploymentRecordSnapshot
+    verification_state: str
+
+
+_PERSON_NAME_SQL = text(
+    """
+    SELECT full_name
+    FROM public.persons
+    WHERE person_id = :person_id
+    """
+)
+
+_EMPLOYMENT_SNAPSHOT_SQL = text(
+    """
+    SELECT employment_id, person_id, record_kind, employer_name, department_name,
+           position_title, employment_type, started_at, ended_at,
+           termination_reason, document_reference, notes,
+           lifecycle_status, supersedes_employment_id, updated_at
+    FROM public.person_external_employment
+    WHERE employment_id = :employment_id
+    """
+)
+
+
+def _map_employment_snapshot(row: Any) -> EmploymentRecordSnapshot:
+    return EmploymentRecordSnapshot(
+        employment_id=int(row["employment_id"]),
+        record_kind=str(row["record_kind"]),
+        employer_name=row["employer_name"],
+        department_name=row["department_name"],
+        position_title=row["position_title"],
+        employment_type=row["employment_type"],
+        started_at=row["started_at"],
+        ended_at=row["ended_at"],
+        termination_reason=row["termination_reason"],
+        document_reference=row["document_reference"],
+        notes=row["notes"],
+        lifecycle_status=str(row["lifecycle_status"]),
+        updated_at=row["updated_at"],
+    )
 
 
 class EmploymentVerificationCommandService:
@@ -156,6 +223,71 @@ class EmploymentVerificationCommandService:
                     f"Task {task_id} is not an employment_episode verification task"
                 )
             return task
+
+    def get_task_review(self, *, task_id: int) -> EmploymentTaskReview:
+        """Load HR-facing prior/revision snapshots for a pending employment task only."""
+        with self._engine.connect() as conn:
+            repo = PersonnelVerificationRepository(conn)
+            task = repo.get_task(task_id)
+            if task.control_point != CONTROL_POINT_EMPLOYMENT_EPISODE:
+                raise TaskValidationError(
+                    f"Task {task_id} is not an employment_episode verification task"
+                )
+            if task.object_type != OBJECT_TYPE_PERSON_EXTERNAL_EMPLOYMENT:
+                raise TaskValidationError(
+                    f"Task {task_id} object_type must be person_external_employment"
+                )
+            if task.status != TASK_STATUS_PENDING:
+                raise RevisionConflictError(
+                    f"Task {task_id} is not pending (status={task.status!r})"
+                )
+
+            prior_row = conn.execute(
+                _EMPLOYMENT_SNAPSHOT_SQL, {"employment_id": task.object_id}
+            ).mappings().first()
+            revision_row = conn.execute(
+                _EMPLOYMENT_SNAPSHOT_SQL, {"employment_id": task.object_version_id}
+            ).mappings().first()
+            if prior_row is None:
+                raise ControlledRecordNotFoundError(
+                    f"prior employment_id={task.object_id} not found"
+                )
+            if revision_row is None:
+                raise ControlledRecordNotFoundError(
+                    f"revision employment_id={task.object_version_id} not found"
+                )
+            if int(prior_row["person_id"]) != task.person_id:
+                raise TaskValidationError("prior person_id does not match task")
+            if int(revision_row["person_id"]) != task.person_id:
+                raise TaskValidationError("revision person_id does not match task")
+            supersedes = revision_row["supersedes_employment_id"]
+            if supersedes is None or int(supersedes) != task.object_id:
+                raise TaskValidationError(
+                    "revision is not linked to task prior employment_id"
+                )
+
+            full_name = conn.execute(
+                _PERSON_NAME_SQL, {"person_id": task.person_id}
+            ).scalar_one_or_none()
+            if full_name is None or not str(full_name).strip():
+                raise ControlledRecordNotFoundError(
+                    f"person_id={task.person_id} not found"
+                )
+
+            state = VerificationStateService(repo).resolve_for_version(
+                control_point=CONTROL_POINT_EMPLOYMENT_EPISODE,
+                object_type=OBJECT_TYPE_PERSON_EXTERNAL_EMPLOYMENT,
+                object_version_id=task.object_version_id,
+                policy_id=task.policy_id,
+            )
+            return EmploymentTaskReview(
+                task=task,
+                person_id=task.person_id,
+                person_full_name=str(full_name).strip(),
+                prior=_map_employment_snapshot(prior_row),
+                revision=_map_employment_snapshot(revision_row),
+                verification_state=state.state,
+            )
 
     @staticmethod
     def _prior_updated_at(conn: Connection, prior_employment_id: int) -> datetime | None:

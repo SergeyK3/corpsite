@@ -6,7 +6,9 @@ from typing import Any
 from app.api.personnel_verification_schemas import (
     DerivedVerificationStateResponse,
     EmploymentPendingTaskListResponse,
+    EmploymentRecordSnapshotResponse,
     EmploymentRevisionDecisionResponse,
+    EmploymentTaskReviewResponse,
     EmploymentVerificationDecisionRequest,
     VerificationAttestationResponse,
     VerificationTaskResponse,
@@ -16,6 +18,8 @@ from app.personnel_verification.application.employment_revision_service import (
 )
 from app.personnel_verification.application.employment_verification_commands import (
     EmploymentPendingTaskView,
+    EmploymentRecordSnapshot,
+    EmploymentTaskReview,
     EmploymentVerificationCommandService,
 )
 from app.personnel_verification.domain.models import (
@@ -106,6 +110,24 @@ def _verifier_user_id(user_ctx: dict[str, Any]) -> int:
     return int(uid)
 
 
+def _snapshot_response(snapshot: EmploymentRecordSnapshot) -> EmploymentRecordSnapshotResponse:
+    return EmploymentRecordSnapshotResponse(
+        employment_id=snapshot.employment_id,
+        record_kind=snapshot.record_kind,
+        employer_name=snapshot.employer_name,
+        department_name=snapshot.department_name,
+        position_title=snapshot.position_title,
+        employment_type=snapshot.employment_type,
+        started_at=snapshot.started_at,
+        ended_at=snapshot.ended_at,
+        termination_reason=snapshot.termination_reason,
+        document_reference=snapshot.document_reference,
+        notes=snapshot.notes,
+        lifecycle_status=snapshot.lifecycle_status,
+        updated_at=snapshot.updated_at,
+    )
+
+
 def list_pending_employment_tasks(
     *,
     person_id: int | None = None,
@@ -115,6 +137,19 @@ def list_pending_employment_tasks(
     items = service.list_pending_tasks(person_id=person_id, limit=limit)
     mapped = [_pending_item(item) for item in items]
     return EmploymentPendingTaskListResponse(items=mapped, count=len(mapped))
+
+
+def get_employment_task_review(*, task_id: int) -> EmploymentTaskReviewResponse:
+    service = EmploymentVerificationCommandService()
+    review: EmploymentTaskReview = service.get_task_review(task_id=task_id)
+    return EmploymentTaskReviewResponse(
+        task=_task_response(review.task, prior_updated_at=review.prior.updated_at),
+        person_id=review.person_id,
+        person_full_name=review.person_full_name,
+        prior=_snapshot_response(review.prior),
+        revision=_snapshot_response(review.revision),
+        verification_state=review.verification_state,
+    )
 
 
 def get_employment_revision_state(

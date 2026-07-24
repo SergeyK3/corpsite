@@ -1,7 +1,7 @@
 """HTTP DTOs for personnel verification employment API (WP-VER-005A)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -83,3 +83,36 @@ class EmploymentRevisionDecisionResponse(BaseModel):
     revision_employment_id: int
     prior_lifecycle_status: str
     revision_lifecycle_status: str
+
+
+class EmploymentRecordSnapshotResponse(BaseModel):
+    """Human-facing employment fields for HR comparison (WP-VER-005B)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    employment_id: int
+    record_kind: str
+    employer_name: str | None = None
+    department_name: str | None = None
+    position_title: str | None = None
+    employment_type: str | None = None
+    started_at: date | None = None
+    ended_at: date | None = None
+    termination_reason: str | None = None
+    document_reference: str | None = None
+    notes: str | None = None
+    lifecycle_status: str
+    updated_at: datetime | None = None
+
+
+class EmploymentTaskReviewResponse(BaseModel):
+    """Task + prior/revision snapshots for HR queue detail (WP-VER-005B)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task: VerificationTaskResponse
+    person_id: int
+    person_full_name: str
+    prior: EmploymentRecordSnapshotResponse
+    revision: EmploymentRecordSnapshotResponse
+    verification_state: str
