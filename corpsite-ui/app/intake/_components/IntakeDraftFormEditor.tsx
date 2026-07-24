@@ -6,7 +6,7 @@ import IntakeAdditionalStep from "./IntakeAdditionalStep";
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import IntakeEducationTable from "./IntakeEducationTable";
 import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
-import { IntakeDateField, IntakeTextField } from "./IntakeFormFields";
+import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
 import IntakeMilitaryCombobox from "./IntakeMilitaryCombobox";
 import IntakePhotoUpload from "./IntakePhotoUpload";
 import IntakeRelativesTable from "./IntakeRelativesTable";
@@ -14,8 +14,10 @@ import IntakeTrainingTable from "./IntakeTrainingTable";
 import {
   INTAKE_CITIZENSHIP_CATALOG,
   INTAKE_CITIZENSHIP_POPULAR,
+  INTAKE_GENDER_OPTIONS,
   INTAKE_NATIONALITY_CATALOG,
   INTAKE_NATIONALITY_POPULAR,
+  normalizeIntakeGenderValue,
 } from "../_lib/intakePersonalDictionary";
 import {
   applyIntakeMilitaryCompositionChange,
@@ -119,7 +121,14 @@ function StepPersonal({
         readOnly
         testId="intake-alphabet"
       />
-      <IntakeTextField label="Пол" value={p.gender} onChange={(v) => set("gender", v)} readOnly={readOnly} />
+      <IntakeSelectField
+        label="Пол"
+        value={normalizeIntakeGenderValue(p.gender)}
+        onChange={(v) => set("gender", v)}
+        readOnly={readOnly}
+        options={INTAKE_GENDER_OPTIONS}
+        testId="intake-gender"
+      />
       <IntakeDictionaryCombobox
         label="Гражданство"
         value={p.citizenship}

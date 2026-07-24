@@ -94,4 +94,42 @@ describe("Intake personal dictionary fields across modes", () => {
     expect(onBehalfOptions).toContain("Россия");
     expect(screen.getByTestId("intake-citizenship")).toHaveValue("Республика Казахстан");
   });
+
+  it("shows gender select with male and female options in public and on-behalf editors", () => {
+    const payload = emptyIntakeDraftPayload();
+    const expectedOptions = ["Выберите…", "Мужской", "Женский"];
+
+    const { unmount: unmountPublic } = render(
+      <IntakeDraftFormEditor
+        payload={payload}
+        onChange={vi.fn()}
+        stepIndex={personalStepIndex}
+        onStepIndexChange={vi.fn()}
+        mode="public"
+        compact
+      />,
+    );
+
+    const publicSelect = screen.getByTestId("intake-gender");
+    expect(within(publicSelect).getAllByRole("option").map((node) => node.textContent)).toEqual(
+      expectedOptions,
+    );
+    unmountPublic();
+
+    render(
+      <IntakeDraftFormEditor
+        payload={payload}
+        onChange={vi.fn()}
+        stepIndex={personalStepIndex}
+        onStepIndexChange={vi.fn()}
+        mode="hr-on-behalf"
+        compact
+      />,
+    );
+
+    const onBehalfSelect = screen.getByTestId("intake-gender");
+    expect(within(onBehalfSelect).getAllByRole("option").map((node) => node.textContent)).toEqual(
+      expectedOptions,
+    );
+  });
 });

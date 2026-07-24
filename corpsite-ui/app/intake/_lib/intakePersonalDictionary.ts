@@ -185,3 +185,26 @@ export function resolveIntakeDictionarySelection(
   const exact = catalog.find((entry) => entry.toLowerCase() === normalized);
   return exact ?? null;
 }
+
+export type IntakeGenderValue = "" | "Мужской" | "Женский";
+
+export const INTAKE_GENDER_OPTIONS: ReadonlyArray<{ value: IntakeGenderValue; label: string }> = [
+  { value: "", label: "Выберите…" },
+  { value: "Мужской", label: "Мужской" },
+  { value: "Женский", label: "Женский" },
+];
+
+export function normalizeIntakeGenderValue(value: string | null | undefined): IntakeGenderValue {
+  const trimmed = String(value ?? "").trim();
+  if (trimmed === "Мужской" || trimmed === "Женский") {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (lower === "мужской" || lower === "м" || lower === "male" || lower === "муж") {
+    return "Мужской";
+  }
+  if (lower === "женский" || lower === "ж" || lower === "female" || lower === "жен") {
+    return "Женский";
+  }
+  return "";
+}
