@@ -41,18 +41,24 @@ export function prepareEmploymentTenureRecords(
 
 export async function calculateEmploymentTenure(
   items: readonly IntakeEmploymentBiographyEntry[],
+  opts?: { calculationDate?: string | null },
 ): Promise<EmploymentTenureCalculation> {
   const path = "/intake/employment-tenure/calculate";
   const records = prepareEmploymentTenureRecords(items);
+  const requestBody: { records: EmploymentTenureRecordInput[]; calculation_date?: string } = { records };
+  const calculationDate = String(opts?.calculationDate ?? "").trim();
+  if (calculationDate) {
+    requestBody.calculation_date = calculationDate;
+  }
   const res = await fetch(resolveApiUrl(path), {
     method: "POST",
     headers: publicHeaders(),
-    body: JSON.stringify({ records }),
+    body: JSON.stringify(requestBody),
     cache: "no-store",
   });
-  const body = await readJsonSafe(res);
-  if (!res.ok) throw toApiError(res.status, body, { method: "POST", url: path });
-  return body as EmploymentTenureCalculation;
+  const responseBody = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, responseBody, { method: "POST", url: path });
+  return responseBody as EmploymentTenureCalculation;
 }
 
 export type { EmploymentTenureCalculation, EmploymentTenureRecordInput, EmploymentTenureRecordResult, EmploymentTenureYmd } from "./employmentTenureFormat";

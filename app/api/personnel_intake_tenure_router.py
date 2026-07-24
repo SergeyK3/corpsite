@@ -20,7 +20,10 @@ router = APIRouter(prefix="/intake/employment-tenure", tags=["personnel-intake-t
 def post_employment_tenure_calculate(body: EmploymentTenureCalculateIn) -> EmploymentTenureCalculateOut:
     """Calculate merged employment tenure for intake employment biography rows."""
     try:
-        result = calculate_employment_tenure(body.records)
+        result = calculate_employment_tenure(
+            body.records,
+            calculation_date=body.calculation_date,
+        )
         return employment_tenure_to_out(result)
     except Exception as exc:
         raise as_http500(exc)

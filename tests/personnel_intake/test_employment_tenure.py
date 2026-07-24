@@ -164,6 +164,62 @@ def test_accepts_pydantic_like_records() -> None:
     assert result.records[0].record_id == "fake-1"
 
 
+def test_tenure_api_accepts_calculation_date() -> None:
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/intake/employment-tenure/calculate",
+        json={
+            "calculation_date": "2026-07-23",
+            "records": [
+                {
+                    "record_id": "api-open",
+                    "organization": "Клиника",
+                    "position": "",
+                    "year_from": "2020-01-01",
+                    "year_to": "",
+                    "reason_for_leaving": "",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["calculation_date"] == "2026-07-23"
+    assert body["total_days"] == 2395
+
+
+def test_tenure_api_rejects_invalid_calculation_date() -> None:
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/intake/employment-tenure/calculate",
+        json={"calculation_date": "not-a-date", "records": []},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail[0]["loc"] == ["body", "calculation_date"]
+
+
+def test_tenure_api_defaults_calculation_date_to_today() -> None:
+    from datetime import date
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.post("/intake/employment-tenure/calculate", json={"records": []})
+    assert response.status_code == 200, response.text
+    assert response.json()["calculation_date"] == date.today().isoformat()
+
+
 def test_tenure_api_accepts_ru_dates_and_pydantic_models() -> None:
     from fastapi.testclient import TestClient
 

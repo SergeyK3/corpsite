@@ -290,6 +290,7 @@ class EmploymentTenureRecordIn(BaseModel):
 
 class EmploymentTenureCalculateIn(BaseModel):
     records: list[EmploymentTenureRecordIn] = Field(default_factory=list)
+    calculation_date: date | None = None
 
 
 class EmploymentTenureYmdOut(BaseModel):
