@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Анкета нового сотрудника — демонстрация</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="demo-banner">
+      <span class="demo-banner__text"><strong>Демонстрационный прототип</strong> · Corpsite · только для показа отделу кадров</span>
+      <button type="button" class="demo-autofill-btn" id="btnDemoAutofill" title="Заполнить анкету тестовыми данными для быстрого показа">
+        Заполнить демо-данными
+      </button>
+    </div>
+
+    <div class="shell">
+      <aside class="sidebar" id="sidebar" aria-label="Шаги анкеты"></aside>
+
+      <main class="main">
+        <div class="mobile-stepper" id="mobileStepper" aria-hidden="true"></div>
+
+        <div class="panel">
+          <header class="panel__header" id="panelHeader"></header>
+          <div class="panel__body" id="panelBody"></div>
+          <footer class="panel__footer" id="panelFooter"></footer>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="app.js?v=4"></script>
+</body>
+</html>

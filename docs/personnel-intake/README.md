@@ -5,7 +5,7 @@
 | Поле | Значение |
 |------|----------|
 | **Контур** | Кадровые процессы → Intake |
-| **Статус программы** | **Initiated** (Architecture) — 2026-07-08 |
+| **Статус программы** | **Active — partial implementation** (2026-07-24) |
 | **Predecessor** | [PMF Pilot Freeze](../personnel-migration/PMF-PILOT-FREEZE.md) |
 | **Канонический формат** | **Markdown** (`.md`) |
 
@@ -41,8 +41,7 @@
 ## Roadmap (summary)
 
 ```text
-PIF-1 Architecture → PIF-2 Data Model → PIF-3 Invitation → PIF-4 Electronic Form
-  → PIF-5 HR Review → PIF-6 Commit → PIF-7 Generated Documents → Pilot
+PIF-1 🟡 → PIF-2 ⬜ → PIF-3 🟡 → PIF-4 🟡 → PIF-5 🟡 → PIF-6 ⬜ → PIF-7 🟡 → Pilot
 ```
 
-Recommended first engineering WP: **PIF-2 — Canonical Personnel Data Model** (see [PIF-roadmap §7](./PIF-roadmap.md#7-recommended-first-engineering-work-package)).
+**Partial implementation (2026-07-24):** invitation, draft, static form, HR on-behalf, re-edit, photo, preview-PDF. **Next engineering WP:** [PIF-6 — Intake Commit](./PIF-roadmap.md#7-recommended-next-engineering-work-package) (see [PIF-roadmap](./PIF-roadmap.md)).

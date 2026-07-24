@@ -121,6 +121,12 @@ runtime/personnel-intake/photos/
 _deploy_stage/
 
 # -----------------------
+# Local agent / dev scratch (not source)
+# -----------------------
+.tmp/
+docs/personnel-intake/demo.zip
+
+# -----------------------
 # Local test artifacts
 # -----------------------
 /tmp_*.xlsx
