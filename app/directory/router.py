@@ -19,6 +19,7 @@ from .employee_documents_routes import router as employee_documents_router
 from .personnel_orders_routes import router as personnel_orders_router
 from .personnel_applications_routes import router as personnel_applications_router
 from .personnel_intake_routes import router as personnel_intake_router
+from .personnel_lk_routes import router as personnel_lk_router
 from .employee_onboarding_routes import router as employee_onboarding_router
 from .hr_import_routes import router as hr_import_router
 from .mrd_routes import router as mrd_router
@@ -50,6 +51,7 @@ router.include_router(personnel_demo_router)
 router.include_router(employee_documents_router)
 router.include_router(personnel_orders_router)
 router.include_router(personnel_applications_router)
+router.include_router(personnel_lk_router)
 router.include_router(personnel_intake_router)
 router.include_router(employee_onboarding_router)
 router.include_router(hr_import_router)

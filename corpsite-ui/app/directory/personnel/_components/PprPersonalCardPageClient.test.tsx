@@ -439,9 +439,9 @@ describe("PprPersonalCardPageClient", () => {
     expect(pushMock).toHaveBeenCalledWith("/directory/staff");
   });
 
-  it("returns to applicants journal when return_to is present", async () => {
+  it("returns to LK registry when return_to is present", async () => {
     currentCardSearchParams = new URLSearchParams(
-      "return_to=%2Fdirectory%2Fpersonnel%2Fapplicants%3Fq%3Dpetrov%26application_id%3D10",
+      "return_to=%2Fdirectory%2Fpersonnel%2Flk%3Fq%3Dpetrov%26application_id%3D10",
     );
     getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
 
@@ -452,7 +452,7 @@ describe("PprPersonalCardPageClient", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Назад к претендентам" }));
-    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/applicants?q=petrov&application_id=10");
+    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/lk?q=petrov&application_id=10");
   });
 
   it("shows NOT_MATERIALIZED as informational banner", async () => {

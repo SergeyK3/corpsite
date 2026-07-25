@@ -3,10 +3,25 @@ import { describe, expect, it } from "vitest";
 import {
   applyTrainingEntryPatch,
   countInclusiveCalendarDays,
+  isInvalidIntakeTrainingPeriodRange,
   normalizeIntakeTrainingEntry,
   reconcileTrainingEntryHours,
+  resolveIntakeTrainingPeriodRangeError,
   resolveTrainingHoursState,
 } from "./intakeTraining";
+import { INTAKE_PERIOD_RANGE_ERROR } from "./intakePeriodRange";
+
+/** Raw training row shape as stored in intake draft JSON (WP-001 §4.4). */
+const APPLICATION_178_TRAINING_ROW = {
+  institution: "Учебный центр охраны труда",
+  course_name: "Охрана труда и техника безопасности",
+  year_from: "2024-07-10",
+  year_to: "2024-06-01",
+  document_type: "certificate",
+  document_number: "ОТ-178-01",
+  hours: "40",
+  hours_is_manual: true,
+} as const;
 
 describe("intakeTraining hours calculation", () => {
   it("calculates inclusive calendar days multiplied by eight", () => {
@@ -48,6 +63,46 @@ describe("intakeTraining hours calculation", () => {
     });
   });
 
+  it("flags reversed period for application 178 draft row even with manual hours", () => {
+    expect(isInvalidIntakeTrainingPeriodRange(APPLICATION_178_TRAINING_ROW)).toBe(true);
+    expect(resolveIntakeTrainingPeriodRangeError(APPLICATION_178_TRAINING_ROW)).toBe(
+      INTAKE_PERIOD_RANGE_ERROR,
+    );
+
+    const item = normalizeIntakeTrainingEntry(APPLICATION_178_TRAINING_ROW);
+    expect(resolveTrainingHoursState(item)).toMatchObject({
+      hours: "40",
+      note: "По документу",
+      isManual: true,
+      periodError: INTAKE_PERIOD_RANGE_ERROR,
+    });
+  });
+
+  it("accepts valid application 178 period when only dates are corrected", () => {
+    const validRow = {
+      ...APPLICATION_178_TRAINING_ROW,
+      year_from: "2024-05-10",
+      year_to: "2024-06-01",
+    };
+
+    expect(isInvalidIntakeTrainingPeriodRange(validRow)).toBe(false);
+    expect(resolveIntakeTrainingPeriodRangeError(validRow)).toBeNull();
+    expect(resolveTrainingHoursState(normalizeIntakeTrainingEntry(validRow)).periodError).toBeNull();
+  });
+
+  it("reads legacy year as period end from raw draft payload", () => {
+    const legacyRow = {
+      institution: "Учебный центр охраны труда",
+      course_name: "Охрана труда и техника безопасности",
+      year_from: "2024-07-10",
+      year: "2024-06-01",
+      hours: "40",
+      hours_is_manual: true,
+    };
+
+    expect(isInvalidIntakeTrainingPeriodRange(legacyRow)).toBe(true);
+  });
+
   it("recalculates only when hours are not manual and dates change", () => {
     const base = normalizeIntakeTrainingEntry({
       year_from: "2021-03-10",
@@ -85,7 +140,9 @@ describe("intakeTraining hours calculation", () => {
       hours: "",
       hours_is_manual: false,
     });
-    expect(resolveTrainingHoursState(invalid).periodError).toContain("не может быть позже");
+    expect(resolveTrainingHoursState(invalid).periodError).toBe(
+      "Дата окончания не может быть раньше даты начала",
+    );
   });
 
   it("migrates legacy year field into year_to on normalize", () => {

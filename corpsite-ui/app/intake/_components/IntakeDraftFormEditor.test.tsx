@@ -18,6 +18,8 @@ vi.mock("./IntakeMilitaryCombobox", () => ({
 
 const personalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "personal");
 const educationStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "education");
+const trainingStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "training");
+const contactsStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "contacts");
 const additionalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "additional");
 
 function expandEducationRow(index = 0) {
@@ -47,6 +49,79 @@ function renderEditor(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+function expandTrainingRow(index = 0) {
+  const desktop = screen.getByTestId("intake-training-desktop-view");
+  fireEvent.click(within(desktop).getByTestId(`intake-training-actions-${index}`));
+  fireEvent.click(within(desktop).getByTestId(`intake-training-row-edit-${index}`));
+}
+
+describe("IntakeDraftFormEditor period validation", () => {
+  it("shows reversed training period error on the record editor", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.training = [
+      {
+        institution: "Учебный центр охраны труда",
+        course_name: "Охрана труда и техника безопасности",
+        year_from: "2024-07-10",
+        year_to: "2024-06-01",
+        document_type: "certificate",
+        document_number: "ОТ-178-01",
+        hours: "40",
+        hours_is_manual: true,
+      },
+    ];
+
+    renderEditor(payload, trainingStepIndex);
+
+    expect(
+      within(screen.getByTestId("intake-training-desktop-view")).getByTestId("intake-training-period-error-0"),
+    ).toHaveTextContent("Дата окончания не может быть раньше даты начала");
+  });
+
+  it("shows reversed training period error in expanded editor after edit", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.training = [
+      {
+        institution: "Центр",
+        course_name: "Первая помощь",
+        year_from: "2024-06-01",
+        year_to: "2024-05-10",
+        hours: "",
+        hours_is_manual: false,
+      },
+    ];
+
+    renderEditor(payload, trainingStepIndex);
+    expandTrainingRow(0);
+
+    expect(within(screen.getByTestId("intake-training-desktop-view")).getByTestId("intake-training-editor-period-error-0")).toHaveTextContent(
+      "Дата окончания не может быть раньше даты начала",
+    );
+  });
+
+  it("shows reversed education period error on the record editor", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНУ",
+        year_from: "2022-09-01",
+        year_to: "2022-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    renderEditor(payload, educationStepIndex);
+    expandEducationRow(0);
+
+    expect(within(screen.getByTestId("intake-education-desktop-view")).getByTestId("intake-education-period-error-0")).toHaveTextContent(
+      "Дата окончания не может быть раньше даты начала",
+    );
+  });
 });
 
 describe("IntakeDraftFormEditor step headers", () => {
@@ -283,5 +358,183 @@ describe("IntakeDraftFormEditor step navigation", () => {
 
     fireEvent.click(screen.getByTestId("intake-nav-end"));
     expect(onStepIndexChange).toHaveBeenCalledWith(reviewStepIndex);
+  });
+});
+
+describe("IntakeDraftFormEditor review and submit actions", () => {
+  it("shows public submit label on review step", () => {
+    render(
+      <IntakeDraftFormEditor
+        payload={emptyIntakeDraftPayload()}
+        onChange={vi.fn()}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={vi.fn()}
+        compact
+        onPrimaryAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("intake-submit-button")).toHaveTextContent("Отправить в отдел кадров");
+    expect(screen.queryByTestId("intake-on-behalf-save-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("intake-on-behalf-submit-button")).not.toBeInTheDocument();
+  });
+
+  it("shows HR save and submit buttons on review step", () => {
+    render(
+      <IntakeDraftFormEditor
+        payload={emptyIntakeDraftPayload()}
+        onChange={vi.fn()}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={vi.fn()}
+        mode="hr-on-behalf"
+        compact
+        onPrimaryAction={vi.fn()}
+        onSecondaryAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("intake-on-behalf-save-button")).toHaveTextContent(
+      "Сохранить от имени претендента",
+    );
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent("Отправить анкету");
+    expect(screen.queryByTestId("intake-submit-button")).not.toBeInTheDocument();
+  });
+
+  it("renders all eight review sections with edit actions", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+    payload.contacts.mobile_phone = "+77005554433";
+    payload.contacts.registration_address = "г. Алматы, ул. Абая 1";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНУ",
+        year_from: "2014-09-01",
+        year_to: "2018-06-30",
+        specialty: "Медицина",
+        qualification: "Бакалавр",
+        diploma_number: "123",
+      },
+    ];
+    payload.military.status = "Призывник";
+
+    render(
+      <IntakeDraftFormEditor
+        payload={payload}
+        onChange={vi.fn()}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={vi.fn()}
+        compact
+      />,
+    );
+
+    expect(screen.getByTestId("intake-review-section-personal")).toHaveTextContent("Петров");
+    expect(screen.getByTestId("intake-review-section-contacts")).toHaveTextContent("Абая");
+    expect(screen.getByTestId("intake-review-education-item-0")).toHaveTextContent("КазНУ");
+    expect(screen.getByTestId("intake-review-section-military")).toHaveTextContent("Призывник");
+    expect(screen.getByTestId("intake-review-edit-personal")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-contacts")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-education")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-training")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-relatives")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-employment")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-military")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-edit-additional")).toBeInTheDocument();
+  });
+
+  it("navigates to the selected section via Изменить", () => {
+    const onStepIndexChange = vi.fn();
+    const onChange = vi.fn();
+    const payload = emptyIntakeDraftPayload();
+    payload.contacts.mobile_phone = "+77005554433";
+
+    render(
+      <IntakeDraftFormEditor
+        payload={payload}
+        onChange={onChange}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={onStepIndexChange}
+        compact
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("intake-review-edit-contacts"));
+
+    expect(onStepIndexChange).toHaveBeenCalledWith(contactsStepIndex);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ current_step: "contacts" }),
+    );
+  });
+
+  it("renders review summary sections and date issue navigation", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.personal.last_name = "Петров";
+    payload.personal.first_name = "Пётр";
+    payload.personal.birth_date = "1990-05-20";
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНМУ",
+        year_from: "2014",
+        year_to: "2018-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+    const onStepIndexChange = vi.fn();
+
+    render(
+      <IntakeDraftFormEditor
+        payload={payload}
+        onChange={vi.fn()}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={onStepIndexChange}
+        compact
+      />,
+    );
+
+    expect(screen.getByTestId("intake-review-summary")).toHaveTextContent("Петров");
+    expect(screen.getByTestId("intake-review-date-issues")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Образование → КазНМУ → дата поступления"));
+    expect(onStepIndexChange).toHaveBeenCalledWith(educationStepIndex);
+  });
+
+  it("blocks both HR review buttons when a reversed period remains", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.training = [
+      {
+        institution: "Учебный центр охраны труда",
+        course_name: "Охрана труда и техника безопасности",
+        year_from: "2024-07-10",
+        year_to: "2024-06-01",
+        document_type: "certificate",
+        document_number: "ОТ-178-01",
+        hours: "40",
+        hours_is_manual: true,
+      },
+    ];
+
+    render(
+      <IntakeDraftFormEditor
+        payload={payload}
+        onChange={vi.fn()}
+        stepIndex={reviewStepIndex}
+        onStepIndexChange={vi.fn()}
+        mode="hr-on-behalf"
+        compact
+        onPrimaryAction={vi.fn()}
+        onSecondaryAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("intake-on-behalf-save-button")).toBeDisabled();
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toBeDisabled();
+    expect(
+      screen.getByText(/Охрана труда и техника безопасности → Дата окончания не может быть раньше даты начала/i),
+    ).toBeInTheDocument();
   });
 });

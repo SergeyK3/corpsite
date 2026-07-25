@@ -21,6 +21,8 @@ from app.directory.personnel_intake_schemas import (
     IntakeOnBehalfEditSessionOut,
     IntakeOnBehalfSaveIn,
     IntakeOnBehalfSaveOut,
+    IntakeOnBehalfSubmitIn,
+    IntakeOnBehalfSubmitOut,
     IntakePhotoMutationOut,
     IntakeReviewStateOut,
     IntakeRevokeOut,
@@ -45,6 +47,7 @@ from app.personnel_intake.application.intake_service import (
 from app.personnel_intake.application.on_behalf_edit_service import (
     load_on_behalf_edit_session,
     save_on_behalf_intake_draft,
+    submit_on_behalf_intake_draft,
 )
 from app.personnel_intake.application.photo_service import (
     delete_intake_photo_on_behalf,
@@ -282,6 +285,7 @@ def get_intake_on_behalf_edit_session(
             session = load_on_behalf_edit_session(conn, application_id)
         return IntakeOnBehalfEditSessionOut(
             application_id=session.application_id,
+            application_status=session.application_status,
             draft=draft_session_to_out(
                 draft=session.draft,
                 link=session.link,
@@ -325,6 +329,49 @@ def patch_intake_on_behalf_draft(
             saved_at=result.saved_at,
             draft_updated_at=result.draft.updated_at,
             changed_fields=list(result.changed_fields),
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeOnBehalfEditError as exc:
+        raise _on_behalf_edit_error_http422(exc)
+    except PersonnelIntakeConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)})
+    except PersonnelIntakeValidationError as exc:
+        raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": str(exc)})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post(
+    "/{application_id}/intake/draft/on-behalf/submit",
+    response_model=IntakeOnBehalfSubmitOut,
+)
+def post_intake_on_behalf_submit(
+    body: IntakeOnBehalfSubmitIn,
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakeOnBehalfSubmitOut:
+    require_personnel_admin_or_403(user)
+    user_id = _require_user_id(user)
+    try:
+        with engine.begin() as conn:
+            result = submit_on_behalf_intake_draft(
+                conn,
+                application_id=application_id,
+                payload=body.payload,
+                actor_user_id=user_id,
+                expected_updated_at=body.expected_updated_at,
+            )
+        return IntakeOnBehalfSubmitOut(
+            application_id=result.application_id,
+            draft_id=result.draft.draft_id,
+            status=result.draft.status,
+            submitted_at=result.submitted_at,
+            draft_updated_at=result.draft.updated_at,
         )
     except PersonnelApplicationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

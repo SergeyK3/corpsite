@@ -118,7 +118,7 @@ describe("intakeAdditional", () => {
       formatIntakeForeignLanguageReviewLine(
         normalizeIntakeForeignLanguageEntry({ language: "Английский", proficiency: "Выше среднего (B2)" }),
       ),
-    ).toBe("Английский (Выше среднего (B2))");
+    ).toBe("Английский — Выше среднего (B2)");
     expect(
       formatIntakeAwardReviewLine(
         normalizeIntakeAwardEntry({

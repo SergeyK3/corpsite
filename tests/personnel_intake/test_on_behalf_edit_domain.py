@@ -59,7 +59,7 @@ def test_evaluate_on_behalf_edit_allows_revision_requested() -> None:
         draft_status="submitted",
         section_statuses=["accepted"],
     )
-    assert allowed is True
+    assert allowed is False
     assert reason is None
     assert code is None
 
@@ -108,6 +108,17 @@ def test_evaluate_on_behalf_edit_blocks_terminal_application() -> None:
     )
     assert allowed is False
     assert code == "APPLICATION_TERMINAL"
+
+
+def test_evaluate_on_behalf_edit_allows_view_only_after_first_submit() -> None:
+    allowed, reason, code = evaluate_on_behalf_edit_eligibility(
+        application_status="intake_submitted",
+        draft_exists=True,
+        draft_status="submitted",
+    )
+    assert allowed is False
+    assert reason is None
+    assert code is None
 
 
 def test_compute_intake_payload_field_changes_lists_nested_paths() -> None:

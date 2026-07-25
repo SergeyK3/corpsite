@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelApplicationIntakeOnBehalfDrawer from "./PersonnelApplicationIntakeOnBehalfDrawer";
 import * as api from "../_lib/personnelApplicationsApi.client";
+import { toApiError } from "@/lib/api";
 import type { IntakeDraftPayload } from "@/app/intake/_lib/intakeApi.client";
 
 vi.mock("../_lib/personnelApplicationsApi.client", async () => {
@@ -13,11 +14,13 @@ vi.mock("../_lib/personnelApplicationsApi.client", async () => {
     ...actual,
     getIntakeOnBehalfEditSession: vi.fn(),
     saveIntakeOnBehalfDraft: vi.fn(),
+    submitIntakeOnBehalfDraft: vi.fn(),
   };
 });
 
 const getIntakeOnBehalfEditSessionMock = vi.mocked(api.getIntakeOnBehalfEditSession);
 const saveIntakeOnBehalfDraftMock = vi.mocked(api.saveIntakeOnBehalfDraft);
+const submitIntakeOnBehalfDraftMock = vi.mocked(api.submitIntakeOnBehalfDraft);
 
 function buildSessionPayload(): IntakeDraftPayload {
   return {
@@ -86,10 +89,32 @@ function buildSessionPayload(): IntakeDraftPayload {
   };
 }
 
-function mockEditableSession(updatedAt = "2026-07-23T09:00:00Z") {
+function mockEditableSession(updatedAt = "2026-07-23T09:00:00Z", draftStatus = "editable") {
   getIntakeOnBehalfEditSessionMock.mockResolvedValue({
     application_id: 42,
-    editable: true,
+    application_status: draftStatus === "editable" ? "intake_pending" : "intake_submitted",
+    editable: draftStatus === "editable",
+    blocked_reason: null,
+    reason_code: null,
+    draft: {
+      application_id: 42,
+      draft_id: 7,
+      link_id: 3,
+      status: draftStatus,
+      read_only: draftStatus !== "editable",
+      link_status: draftStatus === "editable" ? "opened" : "submitted",
+      updated_at: updatedAt,
+      submitted_at: draftStatus === "editable" ? null : "2026-07-23T10:00:00Z",
+      payload: buildSessionPayload(),
+    },
+  });
+}
+
+function mockSubmittedViewSession(updatedAt = "2026-07-23T10:00:00Z") {
+  getIntakeOnBehalfEditSessionMock.mockResolvedValue({
+    application_id: 42,
+    application_status: "intake_submitted",
+    editable: false,
     blocked_reason: null,
     reason_code: null,
     draft: {
@@ -97,12 +122,17 @@ function mockEditableSession(updatedAt = "2026-07-23T09:00:00Z") {
       draft_id: 7,
       link_id: 3,
       status: "submitted",
-      read_only: false,
+      read_only: true,
       link_status: "submitted",
       updated_at: updatedAt,
+      submitted_at: "2026-07-23T10:00:00Z",
       payload: buildSessionPayload(),
     },
   });
+}
+
+function mockFirstFillSession(updatedAt = "2026-07-23T09:00:00Z") {
+  mockEditableSession(updatedAt, "editable");
 }
 
 function drawerScope() {
@@ -121,9 +151,7 @@ async function openReviewStep() {
   await waitFor(() => {
     expect(screen.queryByTestId("intake-on-behalf-loading")).not.toBeInTheDocument();
   });
-  fireEvent.click(drawerScope().getByRole("button", { name: /далее/i }));
-  fireEvent.click(drawerScope().getByRole("button", { name: /далее/i }));
-  fireEvent.click(drawerScope().getByRole("button", { name: /далее/i }));
+  fireEvent.click(drawerScope().getByTestId("intake-nav-end"));
   await waitFor(() => {
     expect(screen.getByTestId("intake-review-summary")).toBeInTheDocument();
   });
@@ -136,11 +164,6 @@ function formButton(name: RegExp) {
 async function openPersonalStep() {
   await waitFor(() => {
     expect(screen.queryByTestId("intake-on-behalf-loading")).not.toBeInTheDocument();
-  });
-  for (let step = 0; step < 5; step += 1) {
-    fireEvent.click(formButton(/назад/i));
-  }
-  await waitFor(() => {
     expect(screen.getByTestId("intake-citizenship")).toBeInTheDocument();
   });
 }
@@ -180,7 +203,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     expect(screen.getByTestId("intake-nationality-option-0")).toHaveTextContent("казахи");
   });
 
-  it("opens on employment biography step with existing data, not review summary", async () => {
+  it("opens on personal step with all sections available, not review summary", async () => {
     mockEditableSession();
 
     render(
@@ -197,17 +220,37 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
 
     expect(screen.queryByTestId("intake-review-summary")).not.toBeInTheDocument();
     expect(screen.queryByText(/шаг 9 из 9/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/шаг 6 из 9/i)).toBeInTheDocument();
-    const drawer = within(screen.getByTestId("intake-on-behalf-drawer"));
-    expect(drawer.getByTestId("intake-employment-biography-table")).toBeInTheDocument();
-    expect(
-      within(drawer.getByTestId("intake-employment-desktop-view")).getByTestId("intake-employment-row-0"),
-    ).toHaveTextContent("Клиника А");
-    expect(
-      within(drawer.getByTestId("intake-employment-desktop-view")).getByTestId("intake-employment-row-0"),
-    ).toHaveTextContent("Медсестра");
+    expect(screen.getByText(/шаг 1 из 9/i)).toBeInTheDocument();
+    expect(screen.getByTestId("intake-citizenship")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /далее/i })).toBeInTheDocument();
     expect(screen.queryByTestId("intake-on-behalf-save-button")).not.toBeInTheDocument();
+  });
+
+  it("navigates through all nine intake steps in on-behalf mode", async () => {
+    mockEditableSession();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("intake-on-behalf-loading")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/шаг 1 из 9/i)).toBeInTheDocument();
+
+    for (let step = 1; step < 9; step += 1) {
+      fireEvent.click(drawerScope().getByTestId("intake-nav-next"));
+      await waitFor(() => {
+        expect(screen.getByText(new RegExp(`шаг ${step + 1} из 9`, "i"))).toBeInTheDocument();
+      });
+    }
+
+    expect(screen.getByTestId("intake-review-summary")).toBeInTheDocument();
   });
 
   it("shows saved button state after successful PATCH", async () => {
@@ -233,6 +276,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
 
     const saveButton = screen.getByTestId("intake-on-behalf-save-button");
     expect(saveButton).toHaveTextContent("Сохранить от имени претендента");
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent("Отправить анкету");
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -299,6 +343,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
   it("blocks on-behalf save on review when legacy year-only dates remain", async () => {
     getIntakeOnBehalfEditSessionMock.mockResolvedValue({
       application_id: 42,
+      application_status: "intake_pending",
       editable: true,
       blocked_reason: null,
       reason_code: null,
@@ -306,10 +351,11 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
         application_id: 42,
         draft_id: 7,
         link_id: 3,
-        status: "submitted",
+        status: "editable",
         read_only: false,
-        link_status: "submitted",
+        link_status: "opened",
         updated_at: "2026-07-23T09:00:00Z",
+        submitted_at: null,
         payload: {
           ...buildSessionPayload(),
           education: [
@@ -396,5 +442,157 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     expect(screen.getByTestId("intake-on-behalf-save-button")).toHaveTextContent(
       "Сохранить от имени претендента",
     );
+  });
+
+  it("shows save and submit buttons on review for editable first-fill draft", async () => {
+    mockFirstFillSession();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await openReviewStep();
+
+    expect(screen.getByTestId("intake-on-behalf-save-button")).toHaveTextContent(
+      "Сохранить от имени претендента",
+    );
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent("Отправить анкету");
+  });
+
+  it("submits editable draft and keeps submitted state in drawer after success", async () => {
+    mockFirstFillSession();
+    submitIntakeOnBehalfDraftMock.mockResolvedValue({
+      application_id: 178,
+      draft_id: 7,
+      status: "submitted",
+      submitted_at: "2026-07-24T15:50:18.458411Z",
+      draft_updated_at: "2026-07-24T15:50:18.458411Z",
+    });
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    await openReviewStep();
+    fireEvent.click(screen.getByTestId("intake-on-behalf-submit-button"));
+
+    await waitFor(() => {
+      expect(submitIntakeOnBehalfDraftMock).toHaveBeenCalledWith(
+        42,
+        expect.any(Object),
+        "2026-07-23T09:00:00Z",
+      );
+      expect(onSaved).toHaveBeenCalled();
+      expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent(
+        "Анкета отправлена",
+      );
+      expect(screen.getByTestId("intake-on-behalf-submit-button")).toBeDisabled();
+      expect(screen.getByTestId("intake-on-behalf-submitted-notice")).toBeInTheDocument();
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(saveIntakeOnBehalfDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps drawer open when submit fails", async () => {
+    mockFirstFillSession();
+    submitIntakeOnBehalfDraftMock.mockRejectedValue(new Error("submit failed"));
+    const onClose = vi.fn();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    await openReviewStep();
+    fireEvent.click(screen.getByTestId("intake-on-behalf-submit-button"));
+
+    expect(await screen.findByTestId("intake-on-behalf-save-error")).toHaveTextContent(
+      "submit failed",
+    );
+    expect(await screen.findByTestId("intake-on-behalf-submit-error")).toHaveTextContent(
+      "submit failed",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent("Отправить анкету");
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toBeEnabled();
+    expect(screen.getByTestId("intake-on-behalf-drawer")).toBeInTheDocument();
+  });
+
+  it("shows structured 422 submit error next to the submit button", async () => {
+    mockFirstFillSession();
+    submitIntakeOnBehalfDraftMock.mockRejectedValue(
+      toApiError(422, {
+        detail: {
+          code: "VALIDATION_FAILED",
+          message:
+            "Intake dates must be full day precision (ДД.ММ.ГГГГ): training[2].year_from, training[2].year_to",
+        },
+      }),
+    );
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={178}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await openReviewStep();
+    fireEvent.click(screen.getByTestId("intake-on-behalf-submit-button"));
+
+    expect(await screen.findByTestId("intake-on-behalf-submit-error")).toHaveTextContent(
+      /training\[2\]\.year_from/i,
+    );
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent("Отправить анкету");
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toBeEnabled();
+  });
+
+  it("loads submitted draft in read-only view with disabled submit button", async () => {
+    mockSubmittedViewSession();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await openReviewStep();
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toHaveTextContent("Анкета отправлена");
+    expect(screen.getByTestId("intake-on-behalf-submit-button")).toBeDisabled();
+    expect(screen.getByTestId("intake-on-behalf-save-button")).toBeDisabled();
+    expect(submitIntakeOnBehalfDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("does not resubmit when clicking disabled submitted button", async () => {
+    mockSubmittedViewSession();
+
+    render(
+      <PersonnelApplicationIntakeOnBehalfDrawer
+        applicationId={42}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    await openReviewStep();
+    fireEvent.click(screen.getByTestId("intake-on-behalf-submit-button"));
+    expect(submitIntakeOnBehalfDraftMock).not.toHaveBeenCalled();
   });
 });

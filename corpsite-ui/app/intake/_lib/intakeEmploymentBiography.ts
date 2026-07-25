@@ -82,3 +82,9 @@ export function employmentBiographyCellValue(value: string | null | undefined): 
   const trimmed = String(value ?? "").trim();
   return trimmed || "—";
 }
+
+export function parseIntakeEmploymentFocusRowIndex(focusTestId: string | null | undefined): number | null {
+  if (!focusTestId) return null;
+  const match = focusTestId.match(/^intake-employment-year-(?:from|to)-(\d+)$/);
+  return match ? Number(match[1]) : null;
+}

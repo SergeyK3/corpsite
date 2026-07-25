@@ -20,7 +20,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/directory/personnel/applicants",
+  usePathname: () => "/directory/personnel/lk",
   useSearchParams: () => new URLSearchParams(""),
 }));
 
@@ -33,12 +33,13 @@ afterEach(() => {
 });
 
 describe("PersonnelSubNav", () => {
-  it("includes Претенденты navigation item and not duplicate applications tab", () => {
+  it("includes Личные карточки navigation item", () => {
     render(<PersonnelSubNav />);
 
-    const applicantsLink = screen.getByRole("link", { name: "Претенденты" });
-    expect(applicantsLink).toHaveAttribute("href", "/directory/personnel/applicants");
-    expect(applicantsLink.className).toContain("bg-blue-600");
+    const lkLink = screen.getByRole("link", { name: "Личные карточки" });
+    expect(lkLink).toHaveAttribute("href", "/directory/personnel/lk");
+    expect(lkLink.className).toContain("bg-blue-600");
+    expect(screen.queryByRole("link", { name: "Претенденты" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Кадровые обращения" })).not.toBeInTheDocument();
   });
 });

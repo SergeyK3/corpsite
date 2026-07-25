@@ -99,6 +99,26 @@ describe("resolveIntakeOnBehalfEditAccess", () => {
     expect(access.blockedReason).toMatch(/согласования/i);
   });
 
+  it("enables view access after first-time submit", () => {
+    const access = resolveIntakeOnBehalfEditAccess({
+      status: "intake_submitted",
+      intake_draft_status: "submitted",
+    });
+    expect(access.visible).toBe(true);
+    expect(access.enabled).toBe(true);
+    expect(access.blockedReason).toBeNull();
+  });
+
+  it("enables view access for revision_requested after resubmit", () => {
+    const access = resolveIntakeOnBehalfEditAccess({
+      status: "revision_requested",
+      intake_draft_status: "submitted",
+    });
+    expect(access.visible).toBe(true);
+    expect(access.enabled).toBe(true);
+    expect(access.blockedReason).toBeNull();
+  });
+
   it("hides edit for completed application", () => {
     const access = resolveIntakeOnBehalfEditAccess({
       status: "completed",

@@ -6,6 +6,7 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_AWAITING_DIRECTOR_RESOLUTION,
     APPLICATION_STATUS_COMPLETED,
     APPLICATION_STATUS_INTAKE_PENDING,
+    APPLICATION_STATUS_INTAKE_SUBMITTED,
     APPLICATION_STATUS_ORDER_DRAFT_CREATED,
     APPLICATION_STATUS_RESOLUTION_PENDING,
     APPLICATION_STATUS_REVISION_REQUESTED,
@@ -85,13 +86,11 @@ def evaluate_on_behalf_edit_eligibility(
         return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_EDITABLE"
 
     if status == APPLICATION_STATUS_REVISION_REQUESTED:
-        if not _draft_open_for_post_submit_on_behalf(
-            draft_status=draft_status_value,
-            application_status=status,
-            section_statuses=section_statuses,
-        ):
-            return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_SUBMITTED"
-        return True, None, None
+        if draft_status_value == INTAKE_DRAFT_STATUS_EDITABLE:
+            return True, None, None
+        if draft_status_value == INTAKE_DRAFT_STATUS_SUBMITTED:
+            return False, None, None
+        return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_SUBMITTED"
 
     if status == APPLICATION_STATUS_UNDER_REVIEW:
         sections = section_statuses or []
@@ -104,5 +103,10 @@ def evaluate_on_behalf_edit_eligibility(
         if has_rework_requested_sections(sections):
             return True, None, None
         return False, ON_BEHALF_EDIT_BLOCKED_NO_REWORK, "NO_REWORK_SECTIONS"
+
+    if status == APPLICATION_STATUS_INTAKE_SUBMITTED:
+        if draft_status_value == INTAKE_DRAFT_STATUS_SUBMITTED:
+            return False, None, None
+        return False, ON_BEHALF_EDIT_BLOCKED_NO_DRAFT, "DRAFT_NOT_SUBMITTED"
 
     return False, ON_BEHALF_EDIT_BLOCKED_NOT_RETURNED, "NOT_RETURNED_FOR_CLARIFICATION"

@@ -10,10 +10,21 @@ from sqlalchemy.engine import Connection
 
 from app.personnel_applications.application.lifecycle_service import append_lifecycle_audit
 from app.personnel_applications.domain.errors import PersonnelApplicationNotFoundError
-from app.personnel_applications.domain.lifecycle_audit import LIFECYCLE_ACTION_INTAKE_EDITED_ON_BEHALF
+from app.personnel_applications.domain.lifecycle_audit import (
+    LIFECYCLE_ACTION_INTAKE_EDITED_ON_BEHALF,
+    LIFECYCLE_ACTION_INTAKE_SUBMITTED,
+)
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
-from app.personnel_applications.domain.status import APPLICATION_STATUS_INTAKE_PENDING
-from app.personnel_intake.application.intake_service import _validate_submit_payload
+from app.personnel_applications.domain.status import (
+    APPLICATION_STATUS_INTAKE_PENDING,
+    APPLICATION_STATUS_INTAKE_SUBMITTED,
+    APPLICATION_STATUS_REVISION_REQUESTED,
+    APPLICATION_STATUS_UNDER_REVIEW,
+)
+from app.personnel_intake.application.intake_service import (
+    _validate_submit_payload,
+    submit_intake_draft_for_application,
+)
 from app.personnel_intake.domain.date_validation import collect_intake_date_validation_errors
 from app.personnel_intake.application.payload_diff import compute_intake_payload_field_changes
 from app.personnel_intake.domain.errors import (
@@ -24,7 +35,7 @@ from app.personnel_intake.domain.errors import (
 )
 from app.personnel_intake.domain.models import IntakeDraftSnapshot, IntakeLinkSnapshot
 from app.personnel_intake.domain.on_behalf_edit import evaluate_on_behalf_edit_eligibility
-from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_EDITABLE
+from app.personnel_intake.domain.status import INTAKE_DRAFT_STATUS_EDITABLE, INTAKE_LINK_STATUS_ISSUED
 from app.personnel_intake.infrastructure.repository import SqlAlchemyPersonnelIntakeRepository
 from app.personnel_intake.infrastructure.review_repository import SqlAlchemyPersonnelIntakeReviewRepository
 
@@ -55,6 +66,7 @@ def _assert_expected_draft_updated_at(
 @dataclass(frozen=True, slots=True)
 class OnBehalfEditSession:
     application_id: int
+    application_status: str
     draft: IntakeDraftSnapshot
     link: IntakeLinkSnapshot
     editable: bool
@@ -68,6 +80,14 @@ class SaveOnBehalfEditResult:
     draft: IntakeDraftSnapshot
     saved_at: datetime
     changed_fields: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SubmitOnBehalfEditResult:
+    application_id: int
+    draft: IntakeDraftSnapshot
+    link: IntakeLinkSnapshot
+    submitted_at: datetime
 
 
 def _validate_on_behalf_save_payload(
@@ -131,6 +151,7 @@ def load_on_behalf_edit_session(conn: Connection, application_id: int) -> OnBeha
 
     return OnBehalfEditSession(
         application_id=application_id,
+        application_status=status,
         draft=draft,
         link=link,
         editable=allowed,
@@ -214,4 +235,101 @@ def save_on_behalf_intake_draft(
         draft=updated,
         saved_at=now,
         changed_fields=tuple(changed_fields),
+    )
+
+
+_ON_BEHALF_SUBMIT_APPLICATION_STATUSES: frozenset[str] = frozenset(
+    {
+        APPLICATION_STATUS_INTAKE_PENDING,
+        APPLICATION_STATUS_REVISION_REQUESTED,
+        APPLICATION_STATUS_UNDER_REVIEW,
+    }
+)
+
+
+def submit_on_behalf_intake_draft(
+    conn: Connection,
+    *,
+    application_id: int,
+    payload: dict[str, Any],
+    actor_user_id: int,
+    expected_updated_at: datetime,
+) -> SubmitOnBehalfEditResult:
+    app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
+    app = app_repo.require_by_id(application_id)
+
+    if app.status not in _ON_BEHALF_SUBMIT_APPLICATION_STATUSES:
+        raise PersonnelIntakeOnBehalfEditError(
+            "On-behalf submit is not allowed for the current application status.",
+            code="SUBMIT_NOT_ALLOWED",
+        )
+
+    session = load_on_behalf_edit_session(conn, application_id)
+    if not session.editable:
+        raise PersonnelIntakeOnBehalfEditError(
+            session.blocked_reason or "On-behalf submit is not allowed.",
+            code=session.reason_code or "EDIT_NOT_ALLOWED",
+        )
+
+    if session.draft.status != INTAKE_DRAFT_STATUS_EDITABLE:
+        raise PersonnelIntakeOnBehalfEditError(
+            "Intake draft is not editable for first-time submit.",
+            code="DRAFT_NOT_EDITABLE",
+        )
+
+    _validate_submit_payload(payload)
+
+    now = _now_utc()
+    _assert_expected_draft_updated_at(
+        expected_updated_at=expected_updated_at,
+        current_updated_at=session.draft.updated_at,
+    )
+
+    intake_repo = SqlAlchemyPersonnelIntakeRepository(conn)
+    updated = intake_repo.update_draft_payload_if_updated_at(
+        session.draft.draft_id,
+        payload=payload,
+        updated_at=now,
+        expected_updated_at=expected_updated_at,
+    )
+    if updated is None:
+        raise PersonnelIntakeConflictError(
+            "Intake draft was changed by another session.",
+            code="DRAFT_VERSION_CONFLICT",
+        )
+
+    link = session.link
+    if link.status == INTAKE_LINK_STATUS_ISSUED:
+        link = intake_repo.mark_link_opened(link.link_id, opened_at=now)
+
+    previous_status = app.status
+    result = submit_intake_draft_for_application(
+        conn,
+        application_id=application_id,
+        draft=updated,
+        link=link,
+    )
+
+    app_after = app_repo.require_by_id(application_id)
+    append_lifecycle_audit(
+        conn,
+        application_id=application_id,
+        action=LIFECYCLE_ACTION_INTAKE_SUBMITTED,
+        previous_status=previous_status,
+        new_status=app_after.status,
+        actor_user_id=actor_user_id,
+        comment="Анкета отправлена HR от имени претендента",
+        metadata={
+            "on_behalf_of": "applicant",
+            "actor_user_id": int(actor_user_id),
+            "submitted_at": result.submitted_at.isoformat(),
+        },
+        created_at=result.submitted_at,
+    )
+
+    return SubmitOnBehalfEditResult(
+        application_id=application_id,
+        draft=result.draft,
+        link=result.link,
+        submitted_at=result.submitted_at,
     )

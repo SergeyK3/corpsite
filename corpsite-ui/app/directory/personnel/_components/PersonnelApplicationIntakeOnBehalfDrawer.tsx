@@ -10,12 +10,14 @@ import {
   resolveIntakeOnBehalfInitialStepIndex,
   type IntakeDraftPayload,
 } from "@/app/intake/_lib/intakeApi.client";
+import { collectIntakeDateValidationIssues } from "@/app/intake/_lib/intakeDateValidation";
 import { intakePayloadsEqual } from "@/app/intake/_lib/intakePayloadCompare";
 import {
   getIntakeOnBehalfEditSession,
   isIntakeOnBehalfDraftVersionConflict,
   mapPersonnelApplicationsApiError,
   saveIntakeOnBehalfDraft,
+  submitIntakeOnBehalfDraft,
 } from "../_lib/personnelApplicationsApi.client";
 import { openIntakePdfByApplicationId } from "@/app/intake/_lib/intakePdfOpen.client";
 
@@ -34,6 +36,10 @@ function withInitialOnBehalfStep(payload: IntakeDraftPayload): IntakeDraftPayloa
   };
 }
 
+function isSubmittedOnBehalfSession(draftStatus: string | null): boolean {
+  return String(draftStatus ?? "").trim() === "submitted";
+}
+
 export default function PersonnelApplicationIntakeOnBehalfDrawer({
   applicationId,
   open,
@@ -47,7 +53,12 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
   const [baselinePayload, setBaselinePayload] = React.useState<IntakeDraftPayload>(emptyIntakeDraftPayload());
   const [stepIndex, setStepIndex] = React.useState(0);
   const [editable, setEditable] = React.useState(false);
+  const [applicationStatus, setApplicationStatus] = React.useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = React.useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [pdfGenerating, setPdfGenerating] = React.useState(false);
   const [saveCommitted, setSaveCommitted] = React.useState(false);
   const payloadRef = React.useRef(payload);
@@ -59,13 +70,20 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
     payloadRef.current = payload;
   }, [payload]);
 
-  const isDirty = !intakePayloadsEqual(baselinePayload, payload);
+  const isSubmittedView = isSubmittedOnBehalfSession(draftStatus);
+  const showEditor = editable || isSubmittedView;
+  const formReadOnly = isSubmittedView || !editable;
+  const isDirty = editable && !intakePayloadsEqual(baselinePayload, payload);
 
   React.useEffect(() => {
     if (!open || applicationId == null) {
       setError(null);
       setBlockedReason(null);
       setEditable(false);
+      setApplicationStatus(null);
+      setDraftStatus(null);
+      setSubmittedAt(null);
+      setSubmitError(null);
       setSaveCommitted(false);
       expectedUpdatedAtRef.current = null;
       sessionHydratedRef.current = false;
@@ -94,7 +112,10 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
         sessionHydratedRef.current = true;
         setBaselinePayload(reconciled);
         setPayload(withInitialOnBehalfStep(reconciled));
+        setApplicationStatus(session.application_status);
         setEditable(session.editable);
+        setDraftStatus(session.draft.status);
+        setSubmittedAt(session.draft.submitted_at?.trim() || null);
         setBlockedReason(session.blocked_reason);
         setStepIndex(resolveIntakeOnBehalfInitialStepIndex());
       })
@@ -122,6 +143,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
   }, [open, onClose]);
 
   function handlePayloadChange(next: IntakeDraftPayload) {
+    if (!editable) return;
     setPayload(next);
     if (saveCommitted && !intakePayloadsEqual(baselinePayload, next)) {
       setSaveCommitted(false);
@@ -165,6 +187,65 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
     }
   }
 
+  async function handleSubmit() {
+    if (isSubmittedView) {
+      return;
+    }
+    const expectedUpdatedAt = expectedUpdatedAtRef.current?.trim() ?? "";
+    if (
+      applicationId == null ||
+      !editable ||
+      submitting ||
+      saving ||
+      !sessionHydratedRef.current ||
+      !expectedUpdatedAt ||
+      draftStatus !== "editable"
+    ) {
+      return;
+    }
+    const currentPayload = payloadRef.current;
+    const dateIssues = collectIntakeDateValidationIssues(currentPayload);
+    if (dateIssues.length > 0) {
+      setError("Исправьте ошибки дат в анкете перед отправкой.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setSubmitError(null);
+    try {
+      const result = await submitIntakeOnBehalfDraft(
+        applicationId,
+        currentPayload as unknown as Record<string, unknown>,
+        expectedUpdatedAt,
+      );
+      expectedUpdatedAtRef.current = result.draft_updated_at;
+      setBaselinePayload(currentPayload);
+      setDraftStatus(result.status);
+      setSubmittedAt(result.submitted_at);
+      setApplicationStatus("intake_submitted");
+      setEditable(false);
+      setSaveCommitted(false);
+      setSubmitError(null);
+      setStepIndex(INTAKE_STEPS.findIndex((step) => step.id === "review"));
+      onSaved?.();
+    } catch (e) {
+      const message = mapPersonnelApplicationsApiError(e, "Не удалось отправить анкету");
+      if (isIntakeOnBehalfDraftVersionConflict(e)) {
+        setError(
+          "Черновик был изменён в другой вкладке или другим пользователем. Обновите страницу и проверьте актуальные данные перед повторной отправкой.",
+        );
+        setSubmitError(message);
+        return;
+      }
+      setError(message);
+      setSubmitError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const canSubmitOnBehalf = editable && draftStatus === "editable" && !isSubmittedView;
+
   async function handleGeneratePdf() {
     if (applicationId == null || pdfGenerating) return;
     setPdfGenerating(true);
@@ -189,6 +270,9 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
     INTAKE_STEPS[stepIndex]?.id === "review" && isDirty && !saving
       ? "Есть несохранённые изменения."
       : null;
+  const drawerTitle = isSubmittedView
+    ? "Анкета претендента"
+    : "Редактирование анкеты от имени претендента";
 
   if (!open) return null;
 
@@ -198,9 +282,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
       <aside className="relative flex h-full w-full max-w-[min(96vw,1400px)] flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Редактирование анкеты от имени претендента
-            </h2>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{drawerTitle}</h2>
             <p className="mt-1 text-sm text-zinc-500">Обращение #{applicationId ?? "—"}</p>
           </div>
           <button
@@ -218,7 +300,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               Загрузка анкеты…
             </p>
           ) : null}
-          {!loading && blockedReason && !editable ? (
+          {!loading && blockedReason && !showEditor ? (
             <div
               className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
               data-testid="intake-on-behalf-blocked"
@@ -226,7 +308,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               {blockedReason}
             </div>
           ) : null}
-          {!loading && editable && error ? (
+          {!loading && showEditor && error ? (
             <div
               className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
               data-testid="intake-on-behalf-save-error"
@@ -234,19 +316,35 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               {error}
             </div>
           ) : null}
-          {!loading && editable ? (
+          {!loading && isSubmittedView ? (
+            <div
+              className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+              data-testid="intake-on-behalf-submitted-notice"
+            >
+              Анкета отправлена в отдел кадров. Просмотр и формирование PDF доступны.
+            </div>
+          ) : null}
+          {!loading && showEditor ? (
             <IntakeDraftFormEditor
               payload={payload}
               onChange={handlePayloadChange}
-              readOnly={false}
+              readOnly={formReadOnly}
+              allowStepNavigation={isSubmittedView}
               stepIndex={stepIndex}
               onStepIndexChange={setStepIndex}
               saving={saving}
               mode="hr-on-behalf"
-              onPrimaryAction={() => void handleSave()}
+              onPrimaryAction={editable ? () => void handleSave() : undefined}
               primaryActionBusy={saving}
               primaryActionLabel={primaryActionLabel}
               primaryActionDisabled={primaryActionDisabled}
+              onSecondaryAction={
+                isSubmittedView || canSubmitOnBehalf ? () => void handleSubmit() : undefined
+              }
+              secondaryActionBusy={submitting}
+              secondaryActionDisabled={isSubmittedView || submitting || saving}
+              secondaryActionLabel={isSubmittedView ? "Анкета отправлена" : undefined}
+              secondaryActionError={submitError}
               onGeneratePdf={() => void handleGeneratePdf()}
               pdfGenerating={pdfGenerating}
               reviewNotice={reviewNotice}
@@ -254,7 +352,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               applicationId={applicationId ?? undefined}
             />
           ) : null}
-          {!loading && !editable && error ? (
+          {!loading && !showEditor && error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
               {error}
             </div>

@@ -16,6 +16,7 @@ import {
   intakeTrainingCellValue,
   normalizeIntakeTrainingEntry,
   parseIntakeTrainingFocusRowIndex,
+  resolveIntakeTrainingPeriodRangeError,
   resolveTrainingHoursState,
   sortIntakeTrainingRows,
   type IntakeTrainingEntry,
@@ -112,7 +113,7 @@ function TrainingRowEditor({
         {hoursState.periodError ? (
           <span
             className="mt-1 block text-xs text-amber-700 dark:text-amber-300"
-            data-testid={`intake-training-period-error-${index}`}
+            data-testid={`intake-training-editor-period-error-${index}`}
           >
             {hoursState.periodError}
           </span>
@@ -122,13 +123,38 @@ function TrainingRowEditor({
   );
 }
 
-function TrainingSummaryCells({ item }: { item: IntakeTrainingEntry }) {
+function TrainingPeriodErrorRow({ index, message }: { index: number; message: string }) {
+  return (
+    <tr data-testid={`intake-training-period-error-row-${index}`}>
+      <td colSpan={7} className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+        <span
+          className="block text-xs text-amber-700 dark:text-amber-300"
+          data-testid={`intake-training-period-error-${index}`}
+        >
+          {message}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+function TrainingSummaryCells({ item, index }: { item: IntakeTrainingEntry; index: number }) {
+  const periodError = resolveIntakeTrainingPeriodRangeError(item);
+
   return (
     <>
       <td className="px-3 py-2 align-top text-sm">{intakeTrainingCellValue(item.course_name)}</td>
       <td className="px-3 py-2 align-top text-sm">{intakeTrainingCellValue(item.institution)}</td>
       <td className="whitespace-nowrap px-3 py-2 align-top text-sm">
-        {formatIntakeTrainingPeriodCell(item)}
+        <div>{formatIntakeTrainingPeriodCell(item)}</div>
+        {periodError ? (
+          <span
+            className="mt-1 block text-xs text-amber-700 dark:text-amber-300 md:hidden"
+            data-testid={`intake-training-period-error-inline-${index}`}
+          >
+            {periodError}
+          </span>
+        ) : null}
       </td>
       <td className="px-3 py-2 align-top text-sm">{formatIntakeTrainingHoursCell(item.hours)}</td>
       <td className="px-3 py-2 align-top text-sm">
@@ -155,6 +181,7 @@ function TrainingMobileCard({
   onPatch: (patch: Partial<IntakeTrainingEntry>) => void;
 }) {
   const { item, index } = row;
+  const periodError = resolveIntakeTrainingPeriodRangeError(item);
   return (
     <div
       className="rounded-xl border border-zinc-200 dark:border-zinc-800"
@@ -170,6 +197,14 @@ function TrainingMobileCard({
         <div className="text-sm text-zinc-600 dark:text-zinc-400">
           {formatIntakeTrainingPeriodCell(item)}
         </div>
+        {periodError ? (
+          <div
+            className="text-xs text-amber-700 dark:text-amber-300"
+            data-testid={`intake-training-period-error-${index}`}
+          >
+            {periodError}
+          </div>
+        ) : null}
         <div className="text-sm text-zinc-600 dark:text-zinc-400">
           {formatIntakeTrainingHoursCell(item.hours)}
         </div>
@@ -284,13 +319,15 @@ export default function IntakeTrainingTable({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ item, index }) => (
+                  {rows.map(({ item, index }) => {
+                    const periodError = resolveIntakeTrainingPeriodRangeError(item);
+                    return (
                     <React.Fragment key={`desktop-training-${index}`}>
                       <tr
                         className="border-b border-zinc-200 dark:border-zinc-800"
                         data-testid={`intake-training-row-${index}`}
                       >
-                        <TrainingSummaryCells item={item} />
+                        <TrainingSummaryCells item={item} index={index} />
                         <td className="px-3 py-2 align-top text-right">
                           <IntakeListRowActionsMenu
                             index={index}
@@ -301,6 +338,9 @@ export default function IntakeTrainingTable({
                           />
                         </td>
                       </tr>
+                      {periodError ? (
+                        <TrainingPeriodErrorRow index={index} message={periodError} />
+                      ) : null}
                       {visibleExpandedIndex === index ? (
                         <tr data-testid={`intake-training-expanded-${index}`}>
                           <td colSpan={7} className="p-0">
@@ -314,7 +354,8 @@ export default function IntakeTrainingTable({
                         </tr>
                       ) : null}
                     </React.Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

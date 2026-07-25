@@ -24,7 +24,8 @@ import {
   formatIntakeRelativeBirthCell,
   intakeRelativeCellValue,
 } from "./intakeRelatives";
-import { INTAKE_PDF_DOCUMENT_CSS } from "./intakePdfDocumentCss";
+import { intakeMilitaryCompositionLabel } from "./intakeMilitaryDictionary";
+import { INTAKE_PDF_DOCUMENT_CSS, INTAKE_PDF_SECTION_FLOW_CLASS } from "./intakePdfDocumentCss";
 import { buildIntakePdfCalculatedSummariesHtml } from "./intakePdfSummaryHtml";
 import type { IntakePdfViewModel } from "./intakePdfViewModel";
 
@@ -97,7 +98,7 @@ function buildIntakePdfHeaderHtml(model: IntakePdfViewModel): string {
 }
 
 function section(title: string, testId: string, body: string): string {
-  return `<section class="intake-pdf-section" data-testid="${escapeHtml(testId)}">
+  return `<section class="intake-pdf-section ${INTAKE_PDF_SECTION_FLOW_CLASS}" data-testid="${escapeHtml(testId)}">
 <h2 class="intake-pdf-section-title">${escapeHtml(title)}</h2>
 ${body}
 </section>`;
@@ -121,17 +122,17 @@ function dataTable(headers: string[], rows: string[][]): string {
   const body = rows
     .map((row) => `<tr>${row.map((value) => `<td>${cell(value)}</td>`).join("")}</tr>`)
     .join("");
-  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="intake-pdf-data-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function additionalSubsection(title: string, testId: string, summary: string): string {
   const normalized = String(summary ?? "").trim();
   if (normalized === "0 зап." || normalized === "Нет сведений") {
-    return `<div data-testid="${escapeHtml(testId)}">
+    return `<div class="intake-pdf-additional-subsection" data-testid="${escapeHtml(testId)}">
 <h3 class="intake-pdf-subsection-title">${escapeHtml(title)}: ${escapeHtml(normalized)}</h3>
 </div>`;
   }
-  return `<div data-testid="${escapeHtml(testId)}">
+  return `<div class="intake-pdf-additional-subsection" data-testid="${escapeHtml(testId)}">
 <h3 class="intake-pdf-subsection-title">${escapeHtml(title)}</h3>
 <p>${cell(summary)}</p>
 </div>`;
@@ -235,7 +236,7 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
       ["Статус", military.status],
       ["Звание", military.rank],
       ["Категория", military.category],
-      ["Состав", military.composition],
+      ["Состав", intakeMilitaryCompositionLabel(military.composition)],
     ]),
   );
 

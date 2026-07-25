@@ -7,6 +7,7 @@ import {
   buildIntakePdfHrefByApplicationId,
   buildIntakePdfHrefByToken,
 } from "./intakePdfFilename";
+import { INTAKE_PDF_DOCUMENT_CSS, INTAKE_PDF_SECTION_FLOW_CLASS } from "./intakePdfDocumentCss";
 import {
   buildIntakePdfHtmlDocument,
   INTAKE_PDF_SECTION_TEST_IDS,
@@ -16,6 +17,7 @@ import { getIntakePdfRenderer, INTAKE_PDF_OPTIONS } from "./intakePdfRenderer";
 import { buildIntakePdfTrainingSummaries } from "./intakePdfSummaries";
 import { buildIntakePdfViewModel } from "./intakePdfViewModel";
 import type { EmploymentTenureCalculation } from "./employmentTenureFormat";
+import { INTAKE_MILITARY_COMPOSITION_OPTIONS } from "@/lib/militaryDictionary";
 import { closePersonnelOrderPdfBrowser } from "@/app/directory/personnel/_lib/personnelOrderPdfBrowser";
 
 function samplePayload() {
@@ -205,6 +207,133 @@ describe("intakePdfHtmlDocument", () => {
     expect(html).toContain("Призывник");
     expect(html).toContain("Иностранные языки: 0 зап.");
     expect(html).not.toMatch(/Иностранные языки<\/h3>\s*<p>0 зап\.<\/p>/);
+  });
+
+  it("localizes military composition enum values in PDF", () => {
+    for (const option of INTAKE_MILITARY_COMPOSITION_OPTIONS) {
+      const payload = samplePayload();
+      payload.military.composition = option.value;
+      const html = buildIntakePdfHtmlDocument(
+        buildIntakePdfViewModel({
+          applicationId: 42,
+          payload,
+          summaries: sampleSummaries(payload),
+        }),
+      );
+
+      expect(html).toContain(option.label);
+      expect(html).not.toContain(`>${option.value}<`);
+    }
+  });
+
+  it("formats foreign language proficiency without nested parentheses", () => {
+    const payload = samplePayload();
+    payload.additional.foreign_languages = [
+      { language: "Английский", proficiency: "Выше среднего (B2)" },
+    ];
+
+    const html = buildIntakePdfHtmlDocument(
+      buildIntakePdfViewModel({
+        applicationId: 42,
+        payload,
+        summaries: sampleSummaries(payload),
+      }),
+    );
+
+    expect(html).toContain("Английский — Выше среднего (B2)");
+    expect(html).not.toContain("Английский (Выше среднего (B2))");
+  });
+
+  it("allows additional section to flow after military without forced page break", () => {
+    const payload = samplePayload();
+    const html = buildIntakePdfHtmlDocument(
+      buildIntakePdfViewModel({
+        applicationId: 42,
+        payload,
+        summaries: sampleSummaries(payload),
+      }),
+    );
+
+    expect(html).toContain(`class="intake-pdf-section ${INTAKE_PDF_SECTION_FLOW_CLASS}"`);
+    expect(html).toContain('data-testid="intake-pdf-section-additional"');
+    expect(html.indexOf('data-testid="intake-pdf-section-military"')).toBeLessThan(
+      html.indexOf('data-testid="intake-pdf-section-additional"'),
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-section\s*\{[^}]*page-break-inside:\s*auto;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-document tr\s*\{[^}]*page-break-inside:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-summary-block\s*\{[^}]*page-break-inside:\s*avoid;/s,
+    );
+  });
+
+  it("uses continuous flow for education and relatives without forced section page breaks", () => {
+    const payload = samplePayload();
+    const html = buildIntakePdfHtmlDocument(
+      buildIntakePdfViewModel({
+        applicationId: 42,
+        payload,
+        summaries: sampleSummaries(payload),
+      }),
+    );
+
+    for (const testId of ["intake-pdf-section-education", "intake-pdf-section-relatives"] as const) {
+      expect(html).toContain(
+        `class="intake-pdf-section ${INTAKE_PDF_SECTION_FLOW_CLASS}" data-testid="${testId}"`,
+      );
+    }
+
+    expect(INTAKE_PDF_DOCUMENT_CSS).not.toMatch(
+      /\.intake-pdf-section\s*\{[^}]*page-break-inside:\s*avoid;/s,
+    );
+    expect(html).toContain('class="intake-pdf-data-table"');
+  });
+
+  it("keeps all PDF sections in continuous document order", () => {
+    const html = buildIntakePdfHtmlDocument(
+      buildIntakePdfViewModel({
+        applicationId: 42,
+        payload: samplePayload(),
+        summaries: sampleSummaries(),
+      }),
+    );
+
+    for (let index = 0; index < INTAKE_PDF_SECTION_TEST_IDS.length - 1; index += 1) {
+      const current = INTAKE_PDF_SECTION_TEST_IDS[index];
+      const next = INTAKE_PDF_SECTION_TEST_IDS[index + 1];
+      expect(html.indexOf(`data-testid="${current}"`)).toBeGreaterThan(-1);
+      expect(html.indexOf(`data-testid="${next}"`)).toBeGreaterThan(-1);
+      expect(html.indexOf(`data-testid="${current}"`)).toBeLessThan(
+        html.indexOf(`data-testid="${next}"`),
+      );
+    }
+  });
+
+  it("protects section leads, table rows, summary cards and additional subsections from splits", () => {
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-section-title\s*\{[^}]*page-break-after:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-data-table thead\s*\{[^}]*page-break-after:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-data-table tbody tr:first-child\s*\{[^}]*page-break-before:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-document tr\s*\{[^}]*page-break-inside:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-summary-block\s*\{[^}]*page-break-inside:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-additional-subsection\s*\{[^}]*page-break-inside:\s*avoid;/s,
+    );
+    expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(
+      /\.intake-pdf-document table\s*\{[^}]*page-break-inside:\s*auto;/s,
+    );
   });
 });
 

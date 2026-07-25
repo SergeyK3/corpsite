@@ -21,9 +21,9 @@ const BASE_ITEMS = [
     prefixes: ["/directory/personnel/journal"],
   },
   {
-    href: "/directory/personnel/applicants",
-    title: "Претенденты",
-    prefixes: ["/directory/personnel/applicants"],
+    href: "/directory/personnel/lk",
+    title: "Личные карточки",
+    prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants"],
   },
   {
     href: "/directory/personnel/onboarding",

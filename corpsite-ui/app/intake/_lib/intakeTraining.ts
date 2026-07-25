@@ -3,11 +3,15 @@ import {
   type IntakeTraining,
   type IntakeTrainingDocumentType,
 } from "./intakeApi.client";
-import {
-  isIncompleteIntakePeriodDate,
-  isValidIntakeFullDateIso,
-} from "./intakeDateValidation";
+import { isIncompleteIntakePeriodDate } from "./intakeDateValidation";
 import { formatIntakePeriodForDisplay, formatIntakePeriodRange } from "./intakePeriodFormat";
+import {
+  countInclusiveCalendarDays,
+  INTAKE_PERIOD_RANGE_ERROR,
+  resolveIntakePeriodRangeError,
+} from "./intakePeriodRange";
+
+export { countInclusiveCalendarDays };
 
 export type IntakeTrainingEntry = IntakeTraining;
 
@@ -30,10 +34,27 @@ export function normalizeIntakeTrainingDocumentType(
   return "certificate";
 }
 
-export function resolveIntakeTrainingYearTo(item: Pick<IntakeTrainingEntry, "year_to" | "year">): string {
+export function resolveIntakeTrainingYearFrom(
+  item: Pick<IntakeTrainingEntry, "year_from"> & Record<string, unknown>,
+): string {
+  return String(item.year_from ?? "").trim();
+}
+
+export function resolveIntakeTrainingYearTo(
+  item: Pick<IntakeTrainingEntry, "year_to" | "year"> & Record<string, unknown>,
+): string {
   const yearTo = String(item.year_to ?? "").trim();
   if (yearTo) return yearTo;
   return String(item.year ?? "").trim();
+}
+
+export function resolveIntakeTrainingPeriodRangeError(
+  item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year"> & Record<string, unknown>,
+): string | null {
+  return resolveIntakePeriodRangeError(
+    resolveIntakeTrainingYearFrom(item),
+    resolveIntakeTrainingYearTo(item),
+  );
 }
 
 export function normalizeIntakeTrainingEntry(
@@ -84,18 +105,6 @@ export function formatIntakeTrainingHoursCell(hours: string | null | undefined):
   return trimmed;
 }
 
-export function countInclusiveCalendarDays(fromIso: string, toIso: string): number | null {
-  if (!isValidIntakeFullDateIso(fromIso) || !isValidIntakeFullDateIso(toIso)) {
-    return null;
-  }
-  const fromParts = fromIso.slice(0, 10).split("-").map(Number);
-  const toParts = toIso.slice(0, 10).split("-").map(Number);
-  const fromDate = Date.UTC(fromParts[0], fromParts[1] - 1, fromParts[2]);
-  const toDate = Date.UTC(toParts[0], toParts[1] - 1, toParts[2]);
-  if (fromDate > toDate) return null;
-  return Math.floor((toDate - fromDate) / 86_400_000) + 1;
-}
-
 export type TrainingHoursResolution = {
   hours: string;
   note: string;
@@ -104,16 +113,18 @@ export type TrainingHoursResolution = {
 };
 
 export function resolveTrainingHoursState(item: IntakeTrainingEntry): TrainingHoursResolution {
+  const periodError = resolveIntakeTrainingPeriodRangeError(item);
+
   if (item.hours_is_manual && String(item.hours ?? "").trim()) {
     return {
       hours: String(item.hours).trim(),
       note: "По документу",
       isManual: true,
-      periodError: null,
+      periodError,
     };
   }
 
-  const yearFrom = String(item.year_from ?? "").trim();
+  const yearFrom = resolveIntakeTrainingYearFrom(item);
   const yearTo = resolveIntakeTrainingYearTo(item);
 
   if (!yearFrom && !yearTo) {
@@ -138,13 +149,22 @@ export function resolveTrainingHoursState(item: IntakeTrainingEntry): TrainingHo
     };
   }
 
+  if (periodError) {
+    return {
+      hours: "",
+      note: "",
+      isManual: false,
+      periodError,
+    };
+  }
+
   const days = countInclusiveCalendarDays(yearFrom, yearTo);
   if (days === null) {
     return {
       hours: "",
       note: "",
       isManual: false,
-      periodError: "Дата начала не может быть позже даты окончания",
+      periodError: INTAKE_PERIOD_RANGE_ERROR,
     };
   }
 
@@ -187,12 +207,10 @@ export function applyTrainingEntryPatch(
   return next;
 }
 
-export function isInvalidIntakeTrainingPeriodRange(item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year">): boolean {
-  const yearFrom = String(item.year_from ?? "").trim();
-  const yearTo = resolveIntakeTrainingYearTo(item);
-  if (!yearFrom || !yearTo) return false;
-  if (isIncompleteIntakePeriodDate(yearFrom) || isIncompleteIntakePeriodDate(yearTo)) return false;
-  return countInclusiveCalendarDays(yearFrom, yearTo) === null;
+export function isInvalidIntakeTrainingPeriodRange(
+  item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year"> & Record<string, unknown>,
+): boolean {
+  return resolveIntakeTrainingPeriodRangeError(item) !== null;
 }
 
 function trainingStartSortKey(item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year">): string {

@@ -21,7 +21,7 @@ import {
 import {
   persistIntakeLinkPath,
 } from "../_lib/personnelApplicantWorkflow";
-import { PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH } from "../_lib/personnelApplicationsJournalNav";
+import { PERSONNEL_LK_WORKPLACE_BASE_PATH } from "../_lib/personnelApplicationsJournalNav";
 import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
 import {
   issueIntakeLink,
@@ -409,7 +409,7 @@ export default function PersonnelApplicationRegisterDrawer({
                   </div>
 
                   <OrgScopeFilter
-                    basePath={PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}
+                    basePath={PERSONNEL_LK_WORKPLACE_BASE_PATH}
                     label="Группа отделений *"
                     emptyLabel="Выберите группу отделений"
                     value={orgGroupId}
@@ -421,7 +421,7 @@ export default function PersonnelApplicationRegisterDrawer({
                   />
 
                   <OrgUnitScopeFilter
-                    basePath={PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}
+                    basePath={PERSONNEL_LK_WORKPLACE_BASE_PATH}
                     label="Отделение *"
                     allLabel="Выберите отделение"
                     orgGroupId={orgGroupId}

@@ -15,6 +15,7 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_INTAKE_PENDING,
     APPLICATION_STATUS_INTAKE_SUBMITTED,
     APPLICATION_STATUS_REGISTERED,
+    APPLICATION_STATUS_REVISION_REQUESTED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
 from app.personnel_intake.domain.applicant_reedit import (
@@ -537,22 +538,58 @@ def submit_intake_draft(
             code="ALREADY_SUBMITTED",
         )
 
+    return submit_intake_draft_for_application(
+        conn,
+        application_id=link.application_id,
+        draft=draft,
+        link=link,
+    )
+
+
+def submit_intake_draft_for_application(
+    conn: Connection,
+    *,
+    application_id: int,
+    draft: IntakeDraftSnapshot,
+    link: IntakeLinkSnapshot,
+    payload: dict[str, Any] | None = None,
+) -> SubmitIntakeDraftResult:
+    """Validate and submit an editable intake draft (shared public/on-behalf path)."""
+    repo = SqlAlchemyPersonnelIntakeRepository(conn)
+    now = _now_utc()
+
+    if payload is not None:
+        if not is_intake_draft_editable(draft.status):
+            raise PersonnelIntakeTokenError(
+                "Intake draft is already submitted.",
+                code="ALREADY_SUBMITTED",
+            )
+        draft = repo.update_draft_payload(draft.draft_id, payload=payload, updated_at=now)
+    elif not is_intake_draft_editable(draft.status):
+        raise PersonnelIntakeTokenError(
+            "Intake draft is already submitted.",
+            code="ALREADY_SUBMITTED",
+        )
+
     _validate_submit_payload(draft.payload)
 
     draft = repo.mark_draft_submitted(draft.draft_id, submitted_at=now)
     link = repo.mark_link_submitted(link.link_id, submitted_at=now)
     app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
-    app = app_repo.require_by_id(link.application_id)
-    if app.status == APPLICATION_STATUS_INTAKE_PENDING:
+    app = app_repo.require_by_id(application_id)
+    if app.status in {
+        APPLICATION_STATUS_INTAKE_PENDING,
+        APPLICATION_STATUS_REVISION_REQUESTED,
+    }:
         _transition_application_status(
             conn,
-            application_id=link.application_id,
+            application_id=application_id,
             new_status=APPLICATION_STATUS_INTAKE_SUBMITTED,
             now=now,
         )
 
     return SubmitIntakeDraftResult(
-        application_id=link.application_id,
+        application_id=application_id,
         link=link,
         draft=draft,
         submitted_at=now,

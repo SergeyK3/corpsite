@@ -140,6 +140,35 @@ describe("IntakeTrainingTable", () => {
     expect(screen.getByTestId("intake-training-summary-hours-value")).toHaveTextContent(/\d+/);
   });
 
+  it("shows reversed period error under collapsed row for manual-hours draft payload", () => {
+    render(
+      <IntakeTrainingTable
+        items={[
+          normalizeIntakeTrainingEntry({
+            institution: "Учебный центр охраны труда",
+            course_name: "Охрана труда и техника безопасности",
+            year_from: "2024-07-10",
+            year_to: "2024-06-01",
+            document_type: "certificate",
+            document_number: "ОТ-178-01",
+            hours: "40",
+            hours_is_manual: true,
+          }),
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const desktop = screen.getByTestId("intake-training-desktop-view");
+    expect(within(desktop).getByTestId("intake-training-row-0")).toHaveTextContent(
+      "10.07.2024 — 01.06.2024",
+    );
+    expect(within(desktop).getByTestId("intake-training-period-error-0")).toHaveTextContent(
+      "Дата окончания не может быть раньше даты начала",
+    );
+    expect(within(desktop).queryByTestId("intake-training-editor-0")).not.toBeInTheDocument();
+  });
+
   it("shows period validation instead of calculated hours for incomplete dates", () => {
     render(
       <IntakeTrainingTable
@@ -158,7 +187,9 @@ describe("IntakeTrainingTable", () => {
 
     expandTrainingRow(0);
     expect(
-      within(screen.getByTestId("intake-training-desktop-view")).getByTestId("intake-training-period-error-0"),
+      within(screen.getByTestId("intake-training-desktop-view")).getByTestId(
+        "intake-training-editor-period-error-0",
+      ),
     ).toHaveTextContent("полные даты");
   });
 });

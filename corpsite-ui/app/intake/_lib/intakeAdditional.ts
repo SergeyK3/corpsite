@@ -304,7 +304,7 @@ export function formatIntakeAdditionalSubsectionReviewSummary(
 export function formatIntakeForeignLanguageReviewLine(item: IntakeForeignLanguage): string {
   const language = resolveIntakeForeignLanguageDisplay(item.language);
   const proficiency = intakeAdditionalCellValue(item.proficiency);
-  return `${language} (${proficiency})`;
+  return `${language} — ${proficiency}`;
 }
 
 export function formatIntakeAwardReviewLine(item: IntakeAward): string {

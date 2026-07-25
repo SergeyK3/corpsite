@@ -20,6 +20,7 @@ type Props = {
   applicationId?: number;
   payload: IntakeDraftPayload;
   readOnly?: boolean;
+  compact?: boolean;
   onPayloadChange: (payload: IntakeDraftPayload) => void;
 };
 
@@ -29,6 +30,7 @@ export default function IntakePhotoUpload({
   applicationId,
   payload,
   readOnly,
+  compact = false,
   onPayloadChange,
 }: Props) {
   const photoFileId = String(payload.personal.photo_file_id ?? "").trim();
@@ -73,6 +75,9 @@ export default function IntakePhotoUpload({
     };
   }, [applicationId, cacheBust, draftSrc, mode, photoFileId]);
 
+  const photoFrameClassName = compact
+    ? "mx-auto w-[120px] overflow-hidden border border-zinc-300 dark:border-zinc-600"
+    : "mx-auto w-[180px] overflow-hidden border border-zinc-300 dark:border-zinc-600";
   const savedPhotoUrl = mode === "public" ? publicPhotoUrl : onBehalfPreviewUrl;
 
   const openFilePicker = () => fileInputRef.current?.click();
@@ -136,10 +141,17 @@ export default function IntakePhotoUpload({
   };
 
   return (
-    <div className="space-y-3 sm:col-span-2" data-testid="intake-photo-upload">
+    <div
+      className={compact ? "shrink-0 space-y-2" : "space-y-3 sm:col-span-2"}
+      data-testid="intake-photo-upload"
+    >
       <div>
         <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">Фотография 3×4</div>
-        <p className="mt-1 text-xs text-zinc-500">JPEG, PNG или HEIC до 10 МБ. После сохранения фото будет сжато до 600×800 px.</p>
+        {compact ? null : (
+          <p className="mt-1 text-xs text-zinc-500">
+            JPEG, PNG или HEIC до 10 МБ. После сохранения фото будет сжато до 600×800 px.
+          </p>
+        )}
       </div>
 
       <input
@@ -168,7 +180,7 @@ export default function IntakePhotoUpload({
       ) : savedPhotoUrl ? (
         <div className="space-y-3">
           <div
-            className="mx-auto w-[180px] overflow-hidden border border-zinc-300 dark:border-zinc-600"
+            className={photoFrameClassName}
             style={{ aspectRatio: "3 / 4" }}
             data-testid="intake-photo-preview"
           >
@@ -200,9 +212,9 @@ export default function IntakePhotoUpload({
           </div>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className={compact ? "space-y-2" : "space-y-2"}>
           <div
-            className="mx-auto flex w-[180px] items-center justify-center border border-dashed border-zinc-300 px-3 text-center text-xs text-zinc-500 dark:border-zinc-600"
+            className={`${photoFrameClassName} flex items-center justify-center border-dashed px-2 text-center text-xs text-zinc-500`}
             style={{ aspectRatio: "3 / 4" }}
             data-testid="intake-photo-empty-slot"
           >

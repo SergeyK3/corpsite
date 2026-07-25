@@ -229,7 +229,7 @@ export const INTAKE_STEPS = [
   { id: "review", title: "Проверка" },
 ] as const;
 
-export const INTAKE_ON_BEHALF_INITIAL_STEP_ID = "employment_biography";
+export const INTAKE_ON_BEHALF_INITIAL_STEP_ID = "personal";
 
 export function formatIntakeStepHeaderTitle(stepIndex: number): string {
   const safeIndex = Math.min(Math.max(stepIndex, 0), INTAKE_STEPS.length - 1);
@@ -237,7 +237,7 @@ export function formatIntakeStepHeaderTitle(stepIndex: number): string {
   return `Анкета претендента · шаг ${safeIndex + 1} из ${INTAKE_STEPS.length} — ${step.title}`;
 }
 
-/** HR on-behalf edit opens on employment biography, not the applicant's saved step. */
+/** HR on-behalf edit opens on the first intake step, not the applicant's saved step. */
 export function resolveIntakeOnBehalfInitialStepIndex(): number {
   const preferredIndex = INTAKE_STEPS.findIndex((step) => step.id === INTAKE_ON_BEHALF_INITIAL_STEP_ID);
   if (preferredIndex >= 0) return preferredIndex;

@@ -316,14 +316,17 @@ export function resolveIntakeOnBehalfEditAccess(
   }
 
   if (status === "revision_requested") {
-    if (!isDraftOpenForPostSubmitOnBehalf(status, draftStatus, reviewSections)) {
-      return {
-        visible: true,
-        enabled: false,
-        blockedReason: "Анкета претендента ещё не отправлена.",
-      };
+    if (draftStatus === "editable") {
+      return { visible: true, enabled: true, blockedReason: null };
     }
-    return { visible: true, enabled: true, blockedReason: null };
+    if (draftStatus === "submitted") {
+      return { visible: true, enabled: true, blockedReason: null };
+    }
+    return {
+      visible: true,
+      enabled: false,
+      blockedReason: "Анкета претендента ещё не отправлена.",
+    };
   }
 
   if (status === "under_review") {
@@ -344,6 +347,17 @@ export function resolveIntakeOnBehalfEditAccess(
       };
     }
     return { visible: true, enabled: true, blockedReason: null };
+  }
+
+  if (status === "intake_submitted") {
+    if (draftStatus === "submitted") {
+      return { visible: true, enabled: true, blockedReason: null };
+    }
+    return {
+      visible: true,
+      enabled: false,
+      blockedReason: "Анкета претендента ещё не отправлена.",
+    };
   }
 
   if (draftStatus === "submitted") {

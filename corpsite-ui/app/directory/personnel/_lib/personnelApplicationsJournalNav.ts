@@ -1,7 +1,10 @@
 import { normalizeReturnTo, RETURN_TO_QUERY_PARAM } from "@/lib/taskNav";
 import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
 
-/** HR workplace journal — единая вкладка «Претенденты». */
+/** Canonical HR workplace for person-centric «Личные карточки» registry. */
+export const PERSONNEL_LK_WORKPLACE_BASE_PATH = "/directory/personnel/lk";
+
+/** Legacy route — redirects to {@link PERSONNEL_LK_WORKPLACE_BASE_PATH}. */
 export const PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH = "/directory/personnel/applicants";
 
 export const PERSONNEL_APPLICATION_ID_PARAM = "application_id";
@@ -84,7 +87,7 @@ export function buildPersonnelApplicationsJournalHref(
   state: PersonnelApplicationsJournalState,
   options?: { includeApplicationId?: boolean; basePath?: string },
 ): string {
-  const basePath = options?.basePath ?? PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH;
+  const basePath = options?.basePath ?? PERSONNEL_LK_WORKPLACE_BASE_PATH;
   const params = buildPersonnelApplicationsJournalQueryParams(state, options);
   const qs = params.toString();
   return qs ? `${basePath}?${qs}` : basePath;
@@ -123,6 +126,8 @@ export function isPersonnelApplicationsJournalReturnHref(href: string | null | u
   const normalized = normalizeReturnTo(href);
   if (!normalized) return false;
   return (
+    normalized === PERSONNEL_LK_WORKPLACE_BASE_PATH ||
+    normalized.startsWith(`${PERSONNEL_LK_WORKPLACE_BASE_PATH}?`) ||
     normalized === PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH ||
     normalized.startsWith(`${PERSONNEL_APPLICANTS_WORKPLACE_BASE_PATH}?`)
   );
@@ -134,7 +139,7 @@ export function resolvePersonnelApplicationsJournalBackLabel(
   const normalized = normalizeReturnTo(returnTo);
   if (!normalized) return "Назад к персоналу";
   if (isPersonnelApplicationsJournalReturnHref(normalized)) {
-    return "Назад к претендентам";
+    return "Назад к личным карточкам";
   }
   return "Назад";
 }

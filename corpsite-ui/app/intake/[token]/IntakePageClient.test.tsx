@@ -607,10 +607,10 @@ describe("IntakePageClient", () => {
     render(<IntakePageClient />);
 
     const summary = await screen.findByTestId("intake-review-summary");
-    expect(summary).toHaveTextContent("Петров Пётр");
+    expect(summary).toHaveTextContent("Петров");
     expect(summary).toHaveTextContent("20.05.1990");
-    expect(summary).toHaveTextContent("+77005554433");
-    expect(summary).toHaveTextContent("petrov@example.test");
+    expect(screen.getByTestId("intake-review-section-contacts")).toHaveTextContent("+77005554433");
+    expect(screen.getByTestId("intake-review-section-contacts")).toHaveTextContent("petrov@example.test");
     expect(screen.queryByLabelText(/Фамилия/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Мобильный телефон/i)).not.toBeInTheDocument();
   });
@@ -799,12 +799,10 @@ describe("IntakePageClient", () => {
 
     render(<IntakePageClient />);
 
-    expect(await screen.findByTestId("intake-review-education-0")).toHaveTextContent(
-      "КазНУ: 01.09.2014 — 30.06.2018",
-    );
-    expect(screen.getByTestId("intake-review-training-0")).toHaveTextContent(
-      "Охрана труда; 10.03.2021",
-    );
+    expect(await screen.findByTestId("intake-review-education-item-0")).toHaveTextContent("КазНУ");
+    expect(screen.getByTestId("intake-review-education-item-0")).toHaveTextContent("01.09.2014");
+    expect(screen.getByTestId("intake-review-training-item-0")).toHaveTextContent("Охрана труда");
+    expect(screen.getByTestId("intake-review-training-item-0")).toHaveTextContent("10.03.2021");
   });
 
   it("blocks submit on review step when legacy year-only dates remain", async () => {

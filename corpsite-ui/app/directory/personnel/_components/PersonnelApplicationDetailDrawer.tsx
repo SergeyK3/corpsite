@@ -35,6 +35,7 @@ type Props = {
   open: boolean;
   journalReturnHref: string;
   onClose: () => void;
+  onDetailChanged?: () => void;
 };
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -51,6 +52,7 @@ export default function PersonnelApplicationDetailDrawer({
   open,
   journalReturnHref,
   onClose,
+  onDetailChanged,
 }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -62,9 +64,12 @@ export default function PersonnelApplicationDetailDrawer({
   const reloadDetail = React.useCallback(() => {
     if (applicationId == null) return;
     void getPersonnelApplication(applicationId)
-      .then(setDetail)
+      .then((data) => {
+        setDetail(data);
+        onDetailChanged?.();
+      })
       .catch((e) => setError(mapPersonnelApplicationsApiError(e, "Не удалось загрузить обращение")));
-  }, [applicationId]);
+  }, [applicationId, onDetailChanged]);
 
   React.useEffect(() => {
     if (!open) return;

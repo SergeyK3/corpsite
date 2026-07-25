@@ -24,6 +24,7 @@ import {
   INTAKE_EDUCATION_TYPE_OPTIONS,
   type IntakeEducation,
 } from "../_lib/intakeApi.client";
+import { resolveIntakePeriodRangeError } from "../_lib/intakePeriodRange";
 
 type Props = {
   items: IntakeEducation[];
@@ -44,6 +45,8 @@ function EducationRowEditor({
   readOnly?: boolean;
   onPatch: (patch: Partial<IntakeEducation>) => void;
 }) {
+  const periodError = resolveIntakePeriodRangeError(item.year_from, item.year_to);
+
   return (
     <div
       className="grid gap-3 border-t border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40 sm:grid-cols-2"
@@ -111,6 +114,14 @@ function EducationRowEditor({
         testId={`intake-education-diploma-number-${index}`}
         onChange={(value) => onPatch({ diploma_number: value })}
       />
+      {periodError ? (
+        <p
+          className="sm:col-span-2 text-xs text-amber-700 dark:text-amber-300"
+          data-testid={`intake-education-period-error-${index}`}
+        >
+          {periodError}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -209,6 +209,7 @@ class IntakeReconciliationDecisionListOut(BaseModel):
 
 class IntakeOnBehalfEditSessionOut(BaseModel):
     application_id: int
+    application_status: str
     draft: IntakeDraftOut
     editable: bool
     blocked_reason: str | None = None
@@ -222,6 +223,19 @@ class IntakeOnBehalfSaveOut(BaseModel):
     saved_at: datetime
     draft_updated_at: datetime
     changed_fields: list[str]
+
+
+class IntakeOnBehalfSubmitIn(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+    expected_updated_at: datetime
+
+
+class IntakeOnBehalfSubmitOut(BaseModel):
+    application_id: int
+    draft_id: int
+    status: str
+    submitted_at: datetime
+    draft_updated_at: datetime
 
 
 def summary_to_out(summary: IntakeSummary, *, intake_url_path: str | None = None) -> IntakeSummaryOut:

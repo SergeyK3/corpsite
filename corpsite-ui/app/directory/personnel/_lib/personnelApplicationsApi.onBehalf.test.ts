@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isIntakeOnBehalfDraftVersionConflict,
   saveIntakeOnBehalfDraft,
+  submitIntakeOnBehalfDraft,
 } from "./personnelApplicationsApi.client";
 
 describe("saveIntakeOnBehalfDraft concurrency contract", () => {
@@ -47,5 +48,39 @@ describe("saveIntakeOnBehalfDraft concurrency contract", () => {
     expect(isIntakeOnBehalfDraftVersionConflict({ status: 422, details: { detail: { code: "X" } } })).toBe(
       false,
     );
+  });
+});
+
+describe("submitIntakeOnBehalfDraft contract", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("sends payload and expected_updated_at in POST body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          application_id: 42,
+          draft_id: 7,
+          status: "submitted",
+          submitted_at: "2026-07-23T10:00:00Z",
+          draft_updated_at: "2026-07-23T10:00:01Z",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitIntakeOnBehalfDraft(42, { current_step: "review" }, "2026-07-23T09:00:00.123456Z");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/intake/draft/on-behalf/submit");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      payload: { current_step: "review" },
+      expected_updated_at: "2026-07-23T09:00:00.123456Z",
+    });
   });
 });

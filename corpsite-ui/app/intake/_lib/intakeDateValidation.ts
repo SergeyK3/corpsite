@@ -6,6 +6,7 @@ import {
   isInvalidIntakeTrainingPeriodRange,
   resolveIntakeTrainingYearTo,
 } from "./intakeTraining";
+import { INTAKE_PERIOD_RANGE_ERROR, resolveIntakePeriodRangeError } from "./intakePeriodRange";
 import {
   formatPersonnelDayDateForDisplay,
   isIncompletePersonnelBirthDate,
@@ -111,6 +112,14 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
         message: formatIssueMessage("Образование", record, "дата окончания"),
       });
     }
+    if (resolveIntakePeriodRangeError(item.year_from, item.year_to)) {
+      pushIssue(issues, {
+        field: `education[${index}].year_to`,
+        stepId: "education",
+        focusTestId: `intake-education-year-to-${index}`,
+        message: formatIssueMessage("Образование", record, INTAKE_PERIOD_RANGE_ERROR),
+      });
+    }
   });
 
   payload.training?.forEach((item, index) => {
@@ -134,10 +143,10 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
     }
     if (isInvalidIntakeTrainingPeriodRange(item)) {
       pushIssue(issues, {
-        field: `training[${index}].year_from`,
+        field: `training[${index}].year_to`,
         stepId: "training",
-        focusTestId: `intake-training-year-from-${index}`,
-        message: formatIssueMessage("Обучение", record, "некорректный период"),
+        focusTestId: `intake-training-year-to-${index}`,
+        message: formatIssueMessage("Обучение", record, INTAKE_PERIOD_RANGE_ERROR),
       });
     }
   });
@@ -170,6 +179,14 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
         stepId: "employment_biography",
         focusTestId: `intake-employment-year-to-${index}`,
         message: formatIssueMessage("Трудовая биография", record, "дата окончания"),
+      });
+    }
+    if (resolveIntakePeriodRangeError(item.year_from, item.year_to)) {
+      pushIssue(issues, {
+        field: `employment_biography[${index}].year_to`,
+        stepId: "employment_biography",
+        focusTestId: `intake-employment-year-to-${index}`,
+        message: formatIssueMessage("Трудовая биография", record, INTAKE_PERIOD_RANGE_ERROR),
       });
     }
   });

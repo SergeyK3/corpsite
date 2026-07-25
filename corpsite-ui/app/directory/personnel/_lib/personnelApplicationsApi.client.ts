@@ -372,6 +372,7 @@ export async function getIntakeReviewState(applicationId: number): Promise<Intak
 
 export type IntakeOnBehalfEditSession = {
   application_id: number;
+  application_status: string;
   draft: {
     application_id: number;
     draft_id: number;
@@ -381,6 +382,7 @@ export type IntakeOnBehalfEditSession = {
     read_only: boolean;
     link_status: string;
     updated_at?: string | null;
+    submitted_at?: string | null;
   };
   editable: boolean;
   blocked_reason: string | null;
@@ -394,6 +396,14 @@ export type IntakeOnBehalfSaveResponse = {
   saved_at: string;
   draft_updated_at: string;
   changed_fields: string[];
+};
+
+export type IntakeOnBehalfSubmitResponse = {
+  application_id: number;
+  draft_id: number;
+  status: string;
+  submitted_at: string;
+  draft_updated_at: string;
 };
 
 export async function getIntakeOnBehalfEditSession(applicationId: number): Promise<IntakeOnBehalfEditSession> {
@@ -433,6 +443,30 @@ export async function saveIntakeOnBehalfDraft(
   const body = await readJsonSafe(res);
   if (!res.ok) throw toApiError(res.status, body, { method: "PATCH", url: path });
   return body as IntakeOnBehalfSaveResponse;
+}
+
+export async function submitIntakeOnBehalfDraft(
+  applicationId: number,
+  payload: Record<string, unknown>,
+  expectedUpdatedAt: string,
+): Promise<IntakeOnBehalfSubmitResponse> {
+  const normalizedExpectedUpdatedAt = expectedUpdatedAt.trim();
+  if (!normalizedExpectedUpdatedAt) {
+    throw new Error("expectedUpdatedAt is required for on-behalf draft submit.");
+  }
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/draft/on-behalf/submit`;
+  const res = await fetch(resolveApiUrl(path), {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify({
+      payload,
+      expected_updated_at: normalizedExpectedUpdatedAt,
+    }),
+    cache: "no-store",
+  });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "POST", url: path });
+  return body as IntakeOnBehalfSubmitResponse;
 }
 
 async function postReviewAction(

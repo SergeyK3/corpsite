@@ -10,6 +10,7 @@ import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFor
 import IntakeMilitaryCombobox from "./IntakeMilitaryCombobox";
 import IntakePhotoUpload from "./IntakePhotoUpload";
 import IntakeRelativesTable from "./IntakeRelativesTable";
+import IntakeReviewStep from "./IntakeReviewStep";
 import IntakeTrainingTable from "./IntakeTrainingTable";
 import {
   INTAKE_CITIZENSHIP_CATALOG,
@@ -31,25 +32,10 @@ import {
   type IntakeDraftPayload,
 } from "../_lib/intakeApi.client";
 import {
-  formatIntakeAcademicDegreeReviewLine,
-  formatIntakeAcademicTitleReviewLine,
-  formatIntakeAdditionalSubsectionReviewSummary,
-  formatIntakeAwardReviewLine,
-  formatIntakeForeignLanguageReviewLine,
-} from "../_lib/intakeAdditional";
-import {
   applyContactsRegistrationAddressChange,
   applyContactsResidenceMirror,
   contactsMirrorResidence,
-  formatIntakeFullName,
 } from "../_lib/intakeContactHelpers";
-import {
-  formatIntakeBirthDateForDisplay,
-  formatIntakeEducationReviewLine,
-  formatIntakeEmploymentReviewLine,
-  formatIntakeRelativeReviewLine,
-  formatIntakeTrainingReviewLine,
-} from "../_lib/intakePeriodFormat";
 import {
   collectIntakeDateValidationIssues,
   resolveIntakeDateIssueStepIndex,
@@ -84,26 +70,32 @@ function StepPersonal({
   const showPersonnelNumber = shouldShowIntakePersonnelNumberField(mode, p.personnel_number);
   const personnelNumberEditable = isIntakePersonnelNumberEditable(mode, readOnly);
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <IntakePhotoUpload
-        mode={mode}
-        intakeToken={intakeToken}
-        applicationId={applicationId}
-        payload={payload}
-        readOnly={readOnly}
-        onPayloadChange={onChange}
-      />
-      <IntakeTextField label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
-      <IntakeTextField label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
-      <IntakeTextField label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
-      <IntakeDateField
-        label="Дата рождения"
-        value={p.birth_date}
-        onChange={(v) => set("birth_date", v)}
-        readOnly={readOnly}
-        kind="birth"
-        testId="intake-birth-date"
-      />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <IntakePhotoUpload
+          compact
+          mode={mode}
+          intakeToken={intakeToken}
+          applicationId={applicationId}
+          payload={payload}
+          readOnly={readOnly}
+          onPayloadChange={onChange}
+        />
+        <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
+          <IntakeTextField label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
+          <IntakeTextField label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
+          <IntakeTextField label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
+          <IntakeDateField
+            label="Дата рождения"
+            value={p.birth_date}
+            onChange={(v) => set("birth_date", v)}
+            readOnly={readOnly}
+            kind="birth"
+            testId="intake-birth-date"
+          />
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
       <IntakeTextField label="Место рождения" value={p.birth_place} onChange={(v) => set("birth_place", v)} readOnly={readOnly} testId="intake-birth-place" />
       {showPersonnelNumber ? (
         <IntakeTextField
@@ -147,6 +139,7 @@ function StepPersonal({
         catalog={INTAKE_NATIONALITY_CATALOG}
         testId="intake-nationality"
       />
+      </div>
     </div>
   );
 }
@@ -282,6 +275,7 @@ export type IntakeDraftFormEditorProps = {
   payload: IntakeDraftPayload;
   onChange: (payload: IntakeDraftPayload) => void;
   readOnly?: boolean;
+  allowStepNavigation?: boolean;
   stepIndex: number;
   onStepIndexChange: (index: number) => void;
   error?: string | null;
@@ -292,6 +286,11 @@ export type IntakeDraftFormEditorProps = {
   primaryActionBusy?: boolean;
   primaryActionLabel?: string;
   primaryActionDisabled?: boolean;
+  onSecondaryAction?: () => void;
+  secondaryActionBusy?: boolean;
+  secondaryActionLabel?: string;
+  secondaryActionDisabled?: boolean;
+  secondaryActionError?: string | null;
   onGeneratePdf?: () => void;
   pdfGenerating?: boolean;
   reviewNotice?: string | null;
@@ -307,6 +306,7 @@ export default function IntakeDraftFormEditor({
   payload,
   onChange,
   readOnly = false,
+  allowStepNavigation,
   stepIndex,
   onStepIndexChange,
   error,
@@ -317,6 +317,11 @@ export default function IntakeDraftFormEditor({
   primaryActionBusy = false,
   primaryActionLabel,
   primaryActionDisabled = false,
+  onSecondaryAction,
+  secondaryActionBusy = false,
+  secondaryActionLabel,
+  secondaryActionDisabled = false,
+  secondaryActionError = null,
   onGeneratePdf,
   pdfGenerating = false,
   reviewNotice,
@@ -328,6 +333,7 @@ export default function IntakeDraftFormEditor({
   applicationId,
 }: IntakeDraftFormEditorProps) {
   const currentStep = INTAKE_STEPS[stepIndex];
+  const blockStepNavigation = readOnly && allowStepNavigation !== true;
   const dateValidationIssues = React.useMemo(
     () => collectIntakeDateValidationIssues(payload),
     [payload],
@@ -351,16 +357,15 @@ export default function IntakeDraftFormEditor({
     setPendingFocusTestId(null);
   }, [pendingFocusTestId, readOnly, stepIndex]);
 
-  function navigateToDateIssue(issue: IntakeDateValidationIssue) {
-    const nextIndex = resolveIntakeDateIssueStepIndex(issue);
-    onStepIndexChange(nextIndex);
-    onChange({ ...payload, current_step: INTAKE_STEPS[nextIndex].id });
-    setPendingFocusTestId(issue.focusTestId);
-  }
-
   function navigateToStep(nextIndex: number) {
     onStepIndexChange(nextIndex);
     onChange({ ...payload, current_step: INTAKE_STEPS[nextIndex].id });
+  }
+
+  function navigateToDateIssue(issue: IntakeDateValidationIssue) {
+    const nextIndex = resolveIntakeDateIssueStepIndex(issue);
+    navigateToStep(nextIndex);
+    setPendingFocusTestId(issue.focusTestId);
   }
 
   function goNext() {
@@ -445,6 +450,7 @@ export default function IntakeDraftFormEditor({
             <IntakeEmploymentBiographyTable
               items={payload.employment_biography}
               readOnly={readOnly}
+              focusTestId={pendingFocusTestId}
               onChange={(items) => onChange({ ...payload, employment_biography: items })}
             />
           ) : null}
@@ -460,134 +466,21 @@ export default function IntakeDraftFormEditor({
             />
           ) : null}
           {currentStep.id === "review" ? (
-            <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300" data-testid="intake-review-summary">
-              <p>
-                {mode === "hr-on-behalf"
-                  ? "Проверьте сведения перед сохранением от имени претендента."
-                  : "Проверьте введённые сведения перед отправкой в отдел кадров."}
-              </p>
-              {mode === "hr-on-behalf" && reviewNotice ? (
-                <p className="text-amber-700 dark:text-amber-300" data-testid="intake-on-behalf-review-notice">
-                  {reviewNotice}
-                </p>
-              ) : null}
-              <ul className="list-disc space-y-1 pl-5">
-                <li>ФИО: {formatIntakeFullName(payload.personal) || "—"}</li>
-                <li>Дата рождения: {formatIntakeBirthDateForDisplay(payload.personal.birth_date) || "—"}</li>
-                <li>Место рождения: {payload.personal.birth_place || "—"}</li>
-                <li>Алфавит: {deriveIntakeSurnameAlphabet(payload.personal.last_name) || "—"}</li>
-                {shouldShowIntakePersonnelNumberField(mode, payload.personal.personnel_number) ? (
-                  <li>Табельный номер: {payload.personal.personnel_number || "—"}</li>
-                ) : null}
-                <li>Телефон: {payload.contacts.mobile_phone || "—"}</li>
-                <li>Email: {payload.contacts.email || "—"}</li>
-                <li>
-                  Образование:{" "}
-                  {payload.education.length === 0
-                    ? "0 зап."
-                    : payload.education.map((item, index) => (
-                        <span key={`education-${index}`} data-testid={`intake-review-education-${index}`}>
-                          {index > 0 ? "; " : ""}
-                          {formatIntakeEducationReviewLine(item)}
-                        </span>
-                      ))}
-                </li>
-                <li>
-                  Обучение:{" "}
-                  {payload.training.length === 0
-                    ? "0 зап."
-                    : payload.training.map((item, index) => (
-                        <span key={`training-${index}`} data-testid={`intake-review-training-${index}`}>
-                          {index > 0 ? "; " : ""}
-                          {formatIntakeTrainingReviewLine(item)}
-                        </span>
-                      ))}
-                </li>
-                <li>
-                  Родственники:{" "}
-                  {payload.relatives.length === 0
-                    ? "0 зап."
-                    : payload.relatives.map((item, index) => (
-                        <span key={`relatives-${index}`} data-testid={`intake-review-relative-${index}`}>
-                          {index > 0 ? "; " : ""}
-                          {formatIntakeRelativeReviewLine(item)}
-                        </span>
-                      ))}
-                </li>
-                <li>
-                  Предыдущие места работы:{" "}
-                  {payload.employment_biography.length === 0
-                    ? "0 зап."
-                    : payload.employment_biography.map((item, index) => (
-                        <span key={`employment-${index}`} data-testid={`intake-review-employment-${index}`}>
-                          {index > 0 ? "; " : ""}
-                          {formatIntakeEmploymentReviewLine(item)}
-                        </span>
-                      ))}
-                </li>
-                <li data-testid="intake-review-additional-languages">
-                  Иностранные языки:{" "}
-                  {formatIntakeAdditionalSubsectionReviewSummary(
-                    payload.additional.foreign_languages,
-                    payload.additional.foreign_languages_none,
-                    (item) => formatIntakeForeignLanguageReviewLine(item),
-                  )}
-                </li>
-                <li data-testid="intake-review-additional-awards">
-                  Награды:{" "}
-                  {formatIntakeAdditionalSubsectionReviewSummary(
-                    payload.additional.awards,
-                    payload.additional.awards_none,
-                    (item) => formatIntakeAwardReviewLine(item),
-                  )}
-                </li>
-                <li data-testid="intake-review-additional-degrees">
-                  Учёные степени:{" "}
-                  {formatIntakeAdditionalSubsectionReviewSummary(
-                    payload.additional.academic_degrees,
-                    payload.additional.academic_degrees_none,
-                    (item) => formatIntakeAcademicDegreeReviewLine(item),
-                  )}
-                </li>
-                <li data-testid="intake-review-additional-titles">
-                  Учёные звания:{" "}
-                  {formatIntakeAdditionalSubsectionReviewSummary(
-                    payload.additional.academic_titles,
-                    payload.additional.academic_titles_none,
-                    (item) => formatIntakeAcademicTitleReviewLine(item),
-                  )}
-                </li>
-              </ul>
-              {hasDateValidationIssues ? (
-                <div
-                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-                  data-testid="intake-review-date-issues"
-                >
-                  <p className="font-medium">Уточните даты перед отправкой:</p>
-                  <ul className="mt-1 list-disc pl-5">
-                    {dateValidationIssues.map((issue) => (
-                      <li key={issue.field}>
-                        <button
-                          type="button"
-                          className="text-left underline decoration-amber-700/60 underline-offset-2 hover:decoration-amber-900 dark:decoration-amber-300/60 dark:hover:decoration-amber-100"
-                          data-testid={`intake-review-date-issue-${issue.field}`}
-                          onClick={() => navigateToDateIssue(issue)}
-                        >
-                          {issue.message}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
+            <IntakeReviewStep
+              payload={payload}
+              mode={mode}
+              reviewNotice={reviewNotice}
+              dateValidationIssues={dateValidationIssues}
+              onNavigateToStep={navigateToStep}
+              onNavigateToDateIssue={navigateToDateIssue}
+            />
           ) : null}
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                disabled={stepIndex === 0 || readOnly}
+                disabled={stepIndex === 0 || blockStepNavigation}
                 onClick={goToStart}
                 className={navButtonClassName}
                 data-testid="intake-nav-start"
@@ -596,7 +489,7 @@ export default function IntakeDraftFormEditor({
               </button>
               <button
                 type="button"
-                disabled={stepIndex === 0 || readOnly}
+                disabled={stepIndex === 0 || blockStepNavigation}
                 onClick={goBack}
                 className={navButtonClassName}
                 data-testid="intake-nav-back"
@@ -606,7 +499,8 @@ export default function IntakeDraftFormEditor({
             </div>
             {currentStep.id === "review" ? (
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                   {onGeneratePdf ? (
                     <button
                       type="button"
@@ -622,7 +516,11 @@ export default function IntakeDraftFormEditor({
                     type="button"
                     disabled={readOnly || primaryActionDisabled || primaryActionBusy || submitBlockedByDates}
                     onClick={() => onPrimaryAction?.()}
-                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:px-4 sm:text-sm"
+                    className={
+                      mode === "hr-on-behalf"
+                        ? "rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900 dark:bg-zinc-900 dark:text-emerald-300 dark:hover:bg-zinc-800 sm:px-4 sm:text-sm"
+                        : "rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:px-4 sm:text-sm"
+                    }
                     data-testid={mode === "hr-on-behalf" ? "intake-on-behalf-save-button" : "intake-submit-button"}
                   >
                     {primaryActionBusy
@@ -634,10 +532,38 @@ export default function IntakeDraftFormEditor({
                           ? "Сохранить от имени претендента"
                           : "Отправить в отдел кадров")}
                   </button>
+                  {mode === "hr-on-behalf" && onSecondaryAction ? (
+                    <button
+                      type="button"
+                      disabled={
+                        readOnly ||
+                        secondaryActionDisabled ||
+                        secondaryActionBusy ||
+                        primaryActionBusy ||
+                        submitBlockedByDates
+                      }
+                      onClick={() => onSecondaryAction()}
+                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:px-4 sm:text-sm"
+                      data-testid="intake-on-behalf-submit-button"
+                    >
+                      {secondaryActionBusy
+                        ? "Отправка…"
+                        : secondaryActionLabel ?? "Отправить анкету"}
+                    </button>
+                  ) : null}
+                  </div>
+                  {secondaryActionError ? (
+                    <p
+                      className="max-w-xl text-right text-xs text-red-700 dark:text-red-300"
+                      data-testid="intake-on-behalf-submit-error"
+                    >
+                      {secondaryActionError}
+                    </p>
+                  ) : null}
                 </div>
                 <button
                   type="button"
-                  disabled={stepIndex === reviewStepIndex || readOnly}
+                  disabled={stepIndex === reviewStepIndex || blockStepNavigation}
                   onClick={goToEnd}
                   className={navButtonClassName}
                   data-testid="intake-nav-end"
@@ -649,7 +575,7 @@ export default function IntakeDraftFormEditor({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  disabled={readOnly}
+                  disabled={blockStepNavigation}
                   onClick={goNext}
                   className={navButtonClassName}
                   data-testid="intake-nav-next"
@@ -658,7 +584,7 @@ export default function IntakeDraftFormEditor({
                 </button>
                 <button
                   type="button"
-                  disabled={stepIndex === reviewStepIndex || readOnly}
+                  disabled={stepIndex === reviewStepIndex || blockStepNavigation}
                   onClick={goToEnd}
                   className={navButtonClassName}
                   data-testid="intake-nav-end"

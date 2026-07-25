@@ -148,4 +148,83 @@ describe("intakeDateValidation", () => {
     expect(collectIntakeDateValidationIssues(payload)).toEqual([]);
     expect(hasBlockingIntakeDateIssues(payload)).toBe(false);
   });
+
+  it("blocks submit when training end date is before start date", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.training = [
+      {
+        institution: "Учебный центр охраны труда",
+        course_name: "Охрана труда и техника безопасности",
+        year_from: "2024-07-10",
+        year_to: "2024-06-01",
+        document_type: "certificate",
+        document_number: "ОТ-178-01",
+        hours: "40",
+        hours_is_manual: true,
+      },
+    ];
+
+    const issues = collectIntakeDateValidationIssues(payload);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.field).toBe("training[0].year_to");
+    expect(issues[0]?.message).toBe(
+      "Обучение → Охрана труда и техника безопасности → Дата окончания не может быть раньше даты начала",
+    );
+    expect(issues[0]?.focusTestId).toBe("intake-training-year-to-0");
+    expect(hasBlockingIntakeDateIssues(payload)).toBe(true);
+  });
+
+  it("allows valid training period for application 178 corrected dates", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.training = [
+      {
+        institution: "Учебный центр охраны труда",
+        course_name: "Охрана труда и техника безопасности",
+        year_from: "2024-05-10",
+        year_to: "2024-06-01",
+        document_type: "certificate",
+        document_number: "ОТ-178-01",
+        hours: "40",
+        hours_is_manual: true,
+      },
+    ];
+
+    expect(collectIntakeDateValidationIssues(payload)).toEqual([]);
+  });
+
+  it("blocks submit when education end date is before start date", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.education = [
+      {
+        education_type: "basic",
+        institution: "КазНУ",
+        year_from: "2022-09-01",
+        year_to: "2022-06-30",
+        specialty: "",
+        qualification: "",
+        diploma_number: "",
+      },
+    ];
+
+    const issues = collectIntakeDateValidationIssues(payload);
+    expect(issues[0]?.field).toBe("education[0].year_to");
+    expect(issues[0]?.message).toContain("Дата окончания не может быть раньше даты начала");
+  });
+
+  it("blocks submit when employment end date is before start date", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.employment_biography = [
+      {
+        organization: "ООО Альфа",
+        position: "Инженер",
+        year_from: "2024-08-01",
+        year_to: "2024-01-15",
+        reason_for_leaving: "",
+      },
+    ];
+
+    const issues = collectIntakeDateValidationIssues(payload);
+    expect(issues[0]?.field).toBe("employment_biography[0].year_to");
+    expect(issues[0]?.message).toContain("Дата окончания не может быть раньше даты начала");
+  });
 });

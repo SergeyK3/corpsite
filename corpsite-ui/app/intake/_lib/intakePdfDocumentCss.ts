@@ -1,3 +1,5 @@
+export const INTAKE_PDF_SECTION_FLOW_CLASS = "intake-pdf-section-flow";
+
 export const INTAKE_PDF_DOCUMENT_CSS = `
 .intake-pdf-document {
   margin: 0 auto;
@@ -17,6 +19,8 @@ export const INTAKE_PDF_DOCUMENT_CSS = `
 
 .intake-pdf-document .intake-pdf-header {
   margin-bottom: 1rem;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
 }
 
 .intake-pdf-document .intake-pdf-header-top {
@@ -178,20 +182,47 @@ export const INTAKE_PDF_DOCUMENT_CSS = `
 
 .intake-pdf-document .intake-pdf-section {
   margin-top: 1rem;
-  break-inside: avoid-page;
-  page-break-inside: avoid;
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 .intake-pdf-document .intake-pdf-section-title {
   margin: 0 0 0.5rem;
   font-size: 11pt;
   font-weight: 700;
+  break-after: avoid-page;
+  page-break-after: avoid;
+}
+
+.intake-pdf-document .intake-pdf-section-title + .intake-pdf-summary-block {
+  break-before: avoid-page;
+  page-break-before: avoid;
 }
 
 .intake-pdf-document .intake-pdf-subsection-title {
   margin: 0.75rem 0 0.35rem;
   font-size: 10pt;
   font-weight: 700;
+}
+
+.intake-pdf-document .intake-pdf-additional-subsection {
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.intake-pdf-document .intake-pdf-data-table thead {
+  break-after: avoid-page;
+  page-break-after: avoid;
+}
+
+.intake-pdf-document .intake-pdf-data-table tbody tr:first-child {
+  break-before: avoid-page;
+  page-break-before: avoid;
+}
+
+.intake-pdf-document .intake-pdf-fields tbody tr:first-child {
+  break-before: avoid-page;
+  page-break-before: avoid;
 }
 
 .intake-pdf-document table {

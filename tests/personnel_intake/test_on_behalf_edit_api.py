@@ -11,9 +11,13 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.main import app
-from app.personnel_applications.domain.lifecycle_audit import LIFECYCLE_ACTION_INTAKE_EDITED_ON_BEHALF
+from app.personnel_applications.domain.lifecycle_audit import (
+    LIFECYCLE_ACTION_INTAKE_EDITED_ON_BEHALF,
+    LIFECYCLE_ACTION_INTAKE_SUBMITTED,
+)
 from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_INTAKE_PENDING,
+    APPLICATION_STATUS_INTAKE_SUBMITTED,
     APPLICATION_STATUS_UNDER_REVIEW,
     VACANCY_CHECK_CONFIRMED_VISUALLY,
 )
@@ -451,3 +455,275 @@ def test_on_behalf_edit_requires_personnel_admin(
         headers=auth_headers(seed["executor_user_id"]),
     )
     assert response.status_code == 403
+
+
+def test_on_behalf_submit_fills_submitted_at_and_moves_application_to_intake_submitted(
+    client,
+    intake_on_behalf_schema_ready,
+    privileged_headers,
+    seed,
+) -> None:
+    app_id, _, payload = _start_editable_intake(client, privileged_headers)
+    session = _on_behalf_session(client, privileged_headers, app_id)
+    submit_payload = _filled_payload()
+    submit_payload["personal"]["last_name"] = payload["personal"]["last_name"]
+    submit_payload["personal"]["first_name"] = payload["personal"]["first_name"]
+
+    submit = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf/submit",
+        headers=privileged_headers,
+        json={
+            "payload": submit_payload,
+            "expected_updated_at": session["draft"]["updated_at"],
+        },
+    )
+    assert submit.status_code == 200, submit.text
+    submit_body = submit.json()
+    assert submit_body["status"] == "submitted"
+    assert submit_body["submitted_at"] is not None
+
+    detail = client.get(f"/directory/personnel-applications/{app_id}", headers=privileged_headers)
+    assert detail.status_code == 200, detail.text
+    detail_body = detail.json()
+    assert detail_body["status"] == APPLICATION_STATUS_INTAKE_SUBMITTED
+    assert detail_body["intake_submitted_at"] is not None
+    assert detail_body["intake_draft_status"] == "submitted"
+    assert detail_body["intake_link_status"] == "submitted"
+
+    with engine.connect() as conn:
+        draft_row = conn.execute(
+            text(
+                """
+                SELECT status, submitted_at
+                FROM public.personnel_intake_drafts
+                WHERE application_id = :application_id
+                """
+            ),
+            {"application_id": app_id},
+        ).mappings().one()
+        link_row = conn.execute(
+            text(
+                """
+                SELECT status, submitted_at
+                FROM public.personnel_intake_links
+                WHERE application_id = :application_id
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"application_id": app_id},
+        ).mappings().one()
+        audit_row = conn.execute(
+            text(
+                """
+                SELECT action, actor_user_id, previous_status, new_status, metadata
+                FROM public.personnel_application_lifecycle_audit
+                WHERE application_id = :application_id
+                  AND action = :action
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "application_id": app_id,
+                "action": LIFECYCLE_ACTION_INTAKE_SUBMITTED,
+            },
+        ).mappings().one()
+
+    assert draft_row["status"] == "submitted"
+    assert draft_row["submitted_at"] is not None
+    assert link_row["status"] == "submitted"
+    assert link_row["submitted_at"] is not None
+    metadata = audit_row["metadata"]
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
+    assert audit_row["actor_user_id"] == seed["initiator_user_id"]
+    assert audit_row["previous_status"] == APPLICATION_STATUS_INTAKE_PENDING
+    assert audit_row["new_status"] == APPLICATION_STATUS_INTAKE_SUBMITTED
+    assert metadata["on_behalf_of"] == "applicant"
+
+
+def test_on_behalf_edit_session_after_submit_returns_submitted_non_editable(
+    client,
+    intake_on_behalf_schema_ready,
+    privileged_headers,
+) -> None:
+    app_id, _, payload = _start_editable_intake(client, privileged_headers)
+    session = _on_behalf_session(client, privileged_headers, app_id)
+    submit_payload = _filled_payload()
+    submit_payload["personal"]["last_name"] = payload["personal"]["last_name"]
+    submit_payload["personal"]["first_name"] = payload["personal"]["first_name"]
+
+    submit = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf/submit",
+        headers=privileged_headers,
+        json={
+            "payload": submit_payload,
+            "expected_updated_at": session["draft"]["updated_at"],
+        },
+    )
+    assert submit.status_code == 200, submit.text
+
+    reloaded = _on_behalf_session(client, privileged_headers, app_id)
+    assert reloaded["application_status"] == APPLICATION_STATUS_INTAKE_SUBMITTED
+    assert reloaded["editable"] is False
+    assert reloaded["blocked_reason"] is None
+    assert reloaded["draft"]["status"] == "submitted"
+    assert reloaded["draft"]["read_only"] is True
+    assert reloaded["draft"]["submitted_at"] is not None
+
+
+def test_on_behalf_submit_rejects_incomplete_payload(
+    client,
+    intake_on_behalf_schema_ready,
+    privileged_headers,
+) -> None:
+    app_id, _, payload = _start_editable_intake(client, privileged_headers)
+    session = _on_behalf_session(client, privileged_headers, app_id)
+    incomplete = dict(payload)
+    incomplete["education"] = []
+
+    submit = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf/submit",
+        headers=privileged_headers,
+        json={
+            "payload": incomplete,
+            "expected_updated_at": session["draft"]["updated_at"],
+        },
+    )
+    assert submit.status_code == 422, submit.text
+    assert submit.json()["detail"]["code"] == "VALIDATION_FAILED"
+
+    detail = client.get(f"/directory/personnel-applications/{app_id}", headers=privileged_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["status"] == APPLICATION_STATUS_INTAKE_PENDING
+    assert detail.json()["intake_submitted_at"] is None
+
+
+def test_on_behalf_submit_returns_version_conflict_without_partial_transition(
+    client,
+    intake_on_behalf_schema_ready,
+    privileged_headers,
+) -> None:
+    app_id, token, payload = _start_editable_intake(client, privileged_headers)
+    session = _on_behalf_session(client, privileged_headers, app_id)
+    stale_updated_at = session["draft"]["updated_at"]
+
+    autosave = client.patch(
+        f"/intake/{token}",
+        json={"payload": {**payload, "contacts": {**payload["contacts"], "email": "changed@example.com"}}},
+    )
+    assert autosave.status_code == 200, autosave.text
+
+    submit = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf/submit",
+        headers=privileged_headers,
+        json={
+            "payload": _filled_payload(),
+            "expected_updated_at": stale_updated_at,
+        },
+    )
+    assert submit.status_code == 409, submit.text
+    assert submit.json()["detail"]["code"] == "DRAFT_VERSION_CONFLICT"
+
+    detail = client.get(f"/directory/personnel-applications/{app_id}", headers=privileged_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["status"] == APPLICATION_STATUS_INTAKE_PENDING
+    assert detail.json()["intake_draft_status"] == "editable"
+    assert detail.json()["intake_submitted_at"] is None
+
+
+def test_on_behalf_submit_allows_revision_requested_editable_resubmit(
+    client,
+    intake_on_behalf_schema_ready,
+    privileged_headers,
+) -> None:
+    app_id, payload = _submit_intake(client, privileged_headers)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE public.personnel_applications
+                SET status = 'revision_requested'
+                WHERE application_id = :application_id
+                """
+            ),
+            {"application_id": app_id},
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE public.personnel_intake_drafts
+                SET status = 'editable'
+                WHERE application_id = :application_id
+                """
+            ),
+            {"application_id": app_id},
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE public.personnel_intake_links
+                SET status = 'opened'
+                WHERE application_id = :application_id
+                """
+            ),
+            {"application_id": app_id},
+        )
+
+    session = _on_behalf_session(client, privileged_headers, app_id)
+    assert session["application_status"] == "revision_requested"
+    assert session["editable"] is True
+    assert session["draft"]["status"] == "editable"
+
+    submit = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf/submit",
+        headers=privileged_headers,
+        json={
+            "payload": payload,
+            "expected_updated_at": session["draft"]["updated_at"],
+        },
+    )
+    assert submit.status_code == 200, submit.text
+    submit_body = submit.json()
+    assert submit_body["status"] == "submitted"
+    assert submit_body["submitted_at"] is not None
+
+    reloaded = _on_behalf_session(client, privileged_headers, app_id)
+    assert reloaded["application_status"] == APPLICATION_STATUS_INTAKE_SUBMITTED
+    assert reloaded["editable"] is False
+    assert reloaded["draft"]["status"] == "submitted"
+    assert reloaded["draft"]["read_only"] is True
+
+    detail = client.get(f"/directory/personnel-applications/{app_id}", headers=privileged_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["status"] == APPLICATION_STATUS_INTAKE_SUBMITTED
+    assert detail.json()["intake_draft_status"] == "submitted"
+
+
+def test_on_behalf_submit_rejects_after_application_already_submitted(
+    client,
+    intake_on_behalf_schema_ready,
+    privileged_headers,
+) -> None:
+    app_id, _ = _submit_intake(client, privileged_headers)
+    session = client.get(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf-edit",
+        headers=privileged_headers,
+    )
+    assert session.status_code == 200, session.text
+
+    submit = client.post(
+        f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf/submit",
+        headers=privileged_headers,
+        json={
+            "payload": _filled_payload(),
+            "expected_updated_at": session.json()["draft"]["updated_at"],
+        },
+    )
+    assert submit.status_code == 422, submit.text
+    assert submit.json()["detail"]["code"] == "SUBMIT_NOT_ALLOWED"
+
+    detail = client.get(f"/directory/personnel-applications/{app_id}", headers=privileged_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["status"] == APPLICATION_STATUS_INTAKE_SUBMITTED

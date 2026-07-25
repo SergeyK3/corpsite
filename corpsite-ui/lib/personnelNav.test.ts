@@ -172,11 +172,17 @@ describe("personnelNav", () => {
       expect(resolveDirectoryOrgTreeBasePath("/directory/staff")).toBe("/directory/staff");
       expect(resolveDirectoryOrgTreeBasePath("/directory/personnel/journal")).toBe("/directory/personnel");
       expect(resolveDirectoryOrgTreeBasePath("/directory/personnel/applicants")).toBe(
-        "/directory/personnel/applicants",
+        "/directory/personnel/lk",
+      );
+      expect(resolveDirectoryOrgTreeBasePath("/directory/personnel/lk")).toBe(
+        "/directory/personnel/lk",
       );
     });
 
-    it("active state highlights HR processes on applicants route", () => {
+    it("active state highlights HR processes on LK route", () => {
+      expect(
+        isDirectorySidebarNavItemActive("/directory/personnel/lk", HR_PROCESSES_NAV_ITEM),
+      ).toBe(true);
       expect(
         isDirectorySidebarNavItemActive("/directory/personnel/applicants", HR_PROCESSES_NAV_ITEM),
       ).toBe(true);

@@ -12,16 +12,19 @@ import {
   INTAKE_EMPLOYMENT_BIOGRAPHY_SHOW_TENURE_COLUMN,
   INTAKE_EMPLOYMENT_TENURE_OVERLAP_HINT,
   isIntakeEmploymentCurrent,
+  parseIntakeEmploymentFocusRowIndex,
   sortIntakeEmploymentBiographyRows,
   type IntakeEmploymentBiographyEntry,
 } from "../_lib/intakeEmploymentBiography";
 import { formatTenureDisplay } from "../_lib/employmentTenureFormat";
 import type { EmploymentTenureRecordResult } from "../_lib/employmentTenureApi.client";
+import { resolveIntakePeriodRangeError } from "../_lib/intakePeriodRange";
 
 type Props = {
   items: IntakeEmploymentBiographyEntry[];
   onChange: (items: IntakeEmploymentBiographyEntry[]) => void;
   readOnly?: boolean;
+  focusTestId?: string | null;
 };
 
 function updateItemAt(
@@ -46,6 +49,9 @@ function EmploymentRowEditor({
   onPatch: (patch: Partial<IntakeEmploymentBiographyEntry>) => void;
 }) {
   const currentlyEmployed = isIntakeEmploymentCurrent(item);
+  const periodError = currentlyEmployed
+    ? null
+    : resolveIntakePeriodRangeError(item.year_from, item.year_to);
 
   return (
     <div
@@ -114,6 +120,14 @@ function EmploymentRowEditor({
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
         />
       </label>
+      {periodError ? (
+        <p
+          className="sm:col-span-2 text-xs text-amber-700 dark:text-amber-300"
+          data-testid={`intake-employment-period-error-${index}`}
+        >
+          {periodError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -220,9 +234,20 @@ function TenureCell({
   );
 }
 
-export default function IntakeEmploymentBiographyTable({ items, onChange, readOnly = false }: Props) {
+export default function IntakeEmploymentBiographyTable({
+  items,
+  onChange,
+  readOnly = false,
+  focusTestId = null,
+}: Props) {
   const [expandedIndex, setExpandedIndex] = React.useState<number | null>(null);
   const rows = React.useMemo(() => sortIntakeEmploymentBiographyRows(items), [items]);
+  const focusRowIndex = parseIntakeEmploymentFocusRowIndex(focusTestId);
+  const visibleExpandedIndex = expandedIndex ?? focusRowIndex;
+
+  React.useEffect(() => {
+    if (focusRowIndex !== null) setExpandedIndex(focusRowIndex);
+  }, [focusRowIndex]);
   const { calculation, loading, error } = useEmploymentTenureCalculation(items);
   const tenureByRecordId = React.useMemo(() => {
     const map = new Map<string, EmploymentTenureRecordResult>();
@@ -333,7 +358,7 @@ export default function IntakeEmploymentBiographyTable({ items, onChange, readOn
                           />
                         </td>
                       </tr>
-                      {expandedIndex === index ? (
+                      {visibleExpandedIndex === index ? (
                         <tr data-testid={`intake-employment-expanded-${index}`}>
                           <td
                             colSpan={INTAKE_EMPLOYMENT_BIOGRAPHY_SHOW_TENURE_COLUMN ? 6 : 5}
@@ -398,7 +423,7 @@ export default function IntakeEmploymentBiographyTable({ items, onChange, readOn
                     />
                   </div>
                 </div>
-                {expandedIndex === index ? (
+                {visibleExpandedIndex === index ? (
                   <EmploymentRowEditor
                     item={item}
                     index={index}
