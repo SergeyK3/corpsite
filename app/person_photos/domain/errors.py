@@ -36,3 +36,12 @@ class CanonicalFileMissingError(PersonPhotoError):
 
 class CanonicalFileIntegrityError(PersonPhotoError):
     """Canonical file failed replay validation (checksum or JPEG rules)."""
+
+
+class HirePhotoNotReadyError(PersonPhotoError):
+    """HIRE apply blocked until intake photo is canonicalized."""
+
+    def __init__(self, message: str, *, code: str, blocker_code: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.blocker_code = blocker_code

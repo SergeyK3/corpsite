@@ -270,6 +270,11 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
                 ),
                 {"ids": person_ids},
             )
+            if order_ids and table_exists(conn, "employee_events"):
+                conn.execute(
+                    text("DELETE FROM public.employee_events WHERE order_id = ANY(:oids)"),
+                    {"oids": list(order_ids)},
+                )
             if order_ids and table_exists(conn, "personnel_order_items"):
                 conn.execute(
                     text("DELETE FROM public.personnel_order_items WHERE order_id = ANY(:oids)"),
@@ -280,10 +285,40 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
                     text("DELETE FROM public.personnel_orders WHERE order_id = ANY(:oids)"),
                     {"oids": list(order_ids)},
                 )
+            if person_ids and table_exists(conn, "personnel_application_blockers"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.personnel_application_blockers
+                        WHERE application_id IN (
+                            SELECT application_id FROM public.personnel_applications
+                            WHERE person_id = ANY(:ids)
+                        )
+                        """
+                    ),
+                    {"ids": person_ids},
+                )
             conn.execute(
                 text("DELETE FROM public.personnel_applications WHERE person_id = ANY(:ids)"),
                 {"ids": person_ids},
             )
+    if person_ids and (
+        table_exists(conn, "person_photo_sources") or table_exists(conn, "person_photos")
+    ):
+        conn.execute(text("SET LOCAL session_replication_role = replica"))
+        try:
+            if table_exists(conn, "person_photo_sources"):
+                conn.execute(
+                    text("DELETE FROM public.person_photo_sources WHERE person_id = ANY(:ids)"),
+                    {"ids": person_ids},
+                )
+            if table_exists(conn, "person_photos"):
+                conn.execute(
+                    text("DELETE FROM public.person_photos WHERE person_id = ANY(:ids)"),
+                    {"ids": person_ids},
+                )
+        finally:
+            conn.execute(text("SET LOCAL session_replication_role = origin"))
     if employee_ids:
         if table_exists(conn, "employee_events"):
             conn.execute(

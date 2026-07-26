@@ -57,7 +57,7 @@ from app.personnel_applications.application.hire_order_draft_service import (
     create_hire_order_draft_for_application,
 )
 from app.personnel_applications.application.application_apply_service import (
-    apply_hire_for_application,
+    orchestrate_hire_apply_for_application,
 )
 from app.personnel_applications.application.resolution_service import (
     change_director_resolution,
@@ -76,6 +76,7 @@ from app.personnel_applications.domain.errors import (
     PersonnelApplicationValidationError,
     VacancyCheckGateError,
 )
+from app.person_photos.domain.errors import HirePhotoNotReadyError
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
 
 router = APIRouter(prefix="/personnel-applications", tags=["personnel-applications"])
@@ -511,12 +512,10 @@ def post_application_apply(
     require_personnel_admin_or_403(user)
     user_id = _require_user_id(user)
     try:
-        with engine.begin() as conn:
-            result = apply_hire_for_application(
-                conn,
-                application_id=application_id,
-                created_by_user_id=user_id,
-            )
+        result = orchestrate_hire_apply_for_application(
+            application_id=application_id,
+            created_by_user_id=user_id,
+        )
         return ApplicationApplyOut(
             application_id=result.application_id,
             personnel_order_id=result.personnel_order_id,
@@ -528,6 +527,8 @@ def post_application_apply(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelApplicationApplyError as exc:
         raise _apply_http422(exc)
+    except HirePhotoNotReadyError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
     except HTTPException:
         raise
     except Exception as exc:

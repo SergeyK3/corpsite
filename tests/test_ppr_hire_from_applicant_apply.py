@@ -547,6 +547,14 @@ def test_hire_apply_repeat_is_idempotent_conflict(client, privileged_headers, se
         )
         assert second.status_code == 409, second.text
 
+        with engine.connect() as conn:
+            if table_exists(conn, "person_photos"):
+                photo_count = conn.execute(
+                    text("SELECT COUNT(*) FROM public.person_photos WHERE person_id = :person_id"),
+                    {"person_id": person_id},
+                ).scalar_one()
+                assert int(photo_count) == 0
+
         with engine.begin() as conn:
             person_after = conn.execute(
                 text(

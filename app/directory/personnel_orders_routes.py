@@ -29,6 +29,7 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderVoidIn,
 )
 from app.directory.rbac import require_personnel_admin_or_403
+from app.person_photos.domain.errors import HirePhotoNotReadyError
 from app.services.personnel_order_archive_guard import PersonnelOrderArchivedError
 from app.services.personnel_orders_apply_service import (
     PersonnelOrderAlreadyAppliedError,
@@ -617,6 +618,8 @@ def apply_personnel_order_route(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderAlreadyAppliedError as exc:
         raise _conflict_http409(exc)
+    except HirePhotoNotReadyError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
     except PersonnelOrderArchivedError as exc:
         raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:

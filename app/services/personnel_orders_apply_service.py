@@ -6,6 +6,7 @@ Apply is allowed once per order (idempotent guard via existing linked events).
 from __future__ import annotations
 
 from datetime import date
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
@@ -25,6 +26,10 @@ from app.db.models.personnel_orders import (
 from app.services.directory_service import _insert_employee_event
 from app.services.hr_event_registry import get_event_class
 from app.services.personnel_order_archive_guard import assert_order_not_archived
+from app.services.personnel_order_hire_apply_readiness import (
+    validate_authoritative_hire_target,
+    validate_hire_order_ready_for_apply_readonly,
+)
 from app.services.personnel_orders_command_service import (
     PersonnelOrderConflictError,
     _fetch_order_row,
@@ -689,6 +694,23 @@ def apply_personnel_order_in_conn(
 
     order_ref = _format_order_ref(str(order["order_number"]), order["order_date"])
 
+    linked_application_person_id: int | None = None
+    if str(order.get("order_type_code") or "").strip().upper() == ORDER_TYPE_HIRE:
+        from app.personnel_applications.infrastructure.repository import (
+            SqlAlchemyPersonnelApplicationRepository,
+        )
+
+        linked_app = SqlAlchemyPersonnelApplicationRepository(conn).get_by_personnel_order_id(
+            int(order_id)
+        )
+        if linked_app is not None:
+            linked_application_person_id = int(linked_app.person_id)
+        validate_authoritative_hire_target(
+            conn,
+            order_id=int(order_id),
+            linked_application_person_id=linked_application_person_id,
+        )
+
     for item in items:
         if item.get("effective_date") is None:
             raise PersonnelOrderValidationError(
@@ -725,9 +747,86 @@ def apply_personnel_order_in_conn(
         )
 
 
+@dataclass(frozen=True, slots=True)
+class OrderHireApplyPrecheck:
+    order_id: int
+    order_type_code: str
+    already_applied: bool
+    linked_application_id: int | None
+    linked_person_id: int | None
+
+
+def precheck_order_hire_apply(order_id: int) -> OrderHireApplyPrecheck:
+    """Read-only pre-check for order apply (closed read txn)."""
+    with engine.connect() as conn:
+        order = _fetch_order_row(conn, order_id)
+        linked_application_id: int | None = None
+        linked_person_id: int | None = None
+        from app.personnel_applications.infrastructure.repository import (
+            SqlAlchemyPersonnelApplicationRepository,
+        )
+
+        linked_app = SqlAlchemyPersonnelApplicationRepository(conn).get_by_personnel_order_id(
+            int(order_id)
+        )
+        if linked_app is not None:
+            linked_application_id = int(linked_app.application_id)
+            linked_person_id = int(linked_app.person_id)
+
+        already_applied = _count_linked_events(conn, int(order_id)) > 0
+        order_type_code = str(order["order_type_code"])
+
+        if (
+            not already_applied
+            and order_type_code == ORDER_TYPE_HIRE
+        ):
+            if linked_application_id is not None:
+                from app.personnel_applications.application.application_apply_service import (
+                    validate_linked_application_for_order_hire_precheck,
+                )
+
+                validate_linked_application_for_order_hire_precheck(
+                    conn,
+                    int(linked_application_id),
+                )
+            validate_hire_order_ready_for_apply_readonly(
+                conn,
+                order_id=int(order_id),
+                linked_application_person_id=linked_person_id,
+            )
+
+        return OrderHireApplyPrecheck(
+            order_id=int(order_id),
+            order_type_code=order_type_code,
+            already_applied=already_applied,
+            linked_application_id=linked_application_id,
+            linked_person_id=linked_person_id,
+        )
+
+
 def apply_personnel_order(*, order_id: int, created_by: int) -> Dict[str, Any]:
     """Apply a signed/registered personnel order once, creating employee_events."""
     _require_available()
+
+    precheck = precheck_order_hire_apply(int(order_id))
+    if precheck.already_applied:
+        raise PersonnelOrderAlreadyAppliedError(
+            f"Personnel order {order_id} has already been applied."
+        )
+
+    if (
+        precheck.order_type_code == ORDER_TYPE_HIRE
+        and precheck.linked_application_id is not None
+        and precheck.linked_person_id is not None
+    ):
+        from app.person_photos.application.hire_apply_hook import ensure_hire_photo_ready
+
+        ensure_hire_photo_ready(
+            application_id=precheck.linked_application_id,
+            person_id=precheck.linked_person_id,
+            actor_user_id=int(created_by),
+            correlation_id=f"hire-apply:order:{order_id}",
+        )
 
     with engine.begin() as conn:
         apply_personnel_order_in_conn(
