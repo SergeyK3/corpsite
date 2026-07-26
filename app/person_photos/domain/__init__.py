@@ -1,0 +1,1 @@
+"""Person photo domain layer."""
