@@ -270,6 +270,23 @@ from app.db.models.personnel_intake import (
     PersonnelIntakeSectionReview,
     PersonnelIntakeTransfer,
 )
+from app.db.models.person_photos import (
+    BLOCKER_CODE_INTAKE_PHOTO_UNAVAILABLE,
+    BLOCKER_CODE_PHOTO_CANONICALIZATION_FAILED,
+    BLOCKER_CODES,
+    CANONICALIZATION_MODE_BACKFILL,
+    CANONICALIZATION_MODE_HIRE_APPLY,
+    CANONICALIZATION_MODE_TRANSFER,
+    CANONICALIZATION_MODES,
+    MAX_PHOTO_BYTE_SIZE,
+    MIME_TYPE_JPEG,
+    PersonPhoto,
+    PersonPhotoSource,
+    PersonnelApplicationBlocker,
+    SOURCE_KIND_INTAKE,
+    SOURCE_KIND_MANUAL_UPLOAD,
+    SOURCE_KINDS,
+)
 
 __all__ = [
     "Base",
@@ -508,4 +525,19 @@ __all__ = [
     "PersonnelIntakeReconciliationDecision",
     "PersonnelIntakeSectionReview",
     "PersonnelIntakeTransfer",
+    "PersonPhoto",
+    "PersonPhotoSource",
+    "PersonnelApplicationBlocker",
+    "SOURCE_KIND_INTAKE",
+    "SOURCE_KIND_MANUAL_UPLOAD",
+    "SOURCE_KINDS",
+    "CANONICALIZATION_MODE_TRANSFER",
+    "CANONICALIZATION_MODE_HIRE_APPLY",
+    "CANONICALIZATION_MODE_BACKFILL",
+    "CANONICALIZATION_MODES",
+    "BLOCKER_CODE_INTAKE_PHOTO_UNAVAILABLE",
+    "BLOCKER_CODE_PHOTO_CANONICALIZATION_FAILED",
+    "BLOCKER_CODES",
+    "MIME_TYPE_JPEG",
+    "MAX_PHOTO_BYTE_SIZE",
 ]
