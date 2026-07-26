@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.security.directory_scope import is_privileged
+from app.security.directory_scope import is_privileged, is_system_admin
 from app.security.auth_policy import (
     fetch_user_auth_policy_row,
     fetch_user_auth_policy_row_by_login,
@@ -283,6 +283,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(user)
     out["is_privileged"] = is_privileged(out)
     out["is_system_admin"] = int(out.get("role_id") or 0) == 2
+    out["can_hard_delete_employee"] = is_system_admin(out)
     uid = int(out.get("user_id") or 0)
     out["has_sysadmin_api"] = evaluate_admin_access(out)
     out["has_personnel_admin"] = out["has_sysadmin_api"] or has_any_personnel_read_permission(uid)

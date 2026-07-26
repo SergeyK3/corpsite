@@ -72,6 +72,7 @@ _ALLOWED_EVENT_TYPES = frozenset(
         "ORG_UNIT_DEACTIVATED",
         "ORG_UNIT_DELETED",
         "ORG_UNIT_DELETE_REJECTED",
+        "EMPLOYEE_HARD_DELETED",
     }
 )
 

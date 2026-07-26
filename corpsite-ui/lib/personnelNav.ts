@@ -3,7 +3,12 @@ import type { MeInfo } from "./types";
 import { canSeeOperationalOrdersNav, OPERATIONAL_ORDERS_NAV_ITEM } from "./operationalOrdersNav";
 
 function isSystemAdminRole(me: MeInfo | null | undefined): boolean {
-  return Number(me?.role_id ?? 0) === 2;
+  return me?.is_system_admin === true;
+}
+
+/** System administrator — canonical /auth/me.is_system_admin only. */
+export function isSystemAdministrator(me: MeInfo | null | undefined): boolean {
+  return isSystemAdminRole(me);
 }
 
 /** Read-only «Персонал» — management-facing personnel browser (ADR-042 E1 + admin + HR). */

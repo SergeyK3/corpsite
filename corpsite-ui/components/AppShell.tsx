@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
+import { CurrentUserProvider } from "@/lib/currentUser";
 import {
   canSeeAdminShell,
   canSeePersonnelIdentityOperationsNav,
@@ -370,7 +371,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <section className="min-w-0">{content}</section>;
   }
 
-  if (isLogin) return <>{children}</>;
+  function withCurrentUser(node: React.ReactNode) {
+    return <CurrentUserProvider value={me}>{node}</CurrentUserProvider>;
+  }
+
+  if (isLogin) return withCurrentUser(<>{children}</>);
 
   if (isPrintPage) {
     if (loading) {
@@ -390,10 +395,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       );
     }
-    return <>{children}</>;
+    return withCurrentUser(<>{children}</>);
   }
 
-  return (
+  return withCurrentUser(
     <div className="min-h-[calc(100vh-52px)] bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="w-full px-3 py-2 xl:px-4 xl:py-3">
         <div className="mb-2 flex flex-wrap items-start justify-between gap-3 print:hidden">
@@ -505,6 +510,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
   );
 }

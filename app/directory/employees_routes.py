@@ -11,7 +11,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.security.directory_scope import is_privileged as _is_privileged
+from app.security.directory_scope import is_privileged as _is_privileged, is_system_admin
+from app.services.employee_hard_delete_service import hard_delete_employee as svc_hard_delete_employee
 
 from app.services.directory_service import (
     list_departments as svc_list_departments,
@@ -732,6 +733,27 @@ def list_employee_events(
             event_type=event_type,
             limit=limit,
             offset=offset,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.delete("/employees/{employee_id}")
+def hard_delete_employee_route(
+    employee_id: str = Path(..., min_length=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not is_system_admin(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        return call_service(
+            svc_hard_delete_employee,
+            employee_id=employee_id,
+            actor_user_id=int(user["user_id"]),
         )
 
     except HTTPException:

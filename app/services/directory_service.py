@@ -359,7 +359,23 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     join_sql += " LEFT JOIN public.org_units ou ON ou.unit_id = e.org_unit_id"
 
     sql = "SELECT " + ", ".join(select_parts) + f" FROM public.{emp_rel} e" + join_sql
-    return sql, {"emp_id_col": emp_id_col}
+    position_expr = (
+        f"p.{pos_name_col}" if pos_fk and pos_rel and pos_id_col and pos_name_col else "NULL"
+    )
+    if dept_fk and dept_rel and dept_id_col and dept_name_col:
+        department_expr = f"COALESCE(ou.name, d.{dept_name_col})"
+    else:
+        department_expr = "ou.name"
+    return sql, {
+        "emp_id_col": emp_id_col,
+        "fio_col": fio_col,
+        "last_col": last_col,
+        "first_col": first_col,
+        "rate_col": rate_col,
+        "status_col": status_col,
+        "position_expr": position_expr,
+        "department_expr": department_expr,
+    }
 
 
 def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, Any]:
@@ -487,6 +503,88 @@ def _fetch_linked_user(employee_id: Any) -> Optional[Dict[str, Any]]:
 # ---------------------------
 # Employees (read)
 # ---------------------------
+def _empty_last_prefix(expr: str) -> str:
+    return (
+        f"CASE WHEN {expr} IS NULL OR NULLIF(BTRIM(CAST({expr} AS TEXT)), '') IS NULL "
+        f"THEN 1 ELSE 0 END"
+    )
+
+
+def _ru_text_sort_expr(expr: str) -> str:
+    return f'LOWER(CAST({expr} AS TEXT)) COLLATE "ru-x-icu"'
+
+
+def _build_employees_order_sql(
+    *,
+    sort: Optional[str],
+    order: Optional[str],
+    emp_id_col: str,
+    fio_col: Optional[str],
+    last_col: Optional[str],
+    first_col: Optional[str],
+    position_expr: str,
+    department_expr: str,
+    rate_col: Optional[str],
+    status_col: Optional[str],
+) -> str:
+    ord_dir = "DESC" if (order or "").lower() == "desc" else "ASC"
+    sort_key = (sort or "").lower().strip()
+    tie_breaker = f"CAST(e.{emp_id_col} AS TEXT) ASC"
+
+    if sort_key in ("fio", "full_name", "name"):
+        if fio_col:
+            expr = f"e.{fio_col}"
+        elif last_col and first_col:
+            expr = f"CONCAT_WS(' ', e.{last_col}, e.{first_col})"
+        elif last_col:
+            expr = f"e.{last_col}"
+        else:
+            return tie_breaker
+        return (
+            f"{_empty_last_prefix(expr)} ASC, "
+            f"{_ru_text_sort_expr(expr)} {ord_dir} NULLS LAST, "
+            f"{tie_breaker}"
+        )
+
+    if sort_key in ("position", "position_name"):
+        expr = position_expr
+        return (
+            f"{_empty_last_prefix(expr)} ASC, "
+            f"{_ru_text_sort_expr(expr)} {ord_dir} NULLS LAST, "
+            f"{tie_breaker}"
+        )
+
+    if sort_key in ("department", "org_unit", "department_name", "org_unit_name"):
+        expr = department_expr
+        return (
+            f"{_empty_last_prefix(expr)} ASC, "
+            f"{_ru_text_sort_expr(expr)} {ord_dir} NULLS LAST, "
+            f"{tie_breaker}"
+        )
+
+    if sort_key in ("rate", "employment_rate", "stavka"):
+        if not rate_col:
+            return tie_breaker
+        expr = f"e.{rate_col}"
+        return (
+            f"{_empty_last_prefix(expr)} ASC, "
+            f"CAST({expr} AS DOUBLE PRECISION) {ord_dir} NULLS LAST, "
+            f"{tie_breaker}"
+        )
+
+    if sort_key == "status":
+        if not status_col:
+            return tie_breaker
+        expr = f"e.{status_col}"
+        return (
+            f"{_empty_last_prefix(expr)} ASC, "
+            f"{_ru_text_sort_expr(expr)} {ord_dir} NULLS LAST, "
+            f"{tie_breaker}"
+        )
+
+    return tie_breaker
+
+
 def list_employees(
     *,
     scope_unit_id: Optional[int] = None,
@@ -511,7 +609,7 @@ def list_employees(
     if "org_unit_id" not in set(emp_cols):
         raise HTTPException(status_code=500, detail="directory: employees has no org_unit_id column.")
 
-    base_sql, _ = _employee_select_sql(emp_rel, emp_cols)
+    base_sql, select_meta = _employee_select_sql(emp_rel, emp_cols)
 
     status_col = _pick_first(emp_cols, ["status", "is_active", "active"])
     fio_col = _pick_first(emp_cols, ["fio", "full_name", "name", "name_ru", "employee_name"])
@@ -626,19 +724,18 @@ def list_employees(
     where_sql = " AND ".join(where) if where else "TRUE"
 
     # order
-    ord_dir = "ASC" if (order or "").lower() != "desc" else "DESC"
-    if (sort or "").lower() in ("full_name", "fio", "name") and fio_col:
-        order_sql = f"LOWER(CAST(e.{fio_col} AS TEXT)) {ord_dir}, CAST(e.{emp_id_col} AS TEXT) ASC"
-    elif (sort or "").lower() in ("full_name", "fio", "name") and last_col:
-        if first_col:
-            order_sql = (
-                f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}, "
-                f"LOWER(CAST(e.{first_col} AS TEXT)) {ord_dir}"
-            )
-        else:
-            order_sql = f"LOWER(CAST(e.{last_col} AS TEXT)) {ord_dir}"
-    else:
-        order_sql = f"CAST(e.{emp_id_col} AS TEXT) ASC"
+    order_sql = _build_employees_order_sql(
+        sort=sort,
+        order=order,
+        emp_id_col=emp_id_col,
+        fio_col=fio_col,
+        last_col=last_col,
+        first_col=first_col,
+        position_expr=str(select_meta.get("position_expr") or "NULL"),
+        department_expr=str(select_meta.get("department_expr") or "ou.name"),
+        rate_col=select_meta.get("rate_col"),
+        status_col=select_meta.get("status_col"),
+    )
 
     q_list = text(
         f"""

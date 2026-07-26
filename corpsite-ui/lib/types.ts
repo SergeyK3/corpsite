@@ -18,6 +18,8 @@ export type MeInfo = {
   /** From GET /auth/me — backend is_privileged() (role_id=2 or env allowlist). */
   is_privileged?: boolean;
   is_system_admin?: boolean;
+  /** GET /auth/me — mirrors DELETE /directory/employees/{id} guard. */
+  can_hard_delete_employee?: boolean;
   /** Sysadmin cabinet API (/admin/users, /admin/access/*, …) — not directory privileged roles. */
   has_sysadmin_api?: boolean;
   /** ADR-043 C4.2 — personnel lifecycle admin (ADMIN or HR_ENROLLMENT_MANAGER). */

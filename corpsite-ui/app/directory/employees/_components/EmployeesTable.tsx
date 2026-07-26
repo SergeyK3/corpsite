@@ -11,6 +11,11 @@ import {
   OPEN_PERSONAL_CARD_CTA,
 } from "@/lib/personnelCardTerminology";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
+import {
+  sortIndicator,
+  type EmployeeSortColumn,
+  type SortOrder,
+} from "../_lib/employeeSort";
 
 type Props = {
   items: EmployeeListItem[];
@@ -26,6 +31,15 @@ type Props = {
   directPersonalCardNav?: boolean;
   /** Compact columns: ФИО, должность, отделение, статус, ставки, открыть. */
   managementView?: boolean;
+  /** Sysadmin hard-delete on /directory/staff. */
+  showAdminDelete?: boolean;
+  deletingEmployeeId?: string | null;
+  onDeleteEmployee?: (item: EmployeeListItem) => void;
+  /** Staff «Персонал»: server-side sort via column headers. */
+  sortable?: boolean;
+  sortColumn?: EmployeeSortColumn | null;
+  sortOrder?: SortOrder | null;
+  onSortColumn?: (column: EmployeeSortColumn) => void;
 };
 
 function formatDate(d: string | null): string {
@@ -57,6 +71,9 @@ const actionLinkClass =
 
 const actionDisabledClass =
   "rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 text-[12px] leading-4 text-zinc-900 dark:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
+
+const actionDeleteClass =
+  "rounded-md border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 px-2.5 py-1 text-[12px] leading-4 text-red-800 dark:text-red-200 transition hover:bg-red-100 dark:hover:bg-red-900/50 disabled:cursor-not-allowed disabled:opacity-50";
 
 function getPersonId(it: any): number | null {
   const raw = it?.person_id ?? it?.personId;
@@ -110,6 +127,53 @@ function PersonalCardOpenAction({ item }: { item: any }) {
   );
 }
 
+const sortableHeaderClass =
+  "inline-flex items-center gap-1 rounded px-0.5 py-0.5 text-left transition hover:text-zinc-900 dark:hover:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60";
+
+function SortableHeader({
+  label,
+  column,
+  activeColumn,
+  activeOrder,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  column: EmployeeSortColumn;
+  activeColumn?: EmployeeSortColumn | null;
+  activeOrder?: SortOrder | null;
+  onSort?: (column: EmployeeSortColumn) => void;
+  className?: string;
+}) {
+  const active = activeColumn === column;
+  return (
+    <th className={className}>
+      <button
+        type="button"
+        className={sortableHeaderClass}
+        aria-label={
+          active
+            ? `${label}, сортировка ${activeOrder === "desc" ? "по убыванию" : "по возрастанию"}`
+            : `${label}, сортировать`
+        }
+        aria-sort={active ? (activeOrder === "desc" ? "descending" : "ascending") : "none"}
+        onClick={() => onSort?.(column)}
+      >
+        <span>{label}</span>
+        {active ? <span aria-hidden="true">{sortIndicator(activeOrder)}</span> : null}
+      </button>
+    </th>
+  );
+}
+
+function StaticHeader({ label, className = "" }: { label: string; className?: string }) {
+  return (
+    <th className={className}>
+      {label}
+    </th>
+  );
+}
+
 export default function EmployeesTable({
   items,
   total,
@@ -121,10 +185,37 @@ export default function EmployeesTable({
   showCard2Button = false,
   directPersonalCardNav = false,
   managementView = false,
+  showAdminDelete = false,
+  deletingEmployeeId = null,
+  onDeleteEmployee,
+  sortable = false,
+  sortColumn = null,
+  sortOrder = null,
+  onSortColumn,
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
   const colSpan = managementView ? 6 : 9;
+  const canSort = sortable && !!onSortColumn;
+
+  const thClass =
+    "px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400";
+
+  function headerCell(label: string, column: EmployeeSortColumn, className: string) {
+    if (canSort) {
+      return (
+        <SortableHeader
+          label={label}
+          column={column}
+          activeColumn={sortColumn}
+          activeOrder={sortOrder}
+          onSort={onSortColumn}
+          className={className}
+        />
+      );
+    }
+    return <StaticHeader label={label} className={className} />;
+  }
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -133,43 +224,35 @@ export default function EmployeesTable({
           <thead>
             <tr className="bg-zinc-100 dark:bg-zinc-900 text-left">
               {!managementView ? (
-                <th className="w-[72px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                <th className={`w-[72px] ${thClass}`}>
                   Таб. №
                 </th>
               ) : null}
-              <th className="min-w-[300px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                ФИО
-              </th>
-              {!managementView ? null : (
-                <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                  Должность
-                </th>
+              {headerCell("ФИО", "fio", `min-w-[300px] ${thClass}`)}
+              {!managementView ? null : headerCell("Должность", "position", `min-w-[220px] ${thClass}`)}
+              {headerCell(
+                managementView ? "Отделение" : "Отдел",
+                "department",
+                `min-w-[220px] ${thClass}`,
               )}
-              <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                {managementView ? "Отделение" : "Отдел"}
-              </th>
               {!managementView ? (
-                <th className="min-w-[220px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                <th className={`min-w-[220px] ${thClass}`}>
                   Должность
                 </th>
               ) : null}
-              <th className="w-[100px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Ставка
-              </th>
+              {headerCell("Ставка", "rate", `w-[100px] ${thClass}`)}
               {!managementView ? (
                 <>
-                  <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                  <th className={`w-[110px] ${thClass}`}>
                     Дата с
                   </th>
-                  <th className="w-[110px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                  <th className={`w-[110px] ${thClass}`}>
                     Дата по
                   </th>
                 </>
               ) : null}
-              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                Статус
-              </th>
-              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+              {headerCell("Статус", "status", `w-[120px] ${thClass}`)}
+              <th className={`w-[120px] ${thClass}`}>
                 Действия
               </th>
             </tr>
@@ -257,6 +340,17 @@ export default function EmployeesTable({
                           >
                             Открыть
                           </Link>
+                        ) : null}
+                        {showAdminDelete && !!employeeId && onDeleteEmployee ? (
+                          <button
+                            type="button"
+                            aria-label={`Удалить ${fio}`}
+                            className={actionDeleteClass}
+                            disabled={loading || deletingEmployeeId === employeeId}
+                            onClick={() => onDeleteEmployee(it as EmployeeListItem)}
+                          >
+                            {deletingEmployeeId === employeeId ? "…" : "Удалить"}
+                          </button>
                         ) : null}
                       </div>
                     </td>

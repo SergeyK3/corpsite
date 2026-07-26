@@ -19,10 +19,20 @@ import {
   getDepartments,
   mapApiErrorToMessage,
   createEmployee,
+  deleteEmployee,
 } from "../_lib/api.client";
+import { useCurrentUser } from "@/lib/currentUser";
+import { canHardDeleteEmployee } from "@/lib/employeeHardDelete";
+import {
+  isEmployeeSortColumn,
+  parseSortOrder,
+  toggleEmployeeSort,
+  type EmployeeSortColumn,
+} from "../_lib/employeeSort";
 import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 import type {
   EmployeeDTO,
+  EmployeeListItem,
   Position,
   Department,
   EmployeesResponse,
@@ -158,7 +168,12 @@ export default function EmployeesPageClient(props: Props) {
   const orgUnitId = sp.get("org_unit_id") ?? "";
   const limitStr = sp.get("limit") ?? "50";
   const offsetStr = sp.get("offset") ?? "0";
+  const sortParam = sp.get("sort") ?? "";
+  const orderParam = sp.get("order") ?? "";
   const deepLinkEmployeeId = (sp.get("employeeId") ?? "").trim();
+
+  const sortColumn = isStaffRoute && isEmployeeSortColumn(sortParam) ? sortParam : null;
+  const sortOrder = sortColumn ? parseSortOrder(orderParam) ?? "asc" : null;
 
   const limitNum = React.useMemo(() => Math.max(1, toInt(limitStr, 50)), [limitStr]);
   const offsetNum = React.useMemo(() => Math.max(0, toInt(offsetStr, 0)), [offsetStr]);
@@ -193,6 +208,10 @@ export default function EmployeesPageClient(props: Props) {
   );
 
   const [employeeRefreshToken, setEmployeeRefreshToken] = React.useState(0);
+  const me = useCurrentUser();
+  const [deletingEmployeeId, setDeletingEmployeeId] = React.useState<string | null>(null);
+
+  const showStaffAdminDelete = isStaffRoute && canHardDeleteEmployee(me);
 
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
@@ -330,6 +349,8 @@ export default function EmployeesPageClient(props: Props) {
         q: qText || null,
         limit: String(limitNum),
         offset: String(offsetNum),
+        sort: sortColumn ?? undefined,
+        order: sortOrder ?? undefined,
       });
 
       if (seq !== loadSeqRef.current) return;
@@ -345,11 +366,19 @@ export default function EmployeesPageClient(props: Props) {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum]);
+  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum, sortColumn, sortOrder]);
 
   React.useEffect(() => {
     void loadItems();
   }, [loadItems]);
+
+  function handleSortColumn(column: EmployeeSortColumn) {
+    const next = toggleEmployeeSort(
+      sortColumn ? { sort: sortColumn, order: sortOrder ?? "asc" } : {},
+      column,
+    );
+    updateUrl({ sort: next.sort, order: next.order }, { resetOffset: true });
+  }
 
   React.useEffect(() => {
     if (!deepLinkEmployeeId) return;
@@ -394,6 +423,35 @@ export default function EmployeesPageClient(props: Props) {
     if (createSaving) return;
     setCreateDrawerOpen(false);
     setCreateError(null);
+  }
+
+  async function handleDeleteEmployee(item: EmployeeDTO | EmployeeListItem) {
+    const row = item as any;
+    const employeeId = String(row?.employee_id ?? row?.employeeId ?? row?.id ?? "").trim();
+    const fio = String(row?.fio ?? row?.full_name ?? row?.fullName ?? row?.name ?? "сотрудника").trim();
+    if (!employeeId) return;
+
+    const confirmed = window.confirm(
+      `Удалить сотрудника «${fio}»?\n\nСотрудник и все связанные данные будут удалены без возможности восстановления.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingEmployeeId(employeeId);
+    setError(null);
+    try {
+      await deleteEmployee(employeeId);
+      setData((prev) => ({
+        items: prev.items.filter((row) => {
+          const rowId = String((row as any)?.employee_id ?? (row as any)?.employeeId ?? (row as any)?.id ?? "");
+          return rowId !== employeeId;
+        }),
+        total: Math.max(0, prev.total - 1),
+      }));
+    } catch (e) {
+      setError(mapApiErrorToMessage(e, "Не удалось удалить сотрудника."));
+    } finally {
+      setDeletingEmployeeId(null);
+    }
   }
 
   async function handleCreateEmployee(values: EmployeeCreateFormValues) {
@@ -581,6 +639,13 @@ export default function EmployeesPageClient(props: Props) {
               showCard2Button={showHrImportCardLink}
               directPersonalCardNav={isStaffRoute}
               managementView={managementView}
+              showAdminDelete={showStaffAdminDelete}
+              deletingEmployeeId={deletingEmployeeId}
+              onDeleteEmployee={showStaffAdminDelete ? handleDeleteEmployee : undefined}
+              sortable={isStaffRoute}
+              sortColumn={sortColumn}
+              sortOrder={sortOrder}
+              onSortColumn={isStaffRoute ? handleSortColumn : undefined}
             />
           </div>
     </>

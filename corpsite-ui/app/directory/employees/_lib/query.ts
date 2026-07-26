@@ -1,5 +1,8 @@
 // corpsite-ui/app/directory/employees/_lib/query.ts
 
+import type { EmployeeSortColumn, SortOrder } from "./employeeSort";
+import { isEmployeeSortColumn, parseSortOrder } from "./employeeSort";
+
 export type EmployeesFilters = {
   q?: string;
   department_id?: number;
@@ -7,6 +10,8 @@ export type EmployeesFilters = {
   status?: "active" | "inactive" | "all";
   limit?: number;
   offset?: number;
+  sort?: EmployeeSortColumn;
+  order?: SortOrder;
 };
 
 export function normalizeFilters(input: Partial<EmployeesFilters>): EmployeesFilters {
@@ -22,6 +27,8 @@ export function normalizeFilters(input: Partial<EmployeesFilters>): EmployeesFil
     status: normalizedStatus,
     limit: input.limit ?? 50,
     offset: input.offset ?? 0,
+    sort: input.sort && isEmployeeSortColumn(input.sort) ? input.sort : undefined,
+    order: parseSortOrder(input.order),
   };
 }
 
@@ -33,5 +40,7 @@ export function filtersToSearchParams(filters: EmployeesFilters): URLSearchParam
   if (filters.status) p.set("status", filters.status);
   if (filters.limit != null) p.set("limit", String(filters.limit));
   if (filters.offset != null) p.set("offset", String(filters.offset));
+  if (filters.sort) p.set("sort", filters.sort);
+  if (filters.order) p.set("order", filters.order);
   return p;
 }

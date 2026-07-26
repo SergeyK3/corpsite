@@ -99,6 +99,25 @@ async function apiPatchJson<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function apiDeleteJson<T>(path: string): Promise<T> {
+  const res = await fetch(resolveApiUrl(path), {
+    method: "DELETE",
+    headers: apiAuthHeaders(),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+  }
+
+  if (res.status === 204) {
+    return {} as T;
+  }
+
+  return (await res.json()) as T;
+}
+
 /**
  * Список сотрудников
  */
@@ -113,6 +132,8 @@ export async function getEmployees(args: {
   q?: string | null;
   limit?: number | string;
   offset?: number | string;
+  sort?: string | null;
+  order?: string | null;
 }): Promise<EmployeesResponse> {
   const qs = buildQuery({
     status: args.status ?? "all",
@@ -125,6 +146,8 @@ export async function getEmployees(args: {
     q: args.q ?? undefined,
     limit: args.limit ?? 50,
     offset: args.offset ?? 0,
+    sort: args.sort ?? undefined,
+    order: args.order ?? undefined,
   });
 
   return apiGetJson<EmployeesResponse>("/directory/employees", qs);
@@ -155,6 +178,24 @@ export async function terminateEmployee(employeeId: string, dateTo?: string): Pr
   const body = dt ? { date_to: dt } : undefined;
 
   return apiPostJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}/terminate`, body);
+}
+
+export type EmployeeHardDeleteResponse = {
+  ok: boolean;
+  employee_id: number;
+  full_name?: string;
+  person_id?: number | null;
+  person_deleted?: boolean;
+};
+
+/**
+ * Административное hard-delete сотрудника (только системный администратор).
+ * Backend: DELETE /directory/employees/{id}
+ */
+export async function deleteEmployee(employeeId: string): Promise<EmployeeHardDeleteResponse> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+  return apiDeleteJson<EmployeeHardDeleteResponse>(`/directory/employees/${encodeURIComponent(id)}`);
 }
 
 /**

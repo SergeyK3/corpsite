@@ -113,4 +113,36 @@ describe("EmployeesTable actions", () => {
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
   });
+
+  it("shows sysadmin delete button when enabled", () => {
+    const onDeleteEmployee = vi.fn();
+    render(
+      <EmployeesTable
+        {...baseProps}
+        managementView
+        directPersonalCardNav
+        showAdminDelete
+        onDeleteEmployee={onDeleteEmployee}
+      />,
+    );
+
+    const deleteButton = screen.getByRole("button", { name: "Удалить Иванов Иван" });
+    expect(deleteButton).toBeInTheDocument();
+    fireEvent.click(deleteButton);
+    expect(onDeleteEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({ employee_id: 42, fio: "Иванов Иван" }),
+    );
+  });
+
+  it("hides delete button for non-sysadmin staff view", () => {
+    render(
+      <EmployeesTable
+        {...baseProps}
+        managementView
+        directPersonalCardNav
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Удалить/ })).not.toBeInTheDocument();
+  });
 });
