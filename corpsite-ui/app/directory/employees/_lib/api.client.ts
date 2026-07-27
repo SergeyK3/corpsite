@@ -188,6 +188,25 @@ export type EmployeeHardDeleteResponse = {
   person_deleted?: boolean;
 };
 
+export type EmployeeBulkDeleteDeletedItem = {
+  employee_id: number;
+  full_name?: string;
+  person_id?: number | null;
+  person_deleted?: boolean;
+};
+
+export type EmployeeBulkDeleteFailedItem = {
+  employee_id: number;
+  error_code: string;
+  message: string;
+};
+
+export type EmployeeBulkDeleteResponse = {
+  requested: number;
+  deleted: EmployeeBulkDeleteDeletedItem[];
+  failed: EmployeeBulkDeleteFailedItem[];
+};
+
 /**
  * Административное hard-delete сотрудника (только системный администратор).
  * Backend: DELETE /directory/employees/{id}
@@ -196,6 +215,26 @@ export async function deleteEmployee(employeeId: string): Promise<EmployeeHardDe
   const id = String(employeeId).trim();
   if (!id) throw new Error("Employee id is empty");
   return apiDeleteJson<EmployeeHardDeleteResponse>(`/directory/employees/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Массовое hard-delete сотрудников (только системный администратор).
+ * Backend: POST /directory/employees/bulk-delete
+ */
+export async function bulkDeleteEmployees(
+  employeeIds: number[],
+): Promise<EmployeeBulkDeleteResponse> {
+  const ids = Array.from(
+    new Set(
+      employeeIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
+  if (ids.length === 0) throw new Error("employee_ids is empty");
+  return apiPostJson<EmployeeBulkDeleteResponse>("/directory/employees/bulk-delete", {
+    employee_ids: ids,
+  });
 }
 
 /**

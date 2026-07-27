@@ -437,3 +437,118 @@ def test_hard_delete_rolls_back_on_audit_failure(client, sysadmin_headers, emplo
             text("SELECT 1 FROM public.users WHERE employee_id = :id"),
             {"id": employee_id},
         ).first() is not None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_hard_delete_all_success(client, sysadmin_headers, employee_bundle):
+    employee_id = int(employee_bundle["target_employee_id"])
+    resp = client.post(
+        "/directory/employees/bulk-delete",
+        headers=sysadmin_headers,
+        json={"employee_ids": [employee_id]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["requested"] == 1
+    assert len(body["deleted"]) == 1
+    assert int(body["deleted"][0]["employee_id"]) == employee_id
+    assert body["failed"] == []
+
+    with engine.connect() as conn:
+        assert conn.execute(
+            text("SELECT 1 FROM public.employees WHERE employee_id = :id"),
+            {"id": employee_id},
+        ).first() is None
+
+    employee_bundle["employee_ids"].remove(employee_id)
+    employee_bundle["person_ids"].remove(int(employee_bundle["target_person_id"]))
+    employee_bundle["user_ids"].remove(int(employee_bundle["user_ids"][0]))
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_hard_delete_partial_success(client, sysadmin_headers, employee_bundle):
+    employee_id = int(employee_bundle["target_employee_id"])
+    missing_id = 9_999_999
+    resp = client.post(
+        "/directory/employees/bulk-delete",
+        headers=sysadmin_headers,
+        json={"employee_ids": [employee_id, missing_id]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["requested"] == 2
+    assert len(body["deleted"]) == 1
+    assert int(body["deleted"][0]["employee_id"]) == employee_id
+    assert len(body["failed"]) == 1
+    failed = body["failed"][0]
+    assert int(failed["employee_id"]) == missing_id
+    assert failed["error_code"] == "NOT_FOUND"
+    assert failed["message"]
+    assert "SELECT" not in failed["message"]
+    assert "Traceback" not in failed["message"]
+
+    with engine.connect() as conn:
+        assert conn.execute(
+            text("SELECT 1 FROM public.employees WHERE employee_id = :id"),
+            {"id": employee_id},
+        ).first() is None
+
+    employee_bundle["employee_ids"].remove(employee_id)
+    employee_bundle["person_ids"].remove(int(employee_bundle["target_person_id"]))
+    employee_bundle["user_ids"].remove(int(employee_bundle["user_ids"][0]))
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_hard_delete_forbidden_for_non_sysadmin(client, observer_headers, employee_bundle):
+    employee_id = int(employee_bundle["target_employee_id"])
+    resp = client.post(
+        "/directory/employees/bulk-delete",
+        headers=observer_headers,
+        json={"employee_ids": [employee_id]},
+    )
+    assert resp.status_code == 403
+
+    with engine.connect() as conn:
+        assert conn.execute(
+            text("SELECT 1 FROM public.employees WHERE employee_id = :id"),
+            {"id": employee_id},
+        ).first() is not None
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_hard_delete_deduplicates_ids(client, sysadmin_headers, employee_bundle):
+    employee_id = int(employee_bundle["target_employee_id"])
+    resp = client.post(
+        "/directory/employees/bulk-delete",
+        headers=sysadmin_headers,
+        json={"employee_ids": [employee_id, employee_id, employee_id]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["requested"] == 1
+    assert len(body["deleted"]) == 1
+    assert body["failed"] == []
+
+    employee_bundle["employee_ids"].remove(employee_id)
+    employee_bundle["person_ids"].remove(int(employee_bundle["target_person_id"]))
+    employee_bundle["user_ids"].remove(int(employee_bundle["user_ids"][0]))
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_hard_delete_rejects_empty_list(client, sysadmin_headers):
+    resp = client.post(
+        "/directory/employees/bulk-delete",
+        headers=sysadmin_headers,
+        json={"employee_ids": []},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_bulk_hard_delete_rejects_over_limit(client, sysadmin_headers):
+    resp = client.post(
+        "/directory/employees/bulk-delete",
+        headers=sysadmin_headers,
+        json={"employee_ids": list(range(1, 202))},
+    )
+    assert resp.status_code == 422

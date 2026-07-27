@@ -9,6 +9,11 @@ describe("canHardDeleteEmployee", () => {
     expect(canHardDeleteEmployee(me)).toBe(true);
   });
 
+  it("allows canonical role_id=2 when an older /auth/me omits capability flags", () => {
+    const me: MeInfo = { user_id: 1, role_id: 2 };
+    expect(canHardDeleteEmployee(me)).toBe(true);
+  });
+
   it("denies sysadmin API access without canonical system admin flag", () => {
     const me: MeInfo = {
       user_id: 34,

@@ -4,7 +4,19 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
+import { useCurrentUser } from "@/lib/currentUser";
+import { canHardDeleteEmployee } from "@/lib/employeeHardDelete";
+import {
+  bulkDeleteEmployees,
+  type EmployeeBulkDeleteResponse,
+} from "../../employees/_lib/api.client";
 import { PERSONNEL_LK_WORKPLACE_BASE_PATH } from "../_lib/personnelApplicationsJournalNav";
+import {
+  buildEmployeeBulkDeleteConfirmMessage,
+  formatEmployeeBulkDeleteFailureLines,
+  formatEmployeeBulkDeleteSummary,
+  listSelectableEmployeeIds,
+} from "../_lib/personnelLkBulkDelete";
 import {
   listPersonnelLkRegistry,
   mapPersonnelLkApiError,
@@ -30,6 +42,8 @@ import PersonnelLkTable from "./PersonnelLkTable";
 export default function PersonnelLkPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const me = useCurrentUser();
+  const showBulkSelect = canHardDeleteEmployee(me);
   const filters = React.useMemo(() => parsePersonnelLkRegistryState(searchParams), [searchParams]);
   const listLoadKey = React.useMemo(() => buildPersonnelLkListLoadKey(filters), [filters]);
   const registryReturnHref = React.useMemo(
@@ -43,6 +57,13 @@ export default function PersonnelLkPageClient() {
   const [error, setError] = React.useState<string | null>(null);
   const [registerOpen, setRegisterOpen] = React.useState(false);
   const [searchDraft, setSearchDraft] = React.useState(filters.q);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = React.useState(false);
+  const [bulkDeleteSummary, setBulkDeleteSummary] = React.useState<{
+    summary: string;
+    failures: string[];
+    kind: "success" | "error";
+  } | null>(null);
   const [toast, setToast] = React.useState<{ message: string; kind: "success" | "error" } | null>(
     null,
   );
@@ -50,6 +71,27 @@ export default function PersonnelLkPageClient() {
   const inFlightLoadKeyRef = React.useRef<string | null>(null);
   const selectedApplicationId = filters.application_id;
   const detailOpen = selectedApplicationId != null;
+
+  const selectableEmployeeIds = React.useMemo(
+    () => listSelectableEmployeeIds(items),
+    [items],
+  );
+  const allPageEmployeesSelected =
+    selectableEmployeeIds.length > 0 &&
+    selectableEmployeeIds.every((id) => selectedEmployeeIds.has(id));
+  const somePageEmployeesSelected = selectableEmployeeIds.some((id) =>
+    selectedEmployeeIds.has(id),
+  );
+
+  const employeeNameById = React.useMemo(() => {
+    const map = new Map<number, string>();
+    for (const item of items) {
+      if (item.record_kind === "employee" && item.employee_id != null) {
+        map.set(item.employee_id, String(item.fio || "сотрудника").trim() || "сотрудника");
+      }
+    }
+    return map;
+  }, [items]);
 
   React.useEffect(() => {
     setSearchDraft(filters.q);
@@ -67,11 +109,16 @@ export default function PersonnelLkPageClient() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const clearSelection = React.useCallback(() => {
+    setSelectedEmployeeIds(new Set());
+  }, []);
+
   const loadList = React.useCallback(async () => {
     if (inFlightLoadKeyRef.current === listLoadKey) return;
     inFlightLoadKeyRef.current = listLoadKey;
     setLoading(true);
     setError(null);
+    clearSelection();
     try {
       const body = await listPersonnelLkRegistry({
         q: filters.q || undefined,
@@ -107,6 +154,7 @@ export default function PersonnelLkPageClient() {
     filters.org_group_id,
     filters.org_unit_id,
     filters.position_id,
+    clearSelection,
   ]);
 
   React.useEffect(() => {
@@ -136,6 +184,70 @@ export default function PersonnelLkPageClient() {
     replaceRegistryState({ application_id: result.application_id });
     inFlightLoadKeyRef.current = null;
     void loadList();
+  }
+
+  function toggleSelectedEmployee(employeeId: number) {
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      if (next.has(employeeId)) next.delete(employeeId);
+      else next.add(employeeId);
+      return next;
+    });
+  }
+
+  function toggleSelectAllPageEmployees() {
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      if (allPageEmployeesSelected) {
+        for (const id of selectableEmployeeIds) next.delete(id);
+      } else {
+        for (const id of selectableEmployeeIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function applyBulkDeleteResult(result: EmployeeBulkDeleteResponse) {
+    const deletedIds = new Set(result.deleted.map((row) => row.employee_id));
+    const failedIds = new Set(result.failed.map((row) => row.employee_id));
+
+    if (deletedIds.size > 0) {
+      setItems((current) =>
+        current.filter(
+          (row) =>
+            !(row.record_kind === "employee" && row.employee_id != null && deletedIds.has(row.employee_id)),
+        ),
+      );
+      setTotal((current) => Math.max(0, current - deletedIds.size));
+    }
+
+    setSelectedEmployeeIds(failedIds);
+
+    const failures = formatEmployeeBulkDeleteFailureLines(result, employeeNameById);
+    const summary = formatEmployeeBulkDeleteSummary(result);
+    const kind = result.failed.length > 0 ? "error" : "success";
+    setBulkDeleteSummary({ summary, failures, kind });
+  }
+
+  async function handleBulkDeleteEmployees() {
+    const ids = Array.from(selectedEmployeeIds);
+    if (ids.length === 0) return;
+
+    const names = ids.map((id) => employeeNameById.get(id) || `ID ${id}`);
+    const confirmed = window.confirm(buildEmployeeBulkDeleteConfirmMessage(names));
+    if (!confirmed) return;
+
+    setBulkDeleting(true);
+    setBulkDeleteSummary(null);
+    setError(null);
+    try {
+      const result = await bulkDeleteEmployees(ids);
+      applyBulkDeleteResult(result);
+    } catch (e) {
+      setError(mapPersonnelLkApiError(e, "Не удалось выполнить массовое удаление."));
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   const page = Math.floor(filters.offset / filters.limit) + 1;
@@ -256,6 +368,47 @@ export default function PersonnelLkPageClient() {
         </label>
       </div>
 
+      {showBulkSelect && selectedEmployeeIds.size > 0 ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800"
+          data-testid="personnel-lk-bulk-panel"
+        >
+          <span className="text-sm text-zinc-600 dark:text-zinc-400" data-testid="personnel-lk-selected-count">
+            Выбрано: {selectedEmployeeIds.size}
+          </span>
+          <button
+            type="button"
+            disabled={bulkDeleting || loading}
+            onClick={() => void handleBulkDeleteEmployees()}
+            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="personnel-lk-bulk-delete-btn"
+          >
+            {bulkDeleting ? "Удаление…" : "Удалить выбранные"}
+          </button>
+        </div>
+      ) : null}
+
+      {bulkDeleteSummary ? (
+        <div
+          className={[
+            "rounded-lg border px-3 py-2 text-sm",
+            bulkDeleteSummary.kind === "error"
+              ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100",
+          ].join(" ")}
+          data-testid="personnel-lk-bulk-summary"
+        >
+          <p data-testid="personnel-lk-bulk-summary-text">{bulkDeleteSummary.summary}</p>
+          {bulkDeleteSummary.failures.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5" data-testid="personnel-lk-bulk-failures">
+              {bulkDeleteSummary.failures.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       {error ? (
         <div
           className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
@@ -270,6 +423,12 @@ export default function PersonnelLkPageClient() {
         loading={loading}
         registryReturnHref={registryReturnHref}
         onOpenApplicant={openApplicant}
+        showBulkSelect={showBulkSelect}
+        selectedEmployeeIds={selectedEmployeeIds}
+        onToggleEmployee={toggleSelectedEmployee}
+        onToggleSelectAllPage={toggleSelectAllPageEmployees}
+        allPageEmployeesSelected={allPageEmployeesSelected}
+        somePageEmployeesSelected={somePageEmployeesSelected}
       />
 
       {!loading && !error ? (

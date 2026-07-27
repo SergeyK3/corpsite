@@ -15,6 +15,12 @@ type Props = {
   loading: boolean;
   registryReturnHref: string;
   onOpenApplicant: (applicationId: number) => void;
+  showBulkSelect?: boolean;
+  selectedEmployeeIds?: Set<number>;
+  onToggleEmployee?: (employeeId: number) => void;
+  onToggleSelectAllPage?: () => void;
+  allPageEmployeesSelected?: boolean;
+  somePageEmployeesSelected?: boolean;
 };
 
 const actionClass =
@@ -25,7 +31,15 @@ export default function PersonnelLkTable({
   loading,
   registryReturnHref,
   onOpenApplicant,
+  showBulkSelect = false,
+  selectedEmployeeIds = new Set(),
+  onToggleEmployee,
+  onToggleSelectAllPage,
+  allPageEmployeesSelected = false,
+  somePageEmployeesSelected = false,
 }: Props) {
+  const colSpan = showBulkSelect ? 7 : 6;
+
   return (
     <div
       className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
@@ -35,6 +49,20 @@ export default function PersonnelLkTable({
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-zinc-100 text-left dark:bg-zinc-900">
+              {showBulkSelect ? (
+                <th className="w-10 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allPageEmployeesSelected}
+                    ref={(node) => {
+                      if (node) node.indeterminate = somePageEmployeesSelected && !allPageEmployeesSelected;
+                    }}
+                    onChange={() => onToggleSelectAllPage?.()}
+                    aria-label="Выбрать всех сотрудников на странице"
+                    data-testid="personnel-lk-select-all"
+                  />
+                </th>
+              ) : null}
               <th className="min-w-[260px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 ФИО
               </th>
@@ -58,55 +86,77 @@ export default function PersonnelLkTable({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-zinc-500">
+                <td colSpan={colSpan} className="px-3 py-8 text-center text-sm text-zinc-500">
                   {loading ? "Загрузка…" : "Записи не найдены."}
                 </td>
               </tr>
             ) : (
-              items.map((item) => (
-                <tr
-                  key={`${item.record_kind}-${item.person_id}`}
-                  data-testid={`personnel-lk-row-${item.record_kind}-${item.person_id}`}
-                >
-                  <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                    {item.fio || "—"}
-                  </td>
-                  <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                    {item.iin || "—"}
-                  </td>
-                  <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                    {personnelLkRecordKindLabel(item.record_kind)}
-                  </td>
-                  <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                    {formatPersonnelLkRate(item.rate)}
-                  </td>
-                  <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                    {personnelLkStatusLabel(item)}
-                  </td>
-                  <td className="px-3 py-1.5">
-                    {item.record_kind === "employee" ? (
-                      <Link
-                        href={buildPersonalCardHref({ personId: item.person_id }, { returnTo: registryReturnHref })}
-                        className={actionClass}
-                        data-testid={`personnel-lk-open-card-${item.person_id}`}
-                      >
-                        Открыть
-                      </Link>
-                    ) : item.active_application_id != null ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenApplicant(item.active_application_id!)}
-                        className={actionClass}
-                        data-testid={`personnel-lk-open-application-${item.active_application_id}`}
-                      >
-                        Открыть
-                      </button>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))
+              items.map((item) => {
+                const isSelectableEmployee =
+                  showBulkSelect && item.record_kind === "employee" && item.employee_id != null;
+                const employeeId = item.employee_id ?? null;
+
+                return (
+                  <tr
+                    key={`${item.record_kind}-${item.person_id}`}
+                    data-testid={`personnel-lk-row-${item.record_kind}-${item.person_id}`}
+                  >
+                    {showBulkSelect ? (
+                      <td className="px-3 py-1.5">
+                        {isSelectableEmployee && employeeId != null ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployeeIds.has(employeeId)}
+                            onChange={() => onToggleEmployee?.(employeeId)}
+                            aria-label={`Выбрать ${item.fio || "сотрудника"}`}
+                            data-testid={`personnel-lk-select-employee-${employeeId}`}
+                          />
+                        ) : null}
+                      </td>
+                    ) : null}
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
+                      {item.fio || "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                      {item.iin || "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                      {personnelLkRecordKindLabel(item.record_kind)}
+                    </td>
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                      {formatPersonnelLkRate(item.rate)}
+                    </td>
+                    <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                      {personnelLkStatusLabel(item)}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {item.record_kind === "employee" ? (
+                        <Link
+                          href={buildPersonalCardHref(
+                            { personId: item.person_id },
+                            { returnTo: registryReturnHref },
+                          )}
+                          className={actionClass}
+                          data-testid={`personnel-lk-open-card-${item.person_id}`}
+                        >
+                          Открыть
+                        </Link>
+                      ) : item.active_application_id != null ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenApplicant(item.active_application_id!)}
+                          className={actionClass}
+                          data-testid={`personnel-lk-open-application-${item.active_application_id}`}
+                        >
+                          Открыть
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

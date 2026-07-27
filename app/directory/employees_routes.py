@@ -12,7 +12,11 @@ from sqlalchemy.exc import IntegrityError
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged as _is_privileged, is_system_admin
-from app.services.employee_hard_delete_service import hard_delete_employee as svc_hard_delete_employee
+from app.services.employee_hard_delete_service import (
+    BULK_HARD_DELETE_MAX,
+    bulk_hard_delete_employees as svc_bulk_hard_delete_employees,
+    hard_delete_employee as svc_hard_delete_employee,
+)
 
 from app.services.directory_service import (
     list_departments as svc_list_departments,
@@ -56,6 +60,10 @@ class EmployeeCreateIn(BaseModel):
     date_from: Optional[date] = None
     employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
     department_id: Optional[int] = Field(default=None, ge=1)
+
+
+class EmployeeBulkDeleteIn(BaseModel):
+    employee_ids: List[int] = Field(..., min_length=1, max_length=BULK_HARD_DELETE_MAX)
 
 
 class EmployeeTerminateIn(BaseModel):
@@ -460,6 +468,27 @@ def create_employee(
         raise
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Unable to create employee.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/bulk-delete")
+def bulk_hard_delete_employees_route(
+    body: EmployeeBulkDeleteIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        if not is_system_admin(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
+        return call_service(
+            svc_bulk_hard_delete_employees,
+            employee_ids=body.employee_ids,
+            actor_user_id=int(user["user_id"]),
+        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise as_http500(e)
 

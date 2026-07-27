@@ -6,5 +6,6 @@ import type { MeInfo } from "./types";
  */
 export function canHardDeleteEmployee(me: MeInfo | null | undefined): boolean {
   if (me?.can_hard_delete_employee === true) return true;
-  return me?.is_system_admin === true;
+  if (me?.is_system_admin === true) return true;
+  return Number(me?.role_id ?? 0) === 2;
 }

@@ -1,7 +1,7 @@
 """Administrative hard-delete of an employee contour and dependent data."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -10,6 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.engine import engine
 from app.services.security_audit_service import write_security_event
+
+BULK_HARD_DELETE_MAX = 200
 
 _PERSON_SECTION_TABLES = (
     "person_education",
@@ -483,6 +485,81 @@ def _load_employee(conn: Connection, employee_id: str) -> Dict[str, Any]:
     if not row:
         raise HTTPException(status_code=404, detail="Сотрудник не найден.")
     return dict(row)
+
+
+def _bulk_hard_delete_error(exc: Exception) -> Tuple[str, str]:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+        message = str(detail).strip() if detail is not None else ""
+        if exc.status_code == 404:
+            return "NOT_FOUND", message or "Сотрудник не найден."
+        if exc.status_code == 409:
+            return (
+                "CONFLICT",
+                message or "Не удалось удалить сотрудника: связанные данные заблокировали операцию.",
+            )
+        if exc.status_code == 403:
+            return "FORBIDDEN", message or "Недостаточно прав."
+        if exc.status_code == 400:
+            return "VALIDATION_ERROR", message or "Некорректный запрос."
+        if exc.status_code == 500:
+            return (
+                "INTERNAL_ERROR",
+                message or "Не удалось удалить сотрудника. Операция отменена.",
+            )
+        return "ERROR", message or "Не удалось удалить сотрудника."
+    return "INTERNAL_ERROR", "Не удалось удалить сотрудника. Операция отменена."
+
+
+def bulk_hard_delete_employees(
+    *,
+    employee_ids: List[int],
+    actor_user_id: int,
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Hard-delete multiple employees with partial success (one transaction per employee)."""
+    unique_ids = list(dict.fromkeys(int(raw_id) for raw_id in employee_ids))
+    deleted: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
+
+    for employee_id in unique_ids:
+        try:
+            result = hard_delete_employee(
+                employee_id=str(employee_id),
+                actor_user_id=int(actor_user_id),
+                request_id=request_id,
+            )
+            deleted.append(
+                {
+                    "employee_id": int(result["employee_id"]),
+                    "full_name": result.get("full_name"),
+                    "person_id": result.get("person_id"),
+                    "person_deleted": bool(result.get("person_deleted")),
+                }
+            )
+        except HTTPException as exc:
+            error_code, message = _bulk_hard_delete_error(exc)
+            failed.append(
+                {
+                    "employee_id": int(employee_id),
+                    "error_code": error_code,
+                    "message": message,
+                }
+            )
+        except Exception:
+            failed.append(
+                {
+                    "employee_id": int(employee_id),
+                    "error_code": "INTERNAL_ERROR",
+                    "message": "Не удалось удалить сотрудника. Операция отменена.",
+                }
+            )
+
+    return {
+        "requested": len(unique_ids),
+        "deleted": deleted,
+        "failed": failed,
+    }
 
 
 def hard_delete_employee(
