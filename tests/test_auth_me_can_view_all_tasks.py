@@ -71,10 +71,12 @@ def test_auth_me_can_view_all_tasks_true_for_system_admin(client) -> None:
 def test_auth_me_can_view_all_tasks_true_for_manager_role(client) -> None:
     suffix = uuid4().hex[:8]
     manager_user_id: int | None = None
+    manager_role_id: int | None = None
+    manager_unit_id: int | None = None
 
     try:
         with engine.begin() as conn:
-            unit_id = create_unit(conn, f"pytest_auth_me_manager_unit_{suffix}")
+            manager_unit_id = create_unit(conn, f"pytest_auth_me_manager_unit_{suffix}")
             manager_role_id = create_role(conn, f"pytest_manager_{suffix}")
             conn.execute(
                 text(
@@ -94,18 +96,28 @@ def test_auth_me_can_view_all_tasks_true_for_manager_role(client) -> None:
                 conn,
                 full_name="Pytest Manager All Tasks",
                 role_id=int(manager_role_id),
-                unit_id=int(unit_id),
+                unit_id=int(manager_unit_id),
             )
 
         resp = client.get("/auth/me", headers=auth_headers(int(manager_user_id)))
         assert resp.status_code == 200, resp.text
         assert resp.json().get("can_view_all_tasks") is True
     finally:
-        if manager_user_id is not None:
-            with engine.begin() as conn:
+        with engine.begin() as conn:
+            if manager_user_id is not None:
                 conn.execute(
                     text("DELETE FROM public.users WHERE user_id = :uid"),
                     {"uid": int(manager_user_id)},
+                )
+            if manager_role_id is not None:
+                conn.execute(
+                    text("DELETE FROM public.roles WHERE role_id = :role_id"),
+                    {"role_id": int(manager_role_id)},
+                )
+            if manager_unit_id is not None:
+                conn.execute(
+                    text("DELETE FROM public.org_units WHERE unit_id = :unit_id"),
+                    {"unit_id": int(manager_unit_id)},
                 )
 
 

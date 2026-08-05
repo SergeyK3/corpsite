@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from app.db.engine import engine
 from app.incoming_information.permissions import (
@@ -19,7 +20,7 @@ from app.incoming_information.permissions import (
     can_restricted_bypass,
 )
 from app.services.access_resolver_service import list_active_access_role_codes
-from tests.conftest import auth_headers, create_unit, table_exists
+from tests.conftest import auth_headers, create_role, create_unit, table_exists
 from tests.incoming_information.conftest import (
     _require_ii_schema_fixture,
     assign_primary,
@@ -41,7 +42,7 @@ from tests.test_adr045_hr_head_auth_me import (
     _cleanup_ephemeral_user,
 )
 
-_ROLE_ID = 14
+_LEGACY_WRONG_ROLE_ID = 14
 _ROLE_CODE = "HR_HEAD"
 _ROLE_NAME = "Руководитель отдела кадров"
 _PERMISSION_CODE = "INCOMING_INFO_READ"
@@ -55,26 +56,26 @@ _MUTATION_OR_BYPASS_CODES = {
 }
 
 
-def _load_migration() -> dict:
+def _load_migration(filename: str) -> dict:
     return runpy.run_path(
         str(
             Path(__file__).resolve().parents[1]
             / "alembic"
             / "versions"
-            / "g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py"
+            / filename
         )
     )
 
 
 def test_migration_grants_only_read_to_production_hr_head(monkeypatch) -> None:
-    migration = _load_migration()
+    migration = _load_migration("g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py")
     statements: list[str] = []
     monkeypatch.setattr(migration["op"], "execute", statements.append)
 
     migration["upgrade"]()
 
     assert migration["down_revision"] == "f3a4b5c6d7e8"
-    assert migration["_ROLE_ID"] == _ROLE_ID
+    assert migration["_ROLE_ID"] == _LEGACY_WRONG_ROLE_ID
     assert migration["_ROLE_CODE"] == _ROLE_CODE
     assert migration["_PERMISSION_CODE"] == _PERMISSION_CODE
     assert len(statements) == 1
@@ -85,44 +86,198 @@ def test_migration_grants_only_read_to_production_hr_head(monkeypatch) -> None:
     assert all(code not in statement for code in _MUTATION_OR_BYPASS_CODES)
 
 
-def _ensure_hr_head_role() -> bool:
-    """Create the production role identity only when the isolated test DB lacks it."""
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_corrective_migration_grants_actual_hr_head_not_role_14(
+    monkeypatch,
+    hr_head_role_not_14: int,
+) -> None:
+    migration = _load_migration(
+        "h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py"
+    )
+    assert migration["down_revision"] == "g4b5c6d7e8f9"
+    assert migration["_ROLE_CODE"] == _ROLE_CODE
+    assert migration["_PERMISSION_CODE"] == _PERMISSION_CODE
+    assert str(_LEGACY_WRONG_ROLE_ID) not in migration["_GRANT_REASON"]
+
+    with engine.connect() as conn:
+        transaction = conn.begin()
+        try:
+            monkeypatch.setattr(
+                migration["op"],
+                "execute",
+                lambda statement: conn.execute(text(statement)),
+            )
+            migration["upgrade"]()
+            migration["upgrade"]()
+
+            rows = conn.execute(
+                text(
+                    "SELECT target_id FROM public.access_grants "
+                    "WHERE target_type = 'ROLE' AND reason = :reason ORDER BY grant_id"
+                ),
+                {"reason": migration["_GRANT_REASON"]},
+            ).scalars().all()
+            assert rows == [hr_head_role_not_14]
+            assert _LEGACY_WRONG_ROLE_ID not in rows
+
+            migration["downgrade"]()
+            assert conn.execute(
+                text("SELECT COUNT(*) FROM public.access_grants WHERE reason = :reason"),
+                {"reason": migration["_GRANT_REASON"]},
+            ).scalar_one() == 0
+        finally:
+            transaction.rollback()
+
+
+def test_corrective_migration_is_fail_closed_and_read_only(monkeypatch) -> None:
+    migration = _load_migration(
+        "h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py"
+    )
+    statements: list[str] = []
+    monkeypatch.setattr(migration["op"], "execute", statements.append)
+    migration["upgrade"]()
+
+    statement = statements[0]
+    assert "v_role_count <> 1" in statement
+    assert "v_permission_count <> 1" in statement
+    assert "v_permission_active IS DISTINCT FROM TRUE" in statement
+    assert "RAISE EXCEPTION" in statement
+    assert "r.role_id = 14" not in statement
+    assert "g.active_flag = TRUE" in statement
+    assert "g.starts_at <= statement_timestamp()" in statement
+    assert all(code not in statement for code in _MUTATION_OR_BYPASS_CODES)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_corrective_migration_fails_when_hr_head_role_is_missing(
+    monkeypatch,
+    hr_head_role_not_14: int,
+) -> None:
+    migration = _load_migration(
+        "h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py"
+    )
+    with engine.connect() as conn:
+        transaction = conn.begin()
+        try:
+            conn.execute(
+                text("UPDATE public.roles SET code = :code WHERE role_id = :role_id"),
+                {
+                    "role_id": hr_head_role_not_14,
+                    "code": f"PYTEST_MISSING_HR_HEAD_{uuid4().hex[:8]}",
+                },
+            )
+            monkeypatch.setattr(
+                migration["op"],
+                "execute",
+                lambda statement: conn.execute(text(statement)),
+            )
+            with pytest.raises(DBAPIError, match="requires exactly one role with code HR_HEAD"):
+                migration["upgrade"]()
+        finally:
+            transaction.rollback()
+
+
+@pytest.fixture
+def hr_head_role_not_14(seed) -> int:
+    """Make ID 14 a different role and HR_HEAD a different ID for regressions."""
+    suffix = uuid4().hex[:8]
+    created_hr_head_role_id: int | None = None
+    original_role_14: dict | None = None
     with engine.begin() as conn:
-        row = conn.execute(
+        role_14 = conn.execute(
             text(
-                "SELECT role_id, code, name FROM public.roles "
-                "WHERE role_id = :role_id OR code = :role_code"
+                "SELECT role_id, code, name FROM public.roles WHERE role_id = :role_id"
             ),
-            {"role_id": _ROLE_ID, "role_code": _ROLE_CODE},
+            {"role_id": _LEGACY_WRONG_ROLE_ID},
         ).mappings().first()
-        if row is None:
+        hr_head = conn.execute(
+            text("SELECT role_id, code, name FROM public.roles WHERE code = :role_code"),
+            {"role_code": _ROLE_CODE},
+        ).mappings().first()
+
+        if role_14 is None:
             conn.execute(
                 text(
                     "INSERT INTO public.roles (role_id, code, name) "
                     "VALUES (:role_id, :role_code, :role_name)"
                 ),
                 {
-                    "role_id": _ROLE_ID,
-                    "role_code": _ROLE_CODE,
-                    "role_name": _ROLE_NAME,
+                    "role_id": _LEGACY_WRONG_ROLE_ID,
+                    "role_code": f"PYTEST_NON_HR_ROLE_14_{suffix}",
+                    "role_name": "Pytest non-HR role occupying ID 14",
                 },
             )
-            return True
+            original_role_14 = {"created": True}
+        elif hr_head is not None and int(hr_head["role_id"]) == _LEGACY_WRONG_ROLE_ID:
+            original_role_14 = dict(role_14)
+            conn.execute(
+                text("UPDATE public.roles SET code = :code WHERE role_id = :role_id"),
+                {
+                    "role_id": _LEGACY_WRONG_ROLE_ID,
+                    "code": f"PYTEST_NON_HR_ROLE_14_{suffix}",
+                },
+            )
+            hr_head = None
 
-    assert int(row["role_id"]) == _ROLE_ID
-    assert row["code"] == _ROLE_CODE
-    assert row["name"] == _ROLE_NAME
-    return False
+        if hr_head is None:
+            created_hr_head_role_id = create_role(conn, f"pytest_hr_head_actual_{suffix}")
+            conn.execute(
+                text(
+                    "UPDATE public.roles SET code = :code, name = :name "
+                    "WHERE role_id = :role_id"
+                ),
+                {
+                    "role_id": created_hr_head_role_id,
+                    "code": _ROLE_CODE,
+                    "name": _ROLE_NAME,
+                },
+            )
+            actual_role_id = created_hr_head_role_id
+        else:
+            actual_role_id = int(hr_head["role_id"])
 
+    assert actual_role_id != _LEGACY_WRONG_ROLE_ID
+    with engine.connect() as conn:
+        assert conn.execute(
+            text("SELECT code FROM public.roles WHERE role_id = :role_id"),
+            {"role_id": _LEGACY_WRONG_ROLE_ID},
+        ).scalar_one() != _ROLE_CODE
 
-def _cleanup_test_role(created_for_test: bool) -> None:
-    if not created_for_test:
-        return
+    yield actual_role_id
+
     with engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM public.roles WHERE role_id = :role_id AND code = :role_code"),
-            {"role_id": _ROLE_ID, "role_code": _ROLE_CODE},
-        )
+        if created_hr_head_role_id is not None:
+            conn.execute(
+                text(
+                    "DELETE FROM public.access_grants WHERE target_type = 'ROLE' "
+                    "AND target_id = :role_id AND reason IN (:test_reason, :migration_reason)"
+                ),
+                {
+                    "role_id": created_hr_head_role_id,
+                    "test_reason": _TEST_GRANT_REASON,
+                    "migration_reason": (
+                        "h5c6d7e8f9a0: HR_HEAD Incoming Information read grant correction"
+                    ),
+                },
+            )
+            conn.execute(
+                text("DELETE FROM public.roles WHERE role_id = :role_id"),
+                {"role_id": created_hr_head_role_id},
+            )
+        if original_role_14 and original_role_14.get("created"):
+            conn.execute(
+                text("DELETE FROM public.roles WHERE role_id = :role_id"),
+                {"role_id": _LEGACY_WRONG_ROLE_ID},
+            )
+        elif original_role_14:
+            conn.execute(
+                text("UPDATE public.roles SET code = :code, name = :name WHERE role_id = :role_id"),
+                {
+                    "role_id": _LEGACY_WRONG_ROLE_ID,
+                    "code": original_role_14["code"],
+                    "name": original_role_14["name"],
+                },
+            )
 
 
 def _ensure_test_role_grant(role_id: int, granted_by_user_id: int) -> None:
@@ -238,29 +393,34 @@ def _register_document_in_other_unit(
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_hr_head_auth_me_has_only_incoming_information_read(client: TestClient, seed) -> None:
+def test_hr_head_auth_me_has_only_incoming_information_read(
+    client: TestClient,
+    seed,
+    hr_head_role_not_14: int,
+) -> None:
     _require_b2()
     if not _role_target_type_allowed():
         pytest.skip("ROLE target_type is unavailable")
 
-    migration = _load_migration()
-    assert migration["_ROLE_ID"] == _ROLE_ID
+    migration = _load_migration(
+        "h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py"
+    )
     assert migration["_ROLE_CODE"] == _ROLE_CODE
     assert migration["_PERMISSION_CODE"] == _PERMISSION_CODE
 
-    role_created_for_test = _ensure_hr_head_role()
     created = None
     try:
-        _ensure_test_role_grant(_ROLE_ID, int(seed["initiator_user_id"]))
+        _ensure_test_role_grant(hr_head_role_not_14, int(seed["initiator_user_id"]))
 
         suffix = uuid4().hex[:8]
         with engine.begin() as conn:
-            created = _create_user(conn, seed, role_id=_ROLE_ID, suffix=suffix)
+            created = _create_user(conn, seed, role_id=hr_head_role_not_14, suffix=suffix)
 
         uid = int(created["user_id"])
         user_ctx = {
             "user_id": uid,
-            "role_id": _ROLE_ID,
+            "role_id": hr_head_role_not_14,
+            "role_code": _ROLE_CODE,
             "unit_id": int(seed["unit_id"]),
         }
         _assert_user_can_call_auth_me(uid)
@@ -272,7 +432,8 @@ def test_hr_head_auth_me_has_only_incoming_information_read(client: TestClient, 
         response = client.get("/auth/me", headers=auth_headers(uid))
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["role_id"] == _ROLE_ID
+        assert body["role_id"] == hr_head_role_not_14
+        assert body["role_code"] == _ROLE_CODE
         assert body["role_name_ru"] == _ROLE_NAME
         assert body["incoming_information_permissions"] == {
             "register": False,
@@ -293,8 +454,7 @@ def test_hr_head_auth_me_has_only_incoming_information_read(client: TestClient, 
     finally:
         if created is not None:
             _cleanup_ephemeral_user(created)
-        _cleanup_test_role_grant(_ROLE_ID)
-        _cleanup_test_role(role_created_for_test)
+        _cleanup_test_role_grant(hr_head_role_not_14)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -302,22 +462,28 @@ def test_hr_head_normal_org_wide_read_keeps_restricted_participant_policy(
     client: TestClient,
     seed,
     ii_control_headers,
+    hr_head_role_not_14: int,
 ) -> None:
     _require_b2()
     if not _role_target_type_allowed():
         pytest.skip("ROLE target_type is unavailable")
 
-    role_created_for_test = _ensure_hr_head_role()
     created = None
     document_ids: list[int] = []
+    other_unit_id: int | None = None
     ordinary_user_id = int(seed["initiator_user_id"])
     token = f"hr-head-org-wide-{uuid4().hex}"
     try:
-        _ensure_test_role_grant(_ROLE_ID, ordinary_user_id)
+        _ensure_test_role_grant(hr_head_role_not_14, ordinary_user_id)
         with engine.begin() as conn:
             other_unit_id = create_unit(conn, f"pytest_{token}")
             assert other_unit_id is not None
-            created = _create_user(conn, seed, role_id=_ROLE_ID, suffix=uuid4().hex[:8])
+            created = _create_user(
+                conn,
+                seed,
+                role_id=hr_head_role_not_14,
+                suffix=uuid4().hex[:8],
+            )
             grant_user_permission(conn, ordinary_user_id, _PERMISSION_CODE)
 
         hr_head_user_id = int(created["user_id"])
@@ -438,5 +604,10 @@ def test_hr_head_normal_org_wide_read_keeps_restricted_participant_policy(
             revoke_user_access_grants(conn, ordinary_user_id)
         if created is not None:
             _cleanup_ephemeral_user(created)
-        _cleanup_test_role_grant(_ROLE_ID)
-        _cleanup_test_role(role_created_for_test)
+        _cleanup_test_role_grant(hr_head_role_not_14)
+        if other_unit_id is not None:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM public.org_units WHERE unit_id = :unit_id"),
+                    {"unit_id": int(other_unit_id)},
+                )

@@ -227,6 +227,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                 SELECT
                     u.user_id,
                     u.role_id,
+                    r.code AS role_code,
                     r.name AS role_name_ru,
                     u.unit_id,
                     u.is_active,
@@ -254,6 +255,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     return {
         "user_id": int(row["user_id"]),
         "role_id": int(row["role_id"]) if row["role_id"] is not None else None,
+        "role_code": str(row["role_code"]) if row["role_code"] is not None else None,
         "role_name_ru": str(row["role_name_ru"]) if row["role_name_ru"] is not None else None,
         "unit_id": int(row["unit_id"]) if row["unit_id"] is not None else None,
         "is_active": bool(row["is_active"]),

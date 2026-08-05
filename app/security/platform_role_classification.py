@@ -24,6 +24,8 @@ LEADERSHIP_PLATFORM_ROLE_CODES: frozenset[str] = frozenset(
     }
 )
 
+HR_HEAD_PLATFORM_ROLE_CODE = "HR_HEAD"
+
 OO_SEC_001_GRANT_REASON = "OO-SEC-001: approved leadership workspace read policy"
 
 # Privileged platform roles — OO access via is_privileged, not OO-SEC-001 grants.
@@ -64,6 +66,11 @@ def is_approved_leadership_workspace_read_role(role_code: str | None) -> bool:
     if not code:
         return False
     return code in LEADERSHIP_PLATFORM_ROLE_CODES
+
+
+def is_hr_head_platform_role(role_code: str | None) -> bool:
+    """Identify the HR head by its stable platform role code."""
+    return (role_code or "").strip().upper() == HR_HEAD_PLATFORM_ROLE_CODE
 
 
 def looks_like_leadership_platform_role(role_code: str | None) -> bool:
