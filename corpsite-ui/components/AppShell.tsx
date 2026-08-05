@@ -34,6 +34,10 @@ import {
   shouldShowPrimaryAdminNavItem,
 } from "@/lib/personnelNav";
 import {
+  INCOMING_INFORMATION_NAV_ITEM,
+  isIncomingInformationRoute,
+} from "@/lib/incomingInformationNav";
+import {
   isOperationalOrdersRoute,
   OPERATIONAL_ORDERS_NAV_ITEM,
 } from "@/lib/operationalOrdersNav";
@@ -115,6 +119,7 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   PERSONNEL_DIRECTORY_NAV_ITEM,
   HR_PROCESSES_NAV_ITEM,
   OPERATIONAL_ORDERS_NAV_ITEM,
+  INCOMING_INFORMATION_NAV_ITEM,
 ];
 
 const SECONDARY_DIRECTORY_NAV: NavItem[] = [
@@ -335,10 +340,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     !isAdmin &&
     !showPersonnelVisibility &&
     directoryNavItems.length > 0 &&
-    (isHrProcessesRoute(pathname) || isPersonnelDirectoryRoute(pathname) || isOperationalOrdersRoute(pathname));
+    (isHrProcessesRoute(pathname) ||
+      isPersonnelDirectoryRoute(pathname) ||
+      isOperationalOrdersRoute(pathname) ||
+      isIncomingInformationRoute(pathname));
 
   const forbiddenNonAdminRoute =
-    !loading && !!me && !canAccessDirectoryRoute(pathname, me) && isForbiddenAdminRoute(pathname, me);
+    !loading &&
+    !!me &&
+    !canAccessDirectoryRoute(pathname, me) &&
+    (isIncomingInformationRoute(pathname) || isForbiddenAdminRoute(pathname, me));
 
   const privilegedSysadminOnly =
     !isAdmin &&
@@ -458,7 +469,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {showOrgUnitsPanel ? <OrgUnitsSidebarPanel basePath={orgTreeBasePath} /> : null}
             </aside>
 
-            {renderMainSection(children)}
+            {renderMainSection(
+              forbiddenNonAdminRoute ? (
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-100 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                  Нет доступа к этому разделу.
+                </div>
+              ) : (
+                children
+              ),
+            )}
           </div>
         ) : showPersonnelVisibility ? (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">

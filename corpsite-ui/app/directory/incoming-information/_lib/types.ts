@@ -1,0 +1,110 @@
+export type IncomingInformationPermissions = {
+  register?: boolean;
+  read?: boolean;
+  resolve?: boolean;
+  execute?: boolean;
+  control?: boolean;
+  restricted_bypass?: boolean;
+};
+
+export type IncomingDocumentListQuery = {
+  limit: number;
+  offset: number;
+};
+
+export type IncomingDocumentListItem = {
+  incoming_document_id: number;
+  registration_number: string;
+  registered_at: string;
+  document_type_label: string;
+  summary: string;
+  sender_display: string;
+  addressee_display: string;
+  primary_executor_display: string | null;
+  due_date: string | null;
+  status_code: string;
+  status_label: string;
+  access_level: string;
+  responsible_org_unit_id: number;
+  is_overdue: boolean;
+};
+
+export type IncomingDocumentListResponse = {
+  items: IncomingDocumentListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+/** Exact browser DTO projection of backend IncomingDocumentOut. */
+export type IncomingDocumentDetail = {
+  incoming_document_id: number;
+  registration_number: string;
+  registration_year: number;
+  registration_seq: number;
+  received_at: string;
+  registered_at: string;
+  document_type_id: number;
+  document_type_code: string;
+  document_type_label: string;
+  receipt_channel_id: number;
+  receipt_channel_code: string;
+  receipt_channel_label: string;
+  status_id: number;
+  status_code: string;
+  status_label: string;
+  status_is_terminal: boolean;
+  planned_result_id: number | null;
+  planned_result_code: string | null;
+  planned_result_label: string | null;
+  summary: string;
+  access_level: string;
+  sender_kind: string;
+  sender_person_id: number | null;
+  sender_employee_id: number | null;
+  sender_org_unit_id: number | null;
+  sender_text: string | null;
+  addressee_kind: string;
+  addressee_user_id: number | null;
+  addressee_employee_id: number | null;
+  addressee_org_unit_id: number | null;
+  addressee_position_id: number | null;
+  addressee_text: string | null;
+  registration_org_unit_id: number;
+  responsible_org_unit_id: number;
+  resolution_text: string | null;
+  due_date: string | null;
+  planned_result_note: string | null;
+  executed_at: string | null;
+  execution_result: string | null;
+  closed_at: string | null;
+  note: string | null;
+  priority_level: string | null;
+  is_control_document: boolean;
+  received_after_registration_exception: boolean;
+  exception_comment: string | null;
+  transfer_comment: string | null;
+  cancellation_reason: string | null;
+  control_decision: string | null;
+  control_comment: string | null;
+  controller_user_id: number | null;
+  row_version: number;
+  closed_by_user_id: number | null;
+  cancelled_at: string | null;
+  cancelled_by_user_id: number | null;
+  transferred_at: string | null;
+  transferred_by_user_id: number | null;
+  resolve_recorded_at: string | null;
+  reopened_at: string | null;
+  reopen_reason: string | null;
+  reopen_count: number;
+  external_recipient_kind: string | null;
+  external_recipient_user_id: number | null;
+  external_recipient_org_unit_id: number | null;
+  external_recipient_text: string | null;
+  created_by_user_id: number;
+  updated_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+  is_overdue: boolean;
+};

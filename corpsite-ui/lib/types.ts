@@ -53,6 +53,16 @@ export type MeInfo = {
     mark_ready_for_signature?: boolean;
     return_from_signature?: boolean;
   };
+  /** WP-II — aggregate read projection used for navigation and direct-route access. */
+  has_incoming_information_read?: boolean;
+  incoming_information_permissions?: {
+    register?: boolean;
+    read?: boolean;
+    resolve?: boolean;
+    execute?: boolean;
+    control?: boolean;
+    restricted_bypass?: boolean;
+  };
 };
 
 export type PersonnelVisibilityInfo = {

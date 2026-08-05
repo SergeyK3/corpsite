@@ -11,6 +11,10 @@ import {
   PERSONNEL_DIRECTORY_NAV_ITEM,
 } from "./personnelNav";
 import { canSeeOperationalOrdersNav, isOperationalOrdersRoute } from "./operationalOrdersNav";
+import {
+  canAccessIncomingInformationRoute,
+  isIncomingInformationRoute,
+} from "./incomingInformationNav";
 
 /** ADR-042 E1 assignment / org-sidebar flag (excludes HR-only operational contour). */
 export function hasE1PersonnelVisibility(me: MeInfo | null | undefined): boolean {
@@ -30,6 +34,7 @@ export function canViewPersonnelTasksReadOnly(me: MeInfo | null | undefined): bo
 }
 
 export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | undefined): boolean {
+  if (isIncomingInformationRoute(pathname)) return canAccessIncomingInformationRoute(me);
   if (canSeeAdminShell(me)) return true;
 
   if (isHrProcessesRoute(pathname)) return canSeeHrProcessesNav(me);

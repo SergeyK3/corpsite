@@ -76,4 +76,14 @@ describe("visibilityNav", () => {
     expect(isOperationalOrdersRoute("/directory/operational-orders")).toBe(true);
     expect(canSeeOperationalOrdersNav(hrHead)).toBe(false);
   });
+
+  it("gates Incoming Information direct routes only by its aggregate projection", () => {
+    expect(canAccessDirectoryRoute("/directory/incoming-information", admin)).toBe(false);
+    expect(canAccessDirectoryRoute("/directory/incoming-information/documents/1", hrHead)).toBe(false);
+    expect(
+      canAccessDirectoryRoute("/directory/incoming-information/documents/1", {
+        has_incoming_information_read: true,
+      }),
+    ).toBe(true);
+  });
 });

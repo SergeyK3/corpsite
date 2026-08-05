@@ -15,7 +15,7 @@ from app.incoming_information.permissions import (
     can_restricted_bypass,
     has_base_read_permission,
 )
-from app.incoming_information.scope import resolve_user_scope_unit_ids
+from app.incoming_information.scope import resolve_document_read_scope_unit_ids
 
 
 def _user_has_any_read_permission(user: dict[str, Any]) -> bool:
@@ -55,7 +55,7 @@ def list_incoming_documents(
     if not _user_has_any_read_permission(user):
         raise IncomingDocumentForbiddenError("Incoming document read access denied.")
 
-    scope = resolve_user_scope_unit_ids(user)
+    scope = resolve_document_read_scope_unit_ids(user)
     employee_id = employee_id_for_user(conn, int(user["user_id"]))
     repo = SqlAlchemyIncomingDocumentRepository(conn)
     return repo.list_documents(

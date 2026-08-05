@@ -1,5 +1,9 @@
 // FILE: corpsite-ui/lib/personnelNav.ts
 import type { MeInfo } from "./types";
+import {
+  canSeeIncomingInformationNav,
+  INCOMING_INFORMATION_NAV_ITEM,
+} from "./incomingInformationNav";
 import { canSeeOperationalOrdersNav, OPERATIONAL_ORDERS_NAV_ITEM } from "./operationalOrdersNav";
 
 function isSystemAdminRole(me: MeInfo | null | undefined): boolean {
@@ -90,6 +94,10 @@ export function isOperationalOrdersNavItem(item: Pick<PersonnelNavItem, "href">)
   return item.href === OPERATIONAL_ORDERS_NAV_ITEM.href;
 }
 
+export function isIncomingInformationNavItem(item: Pick<PersonnelNavItem, "href">): boolean {
+  return item.href === INCOMING_INFORMATION_NAV_ITEM.href;
+}
+
 /**
  * Directory sidebar: Персонал → Кадровые процессы → Производственные приказы → Контакты → Должности.
  * Operational Orders is a sibling top-level node, not nested under HR.
@@ -109,6 +117,9 @@ export function buildDirectorySidebarNavItems(
   items.push(...buildPersonnelSidebarNavItems(me));
   if (canSeeOperationalOrdersNav(me)) {
     items.push(OPERATIONAL_ORDERS_NAV_ITEM);
+  }
+  if (canSeeIncomingInformationNav(me)) {
+    items.push(INCOMING_INFORMATION_NAV_ITEM);
   }
   if (opts?.includeVisibilityExtras !== false) {
     if (me?.show_org_sidebar === true || me?.has_personnel_visibility === true) {
@@ -157,6 +168,7 @@ export function shouldShowPrimaryAdminNavItem(
   if (isPersonnelDirectoryNavItem(item)) return canSeePersonnelDirectoryNav(me);
   if (isHrProcessesNavItem(item)) return canSeeHrProcessesNav(me);
   if (isOperationalOrdersNavItem(item)) return canSeeOperationalOrdersNav(me);
+  if (isIncomingInformationNavItem(item)) return canSeeIncomingInformationNav(me);
   return opts.isAdmin;
 }
 
@@ -191,6 +203,7 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/directory/personnel/applicants")) return "/directory/personnel/lk";
   if (pathname.startsWith("/directory/personnel")) return "/directory/personnel";
   if (pathname.startsWith("/directory/operational-orders")) return "/directory/operational-orders";
+  if (pathname.startsWith("/directory/incoming-information")) return "/directory/incoming-information";
   if (pathname.startsWith("/directory/working-contacts")) return "/directory/working-contacts";
   if (pathname.startsWith("/directory/org-units")) return "/directory/org-units";
   if (pathname.startsWith("/directory/org-unit-types")) return "/directory/org-units";

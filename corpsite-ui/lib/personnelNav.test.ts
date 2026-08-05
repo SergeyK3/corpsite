@@ -22,7 +22,11 @@ import {
 } from "./personnelNav";
 
 describe("personnelNav", () => {
-  const systemAdmin: MeInfo = { user_id: 1, role_id: 2 };
+  const systemAdmin: MeInfo = {
+    user_id: 1,
+    role_id: 2,
+    is_system_admin: true,
+  };
   const privileged: MeInfo = { user_id: 2, role_id: 3, is_privileged: true };
   const hrManager: MeInfo = { user_id: 4, role_id: 3, has_personnel_admin: true };
   const headWithVisibility: MeInfo = {
@@ -156,6 +160,17 @@ describe("personnelNav", () => {
         "Контакты",
         "Должности",
       ]);
+    });
+
+    it("shows Incoming Information only for the canonical aggregate projection", () => {
+      const allowed = buildDirectorySidebarNavItems({
+        ...regular,
+        has_incoming_information_read: true,
+      });
+      expect(allowed.map((item) => item.title)).toEqual(["Входящая информация"]);
+
+      const systemAdminWithoutProjection = buildDirectorySidebarNavItems(systemAdmin);
+      expect(systemAdminWithoutProjection.some((item) => item.title === "Входящая информация")).toBe(false);
     });
 
     it("nav item constants are not cross-wired", () => {
