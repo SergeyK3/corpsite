@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from tests.conftest import auth_headers, create_unit, create_user
-from tests.operational_orders.conftest import _grant_user_permission, cleanup_workspace
+from tests.operational_orders.conftest import _grant_user_permission, cleanup_workspace, revoke_user_access_grants
 
 pytestmark = pytest.mark.usefixtures("_require_oo_schema_fixture")
 
@@ -98,15 +98,7 @@ def scoped_users(seed):
     finally:
         with engine.begin() as conn:
             for user_id in created_user_ids:
-                conn.execute(
-                    text(
-                        """
-                        DELETE FROM public.access_grants
-                        WHERE target_type = 'USER' AND target_id = :user_id
-                        """
-                    ),
-                    {"user_id": int(user_id)},
-                )
+                revoke_user_access_grants(conn, int(user_id))
                 conn.execute(
                     text("DELETE FROM public.users WHERE user_id = :user_id"),
                     {"user_id": int(user_id)},
@@ -310,10 +302,7 @@ def test_validate_forbidden_with_read_only_permission(client, scoped_users, seed
         with engine.begin() as conn:
             cleanup_workspace(conn, workspace_id)
             if read_only_user_id is not None:
-                conn.execute(
-                    text("DELETE FROM public.access_grants WHERE target_type = 'USER' AND target_id = :user_id"),
-                    {"user_id": int(read_only_user_id)},
-                )
+                revoke_user_access_grants(conn, int(read_only_user_id))
                 conn.execute(
                     text("DELETE FROM public.users WHERE user_id = :user_id"),
                     {"user_id": int(read_only_user_id)},
@@ -414,10 +403,7 @@ def test_forbidden_validate_does_not_mutate_clarifications_or_audit(client, scop
         with engine.begin() as conn:
             cleanup_workspace(conn, workspace_id)
             if read_only_user_id is not None:
-                conn.execute(
-                    text("DELETE FROM public.access_grants WHERE target_type = 'USER' AND target_id = :user_id"),
-                    {"user_id": int(read_only_user_id)},
-                )
+                revoke_user_access_grants(conn, int(read_only_user_id))
                 conn.execute(
                     text("DELETE FROM public.users WHERE user_id = :user_id"),
                     {"user_id": int(read_only_user_id)},

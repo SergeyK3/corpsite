@@ -86,6 +86,10 @@ docs/*
 !docs/personnel-intake/
 !docs/personnel-intake/**
 
+# WP-II canonical implementation spec (ADR parent document)
+!docs/implementation/
+!docs/implementation/incoming-information-register.md
+
 # Keep operational / private personnel-order drops out of Git
 docs/personnel-orders/operational/
 docs/personnel-orders/import-source/
@@ -112,6 +116,11 @@ scripts/*.ps1
 runtime/hr-import/
 # Intake applicant photos (PERSONNEL_PHOTO_STORAGE_ROOT local default)
 runtime/personnel-intake/photos/
+runtime/incoming-information/attachments/
+
+# Local dev/review scratch (not source)
+docs-work/_tmp_*
+docs-work/review-bundles/
 
 
 # -----------------------

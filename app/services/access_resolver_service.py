@@ -1,8 +1,7 @@
 """ADR-042 Phase B3 — effective access resolver (read-only, no enforcement)."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy import text
 
@@ -13,10 +12,6 @@ IMPLICIT_NONE = {
     "access_level": "NONE",
     "level_rank": 0,
 }
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _table_exists(conn, table: str) -> bool:
@@ -181,8 +176,8 @@ def _load_active_grants(conn, subjects: Dict[str, Set[int]]) -> List[Dict[str, A
             FROM public.access_grants g
             JOIN public.access_roles r ON r.access_role_id = g.access_role_id
             WHERE g.active_flag = TRUE
-              AND g.starts_at <= now()
-              AND (g.ends_at IS NULL OR g.ends_at > now())
+              AND g.starts_at <= statement_timestamp()
+              AND (g.ends_at IS NULL OR g.ends_at > statement_timestamp())
               AND r.is_active = TRUE
               AND ({where_targets})
             ORDER BY r.level_rank DESC, g.grant_id

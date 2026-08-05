@@ -33,6 +33,7 @@ from app.operational_orders.validation.lifecycle_invariants import (
     validate_signed_metadata,
 )
 from tests.conftest import get_columns, table_exists
+from tests.operational_orders.conftest import cleanup_workspace
 
 DDL_REVISION_005B = "c3d4e5f6a7b8"
 DDL_REVISION_PREVIOUS = "b2c3d4e5f6a7"
@@ -221,13 +222,136 @@ def test_005b_migration_downgrade_upgrade() -> None:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_registration_unique_allows_null() -> None:
+def test_registration_unique_allows_null(seed) -> None:
     _require_schema()
+    catalog = {"org_unit_id": int(seed["unit_id"]), "user_id": int(seed["executor_user_id"])}
     suffix = uuid4().hex[:8]
     workspace_ids: list[int] = []
 
-    with engine.begin() as conn:
-        for idx in range(2):
+    try:
+        with engine.begin() as conn:
+            for idx in range(2):
+                workspace_id = conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.operational_order_draft_workspaces (
+                            organization_id,
+                            drafting_path,
+                            stage,
+                            initiator_type,
+                            initiator_reference,
+                            content_author_type,
+                            content_author_reference,
+                            submitting_org_unit_id,
+                            record_creator_user_id
+                        ) VALUES (
+                            :org_unit_id,
+                            'SUBMITTED_TEXT',
+                            'DOCUMENT_PROMOTED',
+                            'PERSON',
+                            'pytest',
+                            'PERSON',
+                            :author_ref,
+                            :org_unit_id,
+                            :user_id
+                        )
+                        RETURNING workspace_id
+                        """
+                    ),
+                    {
+                        "author_ref": f"pytest-005b-null-{suffix}-{idx}",
+                        "org_unit_id": catalog["org_unit_id"],
+                        "user_id": catalog["user_id"],
+                    },
+                ).scalar_one()
+                workspace_ids.append(int(workspace_id))
+
+                promotion_id = conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.operational_order_promotions (
+                            workspace_id,
+                            status,
+                            workspace_version,
+                            workspace_fingerprint,
+                            promoted_by_user_id
+                        ) VALUES (
+                            :workspace_id,
+                            'COMPLETED',
+                            1,
+                            :fingerprint,
+                            :user_id
+                        )
+                        RETURNING id
+                        """
+                    ),
+                    {
+                        "workspace_id": workspace_id,
+                        "fingerprint": f"fp-{suffix}-{idx}",
+                        "user_id": catalog["user_id"],
+                    },
+                ).scalar_one()
+
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.operational_order_documents (
+                            workspace_id,
+                            status,
+                            created_from_workspace_version,
+                            created_from_workspace_fingerprint,
+                            promotion_id,
+                            created_by_user_id,
+                            registration_year,
+                            registration_number
+                        ) VALUES (
+                            :workspace_id,
+                            'CREATED',
+                            1,
+                            :fingerprint,
+                            :promotion_id,
+                            :user_id,
+                            NULL,
+                            NULL
+                        )
+                        """
+                    ),
+                    {
+                        "workspace_id": workspace_id,
+                        "fingerprint": f"doc-fp-{suffix}-{idx}",
+                        "promotion_id": promotion_id,
+                        "user_id": catalog["user_id"],
+                    },
+                )
+
+            count = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM public.operational_order_documents
+                    WHERE created_from_workspace_fingerprint LIKE :pattern
+                    """
+                ),
+                {"pattern": f"doc-fp-{suffix}-%"},
+            ).scalar_one()
+            assert int(count) == 2
+    finally:
+        with engine.begin() as conn:
+            for workspace_id in workspace_ids:
+                cleanup_workspace(conn, int(workspace_id))
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_registration_unique_rejects_duplicate_year_number(seed) -> None:
+    _require_schema()
+    catalog = {"org_unit_id": int(seed["unit_id"]), "user_id": int(seed["executor_user_id"])}
+    suffix = uuid4().hex[:8]
+    reg_year = 2026
+    reg_number = f"OO-005B-{suffix}"
+    workspace_ids: list[int] = []
+
+    try:
+        with engine.begin() as conn:
             workspace_id = conn.execute(
                 text(
                     """
@@ -241,26 +365,25 @@ def test_registration_unique_allows_null() -> None:
                         content_author_reference,
                         submitting_org_unit_id,
                         record_creator_user_id
-                    )
-                    SELECT
-                        ou.unit_id,
+                    ) VALUES (
+                        :org_unit_id,
                         'SUBMITTED_TEXT',
                         'DOCUMENT_PROMOTED',
                         'PERSON',
                         'pytest',
                         'PERSON',
                         :author_ref,
-                        ou.unit_id,
-                        u.user_id
-                    FROM public.org_units ou
-                    CROSS JOIN public.users u
-                    WHERE ou.parent_unit_id IS NULL
-                    ORDER BY ou.unit_id, u.user_id
-                    LIMIT 1
+                        :org_unit_id,
+                        :user_id
+                    )
                     RETURNING workspace_id
                     """
                 ),
-                {"author_ref": f"pytest-005b-null-{suffix}-{idx}"},
+                {
+                    "author_ref": f"pytest-005b-uniq-{suffix}-1",
+                    "org_unit_id": catalog["org_unit_id"],
+                    "user_id": catalog["user_id"],
+                },
             ).scalar_one()
             workspace_ids.append(int(workspace_id))
 
@@ -278,14 +401,15 @@ def test_registration_unique_allows_null() -> None:
                         'COMPLETED',
                         1,
                         :fingerprint,
-                        (SELECT user_id FROM public.users ORDER BY user_id LIMIT 1)
+                        :user_id
                     )
                     RETURNING id
                     """
                 ),
                 {
                     "workspace_id": workspace_id,
-                    "fingerprint": f"fp-{suffix}-{idx}",
+                    "fingerprint": f"fp-uniq-{suffix}-1",
+                    "user_id": catalog["user_id"],
                 },
             ).scalar_one()
 
@@ -307,223 +431,118 @@ def test_registration_unique_allows_null() -> None:
                         1,
                         :fingerprint,
                         :promotion_id,
-                        (SELECT user_id FROM public.users ORDER BY user_id LIMIT 1),
-                        NULL,
-                        NULL
-                    )
-                    """
-                ),
-                {
-                    "workspace_id": workspace_id,
-                    "fingerprint": f"doc-fp-{suffix}-{idx}",
-                    "promotion_id": promotion_id,
-                },
-            )
-
-        count = conn.execute(
-            text(
-                """
-                SELECT COUNT(*) AS cnt
-                FROM public.operational_order_documents
-                WHERE created_from_workspace_fingerprint LIKE :pattern
-                """
-            ),
-            {"pattern": f"doc-fp-{suffix}-%"},
-        ).scalar_one()
-        assert int(count) == 2
-
-
-@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_registration_unique_rejects_duplicate_year_number() -> None:
-    _require_schema()
-    suffix = uuid4().hex[:8]
-    reg_year = 2026
-    reg_number = f"OO-005B-{suffix}"
-
-    with engine.begin() as conn:
-        workspace_id = conn.execute(
-            text(
-                """
-                INSERT INTO public.operational_order_draft_workspaces (
-                    organization_id,
-                    drafting_path,
-                    stage,
-                    initiator_type,
-                    initiator_reference,
-                    content_author_type,
-                    content_author_reference,
-                    submitting_org_unit_id,
-                    record_creator_user_id
-                )
-                SELECT
-                    ou.unit_id,
-                    'SUBMITTED_TEXT',
-                    'DOCUMENT_PROMOTED',
-                    'PERSON',
-                    'pytest',
-                    'PERSON',
-                    :author_ref,
-                    ou.unit_id,
-                    u.user_id
-                FROM public.org_units ou
-                CROSS JOIN public.users u
-                WHERE ou.parent_unit_id IS NULL
-                ORDER BY ou.unit_id, u.user_id
-                LIMIT 1
-                RETURNING workspace_id
-                """
-            ),
-            {"author_ref": f"pytest-005b-uniq-{suffix}-1"},
-        ).scalar_one()
-
-        promotion_id = conn.execute(
-            text(
-                """
-                INSERT INTO public.operational_order_promotions (
-                    workspace_id,
-                    status,
-                    workspace_version,
-                    workspace_fingerprint,
-                    promoted_by_user_id
-                ) VALUES (
-                    :workspace_id,
-                    'COMPLETED',
-                    1,
-                    :fingerprint,
-                    (SELECT user_id FROM public.users ORDER BY user_id LIMIT 1)
-                )
-                RETURNING id
-                """
-            ),
-            {
-                "workspace_id": workspace_id,
-                "fingerprint": f"fp-uniq-{suffix}-1",
-            },
-        ).scalar_one()
-
-        conn.execute(
-            text(
-                """
-                INSERT INTO public.operational_order_documents (
-                    workspace_id,
-                    status,
-                    created_from_workspace_version,
-                    created_from_workspace_fingerprint,
-                    promotion_id,
-                    created_by_user_id,
-                    registration_year,
-                    registration_number
-                ) VALUES (
-                    :workspace_id,
-                    'CREATED',
-                    1,
-                    :fingerprint,
-                    :promotion_id,
-                    (SELECT user_id FROM public.users ORDER BY user_id LIMIT 1),
-                    :registration_year,
-                    :registration_number
-                )
-                """
-            ),
-            {
-                "workspace_id": workspace_id,
-                "fingerprint": f"doc-uniq-{suffix}-1",
-                "promotion_id": promotion_id,
-                "registration_year": reg_year,
-                "registration_number": reg_number,
-            },
-        )
-
-        workspace_id_2 = conn.execute(
-            text(
-                """
-                INSERT INTO public.operational_order_draft_workspaces (
-                    organization_id,
-                    drafting_path,
-                    stage,
-                    initiator_type,
-                    initiator_reference,
-                    content_author_type,
-                    content_author_reference,
-                    submitting_org_unit_id,
-                    record_creator_user_id
-                )
-                SELECT
-                    ou.unit_id,
-                    'SUBMITTED_TEXT',
-                    'DOCUMENT_PROMOTED',
-                    'PERSON',
-                    'pytest',
-                    'PERSON',
-                    :author_ref,
-                    ou.unit_id,
-                    u.user_id
-                FROM public.org_units ou
-                CROSS JOIN public.users u
-                WHERE ou.parent_unit_id IS NULL
-                ORDER BY ou.unit_id, u.user_id
-                LIMIT 1
-                RETURNING workspace_id
-                """
-            ),
-            {"author_ref": f"pytest-005b-uniq-{suffix}-2"},
-        ).scalar_one()
-
-        promotion_id_2 = conn.execute(
-            text(
-                """
-                INSERT INTO public.operational_order_promotions (
-                    workspace_id,
-                    status,
-                    workspace_version,
-                    workspace_fingerprint,
-                    promoted_by_user_id
-                ) VALUES (
-                    :workspace_id,
-                    'COMPLETED',
-                    1,
-                    :fingerprint,
-                    (SELECT user_id FROM public.users ORDER BY user_id LIMIT 1)
-                )
-                RETURNING id
-                """
-            ),
-            {
-                "workspace_id": workspace_id_2,
-                "fingerprint": f"fp-uniq-{suffix}-2",
-            },
-        ).scalar_one()
-
-        with pytest.raises(Exception):
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO public.operational_order_documents (
-                        workspace_id,
-                        status,
-                        created_from_workspace_version,
-                        created_from_workspace_fingerprint,
-                        promotion_id,
-                        created_by_user_id,
-                        registration_year,
-                        registration_number
-                    ) VALUES (
-                        :workspace_id,
-                        'CREATED',
-                        1,
-                        :fingerprint,
-                        :promotion_id,
-                        (SELECT user_id FROM public.users ORDER BY user_id LIMIT 1),
+                        :user_id,
                         :registration_year,
                         :registration_number
                     )
                     """
                 ),
                 {
-                    "workspace_id": workspace_id_2,
-                    "fingerprint": f"doc-uniq-{suffix}-2",
-                    "promotion_id": promotion_id_2,
+                    "workspace_id": workspace_id,
+                    "fingerprint": f"doc-uniq-{suffix}-1",
+                    "promotion_id": promotion_id,
+                    "user_id": catalog["user_id"],
                     "registration_year": reg_year,
                     "registration_number": reg_number,
                 },
             )
+
+            workspace_id_2 = conn.execute(
+                text(
+                    """
+                    INSERT INTO public.operational_order_draft_workspaces (
+                        organization_id,
+                        drafting_path,
+                        stage,
+                        initiator_type,
+                        initiator_reference,
+                        content_author_type,
+                        content_author_reference,
+                        submitting_org_unit_id,
+                        record_creator_user_id
+                    ) VALUES (
+                        :org_unit_id,
+                        'SUBMITTED_TEXT',
+                        'DOCUMENT_PROMOTED',
+                        'PERSON',
+                        'pytest',
+                        'PERSON',
+                        :author_ref,
+                        :org_unit_id,
+                        :user_id
+                    )
+                    RETURNING workspace_id
+                    """
+                ),
+                {
+                    "author_ref": f"pytest-005b-uniq-{suffix}-2",
+                    "org_unit_id": catalog["org_unit_id"],
+                    "user_id": catalog["user_id"],
+                },
+            ).scalar_one()
+            workspace_ids.append(int(workspace_id_2))
+
+            promotion_id_2 = conn.execute(
+                text(
+                    """
+                    INSERT INTO public.operational_order_promotions (
+                        workspace_id,
+                        status,
+                        workspace_version,
+                        workspace_fingerprint,
+                        promoted_by_user_id
+                    ) VALUES (
+                        :workspace_id,
+                        'COMPLETED',
+                        1,
+                        :fingerprint,
+                        :user_id
+                    )
+                    RETURNING id
+                    """
+                ),
+                {
+                    "workspace_id": workspace_id_2,
+                    "fingerprint": f"fp-uniq-{suffix}-2",
+                    "user_id": catalog["user_id"],
+                },
+            ).scalar_one()
+
+            with pytest.raises(Exception):
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.operational_order_documents (
+                            workspace_id,
+                            status,
+                            created_from_workspace_version,
+                            created_from_workspace_fingerprint,
+                            promotion_id,
+                            created_by_user_id,
+                            registration_year,
+                            registration_number
+                        ) VALUES (
+                            :workspace_id,
+                            'CREATED',
+                            1,
+                            :fingerprint,
+                            :promotion_id,
+                            :user_id,
+                            :registration_year,
+                            :registration_number
+                        )
+                        """
+                    ),
+                    {
+                        "workspace_id": workspace_id_2,
+                        "fingerprint": f"doc-uniq-{suffix}-2",
+                        "promotion_id": promotion_id_2,
+                        "user_id": catalog["user_id"],
+                        "registration_year": reg_year,
+                        "registration_number": reg_number,
+                    },
+                )
+    finally:
+        with engine.begin() as conn:
+            for ws_id in workspace_ids:
+                cleanup_workspace(conn, int(ws_id))

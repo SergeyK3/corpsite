@@ -21,6 +21,12 @@ if _probe_dir:
 
 from app.auth import create_access_token
 from app.db.engine import engine
+from app.security.directory_scope import is_privileged, privileged_role_ids, privileged_user_ids
+
+# Snapshot dev .env allowlists at import so per-test monkeypatch isolation cannot
+# skip seed user-id floors or reserved-role skipping (WP-II-005R3).
+_RESERVED_PRIVILEGED_USER_IDS = frozenset(privileged_user_ids())
+_RESERVED_PRIVILEGED_ROLE_IDS = frozenset(privileged_role_ids())
 
 if _probe_dir:
     (_probe_path / "04_engine_imported_in_conftest").write_text(
@@ -31,7 +37,7 @@ if _probe_dir:
         _handle.write("04_engine_imported_in_conftest\n")
 
 from app.main import app
-from tests.db_sequence_helpers import sync_common_seed_sequences, sync_owned_sequence
+from tests.db_sequence_helpers import sync_common_seed_sequences, sync_owned_sequence, get_owned_sequence
 
 
 # =============================
@@ -459,13 +465,22 @@ def create_unit(conn, name: str) -> Optional[int]:
     return insert_returning_id(conn, table=ut, id_col=id_col, values=values)
 
 
-def create_role(conn, name: str) -> int:
+def _insert_role_row(conn, name: str) -> int:
     now = utcnow()
     if not table_exists(conn, "roles"):
         raise RuntimeError("Table public.roles does not exist")
 
     cols = get_columns(conn, "roles")
+    values: Dict[str, Any] = {"name": name, "created_at": now}
+    if "code" in cols:
+        values["code"] = name
+
+    return insert_returning_id(conn, table="roles", id_col="role_id", values=values)
+
+
+def create_role(conn, name: str) -> int:
     # Never reuse stale pytest_* roles left from interrupted test runs.
+    cols = get_columns(conn, "roles") if table_exists(conn, "roles") else set()
     if "code" in cols and not str(name).lower().startswith("pytest_"):
         existing = conn.execute(
             text("SELECT role_id FROM public.roles WHERE code = :code LIMIT 1"),
@@ -474,11 +489,80 @@ def create_role(conn, name: str) -> int:
         if existing is not None:
             return int(existing)
 
-    values: Dict[str, Any] = {"name": name, "created_at": now}
-    if "code" in cols:
-        values["code"] = name
+    return _insert_role_row(conn, name)
 
-    return insert_returning_id(conn, table="roles", id_col="role_id", values=values)
+
+def assert_non_privileged_role_id(role_id: int, *, label: str = "role") -> None:
+    reserved = _RESERVED_PRIVILEGED_ROLE_IDS
+    assert int(role_id) not in reserved, (
+        f"Test {label} must not use a reserved privileged role_id "
+        f"({int(role_id)} ∈ {sorted(reserved)})."
+    )
+
+
+def _ensure_role_id_sequence_above_reserved(conn) -> None:
+    reserved = _RESERVED_PRIVILEGED_ROLE_IDS
+    if not reserved:
+        return
+    floor = max(int(rid) for rid in reserved) + 1
+    sync_owned_sequence(conn, "roles", "role_id")
+    max_pk = int(
+        conn.execute(text("SELECT COALESCE(MAX(role_id), 0) FROM public.roles")).scalar_one()
+    )
+    target = max(max_pk + 1, floor)
+    seq_name = get_owned_sequence(conn, "roles", "role_id")
+    if seq_name:
+        conn.execute(
+            text("SELECT setval(CAST(:seq_name AS regclass), :target, false)"),
+            {"seq_name": seq_name, "target": target},
+        )
+
+
+def create_non_privileged_role(conn, name: str) -> int:
+    """
+    Create a catalog role whose id is not reserved for system/privileged access.
+
+    On an empty roles table the identity sequence may assign role_id=2 to the
+    second insert; that id is reserved (SYSTEM_ADMIN). Consume it with a throwaway
+    row and return the next free id instead of assigning it to test principals.
+    """
+    reserved = _RESERVED_PRIVILEGED_ROLE_IDS
+    role_id = create_role(conn, name)
+    attempts = 0
+    while int(role_id) in reserved:
+        attempts += 1
+        if attempts > len(reserved) + 3:
+            raise RuntimeError(
+                f"Could not allocate a non-privileged role for {name!r}; "
+                f"last role_id={role_id}, reserved={sorted(reserved)}"
+            )
+        conn.execute(
+            text("DELETE FROM public.roles WHERE role_id = :rid"),
+            {"rid": int(role_id)},
+        )
+        _ensure_role_id_sequence_above_reserved(conn)
+        role_id = _insert_role_row(conn, f"{name}_nonpriv_{attempts}")
+    assert_non_privileged_role_id(role_id, label=name)
+    return int(role_id)
+
+
+def _ensure_seed_user_id_above_env_allowlists(conn) -> None:
+    """Avoid reusing user ids listed in DIRECTORY_PRIVILEGED_USER_IDS from dev .env."""
+    reserved = _RESERVED_PRIVILEGED_USER_IDS
+    floor = 1000
+    if reserved:
+        floor = max(floor, max(int(uid) for uid in reserved) + 1)
+    sync_owned_sequence(conn, "users", "user_id")
+    max_pk = int(
+        conn.execute(text("SELECT COALESCE(MAX(user_id), 0) FROM public.users")).scalar_one()
+    )
+    target = max(max_pk + 1, floor)
+    seq_name = get_owned_sequence(conn, "users", "user_id")
+    if seq_name:
+        conn.execute(
+            text("SELECT setval(CAST(:seq_name AS regclass), :target, false)"),
+            {"seq_name": seq_name, "target": target},
+        )
 
 
 def create_user(conn, *, full_name: str, role_id: int, unit_id: Optional[int] = None) -> int:
@@ -713,9 +797,15 @@ def seed() -> Iterator[Dict[str, Any]]:
         unit_name = f"pytest_unit_{suffix}"
         created_unit_id = create_unit(conn, unit_name)
 
-        executor_role_id = create_role(conn, f"pytest_executor_{suffix}")
-        initiator_role_id = create_role(conn, f"pytest_initiator_{suffix}")
+        executor_role_id = create_non_privileged_role(conn, f"pytest_executor_{suffix}")
+        initiator_role_id = create_non_privileged_role(conn, f"pytest_initiator_{suffix}")
         created_role_ids = [executor_role_id, initiator_role_id]
+
+        assert_non_privileged_role_id(executor_role_id, label="executor_role")
+        assert_non_privileged_role_id(initiator_role_id, label="initiator_role")
+
+        # After role inserts sync sequences — bump user ids last so create_user cannot reset the floor.
+        _ensure_seed_user_id_above_env_allowlists(conn)
 
         executor_user_id = create_user(
             conn,
@@ -730,6 +820,19 @@ def seed() -> Iterator[Dict[str, Any]]:
             unit_id=created_unit_id,
         )
         created_user_ids = [executor_user_id, initiator_user_id]
+
+        for label, user_id in (
+            ("executor_user", executor_user_id),
+            ("initiator_user", initiator_user_id),
+        ):
+            row = fetch_one(
+                conn,
+                "SELECT user_id, role_id FROM public.users WHERE user_id = :uid",
+                uid=int(user_id),
+            )
+            assert not is_privileged(
+                {"user_id": int(row["user_id"]), "role_id": int(row["role_id"])}
+            ), f"Seed {label} must not resolve as privileged (role_id={row['role_id']})."
 
         data: Dict[str, Any] = {
             "period_id": 2,
@@ -770,6 +873,30 @@ def seed() -> Iterator[Dict[str, Any]]:
 
             # personnel applications created by API tests using seed users
             cleanup_seed_personnel_applications(conn, created_user_ids)
+
+            # access grants tied to seed users (must precede user delete for stable reuse)
+            if table_exists(conn, "access_grants"):
+                if created_user_ids:
+                    conn.execute(
+                        text(
+                            """
+                            DELETE FROM public.access_grants
+                            WHERE (target_type = 'USER' AND target_id = ANY(:uids))
+                               OR granted_by_user_id = ANY(:uids)
+                            """
+                        ),
+                        {"uids": created_user_ids},
+                    )
+                if created_role_ids:
+                    conn.execute(
+                        text(
+                            """
+                            DELETE FROM public.access_grants
+                            WHERE target_type = 'ROLE' AND target_id = ANY(:rids)
+                            """
+                        ),
+                        {"rids": created_role_ids},
+                    )
 
             # users
             if table_exists(conn, "users"):

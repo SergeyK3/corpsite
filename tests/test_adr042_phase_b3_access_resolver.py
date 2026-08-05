@@ -41,6 +41,19 @@ def _get_access_role_id(conn, code: str) -> int:
     return int(row)
 
 
+def _create_position(conn, suffix: str) -> int:
+    cols = get_columns(conn, "positions")
+    values = {"name": f"B3 Position {suffix}"}
+    if "category" in cols:
+        values["category"] = "other"
+    return insert_returning_id(
+        conn,
+        table="positions",
+        id_col="position_id",
+        values=values,
+    )
+
+
 def _create_person_employee_user(conn, seed, suffix: str) -> dict:
     person_id = insert_returning_id(
         conn,
@@ -70,9 +83,7 @@ def _create_person_employee_user(conn, seed, suffix: str) -> dict:
         id_col="employee_id",
         values=emp_values,
     )
-    pos_id = conn.execute(
-        text("SELECT position_id FROM public.positions ORDER BY position_id LIMIT 1")
-    ).scalar_one()
+    pos_id = _create_position(conn, suffix)
     assignment_id = insert_returning_id(
         conn,
         table="person_assignments",

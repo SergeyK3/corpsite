@@ -45,6 +45,7 @@ from app.api.personnel_verification_router import router as personnel_verificati
 from app.api.personnel_intake_public_router import router as personnel_intake_public_router
 from app.api.personnel_intake_tenure_router import router as personnel_intake_tenure_router
 from app.operational_orders.router import router as operational_orders_router
+from app.incoming_information.router import router as incoming_information_router
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -131,6 +132,7 @@ app.include_router(personnel_verification_router)
 app.include_router(personnel_intake_public_router)
 app.include_router(personnel_intake_tenure_router)
 app.include_router(operational_orders_router)
+app.include_router(incoming_information_router)
 
 # -----------------------
 # Routers (internal)

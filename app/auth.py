@@ -299,6 +299,14 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["operational_orders_permissions"] = build_operational_orders_permissions(out)
     out["has_operational_orders_read"] = has_any_operational_orders_read(out)
 
+    from app.incoming_information.auth_projection import (
+        build_incoming_information_permissions,
+        has_any_incoming_information_read,
+    )
+
+    out["incoming_information_permissions"] = build_incoming_information_permissions(out)
+    out["has_incoming_information_read"] = has_any_incoming_information_read(out)
+
     from app.services.personnel_visibility_resolver_service import (
         enrich_user_with_personnel_visibility,
     )

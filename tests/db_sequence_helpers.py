@@ -54,12 +54,18 @@ def sync_owned_sequence(
         return None
 
     max_pk = _max_pk(conn, schema=schema, table_name=table_name, pk_column=pk_column)
+    next_value = _sequence_next_value(conn, seq_name)
     if max_pk <= 0:
+        if next_value > 1:
+            return seq_name
         conn.execute(
             text("SELECT setval(CAST(:seq_name AS regclass), 1, false)"),
             {"seq_name": seq_name},
         )
     else:
+        desired_next = max_pk + 1
+        if next_value >= desired_next:
+            return seq_name
         conn.execute(
             text("SELECT setval(CAST(:seq_name AS regclass), :max_pk, true)"),
             {"seq_name": seq_name, "max_pk": max_pk},

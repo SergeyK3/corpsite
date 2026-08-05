@@ -8,7 +8,26 @@ from app.db.engine import engine
 from app.operational_orders.repository import OO_DOCUMENT_TABLES, OO_LIFECYCLE_TABLES, OO_SIGNING_COMMAND_TABLES, OO_TABLES, document_aggregate_available, lifecycle_available, operational_orders_available, signing_command_available
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
+
+def oo_sql_catalog(seed) -> dict[str, int]:
+    """Minimal org/user rows for direct-SQL OO schema tests on an empty test DB."""
+    return {
+        "org_unit_id": int(seed["unit_id"]),
+        "user_id": int(seed["executor_user_id"]),
+    }
+
 DDL_REVISION = "d4e5f6a7b8c9"
+
+
+@pytest.fixture(autouse=True)
+def _oo_isolate_env_privileged_allowlists(monkeypatch):
+    """Ignore dev .env privileged allowlists unless a test sets them explicitly."""
+    for name in (
+        "DIRECTORY_PRIVILEGED_USER_IDS",
+        "DIRECTORY_PRIVILEGED_IDS",
+        "DIRECTORY_PRIVILEGED_ROLE_IDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _schema_available() -> bool:
@@ -85,11 +104,7 @@ def oo_signing_headers(seed):
     with engine.begin() as conn:
         for perm in perms:
             _grant_user_permission(conn, user_id, perm)
-    try:
-        yield auth_headers(user_id)
-    finally:
-        with engine.begin() as conn:
-            revoke_user_access_grants(conn, user_id)
+    yield auth_headers(user_id)
 
 
 @pytest.fixture
@@ -113,11 +128,7 @@ def oo_lifecycle_headers(seed):
     with engine.begin() as conn:
         for perm in perms:
             _grant_user_permission(conn, user_id, perm)
-    try:
-        yield auth_headers(user_id)
-    finally:
-        with engine.begin() as conn:
-            revoke_user_access_grants(conn, user_id)
+    yield auth_headers(user_id)
 
 
 def revoke_user_access_grants(conn, user_id: int) -> None:
@@ -163,22 +174,27 @@ def _grant_user_permission(conn, user_id: int, permission_code: str) -> None:
         {"code": permission_code},
     ).fetchone()
     if not role_row:
-        return
+        raise RuntimeError(f"Missing access role seed: {permission_code}")
+    conn.execute(
+        text(
+            """
+            DELETE FROM public.access_grants g
+            USING public.access_roles ar
+            WHERE g.access_role_id = ar.access_role_id
+              AND ar.code = :code
+              AND g.target_type = 'USER'
+              AND g.target_id = :user_id
+            """
+        ),
+        {"code": permission_code, "user_id": int(user_id)},
+    )
     conn.execute(
         text(
             """
             INSERT INTO public.access_grants (
                 access_role_id, target_type, target_id, granted_by_user_id, reason
             )
-            SELECT :access_role_id, 'USER', :user_id, :user_id, :reason
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM public.access_grants g
-                WHERE g.active_flag = TRUE
-                  AND g.access_role_id = :access_role_id
-                  AND g.target_type = 'USER'
-                  AND g.target_id = :user_id
-            )
+            VALUES (:access_role_id, 'USER', :user_id, :user_id, :reason)
             """
         ),
         {
@@ -202,11 +218,7 @@ def oo_regular_headers(seed):
         _grant_user_permission(conn, user_id, "OPERATIONAL_ORDERS_INTAKE_CREATE")
         _grant_user_permission(conn, user_id, "OPERATIONAL_ORDERS_INTAKE_READ")
         _grant_user_permission(conn, user_id, "OPERATIONAL_ORDERS_INTAKE_OPERATE")
-    try:
-        yield auth_headers(user_id)
-    finally:
-        with engine.begin() as conn:
-            revoke_user_access_grants(conn, user_id)
+    yield auth_headers(user_id)
 
 
 @pytest.fixture
@@ -226,11 +238,7 @@ def oo_editorial_headers(seed):
     with engine.begin() as conn:
         for perm in perms:
             _grant_user_permission(conn, user_id, perm)
-    try:
-        yield auth_headers(user_id)
-    finally:
-        with engine.begin() as conn:
-            revoke_user_access_grants(conn, user_id)
+    yield auth_headers(user_id)
 
 
 # Child tables first — safe DELETE ... WHERE workspace_id (see OO FK graph).
