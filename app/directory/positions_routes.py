@@ -12,18 +12,28 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
-from app.security.directory_scope import is_privileged as _is_privileged
+from app.security.directory_scope import (
+    is_privileged as _is_privileged,
+    is_system_admin as _is_system_admin,
+)
 
 from app.directory.rbac import compute_scope, require_personnel_visibility_or_403
 from app.services.org_unit_allowed_positions_service import (
     build_allowed_positions_exists_sql,
     build_allowed_positions_order_sql,
 )
+from app.services.position_dependencies_service import (
+    build_position_blocked_exists_sql,
+    check_position_dependencies,
+    check_positions_dependencies,
+    load_position_blocking_foreign_keys,
+)
 
 router = APIRouter()
 
 ALLOWED_CATEGORIES = {"leaders", "medical", "admin", "technical", "other"}
 POSITION_LIST_SCOPES = {"used", "allowed"}
+POSITION_DELETE_STATUSES = {"deletable", "blocked"}
 
 
 class PositionUpsert(BaseModel):
@@ -140,6 +150,10 @@ def list_positions_crud(
         default=None,
         description="Org-unit filter semantics: used (employees) or allowed (junction table). Default: used.",
     ),
+    delete_status: Optional[str] = Query(
+        default=None,
+        description="Sysadmin-only deletion assessment filter: deletable or blocked.",
+    ),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
@@ -147,6 +161,16 @@ def list_positions_crud(
     uid = int(user["user_id"])
     visibility_scope = compute_scope(uid, user)
     require_personnel_visibility_or_403(user, visibility_scope)
+
+    normalized_delete_status = str(delete_status or "").strip().lower() or None
+    if normalized_delete_status is not None:
+        if not _is_system_admin(user):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+        if normalized_delete_status not in POSITION_DELETE_STATUSES:
+            raise HTTPException(
+                status_code=422,
+                detail="delete_status must be one of: deletable, blocked.",
+            )
 
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     where_parts = ["TRUE"]
@@ -216,40 +240,64 @@ def list_positions_crud(
                 """.strip()
             )
 
-    where_sql = " AND ".join(where_parts)
-
-    q_total = text(
-        f"""
-        {with_prefix}
-        SELECT COUNT(*) AS cnt
-        FROM public.positions p
-        WHERE {where_sql}
-        """
-    )
-
-    q_list = text(
-        f"""
-        {with_prefix}
-        SELECT p.position_id, p.name, p.category
-        FROM public.positions p
-        WHERE {where_sql}
-        ORDER BY {order_sql}
-        LIMIT :limit OFFSET :offset
-        """
-    )
-
     with engine.begin() as conn:
+        dependency_specs = []
+        if _is_system_admin(user):
+            dependency_specs = load_position_blocking_foreign_keys(conn)
+            if normalized_delete_status is not None:
+                blocked_sql = build_position_blocked_exists_sql(
+                    dependency_specs,
+                    position_expression="p.position_id",
+                )
+                where_parts.append(
+                    f"({blocked_sql})"
+                    if normalized_delete_status == "blocked"
+                    else f"NOT ({blocked_sql})"
+                )
+
+        where_sql = " AND ".join(where_parts)
+        q_total = text(
+            f"""
+            {with_prefix}
+            SELECT COUNT(*) AS cnt
+            FROM public.positions p
+            WHERE {where_sql}
+            """
+        )
+        q_list = text(
+            f"""
+            {with_prefix}
+            SELECT p.position_id, p.name, p.category
+            FROM public.positions p
+            WHERE {where_sql}
+            ORDER BY {order_sql}
+            LIMIT :limit OFFSET :offset
+            """
+        )
         total = int(conn.execute(q_total, params).mappings().first()["cnt"])
         rows = conn.execute(q_list, params).mappings().all()
+        assessments = (
+            check_positions_dependencies(
+                conn,
+                position_ids=[int(row["position_id"]) for row in rows],
+                dependencies=dependency_specs,
+            )
+            if _is_system_admin(user)
+            else {}
+        )
 
-    items = [
-        {
+    items = []
+    for r in rows:
+        position_id = int(r["position_id"])
+        item = {
             "position_id": int(r["position_id"]),
             "name": str(r["name"] or "").strip(),
             "category": str(r["category"] or "").strip(),
         }
-        for r in rows
-    ]
+        assessment = assessments.get(position_id)
+        if assessment is not None:
+            item["delete_assessment"] = assessment.to_dict()
+        items.append(item)
     return {
         "items": items,
         "total": total,
@@ -287,6 +335,31 @@ def get_position(
         "name": str(row["name"] or "").strip(),
         "category": str(row["category"] or "").strip(),
     }
+
+
+@router.get("/positions/{position_id}/dependencies")
+def get_position_dependencies(
+    position_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    if not _is_system_admin(user):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    with engine.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1 FROM public.positions
+                WHERE position_id = :position_id
+                LIMIT 1
+                """
+            ),
+            {"position_id": int(position_id)},
+        ).first()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Position not found.")
+        summary = check_position_dependencies(conn, position_id=int(position_id))
+    return summary.to_dict()
 
 
 @router.post("/positions")
@@ -413,7 +486,7 @@ def delete_position(
     position_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not _is_system_admin(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     q_exists = text(
@@ -422,14 +495,7 @@ def delete_position(
         FROM public.positions
         WHERE position_id = :position_id
         LIMIT 1
-        """
-    )
-
-    q_refs = text(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM public.employees
-        WHERE position_id = :position_id
+        FOR UPDATE
         """
     )
 
@@ -446,15 +512,30 @@ def delete_position(
             if not exists:
                 raise HTTPException(status_code=404, detail="Position not found.")
 
-            refs = int(conn.execute(q_refs, {"position_id": position_id}).mappings().first()["cnt"])
-            if refs > 0:
+            summary = check_position_dependencies(conn, position_id=int(position_id))
+            if not summary.can_delete:
                 raise HTTPException(
                     status_code=409,
-                    detail="Position is used in employees and cannot be deleted.",
+                    detail={
+                        "error_code": "POSITION_HAS_DEPENDENCIES",
+                        **summary.to_dict(),
+                    },
                 )
 
             conn.execute(q_delete, {"position_id": position_id})
-    except IntegrityError:
-        raise HTTPException(status_code=409, detail="Position cannot be deleted because related records still exist.")
+    except IntegrityError as exc:
+        # A dependency may be inserted after an earlier HTTP preflight. The FK
+        # remains the final guard; refresh the shared assessment for a stable,
+        # controlled 409 response instead of exposing the database error.
+        with engine.begin() as conn:
+            summary = check_position_dependencies(conn, position_id=int(position_id))
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "POSITION_HAS_DEPENDENCIES",
+                "race_detected": True,
+                **summary.to_dict(),
+            },
+        ) from exc
 
     return {"ok": True, "position_id": position_id}

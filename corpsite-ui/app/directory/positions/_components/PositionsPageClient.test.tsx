@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CurrentUserProvider } from "@/lib/currentUser";
+import type { MeInfo } from "@/lib/types";
 import PositionsPageClient, { buildPositionsListQuery } from "./PositionsPageClient";
 
 const replace = vi.fn();
@@ -29,6 +31,7 @@ vi.mock("../../../../lib/api", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   searchParams = new URLSearchParams("org_group_id=3&org_unit_id=74");
 });
 
@@ -41,6 +44,14 @@ function fetchScopesAfterCallIndex(index: number): string[] {
   return apiFetchJson.mock.calls
     .slice(index)
     .map((call) => String((call?.[1] as { query?: { scope?: string } })?.query?.scope ?? ""));
+}
+
+function renderWithMe(me: MeInfo | null) {
+  return render(
+    <CurrentUserProvider value={me}>
+      <PositionsPageClient />
+    </CurrentUserProvider>,
+  );
 }
 
 const USED_FIXTURE = {
@@ -473,5 +484,144 @@ describe("PositionsPageClient position scope", () => {
         "/directory/positions?org_group_id=3&org_unit_id=74&position_scope=allowed",
       );
     });
+  });
+});
+
+describe("PositionsPageClient delete permissions", () => {
+  it("hides delete buttons from the HR department head", async () => {
+    apiFetchJson.mockResolvedValue({
+      items: [{ position_id: 10, name: "Руководитель отдела кадров" }],
+      total: 1,
+    });
+
+    renderWithMe({
+      user_id: 34,
+      role_id: 68,
+      is_system_admin: false,
+      is_privileged: true,
+      has_personnel_admin: true,
+    });
+
+    expect(await screen.findByText("Руководитель отдела кадров")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+  });
+
+  it("shows delete buttons to the system administrator", async () => {
+    apiFetchJson.mockResolvedValue({
+      items: [{ position_id: 10, name: "Руководитель отдела кадров" }],
+      total: 1,
+    });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+
+    expect(await screen.findByRole("button", { name: "Удалить" })).toBeInTheDocument();
+  });
+
+  it("shows blocked dependencies and filters the blocked list", async () => {
+    apiFetchJson.mockResolvedValue({
+      items: [
+        {
+          position_id: 100,
+          name: "Менеджер УЧР",
+          delete_assessment: {
+            position_id: 100,
+            can_delete: false,
+            total_dependencies: 2,
+            dependencies: [
+              {
+                key: "org_unique_position.catalog_position_id",
+                label: "Штатные позиции",
+                count: 2,
+              },
+            ],
+          },
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+
+    expect(await screen.findByTestId("position-delete-dependencies-100")).toHaveTextContent(
+      "Штатные позиции: 2",
+    );
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("positions-delete-status-blocked"));
+    await waitFor(() => expect(lastFetchQuery()?.delete_status).toBe("blocked"));
+  });
+
+  it("rechecks dependencies before sending DELETE", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 101, name: "Чистая должность" }],
+        total: 1,
+      })
+      .mockResolvedValueOnce({
+        position_id: 101,
+        can_delete: true,
+        total_dependencies: 0,
+        dependencies: [],
+      })
+      .mockResolvedValueOnce({ ok: true, position_id: 101 })
+      .mockResolvedValueOnce({ items: [], total: 0 });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => {
+      expect(apiFetchJson).toHaveBeenCalledWith("/directory/positions/101/dependencies");
+      expect(apiFetchJson).toHaveBeenCalledWith("/directory/positions/101", {
+        method: "DELETE",
+      });
+    });
+    const dependencyCall = apiFetchJson.mock.calls.findIndex(
+      (call) => call[0] === "/directory/positions/101/dependencies",
+    );
+    const deleteCall = apiFetchJson.mock.calls.findIndex(
+      (call) => call[0] === "/directory/positions/101" && call[1]?.method === "DELETE",
+    );
+    expect(dependencyCall).toBeGreaterThan(-1);
+    expect(deleteCall).toBeGreaterThan(dependencyCall);
+  });
+
+  it("shows a dependency added after preflight from the controlled 409", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 102, name: "Конкурентная должность" }],
+        total: 1,
+      })
+      .mockResolvedValueOnce({
+        position_id: 102,
+        can_delete: true,
+        total_dependencies: 0,
+        dependencies: [],
+      })
+      .mockRejectedValueOnce({
+        status: 409,
+        details: {
+          detail: {
+            error_code: "POSITION_HAS_DEPENDENCIES",
+            position_id: 102,
+            can_delete: false,
+            total_dependencies: 1,
+            dependencies: [
+              {
+                key: "personnel_applications.intended_position_id",
+                label: "Заявления кандидатов",
+                count: 1,
+              },
+            ],
+          },
+        },
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить" }));
+
+    expect(await screen.findAllByText(/Заявления кандидатов: 1/)).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
 });

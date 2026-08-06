@@ -6,6 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
+import { isSystemAdminRole } from "@/lib/adminNav";
+import { useCurrentUser } from "@/lib/currentUser";
 import type { PositionListScope } from "@/lib/taskOrgFilters";
 import { apiFetchJson } from "../../../../lib/api";
 import { formatThrownError } from "@/lib/i18n";
@@ -14,6 +16,20 @@ import PositionDrawer from "./PositionDrawer";
 import type { PositionFormValues } from "./PositionForm";
 
 type PositionCategory = "all" | "leaders" | "medical" | "admin" | "technical" | "other";
+type PositionDeleteStatus = "deletable" | "blocked";
+
+type PositionDependency = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+type PositionDeleteAssessment = {
+  position_id: number;
+  can_delete: boolean;
+  total_dependencies: number;
+  dependencies: PositionDependency[];
+};
 
 type PositionItem = {
   position_id?: number;
@@ -21,6 +37,7 @@ type PositionItem = {
   name: string;
   category?: string | null;
   category_name?: string | null;
+  delete_assessment?: PositionDeleteAssessment;
 };
 
 type PositionsResponse =
@@ -74,6 +91,31 @@ function extractErrorMessage(error: unknown): string {
   return formatThrownError(error, { fallback: "Не удалось выполнить операцию." });
 }
 
+function formatBlockedDeleteMessage(item: PositionItem, assessment: PositionDeleteAssessment): string {
+  const dependencyText = assessment.dependencies
+    .map((dependency) => `${dependency.label}: ${dependency.count}`)
+    .join("; ");
+  return `Удаление должности «${item.name}» заблокировано (${assessment.total_dependencies} связанных записей).${
+    dependencyText ? ` ${dependencyText}` : ""
+  }`;
+}
+
+function deleteAssessmentFromError(error: unknown): PositionDeleteAssessment | null {
+  const details = (error as { details?: unknown } | null)?.details;
+  if (!details || typeof details !== "object") return null;
+  const detail = (details as { detail?: unknown }).detail;
+  if (!detail || typeof detail !== "object") return null;
+  const candidate = detail as Partial<PositionDeleteAssessment> & { error_code?: string };
+  if (candidate.error_code !== "POSITION_HAS_DEPENDENCIES") return null;
+  if (!Array.isArray(candidate.dependencies)) return null;
+  return {
+    position_id: Number(candidate.position_id ?? 0),
+    can_delete: false,
+    total_dependencies: Number(candidate.total_dependencies ?? 0),
+    dependencies: candidate.dependencies as PositionDependency[],
+  };
+}
+
 function parsePositiveInt(value: string | null): number | null {
   const n = Number(String(value ?? "").trim());
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -96,6 +138,7 @@ export function buildPositionsListQuery(args: {
   orgGroupId?: number | null;
   orgUnitId?: number | null;
   positionScope?: PositionListScope | null;
+  deleteStatus?: PositionDeleteStatus | null;
   page?: number;
   pageSize?: number;
 }): Record<string, string | number | undefined> {
@@ -120,6 +163,10 @@ export function buildPositionsListQuery(args: {
   if (args.orgUnitId != null) {
     query.org_unit_id = args.orgUnitId;
     query.scope = args.positionScope ?? "allowed";
+  }
+
+  if (args.deleteStatus) {
+    query.delete_status = args.deleteStatus;
   }
 
   return query;
@@ -178,6 +225,8 @@ function normalizeItems(payload: PositionsResponse): {
 }
 
 export default function PositionsPageClient() {
+  const me = useCurrentUser();
+  const canDeletePositions = isSystemAdminRole(me);
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -232,6 +281,7 @@ export default function PositionsPageClient() {
   const [search, setSearch] = React.useState("");
 
   const [category, setCategory] = React.useState<PositionCategory>("all");
+  const [deleteStatus, setDeleteStatus] = React.useState<PositionDeleteStatus | null>(null);
   const [page, setPage] = React.useState(0);
 
   const [pageError, setPageError] = React.useState<string | null>(null);
@@ -253,7 +303,7 @@ export default function PositionsPageClient() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [orgGroupId, orgUnitId, positionScope]);
+  }, [orgGroupId, orgUnitId, positionScope, deleteStatus]);
 
   React.useEffect(() => {
     if (prevOrgUnitIdRef.current !== orgUnitId) {
@@ -307,6 +357,7 @@ export default function PositionsPageClient() {
           orgGroupId,
           orgUnitId,
           positionScope,
+          deleteStatus: canDeletePositions ? deleteStatus : null,
           page,
         }),
       });
@@ -328,7 +379,7 @@ export default function PositionsPageClient() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [search, category, orgGroupId, orgUnitId, positionScope, page]);
+  }, [search, category, orgGroupId, orgUnitId, positionScope, deleteStatus, canDeletePositions, page]);
 
   const setPositionScope = React.useCallback(
     (nextScope: PositionListScope) => {
@@ -420,16 +471,43 @@ export default function PositionsPageClient() {
 
   async function handleDelete(item: PositionItem) {
     const positionId = positionIdOf(item);
-    const ok = window.confirm(`Удалить должность «${item.name}»?`);
-    if (!ok) return;
-
     setPageError(null);
 
     try {
+      const assessment = await apiFetchJson<PositionDeleteAssessment>(
+        `${API_BASE}/${positionId}/dependencies`,
+      );
+      if (!assessment.can_delete) {
+        setItems((current) =>
+          current.map((row) =>
+            positionIdOf(row) === positionId
+              ? { ...row, delete_assessment: assessment }
+              : row,
+          ),
+        );
+        setPageError(formatBlockedDeleteMessage(item, assessment));
+        return;
+      }
+
+      const ok = window.confirm(`Удалить должность «${item.name}»?`);
+      if (!ok) return;
+
       await apiFetchJson(`${API_BASE}/${positionId}`, { method: "DELETE" });
       await loadItems();
     } catch (error) {
-      setPageError(extractErrorMessage(error));
+      const assessment = deleteAssessmentFromError(error);
+      if (assessment) {
+        setItems((current) =>
+          current.map((row) =>
+            positionIdOf(row) === positionId
+              ? { ...row, delete_assessment: assessment }
+              : row,
+          ),
+        );
+        setPageError(formatBlockedDeleteMessage(item, assessment));
+      } else {
+        setPageError(extractErrorMessage(error));
+      }
     }
   }
 
@@ -545,6 +623,32 @@ export default function PositionsPageClient() {
                 Создать
               </button>
             </div>
+
+            {canDeletePositions ? (
+              <div className="mt-2 flex items-center gap-2" data-testid="positions-delete-status-filter">
+                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Удаление:</span>
+                {([
+                  { value: null, label: "Все" },
+                  { value: "deletable", label: "Разрешённые" },
+                  { value: "blocked", label: "Заблокированные" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value ?? "all"}
+                    type="button"
+                    aria-pressed={deleteStatus === option.value}
+                    data-testid={`positions-delete-status-${option.value ?? "all"}`}
+                    onClick={() => setDeleteStatus(option.value)}
+                    className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                      deleteStatus === option.value
+                        ? "border-zinc-400 bg-zinc-200 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
+                        : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="px-4 py-2">
@@ -631,7 +735,20 @@ export default function PositionsPageClient() {
                             {positionIdOf(item)}
                           </td>
                           <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                            {item.name}
+                            <div>{item.name}</div>
+                            {canDeletePositions && item.delete_assessment?.can_delete === false ? (
+                              <div
+                                className="mt-0.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300"
+                                data-testid={`position-delete-dependencies-${positionIdOf(item)}`}
+                              >
+                                Заблокировано: {item.delete_assessment.total_dependencies} связанных записей
+                                {item.delete_assessment.dependencies.length > 0
+                                  ? ` — ${item.delete_assessment.dependencies
+                                      .map((dependency) => `${dependency.label}: ${dependency.count}`)
+                                      .join("; ")}`
+                                  : ""}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                             {getCategoryLabel(item)}
@@ -646,13 +763,15 @@ export default function PositionsPageClient() {
                                 Изменить
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() => void handleDelete(item)}
-                                className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
-                              >
-                                Удалить
-                              </button>
+                              {canDeletePositions && item.delete_assessment?.can_delete !== false ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDelete(item)}
+                                  className="rounded-md border border-red-300 dark:border-red-800 bg-transparent px-2 py-0.5 text-[10px] leading-4 text-red-700 dark:text-red-300 transition hover:bg-red-50 dark:bg-red-950/35"
+                                >
+                                  Удалить
+                                </button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
