@@ -10,6 +10,13 @@ from sqlalchemy.engine import Connection
 
 _BLOCKING_DELETE_ACTIONS = {"a", "r"}  # PostgreSQL NO ACTION / RESTRICT
 
+_ALLOWED_POSITION_FK_POLICY_IDENTITY = (
+    "public",
+    "org_unit_allowed_positions",
+    "position_id",
+    "org_unit_allowed_positions_position_id_fkey",
+)
+
 _DEPENDENCY_LABELS = {
     "employee_events.from_position_id": "Кадровые события: прежняя должность",
     "employee_events.to_position_id": "Кадровые события: новая должность",
@@ -41,6 +48,15 @@ class PositionForeignKeyDependency:
         return f"{self.table_name}.{self.column_name}"
 
     @property
+    def policy_identity(self) -> tuple[str, str, str, str]:
+        return (
+            self.table_schema,
+            self.table_name,
+            self.column_name,
+            self.constraint_name,
+        )
+
+    @property
     def label(self) -> str:
         return _DEPENDENCY_LABELS.get(self.key, self.key)
 
@@ -54,6 +70,22 @@ class PositionForeignKeyDependency:
     @property
     def column_sql(self) -> str:
         return _quote_identifier(self.column_name)
+
+
+def build_position_dependency_blocking_predicate_sql(
+    dependency: PositionForeignKeyDependency,
+    *,
+    table_alias: str | None = None,
+) -> str:
+    """Return the reviewed row-level blocker predicate for one discovered FK.
+
+    Unknown schema/table/column/constraint identities deliberately use the
+    secure default: every referencing row blocks Position deletion.
+    """
+    if dependency.policy_identity != _ALLOWED_POSITION_FK_POLICY_IDENTITY:
+        return "TRUE"
+    qualifier = f"{_quote_identifier(table_alias)}." if table_alias else ""
+    return f"{qualifier}{_quote_identifier('is_active')} = TRUE"
 
 
 @dataclass(frozen=True)
@@ -148,13 +180,17 @@ def build_position_blocked_exists_sql(
     *,
     position_expression: str,
 ) -> str:
-    checks = [
-        (
-            f"EXISTS (SELECT 1 FROM {dependency.qualified_table_sql} dep "
-            f"WHERE dep.{dependency.column_sql} = {position_expression})"
+    checks = []
+    for dependency in dependencies:
+        predicate_sql = build_position_dependency_blocking_predicate_sql(
+            dependency,
+            table_alias="dep",
         )
-        for dependency in dependencies
-    ]
+        checks.append(
+            f"EXISTS (SELECT 1 FROM {dependency.qualified_table_sql} dep "
+            f"WHERE dep.{dependency.column_sql} = {position_expression} "
+            f"AND ({predicate_sql}))"
+        )
     return " OR ".join(checks) if checks else "FALSE"
 
 
@@ -167,11 +203,16 @@ def check_position_dependencies(
     specs = list(dependencies or load_position_blocking_foreign_keys(conn))
     found: List[PositionDependencyItem] = []
     for dependency in specs:
+        predicate_sql = build_position_dependency_blocking_predicate_sql(
+            dependency,
+            table_alias="dep",
+        )
         count = int(
             conn.execute(
                 text(
-                    f"SELECT COUNT(*)::int FROM {dependency.qualified_table_sql} "
-                    f"WHERE {dependency.column_sql} = :position_id"
+                    f"SELECT COUNT(*)::int FROM {dependency.qualified_table_sql} dep "
+                    f"WHERE dep.{dependency.column_sql} = :position_id "
+                    f"AND ({predicate_sql})"
                 ),
                 {"position_id": int(position_id)},
             ).scalar_one()
@@ -203,12 +244,17 @@ def check_positions_dependencies(
         return {}
 
     for dependency in specs:
+        predicate_sql = build_position_dependency_blocking_predicate_sql(
+            dependency,
+            table_alias="dep",
+        )
         rows = conn.execute(
             text(
-                f"SELECT {dependency.column_sql} AS position_id, COUNT(*)::int AS count "
-                f"FROM {dependency.qualified_table_sql} "
-                f"WHERE {dependency.column_sql} = ANY(:position_ids) "
-                f"GROUP BY {dependency.column_sql}"
+                f"SELECT dep.{dependency.column_sql} AS position_id, COUNT(*)::int AS count "
+                f"FROM {dependency.qualified_table_sql} dep "
+                f"WHERE dep.{dependency.column_sql} = ANY(:position_ids) "
+                f"AND ({predicate_sql}) "
+                f"GROUP BY dep.{dependency.column_sql}"
             ),
             {"position_ids": ids},
         ).mappings().all()

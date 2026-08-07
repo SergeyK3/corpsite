@@ -1,10 +1,10 @@
 # FILE: app/directory/positions_routes.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Literal, Optional, List, Sequence, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -19,10 +19,15 @@ from app.security.directory_scope import (
 
 from app.directory.rbac import compute_scope, require_personnel_visibility_or_403
 from app.services.org_unit_allowed_positions_service import (
+    SORT_ORDER_OMITTED,
+    AllowedPositionMutationNotFoundError,
     build_allowed_positions_exists_sql,
     build_allowed_positions_order_sql,
+    deactivate_allowed_position_link,
+    upsert_allowed_position_link,
 )
 from app.services.position_dependencies_service import (
+    PositionForeignKeyDependency,
     build_position_blocked_exists_sql,
     check_position_dependencies,
     check_positions_dependencies,
@@ -41,6 +46,87 @@ class PositionUpsert(BaseModel):
     category: str = Field(..., min_length=1, max_length=50)
 
 
+class AllowedPositionPutIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sort_order: Optional[StrictInt] = None
+
+
+class AllowedPositionStateOut(BaseModel):
+    is_active: bool
+    sort_order: Optional[int]
+
+
+class AllowedPositionLinkOut(BaseModel):
+    org_unit_allowed_position_id: int
+    org_unit_id: int
+    position_id: int
+    sort_order: Optional[int]
+    is_active: bool
+
+
+class AllowedPositionMutationOut(BaseModel):
+    link: AllowedPositionLinkOut
+    transition: Literal["created", "reactivated", "updated", "noop"]
+    previous_state: Optional[AllowedPositionStateOut]
+    current_state: AllowedPositionStateOut
+
+
+class HttpErrorOut(BaseModel):
+    detail: str
+
+
+class AllowedPositionNotFoundDetailOut(BaseModel):
+    error_code: Literal[
+        "POSITION_NOT_FOUND",
+        "ORG_UNIT_NOT_FOUND",
+        "ALLOWED_POSITION_LINK_NOT_FOUND",
+    ]
+
+
+class AllowedPositionNotFoundOut(BaseModel):
+    detail: AllowedPositionNotFoundDetailOut
+
+
+class PositionDeleteOut(BaseModel):
+    ok: Literal[True]
+    position_id: int
+
+
+class PositionDependencyOut(BaseModel):
+    key: str
+    label: str
+    table: str
+    column: str
+    constraint: str
+    count: int
+
+
+class PositionDependencyConflictDetailOut(BaseModel):
+    error_code: Literal["POSITION_HAS_DEPENDENCIES"]
+    position_id: int
+    can_delete: bool
+    total_dependencies: int
+    dependencies: List[PositionDependencyOut]
+    race_detected: Optional[Literal[True]] = None
+
+
+class PositionDefensiveFkConflictDetailOut(BaseModel):
+    error_code: Literal["POSITION_HAS_DEPENDENCIES"]
+    race_detected: Literal[True]
+
+
+class PositionDependencyConflictOut(BaseModel):
+    detail: Union[
+        PositionDependencyConflictDetailOut,
+        PositionDefensiveFkConflictDetailOut,
+    ]
+
+
+class _ConfirmedPositionDeleteFkRace(RuntimeError):
+    """Internal signal raised only from the direct Position DELETE site."""
+
+
 def _normalize_name(value: str) -> str:
     return " ".join((value or "").replace(" -", "-").replace("- ", "-").split()).strip()
 
@@ -53,6 +139,49 @@ def _normalize_category(value: Optional[str]) -> str:
             detail="category must be one of: leaders, medical, admin, technical, other.",
         )
     return s
+
+
+def _allowed_position_link_response(link: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "org_unit_allowed_position_id": int(link["org_unit_allowed_position_id"]),
+        "org_unit_id": int(link["org_unit_id"]),
+        "position_id": int(link["position_id"]),
+        "sort_order": link["sort_order"],
+        "is_active": bool(link["is_active"]),
+    }
+
+
+def _allowed_position_not_found(exc: AllowedPositionMutationNotFoundError) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={"error_code": exc.code},
+    )
+
+
+def _is_position_delete_fk_race(
+    exc: IntegrityError,
+    dependencies: Sequence[PositionForeignKeyDependency],
+) -> bool:
+    original = exc.orig
+    sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+    if sqlstate != "23503":
+        return False
+
+    diag = getattr(original, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None)
+    if not constraint_name:
+        return False
+
+    schema_name = getattr(diag, "schema_name", None)
+    table_name = getattr(diag, "table_name", None)
+    matches = [
+        dependency
+        for dependency in dependencies
+        if dependency.constraint_name == str(constraint_name)
+        and (schema_name is None or dependency.table_schema == str(schema_name))
+        and (table_name is None or dependency.table_name == str(table_name))
+    ]
+    return len(matches) == 1
 
 
 def _get_columns(rel: str, schema: str = "public") -> List[str]:
@@ -134,6 +263,88 @@ def _normalize_list_scope(
             detail="scope=allowed requires org_unit_id and/or org_group_id.",
         )
     return normalized
+
+
+@router.put(
+    "/org-units/{org_unit_id}/allowed-positions/{position_id}",
+    response_model=AllowedPositionMutationOut,
+    responses={
+        201: {"model": AllowedPositionMutationOut},
+        403: {"model": HttpErrorOut},
+        404: {"model": AllowedPositionNotFoundOut},
+    },
+)
+def put_org_unit_allowed_position(
+    org_unit_id: int,
+    position_id: int,
+    request: Request,
+    response: Response,
+    payload: Optional[AllowedPositionPutIn] = Body(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    if not _is_system_admin(user):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    sort_order = SORT_ORDER_OMITTED
+    if payload is not None and "sort_order" in payload.model_fields_set:
+        sort_order = payload.sort_order
+
+    try:
+        with engine.begin() as conn:
+            result = upsert_allowed_position_link(
+                conn,
+                org_unit_id=int(org_unit_id),
+                position_id=int(position_id),
+                actor_user_id=int(user["user_id"]),
+                sort_order=sort_order,
+                request_id=request.headers.get("x-request-id"),
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+    except AllowedPositionMutationNotFoundError as exc:
+        raise _allowed_position_not_found(exc) from exc
+
+    response.status_code = 201 if result.transition == "created" else 200
+    return {
+        "link": _allowed_position_link_response(result.link),
+        "transition": result.transition,
+        "previous_state": result.previous_state,
+        "current_state": result.current_state,
+    }
+
+
+@router.delete(
+    "/org-units/{org_unit_id}/allowed-positions/{position_id}",
+    response_model=AllowedPositionLinkOut,
+    responses={
+        403: {"model": HttpErrorOut},
+        404: {"model": AllowedPositionNotFoundOut},
+    },
+)
+def delete_org_unit_allowed_position(
+    org_unit_id: int,
+    position_id: int,
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    if not _is_system_admin(user):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    try:
+        with engine.begin() as conn:
+            link = deactivate_allowed_position_link(
+                conn,
+                org_unit_id=int(org_unit_id),
+                position_id=int(position_id),
+                actor_user_id=int(user["user_id"]),
+                request_id=request.headers.get("x-request-id"),
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+    except AllowedPositionMutationNotFoundError as exc:
+        raise _allowed_position_not_found(exc) from exc
+
+    return _allowed_position_link_response(link)
 
 
 @router.get("/positions")
@@ -481,7 +692,15 @@ def update_position(
     }
 
 
-@router.delete("/positions/{position_id}")
+@router.delete(
+    "/positions/{position_id}",
+    response_model=PositionDeleteOut,
+    responses={
+        403: {"model": HttpErrorOut},
+        404: {"model": HttpErrorOut},
+        409: {"model": PositionDependencyConflictOut},
+    },
+)
 def delete_position(
     position_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
@@ -499,10 +718,30 @@ def delete_position(
         """
     )
 
+    q_lock_allowed_links = text(
+        """
+        SELECT org_unit_allowed_position_id, is_active
+        FROM public.org_unit_allowed_positions
+        WHERE position_id = :position_id
+        ORDER BY org_unit_allowed_position_id
+        FOR UPDATE
+        """
+    )
+
+    q_delete_inactive_links = text(
+        """
+        DELETE FROM public.org_unit_allowed_positions
+        WHERE position_id = :position_id
+          AND is_active = FALSE
+        RETURNING org_unit_allowed_position_id
+        """
+    )
+
     q_delete = text(
         """
         DELETE FROM public.positions
         WHERE position_id = :position_id
+        RETURNING position_id
         """
     )
 
@@ -511,6 +750,34 @@ def delete_position(
             exists = conn.execute(q_exists, {"position_id": position_id}).first()
             if not exists:
                 raise HTTPException(status_code=404, detail="Position not found.")
+
+            allowed_links = conn.execute(
+                q_lock_allowed_links,
+                {"position_id": int(position_id)},
+            ).mappings().all()
+            if any(bool(row["is_active"]) for row in allowed_links):
+                summary = check_position_dependencies(conn, position_id=int(position_id))
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "error_code": "POSITION_HAS_DEPENDENCIES",
+                        **summary.to_dict(),
+                    },
+                )
+
+            inactive_link_ids = {
+                int(row["org_unit_allowed_position_id"])
+                for row in allowed_links
+            }
+            deleted_inactive_link_ids = {
+                int(row["org_unit_allowed_position_id"])
+                for row in conn.execute(
+                    q_delete_inactive_links,
+                    {"position_id": int(position_id)},
+                ).mappings().all()
+            }
+            if deleted_inactive_link_ids != inactive_link_ids:
+                raise RuntimeError("INACTIVE_ALLOWED_POSITION_CLEANUP_MISMATCH")
 
             summary = check_position_dependencies(conn, position_id=int(position_id))
             if not summary.can_delete:
@@ -522,19 +789,31 @@ def delete_position(
                     },
                 )
 
-            conn.execute(q_delete, {"position_id": position_id})
-    except IntegrityError as exc:
-        # A dependency may be inserted after an earlier HTTP preflight. The FK
-        # remains the final guard; refresh the shared assessment for a stable,
-        # controlled 409 response instead of exposing the database error.
+            try:
+                with conn.begin_nested():
+                    deleted_position_id = conn.execute(
+                        q_delete,
+                        {"position_id": int(position_id)},
+                    ).scalar_one_or_none()
+            except IntegrityError as exc:
+                dependencies = load_position_blocking_foreign_keys(conn)
+                if _is_position_delete_fk_race(exc, dependencies):
+                    raise _ConfirmedPositionDeleteFkRace from exc
+                raise
+            if deleted_position_id is None:
+                raise RuntimeError("POSITION_DELETE_STALE_WRITE")
+    except _ConfirmedPositionDeleteFkRace as exc:
+        # The request transaction has rolled back before this assessment. Keep
+        # the refreshed production result internal to the defensive branch.
         with engine.begin() as conn:
-            summary = check_position_dependencies(conn, position_id=int(position_id))
+            check_position_dependencies(conn, position_id=int(position_id))
+        # Keep the defensive response closed: PostgreSQL diagnostics and the
+        # discovered constraint identity are internal classifier evidence.
         raise HTTPException(
             status_code=409,
             detail={
                 "error_code": "POSITION_HAS_DEPENDENCIES",
                 "race_detected": True,
-                **summary.to_dict(),
             },
         ) from exc
 
