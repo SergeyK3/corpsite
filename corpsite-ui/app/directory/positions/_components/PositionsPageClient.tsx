@@ -808,12 +808,14 @@ export default function PositionsPageClient() {
                                     <span className="font-medium">
                                       Состояние: {link.is_active ? "активна" : "неактивна"}
                                     </span>
-                                    <a
-                                      href={allowedPositionManagementHref(link)}
-                                      className="font-medium underline underline-offset-2 hover:no-underline"
-                                    >
-                                      Перейти к управлению
-                                    </a>
+                                    {orgUnitId === link.org_unit_id && positionScope === "allowed" ? null : (
+                                      <a
+                                        href={allowedPositionManagementHref(link)}
+                                        className="font-medium underline underline-offset-2 hover:no-underline"
+                                      >
+                                        Перейти к управлению
+                                      </a>
+                                    )}
                                   </div>
                                 ))}
                               </div>

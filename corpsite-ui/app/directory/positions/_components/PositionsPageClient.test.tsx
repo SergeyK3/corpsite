@@ -73,6 +73,36 @@ const ALLOWED_FIXTURE = {
   total: 5,
 };
 
+const BLOCKED_ALLOWED_LINK_FIXTURE = {
+  items: [
+    {
+      position_id: 100,
+      name: "Менеджер УУР",
+      delete_assessment: {
+        position_id: 100,
+        can_delete: false,
+        total_dependencies: 1,
+        dependencies: [
+          {
+            key: "org_unit_allowed_positions.position_id",
+            label: "Разрешённые должности подразделений",
+            count: 1,
+            allowed_position_links: [
+              {
+                org_unit_allowed_position_id: 501,
+                org_unit_id: 74,
+                org_unit_name: "Отдел кадров",
+                is_active: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+  total: 1,
+};
+
 describe("buildPositionsListQuery", () => {
   it("includes org_unit_id and scope=allowed for selected unit by default", () => {
     expect(
@@ -551,37 +581,9 @@ describe("PositionsPageClient delete permissions", () => {
     await waitFor(() => expect(lastFetchQuery()?.delete_status).toBe("blocked"));
   });
 
-  it("shows the concrete allowed-position link, state, and management route", async () => {
-    searchParams = new URLSearchParams("");
-    apiFetchJson.mockResolvedValue({
-      items: [
-        {
-          position_id: 100,
-          name: "Менеджер УУР",
-          delete_assessment: {
-            position_id: 100,
-            can_delete: false,
-            total_dependencies: 1,
-            dependencies: [
-              {
-                key: "org_unit_allowed_positions.position_id",
-                label: "Разрешённые должности подразделений",
-                count: 1,
-                allowed_position_links: [
-                  {
-                    org_unit_allowed_position_id: 501,
-                    org_unit_id: 74,
-                    org_unit_name: "Отдел кадров",
-                    is_active: true,
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      ],
-      total: 1,
-    });
+  it("hides the management link in the same unit allowed context but keeps dependency data", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=allowed");
+    apiFetchJson.mockResolvedValue(BLOCKED_ALLOWED_LINK_FIXTURE);
 
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
 
@@ -589,6 +591,33 @@ describe("PositionsPageClient delete permissions", () => {
     expect(detail).toHaveTextContent("Отдел кадров (подразделение ID 74)");
     expect(detail).toHaveTextContent("связь ID 501");
     expect(detail).toHaveTextContent("Состояние: активна");
+    expect(screen.queryByRole("link", { name: "Перейти к управлению" })).not.toBeInTheDocument();
+  });
+
+  it("shows the management link for another unit with the exact allowed route", async () => {
+    searchParams = new URLSearchParams("org_unit_id=73&position_scope=allowed");
+    apiFetchJson.mockResolvedValue(BLOCKED_ALLOWED_LINK_FIXTURE);
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+
+    expect(await screen.findByTestId("allowed-position-dependency-501")).toHaveTextContent(
+      "Отдел кадров (подразделение ID 74)",
+    );
+    expect(screen.getByRole("link", { name: "Перейти к управлению" })).toHaveAttribute(
+      "href",
+      "/directory/positions?org_unit_id=74&org_unit_name=%D0%9E%D1%82%D0%B4%D0%B5%D0%BB+%D0%BA%D0%B0%D0%B4%D1%80%D0%BE%D0%B2&position_scope=allowed",
+    );
+  });
+
+  it("shows the management link for the same unit in used mode and targets allowed mode", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=used");
+    apiFetchJson.mockResolvedValue(BLOCKED_ALLOWED_LINK_FIXTURE);
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+
+    expect(await screen.findByTestId("allowed-position-dependency-501")).toHaveTextContent(
+      "Состояние: активна",
+    );
     expect(screen.getByRole("link", { name: "Перейти к управлению" })).toHaveAttribute(
       "href",
       "/directory/positions?org_unit_id=74&org_unit_name=%D0%9E%D1%82%D0%B4%D0%B5%D0%BB+%D0%BA%D0%B0%D0%B4%D1%80%D0%BE%D0%B2&position_scope=allowed",
