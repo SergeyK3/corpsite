@@ -18,10 +18,18 @@ import type { PositionFormValues } from "./PositionForm";
 type PositionCategory = "all" | "leaders" | "medical" | "admin" | "technical" | "other";
 type PositionDeleteStatus = "deletable" | "blocked";
 
+type AllowedPositionDependencyLink = {
+  org_unit_allowed_position_id: number;
+  org_unit_id: number;
+  org_unit_name: string;
+  is_active: boolean;
+};
+
 type PositionDependency = {
   key: string;
   label: string;
   count: number;
+  allowed_position_links?: AllowedPositionDependencyLink[];
 };
 
 type PositionDeleteAssessment = {
@@ -89,6 +97,15 @@ function getCategoryLabel(item: PositionItem): string {
 
 function extractErrorMessage(error: unknown): string {
   return formatThrownError(error, { fallback: "Не удалось выполнить операцию." });
+}
+
+function allowedPositionManagementHref(link: AllowedPositionDependencyLink): string {
+  const params = new URLSearchParams({
+    org_unit_id: String(link.org_unit_id),
+    org_unit_name: link.org_unit_name,
+    position_scope: "allowed",
+  });
+  return `/directory/positions?${params.toString()}`;
 }
 
 function formatBlockedDeleteMessage(item: PositionItem, assessment: PositionDeleteAssessment): string {
@@ -276,6 +293,7 @@ export default function PositionsPageClient() {
 
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [allowedPositionMutationId, setAllowedPositionMutationId] = React.useState<number | null>(null);
 
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
@@ -466,6 +484,33 @@ export default function PositionsPageClient() {
       setDrawerError(extractErrorMessage(error));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDeactivateAllowedPosition(item: PositionItem) {
+    if (orgUnitId == null || positionScope !== "allowed" || !canDeletePositions) return;
+
+    const unitName = filterOrgUnitName || orgUnitNameFromUrl || `ID ${orgUnitId}`;
+    const confirmed = window.confirm(
+      `Убрать должность «${item.name}» из разрешённых для подразделения «${unitName}»? ` +
+        "Должность останется в глобальном справочнике. " +
+        "Разрешённые списки других подразделений не изменятся.",
+    );
+    if (!confirmed) return;
+
+    const positionId = positionIdOf(item);
+    setAllowedPositionMutationId(positionId);
+    setPageError(null);
+    try {
+      await apiFetchJson(
+        `/directory/org-units/${orgUnitId}/allowed-positions/${positionId}`,
+        { method: "DELETE" },
+      );
+      await loadItems();
+    } catch (error) {
+      setPageError(extractErrorMessage(error));
+    } finally {
+      setAllowedPositionMutationId(null);
     }
   }
 
@@ -741,12 +786,36 @@ export default function PositionsPageClient() {
                                 className="mt-0.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300"
                                 data-testid={`position-delete-dependencies-${positionIdOf(item)}`}
                               >
-                                Заблокировано: {item.delete_assessment.total_dependencies} связанных записей
+                                <div>
+                                  Заблокировано: {item.delete_assessment.total_dependencies} связанных записей
                                 {item.delete_assessment.dependencies.length > 0
                                   ? ` — ${item.delete_assessment.dependencies
                                       .map((dependency) => `${dependency.label}: ${dependency.count}`)
                                       .join("; ")}`
                                   : ""}
+                                </div>
+                                {item.delete_assessment.dependencies.flatMap(
+                                  (dependency) => dependency.allowed_position_links ?? [],
+                                ).map((link) => (
+                                  <div
+                                    key={link.org_unit_allowed_position_id}
+                                    className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-amber-300/70 px-2 py-1 dark:border-amber-800"
+                                    data-testid={`allowed-position-dependency-${link.org_unit_allowed_position_id}`}
+                                  >
+                                    <span>
+                                      {link.org_unit_name} (подразделение ID {link.org_unit_id}) · связь ID {link.org_unit_allowed_position_id}
+                                    </span>
+                                    <span className="font-medium">
+                                      Состояние: {link.is_active ? "активна" : "неактивна"}
+                                    </span>
+                                    <a
+                                      href={allowedPositionManagementHref(link)}
+                                      className="font-medium underline underline-offset-2 hover:no-underline"
+                                    >
+                                      Перейти к управлению
+                                    </a>
+                                  </div>
+                                ))}
                               </div>
                             ) : null}
                           </td>
@@ -762,6 +831,19 @@ export default function PositionsPageClient() {
                               >
                                 Изменить
                               </button>
+
+                              {canDeletePositions && orgUnitId != null && positionScope === "allowed" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeactivateAllowedPosition(item)}
+                                  disabled={allowedPositionMutationId === positionIdOf(item)}
+                                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] leading-4 text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-200 dark:hover:bg-amber-950/60"
+                                >
+                                  {allowedPositionMutationId === positionIdOf(item)
+                                    ? "Убираем..."
+                                    : "Убрать из разрешённых"}
+                                </button>
+                              ) : null}
 
                               {canDeletePositions && item.delete_assessment?.can_delete !== false ? (
                                 <button

@@ -89,6 +89,22 @@ def build_position_dependency_blocking_predicate_sql(
 
 
 @dataclass(frozen=True)
+class AllowedPositionDependencyLink:
+    org_unit_allowed_position_id: int
+    org_unit_id: int
+    org_unit_name: str
+    is_active: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "org_unit_allowed_position_id": int(self.org_unit_allowed_position_id),
+            "org_unit_id": int(self.org_unit_id),
+            "org_unit_name": self.org_unit_name,
+            "is_active": bool(self.is_active),
+        }
+
+
+@dataclass(frozen=True)
 class PositionDependencyItem:
     key: str
     label: str
@@ -96,9 +112,10 @@ class PositionDependencyItem:
     column: str
     constraint: str
     count: int
+    allowed_position_links: Sequence[AllowedPositionDependencyLink] = ()
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "key": self.key,
             "label": self.label,
             "table": self.table,
@@ -106,6 +123,56 @@ class PositionDependencyItem:
             "constraint": self.constraint,
             "count": int(self.count),
         }
+        if self.allowed_position_links:
+            result["allowed_position_links"] = [
+                link.to_dict() for link in self.allowed_position_links
+            ]
+        return result
+
+
+def _load_allowed_position_dependency_links(
+    conn: Connection,
+    *,
+    position_ids: Sequence[int],
+) -> Mapping[int, Sequence[AllowedPositionDependencyLink]]:
+    ids = list(dict.fromkeys(int(position_id) for position_id in position_ids))
+    if not ids:
+        return {}
+
+    rows = conn.execute(
+        text(
+            """
+            SELECT
+                oap.position_id,
+                oap.org_unit_allowed_position_id,
+                oap.org_unit_id,
+                ou.name AS org_unit_name,
+                oap.is_active
+            FROM public.org_unit_allowed_positions oap
+            JOIN public.org_units ou ON ou.unit_id = oap.org_unit_id
+            WHERE oap.position_id = ANY(:position_ids)
+              AND oap.is_active = TRUE
+            ORDER BY oap.position_id, oap.org_unit_allowed_position_id
+            """
+        ),
+        {"position_ids": ids},
+    ).mappings().all()
+
+    links_by_position: Dict[int, List[AllowedPositionDependencyLink]] = {
+        position_id: [] for position_id in ids
+    }
+    for row in rows:
+        links_by_position[int(row["position_id"])].append(
+            AllowedPositionDependencyLink(
+                org_unit_allowed_position_id=int(
+                    row["org_unit_allowed_position_id"]
+                ),
+                org_unit_id=int(row["org_unit_id"]),
+                org_unit_name=str(row["org_unit_name"] or "").strip(),
+                is_active=bool(row["is_active"]),
+            )
+        )
+    return links_by_position
 
 
 @dataclass(frozen=True)
@@ -201,6 +268,17 @@ def check_position_dependencies(
     dependencies: Sequence[PositionForeignKeyDependency] | None = None,
 ) -> PositionDependencySummary:
     specs = list(dependencies or load_position_blocking_foreign_keys(conn))
+    allowed_links_by_position: Mapping[
+        int, Sequence[AllowedPositionDependencyLink]
+    ] = {}
+    if any(
+        dependency.policy_identity == _ALLOWED_POSITION_FK_POLICY_IDENTITY
+        for dependency in specs
+    ):
+        allowed_links_by_position = _load_allowed_position_dependency_links(
+            conn,
+            position_ids=[int(position_id)],
+        )
     found: List[PositionDependencyItem] = []
     for dependency in specs:
         predicate_sql = build_position_dependency_blocking_predicate_sql(
@@ -226,6 +304,12 @@ def check_position_dependencies(
                     column=dependency.column_name,
                     constraint=dependency.constraint_name,
                     count=count,
+                    allowed_position_links=(
+                        allowed_links_by_position.get(int(position_id), ())
+                        if dependency.policy_identity
+                        == _ALLOWED_POSITION_FK_POLICY_IDENTITY
+                        else ()
+                    ),
                 )
             )
     return PositionDependencySummary(position_id=int(position_id), dependencies=found)
@@ -242,6 +326,18 @@ def check_positions_dependencies(
     items_by_position: Dict[int, List[PositionDependencyItem]] = {position_id: [] for position_id in ids}
     if not ids:
         return {}
+
+    allowed_links_by_position: Mapping[
+        int, Sequence[AllowedPositionDependencyLink]
+    ] = {}
+    if any(
+        dependency.policy_identity == _ALLOWED_POSITION_FK_POLICY_IDENTITY
+        for dependency in specs
+    ):
+        allowed_links_by_position = _load_allowed_position_dependency_links(
+            conn,
+            position_ids=ids,
+        )
 
     for dependency in specs:
         predicate_sql = build_position_dependency_blocking_predicate_sql(
@@ -268,6 +364,12 @@ def check_positions_dependencies(
                     column=dependency.column_name,
                     constraint=dependency.constraint_name,
                     count=int(row["count"]),
+                    allowed_position_links=(
+                        allowed_links_by_position.get(position_id, ())
+                        if dependency.policy_identity
+                        == _ALLOWED_POSITION_FK_POLICY_IDENTITY
+                        else ()
+                    ),
                 )
             )
 

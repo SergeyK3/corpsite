@@ -93,6 +93,13 @@ class PositionDeleteOut(BaseModel):
     position_id: int
 
 
+class AllowedPositionDependencyLinkOut(BaseModel):
+    org_unit_allowed_position_id: int
+    org_unit_id: int
+    org_unit_name: str
+    is_active: bool
+
+
 class PositionDependencyOut(BaseModel):
     key: str
     label: str
@@ -100,6 +107,7 @@ class PositionDependencyOut(BaseModel):
     column: str
     constraint: str
     count: int
+    allowed_position_links: Optional[List[AllowedPositionDependencyLinkOut]] = None
 
 
 class PositionDependencyConflictDetailOut(BaseModel):

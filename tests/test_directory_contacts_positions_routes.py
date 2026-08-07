@@ -228,20 +228,27 @@ def _join_worker(worker: Thread, *, timeout_seconds: float = 5.0) -> None:
 
 def test_position_with_allowed_link_is_blocked_and_preserved(client, seed, sysadmin_headers):
     position_id = 0
+    link_id = 0
+    unit_name = ""
     try:
         with engine.begin() as conn:
             position_id = _insert_position(conn, name=f"pytest_delete_position_{uuid4().hex}")
-            conn.execute(
+            link_id = int(conn.execute(
                 text(
                     """
                     INSERT INTO public.org_unit_allowed_positions (
                         org_unit_id, position_id, is_active
                     )
                     VALUES (:unit_id, :position_id, TRUE)
+                    RETURNING org_unit_allowed_position_id
                     """
                 ),
                 {"unit_id": int(seed["unit_id"]), "position_id": position_id},
-            )
+            ).scalar_one())
+            unit_name = str(conn.execute(
+                text("SELECT name FROM public.org_units WHERE unit_id = :unit_id"),
+                {"unit_id": int(seed["unit_id"])},
+            ).scalar_one())
 
         assessment_response = client.get(
             f"/directory/positions/{position_id}/dependencies", headers=sysadmin_headers
@@ -250,7 +257,16 @@ def test_position_with_allowed_link_is_blocked_and_preserved(client, seed, sysad
         assessment = assessment_response.json()
         assert assessment["can_delete"] is False
         assert assessment["total_dependencies"] == 1
-        assert assessment["dependencies"][0]["key"] == "org_unit_allowed_positions.position_id"
+        allowed_dependency = assessment["dependencies"][0]
+        assert allowed_dependency["key"] == "org_unit_allowed_positions.position_id"
+        assert allowed_dependency["allowed_position_links"] == [
+            {
+                "org_unit_allowed_position_id": link_id,
+                "org_unit_id": int(seed["unit_id"]),
+                "org_unit_name": unit_name,
+                "is_active": True,
+            }
+        ]
 
         response = client.delete(
             f"/directory/positions/{position_id}", headers=sysadmin_headers
@@ -330,6 +346,8 @@ def test_inactive_allowed_link_is_not_a_dependency(client, seed, sysadmin_header
 def test_mixed_allowed_links_report_only_active_rows(client, seed, sysadmin_headers):
     position_id = 0
     second_unit_id = 0
+    active_link_id = 0
+    active_unit_name = ""
     try:
         with engine.begin() as conn:
             position_id = _insert_position(
@@ -338,7 +356,7 @@ def test_mixed_allowed_links_report_only_active_rows(client, seed, sysadmin_head
             )
             second_unit_id = int(create_unit(conn, f"pytest_mixed_unit_{uuid4().hex}") or 0)
             assert second_unit_id > 0
-            conn.execute(
+            rows = conn.execute(
                 text(
                     """
                     INSERT INTO public.org_unit_allowed_positions (
@@ -347,6 +365,7 @@ def test_mixed_allowed_links_report_only_active_rows(client, seed, sysadmin_head
                     VALUES
                         (:active_unit_id, :position_id, TRUE),
                         (:inactive_unit_id, :position_id, FALSE)
+                    RETURNING org_unit_allowed_position_id, org_unit_id, is_active
                     """
                 ),
                 {
@@ -354,7 +373,12 @@ def test_mixed_allowed_links_report_only_active_rows(client, seed, sysadmin_head
                     "inactive_unit_id": second_unit_id,
                     "position_id": position_id,
                 },
-            )
+            ).mappings().all()
+            active_link_id = int(next(row for row in rows if row["is_active"])["org_unit_allowed_position_id"])
+            active_unit_name = str(conn.execute(
+                text("SELECT name FROM public.org_units WHERE unit_id = :unit_id"),
+                {"unit_id": int(seed["unit_id"])},
+            ).scalar_one())
 
         response = client.get(
             f"/directory/positions/{position_id}/dependencies",
@@ -372,6 +396,14 @@ def test_mixed_allowed_links_report_only_active_rows(client, seed, sysadmin_head
                 "column": "position_id",
                 "constraint": "org_unit_allowed_positions_position_id_fkey",
                 "count": 1,
+                "allowed_position_links": [
+                    {
+                        "org_unit_allowed_position_id": active_link_id,
+                        "org_unit_id": int(seed["unit_id"]),
+                        "org_unit_name": active_unit_name,
+                        "is_active": True,
+                    }
+                ],
             }
         ]
         delete_response = client.delete(

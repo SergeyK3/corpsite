@@ -144,9 +144,13 @@ export const RECORD_STATUS_LABELS: Readonly<Record<string, string>> = {
 
 const API_MESSAGE_LABELS: Readonly<Record<string, string>> = {
   "request failed": "Не удалось выполнить запрос",
-  "failed to fetch": "Не удалось связаться с сервером. Проверьте, что backend запущен (npm run dev).",
+  "failed to fetch": "Не удалось получить ответ от сервера. Проверьте сетевое подключение и повторите попытку.",
   "networkerror when attempting to fetch resource.":
-    "Не удалось связаться с сервером. Проверьте, что backend запущен (npm run dev).",
+    "Не удалось получить ответ от сервера. Проверьте сетевое подключение и повторите попытку.",
+  forbidden: "Недостаточно прав",
+  "forbidden.": "Недостаточно прав",
+  "not authenticated": "Требуется авторизация",
+  "not authenticated.": "Требуется авторизация",
   "backend did not return access_token": "Сервер не вернул токен доступа",
 
   "task not found": "Задача не найдена",
@@ -187,8 +191,47 @@ const HTTP_STATUS_FALLBACKS: Readonly<Record<number, string>> = {
   404: "Объект не найден",
   409: "Конфликт данных",
   422: "Некорректные данные",
-  500: "Ошибка сервера",
+  500: "Ошибка сервера. Повторите попытку позже.",
 };
+
+const NETWORK_ERROR_KEYS = new Set([
+  "failed to fetch",
+  "networkerror when attempting to fetch resource.",
+]);
+
+function httpStatusFallback(status: number, customFallback?: string): string {
+  if (HTTP_STATUS_FALLBACKS[status]) return HTTP_STATUS_FALLBACKS[status];
+  if (status >= 500 && status <= 599) {
+    return "Ошибка сервера. Повторите попытку позже.";
+  }
+  if (status >= 400 && status <= 499) {
+    return "Ошибка клиентского запроса.";
+  }
+  return customFallback ?? "Не удалось выполнить запрос";
+}
+
+function formatHttpResponseMessage(
+  status: number,
+  message: string,
+  fallback: string,
+): string {
+  const raw = String(message ?? "").trim();
+  if (!raw) return fallback;
+
+  const key = normalizeLookupKey(raw);
+  if (status >= 500) {
+    if (
+      NETWORK_ERROR_KEYS.has(key) ||
+      key === "internal server error" ||
+      raw.length > 300 ||
+      /<html|traceback|stack trace/i.test(raw)
+    ) {
+      return fallback;
+    }
+  }
+
+  return translateKnownMessage(raw) || fallback;
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -356,39 +399,45 @@ export function formatApiError(
   body: unknown,
   options?: FormatApiErrorOptions,
 ): string {
-  const fallback =
-    options?.fallback ??
-    HTTP_STATUS_FALLBACKS[status] ??
-    "Не удалось выполнить запрос";
+  const fallback = httpStatusFallback(status, options?.fallback);
 
   if (body == null) return fallback;
 
   if (typeof body === "string") {
-    const translated = translateKnownMessage(body);
-    return translated || fallback;
+    return formatHttpResponseMessage(status, body, fallback);
   }
 
   if (!isRecord(body)) return fallback;
 
+  if (status >= 500) {
+    const serverDetail = body.detail;
+    if (typeof serverDetail === "string") {
+      return formatHttpResponseMessage(status, serverDetail, fallback);
+    }
+    if (isRecord(serverDetail)) {
+      const nested = String(serverDetail.message ?? serverDetail.detail ?? "").trim();
+      if (nested) return formatHttpResponseMessage(status, nested, fallback);
+    }
+    return fallback;
+  }
+
   const structured = String(body.message ?? "").trim();
-  if (structured) return structured;
+  if (structured) return formatHttpResponseMessage(status, structured, fallback);
 
   const detail = body.detail ?? body.error;
 
   if (typeof detail === "string") {
-    const translated = translateKnownMessage(detail);
-    return translated || fallback;
+    return formatHttpResponseMessage(status, detail, fallback);
   }
 
   if (isRecord(detail)) {
     const nested = String(detail.message ?? detail.detail ?? "").trim();
-    if (nested) return translateKnownMessage(nested) || fallback;
+    if (nested) return formatHttpResponseMessage(status, nested, fallback);
   }
 
   const loose = String(body.error ?? "").trim();
   if (loose) {
-    const translated = translateKnownMessage(loose);
-    return translated || fallback;
+    return formatHttpResponseMessage(status, loose, fallback);
   }
 
   return fallback;

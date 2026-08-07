@@ -551,6 +551,228 @@ describe("PositionsPageClient delete permissions", () => {
     await waitFor(() => expect(lastFetchQuery()?.delete_status).toBe("blocked"));
   });
 
+  it("shows the concrete allowed-position link, state, and management route", async () => {
+    searchParams = new URLSearchParams("");
+    apiFetchJson.mockResolvedValue({
+      items: [
+        {
+          position_id: 100,
+          name: "Менеджер УУР",
+          delete_assessment: {
+            position_id: 100,
+            can_delete: false,
+            total_dependencies: 1,
+            dependencies: [
+              {
+                key: "org_unit_allowed_positions.position_id",
+                label: "Разрешённые должности подразделений",
+                count: 1,
+                allowed_position_links: [
+                  {
+                    org_unit_allowed_position_id: 501,
+                    org_unit_id: 74,
+                    org_unit_name: "Отдел кадров",
+                    is_active: true,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+
+    const detail = await screen.findByTestId("allowed-position-dependency-501");
+    expect(detail).toHaveTextContent("Отдел кадров (подразделение ID 74)");
+    expect(detail).toHaveTextContent("связь ID 501");
+    expect(detail).toHaveTextContent("Состояние: активна");
+    expect(screen.getByRole("link", { name: "Перейти к управлению" })).toHaveAttribute(
+      "href",
+      "/directory/positions?org_unit_id=74&org_unit_name=%D0%9E%D1%82%D0%B4%D0%B5%D0%BB+%D0%BA%D0%B0%D0%B4%D1%80%D0%BE%D0%B2&position_scope=allowed",
+    );
+  });
+
+  it("cancels allowed-position deactivation without sending a request", async () => {
+    searchParams = new URLSearchParams(
+      "org_unit_id=74&org_unit_name=%D0%9E%D1%82%D0%B4%D0%B5%D0%BB%20%D0%BA%D0%B0%D0%B4%D1%80%D0%BE%D0%B2&position_scope=allowed",
+    );
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    apiFetchJson.mockResolvedValue({
+      items: [{ position_id: 100, name: "Менеджер УУР" }],
+      total: 1,
+      filter_org_unit_id: 74,
+      filter_org_unit_name: "Отдел кадров",
+    });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать из разрешённых" }));
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("Менеджер УУР"));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("Отдел кадров"));
+    expect(apiFetchJson).not.toHaveBeenCalledWith(
+      "/directory/org-units/74/allowed-positions/100",
+      expect.anything(),
+    );
+  });
+
+  it("deactivates the selected allowed link and reloads the scoped list", async () => {
+    searchParams = new URLSearchParams(
+      "org_unit_id=74&org_unit_name=%D0%9E%D1%82%D0%B4%D0%B5%D0%BB%20%D0%BA%D0%B0%D0%B4%D1%80%D0%BE%D0%B2&position_scope=allowed",
+    );
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    let resolveDelete!: (value: unknown) => void;
+    const deleteRequest = new Promise((resolve) => {
+      resolveDelete = resolve;
+    });
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 100, name: "Менеджер УУР" }],
+        total: 1,
+        filter_org_unit_id: 74,
+        filter_org_unit_name: "Отдел кадров",
+      })
+      .mockImplementationOnce(() => deleteRequest)
+      .mockResolvedValueOnce({
+        items: [],
+        total: 0,
+        filter_org_unit_id: 74,
+        filter_org_unit_name: "Отдел кадров",
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать из разрешённых" }));
+
+    expect(await screen.findByRole("button", { name: "Убираем..." })).toBeDisabled();
+    resolveDelete({
+        org_unit_allowed_position_id: 501,
+        org_unit_id: 74,
+        position_id: 100,
+        sort_order: null,
+        is_active: false,
+    });
+
+    await waitFor(() => {
+      expect(apiFetchJson).toHaveBeenCalledWith(
+        "/directory/org-units/74/allowed-positions/100",
+        { method: "DELETE" },
+      );
+      expect(screen.queryByRole("button", { name: "Убрать из разрешённых" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not describe an HTTP 500 response as a network outage", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=allowed");
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 100, name: "Менеджер УУР" }],
+        total: 1,
+        filter_org_unit_id: 74,
+        filter_org_unit_name: "Отдел кадров",
+      })
+      .mockRejectedValueOnce({
+        status: 500,
+        message: "Failed to fetch",
+        details: { message: "Failed to fetch" },
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать из разрешённых" }));
+
+    expect(await screen.findByText("Ошибка сервера. Повторите попытку позже.")).toBeInTheDocument();
+    expect(screen.queryByText(/Не удалось получить ответ от сервера/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/npm run dev/)).not.toBeInTheDocument();
+    expect(screen.getByText("Менеджер УУР")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Убрать из разрешённых" })).toBeInTheDocument();
+  });
+
+  it("shows a separate neutral message for a real network error", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=allowed");
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 100, name: "Менеджер УУР" }],
+        total: 1,
+        filter_org_unit_id: 74,
+        filter_org_unit_name: "Отдел кадров",
+      })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать из разрешённых" }));
+
+    expect(
+      await screen.findByText(
+        "Не удалось получить ответ от сервера. Проверьте сетевое подключение и повторите попытку.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/npm run dev/)).not.toBeInTheDocument();
+  });
+
+  it("shows the HTTP 403 permission message and keeps the action available", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=allowed");
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 100, name: "Менеджер УУР" }],
+        total: 1,
+        filter_org_unit_id: 74,
+        filter_org_unit_name: "Отдел кадров",
+      })
+      .mockRejectedValueOnce({
+        status: 403,
+        message: "Forbidden.",
+        details: { detail: "Forbidden." },
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать из разрешённых" }));
+
+    expect(await screen.findByText("Недостаточно прав")).toBeInTheDocument();
+    expect(screen.getByText("Менеджер УУР")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Убрать из разрешённых" })).toBeInTheDocument();
+  });
+
+  it("uses a safe backend detail for an HTTP 500 response", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=allowed");
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    apiFetchJson
+      .mockResolvedValueOnce({
+        items: [{ position_id: 100, name: "Менеджер УУР" }],
+        total: 1,
+        filter_org_unit_id: 74,
+        filter_org_unit_name: "Отдел кадров",
+      })
+      .mockRejectedValueOnce({
+        status: 500,
+        message: "Request failed",
+        details: { detail: "Временная ошибка обработки связи." },
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать из разрешённых" }));
+
+    expect(await screen.findByText("Временная ошибка обработки связи.")).toBeInTheDocument();
+    expect(screen.getByText("Менеджер УУР")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Убрать из разрешённых" })).toBeInTheDocument();
+  });
+
+  it("hides allowed-position management from a non-system administrator", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=allowed");
+    apiFetchJson.mockResolvedValue({
+      items: [{ position_id: 100, name: "Менеджер УУР" }],
+      total: 1,
+    });
+
+    renderWithMe({ user_id: 7, role_id: 5, is_system_admin: false });
+
+    expect(await screen.findByText("Менеджер УУР")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Убрать из разрешённых" })).not.toBeInTheDocument();
+  });
+
   it("rechecks dependencies before sending DELETE", async () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
     apiFetchJson
