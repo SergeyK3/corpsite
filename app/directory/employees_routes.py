@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged as _is_privileged, is_system_admin
+from app.security.admin_permissions import HR_ENROLLMENT_MANAGER_CODE, has_admin_permission
 from app.services.employee_hard_delete_service import (
     BULK_HARD_DELETE_MAX,
     bulk_hard_delete_employees as svc_bulk_hard_delete_employees,
@@ -32,6 +33,10 @@ from app.services.directory_service import (
 )
 from app.services.hr_event_registry import list_registry_for_ui
 from app.services.personnel_events_service import create_personnel_event
+from app.services.manual_assignment_change_service import (
+    ManualAssignmentChangeError,
+    change_employee_assignment,
+)
 
 from .common import as_http500, call_service
 from .rbac import compute_scope, require_privileged_or_403, require_personnel_visibility_or_403
@@ -82,6 +87,17 @@ class EmployeeTransferIn(BaseModel):
     to_employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
     effective_date: date
     order_ref: Optional[str] = Field(default=None, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class EmployeeAssignmentChangeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_assignment_id: int = Field(..., ge=1)
+    org_unit_id: int = Field(..., ge=1)
+    position_id: int = Field(..., ge=1)
+    start_date: date
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
     comment: Optional[str] = Field(default=None, max_length=2000)
 
 
@@ -612,6 +628,55 @@ def create_personnel_event_route(
         raise HTTPException(status_code=409, detail="Unable to create personnel event.")
     except Exception as e:
         raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/assignment-change")
+def change_employee_assignment_route(
+    employee_id: int = Path(..., ge=1),
+    body: EmployeeAssignmentChangeIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    actor_user_id = int(user["user_id"])
+    if not has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission required: {HR_ENROLLMENT_MANAGER_CODE}",
+        )
+    try:
+        result = change_employee_assignment(
+            employee_id=int(employee_id),
+            expected_assignment_id=body.expected_assignment_id,
+            org_unit_id=body.org_unit_id,
+            position_id=body.position_id,
+            start_date=body.start_date,
+            actor_user_id=actor_user_id,
+            idempotency_key=body.idempotency_key,
+            comment=body.comment,
+        )
+        return {"result": result.to_dict()}
+    except ManualAssignmentChangeError as exc:
+        conflict_codes = {
+            "ACTIVE_ASSIGNMENT_CARDINALITY_INVALID",
+            "ACTIVE_ASSIGNMENT_STALE",
+            "EMPLOYEE_ASSIGNMENT_LINK_CONFLICT",
+            "EMPLOYEE_ASSIGNMENT_PROJECTION_STALE",
+            "MANUAL_ASSIGNMENT_IDEMPOTENCY_CONFLICT",
+            "ACTIVE_ASSIGNMENT_POSTCONDITION_FAILED",
+            "ASSIGNMENT_AUDIT_WRITE_FAILED",
+        }
+        not_found_codes = {"EMPLOYEE_NOT_FOUND"}
+        status_code = 404 if exc.code in not_found_codes else 409 if exc.code in conflict_codes else 422
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ASSIGNMENT_CHANGE_INTEGRITY_CONFLICT", "message": "Assignment change conflicted with current state."},
+        ) from exc
+    except Exception as exc:
+        raise as_http500(exc)
 
 
 @router.post("/employees/{employee_id}/transfer")

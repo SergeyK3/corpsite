@@ -27,6 +27,7 @@ import EmployeeAssignmentCorrectionDrawer, {
   type EmployeeAssignmentCorrectionFormValues,
 } from "./EmployeeAssignmentCorrectionDrawer";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
+import EmployeeAssignmentChangeForm from "./EmployeeAssignmentChangeForm";
 
 type Props = {
   employeeId: string;
@@ -250,6 +251,16 @@ export default function EmployeeOperationalAssignmentSection({
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {enrolled ? (
+          <EmployeeAssignmentChangeForm
+            employeeId={employeeId}
+            details={details}
+            onChanged={async () => {
+              onAssignmentChanged?.();
+              await loadAssignment();
+            }}
+          />
+        ) : null}
         {enrolled ? (
           <button
             type="button"

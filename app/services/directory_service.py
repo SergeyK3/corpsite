@@ -317,6 +317,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         (f"e.{dept_fk} AS e_dept_id" if dept_fk else "NULL AS e_dept_id"),
         (f"e.{pos_fk} AS e_pos_id" if pos_fk else "NULL AS e_pos_id"),
         f"e.{org_unit_fk} AS e_org_unit_id",
+        ("e.person_id AS e_person_id" if "person_id" in set(emp_cols) else "NULL AS e_person_id"),
     ]
 
     join_sql = ""
@@ -422,6 +423,7 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
 
     return {
         "id": str(row.get("e_id")) if row.get("e_id") is not None else None,
+        "person_id": int(row["e_person_id"]) if row.get("e_person_id") is not None else None,
         "fio": fio,
         "department": {"id": row.get("e_dept_id"), "name": row.get("dept_name")},
         "position": {"id": row.get("e_pos_id"), "name": row.get("pos_name")},
@@ -438,6 +440,37 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "date_to": row.get("e_date_to"),
         "source": {"relation": emp_rel},
     }
+
+
+def _get_single_active_assignment_id(conn: Any, *, person_id: Optional[int]) -> Optional[int]:
+    if person_id is None:
+        return None
+
+    assignment_ids = [
+        int(value)
+        for value in conn.execute(
+            text(
+                """
+                SELECT assignment_id
+                FROM public.person_assignments
+                WHERE person_id = :person_id
+                  AND active_flag IS TRUE
+                  AND lifecycle_status = 'active'
+                ORDER BY assignment_id
+                """
+            ),
+            {"person_id": int(person_id)},
+        ).scalars().all()
+    ]
+    if len(assignment_ids) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ACTIVE_ASSIGNMENT_CARDINALITY_INVALID",
+                "message": "Employee has multiple active assignments.",
+            },
+        )
+    return assignment_ids[0] if assignment_ids else None
 
 
 def _fetch_linked_user(employee_id: Any) -> Optional[Dict[str, Any]]:
@@ -834,10 +867,16 @@ def get_employee(
     with engine.begin() as conn:
         row = conn.execute(q_one, params).mappings().first()
 
-    if not row:
-        raise HTTPException(status_code=404, detail="Employee not found.")
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        active_assignment_id = _get_single_active_assignment_id(
+            conn,
+            person_id=(int(row["e_person_id"]) if row.get("e_person_id") is not None else None),
+        )
 
     result = _normalize_employee_joined(dict(row), emp_rel)
+    result["active_assignment_id"] = active_assignment_id
     result["user"] = _fetch_linked_user(row.get("e_id"))
     return result
 

@@ -401,7 +401,6 @@ describe("PprPersonalCardPageClient", () => {
     expect(screen.getByTestId("orders-section")).toBeInTheDocument();
     expect(screen.queryByText("NOT_MATERIALIZED")).not.toBeInTheDocument();
     expect(screen.queryByText("Кадровая карточка-досье")).not.toBeInTheDocument();
-    expect(screen.queryByText("Текущее назначение")).not.toBeInTheDocument();
     expect(screen.queryByText("Доступ")).not.toBeInTheDocument();
     expect(screen.queryByText("История кадровых событий")).not.toBeInTheDocument();
   });

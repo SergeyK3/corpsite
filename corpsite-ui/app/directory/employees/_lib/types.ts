@@ -24,6 +24,7 @@ export type OrgUnitRef = {
 export type EmployeeDTO = {
   id: string | null;
   person_id?: number | null;
+  active_assignment_id?: number | null;
   record_kind?: "employee" | "applicant" | string | null;
   fio: string | null;
 

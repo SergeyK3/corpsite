@@ -58,6 +58,7 @@ import PprCardApplicationsSection from "./PprCardApplicationsSection";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
+import { getEmployees } from "../../employees/_lib/api.client";
 
 type Props = {
   employeeId?: string;
@@ -106,13 +107,15 @@ export default function PprPersonalCardPageClient({
   const [ppr, setPpr] = React.useState<PprCompositeReadResponse | null>(null);
   const [intendedEmployment, setIntendedEmployment] = React.useState<PprIntendedEmploymentResponse | null>(null);
   const [activeApplication, setActiveApplication] = React.useState<PersonnelApplicationDetail | null>(null);
+  const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
   const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
-  const resolvedEmployeeId =
+  const pprEmployeeId =
     ppr?.identity.employee_context_id != null
       ? String(ppr.identity.employee_context_id)
       : employeeId ?? null;
+  const resolvedEmployeeId = pprEmployeeId ?? fallbackEmployeeId;
 
   const loadCard = React.useCallback(
     async (signal?: AbortSignal) => {
@@ -164,6 +167,39 @@ export default function PprPersonalCardPageClient({
       cancelled = true;
     };
   }, [resolvedPersonId]);
+
+  React.useEffect(() => {
+    if (pprEmployeeId != null) {
+      setFallbackEmployeeId(null);
+      return;
+    }
+    if (resolvedPersonId == null || !ppr?.general.full_name) {
+      setFallbackEmployeeId(null);
+      return;
+    }
+
+    let cancelled = false;
+    void getEmployees({
+      status: "all",
+      q: ppr.general.full_name,
+      limit: 50,
+      offset: 0,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        const matches = (response.items ?? []).filter(
+          (item) => Number(item.person_id) === Number(resolvedPersonId) && item.id != null,
+        );
+        setFallbackEmployeeId(matches.length === 1 ? String(matches[0].id) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setFallbackEmployeeId(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pprEmployeeId, ppr?.general.full_name, resolvedPersonId]);
 
   React.useEffect(() => {
     if (loading || errorView || !ppr) return;
@@ -455,8 +491,8 @@ export default function PprPersonalCardPageClient({
               {!isApplicant && resolvedEmployeeId ? (
                 <PprCardSection
                   id="assignment"
-                  title="Трудовая деятельность"
-                  description="Текущее назначение и операционный контур занятости."
+                  title="Текущее назначение"
+                  description="Действующие подразделение и должность сотрудника."
                 >
                   <EmployeeOperationalAssignmentSection
                     employeeId={resolvedEmployeeId}
