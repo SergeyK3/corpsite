@@ -17,6 +17,10 @@ from app.services.personnel_order_lifecycle_audit_service import (
     append_archive_order_audit,
     append_restore_order_audit,
 )
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    lock_personnel_order_evidence_scopes_tx,
+)
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
     PersonnelOrderValidationError,
@@ -161,6 +165,7 @@ def archive_personnel_order(
     )
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row_for_archive(conn, int(order_id))
         status = str(order["status"])
         previous_void_kind = order.get("void_kind")
@@ -214,6 +219,7 @@ def archive_personnel_order(
                 "display_reason": display_reason,
             },
         )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
 
@@ -227,6 +233,7 @@ def restore_personnel_order(
     _require_available()
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row_for_archive(conn, int(order_id))
         status = str(order["status"])
         previous_void_kind = order.get("void_kind")
@@ -266,5 +273,6 @@ def restore_personnel_order(
             actor_user_id=int(actor_user_id),
             metadata_json={"permission_used": PERMISSION_RESTORE},
         )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))

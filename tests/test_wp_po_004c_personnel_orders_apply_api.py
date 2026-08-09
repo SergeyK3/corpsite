@@ -63,6 +63,10 @@ def _cleanup_order(order_id: int) -> None:
             {"order_id": order_id},
         )
         conn.execute(
+            text("DELETE FROM public.personnel_order_evidence_scopes WHERE order_id = :order_id"),
+            {"order_id": order_id},
+        )
+        conn.execute(
             text("DELETE FROM public.personnel_orders WHERE order_id = :order_id"),
             {"order_id": order_id},
         )

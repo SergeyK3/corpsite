@@ -21,6 +21,10 @@ from app.personnel_applications.domain.status import (
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    create_personnel_order_evidence_scope_tx,
+)
 
 
 def _now_utc() -> datetime:
@@ -108,6 +112,7 @@ def _create_draft_hire_order(
             "created_by": int(created_by_user_id),
         },
     ).scalar_one()
+    scope_token = create_personnel_order_evidence_scope_tx(conn, order_id=int(order_id))
 
     conn.execute(
         text(
@@ -140,6 +145,7 @@ def _create_draft_hire_order(
             "item_status": ITEM_STATUS_ACTIVE,
         },
     )
+    advance_personnel_order_evidence_scopes_tx(conn, tokens=[scope_token])
     return int(order_id)
 
 

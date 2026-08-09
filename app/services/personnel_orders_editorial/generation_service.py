@@ -20,6 +20,10 @@ from app.db.models.personnel_orders import (
 )
 from app.services.personnel_orders_editorial.audit import write_editorial_audit
 from app.services.personnel_order_archive_guard import assert_order_not_archived
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    lock_personnel_order_evidence_scopes_tx,
+)
 from app.services.personnel_orders_editorial.availability import require_available
 from app.services.personnel_orders_editorial.basis_policy import resolve_basis_required
 from app.services.personnel_orders_editorial.constants import ALLOWED_LOCALES
@@ -91,6 +95,7 @@ def generate_editorial(
     scope = dict(scope) if scope else None
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = fetch_order(conn, order_id)
         assert_order_not_archived(order)
         ensure_draft_writable(order)
@@ -299,6 +304,7 @@ def generate_editorial(
                         )
 
         touch_order_updated_at(conn, int(order_id))
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     # Lazy import avoids cycle with service (which does not import this module).
     from app.services.personnel_orders_editorial.service import get_editorial_state

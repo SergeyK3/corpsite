@@ -72,6 +72,61 @@ class PersonAssignmentSyncError(Exception):
         super().__init__(message)
 
 
+@dataclass(frozen=True, slots=True)
+class AssignmentBoundaryActivationResult:
+    code: str
+    effective_date: date
+    generation: int
+    advanced: bool
+
+
+def assignment_boundary_activation_tx(
+    conn: Connection,
+    *,
+    target_effective_date: date,
+    expected_effective_date: date,
+    expected_generation: int,
+) -> AssignmentBoundaryActivationResult:
+    """C2-owned CAS advancement; caller owns transaction and reconciliation."""
+    conn.execute(text("SELECT pg_advisory_xact_lock(65002, 1)"))
+    rows = list(conn.execute(text("SELECT effective_date, generation FROM public.person_assignment_activation_watermark WHERE singleton IS TRUE FOR UPDATE")).mappings())
+    total = int(conn.execute(text("SELECT count(*) FROM public.person_assignment_activation_watermark")).scalar_one())
+    if len(rows) != 1 or total != 1:
+        raise PersonAssignmentSyncError("BOUNDARY_WATERMARK_INVALID")
+    row = rows[0]
+    persisted_date = row["effective_date"]
+    persisted_generation = int(row["generation"])
+    if persisted_date != expected_effective_date or persisted_generation != int(expected_generation):
+        raise PersonAssignmentSyncError("BOUNDARY_WATERMARK_INVALID")
+    business_date = conn.execute(text("SELECT ((transaction_timestamp() AT TIME ZONE 'UTC') + INTERVAL '5 hours')::date")).scalar_one()
+    if target_effective_date < persisted_date:
+        return AssignmentBoundaryActivationResult("BOUNDARY_RUN_OUT_OF_ORDER", persisted_date, persisted_generation, False)
+    if target_effective_date == persisted_date:
+        return AssignmentBoundaryActivationResult("BOUNDARY_RUN_DUPLICATE", persisted_date, persisted_generation, False)
+    if target_effective_date > business_date:
+        return AssignmentBoundaryActivationResult("BOUNDARY_RUN_FUTURE_DATE", persisted_date, persisted_generation, False)
+    updated = conn.execute(
+        text("""
+            UPDATE public.person_assignment_activation_watermark
+            SET effective_date=:target_effective_date,
+                processed_at=transaction_timestamp(), generation=generation+1,
+                updated_at=transaction_timestamp()
+            WHERE singleton IS TRUE
+              AND effective_date=:persisted_effective_date
+              AND generation=:persisted_generation
+            RETURNING effective_date, generation
+        """),
+        {"target_effective_date": target_effective_date,
+         "persisted_effective_date": persisted_date,
+         "persisted_generation": persisted_generation},
+    ).mappings().first()
+    if updated is None:
+        raise PersonAssignmentSyncError("BOUNDARY_WATERMARK_INVALID")
+    return AssignmentBoundaryActivationResult(
+        "BOUNDARY_RUN_ADVANCED", updated["effective_date"], int(updated["generation"]), True
+    )
+
+
 @dataclass
 class PersonAssignmentSyncReport:
     events_seen: int = 0

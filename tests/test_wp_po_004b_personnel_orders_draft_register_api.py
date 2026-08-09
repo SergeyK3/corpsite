@@ -102,6 +102,10 @@ def _cleanup_order(order_id: int) -> None:
             {"order_id": order_id},
         )
         conn.execute(
+            text("DELETE FROM public.personnel_order_evidence_scopes WHERE order_id = :order_id"),
+            {"order_id": order_id},
+        )
+        conn.execute(
             text("DELETE FROM public.personnel_orders WHERE order_id = :order_id"),
             {"order_id": order_id},
         )
@@ -185,6 +189,60 @@ def test_create_draft_add_item_text_and_register_without_events(client, privileg
             headers=privileged_headers,
         )
         assert item_patch_resp.status_code == 409
+    finally:
+        _cleanup_order(order_id)
+
+
+def test_order_writers_advance_one_evidence_generation_per_transaction(
+    client, privileged_headers
+):
+    order_number = f"WPPO4B-GEN-{uuid4().hex[:8]}"
+    with engine.connect() as conn:
+        employee_id = _pick_employee_id(conn)
+    created = client.post(
+        "/directory/personnel-orders",
+        json={"order_number": order_number, "order_date": "2026-07-07",
+              "order_type_code": "HIRE", "source_mode": "PAPER"},
+        headers=privileged_headers,
+    )
+    assert created.status_code == 201, created.text
+    order_id = created.json()["order"]["order_id"]
+
+    def generation() -> int:
+        with engine.connect() as conn:
+            return int(conn.execute(text("SELECT generation FROM public.personnel_order_evidence_scopes WHERE order_id=:id"), {"id": order_id}).scalar_one())
+
+    try:
+        assert generation() == 1
+        item = client.post(
+            f"/directory/personnel-orders/{order_id}/items",
+            json={"item_type_code": "HIRE", "employee_id": employee_id,
+                  "effective_date": "2026-07-07", "payload": {}},
+            headers=privileged_headers,
+        )
+        assert item.status_code == 200, item.text
+        assert generation() == 2
+        changed = client.patch(
+            f"/directory/personnel-orders/{order_id}",
+            json={"comment": "generation proof"},
+            headers=privileged_headers,
+        )
+        assert changed.status_code == 200, changed.text
+        assert generation() == 3
+        registered = client.post(
+            f"/directory/personnel-orders/{order_id}/register",
+            json={"target_status": "REGISTERED"},
+            headers=privileged_headers,
+        )
+        assert registered.status_code == 200, registered.text
+        assert generation() == 4
+        failed = client.patch(
+            f"/directory/personnel-orders/{order_id}",
+            json={"comment": "must rollback"},
+            headers=privileged_headers,
+        )
+        assert failed.status_code == 409
+        assert generation() == 4
     finally:
         _cleanup_order(order_id)
 

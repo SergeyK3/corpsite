@@ -38,6 +38,10 @@ from app.services.personnel_order_lifecycle_audit_service import (
     append_void_order_audit,
     resolve_void_kind,
 )
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    lock_personnel_order_evidence_scopes_tx,
+)
 
 CANCELABLE_ORDER_STATUSES = {
     ORDER_STATUS_DRAFT,
@@ -698,6 +702,7 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
     normalized_reason = _normalize_void_reason(void_reason)
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         assert_order_not_archived(order)
         status = str(order["status"])
@@ -769,6 +774,7 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
             raise PersonnelOrderConflictError(
                 f"Personnel order {order_id} cannot be voided from status {status}."
             )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
 
@@ -785,6 +791,7 @@ def void_personnel_order_item(
     normalized_reason = _normalize_void_reason(void_reason)
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         assert_order_not_archived(order)
         status = str(order["status"])
@@ -830,5 +837,6 @@ def void_personnel_order_item(
                     void_reason=normalized_reason,
                     actor_user_id=int(voided_by),
                 )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))

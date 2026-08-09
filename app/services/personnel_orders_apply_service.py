@@ -26,6 +26,10 @@ from app.db.models.personnel_orders import (
 from app.services.directory_service import _insert_employee_event
 from app.services.hr_event_registry import get_event_class
 from app.services.personnel_order_archive_guard import assert_order_not_archived
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    lock_personnel_order_evidence_scopes_tx,
+)
 from app.services.personnel_order_hire_apply_readiness import (
     validate_authoritative_hire_target,
     validate_hire_order_ready_for_apply_readonly,
@@ -674,6 +678,7 @@ def apply_personnel_order_in_conn(
     complete_linked_application: bool = True,
 ) -> None:
     """Apply a signed/registered personnel order within caller-owned transaction."""
+    scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
     order = _fetch_order_row(conn, order_id)
     assert_order_not_archived(order)
     status = str(order["status"])
@@ -691,6 +696,11 @@ def apply_personnel_order_in_conn(
     items = _fetch_active_items(conn, order_id)
     if not items:
         raise PersonnelOrderValidationError("At least one active order item is required to apply.")
+    evidence_changed = any(
+        str(item.get("item_type_code") or "").strip().upper() == ORDER_TYPE_HIRE
+        and item.get("employee_id") is None
+        for item in items
+    )
 
     order_ref = _format_order_ref(str(order["order_number"]), order["order_date"])
 
@@ -745,6 +755,8 @@ def apply_personnel_order_in_conn(
             order_id=int(order_id),
             created_by_user_id=int(created_by),
         )
+    if evidence_changed:
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
 
 @dataclass(frozen=True, slots=True)

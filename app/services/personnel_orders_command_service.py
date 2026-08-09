@@ -28,6 +28,11 @@ from app.db.models.personnel_orders import (
     SOURCE_MODE_PAPER,
 )
 from app.services.personnel_order_archive_guard import assert_order_not_archived
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    create_personnel_order_evidence_scope_tx,
+    lock_personnel_order_evidence_scopes_tx,
+)
 from app.services.personnel_order_signatory_resolver import (
     apply_default_signatory_if_needed,
 )
@@ -347,6 +352,7 @@ def create_personnel_order_draft(
                     "created_by": int(created_by),
                 },
             ).scalar_one()
+            create_personnel_order_evidence_scope_tx(conn, order_id=int(order_id))
     except IntegrityError as exc:
         if normalized_number:
             raise PersonnelOrderConflictError(
@@ -406,6 +412,7 @@ def update_personnel_order_draft(
 
     try:
         with engine.begin() as conn:
+            scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
             order = _fetch_order_row(conn, order_id)
             _ensure_order_editable(order)
             if signed_by_employee_id is not None:
@@ -430,6 +437,7 @@ def update_personnel_order_draft(
                 _mark_editorial_stale(conn, int(order_id))
             except Exception:
                 pass
+            advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
     except IntegrityError as exc:
         raise PersonnelOrderConflictError("Personnel order number already exists.") from exc
 
@@ -452,6 +460,7 @@ def create_personnel_order_item(
     payload_json = json.dumps(payload or {})
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
 
@@ -525,6 +534,7 @@ def create_personnel_order_item(
             _mark_editorial_stale(conn, int(order_id))
         except Exception:
             pass
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
 
@@ -565,6 +575,7 @@ def update_personnel_order_item(
         raise PersonnelOrderValidationError("No fields provided for item update.")
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
 
@@ -651,6 +662,7 @@ def update_personnel_order_item(
             _mark_editorial_stale(conn, int(order_id), item_id=int(item_id))
         except Exception:
             pass
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
 
@@ -668,6 +680,7 @@ def upsert_personnel_order_localized_text(
     normalized_locale = _normalize_locale(locale)
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
 
@@ -757,6 +770,7 @@ def upsert_personnel_order_localized_text(
             ),
             {"order_id": int(order_id)},
         )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
 
@@ -802,6 +816,7 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
             raise PersonnelOrderReadyGateError(problems)
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         assert_order_not_archived(order)
         if str(order["status"]) != ORDER_STATUS_DRAFT:
@@ -819,6 +834,7 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
             ),
             {"order_id": int(order_id), "status": ORDER_STATUS_READY_FOR_SIGNATURE},
         )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
 
@@ -832,6 +848,7 @@ def register_personnel_order(
     normalized_target = _normalize_register_target(target_status)
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         assert_order_not_archived(order)
         current_status = str(order["status"])
@@ -867,5 +884,6 @@ def register_personnel_order(
                 "order_type_code": resolved_type,
             },
         )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))

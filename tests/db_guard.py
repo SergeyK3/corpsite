@@ -144,7 +144,11 @@ def bind_app_engine_to_test_database() -> str:
         engine_module.engine.dispose()
 
     engine_module.DATABASE_URL = test_url
-    engine_module.engine = create_engine(test_url, pool_pre_ping=True)
+    engine_module.engine = create_engine(
+        test_url,
+        pool_pre_ping=True,
+        hide_parameters=True,
+    )
     _ENGINE_BOUND = True
     return test_url
 

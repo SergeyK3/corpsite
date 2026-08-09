@@ -281,6 +281,11 @@ def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]
                     {"oids": list(order_ids)},
                 )
             if order_ids and table_exists(conn, "personnel_orders"):
+                if table_exists(conn, "personnel_order_evidence_scopes"):
+                    conn.execute(
+                        text("DELETE FROM public.personnel_order_evidence_scopes WHERE order_id = ANY(:oids)"),
+                        {"oids": list(order_ids)},
+                    )
                 conn.execute(
                     text("DELETE FROM public.personnel_orders WHERE order_id = ANY(:oids)"),
                     {"oids": list(order_ids)},

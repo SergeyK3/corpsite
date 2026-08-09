@@ -17,6 +17,10 @@ from app.security.admin_permissions import has_admin_permission
 from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_order_cancel_scope_service import evaluate_order_cancel_scope
 from app.services.personnel_order_lifecycle_audit_service import append_cancel_order_audit
+from app.services.personnel_order_evidence_scope_service import (
+    advance_personnel_order_evidence_scopes_tx,
+    lock_personnel_order_evidence_scopes_tx,
+)
 from app.services.personnel_orders_command_service import PersonnelOrderConflictError
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
@@ -213,6 +217,7 @@ def cancel_personnel_order(
     )
 
     with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row_for_cancel(conn, int(order_id))
         assert_order_not_archived(order)
         status = str(order["status"])
@@ -268,5 +273,6 @@ def cancel_personnel_order(
                 "scope_rule": scope_rule,
             },
         )
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
