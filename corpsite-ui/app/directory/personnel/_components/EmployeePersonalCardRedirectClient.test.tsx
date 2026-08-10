@@ -70,6 +70,32 @@ describe("EmployeePersonalCardRedirectClient", () => {
     expect(replaceMock.mock.calls[0]?.[0]).not.toContain("/persons/42/card");
   });
 
+  it("redirects to the non-cyclic operational import card only when the employee has no Person link", async () => {
+    getPprByEmployeeIdMock.mockRejectedValue({
+      status: 409,
+      message: "Employee 228 has no linked person_id; authoritative PPR path blocked.",
+    });
+
+    render(<EmployeePersonalCardRedirectClient employeeId="228" />);
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/directory/personnel/employees/228/import-card");
+    });
+    expect(screen.queryByTestId("employee-card-redirect-error")).not.toBeInTheDocument();
+  });
+
+  it("does not fall back to the operational card for another 409 conflict", async () => {
+    getPprByEmployeeIdMock.mockRejectedValue({
+      status: 409,
+      details: { detail: "Another PPR identity conflict." },
+    });
+
+    render(<EmployeePersonalCardRedirectClient employeeId="228" />);
+
+    expect(await screen.findByTestId("employee-card-redirect-error")).toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
   it("shows access denied without redirect on 403", async () => {
     getPprByEmployeeIdMock.mockRejectedValue({ status: 403 });
 
@@ -81,6 +107,15 @@ describe("EmployeePersonalCardRedirectClient", () => {
 
   it("shows not found without redirect on 404", async () => {
     getPprByEmployeeIdMock.mockRejectedValue({ status: 404 });
+
+    render(<EmployeePersonalCardRedirectClient employeeId="42" />);
+
+    expect(await screen.findByTestId("employee-card-redirect-error")).toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a network error without redirect", async () => {
+    getPprByEmployeeIdMock.mockRejectedValue(new TypeError("Network request failed"));
 
     render(<EmployeePersonalCardRedirectClient employeeId="42" />);
 

@@ -26,5 +26,7 @@ describe("employee card route guard", () => {
     const source = readFileSync(pagePath, "utf8");
 
     expect(source).toContain("EmployeeImportCard2PageClient");
+    expect(source).not.toContain("EmployeePersonalCardRedirectClient");
+    expect(source).not.toContain("redirect(");
   });
 });

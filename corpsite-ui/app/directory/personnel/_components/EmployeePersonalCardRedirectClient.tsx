@@ -16,6 +16,23 @@ type Props = {
   legacyQueryString?: string;
 };
 
+function isPprEmployeePersonLinkMissingError(error: unknown, employeeId: string): boolean {
+  const apiError = error as {
+    status?: unknown;
+    message?: unknown;
+    details?: { detail?: unknown; message?: unknown };
+  };
+  const expectedPrefix = `Employee ${employeeId} has no linked person_id`;
+  const details = [apiError.details?.detail, apiError.details?.message, apiError.message];
+
+  return (
+    apiError.status === 409 &&
+    details.some(
+      (detail) => typeof detail === "string" && detail.trim().startsWith(expectedPrefix),
+    )
+  );
+}
+
 export default function EmployeePersonalCardRedirectClient({
   employeeId,
   legacyQueryString = "",
@@ -51,6 +68,11 @@ export default function EmployeePersonalCardRedirectClient({
         router.replace(target);
       } catch (error) {
         if (controller.signal.aborted) return;
+        if (isPprEmployeePersonLinkMissingError(error, employeeId)) {
+          redirectStartedRef.current = true;
+          router.replace(`/directory/personnel/employees/${encodeURIComponent(employeeId)}/import-card`);
+          return;
+        }
         setErrorView(mapPprCardError(error));
       }
     })();
