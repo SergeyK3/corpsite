@@ -143,7 +143,7 @@ export default function EmployeeAssignmentChangeForm({
 
     submittingRef.current = true;
     const confirmed = window.confirm(
-      `Изменить назначение?\nПрежняя должность: ${currentPositionName}\nНовая должность: ${selectedPosition.name}\nДата начала: ${startDate}`,
+      `Оформить новое назначение?\nПрежняя должность: ${currentPositionName}\nНовая должность: ${selectedPosition.name}\nДата начала: ${startDate}`,
     );
     if (!confirmed) {
       submittingRef.current = false;
@@ -179,7 +179,7 @@ export default function EmployeeAssignmentChangeForm({
         data-testid="assignment-change-open"
         className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
       >
-        Изменить назначение
+        Оформить новое назначение
       </button>
 
       {open ? (
@@ -194,7 +194,10 @@ export default function EmployeeAssignmentChangeForm({
             className="relative w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
             onSubmit={(event) => void submit(event)}
           >
-            <h2 className="text-lg font-semibold">Изменить назначение</h2>
+            <h2 className="text-lg font-semibold">Оформить новое назначение</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Закроет текущее назначение и создаст новое с указанной даты. Кадровая история сохранится.
+            </p>
             <dl className="mt-4 grid gap-3 rounded-lg bg-zinc-50 p-3 text-sm dark:bg-zinc-900">
               <div>
                 <dt className="text-xs text-zinc-500">Текущее подразделение</dt>

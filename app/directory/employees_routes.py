@@ -725,7 +725,11 @@ def correct_employee(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        if not _is_privileged(user):
+        actor_user_id = int(user["user_id"])
+        if not (
+            _is_privileged(user)
+            or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
+        ):
             raise HTTPException(status_code=403, detail="Forbidden.")
 
         if isinstance(body, EmployeeCorrectGeneralIn):
@@ -818,7 +822,11 @@ def list_employee_events(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        if not _is_privileged(user):
+        actor_user_id = int(user["user_id"])
+        if not (
+            _is_privileged(user)
+            or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
+        ):
             raise HTTPException(status_code=403, detail="Forbidden.")
 
         return call_service(

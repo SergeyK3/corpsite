@@ -139,7 +139,7 @@ describe("EmployeeOperationalAssignmentSection", () => {
     await waitFor(() => {
       expect(screen.getByTestId("assignment-correction-open")).toBeInTheDocument();
     });
-    expect(screen.queryByText("Изменить назначение")).not.toBeInTheDocument();
+    expect(screen.queryByText("Оформить новое назначение")).not.toBeInTheDocument();
   });
 
   it("submits assignment correction and refreshes", async () => {
@@ -221,6 +221,37 @@ describe("EmployeeAssignmentCorrectionDrawer", () => {
     await waitFor(() => {
       expect(screen.getByTestId("assignment-correction-org-cascade")).toBeInTheDocument();
     });
-    expect(screen.getByText("Исправить назначение")).toBeInTheDocument();
+    expect(screen.getByText("Исправить ошибку в назначении")).toBeInTheDocument();
+  });
+});
+
+describe("EmployeeOperationalAssignmentSection corrected position", () => {
+  it("renders the corrected position after reloading assignment data", async () => {
+    const correctedDetails = {
+      ...employeeDetails,
+      position: { id: 502, name: "Референт" },
+    } as EmployeeDetails;
+    vi.mocked(getEmployee)
+      .mockResolvedValueOnce(employeeDetails)
+      .mockResolvedValueOnce(correctedDetails);
+    vi.mocked(correctEmployee).mockResolvedValue({
+      item: correctedDetails,
+      event: { event_id: 3, event_type: "CORRECTION" } as never,
+    });
+
+    render(<EmployeeOperationalAssignmentSection employeeId="1" batchId={7} onAssignmentChanged={vi.fn()} />);
+
+    await waitFor(() => screen.getByTestId("assignment-correction-open"));
+    fireEvent.click(screen.getByTestId("assignment-correction-open"));
+    await waitFor(() => screen.getByTestId("assignment-correction-drawer"));
+    fireEvent.change(screen.getByTestId("assignment-correction-reason"), {
+      target: { value: "Ошибка исходных данных" },
+    });
+    fireEvent.change(screen.getByTestId("assignment-correction-comment"), {
+      target: { value: "Проверено" },
+    });
+    fireEvent.click(screen.getByTestId("assignment-correction-submit"));
+
+    expect(await screen.findByText("Референт")).toBeInTheDocument();
   });
 });

@@ -92,6 +92,7 @@ describe("EmployeeAssignmentChangeForm", () => {
   it("shows the button only with exact permission", () => {
     renderForm({ permission: true });
     expect(screen.getByTestId("assignment-change-open")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Оформить новое назначение" })).toBeInTheDocument();
     cleanup();
     renderForm({ permission: false });
     expect(screen.queryByTestId("assignment-change-open")).not.toBeInTheDocument();

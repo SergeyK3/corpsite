@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeImportCard2PageClient from "./EmployeeImportCard2PageClient";
@@ -25,9 +25,17 @@ vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByEmployeeId: (...args: unknown[]) => getPprByEmployeeIdMock(...args),
 }));
 
-vi.mock("./EmployeeOperationalAssignmentSection", () => ({ default: () => <div /> }));
+vi.mock("./EmployeeOperationalAssignmentSection", () => ({
+  default: ({ onAssignmentChanged }: { onAssignmentChanged?: () => void }) => (
+    <button type="button" data-testid="assignment-changed" onClick={() => onAssignmentChanged?.()} />
+  ),
+}));
 vi.mock("./EmployeePersonnelHistorySection", () => ({ default: () => <div /> }));
-vi.mock("./EmployeeCardGeneralSection", () => ({ default: () => <div /> }));
+vi.mock("./EmployeeCardGeneralSection", () => ({
+  default: ({ details }: { details: { position?: { name?: string | null } } }) => (
+    <div data-testid="general-position">{details.position?.name ?? "—"}</div>
+  ),
+}));
 vi.mock("./EmployeeCardOrdersSection", () => ({ default: () => <div /> }));
 vi.mock("./EmployeeCardDeletionNotice", () => ({ default: () => <div /> }));
 vi.mock("./EmployeeImportCardSection", () => ({
@@ -59,5 +67,29 @@ describe("EmployeeImportCard2PageClient", () => {
       expect(getEmployeeImportCard2OptionalMock).toHaveBeenCalledWith("228");
     });
     expect(getPprByEmployeeIdMock).not.toHaveBeenCalled();
+  });
+
+  it("reloads the card shell with the corrected position after assignment correction", async () => {
+    getEmployeeMock
+      .mockResolvedValueOnce({
+        employee_id: 228,
+        fio: "Шаймарданова Алия",
+        position: { id: 501, name: "Менеджер" },
+      })
+      .mockResolvedValueOnce({
+        employee_id: 228,
+        fio: "Шаймарданова Алия",
+        position: { id: 502, name: "Референт" },
+      });
+
+    render(<EmployeeImportCard2PageClient employeeId="228" />);
+
+    expect(await screen.findByTestId("general-position")).toHaveTextContent("Менеджер");
+    fireEvent.click(screen.getByTestId("assignment-changed"));
+
+    await waitFor(() => {
+      expect(getEmployeeMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("general-position")).toHaveTextContent("Референт");
+    });
   });
 });

@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.directory import employees_routes
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
 
@@ -19,6 +20,37 @@ def _db_available() -> bool:
     except Exception:
         return False
 
+
+def _grant_hr_enrollment_manager(user_id: int) -> int:
+    with engine.begin() as conn:
+        return int(
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO public.access_grants (
+                        access_role_id, target_type, target_id,
+                        granted_by_user_id, reason
+                    )
+                    SELECT access_role_id, 'USER', :user_id, :user_id,
+                           'pytest employee correction permission'
+                    FROM public.access_roles
+                    WHERE code = 'HR_ENROLLMENT_MANAGER'
+                    RETURNING grant_id
+                    """
+                ),
+                {"user_id": int(user_id)},
+            ).scalar_one()
+        )
+
+
+def _cleanup_access_grant(grant_id: int | None) -> None:
+    if grant_id is None:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM public.access_grants WHERE grant_id = :grant_id"),
+            {"grant_id": int(grant_id)},
+        )
 
 @pytest.fixture
 def privileged_headers(seed, monkeypatch):
@@ -388,3 +420,170 @@ def test_correct_assignment_no_changes_returns_422(client, seed, privileged_head
         _cleanup_employees(emp_ids)
         _cleanup_positions(pos_ids)
         _cleanup_units(unit_ids)
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_correct_assignment_allows_hr_enrollment_manager_without_privileged_status(client, seed, monkeypatch):
+    employee_id, _from_unit_id, to_unit_id, _position_id, alt_position_id, _name, emp_ids, pos_ids, unit_ids = (
+        _make_fixture(seed)
+    )
+    actor_user_id = int(seed["executor_user_id"])
+    grant_id = None
+
+    try:
+        grant_id = _grant_hr_enrollment_manager(actor_user_id)
+        monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: False)
+        monkeypatch.setattr(
+            employees_routes,
+            "svc_get_employee",
+            lambda **_kwargs: {"employee_id": employee_id},
+        )
+
+        response = client.post(
+            f"/directory/employees/{employee_id}/correct",
+            json={
+                "domain": "assignment",
+                "org_unit_id": to_unit_id,
+                "position_id": alt_position_id,
+                "employment_rate": 1.0,
+                "date_from": "2024-02-01",
+                "date_to": None,
+                "effective_date": "2026-08-10",
+                "reason": "Permission correction test",
+                "comment": "HR enrollment manager may correct assignment",
+            },
+            headers=auth_headers(actor_user_id),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["event"]["metadata"]["domain"] == "assignment"
+    finally:
+        _cleanup_access_grant(grant_id)
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+def test_correct_assignment_without_privilege_or_hr_enrollment_manager_gets_403(client, seed, monkeypatch):
+    monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: False)
+    monkeypatch.setattr(employees_routes, "has_admin_permission", lambda _user_id, _permission: False)
+
+    response = client.post(
+        "/directory/employees/1/correct",
+        json={
+            "domain": "assignment",
+            "org_unit_id": 1,
+            "position_id": 1,
+            "employment_rate": 1.0,
+            "date_from": None,
+            "date_to": None,
+            "effective_date": "2026-08-10",
+            "reason": "Permission correction test",
+            "comment": "User without permission",
+        },
+        headers=auth_headers(int(seed["initiator_user_id"])),
+    )
+
+    assert response.status_code == 403
+
+def test_correct_assignment_keeps_privileged_access(client, seed, monkeypatch):
+    corrected = []
+    monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: True)
+    monkeypatch.setattr(employees_routes, "has_admin_permission", lambda _user_id, _permission: False)
+    monkeypatch.setattr(
+        employees_routes,
+        "svc_correct_employee",
+        lambda **kwargs: corrected.append(kwargs) or {"event_type": "CORRECTION"},
+    )
+    monkeypatch.setattr(
+        employees_routes,
+        "svc_get_employee",
+        lambda **_kwargs: {"employee_id": "1"},
+    )
+
+    response = client.post(
+        "/directory/employees/1/correct",
+        json={
+            "domain": "assignment",
+            "org_unit_id": 1,
+            "position_id": 1,
+            "employment_rate": 1.0,
+            "date_from": None,
+            "date_to": None,
+            "effective_date": "2026-08-10",
+            "reason": "Privileged correction test",
+            "comment": "Privileged user may correct assignment",
+        },
+        headers=auth_headers(int(seed["initiator_user_id"])),
+    )
+
+    assert response.status_code == 200, response.text
+    assert len(corrected) == 1
+
+def test_employee_events_allows_hr_enrollment_manager_without_privileged_status(client, seed, monkeypatch):
+    actor_user_id = int(seed["executor_user_id"])
+    grant_id = None
+    try:
+        grant_id = _grant_hr_enrollment_manager(actor_user_id)
+        monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: False)
+        monkeypatch.setattr(employees_routes, "svc_list_employee_events", lambda **_kwargs: {"items": [], "total": 0})
+
+        response = client.get("/directory/employees/1/events", headers=auth_headers(actor_user_id))
+
+        assert response.status_code == 200, response.text
+    finally:
+        _cleanup_access_grant(grant_id)
+
+
+def test_employee_events_without_privilege_or_hr_enrollment_manager_gets_403(client, seed, monkeypatch):
+    monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: False)
+    monkeypatch.setattr(employees_routes, "has_admin_permission", lambda _user_id, _permission: False)
+
+    response = client.get("/directory/employees/1/events", headers=auth_headers(int(seed["initiator_user_id"])))
+
+    assert response.status_code == 403
+
+
+def test_employee_events_keeps_privileged_access(client, seed, monkeypatch):
+    monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: True)
+    monkeypatch.setattr(employees_routes, "has_admin_permission", lambda _user_id, _permission: False)
+    monkeypatch.setattr(employees_routes, "svc_list_employee_events", lambda **_kwargs: {"items": [], "total": 0})
+
+    response = client.get("/directory/employees/1/events", headers=auth_headers(int(seed["initiator_user_id"])))
+
+    assert response.status_code == 200, response.text
+
+def test_correct_assignment_api_returns_refreshed_position(client, seed, monkeypatch):
+    monkeypatch.setattr(employees_routes, "_is_privileged", lambda _user: True)
+    monkeypatch.setattr(employees_routes, "has_admin_permission", lambda _user_id, _permission: False)
+    monkeypatch.setattr(
+        employees_routes,
+        "svc_correct_employee",
+        lambda **_kwargs: {"event_id": 7, "event_type": "CORRECTION"},
+    )
+    monkeypatch.setattr(
+        employees_routes,
+        "svc_get_employee",
+        lambda **_kwargs: {
+            "employee_id": "1",
+            "position": {"id": 502, "name": "Референт"},
+        },
+    )
+
+    response = client.post(
+        "/directory/employees/1/correct",
+        json={
+            "domain": "assignment",
+            "org_unit_id": 1,
+            "position_id": 502,
+            "employment_rate": 1.0,
+            "date_from": None,
+            "date_to": None,
+            "effective_date": "2026-08-10",
+            "reason": "Ошибка исходных данных",
+            "comment": "Проверено",
+        },
+        headers=auth_headers(int(seed["initiator_user_id"])),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["item"]["position"] == {"id": 502, "name": "Референт"}

@@ -159,7 +159,10 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
                   batchId={importDetail?.batch_id ?? null}
                   rowId={importDetail?.row_id ?? null}
                   refreshToken={assignmentRefreshToken}
-                  onAssignmentChanged={() => setAssignmentRefreshToken((t) => t + 1)}
+                  onAssignmentChanged={() => {
+                    void loadShell();
+                    setAssignmentRefreshToken((t) => t + 1);
+                  }}
                 />
               </EmployeeImportCardSection>
 

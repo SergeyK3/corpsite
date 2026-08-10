@@ -171,7 +171,7 @@ describe("person-card current assignment integration", () => {
     );
     expect(screen.getByText("Отдел кадров")).toBeInTheDocument();
     expect(screen.getByText("Руководитель отдела кадров")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Изменить назначение" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Оформить новое назначение" })).toBeInTheDocument();
     expect(getPprByPersonId).toHaveBeenCalledWith(
       "105",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -187,6 +187,6 @@ describe("person-card current assignment integration", () => {
 
     expect(await screen.findByRole("heading", { name: "Текущее назначение" })).toBeInTheDocument();
     await waitFor(() => expect(getEmployee).toHaveBeenCalledWith("16"));
-    expect(screen.queryByRole("button", { name: "Изменить назначение" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Оформить новое назначение" })).not.toBeInTheDocument();
   });
 });

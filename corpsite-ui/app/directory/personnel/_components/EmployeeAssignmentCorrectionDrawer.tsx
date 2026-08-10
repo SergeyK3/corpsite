@@ -140,9 +140,9 @@ export default function EmployeeAssignmentCorrectionDrawer({
       <div className="relative ml-auto flex h-full w-full max-w-[720px] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Исправить назначение</h2>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Исправить ошибку в назначении</h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Административная корректировка организационного назначения в справочнике персонала.
+              Используйте для исправления неверно внесённых данных. Новое назначение не создаётся; причина исправления сохраняется в истории.
             </p>
           </div>
           <button
