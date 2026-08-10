@@ -11,6 +11,7 @@ import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope
 import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 import EmployeeCreateDrawer from "./EmployeeCreateDrawer";
+import ControlListEntryDialog from "./ControlListEntryDialog";
 import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 
 import {
@@ -198,6 +199,7 @@ export default function EmployeesPageClient(props: Props) {
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = React.useState<string | null>(null);
+  const [controlListDialogOpen, setControlListDialogOpen] = React.useState(false);
 
   const [createDrawerOpen, setCreateDrawerOpen] = React.useState(false);
   const [createSaving, setCreateSaving] = React.useState(false);
@@ -588,6 +590,16 @@ export default function EmployeesPageClient(props: Props) {
               </select>
 
               {isStaffRoute ? (
+                <button
+                  type="button"
+                  onClick={() => setControlListDialogOpen(true)}
+                  className="h-9 shrink-0 rounded-lg border border-zinc-300 bg-white px-3 text-[13px] font-medium text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  + Из контр. списка
+                </button>
+              ) : null}
+
+              {isStaffRoute ? (
                 <Link
                   href="/directory/personnel/applicants"
                   className="flex h-9 items-center rounded-lg border border-sky-300 bg-sky-50 px-3 text-[13px] text-sky-900 transition hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200"
@@ -690,6 +702,14 @@ export default function EmployeesPageClient(props: Props) {
           error={createError}
           onClose={handleCloseCreateDrawer}
           onSubmit={handleCreateEmployee}
+        />
+      ) : null}
+
+      {isStaffRoute ? (
+        <ControlListEntryDialog
+          open={controlListDialogOpen}
+          onClose={() => setControlListDialogOpen(false)}
+          onEnrolled={() => void loadItems()}
         />
       ) : null}
     </>

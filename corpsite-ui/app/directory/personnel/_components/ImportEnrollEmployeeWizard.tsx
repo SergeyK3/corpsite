@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -38,6 +38,7 @@ type Props = {
   record: NormalizedRecord;
   batchFileName?: string;
   canEnroll?: boolean;
+  mode?: "enroll-only";
   onReviewed: (record: NormalizedRecord) => void;
   onToast: (message: string, kind?: "success" | "error") => void;
 };
@@ -251,6 +252,7 @@ export default function ImportEnrollEmployeeWizard({
   record,
   batchFileName,
   canEnroll = true,
+  mode,
   onReviewed,
   onToast,
 }: Props) {
@@ -652,7 +654,7 @@ export default function ImportEnrollEmployeeWizard({
           </div>
         ) : (
           <p className="text-xs text-zinc-600 dark:text-zinc-400">
-            Используйте ручную привязку по ID или обратитесь к администратору.
+            {mode === "enroll-only" ? "Зачисление не выполнено: сотрудник уже существует в оперативном контуре." : "Используйте ручную привязку по ID или обратитесь к администратору."}
           </p>
         )}
       </section>
@@ -713,7 +715,7 @@ export default function ImportEnrollEmployeeWizard({
                   {fieldErrors.orgGroup}
                 </p>
               ) : null}
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
                 <div>
                   <OrgUnitScopeFilter
                     basePath={ENROLL_WIZARD_BASE_PATH}
@@ -754,7 +756,7 @@ export default function ImportEnrollEmployeeWizard({
                       setFieldErrors((prev) => ({ ...prev, position: undefined }));
                     }}
                     disabled={positionSelectDisabled}
-                    className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="w-full min-w-0 rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <option value="">{positionSelectPlaceholder()}</option>
                     {renderPositionSelectOptions(positionGroups)}
@@ -886,7 +888,11 @@ export default function ImportEnrollEmployeeWizard({
               className="mt-1"
               data-testid="enroll-wizard-confirm-checkbox"
             />
-            <span>Добавить сотрудника в справочник персонала</span>
+            <span>
+              {mode === "enroll-only"
+                ? "Подтверждаю создание сотрудника в „Персонале“ и привязку записей этого импорта с тем же ИИН"
+                : "Добавить сотрудника в справочник персонала"}
+            </span>
           </label>
           {fieldErrors.confirm ? (
             <p className="text-xs text-red-600 dark:text-red-400" data-testid="enroll-wizard-error-confirm">
@@ -929,3 +935,5 @@ export default function ImportEnrollEmployeeWizard({
     </>
   );
 }
+
+

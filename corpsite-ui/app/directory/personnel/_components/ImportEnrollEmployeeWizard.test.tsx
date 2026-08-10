@@ -550,4 +550,26 @@ describe("ImportEnrollEmployeeWizard single-screen UX", () => {
       expect(screen.getByText(IMPORT_POSITION_NOT_IN_CATALOG_WARNING)).toBeInTheDocument();
     });
   });
+
+  it("shows enroll-only confirmation label in enroll-only mode", async () => {
+    vi.mocked(enrollEmployeeFromNormalizedRecord).mockResolvedValue(dryRunReady);
+    render(
+      <ImportEnrollEmployeeWizard
+        mode="enroll-only"
+        record={baseRecord}
+        canEnroll
+        onReviewed={vi.fn()}
+        onToast={vi.fn()}
+      />,
+    );
+
+    await waitForWizardReady();
+
+    expect(
+      screen.getByText(
+        "Подтверждаю создание сотрудника в „Персонале“ и привязку записей этого импорта с тем же ИИН",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Добавить сотрудника в справочник персонала")).not.toBeInTheDocument();
+  });
 });
