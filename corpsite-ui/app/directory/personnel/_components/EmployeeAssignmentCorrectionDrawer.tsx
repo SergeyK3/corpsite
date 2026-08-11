@@ -49,7 +49,7 @@ function toInputDate(value: string | null | undefined): string {
   return raw.slice(0, 10);
 }
 function currentStatus(details: EmployeeDetails): "active" | "inactive" {
-  return details.status === "inactive" || details.is_active === false ? "inactive" : "active";
+  return details.status === "inactive" ? "inactive" : "active";
 }
 function currentFullName(details: EmployeeDetails): string {
   const record = details as Record<string, unknown>;

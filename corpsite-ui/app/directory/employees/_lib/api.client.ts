@@ -377,7 +377,10 @@ export async function correctEmployee(
 
   const isCombined = body.domain === "combined";
   const org_unit_id = body.org_unit_id == null ? null : Number(body.org_unit_id);
-  if (!isCombined && (!Number.isFinite(org_unit_id) || org_unit_id < 1)) {
+  if (
+    !isCombined &&
+    (org_unit_id === null || !Number.isFinite(org_unit_id) || org_unit_id < 1)
+  ) {
     throw new Error("org_unit_id is required");
   }
 
