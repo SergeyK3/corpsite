@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeCardGeneralSection from "./EmployeeCardGeneralSection";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
-import EmployeeGeneralCorrectionDrawer from "./EmployeeGeneralCorrectionDrawer";
 import EmployeeAssignmentCorrectionDrawer from "./EmployeeAssignmentCorrectionDrawer";
 import type { EmployeeDetails } from "../../employees/_lib/types";
 
@@ -82,47 +81,10 @@ afterEach(() => {
 });
 
 describe("EmployeeCardGeneralSection", () => {
-  it("opens general correction drawer and submits", async () => {
-    vi.mocked(correctEmployee).mockResolvedValue({
-      item: { ...employeeDetails, fio: "Иванов И. И." },
-      event: { event_id: 1, event_type: "CORRECTION" } as never,
-    });
-
-    const onDetailsChanged = vi.fn();
-    render(
-      <EmployeeCardGeneralSection
-        employeeId="1"
-        details={employeeDetails}
-        onDetailsChanged={onDetailsChanged}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId("general-correction-open"));
-    expect(screen.getByTestId("general-correction-drawer")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByTestId("general-correction-full-name"), {
-      target: { value: "Иванов И. И." },
-    });
-    fireEvent.change(screen.getByTestId("general-correction-reason"), {
-      target: { value: "Опечатка" },
-    });
-    fireEvent.change(screen.getByTestId("general-correction-comment"), {
-      target: { value: "По паспорту" },
-    });
-    fireEvent.click(screen.getByTestId("general-correction-submit"));
-
-    await waitFor(() => {
-      expect(correctEmployee).toHaveBeenCalledWith(
-        "1",
-        expect.objectContaining({
-          domain: "general",
-          full_name: "Иванов И. И.",
-          reason: "Опечатка",
-          comment: "По паспорту",
-        }),
-      );
-    });
-    expect(onDetailsChanged).toHaveBeenCalled();
+  it("does not render the separate general correction action", () => {
+    render(<EmployeeCardGeneralSection employeeId="1" details={employeeDetails} />);
+    expect(screen.queryByTestId("general-correction-open")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("general-correction-drawer")).not.toBeInTheDocument();
   });
 });
 
@@ -162,6 +124,9 @@ describe("EmployeeOperationalAssignmentSection", () => {
 
     await waitFor(() => screen.getByTestId("assignment-correction-drawer"));
 
+    fireEvent.change(screen.getByTestId("assignment-correction-status"), {
+      target: { value: "inactive" },
+    });
     fireEvent.change(screen.getByTestId("assignment-correction-reason"), {
       target: { value: "Ошибка импорта" },
     });
@@ -179,8 +144,8 @@ describe("EmployeeOperationalAssignmentSection", () => {
       expect(correctEmployee).toHaveBeenCalledWith(
         "1",
         expect.objectContaining({
-          domain: "assignment",
-          org_unit_id: 42,
+          domain: "combined",
+          status: "inactive",
           reason: "Ошибка импорта",
           comment: "Сверка",
         }),
@@ -188,22 +153,44 @@ describe("EmployeeOperationalAssignmentSection", () => {
     });
     expect(onAssignmentChanged).toHaveBeenCalled();
   });
-});
 
-describe("EmployeeGeneralCorrectionDrawer", () => {
-  it("renders required fields", () => {
-    render(
-      <EmployeeGeneralCorrectionDrawer
-        open
-        details={employeeDetails}
-        onClose={vi.fn()}
-        onSubmit={vi.fn()}
-      />,
-    );
+  it("submits changed general, assignment, and status values in one combined request", async () => {
+    vi.mocked(correctEmployee).mockResolvedValue({ item: employeeDetails, event: {} as never });
+    render(<EmployeeOperationalAssignmentSection employeeId="1" batchId={7} onAssignmentChanged={vi.fn()} />);
 
-    expect(screen.getByText("Исправить данные")).toBeInTheDocument();
-    expect(screen.getByTestId("general-correction-full-name")).toHaveValue("Иванов Иван Иванович");
-    expect(screen.getByText("Сохранить корректировку")).toBeInTheDocument();
+    await waitFor(() => screen.getByTestId("assignment-correction-open"));
+    fireEvent.click(screen.getByTestId("assignment-correction-open"));
+    await waitFor(() => screen.getByTestId("assignment-correction-drawer"));
+    fireEvent.change(screen.getByTestId("assignment-correction-full-name"), { target: { value: "Иванов И. И." } });
+    fireEvent.change(screen.getByTestId("assignment-correction-rate"), { target: { value: "0.5" } });
+    fireEvent.change(screen.getByTestId("assignment-correction-status"), { target: { value: "inactive" } });
+    fireEvent.change(screen.getByTestId("assignment-correction-reason"), { target: { value: "Сверка" } });
+    fireEvent.change(screen.getByTestId("assignment-correction-comment"), { target: { value: "Подтверждено" } });
+    fireEvent.click(screen.getByTestId("assignment-correction-submit"));
+
+    await waitFor(() => expect(correctEmployee).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(correctEmployee)).toHaveBeenCalledWith("1", expect.objectContaining({
+      domain: "combined", full_name: "Иванов И. И.", employment_rate: 0.5, status: "inactive",
+    }));
+    expect(vi.mocked(correctEmployee).mock.calls[0]?.[1]).not.toHaveProperty("org_unit_id");
+    expect(vi.mocked(correctEmployee).mock.calls[0]?.[1]).not.toHaveProperty("position_id");
+  });
+
+  it("keeps the drawer open and does not refresh the card after a failed request", async () => {
+    vi.mocked(correctEmployee).mockRejectedValue(new Error("save failed"));
+    const onAssignmentChanged = vi.fn();
+    render(<EmployeeOperationalAssignmentSection employeeId="1" batchId={7} onAssignmentChanged={onAssignmentChanged} />);
+    await waitFor(() => screen.getByTestId("assignment-correction-open"));
+    fireEvent.click(screen.getByTestId("assignment-correction-open"));
+    await waitFor(() => screen.getByTestId("assignment-correction-drawer"));
+    fireEvent.change(screen.getByTestId("assignment-correction-status"), { target: { value: "inactive" } });
+    fireEvent.change(screen.getByTestId("assignment-correction-reason"), { target: { value: "Сверка" } });
+    fireEvent.change(screen.getByTestId("assignment-correction-comment"), { target: { value: "Подтверждено" } });
+    fireEvent.click(screen.getByTestId("assignment-correction-submit"));
+
+    expect(await screen.findByText("save failed")).toBeInTheDocument();
+    expect(screen.getByTestId("assignment-correction-drawer")).toBeInTheDocument();
+    expect(onAssignmentChanged).not.toHaveBeenCalled();
   });
 });
 
@@ -222,6 +209,32 @@ describe("EmployeeAssignmentCorrectionDrawer", () => {
       expect(screen.getByTestId("assignment-correction-org-cascade")).toBeInTheDocument();
     });
     expect(screen.getByText("Исправить ошибку в назначении")).toBeInTheDocument();
+    expect(screen.getByTestId("assignment-correction-status")).toHaveValue("active");
+    expect(screen.getByTestId("assignment-correction-full-name")).toHaveValue("Иванов Иван Иванович");
+  });
+
+  it("does not submit an unchanged status", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <EmployeeAssignmentCorrectionDrawer
+        open
+        details={employeeDetails}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await waitFor(() => screen.getByTestId("assignment-correction-status"));
+    fireEvent.change(screen.getByTestId("assignment-correction-reason"), {
+      target: { value: "Проверка без изменения статуса" },
+    });
+    fireEvent.change(screen.getByTestId("assignment-correction-comment"), {
+      target: { value: "Статус подтверждён" },
+    });
+    fireEvent.click(screen.getByTestId("assignment-correction-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty("status");
   });
 });
 
@@ -244,6 +257,9 @@ describe("EmployeeOperationalAssignmentSection corrected position", () => {
     await waitFor(() => screen.getByTestId("assignment-correction-open"));
     fireEvent.click(screen.getByTestId("assignment-correction-open"));
     await waitFor(() => screen.getByTestId("assignment-correction-drawer"));
+    fireEvent.change(screen.getByTestId("assignment-correction-status"), {
+      target: { value: "inactive" },
+    });
     fireEvent.change(screen.getByTestId("assignment-correction-reason"), {
       target: { value: "Ошибка исходных данных" },
     });
@@ -253,5 +269,6 @@ describe("EmployeeOperationalAssignmentSection corrected position", () => {
     fireEvent.click(screen.getByTestId("assignment-correction-submit"));
 
     expect(await screen.findByText("Референт")).toBeInTheDocument();
+    expect(vi.mocked(correctEmployee).mock.calls[0]?.[1]).toHaveProperty("status", "inactive");
   });
 });

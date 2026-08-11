@@ -33,6 +33,10 @@ from app.services.directory_service import (
 )
 from app.services.hr_event_registry import list_registry_for_ui
 from app.services.personnel_events_service import create_personnel_event
+from app.services.employee_termination_verification_service import (
+    TerminationVerificationError,
+    verify_employee_termination,
+)
 from app.services.manual_assignment_change_service import (
     ManualAssignmentChangeError,
     change_employee_assignment,
@@ -73,6 +77,14 @@ class EmployeeBulkDeleteIn(BaseModel):
 
 class EmployeeTerminateIn(BaseModel):
     date_to: Optional[date] = None
+
+
+class EmployeeTerminationVerifyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    termination_date: date
+    order_number: str = Field(..., min_length=1, max_length=500)
+    order_date: date
 
 
 class EmployeeUpdateIn(BaseModel):
@@ -127,12 +139,29 @@ class EmployeeCorrectAssignmentIn(BaseModel):
     employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
     date_from: Optional[date] = Field(...)
     date_to: Optional[date] = None
+    status: Optional[Literal["active", "inactive"]] = None
     effective_date: date
     reason: str = Field(..., min_length=1, max_length=500)
     comment: str = Field(..., min_length=1, max_length=2000)
 
 
-EmployeeCorrectIn = Union[EmployeeCorrectGeneralIn, EmployeeCorrectAssignmentIn]
+class EmployeeCorrectCombinedIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    domain: Literal["combined"]
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    org_unit_id: Optional[int] = Field(default=None, ge=1)
+    position_id: Optional[int] = Field(default=None, ge=1)
+    employment_rate: Optional[float] = Field(default=None, gt=0, le=2)
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    status: Optional[Literal["active", "inactive"]] = None
+    effective_date: date
+    reason: str = Field(..., min_length=1, max_length=500)
+    comment: str = Field(..., min_length=1, max_length=2000)
+
+
+EmployeeCorrectIn = Union[EmployeeCorrectGeneralIn, EmployeeCorrectAssignmentIn, EmployeeCorrectCombinedIn]
 
 
 class PersonnelEventCreateIn(BaseModel):
@@ -580,6 +609,34 @@ def terminate_employee(
         raise as_http500(e)
 
 
+@router.patch("/employees/{employee_id}/termination-verification")
+def verify_termination_details(
+    employee_id: int = Path(..., ge=1),
+    body: EmployeeTerminationVerifyIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    if not _is_privileged(user):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    try:
+        with engine.begin() as conn:
+            verify_employee_termination(
+                conn,
+                employee_id=int(employee_id),
+                termination_date=body.termination_date,
+                order_number=body.order_number,
+                order_date=body.order_date,
+                actor_user_id=int(user["user_id"]),
+            )
+        return svc_get_employee(
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=str(employee_id),
+        )
+    except TerminationVerificationError as exc:
+        status_code = 404 if exc.code in {"EMPLOYEE_NOT_FOUND", "TERMINATION_RECORD_NOT_FOUND"} else 409
+        raise HTTPException(status_code=status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+
+
 @router.get("/hr-event-registry")
 def get_hr_event_registry(
     user: Dict[str, Any] = Depends(get_current_user),
@@ -721,7 +778,7 @@ def transfer_employee(
 @router.post("/employees/{employee_id}/correct")
 def correct_employee(
     employee_id: str = Path(..., min_length=1),
-    body: EmployeeCorrectGeneralIn | EmployeeCorrectAssignmentIn = ...,
+    body: EmployeeCorrectGeneralIn | EmployeeCorrectAssignmentIn | EmployeeCorrectCombinedIn = ...,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
@@ -743,7 +800,7 @@ def correct_employee(
                 comment=body.comment,
                 created_by=int(user["user_id"]),
             )
-        else:
+        elif isinstance(body, EmployeeCorrectAssignmentIn):
             event = call_service(
                 svc_correct_employee,
                 employee_id=employee_id,
@@ -753,6 +810,25 @@ def correct_employee(
                 employment_rate=body.employment_rate,
                 date_from=body.date_from,
                 date_to=body.date_to,
+                status=body.status,
+                effective_date=body.effective_date,
+                reason=body.reason,
+                comment=body.comment,
+                created_by=int(user["user_id"]),
+            )
+        else:
+            event = call_service(
+                svc_correct_employee,
+                employee_id=employee_id,
+                domain="combined",
+                full_name=body.full_name,
+                org_unit_id=body.org_unit_id,
+                position_id=body.position_id,
+                employment_rate=body.employment_rate,
+                date_from=body.date_from,
+                date_to=body.date_to,
+                status=body.status,
+                provided_fields=set(body.model_fields_set),
                 effective_date=body.effective_date,
                 reason=body.reason,
                 comment=body.comment,

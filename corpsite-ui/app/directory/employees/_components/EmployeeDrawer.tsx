@@ -15,7 +15,11 @@ import {
 } from "@/lib/personnelCardTerminology";
 import type { MeInfo } from "@/lib/types";
 import type { EmployeeDetails } from "../_lib/types";
-import { getEmployee, mapApiErrorToMessage } from "../_lib/api.client";
+import {
+  getEmployee,
+  mapApiErrorToMessage,
+  verifyEmployeeTermination,
+} from "../_lib/api.client";
 import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 
@@ -68,6 +72,11 @@ export default function EmployeeDrawer({
   const [details, setDetails] = useState<EmployeeDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<MeInfo | null>(null);
+  const [terminationDate, setTerminationDate] = useState("");
+  const [terminationOrderNumber, setTerminationOrderNumber] = useState("");
+  const [terminationOrderDate, setTerminationOrderDate] = useState("");
+  const [terminationSaving, setTerminationSaving] = useState(false);
+  const [terminationError, setTerminationError] = useState<string | null>(null);
 
   const loadDetails = useCallback(async () => {
     if (!employeeId) {
@@ -119,6 +128,36 @@ export default function EmployeeDrawer({
 
     void loadDetails();
   }, [employeeId, open, refreshToken, loadDetails]);
+
+  useEffect(() => {
+    const termination = details?.termination;
+    setTerminationDate(termination?.termination_date ?? "");
+    setTerminationOrderNumber(termination?.order_number ?? "");
+    setTerminationOrderDate(termination?.order_date ?? "");
+    setTerminationError(null);
+  }, [details]);
+
+  async function handleVerifyTermination() {
+    if (!employeeId) return;
+    if (!terminationDate || !terminationOrderNumber.trim() || !terminationOrderDate) {
+      setTerminationError("Заполните дату увольнения, номер и дату приказа.");
+      return;
+    }
+    setTerminationSaving(true);
+    setTerminationError(null);
+    try {
+      const updated = await verifyEmployeeTermination(employeeId, {
+        termination_date: terminationDate,
+        order_number: terminationOrderNumber.trim(),
+        order_date: terminationOrderDate,
+      });
+      setDetails(updated);
+    } catch (e) {
+      setTerminationError(mapApiErrorToMessage(e));
+    } finally {
+      setTerminationSaving(false);
+    }
+  }
 
   if (!open) return null;
 
@@ -226,6 +265,77 @@ export default function EmployeeDrawer({
                   </div>
                 </div>
               </section>
+
+              {details.termination ? (
+                <section>
+                  <h3 className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                    Сведения об увольнении
+                  </h3>
+                  {details.termination.verification_status === "UNVERIFIED" ? (
+                    <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+                      <div className="inline-flex rounded-full bg-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-950 dark:bg-amber-900 dark:text-amber-100">
+                        Сведения не верифицированы
+                      </div>
+                      <p className="text-sm text-amber-950 dark:text-amber-100">
+                        Сотрудник уволен. Дата и реквизиты приказа пока не подтверждены.
+                      </p>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <label className="text-xs text-zinc-700 dark:text-zinc-300">
+                          Дата увольнения
+                          <input
+                            aria-label="Дата увольнения"
+                            type="date"
+                            value={terminationDate}
+                            onChange={(event) => setTerminationDate(event.target.value)}
+                            className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                          />
+                        </label>
+                        <label className="text-xs text-zinc-700 dark:text-zinc-300">
+                          Номер приказа
+                          <input
+                            aria-label="Номер приказа"
+                            value={terminationOrderNumber}
+                            onChange={(event) => setTerminationOrderNumber(event.target.value)}
+                            className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                          />
+                        </label>
+                        <label className="text-xs text-zinc-700 dark:text-zinc-300">
+                          Дата приказа
+                          <input
+                            aria-label="Дата приказа"
+                            type="date"
+                            value={terminationOrderDate}
+                            onChange={(event) => setTerminationOrderDate(event.target.value)}
+                            className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                          />
+                        </label>
+                      </div>
+                      {terminationError ? (
+                        <p className="text-sm text-red-700 dark:text-red-300">{terminationError}</p>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={terminationSaving}
+                        onClick={() => void handleVerifyTermination()}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {terminationSaving ? "Сохранение…" : "Заполнить сведения об увольнении"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={readOnlyCardClass}>
+                      <div className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                        Сведения верифицированы
+                      </div>
+                      <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                        <div><dt className="text-zinc-500">Дата увольнения</dt><dd>{fmtDate(details.termination.termination_date)}</dd></div>
+                        <div><dt className="text-zinc-500">Номер приказа</dt><dd>{details.termination.order_number || "—"}</dd></div>
+                        <div><dt className="text-zinc-500">Дата приказа</dt><dd>{fmtDate(details.termination.order_date)}</dd></div>
+                      </dl>
+                    </div>
+                  )}
+                </section>
+              ) : null}
 
               <section>
                 <h3 className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-50">

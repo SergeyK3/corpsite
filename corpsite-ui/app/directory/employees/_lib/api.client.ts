@@ -10,6 +10,7 @@ import type {
   EmployeeCorrectPayload,
   EmployeeCorrectResponse,
   EmployeeEventsResponse,
+  EmployeeTerminationVerifyPayload,
   UserDTO,
   UserCreatePayload,
 } from "./types";
@@ -36,10 +37,10 @@ function buildQuery(params: Record<string, string | number | null | undefined>):
 }
 
 /**
- * Единая мапа ошибок fetch/HTTP → человеко-читаемый текст для UI.
- * Важно: экспортируется и используется в компонентах.
+ * Р•РґРёРЅР°СЏ РјР°РїР° РѕС€РёР±РѕРє fetch/HTTP в†’ С‡РµР»РѕРІРµРєРѕ-С‡РёС‚Р°РµРјС‹Р№ С‚РµРєСЃС‚ РґР»СЏ UI.
+ * Р’Р°Р¶РЅРѕ: СЌРєСЃРїРѕСЂС‚РёСЂСѓРµС‚СЃСЏ Рё РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІ РєРѕРјРїРѕРЅРµРЅС‚Р°С….
  */
-export function mapApiErrorToMessage(e: unknown, fallback = "Ошибка запроса."): string {
+export function mapApiErrorToMessage(e: unknown, fallback = "РћС€РёР±РєР° Р·Р°РїСЂРѕСЃР°."): string {
   return formatThrownError(e, { fallback });
 }
 
@@ -119,7 +120,7 @@ async function apiDeleteJson<T>(path: string): Promise<T> {
 }
 
 /**
- * Список сотрудников
+ * РЎРїРёСЃРѕРє СЃРѕС‚СЂСѓРґРЅРёРєРѕРІ
  */
 export async function getEmployees(args: {
   status?: string;
@@ -154,7 +155,7 @@ export async function getEmployees(args: {
 }
 
 /**
- * Детали сотрудника
+ * Р”РµС‚Р°Р»Рё СЃРѕС‚СЂСѓРґРЅРёРєР°
  */
 export async function getEmployee(employeeId: string): Promise<EmployeeDetails> {
   const id = String(employeeId).trim();
@@ -163,10 +164,10 @@ export async function getEmployee(employeeId: string): Promise<EmployeeDetails> 
 }
 
 /**
- * Завершение работы сотрудника
+ * Р—Р°РІРµСЂС€РµРЅРёРµ СЂР°Р±РѕС‚С‹ СЃРѕС‚СЂСѓРґРЅРёРєР°
  * Backend: POST /directory/employees/{id}/terminate
  *
- * Совместимость с UI:
+ * РЎРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃ UI:
  * - terminateEmployee(id)
  * - terminateEmployee(id, dateTo)  // dateTo: "YYYY-MM-DD"
  */
@@ -208,7 +209,7 @@ export type EmployeeBulkDeleteResponse = {
 };
 
 /**
- * Административное hard-delete сотрудника (только системный администратор).
+ * РђРґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅРѕРµ hard-delete СЃРѕС‚СЂСѓРґРЅРёРєР° (С‚РѕР»СЊРєРѕ СЃРёСЃС‚РµРјРЅС‹Р№ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ).
  * Backend: DELETE /directory/employees/{id}
  */
 export async function deleteEmployee(employeeId: string): Promise<EmployeeHardDeleteResponse> {
@@ -218,7 +219,7 @@ export async function deleteEmployee(employeeId: string): Promise<EmployeeHardDe
 }
 
 /**
- * Массовое hard-delete сотрудников (только системный администратор).
+ * РњР°СЃСЃРѕРІРѕРµ hard-delete СЃРѕС‚СЂСѓРґРЅРёРєРѕРІ (С‚РѕР»СЊРєРѕ СЃРёСЃС‚РµРјРЅС‹Р№ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ).
  * Backend: POST /directory/employees/bulk-delete
  */
 export async function bulkDeleteEmployees(
@@ -238,12 +239,13 @@ export async function bulkDeleteEmployees(
 }
 
 /**
- * Создание сотрудника
+ * РЎРѕР·РґР°РЅРёРµ СЃРѕС‚СЂСѓРґРЅРёРєР°
  * Backend: POST /directory/employees
  */
 export async function createEmployee(body: EmployeeCreatePayload): Promise<EmployeeDetails> {
   const full_name = String(body.full_name ?? "").trim();
   if (!full_name) throw new Error("full_name is required");
+
 
   const org_unit_id = Number(body.org_unit_id);
   const position_id = Number(body.position_id);
@@ -267,7 +269,7 @@ export async function createEmployee(body: EmployeeCreatePayload): Promise<Emplo
 }
 
 /**
- * Редактирование сотрудника
+ * Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃРѕС‚СЂСѓРґРЅРёРєР°
  * Backend: PATCH /directory/employees/{id}
  */
 export async function updateEmployee(
@@ -293,7 +295,7 @@ export async function updateEmployee(
 }
 
 /**
- * Кадровый перевод сотрудника
+ * РљР°РґСЂРѕРІС‹Р№ РїРµСЂРµРІРѕРґ СЃРѕС‚СЂСѓРґРЅРёРєР°
  * Backend: POST /directory/employees/{id}/transfer
  */
 export async function transferEmployee(
@@ -337,7 +339,7 @@ export async function transferEmployee(
 }
 
 /**
- * Административная корректировка данных сотрудника (audited).
+ * РђРґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅР°СЏ РєРѕСЂСЂРµРєС‚РёСЂРѕРІРєР° РґР°РЅРЅС‹С… СЃРѕС‚СЂСѓРґРЅРёРєР° (audited).
  * Backend: POST /directory/employees/{id}/correct
  */
 export async function correctEmployee(
@@ -372,20 +374,26 @@ export async function correctEmployee(
     );
   }
 
-  const org_unit_id = Number(body.org_unit_id);
-  if (!Number.isFinite(org_unit_id) || org_unit_id < 1) {
+
+  const isCombined = body.domain === "combined";
+  const org_unit_id = body.org_unit_id == null ? null : Number(body.org_unit_id);
+  if (!isCombined && (!Number.isFinite(org_unit_id) || org_unit_id < 1)) {
     throw new Error("org_unit_id is required");
   }
 
   const payload: Record<string, unknown> = {
-    domain: "assignment",
-    org_unit_id,
-    date_from: body.date_from ?? null,
-    date_to: body.date_to ?? null,
+    domain: body.domain,
     effective_date,
     reason,
     comment,
   };
+
+  if (org_unit_id != null && Number.isFinite(org_unit_id) && org_unit_id >= 1) {
+    payload.org_unit_id = org_unit_id;
+  }
+
+  if ("date_from" in body) payload.date_from = body.date_from;
+  if ("date_to" in body) payload.date_to = body.date_to;
 
   if (body.position_id != null && Number.isFinite(Number(body.position_id))) {
     payload.position_id = Number(body.position_id);
@@ -395,6 +403,14 @@ export async function correctEmployee(
     payload.employment_rate = Number(body.employment_rate);
   }
 
+  if (body.status != null) {
+    payload.status = body.status;
+  }
+
+  if (isCombined && body.full_name != null) {
+    payload.full_name = body.full_name;
+  }
+
   return apiPostJson<EmployeeCorrectResponse>(
     `/directory/employees/${encodeURIComponent(id)}/correct`,
     payload
@@ -402,7 +418,7 @@ export async function correctEmployee(
 }
 
 /**
- * Кадровая история сотрудника
+ * РљР°РґСЂРѕРІР°СЏ РёСЃС‚РѕСЂРёСЏ СЃРѕС‚СЂСѓРґРЅРёРєР°
  * Backend: GET /directory/employees/{id}/events
  */
 export async function listEmployeeEvents(
@@ -429,7 +445,7 @@ export async function listEmployeeEvents(
 }
 
 /**
- * Пользователь по employee_id
+ * РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РїРѕ employee_id
  * Backend: GET /directory/users?employee_id=
  */
 export async function getUserByEmployeeId(employeeId: number | string): Promise<UserDTO> {
@@ -440,7 +456,7 @@ export async function getUserByEmployeeId(employeeId: number | string): Promise<
 }
 
 /**
- * Создание пользователя для сотрудника
+ * РЎРѕР·РґР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ СЃРѕС‚СЂСѓРґРЅРёРєР°
  * Backend: POST /directory/users
  */
 export async function createUser(body: UserCreatePayload): Promise<UserDTO> {
@@ -470,7 +486,7 @@ export async function createUser(body: UserCreatePayload): Promise<UserDTO> {
 }
 
 /**
- * Изменение Role Corpsite у существующего Platform User (без пересоздания аккаунта).
+ * РР·РјРµРЅРµРЅРёРµ Role Corpsite Сѓ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РµРіРѕ Platform User (Р±РµР· РїРµСЂРµСЃРѕР·РґР°РЅРёСЏ Р°РєРєР°СѓРЅС‚Р°).
  * Backend: PATCH /directory/users/{user_id}/role
  */
 export async function updateUserRole(userId: number | string, roleId: number | string): Promise<UserDTO> {
@@ -482,7 +498,7 @@ export async function updateUserRole(userId: number | string, roleId: number | s
 }
 
 /**
- * Роли (для select при создании пользователя)
+ * Р РѕР»Рё (РґР»СЏ select РїСЂРё СЃРѕР·РґР°РЅРёРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ)
  */
 export async function getRoles(args?: { limit?: number; offset?: number }): Promise<any> {
   const qs = buildQuery({
@@ -493,7 +509,7 @@ export async function getRoles(args?: { limit?: number; offset?: number }): Prom
 }
 
 /**
- * Должности
+ * Р”РѕР»Р¶РЅРѕСЃС‚Рё
  */
 export async function getPositions(args?: {
   limit?: number;
@@ -513,7 +529,7 @@ export async function getPositions(args?: {
 }
 
 /**
- * Отделы
+ * РћС‚РґРµР»С‹
  */
 export async function getDepartments(args?: { limit?: number; offset?: number }): Promise<any> {
   const qs = buildQuery({
@@ -521,4 +537,16 @@ export async function getDepartments(args?: { limit?: number; offset?: number })
     offset: args?.offset ?? 0,
   });
   return apiGetJson<any>("/directory/departments", qs);
+}
+
+export async function verifyEmployeeTermination(
+  employeeId: string,
+  payload: EmployeeTerminationVerifyPayload,
+): Promise<EmployeeDetails> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+  return apiPatchJson<EmployeeDetails>(
+    `/directory/employees/${encodeURIComponent(id)}/termination-verification`,
+    payload,
+  );
 }

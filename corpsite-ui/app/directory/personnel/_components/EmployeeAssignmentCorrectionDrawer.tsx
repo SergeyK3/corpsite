@@ -13,11 +13,13 @@ import type { EmployeeDetails } from "../../employees/_lib/types";
 const CORRECTION_BASE_PATH = "/directory/personnel/employees/correction";
 
 export type EmployeeAssignmentCorrectionFormValues = {
-  org_unit_id: number;
-  position_id: number | null;
-  employment_rate: number;
-  date_from: string | null;
-  date_to: string | null;
+  full_name?: string;
+  org_unit_id?: number;
+  position_id?: number | null;
+  employment_rate?: number;
+  date_from?: string | null;
+  date_to?: string | null;
+  status?: "active" | "inactive";
   effective_date: string;
   reason: string;
   comment: string;
@@ -46,6 +48,13 @@ function toInputDate(value: string | null | undefined): string {
   if (!raw) return "";
   return raw.slice(0, 10);
 }
+function currentStatus(details: EmployeeDetails): "active" | "inactive" {
+  return details.status === "inactive" || details.is_active === false ? "inactive" : "active";
+}
+function currentFullName(details: EmployeeDetails): string {
+  const record = details as Record<string, unknown>;
+  return String(record.fio ?? record.full_name ?? record.fullName ?? "").trim();
+}
 
 export default function EmployeeAssignmentCorrectionDrawer({
   open,
@@ -58,9 +67,11 @@ export default function EmployeeAssignmentCorrectionDrawer({
   const [orgGroupId, setOrgGroupId] = React.useState<number | null>(null);
   const [orgUnitId, setOrgUnitId] = React.useState<number | null>(null);
   const [positionId, setPositionId] = React.useState<number | null>(null);
+  const [fullName, setFullName] = React.useState("");
   const [employmentRate, setEmploymentRate] = React.useState("1");
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
+  const [status, setStatus] = React.useState<"active" | "inactive">("active");
   const [effectiveDate, setEffectiveDate] = React.useState(todayIsoDate());
   const [reason, setReason] = React.useState("");
   const [comment, setComment] = React.useState("");
@@ -107,9 +118,11 @@ export default function EmployeeAssignmentCorrectionDrawer({
       setOrgGroupId(groupId);
       setOrgUnitId(Number.isFinite(orgUnit) && orgUnit > 0 ? orgUnit : null);
       setPositionId(Number.isFinite(position) && position > 0 ? position : null);
+      setFullName(currentFullName(details));
       setEmploymentRate(Number.isFinite(rate) && rate > 0 ? String(rate) : "1");
       setDateFrom(toInputDate((d.date_from ?? d.dateFrom) as string | null | undefined));
       setDateTo(toInputDate((d.date_to ?? d.dateTo) as string | null | undefined));
+      setStatus(currentStatus(details));
       setEffectiveDate(todayIsoDate());
       setReason("");
       setComment("");
@@ -159,14 +172,27 @@ export default function EmployeeAssignmentCorrectionDrawer({
           className="flex flex-1 flex-col overflow-y-auto px-5 py-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!orgUnitId) return;
             const rate = Number(employmentRate);
+            const currentOrgUnitId = Number(details.org_unit?.unit_id ?? 0);
+            const currentPositionId = Number(details.position?.id ?? 0);
+            const currentRate = Number(details.rate ?? 1);
+            const detailRecord = details as Record<string, unknown>;
+            const currentDateFrom = toInputDate(
+              (detailRecord.date_from ?? detailRecord.dateFrom) as string | null | undefined,
+            );
+            const currentDateTo = toInputDate(
+              (detailRecord.date_to ?? detailRecord.dateTo) as string | null | undefined,
+            );
+            const nextDateFrom = isoDateOrNull(dateFrom);
+            const nextDateTo = isoDateOrNull(dateTo);
             void onSubmit({
-              org_unit_id: orgUnitId,
-              position_id: positionId,
-              employment_rate: Number.isFinite(rate) && rate > 0 ? rate : 1,
-              date_from: isoDateOrNull(dateFrom),
-              date_to: isoDateOrNull(dateTo),
+              ...(fullName.trim() !== currentFullName(details) ? { full_name: fullName.trim() } : {}),
+              ...(orgUnitId != null && orgUnitId !== currentOrgUnitId ? { org_unit_id: orgUnitId } : {}),
+              ...(positionId !== currentPositionId ? { position_id: positionId } : {}),
+              ...(Number.isFinite(rate) && rate > 0 && rate !== currentRate ? { employment_rate: rate } : {}),
+              ...(nextDateFrom !== (currentDateFrom || null) ? { date_from: nextDateFrom } : {}),
+              ...(nextDateTo !== (currentDateTo || null) ? { date_to: nextDateTo } : {}),
+              ...(status === currentStatus(details) ? {} : { status }),
               effective_date: effectiveDate,
               reason: reason.trim(),
               comment: comment.trim(),
@@ -183,6 +209,17 @@ export default function EmployeeAssignmentCorrectionDrawer({
             <div className="text-sm text-zinc-500">Загрузка текущего назначения…</div>
           ) : (
             <div className="space-y-4">
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-zinc-500">{"ФИО *"}</span>
+                <input
+                  data-testid="assignment-correction-full-name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                  required
+                />
+              </label>
+
               <div data-testid="assignment-correction-org-cascade">
                 <OrgScopeFilter
                   basePath={CORRECTION_BASE_PATH}
@@ -237,6 +274,19 @@ export default function EmployeeAssignmentCorrectionDrawer({
               </label>
 
               <label className="grid gap-1">
+                <span className="text-xs font-medium text-zinc-500">Статус *</span>
+                <select
+                  data-testid="assignment-correction-status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value === "inactive" ? "inactive" : "active")}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <option value="active">{"\u0420\u0430\u0431\u043e\u0442\u0430\u0435\u0442"}</option>
+                  <option value="inactive">{"\u041d\u0435 \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442"}</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1">
                 <span className="text-xs font-medium text-zinc-500">Ставка *</span>
                 <input
                   data-testid="assignment-correction-rate"
@@ -253,7 +303,7 @@ export default function EmployeeAssignmentCorrectionDrawer({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1">
-                  <span className="text-xs font-medium text-zinc-500">Дата начала</span>
+                  <span className="text-xs font-medium text-zinc-500">{"\u0414\u0430\u0442\u0430 \u043d\u0430\u0447\u0430\u043b\u0430"}</span>
                   <input
                     data-testid="assignment-correction-date-from"
                     type="date"
@@ -261,10 +311,10 @@ export default function EmployeeAssignmentCorrectionDrawer({
                     onChange={(e) => setDateFrom(e.target.value)}
                     className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                   />
-                  <span className="text-xs text-zinc-500">Оставьте пустым для NULL</span>
+                  <span className="text-xs text-zinc-500">{"\u041e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u043f\u0443\u0441\u0442\u044b\u043c \u0434\u043b\u044f NULL"}</span>
                 </label>
                 <label className="grid gap-1">
-                  <span className="text-xs font-medium text-zinc-500">Дата окончания</span>
+                  <span className="text-xs font-medium text-zinc-500">{"\u0414\u0430\u0442\u0430 \u043e\u043a\u043e\u043d\u0447\u0430\u043d\u0438\u044f"}</span>
                   <input
                     data-testid="assignment-correction-date-to"
                     type="date"
@@ -272,12 +322,12 @@ export default function EmployeeAssignmentCorrectionDrawer({
                     onChange={(e) => setDateTo(e.target.value)}
                     className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                   />
-                  <span className="text-xs text-zinc-500">Оставьте пустым для NULL</span>
+                  <span className="text-xs text-zinc-500">{"\u041e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u043f\u0443\u0441\u0442\u044b\u043c \u0434\u043b\u044f NULL"}</span>
                 </label>
               </div>
 
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-zinc-500">Дата корректировки *</span>
+                <span className="text-xs font-medium text-zinc-500">{"\u0414\u0430\u0442\u0430 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u043a\u0438 *"}</span>
                 <input
                   data-testid="assignment-correction-effective-date"
                   type="date"
@@ -300,7 +350,7 @@ export default function EmployeeAssignmentCorrectionDrawer({
               </label>
 
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-zinc-500">Комментарий *</span>
+                <span className="text-xs font-medium text-zinc-500">{"\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 *"}</span>
                 <textarea
                   data-testid="assignment-correction-comment"
                   value={comment}
@@ -324,7 +374,7 @@ export default function EmployeeAssignmentCorrectionDrawer({
             </button>
             <button
               type="submit"
-              disabled={saving || !prefillDone || !orgUnitId}
+              disabled={saving || !prefillDone || !fullName.trim()}
               data-testid="assignment-correction-submit"
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >

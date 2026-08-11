@@ -358,6 +358,27 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         "ou.is_active AS org_unit_is_active",
     ]
     join_sql += " LEFT JOIN public.org_units ou ON ou.unit_id = e.org_unit_id"
+    has_termination_records = ("employee_termination_records", "table") in _list_relations()
+    if has_termination_records:
+        select_parts += [
+            "etr.termination_record_id AS termination_record_id",
+            "etr.verification_status AS termination_verification_status",
+            "etr.termination_date AS termination_date",
+            "etr.order_number AS termination_order_number",
+            "etr.order_date AS termination_order_date",
+        ]
+        join_sql += (
+            " LEFT JOIN public.employee_termination_records etr"
+            f" ON etr.employee_id = e.{emp_id_col}"
+        )
+    else:
+        select_parts += [
+            "NULL AS termination_record_id",
+            "NULL AS termination_verification_status",
+            "NULL AS termination_date",
+            "NULL AS termination_order_number",
+            "NULL AS termination_order_date",
+        ]
 
     sql = "SELECT " + ", ".join(select_parts) + f" FROM public.{emp_rel} e" + join_sql
     position_expr = (
@@ -438,6 +459,17 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "status": status_norm,
         "date_from": row.get("e_date_from"),
         "date_to": row.get("e_date_to"),
+        "termination": (
+            {
+                "record_id": int(row["termination_record_id"]),
+                "verification_status": row.get("termination_verification_status"),
+                "termination_date": row.get("termination_date"),
+                "order_number": row.get("termination_order_number"),
+                "order_date": row.get("termination_order_date"),
+            }
+            if row.get("termination_record_id") is not None
+            else None
+        ),
         "source": {"relation": emp_rel},
     }
 
@@ -1711,15 +1743,19 @@ def _correct_employee_general(
 def _correct_employee_assignment(
     *,
     employee_id: str,
-    org_unit_id: int,
+    org_unit_id: Optional[int],
     position_id: Optional[int],
     employment_rate: Optional[float],
     date_from: Optional[date],
     date_to: Optional[date],
+    status: Optional[str],
     effective_date: date,
     reason: str,
     comment: str,
     created_by: int,
+    full_name: Optional[str] = None,
+    provided_fields: Optional[set[str]] = None,
+    domain: str = "assignment",
 ) -> Dict[str, Any]:
     target_id_text = _normalize_employee_id_text(employee_id)
     if not target_id_text:
@@ -1729,11 +1765,13 @@ def _correct_employee_assignment(
         """
         SELECT
             employee_id,
+            full_name,
             org_unit_id,
             position_id,
             employment_rate,
             date_from,
-            date_to
+            date_to,
+            is_active
         FROM public.employees
         WHERE CAST(employee_id AS TEXT) = :id_text
         FOR UPDATE
@@ -1762,7 +1800,9 @@ def _correct_employee_assignment(
             position_id = :position_id,
             employment_rate = :employment_rate,
             date_from = :date_from,
-            date_to = :date_to
+            date_to = :date_to,
+            is_active = :is_active,
+            full_name = :full_name
         WHERE employee_id = :employee_id
         """
     )
@@ -1780,6 +1820,7 @@ def _correct_employee_assignment(
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         emp_id = int(row["employee_id"])
+        from_name = str(row["full_name"])
         from_org_unit_id = int(row["org_unit_id"])
         from_position_raw = row.get("position_id")
         from_position_id = int(from_position_raw) if from_position_raw is not None else None
@@ -1787,8 +1828,10 @@ def _correct_employee_assignment(
         from_rate = float(from_rate_raw) if from_rate_raw is not None else None
         from_date_from = row.get("date_from")
         from_date_to = row.get("date_to")
+        from_is_active = bool(row.get("is_active"))
 
-        org_row = conn.execute(q_org_unit, {"unit_id": int(org_unit_id)}).first()
+        effective_org_unit_id = int(org_unit_id) if org_unit_id is not None else from_org_unit_id
+        org_row = conn.execute(q_org_unit, {"unit_id": effective_org_unit_id}).first()
         if org_row is None:
             raise HTTPException(status_code=404, detail="Org unit not found.")
 
@@ -1813,37 +1856,50 @@ def _correct_employee_assignment(
         else:
             effective_to_rate = from_rate if from_rate is not None else 1.0
 
-        effective_date_from = date_from
-        effective_date_to = date_to
+        date_from_provided = provided_fields is None or "date_from" in provided_fields
+        date_to_provided = provided_fields is None or "date_to" in provided_fields
+        effective_date_from = date_from if date_from_provided else from_date_from
+        effective_date_to = date_to if date_to_provided else from_date_to
+        effective_is_active = from_is_active if status is None else status == "active"
+        normalized_name = " ".join((full_name or from_name).split()).strip()
 
         changes: Dict[str, Dict[str, Any]] = {}
-        _append_correction_change(changes, "org_unit_id", from_org_unit_id, int(org_unit_id))
+        _append_correction_change(changes, "full_name", from_name, normalized_name)
+        _append_correction_change(changes, "org_unit_id", from_org_unit_id, effective_org_unit_id)
         _append_correction_change(changes, "position_id", from_position_id, effective_to_position_id)
         _append_correction_change(changes, "employment_rate", from_rate, effective_to_rate)
         _append_correction_change(changes, "date_from", from_date_from, effective_date_from)
         _append_correction_change(changes, "date_to", from_date_to, effective_date_to)
+        _append_correction_change(
+            changes,
+            "status",
+            "active" if from_is_active else "inactive",
+            "active" if effective_is_active else "inactive",
+        )
 
         if not changes:
             raise HTTPException(status_code=422, detail="No changes detected.")
 
-        metadata = {"domain": "assignment", "reason": reason, "changes": changes}
+        metadata = {"domain": domain, "reason": reason, "changes": changes}
 
         conn.execute(
             q_update_employee,
             {
                 "employee_id": emp_id,
-                "org_unit_id": int(org_unit_id),
+                "org_unit_id": effective_org_unit_id,
                 "position_id": effective_to_position_id,
                 "employment_rate": effective_to_rate,
                 "date_from": effective_date_from,
                 "date_to": effective_date_to,
+                "is_active": effective_is_active,
+                "full_name": normalized_name,
             },
         )
 
-        if from_org_unit_id != int(org_unit_id):
+        if from_org_unit_id != effective_org_unit_id:
             conn.execute(
                 q_update_user_unit,
-                {"employee_id": emp_id, "unit_id": int(org_unit_id)},
+                {"employee_id": emp_id, "unit_id": effective_org_unit_id},
             )
 
         return _insert_employee_event(
@@ -1857,7 +1913,7 @@ def _correct_employee_assignment(
             from_org_unit_id=from_org_unit_id,
             from_position_id=from_position_id,
             from_rate=from_rate,
-            to_org_unit_id=int(org_unit_id),
+            to_org_unit_id=effective_org_unit_id,
             to_position_id=effective_to_position_id,
             to_rate=effective_to_rate,
             order_ref=None,
@@ -1880,13 +1936,15 @@ def correct_employee(
     employment_rate: Optional[float] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    status: Optional[str] = None,
+    provided_fields: Optional[set[str]] = None,
 ) -> Dict[str, Any]:
     normalized_comment, normalized_reason = _validate_correction_comment_reason(
         comment=comment,
         reason=reason,
     )
     normalized_domain = (domain or "").strip().lower()
-    if normalized_domain not in {"general", "assignment"}:
+    if normalized_domain not in {"general", "assignment", "combined"}:
         raise HTTPException(status_code=422, detail="Invalid domain.")
 
     if normalized_domain == "general":
@@ -1901,16 +1959,20 @@ def correct_employee(
             created_by=created_by,
         )
 
-    if org_unit_id is None:
+    if normalized_domain == "assignment" and org_unit_id is None:
         raise HTTPException(status_code=422, detail="org_unit_id is required.")
 
     return _correct_employee_assignment(
         employee_id=employee_id,
-        org_unit_id=int(org_unit_id),
+        org_unit_id=int(org_unit_id) if org_unit_id is not None else None,
         position_id=position_id,
         employment_rate=employment_rate,
         date_from=date_from,
         date_to=date_to,
+        status=status,
+        full_name=full_name if normalized_domain == "combined" else None,
+        provided_fields=provided_fields if normalized_domain == "combined" else None,
+        domain=normalized_domain,
         effective_date=effective_date,
         reason=normalized_reason,
         comment=normalized_comment,

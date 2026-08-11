@@ -268,6 +268,51 @@ def test_correct_general_returns_correction_event_with_metadata(client, seed, pr
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_combined_correction_updates_only_changed_fields_in_one_event(client, seed, privileged_headers, monkeypatch):
+    employee_id, from_unit_id, _to, position_id, _alt, full_name, emp_ids, pos_ids, unit_ids = _make_fixture(seed)
+    monkeypatch.setattr(employees_routes, "svc_get_employee", lambda **_kwargs: {"employee_id": employee_id})
+
+    try:
+        response = client.post(
+            f"/directory/employees/{employee_id}/correct",
+            json={
+                "domain": "combined",
+                "full_name": f"{full_name} Updated",
+                "employment_rate": 0.5,
+                "status": "inactive",
+                "effective_date": "2026-08-11",
+                "reason": "Combined correction",
+                "comment": "Verified source data",
+            },
+            headers=privileged_headers,
+        )
+
+        assert response.status_code == 200, response.text
+        metadata = response.json()["event"]["metadata"]
+        assert response.json()["event"]["event_type"] == "CORRECTION"
+        assert metadata["domain"] == "combined"
+        assert set(metadata["changes"]) == {"full_name", "employment_rate", "status"}
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT full_name, org_unit_id, position_id, employment_rate, is_active FROM public.employees WHERE employee_id = :id"),
+                {"id": employee_id},
+            ).mappings().one()
+            assert row["full_name"] == f"{full_name} Updated"
+            assert int(row["org_unit_id"]) == from_unit_id
+            assert int(row["position_id"]) == position_id
+            assert float(row["employment_rate"]) == 0.5
+            assert row["is_active"] is False
+            assert conn.execute(text("SELECT COUNT(*) FROM public.employee_events WHERE employee_id = :id"), {"id": employee_id}).scalar_one() == 1
+            if table_exists(conn, "employee_termination_records"):
+                assert conn.execute(text("SELECT COUNT(*) FROM public.employee_termination_records WHERE employee_id = :id"), {"id": employee_id}).scalar_one() == 0
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_correct_assignment_returns_correction_event_with_metadata(client, seed, privileged_headers):
     employee_id, from_unit_id, to_unit_id, position_id, alt_position_id, _name, emp_ids, pos_ids, unit_ids = (
         _make_fixture(seed)
@@ -587,3 +632,57 @@ def test_correct_assignment_api_returns_refreshed_position(client, seed, monkeyp
 
     assert response.status_code == 200, response.text
     assert response.json()["item"]["position"] == {"id": 502, "name": "Референт"}
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_correct_assignment_updates_status_without_termination_record(client, seed, privileged_headers, monkeypatch):
+    employee_id, from_unit_id, _to, position_id, _alt, _name, emp_ids, pos_ids, unit_ids = _make_fixture(seed)
+    monkeypatch.setattr(
+        employees_routes,
+        "svc_get_employee",
+        lambda **_kwargs: {"employee_id": employee_id, "status": "inactive"},
+    )
+
+    try:
+        response = client.post(
+            f"/directory/employees/{employee_id}/correct",
+            json={
+                "domain": "assignment",
+                "org_unit_id": from_unit_id,
+                "position_id": position_id,
+                "employment_rate": 1.0,
+                "date_from": "2024-01-15",
+                "date_to": None,
+                "status": "inactive",
+                "effective_date": "2026-08-11",
+                "reason": "Ошибка исходного статуса",
+                "comment": "Исправлено по контрольному списку",
+            },
+            headers=privileged_headers,
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["item"]["status"] == "inactive"
+        metadata = response.json()["event"]["metadata"]
+        assert response.json()["event"]["event_type"] == "CORRECTION"
+        assert metadata["changes"]["status"] == {"from": "active", "to": "inactive"}
+
+        with engine.connect() as conn:
+            is_active = conn.execute(
+                text("SELECT is_active FROM public.employees WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            ).scalar_one()
+            event_count = conn.execute(
+                text("SELECT COUNT(*) FROM public.employee_events WHERE employee_id = :employee_id"),
+                {"employee_id": employee_id},
+            ).scalar_one()
+            assert is_active is False
+            assert int(event_count) == 1
+            if table_exists(conn, "employee_termination_records"):
+                termination_count = conn.execute(
+                    text("SELECT COUNT(*) FROM public.employee_termination_records WHERE employee_id = :employee_id"),
+                    {"employee_id": employee_id},
+                ).scalar_one()
+                assert int(termination_count) == 0
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)

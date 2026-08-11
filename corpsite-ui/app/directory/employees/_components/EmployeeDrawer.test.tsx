@@ -10,6 +10,7 @@ import type { EmployeeDetails } from "../_lib/types";
 
 vi.mock("../_lib/api.client", () => ({
   getEmployee: vi.fn(),
+  verifyEmployeeTermination: vi.fn(),
   mapApiErrorToMessage: vi.fn((e: unknown) => String(e)),
 }));
 
@@ -97,6 +98,54 @@ describe("EmployeeDrawer preview contract", () => {
     });
 
     expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
+  });
+
+  it("shows empty unverified termination facts and a completion action", async () => {
+    vi.mocked(getEmployee).mockResolvedValue({
+      ...activeEmployee,
+      status: "inactive",
+      date_to: null,
+      termination: {
+        record_id: 9,
+        verification_status: "UNVERIFIED",
+        termination_date: null,
+        order_number: null,
+        order_date: null,
+      },
+    });
+
+    render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Сведения не верифицированы")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Дата увольнения")).toHaveValue("");
+    expect(screen.getByLabelText("Номер приказа")).toHaveValue("");
+    expect(screen.getByLabelText("Дата приказа")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Заполнить сведения об увольнении" })).toBeInTheDocument();
+  });
+
+  it("hides the warning after termination verification", async () => {
+    vi.mocked(getEmployee).mockResolvedValue({
+      ...activeEmployee,
+      status: "inactive",
+      date_to: "2024-02-29",
+      termination: {
+        record_id: 9,
+        verification_status: "VERIFIED",
+        termination_date: "2024-02-29",
+        order_number: "15-к",
+        order_date: "2024-02-28",
+      },
+    });
+
+    render(<EmployeeDrawer employeeId="42" open onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Сведения верифицированы")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Сведения не верифицированы")).not.toBeInTheDocument();
+    expect(screen.getByText("15-к")).toBeInTheDocument();
   });
 
   it("shows compact account summary when user is linked", async () => {

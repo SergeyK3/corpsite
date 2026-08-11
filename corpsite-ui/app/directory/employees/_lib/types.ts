@@ -38,6 +38,13 @@ export type EmployeeDTO = {
 
   date_from: string | null;
   date_to: string | null;
+  termination?: {
+    record_id: number;
+    verification_status: "UNVERIFIED" | "VERIFIED";
+    termination_date: string | null;
+    order_number: string | null;
+    order_date: string | null;
+  } | null;
 
   user?: LinkedUserDTO | null;
 
@@ -59,6 +66,12 @@ export type EmployeeCreatePayload = {
 
 export type EmployeeUpdatePayload = {
   full_name?: string;
+};
+
+export type EmployeeTerminationVerifyPayload = {
+  termination_date: string;
+  order_number: string;
+  order_date: string;
 };
 
 export type EmployeeEventDTO = {
@@ -121,12 +134,30 @@ export type EmployeeCorrectAssignmentPayload = {
   employment_rate?: number;
   date_from: string | null;
   date_to?: string | null;
+  status?: "active" | "inactive";
   effective_date: string;
   reason: string;
   comment: string;
 };
 
-export type EmployeeCorrectPayload = EmployeeCorrectGeneralPayload | EmployeeCorrectAssignmentPayload;
+export type EmployeeCorrectCombinedPayload = {
+  domain: "combined";
+  full_name?: string;
+  org_unit_id?: number;
+  position_id?: number;
+  employment_rate?: number;
+  date_from?: string | null;
+  date_to?: string | null;
+  status?: "active" | "inactive";
+  effective_date: string;
+  reason: string;
+  comment: string;
+};
+
+export type EmployeeCorrectPayload =
+  | EmployeeCorrectGeneralPayload
+  | EmployeeCorrectAssignmentPayload
+  | EmployeeCorrectCombinedPayload;
 
 export type EmployeeCorrectResponse = {
   item: EmployeeDetails;
@@ -233,7 +264,12 @@ export function mapEmployee(dto: EmployeeDTO): Employee {
   }
 
   const dateTo = dto.date_to ?? null;
-  const isActive = dto.status === "active" || dateTo == null;
+  const isActive =
+    dto.status === "active"
+      ? true
+      : dto.status === "inactive"
+        ? false
+        : dateTo == null;
 
   return {
     id: dto.id,

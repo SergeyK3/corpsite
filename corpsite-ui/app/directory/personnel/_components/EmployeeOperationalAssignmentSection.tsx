@@ -199,12 +199,14 @@ export default function EmployeeOperationalAssignmentSection({
     setCorrectionError(null);
     try {
       const result = await correctEmployee(employeeId, {
-        domain: "assignment",
-        org_unit_id: values.org_unit_id,
-        position_id: values.position_id ?? undefined,
-        employment_rate: values.employment_rate,
-        date_from: values.date_from,
-        date_to: values.date_to,
+        domain: "combined",
+        ...(values.full_name ? { full_name: values.full_name } : {}),
+        ...(values.org_unit_id != null ? { org_unit_id: values.org_unit_id } : {}),
+        ...(values.position_id != null ? { position_id: values.position_id } : {}),
+        ...(values.employment_rate != null ? { employment_rate: values.employment_rate } : {}),
+        ...(values.date_from !== undefined ? { date_from: values.date_from } : {}),
+        ...(values.date_to !== undefined ? { date_to: values.date_to } : {}),
+        ...(values.status ? { status: values.status } : {}),
         effective_date: values.effective_date,
         reason: values.reason,
         comment: values.comment,
