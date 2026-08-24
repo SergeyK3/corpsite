@@ -8,20 +8,12 @@ import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
 import {
+  listHREventRegistry,
   listPersonnelEvents,
   mapPersonnelJournalApiError,
+  type HREventRegistryItem,
   type PersonnelEventRow,
 } from "../_lib/personnelJournalApi.client";
-
-const EVENT_TYPES = [
-  { value: "", label: "Все" },
-  { value: "HIRE", label: "Приём" },
-  { value: "TRANSFER", label: "Перевод" },
-  { value: "POSITION_CHANGE", label: "Смена должности" },
-  { value: "RATE_CHANGE", label: "Изменение ставки" },
-  { value: "CORRECTION", label: "Исправление" },
-  { value: "TERMINATION", label: "Увольнение" },
-] as const;
 
 const EVENT_BADGE: Record<string, string> = {
   HIRE: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
@@ -245,6 +237,8 @@ export default function PersonnelJournalPageClient() {
   const searchParams = useSearchParams();
 
   const [items, setItems] = React.useState<PersonnelEventRow[]>([]);
+  const [registryItems, setRegistryItems] = React.useState<HREventRegistryItem[]>([]);
+  const [registryError, setRegistryError] = React.useState<string | null>(null);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -253,7 +247,11 @@ export default function PersonnelJournalPageClient() {
     router.push(buildEmployeeCardHref(id, { section: "history" }));
   }
 
+  const eventCategory = searchParams.get("event_category") || "";
   const eventType = searchParams.get("event_type") || "";
+  const leaveKind = searchParams.get("leave_kind") || "";
+  const leaveOperation = searchParams.get("leave_operation") || "";
+  const isLeaveCategory = eventCategory === "LEAVE";
   const dateFrom = searchParams.get("date_from") || "";
   const dateTo = searchParams.get("date_to") || "";
   const employeeSearch = searchParams.get("q") || "";
@@ -262,12 +260,33 @@ export default function PersonnelJournalPageClient() {
     [searchParams],
   );
 
+  React.useEffect(() => {
+    let active = true;
+    void listHREventRegistry()
+      .then((body) => {
+        if (!active) return;
+        setRegistryItems(Array.isArray(body.items) ? body.items : []);
+        setRegistryError(null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRegistryItems([]);
+        setRegistryError("Не удалось загрузить классификатор кадровых событий");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const body = await listPersonnelEvents({
-        event_type: eventType || undefined,
+        event_category: eventCategory || undefined,
+        event_type: isLeaveCategory ? undefined : eventType || undefined,
+        leave_kind: isLeaveCategory ? leaveKind || undefined : undefined,
+        leave_operation: isLeaveCategory ? leaveOperation || undefined : undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         org_group_id: orgFilters.org_group_id,
@@ -285,7 +304,7 @@ export default function PersonnelJournalPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [eventType, dateFrom, dateTo, orgFilters.org_group_id, orgFilters.org_unit_id, orgFilters.position_id]);
+  }, [eventCategory, eventType, leaveKind, leaveOperation, isLeaveCategory, dateFrom, dateTo, orgFilters.org_group_id, orgFilters.org_unit_id, orgFilters.position_id]);
 
   React.useEffect(() => {
     void load();
@@ -300,16 +319,59 @@ export default function PersonnelJournalPageClient() {
     });
   }, [employeeSearch, items]);
 
+  const categories = React.useMemo(() => {
+    const byCode = new Map<string, { code: string; label: string }>();
+    registryItems.forEach((item) => {
+      if (!byCode.has(item.category)) {
+        byCode.set(item.category, { code: item.category, label: item.category_label_ru });
+      }
+    });
+    return [...byCode.values()];
+  }, [registryItems]);
+  const categoryItems = React.useMemo(
+    () => registryItems.filter((item) => !eventCategory || item.category === eventCategory),
+    [eventCategory, registryItems],
+  );
+  const leaveItems = React.useMemo(
+    () => registryItems.filter((item) => item.category === "LEAVE"),
+    [registryItems],
+  );
+  const leaveKinds = React.useMemo(
+    () => [...new Map(leaveItems.filter((item) => item.leave_kind).map((item) => [item.leave_kind!, item])).values()],
+    [leaveItems],
+  );
+  const leaveOperations = React.useMemo(
+    () => [...new Map(leaveItems.filter((item) => (
+      item.operation && (!leaveKind || item.leave_kind === leaveKind)
+    )).map((item) => [item.operation!, item])).values()],
+    [leaveItems, leaveKind],
+  );
+
   function updateFilters(next: {
+    event_category?: string;
     event_type?: string;
+    leave_kind?: string;
+    leave_operation?: string;
     date_from?: string;
     date_to?: string;
     q?: string;
   }) {
     const params = new URLSearchParams(searchParams.toString());
+    if (next.event_category !== undefined) {
+      if (next.event_category) params.set("event_category", next.event_category);
+      else params.delete("event_category");
+    }
     if (next.event_type !== undefined) {
       if (next.event_type) params.set("event_type", next.event_type);
       else params.delete("event_type");
+    }
+    if (next.leave_kind !== undefined) {
+      if (next.leave_kind) params.set("leave_kind", next.leave_kind);
+      else params.delete("leave_kind");
+    }
+    if (next.leave_operation !== undefined) {
+      if (next.leave_operation) params.set("leave_operation", next.leave_operation);
+      else params.delete("leave_operation");
     }
     if (next.date_from !== undefined) {
       if (next.date_from) params.set("date_from", next.date_from);
@@ -338,23 +400,82 @@ export default function PersonnelJournalPageClient() {
 
       <TaskOrgFiltersBar basePath="/directory/personnel/journal" className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40" />
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <form
+        className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load();
+        }}
+      >
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Тип события
+            Категория события
           </label>
           <select
-            value={eventType}
-            onChange={(e) => updateFilters({ event_type: e.target.value })}
+            aria-label="Категория события"
+            value={eventCategory}
+            onChange={(e) => updateFilters({
+              event_category: e.target.value,
+              event_type: "",
+              leave_kind: "",
+              leave_operation: "",
+            })}
             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           >
-            {EVENT_TYPES.map((t) => (
-              <option key={t.value || "all"} value={t.value}>
-                {t.label}
-              </option>
+            <option value="">Все категории</option>
+            {categories.map((category) => (
+              <option key={category.code} value={category.code}>{category.label}</option>
             ))}
           </select>
         </div>
+        {!isLeaveCategory ? (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Событие
+            </label>
+            <select
+              aria-label="Событие"
+              value={eventType}
+              onChange={(e) => updateFilters({ event_type: e.target.value })}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              <option value="">Все события</option>
+              {categoryItems.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label_ru}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        {isLeaveCategory ? (
+          <>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Вид отпуска</label>
+              <select
+                aria-label="Вид отпуска"
+                value={leaveKind}
+                onChange={(e) => updateFilters({ leave_kind: e.target.value, leave_operation: "", event_type: "" })}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              >
+                <option value="">Все виды</option>
+                {leaveKinds.map((item) => <option key={item.leave_kind} value={item.leave_kind!}>{item.leave_kind_label_ru}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Операция</label>
+              <select
+                aria-label="Операция отпуска"
+                value={leaveOperation}
+                onChange={(e) => updateFilters({ leave_operation: e.target.value, event_type: "" })}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              >
+                <option value="">Все операции</option>
+                {leaveOperations.map((item) => <option key={item.operation} value={item.operation!}>{item.operation_label_ru}</option>)}
+              </select>
+            </div>
+          </>
+        ) : null}
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Дата с
@@ -396,7 +517,13 @@ export default function PersonnelJournalPageClient() {
               ? `${filteredItems.length} из ${total} событий`
               : `${total} событий`}
         </div>
-      </div>
+      </form>
+
+      {registryError ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/55 dark:bg-amber-950/35 dark:text-amber-100">
+          {registryError}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-200">

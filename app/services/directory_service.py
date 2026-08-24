@@ -10,7 +10,11 @@ from fastapi import HTTPException
 from sqlalchemy import bindparam, text
 
 from app.db.engine import engine
-from app.services.hr_event_registry import get_event_class, get_event_label
+from app.services.hr_event_registry import (
+    get_event_class,
+    get_event_label,
+    resolve_journal_event_codes,
+)
 from app.services.personnel_orders_query_service import personnel_orders_available
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
@@ -2064,7 +2068,10 @@ def list_employee_events(
 
 def list_personnel_events(
     *,
+    event_category: Optional[str] = None,
     event_type: Optional[str] = None,
+    leave_kind: Optional[str] = None,
+    leave_operation: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     org_group_id: Optional[int] = None,
@@ -2074,19 +2081,15 @@ def list_personnel_events(
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Org-wide personnel event register (Track B demo)."""
-    allowed_types = {
-        "TRANSFER",
-        "CORRECTION",
-        "HIRE",
-        "TERMINATION",
-        "POSITION_CHANGE",
-        "RATE_CHANGE",
-    }
-    if event_type is not None:
-        normalized_type = event_type.strip().upper()
-        if normalized_type not in allowed_types:
-            raise HTTPException(status_code=422, detail="Invalid event_type filter.")
-        event_type = normalized_type
+    try:
+        registry_codes = resolve_journal_event_codes(
+            event_category=event_category,
+            event_type=event_type,
+            leave_kind=leave_kind,
+            leave_operation=leave_operation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     where_parts: List[str] = ["TRUE"]
     params: Dict[str, Any] = {
@@ -2094,9 +2097,12 @@ def list_personnel_events(
         "offset": int(offset),
     }
 
-    if event_type is not None:
-        where_parts.append("ev.event_type = :event_type")
-        params["event_type"] = event_type
+    if registry_codes is not None:
+        if registry_codes:
+            where_parts.append("ev.event_type IN :event_types")
+            params["event_types"] = sorted(registry_codes)
+        else:
+            where_parts.append("FALSE")
     if date_from is not None:
         where_parts.append("ev.effective_date >= :date_from")
         params["date_from"] = date_from
@@ -2175,6 +2181,10 @@ def list_personnel_events(
         LIMIT :limit OFFSET :offset
         """
     )
+
+    if registry_codes:
+        q_total = q_total.bindparams(bindparam("event_types", expanding=True))
+        q_list = q_list.bindparams(bindparam("event_types", expanding=True))
 
     def _event_rate(v: Any) -> Optional[float]:
         if v is None:

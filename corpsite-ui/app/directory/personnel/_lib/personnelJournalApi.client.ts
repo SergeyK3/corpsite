@@ -70,8 +70,34 @@ export type PersonnelEventsResponse = {
   total: number;
 };
 
+export type HREventRegistryItem = {
+  code: string;
+  label_ru: string;
+  label_kk: string | null;
+  category: string;
+  category_label_ru: string;
+  category_label_kk: string;
+  event_class: string;
+  leave_kind: string | null;
+  operation: string | null;
+  leave_kind_label_ru: string | null;
+  leave_kind_label_kk: string | null;
+  operation_label_ru: string | null;
+  operation_label_kk: string | null;
+  automatic_effect: string;
+  journal_filterable: boolean;
+};
+
+export type HREventRegistryResponse = {
+  version: string;
+  items: HREventRegistryItem[];
+};
+
 export async function listPersonnelEvents(args?: {
+  event_category?: string;
   event_type?: string;
+  leave_kind?: string;
+  leave_operation?: string;
   date_from?: string;
   date_to?: string;
   org_group_id?: number;
@@ -81,7 +107,10 @@ export async function listPersonnelEvents(args?: {
   offset?: number;
 }): Promise<PersonnelEventsResponse> {
   const qs = buildQuery({
+    event_category: args?.event_category,
     event_type: args?.event_type,
+    leave_kind: args?.leave_kind,
+    leave_operation: args?.leave_operation,
     date_from: args?.date_from,
     date_to: args?.date_to,
     org_group_id: args?.org_group_id,
@@ -91,4 +120,8 @@ export async function listPersonnelEvents(args?: {
     offset: args?.offset ?? 0,
   });
   return apiGetJson<PersonnelEventsResponse>("/directory/personnel-events", qs);
+}
+
+export async function listHREventRegistry(): Promise<HREventRegistryResponse> {
+  return apiGetJson<HREventRegistryResponse>("/directory/hr-event-registry");
 }

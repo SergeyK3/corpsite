@@ -24,7 +24,13 @@ router = APIRouter()
 
 @router.get("/personnel-events")
 def list_personnel_events_register(
-    event_type: Optional[str] = Query(default=None),
+    event_category: Optional[str] = Query(default=None),
+
+    event_type: Optional[str] = Query(default=None),
+
+    leave_kind: Optional[str] = Query(default=None),
+
+    leave_operation: Optional[str] = Query(default=None),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     org_group_id: Optional[int] = Query(default=None, ge=1),
@@ -40,7 +46,13 @@ def list_personnel_events_register(
 
         return call_service(
             svc_list_personnel_events,
-            event_type=event_type,
+            event_category=event_category,
+
+            event_type=event_type,
+
+            leave_kind=leave_kind,
+
+            leave_operation=leave_operation,
             date_from=date_from,
             date_to=date_to,
             org_group_id=org_group_id,

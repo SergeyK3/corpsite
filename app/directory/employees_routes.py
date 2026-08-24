@@ -31,7 +31,7 @@ from app.services.directory_service import (
     correct_employee as svc_correct_employee,
     list_employee_events as svc_list_employee_events,
 )
-from app.services.hr_event_registry import list_registry_for_ui
+from app.services.hr_event_registry import HR_EVENT_REGISTRY_VERSION, list_journal_registry_for_ui
 from app.services.personnel_events_service import create_personnel_event
 from app.services.employee_termination_verification_service import (
     TerminationVerificationError,
@@ -43,7 +43,12 @@ from app.services.manual_assignment_change_service import (
 )
 
 from .common import as_http500, call_service
-from .rbac import compute_scope, require_privileged_or_403, require_personnel_visibility_or_403
+from .rbac import (
+    compute_scope,
+    require_personnel_admin_or_403,
+    require_privileged_or_403,
+    require_personnel_visibility_or_403,
+)
 
 router = APIRouter()
 
@@ -642,9 +647,8 @@ def get_hr_event_registry(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        if not _is_privileged(user):
-            raise HTTPException(status_code=403, detail="Forbidden.")
-        return {"items": list_registry_for_ui()}
+        require_personnel_admin_or_403(user)
+        return {"version": HR_EVENT_REGISTRY_VERSION, "items": list_journal_registry_for_ui()}
     except HTTPException:
         raise
     except Exception as e:
