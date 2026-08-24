@@ -454,10 +454,24 @@ def list_positions_crud(
                     SELECT 1
                     FROM public.employees e
                     WHERE e.{emp_meta['position_col']} = p.position_id
+                      AND e.is_active = TRUE
                       AND ({org_scope.where_sql})
                 )
                 """.strip()
             )
+            if org_unit_id is not None:
+                params["org_unit_id"] = int(org_unit_id)
+                where_parts.append(
+                    """
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM public.org_unit_allowed_positions oap_inactive
+                        WHERE oap_inactive.org_unit_id = :org_unit_id
+                          AND oap_inactive.position_id = p.position_id
+                          AND oap_inactive.is_active = FALSE
+                    )
+                    """.strip()
+                )
 
     with engine.begin() as conn:
         dependency_specs = []
