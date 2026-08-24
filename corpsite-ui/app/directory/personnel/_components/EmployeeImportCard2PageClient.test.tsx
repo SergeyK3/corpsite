@@ -32,8 +32,11 @@ vi.mock("./EmployeeOperationalAssignmentSection", () => ({
 }));
 vi.mock("./EmployeePersonnelHistorySection", () => ({ default: () => <div /> }));
 vi.mock("./EmployeeCardGeneralSection", () => ({
-  default: ({ details }: { details: { position?: { name?: string | null } } }) => (
-    <div data-testid="general-position">{details.position?.name ?? "—"}</div>
+  default: ({ details }: { details: { position?: { name?: string | null }; status?: string } }) => (
+    <>
+      <div data-testid="general-position">{details.position?.name ?? "—"}</div>
+      <div data-testid="general-status">{details.status ?? "—"}</div>
+    </>
   ),
 }));
 vi.mock("./EmployeeCardOrdersSection", () => ({ default: () => <div /> }));
@@ -90,6 +93,21 @@ describe("EmployeeImportCard2PageClient", () => {
     await waitFor(() => {
       expect(getEmployeeMock).toHaveBeenCalledTimes(2);
       expect(screen.getByTestId("general-position")).toHaveTextContent("Референт");
+    });
+  });
+  it("reloads the card shell with the corrected status", async () => {
+    getEmployeeMock
+      .mockResolvedValueOnce({ employee_id: 228, fio: "Достоярова", status: "active" })
+      .mockResolvedValueOnce({ employee_id: 228, fio: "Достоярова", status: "inactive" });
+
+    render(<EmployeeImportCard2PageClient employeeId="228" />);
+
+    expect(await screen.findByTestId("general-status")).toHaveTextContent("active");
+    fireEvent.click(screen.getByTestId("assignment-changed"));
+
+    await waitFor(() => {
+      expect(getEmployeeMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("general-status")).toHaveTextContent("inactive");
     });
   });
 });
