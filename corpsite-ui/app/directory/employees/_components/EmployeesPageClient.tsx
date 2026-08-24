@@ -1,4 +1,4 @@
-// FILE: corpsite-ui/app/directory/employees/_components/EmployeesPageClient.tsx
+﻿// FILE: corpsite-ui/app/directory/employees/_components/EmployeesPageClient.tsx
 "use client";
 
 import * as React from "react";
@@ -244,6 +244,25 @@ export default function EmployeesPageClient(props: Props) {
     router.replace(`${routeBase}?${nextParams.toString()}`);
   }
 
+  function handleStatusChange(nextStatus: string) {
+    if (nextStatus !== "inactive") {
+      updateUrl({ status: nextStatus }, { resetOffset: true });
+      return;
+    }
+
+    const nextParams = new URLSearchParams(sp.toString());
+    for (const key of ORG_FILTER_PARAM_KEYS) {
+      nextParams.delete(key);
+    }
+    nextParams.delete("department_id");
+    nextParams.delete("position_id");
+    nextParams.set("status", nextStatus);
+    nextParams.set("offset", "0");
+    if (!nextParams.get("limit")) nextParams.set("limit", "50");
+
+    router.replace(`${routeBase}?${nextParams.toString()}`);
+  }
+
   function handleRefresh() {
     setError(null);
 
@@ -340,13 +359,14 @@ export default function EmployeesPageClient(props: Props) {
     setError(null);
 
     try {
+      const inactiveStatus = status === "inactive";
       const json = await getEmployees({
         status,
-        department_id: departmentId || null,
-        position_id: positionId || null,
-        org_group_id: orgGroupId ?? null,
-        org_unit_id: orgUnitId || null,
-        include_children: Boolean(orgUnitId),
+        department_id: inactiveStatus ? null : departmentId || null,
+        position_id: inactiveStatus ? null : positionId || null,
+        org_group_id: inactiveStatus ? null : orgGroupId ?? null,
+        org_unit_id: inactiveStatus ? null : orgUnitId || null,
+        include_children: !inactiveStatus && Boolean(orgUnitId),
         include_applicants: false,
         q: qText || null,
         limit: String(limitNum),
@@ -575,7 +595,7 @@ export default function EmployeesPageClient(props: Props) {
 
               <select
                 value={status}
-                onChange={(e) => updateUrl({ status: e.target.value }, { resetOffset: true })}
+                onChange={(e) => handleStatusChange(e.target.value)}
                 className="h-9 min-w-[160px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition focus:border-zinc-400"
               >
                 <option value="all" className="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
