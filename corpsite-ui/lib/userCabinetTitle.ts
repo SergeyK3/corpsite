@@ -10,14 +10,25 @@ export function resolvePlatformRoleLabel(me: MeInfo | null | undefined): string 
   return String(me?.role_name_ru ?? me?.role_name ?? "").trim();
 }
 
+/** Platform roles whose cabinet identity follows RBAC, not a stale HR position snapshot. */
+const PLATFORM_ROLE_CABINET_IDENTITY_CODES = new Set(["HR_HEAD"]);
+
+export function platformRoleDefinesCabinetIdentity(roleCode: string | null | undefined): boolean {
+  return PLATFORM_ROLE_CABINET_IDENTITY_CODES.has(String(roleCode ?? "").trim().toUpperCase());
+}
+
 /**
  * Cabinet header title: employee position first, Platform Role as fallback.
- * RBAC fields are unchanged; this affects display only.
+ * HR_HEAD is an exception: Platform Role change switches cabinet before HR updates position.
  */
 export function resolveCabinetTitle(me: MeInfo | null | undefined): string {
+  const role = resolvePlatformRoleLabel(me);
+  if (platformRoleDefinesCabinetIdentity(me?.role_code) && role) {
+    return role;
+  }
+
   const position = resolveEmployeePositionTitle(me);
   if (position) return position;
 
-  const role = resolvePlatformRoleLabel(me);
   return role || "Сотрудник";
 }
