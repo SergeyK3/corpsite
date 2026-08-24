@@ -1,13 +1,17 @@
 """HR_HEAD receives only the Incoming Information read permission via ROLE grant."""
 from __future__ import annotations
 
+import os
+from contextlib import contextmanager
 import runpy
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from app.db.engine import engine
@@ -67,6 +71,52 @@ def _load_migration(filename: str) -> dict:
     )
 
 
+@contextmanager
+def _fresh_database_at_revision(revision: str):
+    """Provide a disposable empty PostgreSQL database migrated to ``revision``."""
+    database_name = f"corpsite_hr_head_{uuid4().hex[:12]}"
+    base_url = str(engine.url.render_as_string(hide_password=False))
+    admin_url = base_url.rsplit("/", 1)[0] + "/postgres"
+    database_url = base_url.rsplit("/", 1)[0] + f"/{database_name}"
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    database_engine = create_engine(database_url)
+    previous_database_url = os.environ.get("DATABASE_URL")
+
+    with admin_engine.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{database_name}"'))
+
+    try:
+        os.environ["DATABASE_URL"] = database_url
+        command.upgrade(Config("alembic.ini"), revision)
+        yield database_engine
+    finally:
+        if previous_database_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous_database_url
+        database_engine.dispose()
+        with admin_engine.connect() as conn:
+            conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = :database_name AND pid <> pg_backend_pid()"
+                ),
+                {"database_name": database_name},
+            )
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{database_name}"'))
+        admin_engine.dispose()
+
+
+def _seed_g4_prerequisites(conn) -> None:
+    conn.execute(
+        text(
+            "INSERT INTO public.roles (role_id, name, code) "
+            "VALUES (14, 'Fresh test HR head', 'HR_HEAD') "
+            "ON CONFLICT DO NOTHING"
+        )
+    )
+
+
 def test_migration_grants_only_read_to_production_hr_head(monkeypatch) -> None:
     migration = _load_migration("g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py")
     statements: list[str] = []
@@ -83,7 +133,68 @@ def test_migration_grants_only_read_to_production_hr_head(monkeypatch) -> None:
     assert "ar.code = 'INCOMING_INFO_READ'" in statement
     assert "r.role_id = 14" in statement
     assert "r.code = 'HR_HEAD'" in statement
+    assert "COALESCE" not in statement
+    assert ", 1" not in statement
     assert all(code not in statement for code in _MUTATION_OR_BYPASS_CODES)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_migration_skips_grant_on_fresh_database_without_users(monkeypatch) -> None:
+    with _fresh_database_at_revision("f3a4b5c6d7e8") as fresh_engine:
+        migration = _load_migration("g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py")
+        with fresh_engine.begin() as conn:
+            assert conn.execute(text("SELECT count(*) FROM public.users")).scalar_one() == 0
+            _seed_g4_prerequisites(conn)
+            monkeypatch.setattr(
+                migration["op"], "execute", lambda statement: conn.execute(text(statement))
+            )
+            migration["upgrade"]()
+
+            assert conn.execute(
+                text(
+                    "SELECT count(*) FROM public.access_grants "
+                    "WHERE target_type = 'ROLE' AND target_id = 14"
+                )
+            ).scalar_one() == 0
+            assert conn.execute(
+                text(
+                    "SELECT count(*) FROM pg_constraint "
+                    "WHERE conrelid = 'public.access_grants'::regclass "
+                    "AND conname = 'access_grants_granted_by_user_id_fkey'"
+                )
+            ).scalar_one() == 1
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_migration_uses_real_active_admin_id_not_user_id_one(monkeypatch) -> None:
+    with _fresh_database_at_revision("f3a4b5c6d7e8") as fresh_engine:
+        migration = _load_migration("g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py")
+        with fresh_engine.begin() as conn:
+            _seed_g4_prerequisites(conn)
+            role_id = conn.execute(
+                text("SELECT role_id FROM public.roles WHERE role_id = 14 AND code = 'HR_HEAD'")
+            ).scalar_one()
+            admin_id = 777001
+            conn.execute(
+                text(
+                    "INSERT INTO public.users (user_id, full_name, role_id, login, is_active) "
+                    "VALUES (:user_id, 'Fresh test admin', :role_id, 'admin', TRUE)"
+                ),
+                {"user_id": admin_id, "role_id": role_id},
+            )
+            monkeypatch.setattr(
+                migration["op"], "execute", lambda statement: conn.execute(text(statement))
+            )
+            migration["upgrade"]()
+
+            granted_by = conn.execute(
+                text(
+                    "SELECT granted_by_user_id FROM public.access_grants "
+                    "WHERE target_type = 'ROLE' AND target_id = 14"
+                )
+            ).scalar_one()
+            assert granted_by == admin_id
+            assert granted_by != 1
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

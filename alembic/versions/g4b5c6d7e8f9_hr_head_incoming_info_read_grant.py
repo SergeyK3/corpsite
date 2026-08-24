@@ -28,20 +28,18 @@ def upgrade() -> None:
             ar.access_role_id,
             'ROLE',
             r.role_id,
-            COALESCE(
-                (
-                    SELECT u.user_id
-                    FROM public.users u
-                    WHERE lower(u.login) = 'admin'
-                      AND u.is_active = TRUE
-                    ORDER BY u.user_id
-                    LIMIT 1
-                ),
-                1
-            ),
+            u.user_id,
             '{_GRANT_REASON}'
         FROM public.access_roles ar
         CROSS JOIN public.roles r
+        CROSS JOIN LATERAL (
+            SELECT u.user_id
+            FROM public.users u
+            WHERE lower(u.login) = 'admin'
+              AND u.is_active = TRUE
+            ORDER BY u.user_id
+            LIMIT 1
+        ) u
         WHERE ar.code = '{_PERMISSION_CODE}'
           AND ar.is_active = TRUE
           AND r.role_id = {_ROLE_ID}
