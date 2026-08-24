@@ -12,9 +12,23 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
+from app.security.admin_permissions import has_any_personnel_read_permission
 from app.security.directory_scope import is_privileged as _is_privileged
 
 router = APIRouter()
+
+
+def _can_read_contacts(user: Dict[str, Any]) -> bool:
+    if _is_privileged(user):
+        return True
+    uid = int(user.get("user_id") or 0)
+    if uid and has_any_personnel_read_permission(uid):
+        return True
+    return bool(user.get("has_personnel_admin"))
+
+
+def _can_manage_contacts(user: Dict[str, Any]) -> bool:
+    return _is_privileged(user) or bool(user.get("has_personnel_admin"))
 
 
 class ContactUpsert(BaseModel):
@@ -318,7 +332,7 @@ def list_contacts(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not _can_read_contacts(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     params: Dict[str, Any] = {"limit": int(limit), "offset": int(offset)}
@@ -464,7 +478,7 @@ def get_contact(
     contact_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not _can_read_contacts(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     with engine.begin() as conn:
@@ -481,7 +495,7 @@ def create_contact(
     payload: ContactUpsert,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not _can_manage_contacts(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     full_name = _normalize_text(payload.full_name)
@@ -591,7 +605,7 @@ def update_contact(
     payload: ContactUpsert,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not _can_manage_contacts(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     full_name = _normalize_text(payload.full_name)
@@ -671,7 +685,7 @@ def delete_contact(
     contact_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not _can_manage_contacts(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     q_delete = text(

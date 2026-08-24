@@ -7,9 +7,18 @@ from time import monotonic
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import exc as sa_exc, text
 from sqlalchemy.engine import Connection
 
+from app.directory.contacts_routes import (
+    ContactUpsert,
+    _can_manage_contacts,
+    _can_read_contacts,
+    create_contact,
+    delete_contact,
+    update_contact,
+)
 from app.directory import positions_routes
 from app.db.engine import engine
 from app.security.directory_scope import SYSTEM_ADMIN_ROLE_ID
@@ -25,6 +34,58 @@ from tests.conftest import (
     insert_returning_id,
     utcnow,
 )
+
+
+def test_contacts_read_and_manage_access_are_separated(monkeypatch):
+    monkeypatch.setattr(
+        "app.directory.contacts_routes._is_privileged",
+        lambda _user: False,
+    )
+    monkeypatch.setattr(
+        "app.directory.contacts_routes.has_any_personnel_read_permission",
+        lambda user_id: int(user_id) == 361,
+    )
+
+    personnel_reader = {"user_id": 361, "has_personnel_admin": False}
+    personnel_admin = {"user_id": 999, "has_personnel_admin": True}
+
+    assert _can_read_contacts(personnel_reader) is True
+    assert _can_manage_contacts(personnel_reader) is False
+    assert _can_read_contacts(personnel_admin) is True
+    assert _can_manage_contacts(personnel_admin) is True
+
+
+def test_personnel_reader_cannot_manage_contacts(monkeypatch):
+    monkeypatch.setattr(
+        "app.directory.contacts_routes._is_privileged",
+        lambda _user: False,
+    )
+    monkeypatch.setattr(
+        "app.directory.contacts_routes.has_any_personnel_read_permission",
+        lambda user_id: int(user_id) == 361,
+    )
+    personnel_reader = {"user_id": 361, "has_personnel_admin": False}
+    payload = ContactUpsert(full_name="Read-only contact")
+
+    for action in (
+        lambda: create_contact(payload, personnel_reader),
+        lambda: update_contact(1, payload, personnel_reader),
+        lambda: delete_contact(1, personnel_reader),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            action()
+        assert exc_info.value.status_code == 403
+
+
+def test_privileged_user_keeps_contacts_read_and_manage_access(monkeypatch):
+    monkeypatch.setattr(
+        "app.directory.contacts_routes._is_privileged",
+        lambda _user: True,
+    )
+    user = {"user_id": 361, "has_personnel_admin": False}
+
+    assert _can_read_contacts(user) is True
+    assert _can_manage_contacts(user) is True
 
 
 @pytest.fixture
