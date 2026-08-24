@@ -192,6 +192,7 @@ def test_hr_head_can_access_hr_process_endpoints(client: TestClient, seed):
         _assert_user_can_call_auth_me(uid)
 
         for path in (
+            "/directory/contacts",
             "/directory/employee-documents?limit=1&offset=0",
             "/directory/personnel/hr-change-events?limit=1&offset=0",
             "/directory/personnel/import/batches?limit=1&offset=0",
