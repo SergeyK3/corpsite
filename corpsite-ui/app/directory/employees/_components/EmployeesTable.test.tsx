@@ -134,6 +134,62 @@ describe("EmployeesTable actions", () => {
     );
   });
 
+  it("shows unverified termination warning and completion action", () => {
+    const onOpenEmployee = vi.fn();
+    render(
+      <EmployeesTable
+        {...baseProps}
+        items={[{
+          employee_id: 42,
+          person_id: 501,
+          fio: "Архивный сотрудник",
+          status: "inactive",
+          employment_rate: 1,
+          date_to: null,
+          termination: {
+            record_id: 7,
+            verification_status: "UNVERIFIED",
+            termination_date: null,
+            order_number: null,
+            order_date: null,
+          },
+        }]}
+        onOpenEmployee={onOpenEmployee}
+        managementView
+        directPersonalCardNav
+      />,
+    );
+
+    expect(screen.getByText("Сведения не верифицированы")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Заполнить сведения об увольнении" }));
+    expect(onOpenEmployee).toHaveBeenCalledWith("42");
+  });
+
+  it("shows the unverified termination warning without completion action in read-only view", () => {
+    render(
+      <EmployeesTable
+        {...baseProps}
+        items={[{
+          employee_id: 42,
+          person_id: 501,
+          fio: "Архивный сотрудник",
+          status: "inactive",
+          employment_rate: 1,
+          termination: {
+            record_id: 7,
+            verification_status: "UNVERIFIED",
+            termination_date: null,
+            order_number: null,
+            order_date: null,
+          },
+        }]}
+      />,
+    );
+
+    expect(screen.getByText("Сведения не верифицированы")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Заполнить сведения об увольнении" })).not.toBeInTheDocument();
+  });
+
   it("hides delete button for non-sysadmin staff view", () => {
     render(
       <EmployeesTable

@@ -315,10 +315,24 @@ export default function EmployeesTable({
 
                     <td className="px-3 py-1.5 text-[13px] leading-4">
                       <EmployeeStatusBadge item={it} />
+                      {it?.termination?.verification_status === "UNVERIFIED" ? (
+                        <div className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+                          Сведения не верифицированы
+                        </div>
+                      ) : null}
                     </td>
 
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
+                        {managementView && it?.termination?.verification_status === "UNVERIFIED" && employeeId ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenEmployee(employeeId)}
+                            className={actionLinkClass}
+                          >
+                            Заполнить сведения об увольнении
+                          </button>
+                        ) : null}
                         {directPersonalCardNav ? (
                           <PersonalCardOpenAction item={it} />
                         ) : null}
