@@ -18,6 +18,7 @@ from app.db.models.personnel_orders import (
     LOCALE_RU,
     MVP_HEADER_ORDER_TYPE_CODES,
     MVP_ITEM_TYPE_CODES,
+    LEAVE_DRAFT_ITEM_TYPE_CODES,
     ORDER_STATUS_DRAFT,
     ORDER_STATUS_READY_FOR_SIGNATURE,
     ORDER_STATUS_REGISTERED,
@@ -42,6 +43,7 @@ from app.services.personnel_orders_query_service import (
     get_personnel_order,
     personnel_orders_available,
 )
+from app.services.hr_event_registry import EVENT_CATEGORY_LEAVE, get_event_def
 
 EDITABLE_ORDER_STATUSES = {
     ORDER_STATUS_DRAFT,
@@ -95,9 +97,39 @@ def _normalize_header_type(order_type_code: str) -> str:
 
 def _normalize_item_type(item_type_code: str) -> str:
     normalized = str(item_type_code or "").strip().upper()
-    if normalized not in MVP_ITEM_TYPE_CODES:
+    if normalized not in MVP_ITEM_TYPE_CODES + LEAVE_DRAFT_ITEM_TYPE_CODES:
         raise PersonnelOrderValidationError(f"Invalid item_type_code: {item_type_code}")
+    if normalized in LEAVE_DRAFT_ITEM_TYPE_CODES:
+        definition = get_event_def(normalized)
+        if definition is None or definition.category != EVENT_CATEGORY_LEAVE:
+            raise PersonnelOrderValidationError(f"Invalid leave item_type_code: {item_type_code}")
     return normalized
+
+
+def _validate_leave_draft_item(
+    *,
+    item_type_code: str,
+    employee_id: Optional[int],
+    effective_date: Optional[date],
+    period_start: Optional[date],
+    period_end: Optional[date],
+    payload: Dict[str, Any],
+) -> None:
+    if item_type_code not in LEAVE_DRAFT_ITEM_TYPE_CODES:
+        return
+    if employee_id is None:
+        raise PersonnelOrderValidationError("Leave item requires employee_id.")
+    if effective_date is None or period_start is None or period_end is None:
+        raise PersonnelOrderValidationError("Leave item requires effective_date, period_start and period_end.")
+    if period_end < period_start:
+        raise PersonnelOrderValidationError("Leave period_end cannot be earlier than period_start.")
+    if str(payload.get("leave_start") or "") != period_start.isoformat():
+        raise PersonnelOrderValidationError("Leave payload.leave_start must match period_start.")
+    if str(payload.get("leave_end") or "") != period_end.isoformat():
+        raise PersonnelOrderValidationError("Leave payload.leave_end must match period_end.")
+    if item_type_code == "LEAVE.ANNUAL.GRANT":
+        if not str(payload.get("work_period_start") or "").strip() or not str(payload.get("work_period_end") or "").strip():
+            raise PersonnelOrderValidationError("Annual leave requires work_period_start and work_period_end.")
 
 
 def _normalize_source_mode(source_mode: str) -> str:
@@ -457,6 +489,7 @@ def create_personnel_order_item(
 ) -> Dict[str, Any]:
     _require_available()
     normalized_type = _normalize_item_type(item_type_code)
+    normalized_payload = payload or {}
     payload_json = json.dumps(payload or {})
 
     with engine.begin() as conn:
@@ -475,6 +508,14 @@ def create_personnel_order_item(
 
         if employee_id is not None:
             _ensure_employee_exists(conn, employee_id)
+        _validate_leave_draft_item(
+            item_type_code=normalized_type,
+            employee_id=employee_id,
+            effective_date=effective_date,
+            period_start=period_start,
+            period_end=period_end,
+            payload=normalized_payload,
+        )
 
         next_number = int(item_number) if item_number is not None else _next_item_number(conn, order_id)
         if next_number < 1:
@@ -537,6 +578,36 @@ def create_personnel_order_item(
         advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))
+
+
+def delete_personnel_order_draft(*, order_id: int) -> None:
+    """Physically remove an unused DRAFT only; never touches applied records."""
+    _require_available()
+    with engine.begin() as conn:
+        order = _fetch_order_row(conn, order_id)
+        _ensure_order_editable(order)
+        linked_events = conn.execute(
+            text("SELECT COUNT(*) FROM public.employee_events WHERE order_id = :order_id"),
+            {"order_id": int(order_id)},
+        ).scalar_one()
+        if int(linked_events or 0):
+            raise PersonnelOrderConflictError("Cannot delete a personnel order with employee_events.")
+        for table in (
+            "personnel_order_attachments",
+            "personnel_order_editorial_blocks",
+            "personnel_order_items",
+            "personnel_order_lifecycle_audit",
+            "personnel_order_localized_texts",
+            "personnel_order_prints",
+            "personnel_order_evidence_scopes",
+        ):
+            conn.execute(text(f"DELETE FROM public.{table} WHERE order_id = :order_id"), {"order_id": int(order_id)})
+        result = conn.execute(
+            text("DELETE FROM public.personnel_orders WHERE order_id = :order_id AND status = :status"),
+            {"order_id": int(order_id), "status": ORDER_STATUS_DRAFT},
+        )
+        if result.rowcount != 1:
+            raise PersonnelOrderConflictError("Personnel order is not an editable DRAFT.")
 
 
 def update_personnel_order_item(
@@ -611,6 +682,18 @@ def update_personnel_order_item(
         merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
         merged_payload_raw = payload if payload is not None else current_item.get("payload")
         merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
+        current_periods = conn.execute(
+            text("SELECT effective_date, period_start, period_end FROM public.personnel_order_items WHERE item_id = :item_id"),
+            {"item_id": int(item_id)},
+        ).mappings().one()
+        _validate_leave_draft_item(
+            item_type_code=str(merged_type),
+            employee_id=int(merged_employee_id) if merged_employee_id is not None else None,
+            effective_date=updates.get("effective_date", current_periods["effective_date"]),
+            period_start=updates.get("period_start", current_periods["period_start"]),
+            period_end=updates.get("period_end", current_periods["period_end"]),
+            payload=merged_payload,
+        )
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
 
