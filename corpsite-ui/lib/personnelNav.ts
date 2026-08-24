@@ -30,6 +30,14 @@ export function canSeeHrProcessesNav(me: MeInfo | null | undefined): boolean {
   return me?.has_personnel_admin === true;
 }
 
+/** «Контакты» — full directory contacts for HR head / enrollment manager and visibility users. */
+export function canSeeContactsDirectoryNav(me: MeInfo | null | undefined): boolean {
+  if (isSystemAdminRole(me)) return true;
+  if (me?.is_privileged === true) return true;
+  if (canSeeHrProcessesNav(me)) return true;
+  return me?.show_org_sidebar === true || me?.has_personnel_visibility === true;
+}
+
 export function isPersonnelDirectoryRoute(pathname: string): boolean {
   return (
     pathname === "/directory/staff" ||
@@ -61,6 +69,13 @@ export const PERSONNEL_DIRECTORY_NAV_ITEM: PersonnelNavItem = {
   href: PERSONNEL_DIRECTORY_NAV_HREF,
   title: "Персонал",
   matchPrefixes: ["/directory/staff", "/directory/employees"],
+};
+
+/** Directory contacts — HR operational contour and visibility users. */
+export const CONTACTS_DIRECTORY_NAV_ITEM: PersonnelNavItem = {
+  href: "/directory/contacts",
+  title: "Контакты",
+  matchPrefixes: ["/directory/contacts"],
 };
 
 /** HR operational contour sidebar item (ADR-045). */
@@ -122,27 +137,21 @@ export function buildDirectorySidebarNavItems(
     items.push(INCOMING_INFORMATION_NAV_ITEM);
   }
   if (opts?.includeVisibilityExtras !== false) {
+    if (canSeeContactsDirectoryNav(me)) {
+      items.push(CONTACTS_DIRECTORY_NAV_ITEM);
+    }
     if (me?.show_org_sidebar === true || me?.has_personnel_visibility === true) {
-      items.push(...VISIBILITY_DIRECTORY_EXTRAS);
+      items.push({
+        href: "/directory/positions",
+        title: "Должности",
+        matchPrefixes: ["/directory/positions"],
+      });
     }
   }
   return items;
 }
 
 export type VisibilityDirectoryNavItem = PersonnelNavItem;
-
-const VISIBILITY_DIRECTORY_EXTRAS: VisibilityDirectoryNavItem[] = [
-  {
-    href: "/directory/contacts",
-    title: "Контакты",
-    matchPrefixes: ["/directory/contacts"],
-  },
-  {
-    href: "/directory/positions",
-    title: "Должности",
-    matchPrefixes: ["/directory/positions"],
-  },
-];
 
 export function buildVisibilityDirectoryNavItems(
   me: MeInfo | null | undefined,

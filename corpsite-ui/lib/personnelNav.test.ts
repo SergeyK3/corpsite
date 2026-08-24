@@ -7,6 +7,7 @@ import {
   buildDirectorySidebarNavItems,
   buildPersonnelSidebarNavItems,
   buildVisibilityDirectoryNavItems,
+  canSeeContactsDirectoryNav,
   canSeeHrProcessesNav,
   canSeePersonnelDirectoryNav,
   HR_PROCESSES_NAV_HREF,
@@ -59,6 +60,13 @@ describe("personnelNav", () => {
     expect(canSeeHrProcessesNav(headWithVisibility)).toBe(false);
     expect(canSeeHrProcessesNav(directorLike)).toBe(false);
     expect(canSeeHrProcessesNav(regular)).toBe(false);
+  });
+
+  it("canSeeContactsDirectoryNav for HR head and visibility users", () => {
+    expect(canSeeContactsDirectoryNav(systemAdmin)).toBe(true);
+    expect(canSeeContactsDirectoryNav(hrManager)).toBe(true);
+    expect(canSeeContactsDirectoryNav(headWithVisibility)).toBe(true);
+    expect(canSeeContactsDirectoryNav(regular)).toBe(false);
   });
 
   it("route helpers distinguish staff vs HR processes", () => {
@@ -127,9 +135,9 @@ describe("personnelNav", () => {
       expect(canSeeSysadminCabinetNav(headWithVisibility)).toBe(false);
     });
 
-    it("HR head visibility shell matches sysadmin personnel split without directory extras", () => {
+    it("HR head visibility shell includes contacts alongside personnel split", () => {
       const items = buildVisibilityDirectoryNavItems(hrManager);
-      expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы"]);
+      expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы", "Контакты"]);
     });
 
     it("Operational Orders is a sibling node, not nested under HR personnel items", () => {
@@ -145,6 +153,7 @@ describe("personnelNav", () => {
         "Персонал",
         "Кадровые процессы",
         "Производственные приказы",
+        "Контакты",
       ]);
       expect(withOo[2]?.iconId).toBeUndefined();
     });
