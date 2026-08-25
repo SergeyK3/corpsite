@@ -288,6 +288,10 @@ def _resolve_header_type_from_items(conn, order_id: int, fallback: str) -> str:
     types = {str(value).strip().upper() for value in rows if value}
     if not types:
         return fallback
+    # Leave item codes are item-level semantics; the grouped order header stays
+    # COMPOSITE rather than acquiring an item-only type code.
+    if types.intersection(LEAVE_DRAFT_ITEM_TYPE_CODES):
+        return ORDER_TYPE_COMPOSITE
     if len(types) == 1:
         return next(iter(types))
     return ORDER_TYPE_COMPOSITE

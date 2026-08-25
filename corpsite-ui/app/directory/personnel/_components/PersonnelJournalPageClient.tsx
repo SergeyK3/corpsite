@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
+import { formatPersonnelOrderDate } from "../_lib/personnelOrderLabels";
 import {
   listHREventRegistry,
   listPersonnelEvents,
@@ -50,9 +51,13 @@ function fmtDate(v: string | null | undefined): string {
 function fmtOrderRef(v: string | null | undefined): React.ReactNode {
   const value = String(v ?? "").trim();
   if (!value) return "—";
+  const orderDateMatch = value.match(/^(.*\s)(\d{4}-\d{2}-\d{2})$/);
+  const displayValue = orderDateMatch
+    ? `${orderDateMatch[1]}${formatPersonnelOrderDate(orderDateMatch[2])}`
+    : value;
   return (
     <span className="inline-flex max-w-[12rem] truncate rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-xs font-semibold tracking-tight text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-      {value}
+      {displayValue}
     </span>
   );
 }
@@ -67,8 +72,36 @@ function nameOrDash(v: string | null | undefined): string {
   return s || "—";
 }
 
+function leaveMetadataString(row: PersonnelEventRow, key: string): string | null {
+  const value = row.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function leaveMetadataDays(row: PersonnelEventRow): number | null {
+  const value = Number(row.metadata?.leave_days);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 function formatEventDetails(row: PersonnelEventRow): string[] {
   const typeKey = String(row.event_type || "").toUpperCase();
+
+  if (typeKey === "ANNUAL_LEAVE") {
+    const lines: string[] = [];
+    const leaveStart = leaveMetadataString(row, "leave_start");
+    const leaveEnd = leaveMetadataString(row, "leave_end");
+    if (leaveStart && leaveEnd) {
+      lines.push(`Период отпуска: ${fmtDate(leaveStart)} – ${fmtDate(leaveEnd)}`);
+    }
+    const leaveDays = leaveMetadataDays(row);
+    if (leaveDays !== null) lines.push(`Календарных дней: ${leaveDays}`);
+    const unit = nameOrDash(row.to_org_unit_name || row.from_org_unit_name);
+    if (unit !== "—") lines.push(`Подразделение: ${unit}`);
+    const position = nameOrDash(row.to_position_name || row.from_position_name);
+    if (position !== "—") lines.push(`Должность: ${position}`);
+    const rate = fmtRate(row.to_rate ?? row.from_rate);
+    if (rate !== "—") lines.push(`Ставка: ${rate}`);
+    return lines;
+  }
 
   if (typeKey === "HIRE") {
     return [
@@ -169,6 +202,15 @@ function orgUnitsUnchanged(row: PersonnelEventRow): boolean {
 
 function renderOrgUnitCells(row: PersonnelEventRow): React.ReactNode {
   const typeKey = String(row.event_type || "").toUpperCase();
+
+  if (typeKey === "ANNUAL_LEAVE") {
+    const unit = row.to_org_unit_name || row.from_org_unit_name;
+    return (
+      <td colSpan={2} className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
+        {unit || "—"}
+      </td>
+    );
+  }
 
   if (typeKey === "HIRE") {
     return (

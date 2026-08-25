@@ -542,6 +542,10 @@ def _rollback_snapshot_for_event(conn, event: Dict[str, Any]) -> None:
             )
         return
 
+    if event_type == "ANNUAL_LEAVE":
+        # Annual leave does not modify the employee employment snapshot.
+        return
+
     raise PersonnelOrderValidationError(f"Unsupported event_type for void rollback: {event_type}")
 
 

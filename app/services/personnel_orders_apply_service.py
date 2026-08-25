@@ -193,6 +193,8 @@ def _optional_rate(value: Any) -> Optional[float]:
 
 def _resolve_event_types(item_type_code: str, payload: Dict[str, Any]) -> List[str]:
     normalized = str(item_type_code or "").strip().upper()
+    if normalized == "LEAVE.ANNUAL.GRANT":
+        return ["ANNUAL_LEAVE"]
     if normalized not in MVP_ITEM_TYPE_CODES:
         raise PersonnelOrderValidationError(f"Unsupported item_type_code: {item_type_code}")
 
@@ -208,6 +210,78 @@ def _resolve_event_types(item_type_code: str, payload: Dict[str, Any]) -> List[s
     if normalized in {ORDER_TYPE_CONCURRENT_DUTY_START, ORDER_TYPE_CONCURRENT_DUTY_END}:
         return ["RATE_CHANGE"]
     raise PersonnelOrderValidationError(f"Unsupported item_type_code: {item_type_code}")
+
+
+def _apply_annual_leave(
+    conn,
+    *,
+    item: Dict[str, Any],
+    order_id: int,
+    order_ref: str,
+    created_by: int,
+) -> None:
+    """Record annual leave without changing the employee employment snapshot."""
+    employee_id = int(item["employee_id"])
+    effective_date = item["effective_date"]
+    payload = _parse_payload(item.get("payload"))
+    period_start_raw = payload.get("leave_start")
+    period_end_raw = payload.get("leave_end")
+    if not period_start_raw or not period_end_raw:
+        raise PersonnelOrderValidationError(
+            f"Order item {item['item_id']} annual leave requires leave_start and leave_end."
+        )
+
+    period_start = date.fromisoformat(str(period_start_raw))
+    period_end = date.fromisoformat(str(period_end_raw))
+    if effective_date != period_start:
+        raise PersonnelOrderValidationError(
+            f"Order item {item['item_id']} annual leave effective_date must equal leave_start."
+        )
+    expected_days = (period_end - period_start).days + 1
+    try:
+        leave_days = int(payload.get("leave_days"))
+    except (TypeError, ValueError) as exc:
+        raise PersonnelOrderValidationError(
+            f"Order item {item['item_id']} annual leave requires integer leave_days."
+        ) from exc
+    if leave_days != expected_days:
+        raise PersonnelOrderValidationError(
+            f"Order item {item['item_id']} annual leave leave_days must equal the inclusive period length."
+        )
+
+    snapshot = _fetch_employee_snapshot(conn, employee_id)
+    org_unit_id = int(snapshot["org_unit_id"]) if snapshot.get("org_unit_id") is not None else None
+    position_id = int(snapshot["position_id"]) if snapshot.get("position_id") is not None else None
+    rate_raw = snapshot.get("employment_rate")
+    rate = float(rate_raw) if rate_raw is not None else None
+    source_description = payload.get("source_description") or payload.get("description")
+
+    _insert_employee_event(
+        conn,
+        employee_id=employee_id,
+        event_type="ANNUAL_LEAVE",
+        event_class=get_event_class("ANNUAL_LEAVE"),
+        lifecycle_status="APPROVED",
+        metadata={
+            "leave_start": period_start.isoformat(),
+            "leave_end": period_end.isoformat(),
+            "leave_days": leave_days,
+            "personnel_order_id": int(order_id),
+            "personnel_order_item_id": int(item["item_id"]),
+        },
+        effective_date=period_start,
+        from_org_unit_id=org_unit_id,
+        from_position_id=position_id,
+        from_rate=rate,
+        to_org_unit_id=org_unit_id,
+        to_position_id=position_id,
+        to_rate=rate,
+        order_ref=order_ref,
+        comment=str(source_description) if source_description is not None else None,
+        created_by=created_by,
+        order_id=order_id,
+        order_item_id=int(item["item_id"]),
+    )
 
 
 def _build_item_metadata(
@@ -665,6 +739,14 @@ def _apply_item_events(
                 order_ref=order_ref,
                 created_by=created_by,
                 item_type_code=str(item["item_type_code"]),
+            )
+        elif event_type == "ANNUAL_LEAVE":
+            _apply_annual_leave(
+                conn,
+                item=item,
+                order_id=order_id,
+                order_ref=order_ref,
+                created_by=created_by,
             )
         else:
             raise PersonnelOrderValidationError(f"Unsupported event_type mapping: {event_type}")

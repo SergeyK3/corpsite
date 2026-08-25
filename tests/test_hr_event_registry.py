@@ -204,6 +204,7 @@ def test_journal_registry_contains_current_and_leave_v11_codes():
 
 def test_journal_registry_filters_resolve_to_canonical_codes():
     assert resolve_journal_event_codes(event_category="LEAVE") == {
+        "ANNUAL_LEAVE",
         "LEAVE.ANNUAL.GRANT",
         "LEAVE.ANNUAL.POSTPONE",
         "LEAVE.ANNUAL.EXTEND",
