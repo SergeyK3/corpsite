@@ -48,12 +48,9 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   TERMINATION: "Увольнение",
   CONCURRENT_DUTY_START: "Совмещение (начало)",
   CONCURRENT_DUTY_END: "Совмещение (окончание)",
-  COMPOSITE: "Составной",
-};
-
-export const LEAVE_ORDER_TYPE_LABELS: Record<"LEAVE.ANNUAL.GRANT" | "LEAVE.UNPAID.GRANT", string> = {
   "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
   "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
+  COMPOSITE: "Составной",
 };
 
 export const PERSONNEL_ORDER_SOURCE_MODE_LABELS: Record<string, string> = {
@@ -93,9 +90,6 @@ export function personnelOrderStatusLabel(status: string | null | undefined): st
 
 export function personnelOrderTypeLabel(typeCode: string | null | undefined): string {
   const normalized = String(typeCode || "").trim().toUpperCase();
-  if (normalized === "LEAVE.ANNUAL.GRANT" || normalized === "LEAVE.UNPAID.GRANT") {
-    return LEAVE_ORDER_TYPE_LABELS[normalized];
-  }
   if ((PERSONNEL_ORDER_TYPES as readonly string[]).includes(normalized)) {
     return PERSONNEL_ORDER_TYPE_LABELS[normalized as PersonnelOrderType];
   }
