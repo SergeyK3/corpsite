@@ -56,6 +56,7 @@ from app.services.personnel_orders_command_service import (
     PersonnelOrderItemNotFoundError,
     create_personnel_order_draft,
     delete_personnel_order_draft,
+    delete_personnel_order_item,
     create_personnel_order_item,
     mark_personnel_order_ready_for_signature,
     register_personnel_order,
@@ -380,6 +381,33 @@ def update_personnel_order_item_route(
         raise _order_archived_http(exc)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
+    except PersonnelOrderConflictError as exc:
+        raise _conflict_http409(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.delete(
+    "/personnel-orders/{order_id}/items/{item_id}",
+    response_model=PersonnelOrderDetailResponse,
+)
+def delete_personnel_order_item_route(
+    order_id: int = Path(..., ge=1),
+    item_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Remove one item from an editable DRAFT personnel order."""
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(delete_personnel_order_item, order_id=order_id, item_id=item_id)
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderItemNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
     except PersonnelOrderConflictError as exc:
         raise _conflict_http409(exc)
     except HTTPException:

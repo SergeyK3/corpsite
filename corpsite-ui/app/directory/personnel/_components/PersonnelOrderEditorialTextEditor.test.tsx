@@ -398,6 +398,14 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
   });
 
+  it("renders the generate action as the primary blue button", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
+
+    const button = await screen.findByTestId("personnel-order-editorial-generate");
+    expect(button).toHaveClass("bg-blue-700", "text-white");
+  });
+
   it("saves override with expected revision and updates status to Edited", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
     const afterSave = sampleState();

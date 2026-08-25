@@ -314,7 +314,7 @@ export default function PersonnelOrderEditorialTextEditor({
             type="button"
             onClick={() => void handleGenerateAll()}
             disabled={busy || loading}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-60 dark:border-zinc-700"
+            className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-600 dark:hover:bg-blue-500"
             data-testid="personnel-order-editorial-generate"
           >
             {busy ? "Формирование…" : "Сформировать / обновить текст"}

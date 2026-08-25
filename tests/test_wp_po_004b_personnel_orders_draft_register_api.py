@@ -193,6 +193,58 @@ def test_create_draft_add_item_text_and_register_without_events(client, privileg
         _cleanup_order(order_id)
 
 
+def test_delete_draft_item_compacts_numbers_and_rejects_repeat(client, monkeypatch):
+    order_number = f"WPPO4B-DELETE-{uuid4().hex[:8]}"
+    with engine.begin() as conn:
+        employee_id = _pick_employee_id(conn)
+        user_id = _pick_user_id(conn)
+    monkeypatch.setenv("DIRECTORY_PRIVILEGED_USER_IDS", str(user_id))
+    headers = auth_headers(user_id)
+    created = client.post(
+        "/directory/personnel-orders",
+        json={
+            "order_number": order_number,
+            "order_date": "2026-08-03",
+            "order_type_code": "HIRE",
+            "source_mode": "PAPER",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    order_id = created.json()["order"]["order_id"]
+    try:
+        first = client.post(
+            f"/directory/personnel-orders/{order_id}/items",
+            json={"item_type_code": "HIRE", "employee_id": employee_id, "payload": {}},
+            headers=headers,
+        )
+        second = client.post(
+            f"/directory/personnel-orders/{order_id}/items",
+            json={"item_type_code": "HIRE", "employee_id": employee_id, "payload": {}},
+            headers=headers,
+        )
+        assert first.status_code == second.status_code == 200
+        first_id = first.json()["items"][0]["item_id"]
+
+        deleted = client.delete(
+            f"/directory/personnel-orders/{order_id}/items/{first_id}",
+            headers=headers,
+        )
+        assert deleted.status_code == 200, deleted.text
+        remaining = deleted.json()["items"]
+        assert len(remaining) == 1
+        assert remaining[0]["item_number"] == 1
+        assert remaining[0]["item_id"] != first_id
+
+        repeated = client.delete(
+            f"/directory/personnel-orders/{order_id}/items/{first_id}",
+            headers=headers,
+        )
+        assert repeated.status_code == 404
+    finally:
+        _cleanup_order(order_id)
+
+
 def test_order_writers_advance_one_evidence_generation_per_transaction(
     client, privileged_headers
 ):

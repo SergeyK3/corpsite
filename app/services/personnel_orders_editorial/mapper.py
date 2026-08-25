@@ -51,16 +51,18 @@ def pick_payload_value(payload: Mapping[str, Any], *keys: str) -> Any:
 
 def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dict[str, Any]:
     payload = payload_dict(item.get("payload"))
+    org_unit_name = pick_payload_value(
+        payload, "org_unit_name", "orgUnitName", "from_org_unit_name"
+    ) or item.get("snapshot_org_unit_name")
+    position_name = pick_payload_value(
+        payload, "position_name", "positionName", "from_position_name"
+    ) or item.get("snapshot_position_name")
     return {
         "item_type_code": item.get("item_type_code"),
         "employee_name": employee_name,
         "effective_date": iso_date(item.get("effective_date")),
-        "org_unit_name": pick_payload_value(
-            payload, "org_unit_name", "orgUnitName", "from_org_unit_name"
-        ),
-        "position_name": pick_payload_value(
-            payload, "position_name", "positionName", "from_position_name"
-        ),
+        "org_unit_name": org_unit_name,
+        "position_name": position_name,
         "to_org_unit_name": pick_payload_value(
             payload, "to_org_unit_name", "toOrgUnitName"
         ),
@@ -79,6 +81,18 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "termination_reason": pick_payload_value(
             payload, "termination_reason", "terminationReason", "reason"
         ),
+        # Leave data is kept in the item payload. It is deliberately passed
+        # through as one structured source for both editorial locales.
+        "leave_start": pick_payload_value(payload, "leave_start"),
+        "leave_end": pick_payload_value(payload, "leave_end"),
+        "leave_days": pick_payload_value(payload, "leave_days"),
+        "work_periods": payload.get("work_periods"),
+        "work_period_start": pick_payload_value(payload, "work_period_start"),
+        "work_period_end": pick_payload_value(payload, "work_period_end"),
+        "work_period_days": pick_payload_value(payload, "work_period_days"),
+        "basis": payload.get("basis"),
+        "vacation_benefit_applicable": payload.get("vacation_benefit_applicable"),
+        "vacation_benefit_rule": pick_payload_value(payload, "vacation_benefit_rule"),
     }
 
 

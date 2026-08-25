@@ -68,17 +68,24 @@ def load_items(conn: Connection, order_id: int) -> List[Dict[str, Any]]:
         text(
             """
             SELECT
-                item_id,
-                order_id,
-                item_number,
-                item_type_code,
-                employee_id,
-                effective_date,
-                payload,
-                item_status
-            FROM public.personnel_order_items
-            WHERE order_id = :order_id
-            ORDER BY item_number ASC, item_id ASC
+                poi.item_id,
+                poi.order_id,
+                poi.item_number,
+                poi.item_type_code,
+                poi.employee_id,
+                poi.effective_date,
+                poi.payload,
+                poi.item_status,
+                e.org_unit_id AS snapshot_org_unit_id,
+                ou.name AS snapshot_org_unit_name,
+                e.position_id AS snapshot_position_id,
+                p.name AS snapshot_position_name
+            FROM public.personnel_order_items poi
+            LEFT JOIN public.employees e ON e.employee_id = poi.employee_id
+            LEFT JOIN public.org_units ou ON ou.unit_id = e.org_unit_id
+            LEFT JOIN public.positions p ON p.position_id = e.position_id
+            WHERE poi.order_id = :order_id
+            ORDER BY poi.item_number ASC, poi.item_id ASC
             """
         ),
         {"order_id": int(order_id)},

@@ -61,6 +61,14 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "kk": "Кадрлық өзгерістер туралы",
         "ru": "О кадровых изменениях",
     },
+    "LEAVE.ANNUAL.GRANT": {
+        "kk": "Жыл сайынғы ақылы еңбек демалысын беру туралы",
+        "ru": "О предоставлении ежегодного оплачиваемого трудового отпуска",
+    },
+    "LEAVE.UNPAID.GRANT": {
+        "kk": "Жалақы сақталмайтын демалыс беру туралы",
+        "ru": "О предоставлении отпуска без сохранения заработной платы",
+    },
 }
 
 _RU_MONTHS = (
@@ -169,6 +177,46 @@ def _localized_name(value: Any, locale: str) -> str:
     return _dash(value)
 
 
+def _leave_work_periods(item_ctx: Mapping[str, Any]) -> list[Dict[str, Any]]:
+    """Return the current array form, with a read-only legacy fallback."""
+    raw_periods = item_ctx.get("work_periods")
+    if isinstance(raw_periods, list):
+        periods = [dict(period) for period in raw_periods if isinstance(period, Mapping)]
+        if periods:
+            return periods
+    if any(
+        item_ctx.get(key) not in (None, "")
+        for key in ("work_period_start", "work_period_end", "work_period_days")
+    ):
+        return [{
+            "start": item_ctx.get("work_period_start"),
+            "end": item_ctx.get("work_period_end"),
+            "days": item_ctx.get("work_period_days"),
+        }]
+    return []
+
+
+def _leave_basis(item_ctx: Mapping[str, Any], locale: str) -> str:
+    basis = item_ctx.get("basis")
+    basis = basis if isinstance(basis, Mapping) else {}
+    raw_date = _clean(basis.get("date"))
+    date = _format_date(raw_date, locale) if raw_date else ""
+    number = _clean(basis.get("number"))
+    if locale == "kk":
+        if date:
+            number_part = f" № {number}" if number else ""
+            return f"Негіз: {date} күнгі жеке өтініш{number_part}."
+        if number:
+            return f"Негіз: № {number} жеке өтініш."
+        return "Негіз: жеке өтініш."
+    if date:
+        number_part = f" № {number}" if number else ""
+        return f"Основание: личное заявление от {date}{number_part}."
+    if number:
+        return f"Основание: личное заявление № {number}."
+    return "Основание: личное заявление."
+
+
 def _result(
     *,
     generated_text: str,
@@ -272,11 +320,73 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     remaining_rate = item_ctx.get("remaining_rate")
     total_rate = item_ctx.get("total_rate")
     termination_reason = item_ctx.get("termination_reason")
+    leave_start = item_ctx.get("leave_start")
+    leave_end = item_ctx.get("leave_end")
+    leave_days = item_ctx.get("leave_days")
+    work_periods = _leave_work_periods(item_ctx)
+    vacation_benefit_applicable = bool(item_ctx.get("vacation_benefit_applicable"))
+    vacation_benefit_rule = _clean(item_ctx.get("vacation_benefit_rule"))
 
     fio = _dash(employee_name)
     date = _format_date(effective_date, lang)
 
-    if item_type == ORDER_TYPE_HIRE:
+    if item_type == "LEAVE.ANNUAL.GRANT":
+        org = _localized_name(org_unit_name, lang)
+        position = _localized_name(position_name, lang)
+        leave_start_text = _format_date(leave_start, lang)
+        leave_end_text = _format_date(leave_end, lang)
+        days = _dash(leave_days)
+        if lang == "kk":
+            periods_text = "; ".join(
+                f"{_format_date(period.get('start'), lang)} – {_format_date(period.get('end'), lang)}: {_dash(period.get('days'))} күн"
+                for period in work_periods
+            ) or "—"
+            benefit_text = (
+                f" Демалыс жәрдемақысы: {vacation_benefit_rule or 'қарастырылған'}."
+                if vacation_benefit_applicable
+                else ""
+            )
+            text = (
+                f"{fio}, «{org}» бөлімшесінің «{position}» қызметкеріне "
+                f"{leave_start_text} мен {leave_end_text} аралығында {days} күнтізбелік күнге "
+                f"жыл сайынғы ақылы еңбек демалысы берілсін. Жұмыс кезеңдері: {periods_text}."
+                f"{benefit_text} {_leave_basis(item_ctx, lang)}"
+            )
+        else:
+            periods_text = "; ".join(
+                f"{_format_date(period.get('start'), lang)} – {_format_date(period.get('end'), lang)}: {_dash(period.get('days'))} календарных дней"
+                for period in work_periods
+            ) or "—"
+            benefit_text = (
+                f" Пособие к отпуску: {vacation_benefit_rule or 'предусмотрено'}."
+                if vacation_benefit_applicable
+                else ""
+            )
+            text = (
+                f"Предоставить {fio}, {position} подразделения «{org}», ежегодный оплачиваемый "
+                f"трудовой отпуск с {leave_start_text} по {leave_end_text} включительно "
+                f"продолжительностью {days} календарных дней. Рабочие периоды: {periods_text}."
+                f"{benefit_text} {_leave_basis(item_ctx, lang)}"
+            )
+    elif item_type == "LEAVE.UNPAID.GRANT":
+        org = _localized_name(org_unit_name, lang)
+        position = _localized_name(position_name, lang)
+        leave_start_text = _format_date(leave_start, lang)
+        leave_end_text = _format_date(leave_end, lang)
+        days = _dash(leave_days)
+        if lang == "kk":
+            text = (
+                f"{fio}, «{org}» бөлімшесінің «{position}» қызметкеріне "
+                f"{leave_start_text} мен {leave_end_text} аралығында {days} күнтізбелік күнге "
+                f"жалақы сақталмайтын демалыс берілсін. {_leave_basis(item_ctx, lang)}"
+            )
+        else:
+            text = (
+                f"Предоставить {fio}, {position} подразделения «{org}», отпуск без сохранения "
+                f"заработной платы с {leave_start_text} по {leave_end_text} включительно "
+                f"продолжительностью {days} календарных дней. {_leave_basis(item_ctx, lang)}"
+            )
+    elif item_type == ORDER_TYPE_HIRE:
         org = _localized_name(org_unit_name, lang)
         position = _localized_name(position_name, lang)
         rate_value = _format_rate_value(rate)
@@ -384,6 +494,13 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             "remaining_rate": remaining_rate if remaining_rate not in (None, "") else None,
             "total_rate": total_rate if total_rate not in (None, "") else None,
             "termination_reason": _clean(termination_reason) or None,
+            "leave_start": _clean(leave_start) or None,
+            "leave_end": _clean(leave_end) or None,
+            "leave_days": leave_days if leave_days not in (None, "") else None,
+            "work_periods": work_periods or None,
+            "basis": item_ctx.get("basis") if isinstance(item_ctx.get("basis"), Mapping) else None,
+            "vacation_benefit_applicable": vacation_benefit_applicable,
+            "vacation_benefit_rule": vacation_benefit_rule or None,
         },
     )
 

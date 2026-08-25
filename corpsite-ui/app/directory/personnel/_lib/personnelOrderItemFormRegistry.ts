@@ -11,7 +11,9 @@ export type PersonnelOrderItemFormType =
   | "RATE_CHANGE"
   | "CONCURRENT_DUTY_START"
   | "CONCURRENT_DUTY_END"
-  | "HIRE";
+  | "HIRE"
+  | "LEAVE.ANNUAL.GRANT"
+  | "LEAVE.UNPAID.GRANT";
 
 /** Unified form sections — order is per item type via fieldSectionOrder. */
 export type ItemFormSection =
@@ -82,6 +84,20 @@ function entry(
 }
 
 const REGISTRY: Record<PersonnelOrderItemFormType, ItemFormRegistryEntry> = {
+  "LEAVE.ANNUAL.GRANT": entry({
+    employeePicker: true, employeePickerActiveOnly: true, employeePickerMode: "required",
+    showCurrentPlacement: true, showTargetPlacement: false, showTargetRate: false,
+    showTerminationReason: false, showConcurrentDutyStartFields: false, showConcurrentDutyEndFields: false,
+    showHirePlacement: false, clearTargetOnEmployeeChange: false, backendItemType: "LEAVE.ANNUAL.GRANT",
+    orgPlacementSectionTitle: "", fieldSectionOrder: ["employee", "current_placement", "additional"],
+  }),
+  "LEAVE.UNPAID.GRANT": entry({
+    employeePicker: true, employeePickerActiveOnly: true, employeePickerMode: "required",
+    showCurrentPlacement: true, showTargetPlacement: false, showTargetRate: false,
+    showTerminationReason: false, showConcurrentDutyStartFields: false, showConcurrentDutyEndFields: false,
+    showHirePlacement: false, clearTargetOnEmployeeChange: false, backendItemType: "LEAVE.UNPAID.GRANT",
+    orgPlacementSectionTitle: "", fieldSectionOrder: ["employee", "current_placement", "additional"],
+  }),
   TRANSFER: entry({
     employeePicker: true,
     employeePickerActiveOnly: true,
@@ -208,6 +224,8 @@ export const PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS: ReadonlyArray<{
   value: PersonnelOrderItemFormType;
   label: string;
 }> = [
+  { value: "LEAVE.ANNUAL.GRANT", label: "Ежегодный трудовой отпуск" },
+  { value: "LEAVE.UNPAID.GRANT", label: "Отпуск без сохранения заработной платы" },
   { value: "TRANSFER", label: PERSONNEL_ORDER_TYPE_LABELS.TRANSFER },
   { value: "TERMINATION", label: PERSONNEL_ORDER_TYPE_LABELS.TERMINATION },
   { value: "RATE_CHANGE", label: "Изменение ставки" },

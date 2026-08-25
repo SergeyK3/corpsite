@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
-import { createPersonnelOrderItem, updatePersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
+import { createPersonnelOrderItem, deletePersonnelOrderItem, updatePersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
 import { loadScopedPositionOptions, loadGlobalPositionCatalogCached, resetGlobalPositionCatalogCache } from "@/lib/taskOrgFilters";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
@@ -119,6 +119,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async (importOriginal) => {
   return {
     ...actual,
     createPersonnelOrderItem: vi.fn(),
+    deletePersonnelOrderItem: vi.fn(),
     updatePersonnelOrderItem: vi.fn(),
   };
 });
@@ -177,6 +178,21 @@ beforeEach(() => {
     events: [],
   });
   vi.mocked(updatePersonnelOrderItem).mockResolvedValue({
+    order: {
+      order_id: 1,
+      order_type_code: "HIRE",
+      order_class: "SIMPLE",
+      status: "DRAFT",
+      source_mode: "PAPER",
+      created_by: 1,
+    },
+    items: [],
+    localized_texts: [],
+    attachments: [],
+    prints: [],
+    events: [],
+  });
+  vi.mocked(deletePersonnelOrderItem).mockResolvedValue({
     order: {
       order_id: 1,
       order_type_code: "HIRE",
@@ -250,6 +266,45 @@ describe("PersonnelOrderItemEditor employee autocomplete", () => {
       "Руководитель отдела кадров",
     );
     expect(screen.getByTestId("personnel-order-current-rate")).toHaveTextContent("1");
+  });
+});
+
+describe("PersonnelOrderItemEditor draft item deletion", () => {
+  const draftItem = {
+    item_id: 31,
+    order_id: 1,
+    item_number: 1,
+    item_type_code: "LEAVE.UNPAID.GRANT",
+    item_status: "ACTIVE",
+    employee_id: 138,
+    employee_name: "Макыбаева Акмарал Сабитовна",
+    effective_date: "2026-08-03",
+    payload: {},
+  };
+
+  it("confirms once, deletes the item and lets the parent refresh the list", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onChanged = vi.fn();
+    render(<PersonnelOrderItemEditor orderId={1} items={[draftItem]} onChanged={onChanged} />);
+
+    const button = screen.getByTestId("personnel-order-item-delete-31");
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(deletePersonnelOrderItem).toHaveBeenCalledTimes(1);
+      expect(deletePersonnelOrderItem).toHaveBeenCalledWith(1, 31);
+      expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ items: [] }));
+    });
+  });
+
+  it("does not delete when confirmation is cancelled", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<PersonnelOrderItemEditor orderId={1} items={[draftItem]} onChanged={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("personnel-order-item-delete-31"));
+
+    expect(deletePersonnelOrderItem).not.toHaveBeenCalled();
   });
 });
 

@@ -17,6 +17,7 @@ import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
 import {
   createPersonnelOrderItem,
+  deletePersonnelOrderItem,
   mapPersonnelOrdersApiError,
   updatePersonnelOrderItem,
   type PersonnelOrderDetailResponse,
@@ -185,6 +186,9 @@ export default function PersonnelOrderItemEditor({
   const [pendingNewEmployee, setPendingNewEmployee] = React.useState(false);
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
   const [currentPlacement, setCurrentPlacement] = React.useState<CurrentPlacementView | null>(null);
+  const [deletingItemId, setDeletingItemId] = React.useState<number | null>(null);
+  const deletionInProgressRef = React.useRef(false);
+  const [leavePreviewLocale, setLeavePreviewLocale] = React.useState<"ru" | "kk">("ru");
   const [effectiveDate, setEffectiveDate] = React.useState("");
   const [payloadDraft, setPayloadDraft] = React.useState<ItemPayloadDraft>(emptyItemPayloadDraft());
   const [targetOrgGroupId, setTargetOrgGroupId] = React.useState<number | null>(null);
@@ -494,17 +498,32 @@ export default function PersonnelOrderItemEditor({
     setSaving(true);
     try {
       const backendType = resolveBackendItemTypeCode(itemTypeCode);
+      const isLeave = backendType === "LEAVE.ANNUAL.GRANT" || backendType === "LEAVE.UNPAID.GRANT";
+      const leaveStart = String(payloadDraft.leave_start || "").trim();
+      const leaveEnd = String(payloadDraft.leave_end || "").trim();
+      if (isLeave && (!leaveStart || !leaveEnd || !payloadDraft.application_date)) {
+        setError("Для отпуска обязательны даты и дата личного заявления.");
+        setSaving(false);
+        return;
+      }
       const employeeNumeric = Number(employeeId);
       let resolvedEmployeeId =
         Number.isFinite(employeeNumeric) && employeeNumeric > 0 ? employeeNumeric : null;
       if (savedEmployeeIdBlocksPendingReset && resolvedEmployeeId == null) {
         resolvedEmployeeId = editingItemSavedEmployeeId;
       }
+      const payload = buildItemPayload(backendType, payloadDraft);
+      if (isLeave && currentPlacement) {
+        payload.org_unit_name = currentPlacement.org_unit_name || null;
+        payload.position_name = currentPlacement.position_name || null;
+      }
       const body = {
         item_type_code: backendType,
         employee_id: resolvedEmployeeId,
-        effective_date: effectiveDate || null,
-        payload: buildItemPayload(backendType, payloadDraft),
+        effective_date: isLeave ? leaveStart : effectiveDate || null,
+        period_start: isLeave ? leaveStart : null,
+        period_end: isLeave ? leaveEnd : null,
+        payload,
       };
       const detail =
         editingItemId != null
@@ -516,6 +535,25 @@ export default function PersonnelOrderItemEditor({
       setError(mapPersonnelOrdersApiError(err, "Не удалось сохранить пункт."));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDeleteItem(item: PersonnelOrderItem) {
+    if (disabled || item.item_status !== "ACTIVE" || deletionInProgressRef.current) return;
+    if (!window.confirm(`Удалить пункт №${item.item_number}?`)) return;
+
+    deletionInProgressRef.current = true;
+    setDeletingItemId(item.item_id);
+    setError(null);
+    try {
+      const detail = await deletePersonnelOrderItem(orderId, item.item_id);
+      if (editingItemId === item.item_id) resetForm(itemTypeCode);
+      onChanged(detail);
+    } catch (err) {
+      setError(mapPersonnelOrdersApiError(err, "Не удалось удалить пункт."));
+    } finally {
+      deletionInProgressRef.current = false;
+      setDeletingItemId(null);
     }
   }
 
@@ -773,6 +811,36 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderAdditionalSection() {
+    if (itemTypeCode === "LEAVE.ANNUAL.GRANT" || itemTypeCode === "LEAVE.UNPAID.GRANT") {
+      const annual = itemTypeCode === "LEAVE.ANNUAL.GRANT";
+      const start = String(payloadDraft.leave_start || "");
+      const end = String(payloadDraft.leave_end || "");
+      const calculatedDays = start && end ? Math.max(0, Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1) : "";
+      return <div className="space-y-3" data-testid="personnel-leave-fields">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <FormField label="Дата начала"><input type="date" value={start} onChange={(e) => updatePayloadField("leave_start", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="Дата окончания"><input type="date" value={end} onChange={(e) => updatePayloadField("leave_end", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="Календарные дни"><input readOnly value={calculatedDays} data-testid="leave-days" className={FIELD_INPUT_CLASS} /></FormField>
+        </div>
+        {annual ? <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="annual-leave-work-periods">
+          <div className="mb-2 flex items-center justify-between text-sm font-medium"><span>Рабочие периоды</span><button type="button" onClick={() => setPayloadDraft((prev) => { const periods = prev.work_periods?.length ? prev.work_periods : [{ start: prev.work_period_start || "", end: prev.work_period_end || "", days: prev.work_period_days || "" }]; return { ...prev, work_periods: [...periods, { start: "", end: "", days: "" }] }; })} className="text-blue-700 hover:underline">Добавить рабочий период</button></div>
+          {(payloadDraft.work_periods || [{ start: payloadDraft.work_period_start || "", end: payloadDraft.work_period_end || "", days: payloadDraft.work_period_days || "" }]).map((period, index) => <div key={index} className="mb-3 grid gap-3 sm:grid-cols-4" data-testid={`annual-leave-work-period-${index}`}>
+            <FormField label="Начало"><input type="date" value={period.start} onChange={(e) => setPayloadDraft((prev) => { const periods = prev.work_periods?.length ? prev.work_periods : [{ start: prev.work_period_start || "", end: prev.work_period_end || "", days: prev.work_period_days || "" }]; return {...prev, work_periods: periods.map((row, i) => i === index ? {...row, start:e.target.value} : row)}; })} className={FIELD_INPUT_CLASS} /></FormField>
+            <FormField label="Окончание"><input type="date" value={period.end} onChange={(e) => setPayloadDraft((prev) => { const periods = prev.work_periods?.length ? prev.work_periods : [{ start: prev.work_period_start || "", end: prev.work_period_end || "", days: prev.work_period_days || "" }]; return {...prev, work_periods: periods.map((row, i) => i === index ? {...row, end:e.target.value} : row)}; })} className={FIELD_INPUT_CLASS} /></FormField>
+            <FormField label="Дни за период"><input type="number" min="1" value={period.days} onChange={(e) => setPayloadDraft((prev) => { const periods = prev.work_periods?.length ? prev.work_periods : [{ start: prev.work_period_start || "", end: prev.work_period_end || "", days: prev.work_period_days || "" }]; return {...prev, work_periods: periods.map((row, i) => i === index ? {...row, days:e.target.value} : row)}; })} className={FIELD_INPUT_CLASS} /></FormField>
+            {index > 0 ? <button type="button" onClick={() => setPayloadDraft((prev) => ({...prev, work_periods: (prev.work_periods || []).filter((_, i) => i !== index)}))} className="self-end rounded border px-2 py-2 text-sm">Удалить</button> : <span />}
+          </div>)}
+        </div> : null}
+        <div className="grid gap-3 sm:grid-cols-2"><FormField label="Дата заявления"><input type="date" required value={payloadDraft.application_date || ""} onChange={(e) => updatePayloadField("application_date", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField><FormField label="Номер заявления"><input value={payloadDraft.application_number || ""} onChange={(e) => updatePayloadField("application_number", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField></div>
+        {annual ? <><label className="flex gap-2 text-sm"><input type="checkbox" checked={Boolean(payloadDraft.vacation_benefit_applicable)} onChange={(e) => setPayloadDraft((prev) => ({...prev, vacation_benefit_applicable:e.target.checked}))} />Пособие к отпуску</label>{payloadDraft.vacation_benefit_applicable ? <FormField label="Правило пособия"><input value={payloadDraft.vacation_benefit_rule || ""} onChange={(e) => updatePayloadField("vacation_benefit_rule", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField> : null}</> : null}
+        <FormField label="Примечание"><textarea value={payloadDraft.leave_note || ""} onChange={(e) => updatePayloadField("leave_note", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+        <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="leave-order-preview">
+          <div className="mb-2 flex gap-2"><button type="button" onClick={() => setLeavePreviewLocale("ru")} className={leavePreviewLocale === "ru" ? "font-semibold" : ""}>Русский</button><span>/</span><button type="button" onClick={() => setLeavePreviewLocale("kk")} className={leavePreviewLocale === "kk" ? "font-semibold" : ""}>Қазақша</button></div>
+          <div className="text-sm font-semibold">{leavePreviewLocale === "ru" ? "ПРИКАЗ" : "БҰЙРЫҚ"}</div>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm"><li>{leavePreviewLocale === "ru" ? `${annual ? "Предоставить ежегодный трудовой отпуск" : "Предоставить отпуск без сохранения заработной платы"} ${employeeQuery || "сотруднику"}, ${currentPlacement?.position_name || "должность"} ${currentPlacement?.org_unit_name || "подразделения"}, с ${start || "…"} по ${end || "…"}, ${calculatedDays || "…"} календарных дней.` : `${employeeQuery || "Қызметкерге"} ${start || "…"} мен ${end || "…"} аралығында ${calculatedDays || "…"} күнтізбелік күнге ${annual ? "жылдық ақылы еңбек демалысы" : "еңбекақысы сақталмайтын демалыс"} берілсін.`} {annual ? (payloadDraft.work_periods || []).map((p) => ` ${p.start}–${p.end}: ${p.days} ${leavePreviewLocale === "ru" ? "дн." : "күн."}`).join("") : ""} {payloadDraft.vacation_benefit_applicable ? (leavePreviewLocale === "ru" ? ` Пособие: ${payloadDraft.vacation_benefit_rule || "…"}.` : ` Демалыс жәрдемақысы: ${payloadDraft.vacation_benefit_rule || "…"}.`) : ""} {leavePreviewLocale === "ru" ? ` Основание: личное заявление от ${payloadDraft.application_date || "…"}.` : ` Негіз: ${payloadDraft.application_date || "…"} күнгі жеке өтініш.`}</li></ol>
+        </div>
+      </div>;
+    }
     return (
       <div className="grid gap-3 sm:grid-cols-2">
         {formConfig?.showTargetRate && formConfig.showTargetPlacement ? (
@@ -923,13 +991,25 @@ export default function PersonnelOrderItemEditor({
                   <td className="px-3 py-2">{item.item_status}</td>
                   <td className="px-3 py-2">
                     {!disabled && item.item_status === "ACTIVE" ? (
-                      <button
-                        type="button"
-                        className="text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
-                        onClick={() => void startEdit(item)}
-                      >
-                        Изменить
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
+                          onClick={() => void startEdit(item)}
+                          disabled={deletingItemId === item.item_id}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
+                          onClick={() => void handleDeleteItem(item)}
+                          disabled={deletingItemId != null}
+                          data-testid={`personnel-order-item-delete-${item.item_id}`}
+                        >
+                          {deletingItemId === item.item_id ? "Удаление…" : "Удалить"}
+                        </button>
+                      </div>
                     ) : null}
                   </td>
                 </tr>

@@ -560,6 +560,17 @@ export async function updatePersonnelOrderItem(
   );
 }
 
+export async function deletePersonnelOrderItem(
+  orderId: number,
+  itemId: number,
+): Promise<PersonnelOrderDetailResponse> {
+  return requestJson<PersonnelOrderDetailResponse>(
+    "DELETE",
+    `/directory/personnel-orders/${orderId}/items/${itemId}`,
+    { fallback: "Не удалось удалить пункт приказа." },
+  );
+}
+
 export async function markPersonnelOrderReadyForSignature(
   orderId: number,
 ): Promise<PersonnelOrderDetailResponse> {

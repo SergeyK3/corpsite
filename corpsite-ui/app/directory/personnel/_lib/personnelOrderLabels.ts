@@ -11,6 +11,8 @@ export type PersonnelOrderType =
   | "TERMINATION"
   | "CONCURRENT_DUTY_START"
   | "CONCURRENT_DUTY_END"
+  | "LEAVE.ANNUAL.GRANT"
+  | "LEAVE.UNPAID.GRANT"
   | "COMPOSITE";
 
 export const PERSONNEL_ORDER_STATUSES: readonly PersonnelOrderStatus[] = [
@@ -27,6 +29,8 @@ export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
   "TERMINATION",
   "CONCURRENT_DUTY_START",
   "CONCURRENT_DUTY_END",
+  "LEAVE.ANNUAL.GRANT",
+  "LEAVE.UNPAID.GRANT",
   "COMPOSITE",
 ] as const;
 
@@ -45,6 +49,11 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   CONCURRENT_DUTY_START: "Совмещение (начало)",
   CONCURRENT_DUTY_END: "Совмещение (окончание)",
   COMPOSITE: "Составной",
+};
+
+export const LEAVE_ORDER_TYPE_LABELS: Record<"LEAVE.ANNUAL.GRANT" | "LEAVE.UNPAID.GRANT", string> = {
+  "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
+  "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
 };
 
 export const PERSONNEL_ORDER_SOURCE_MODE_LABELS: Record<string, string> = {
@@ -70,7 +79,7 @@ export const PERSONNEL_ORDER_TYPE_FILTER_OPTIONS: ReadonlyArray<{
   { value: "", label: "Все типы" },
   ...PERSONNEL_ORDER_TYPES.map((value) => ({
     value,
-    label: PERSONNEL_ORDER_TYPE_LABELS[value],
+    label: personnelOrderTypeLabel(value),
   })),
 ];
 
@@ -84,6 +93,9 @@ export function personnelOrderStatusLabel(status: string | null | undefined): st
 
 export function personnelOrderTypeLabel(typeCode: string | null | undefined): string {
   const normalized = String(typeCode || "").trim().toUpperCase();
+  if (normalized === "LEAVE.ANNUAL.GRANT" || normalized === "LEAVE.UNPAID.GRANT") {
+    return LEAVE_ORDER_TYPE_LABELS[normalized];
+  }
   if ((PERSONNEL_ORDER_TYPES as readonly string[]).includes(normalized)) {
     return PERSONNEL_ORDER_TYPE_LABELS[normalized as PersonnelOrderType];
   }
@@ -136,6 +148,8 @@ export const PERSONNEL_ORDER_CREATE_TYPES = [
   "TERMINATION",
   "CONCURRENT_DUTY_START",
   "CONCURRENT_DUTY_END",
+  "LEAVE.ANNUAL.GRANT",
+  "LEAVE.UNPAID.GRANT",
 ] as const satisfies readonly PersonnelOrderType[];
 
 export const PERSONNEL_ORDER_CREATE_TYPE_OPTIONS: ReadonlyArray<{
@@ -143,7 +157,7 @@ export const PERSONNEL_ORDER_CREATE_TYPE_OPTIONS: ReadonlyArray<{
   label: string;
 }> = PERSONNEL_ORDER_CREATE_TYPES.map((value) => ({
   value,
-  label: PERSONNEL_ORDER_TYPE_LABELS[value],
+  label: personnelOrderTypeLabel(value),
 }));
 
 export function isEditablePersonnelOrderStatus(status: string | null | undefined): boolean {

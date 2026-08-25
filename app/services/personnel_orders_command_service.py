@@ -127,9 +127,45 @@ def _validate_leave_draft_item(
         raise PersonnelOrderValidationError("Leave payload.leave_start must match period_start.")
     if str(payload.get("leave_end") or "") != period_end.isoformat():
         raise PersonnelOrderValidationError("Leave payload.leave_end must match period_end.")
+    try:
+        leave_days = int(payload.get("leave_days"))
+    except (TypeError, ValueError):
+        raise PersonnelOrderValidationError("Leave item requires integer payload.leave_days.")
+    if payload.get("work_periods") is not None and leave_days != (period_end - period_start).days + 1:
+        raise PersonnelOrderValidationError("Leave payload.leave_days must equal inclusive leave period days.")
+    basis = payload.get("basis") if isinstance(payload.get("basis"), dict) else {}
+    if basis and (str(basis.get("kind") or "").strip() != "PERSONAL_APPLICATION" or not str(basis.get("date") or "").strip()):
+        raise PersonnelOrderValidationError("Leave personal application requires kind PERSONAL_APPLICATION and date.")
+    if item_type_code == "LEAVE.UNPAID.GRANT" and payload.get("work_periods") is not None:
+        raise PersonnelOrderValidationError("Unpaid leave must not include work_periods.")
     if item_type_code == "LEAVE.ANNUAL.GRANT":
-        if not str(payload.get("work_period_start") or "").strip() or not str(payload.get("work_period_end") or "").strip():
-            raise PersonnelOrderValidationError("Annual leave requires work_period_start and work_period_end.")
+        work_periods = payload.get("work_periods")
+        if work_periods is None:
+            # Compatibility with existing leave drafts created before the constructor.
+            if not str(payload.get("work_period_start") or "").strip() or not str(payload.get("work_period_end") or "").strip():
+                raise PersonnelOrderValidationError("Annual leave requires work_period_start and work_period_end.")
+        else:
+            if not isinstance(work_periods, list) or not work_periods:
+                raise PersonnelOrderValidationError("Annual leave requires at least one work_period.")
+            total = 0
+            for index, work_period in enumerate(work_periods, start=1):
+                if not isinstance(work_period, dict):
+                    raise PersonnelOrderValidationError(f"work_periods[{index}] must be an object.")
+                try:
+                    start = date.fromisoformat(str(work_period.get("start") or ""))
+                    end = date.fromisoformat(str(work_period.get("end") or ""))
+                    days = int(work_period.get("days"))
+                except (TypeError, ValueError):
+                    raise PersonnelOrderValidationError(f"work_periods[{index}] requires start, end and integer days.")
+                if end < start:
+                    raise PersonnelOrderValidationError(f"work_periods[{index}].end cannot be earlier than start.")
+                if days < 1:
+                    raise PersonnelOrderValidationError(f"work_periods[{index}].days must be positive.")
+                total += days
+            if total != leave_days:
+                raise PersonnelOrderValidationError("Annual leave work_periods days must equal leave_days.")
+        if work_periods is not None and payload.get("calculation_status") not in {"REQUESTED", "CALCULATED", "RETURNED_FOR_CORRECTION"}:
+            raise PersonnelOrderValidationError("Annual leave requires calculation_status.")
 
 
 def _normalize_source_mode(source_mode: str) -> str:
@@ -288,10 +324,10 @@ def _resolve_header_type_from_items(conn, order_id: int, fallback: str) -> str:
     types = {str(value).strip().upper() for value in rows if value}
     if not types:
         return fallback
-    # Leave item codes are item-level semantics; the grouped order header stays
-    # COMPOSITE rather than acquiring an item-only type code.
     if types.intersection(LEAVE_DRAFT_ITEM_TYPE_CODES):
-        return ORDER_TYPE_COMPOSITE
+        if len(types) != 1:
+            raise PersonnelOrderValidationError("Leave order cannot mix annual and unpaid leave items.")
+        return next(iter(types))
     if len(types) == 1:
         return next(iter(types))
     return ORDER_TYPE_COMPOSITE
@@ -500,6 +536,8 @@ def create_personnel_order_item(
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
+        if str(order.get("order_type_code") or "").upper() in LEAVE_DRAFT_ITEM_TYPE_CODES and normalized_type != str(order["order_type_code"]).upper():
+            raise PersonnelOrderValidationError("Leave order item type must match the order type.")
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
 
@@ -612,6 +650,88 @@ def delete_personnel_order_draft(*, order_id: int) -> None:
         )
         if result.rowcount != 1:
             raise PersonnelOrderConflictError("Personnel order is not an editable DRAFT.")
+
+
+def delete_personnel_order_item(*, order_id: int, item_id: int) -> Dict[str, Any]:
+    """Delete one item from an editable draft and compact its numbering."""
+    _require_available()
+    with engine.begin() as conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
+        order = _fetch_order_row(conn, order_id)
+        _ensure_order_editable(order)
+        item = conn.execute(
+            text(
+                """
+                SELECT item_id
+                FROM public.personnel_order_items
+                WHERE item_id = :item_id AND order_id = :order_id
+                """
+            ),
+            {"item_id": int(item_id), "order_id": int(order_id)},
+        ).first()
+        if item is None:
+            raise PersonnelOrderItemNotFoundError(
+                f"Personnel order item {item_id} not found for order {order_id}."
+            )
+
+        # Editorial and basis records are item-scoped and must disappear with
+        # the structured item so a later generation cannot include it.
+        for table, column in (
+            ("personnel_order_item_editorial_blocks", "order_item_id"),
+            ("personnel_order_item_bases", "order_item_id"),
+        ):
+            conn.execute(
+                text(f"DELETE FROM public.{table} WHERE {column} = :item_id"),
+                {"item_id": int(item_id)},
+            )
+        conn.execute(
+            text(
+                """
+                DELETE FROM public.personnel_order_items
+                WHERE item_id = :item_id AND order_id = :order_id
+                """
+            ),
+            {"item_id": int(item_id), "order_id": int(order_id)},
+        )
+        # Avoid transient collisions on the order/item number uniqueness rule
+        # while preserving the positive-number database check.
+        conn.execute(
+            text(
+                """
+                UPDATE public.personnel_order_items
+                SET item_number = item_number + 1000000
+                WHERE order_id = :order_id
+                """
+            ),
+            {"order_id": int(order_id)},
+        )
+        conn.execute(
+            text(
+                """
+                WITH numbered AS (
+                    SELECT item_id, ROW_NUMBER() OVER (ORDER BY item_number ASC, item_id ASC) AS item_number
+                    FROM public.personnel_order_items
+                    WHERE order_id = :order_id
+                )
+                UPDATE public.personnel_order_items poi
+                SET item_number = numbered.item_number
+                FROM numbered
+                WHERE poi.item_id = numbered.item_id
+                """
+            ),
+            {"order_id": int(order_id)},
+        )
+        conn.execute(
+            text("UPDATE public.personnel_orders SET updated_at = now() WHERE order_id = :order_id"),
+            {"order_id": int(order_id)},
+        )
+        try:
+            _mark_editorial_stale(conn, int(order_id))
+        except Exception:
+            pass
+        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
+
+    return get_personnel_order(int(order_id))
 
 
 def update_personnel_order_item(
