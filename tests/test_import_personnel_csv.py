@@ -50,11 +50,14 @@ def test_importer_uses_neutral_migration_labels_and_explicit_apply_actor():
 def test_loader_apply_path_uses_transaction_bound_order_and_contact_services():
     loader = _loader_module()
     source = inspect.getsource(loader.apply_one)
+    row_source = inspect.getsource(loader._row_from_source)
 
     assert "create_personnel_order_draft_tx" in source
     assert "create_personnel_order_item_tx" in source
     assert "register_personnel_order_tx" in source
     assert "ensure_operational_contact_for_employee" in source
+    assert 'source.get("found_department_unit_id")' in row_source
+    assert 'source.get("unit_id")' not in row_source
 
 
 def test_apply_one_receives_actor_user_id_for_all_audit_writes():

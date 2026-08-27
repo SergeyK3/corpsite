@@ -107,17 +107,12 @@ def load_department_map(input_xlsx: Path) -> tuple[dict[str, dict[str, Any]], se
         for values in sheet.iter_rows(min_row=2, values_only=True):
             if len(values) < 4:
                 continue
-            unit_id, name, code, source_department = values[:4]
+            _xlsx_unit_id, name, code, source_department = values[:4]
             source_key = normalized(source_department)
             if not source_key:
                 continue
-            try:
-                numeric_unit_id = int(unit_id)
-            except (TypeError, ValueError):
-                continue
             mapping_candidates[source_key].append(
                 {
-                    "unit_id": numeric_unit_id,
                     "name": text_value(name),
                     "code": text_value(code),
                     "source_department": text_value(source_department),
@@ -129,7 +124,7 @@ def load_department_map(input_xlsx: Path) -> tuple[dict[str, dict[str, Any]], se
     mapping: dict[str, dict[str, Any]] = {}
     ambiguous: set[str] = set()
     for key, candidates in mapping_candidates.items():
-        distinct = {(row["unit_id"], row["name"], row["code"]) for row in candidates}
+        distinct = {(row["name"], row["code"]) for row in candidates}
         if len(distinct) == 1:
             mapping[key] = candidates[0]
         else:
@@ -191,7 +186,7 @@ def load_database() -> dict[str, Any]:
             units = connection.execute(
                 text(
                     """
-                    SELECT unit_id, name, code
+                    SELECT unit_id, name, code, is_active
                     FROM public.org_units
                     ORDER BY unit_id
                     """
@@ -244,6 +239,11 @@ def load_database() -> dict[str, Any]:
             employees_by_name[key_name].add(employee_id)
 
     units_by_id = {int(row["unit_id"]): dict(row) for row in units}
+    units_by_code: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in units:
+        code = text_value(row["code"])
+        if code:
+            units_by_code[code].append(dict(row))
     positions_by_key: dict[str, list[dict[str, Any]]] = defaultdict(list)
     positions_by_id = {int(row["position_id"]): dict(row) for row in positions}
     for row in positions:
@@ -261,6 +261,7 @@ def load_database() -> dict[str, Any]:
         "employees_by_id": employees_by_id,
         "person_iins": person_iins,
         "units_by_id": units_by_id,
+        "units_by_code": units_by_code,
         "positions_by_key": positions_by_key,
         "positions_by_id": positions_by_id,
     }
@@ -334,16 +335,21 @@ def reconcile_row(
         errors.append("отделение отсутствует в первых 4 столбцах XLSX")
     else:
         candidate = department_map[department_key]
-        db_unit = database["units_by_id"].get(candidate["unit_id"])
-        if db_unit is None:
-            errors.append(f"unit_id={candidate['unit_id']} из XLSX отсутствует в public.org_units")
+        department_code = text_value(candidate["code"])
+        db_units = database["units_by_code"].get(department_code, []) if department_code else []
+        if not department_code:
+            errors.append("в XLSX не указан code отделения")
+        elif not db_units:
+            errors.append(f"code={department_code} из XLSX отсутствует в public.org_units")
+        elif len(db_units) > 1:
+            errors.append(f"code={department_code} неоднозначен в public.org_units")
+        elif not bool(db_units[0].get("is_active")):
+            errors.append(f"code={department_code} найден в public.org_units, но подразделение неактивно")
         else:
-            department = db_unit
-            report["found_department_unit_id"] = str(db_unit["unit_id"])
-            report["found_department_name"] = text_value(db_unit["name"])
-            report["found_department_code"] = text_value(db_unit["code"])
-            if normalized(db_unit["code"]) != normalized(candidate["code"]):
-                errors.append(f"код отделения XLSX не совпадает с public.org_units для unit_id={candidate['unit_id']}")
+            department = db_units[0]
+            report["found_department_unit_id"] = str(department["unit_id"])
+            report["found_department_name"] = text_value(department["name"])
+            report["found_department_code"] = text_value(department["code"])
 
     position_key = normalized(report["position"])
     position = None
