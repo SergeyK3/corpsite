@@ -435,6 +435,124 @@ def create_personnel_order_draft(
     return get_personnel_order(int(order_id))
 
 
+def create_personnel_order_draft_tx(
+    conn,
+    *,
+    created_by: int,
+    order_number: str,
+    order_date: date,
+    order_type_code: str,
+    comment: Optional[str] = None,
+) -> int:
+    """Create a DRAFT order in the caller's transaction.
+
+    This is the transaction-bound counterpart for controlled imports.  It uses
+    the same validation, defaults and evidence scope as the public draft
+    command, but deliberately does not open its own transaction.
+    """
+    normalized_number = str(order_number or "").strip() or None
+    normalized_type = _normalize_header_type(order_type_code)
+    (
+        signed_by_employee_id,
+        signed_by_name,
+        signed_by_position,
+        _warning,
+    ) = apply_default_signatory_if_needed(conn=conn)
+    order_id = conn.execute(
+        text(
+            """
+            INSERT INTO public.personnel_orders (
+                order_number, order_date, order_type_code, status, source_mode,
+                signed_by_employee_id, signed_by_name, signed_by_position,
+                comment, created_by
+            ) VALUES (
+                :order_number, :order_date, :order_type_code, :status, :source_mode,
+                :signed_by_employee_id, :signed_by_name, :signed_by_position,
+                :comment, :created_by
+            ) RETURNING order_id
+            """
+        ),
+        {
+            "order_number": normalized_number,
+            "order_date": order_date,
+            "order_type_code": normalized_type,
+            "status": ORDER_STATUS_DRAFT,
+            "source_mode": SOURCE_MODE_DIGITAL,
+            "signed_by_employee_id": signed_by_employee_id,
+            "signed_by_name": signed_by_name,
+            "signed_by_position": signed_by_position,
+            "comment": comment,
+            "created_by": int(created_by),
+        },
+    ).scalar_one()
+    create_personnel_order_evidence_scope_tx(conn, order_id=int(order_id))
+    return int(order_id)
+
+
+def create_personnel_order_item_tx(
+    conn,
+    *,
+    order_id: int,
+    item_type_code: str,
+    effective_date: date,
+    payload: Dict[str, Any],
+) -> int:
+    """Add an active item in the caller's transaction."""
+    normalized_type = _normalize_item_type(item_type_code)
+    order = _fetch_order_row(conn, int(order_id))
+    _ensure_order_editable(order)
+    from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
+
+    validate_hire_item_identity(conn, item_type_code=normalized_type, employee_id=None, payload=payload)
+    item_id = conn.execute(
+        text(
+            """
+            INSERT INTO public.personnel_order_items (
+                order_id, item_number, item_type_code, employee_id, effective_date,
+                payload, item_status
+            ) VALUES (
+                :order_id, :item_number, :item_type_code, NULL, :effective_date,
+                CAST(:payload AS jsonb), :item_status
+            ) RETURNING item_id
+            """
+        ),
+        {
+            "order_id": int(order_id),
+            "item_number": _next_item_number(conn, int(order_id)),
+            "item_type_code": normalized_type,
+            "effective_date": effective_date,
+            "payload": json.dumps(payload),
+            "item_status": ITEM_STATUS_ACTIVE,
+        },
+    ).scalar_one()
+    return int(item_id)
+
+
+def register_personnel_order_tx(conn, *, order_id: int, target_status: str) -> None:
+    """Register a valid draft without leaving the caller's transaction."""
+    normalized_target = _normalize_register_target(target_status)
+    scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[int(order_id)])
+    order = _fetch_order_row(conn, int(order_id))
+    assert_order_not_archived(order)
+    if str(order["status"]) not in REGISTERABLE_FROM_STATUSES:
+        raise PersonnelOrderConflictError(
+            f"Personnel order {order_id} cannot be registered from status {order['status']}."
+        )
+    _validate_registerable_order(conn, order)
+    resolved_type = _resolve_header_type_from_items(conn, int(order_id), str(order["order_type_code"]))
+    conn.execute(
+        text(
+            """
+            UPDATE public.personnel_orders
+            SET status = :status, order_type_code = :order_type_code, updated_at = now()
+            WHERE order_id = :order_id
+            """
+        ),
+        {"order_id": int(order_id), "status": normalized_target, "order_type_code": resolved_type},
+    )
+    advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
+
+
 def update_personnel_order_draft(
     *,
     order_id: int,

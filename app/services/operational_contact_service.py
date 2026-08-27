@@ -227,6 +227,7 @@ def ensure_operational_contact_for_employee(
     *,
     employee_id: int,
     full_name: Optional[str] = None,
+    phone: Optional[str] = None,
 ) -> EnsureOperationalContactResult:
     """Create or reuse operational contact for an enrolled employee (idempotent)."""
     if not _table_exists(conn, "contacts"):
@@ -235,20 +236,44 @@ def ensure_operational_contact_for_employee(
     employee = _load_employee_context(conn, int(employee_id))
     user = _load_user_context(conn, int(employee_id))
     fields = _compose_contact_fields(employee=employee, user=user, full_name_override=full_name)
+    supplied_phone = str(phone or "").strip() or None
+    if supplied_phone is not None:
+        fields["phone"] = supplied_phone
 
-    existing_id = find_operational_contact_id(
-        conn,
-        person_id=fields["person_id"],
-        telegram_numeric_id=fields["telegram_numeric_id"],
-        full_name=fields["full_name"],
-    )
+    # A new personnel record must never adopt an unrelated legacy contact only
+    # because the display names coincide.  For a known Person, contact identity
+    # is person_id; name fallback remains only for legacy records without one.
+    if fields["person_id"] is not None:
+        existing_id = conn.execute(
+            text(
+                """
+                SELECT contact_id
+                FROM public.contacts
+                WHERE person_id = :person_id
+                  AND COALESCE(is_deleted, false) = false
+                ORDER BY contact_id
+                LIMIT 1
+                """
+            ),
+            {"person_id": int(fields["person_id"])},
+        ).scalar_one_or_none()
+    else:
+        existing_id = find_operational_contact_id(
+            conn,
+            person_id=None,
+            telegram_numeric_id=fields["telegram_numeric_id"],
+            full_name=fields["full_name"],
+        )
     if existing_id is not None:
         conn.execute(
             text(
                 """
                 UPDATE public.contacts
                 SET
-                    phone = COALESCE(NULLIF(trim(phone), ''), :phone),
+                    phone = CASE
+                        WHEN :phone_is_authoritative THEN :phone
+                        ELSE COALESCE(NULLIF(trim(phone), ''), :phone)
+                    END,
                     telegram_username = COALESCE(NULLIF(trim(telegram_username), ''), :telegram_username),
                     telegram_numeric_id = COALESCE(telegram_numeric_id, :telegram_numeric_id),
                     person_id = COALESCE(person_id, :person_id),
@@ -258,6 +283,7 @@ def ensure_operational_contact_for_employee(
             ),
             {
                 "contact_id": int(existing_id),
+                "phone_is_authoritative": supplied_phone is not None,
                 **fields,
             },
         )

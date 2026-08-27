@@ -35,7 +35,7 @@ def test_parse_telegram_numeric_id():
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_ensure_operational_contact_is_idempotent(seed):
+def test_ensure_operational_contact_is_idempotent():
     if not _phase_1a_available():
         pytest.skip("employees tables missing")
 
@@ -45,6 +45,12 @@ def test_ensure_operational_contact_is_idempotent(seed):
         with engine.begin() as conn:
             if not table_exists(conn, "contacts"):
                 pytest.skip("contacts table missing")
+            unit_id = conn.execute(
+                text(
+                    "SELECT unit_id FROM public.org_units "
+                    "WHERE is_active = TRUE ORDER BY unit_id LIMIT 1"
+                )
+            ).scalar_one()
             position_id = insert_returning_id(
                 conn,
                 table="positions",
@@ -54,20 +60,35 @@ def test_ensure_operational_contact_is_idempotent(seed):
             employee_id = _create_employee(
                 conn,
                 full_name="Ops026 Contact Idempotent",
-                org_unit_id=int(seed["unit_id"]),
+                org_unit_id=int(unit_id),
                 position_id=int(position_id),
             )
             first = ensure_operational_contact_for_employee(
                 conn,
                 employee_id=employee_id,
                 full_name="Ops026 Contact Idempotent",
+                phone="70000000001",
             )
             second = ensure_operational_contact_for_employee(
                 conn,
                 employee_id=employee_id,
                 full_name="Ops026 Contact Idempotent",
             )
+            retained_phone = conn.execute(
+                text("SELECT phone FROM public.contacts WHERE contact_id = :id"),
+                {"id": first.contact_id},
+            ).scalar_one()
+            third = ensure_operational_contact_for_employee(
+                conn,
+                employee_id=employee_id,
+                full_name="Ops026 Contact Idempotent",
+                phone="70000000002",
+            )
             contact_id = first.contact_id
+            phone = conn.execute(
+                text("SELECT phone FROM public.contacts WHERE contact_id = :id"),
+                {"id": contact_id},
+            ).scalar_one()
             count = conn.execute(
                 text(
                     """
@@ -85,6 +106,9 @@ def test_ensure_operational_contact_is_idempotent(seed):
         assert second.created is False
         assert second.existed is True
         assert second.contact_id == first.contact_id
+        assert retained_phone == "70000000001"
+        assert third.contact_id == first.contact_id
+        assert phone == "70000000002"
         assert int(count) == 1
     finally:
         with engine.begin() as conn:
@@ -95,7 +119,7 @@ def test_ensure_operational_contact_is_idempotent(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_find_operational_contact_by_telegram(seed):
+def test_find_operational_contact_by_telegram():
     if not _phase_1a_available():
         pytest.skip("employees tables missing")
 
