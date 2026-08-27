@@ -1,10 +1,11 @@
-"""Read-only reconciliation of tmp/сотр слиян.csv against the local Corpsite DB.
+"""Read-only reconciliation of a personnel CSV against the Corpsite DB.
 
 The script never writes to PostgreSQL: all reads run in an explicit
-READ ONLY transaction.  Its only output is tmp/personnel_reconciliation_report.csv.
+READ ONLY transaction.  Input and report paths are supplied explicitly.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import unicodedata
@@ -19,10 +20,6 @@ from sqlalchemy import text
 from app.db.engine import engine
 
 
-ROOT = Path(__file__).resolve().parents[1]
-INPUT_CSV = ROOT / "tmp" / "сотр слиян.csv"
-INPUT_XLSX = ROOT / "tmp" / "спрКорпсайт.xlsx"
-OUTPUT_CSV = ROOT / "tmp" / "personnel_reconciliation_report.csv"
 DEPARTMENT_SHEET = "конвер справ отделов"
 
 STATUS_MATCH = "уже существует, данные совпадают"
@@ -100,8 +97,8 @@ def date_text(value: Any) -> str:
     return value.isoformat() if isinstance(value, date) else text_value(value)
 
 
-def load_department_map() -> tuple[dict[str, dict[str, Any]], set[str]]:
-    workbook = load_workbook(INPUT_XLSX, read_only=True, data_only=True)
+def load_department_map(input_xlsx: Path) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    workbook = load_workbook(input_xlsx, read_only=True, data_only=True)
     try:
         if DEPARTMENT_SHEET not in workbook.sheetnames:
             raise RuntimeError(f"В XLSX отсутствует вкладка «{DEPARTMENT_SHEET}»")
@@ -469,16 +466,23 @@ def reconcile_row(
 
 
 def main() -> None:
-    if not INPUT_CSV.is_file() or not INPUT_XLSX.is_file():
-        raise SystemExit("Не найдены входные файлы в tmp")
-    with INPUT_CSV.open("r", encoding="utf-8-sig", newline="") as source:
+    parser = argparse.ArgumentParser(description="Read-only personnel CSV reconciliation")
+    parser.add_argument("--csv", type=Path, required=True, help="source personnel CSV")
+    parser.add_argument("--xlsx", type=Path, required=True, help="department mapping XLSX")
+    parser.add_argument("--output-report", type=Path, required=True, help="reconciliation report CSV")
+    args = parser.parse_args()
+    for label, path in (("--csv", args.csv), ("--xlsx", args.xlsx)):
+        if not path.is_file():
+            raise SystemExit(f"{label} file not found: {path}")
+
+    with args.csv.open("r", encoding="utf-8-sig", newline="") as source:
         rows = list(csv.DictReader(source, delimiter=";"))
     required = {"ФИО", "ИИН", "Дата рождения", "должность", "отдел", "ТабНомер", "телефон", "date_from"}
     missing_headers = sorted(required.difference(rows[0].keys() if rows else set()))
     if missing_headers:
         raise SystemExit(f"В CSV отсутствуют столбцы: {', '.join(missing_headers)}")
 
-    department_map, ambiguous_department_keys = load_department_map()
+    department_map, ambiguous_department_keys = load_department_map(args.xlsx)
     database = load_database()
     duplicate_keys, duplicate_counts = csv_duplicate_keys(rows)
     report_rows = [
@@ -493,14 +497,14 @@ def main() -> None:
         )
         for index, row in enumerate(rows)
     ]
-    with OUTPUT_CSV.open("w", encoding="utf-8-sig", newline="") as output:
+    with args.output_report.open("w", encoding="utf-8-sig", newline="") as output:
         writer = csv.DictWriter(output, fieldnames=REPORT_COLUMNS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(report_rows)
 
     counts = Counter(row["status"] for row in report_rows)
     fio_intersections = sum(1 for row in report_rows if int(row["fio_match_count"] or 0) > 0)
-    print(f"Отчёт: {OUTPUT_CSV}")
+    print(f"Отчёт: {args.output_report}")
     print("Строк CSV:", len(report_rows))
     print("Сотрудников в локальной БД:", len(database["employees_by_id"]))
     print("Точных пересечений по нормализованному ФИО:", fio_intersections)

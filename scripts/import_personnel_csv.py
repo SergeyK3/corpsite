@@ -15,7 +15,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from reconcile_personnel_csv import ROOT, normalized, normalized_iin, parse_date, text_value
+from reconcile_personnel_csv import normalized, normalized_iin, parse_date, text_value
 from app.db.engine import engine
 from app.personnel_applications.application.registration_service import _ensure_envelope_exists, _insert_person
 from app.services.identity_reconciliation_service import _insert_employee_identity_iin
@@ -28,14 +28,8 @@ from app.services.personnel_orders_command_service import (
 )
 
 
-DEFAULT_CSV = ROOT / "tmp" / "сотр слияние.csv"
-DEFAULT_XLSX = ROOT / "tmp" / "спрКорпсайт.xlsx"
-DEFAULT_INPUT_REPORT = ROOT / "tmp" / "personnel_reconciliation_report.csv"
-DEFAULT_OUTPUT_REPORT = ROOT / "tmp" / "personnel_import_dry_run.csv"
-DEFAULT_APPLY_REPORT = ROOT / "tmp" / "personnel_import_apply_result.csv"
 PRODUCTION_ORDER_PREFIX = "PERSONNEL-IMPORT-2026"
 STATUS_NEW = "новый сотрудник"
-PILOT_ACTOR_USER_ID = 1
 
 OUT_READY = "готово к созданию"
 OUT_DATE_REQUIRED = "требуется date_from"
@@ -220,7 +214,7 @@ def _repeat_check(*, full_name: str, iin: str) -> tuple[str, str]:
 def _verify_created(
     *, row: dict[str, str], require_identity_and_contact: bool, order_prefix: str
 ) -> dict[str, int | None]:
-    """Read back only the objects created by this deterministic pilot row."""
+    """Read back only the objects created by this deterministic import row."""
     with engine.connect() as connection:
         employee = connection.execute(
             text(
@@ -300,7 +294,7 @@ def _verify_created(
 
 
 def apply_one(
-    source: dict[str, str], *, fail_after_draft: bool = False,
+    source: dict[str, str], *, actor_user_id: int, fail_after_draft: bool = False,
     order_prefix: str = PRODUCTION_ORDER_PREFIX,
 ) -> dict[str, str]:
     """Apply one row; all mutations go through existing Corpsite services."""
@@ -354,15 +348,15 @@ def apply_one(
                 connection,
                 person_id=person_id,
                 is_new_person=is_new_person,
-                actor_id=f"csv-pilot:{PILOT_ACTOR_USER_ID}",
+                actor_id=f"personnel-import:{actor_user_id}",
             )
             order_id = create_personnel_order_draft_tx(
                 connection,
-                created_by=PILOT_ACTOR_USER_ID,
+                created_by=actor_user_id,
                 order_number=order_number(source_row=row["csv_row"], prefix=order_prefix),
                 order_date=effective_date,
                 order_type_code="HIRE",
-                comment=f"Local CSV pilot import, source row {row['csv_row']}",
+                comment=f"Bulk personnel migration, source row {row['csv_row']}",
             )
             if fail_after_draft:
                 raise RuntimeError("test failure after HIRE draft")
@@ -379,7 +373,7 @@ def apply_one(
                 },
             )
             register_personnel_order_tx(connection, order_id=order_id, target_status="SIGNED")
-            apply_personnel_order_in_conn(connection, order_id=order_id, created_by=PILOT_ACTOR_USER_ID)
+            apply_personnel_order_in_conn(connection, order_id=order_id, created_by=actor_user_id)
             employee_id = connection.execute(
                 text("SELECT employee_id FROM public.employees WHERE person_id = :person_id"),
                 {"person_id": person_id},
@@ -389,7 +383,7 @@ def apply_one(
                     connection,
                     employee_id=int(employee_id),
                     iin=iin,
-                    created_by=PILOT_ACTOR_USER_ID,
+                    created_by=actor_user_id,
                 )
             ensure_operational_contact_for_employee(
                 connection,
@@ -411,19 +405,27 @@ def apply_one(
         raise
 
 
+def actor_user_exists(actor_user_id: int) -> bool:
+    with engine.connect() as connection:
+        return connection.execute(
+            text("SELECT 1 FROM public.users WHERE user_id = :user_id"),
+            {"user_id": actor_user_id},
+        ).scalar_one_or_none() is not None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--apply", action="store_true")
-    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="source personnel CSV (provenance check)")
-    parser.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX, help="department mapping XLSX (provenance check)")
-    parser.add_argument("--report", type=Path, default=DEFAULT_INPUT_REPORT, help="reconciliation report CSV to import")
-    parser.add_argument("--output-report", type=Path, default=None, help="dry-run/apply result CSV")
+    parser.add_argument("--csv", type=Path, required=True, help="source personnel CSV (provenance check)")
+    parser.add_argument("--xlsx", type=Path, required=True, help="department mapping XLSX (provenance check)")
+    parser.add_argument("--report", type=Path, required=True, help="reconciliation report CSV to import")
+    parser.add_argument("--output-report", type=Path, required=True, help="dry-run/apply result CSV")
     parser.add_argument(
         "--dry-run-report",
         type=Path,
-        default=DEFAULT_OUTPUT_REPORT,
+        default=None,
         help="previous dry-run result; bulk --apply accepts only rows marked ready there",
     )
     parser.add_argument("--order-prefix", default=PRODUCTION_ORDER_PREFIX, help="stable personnel order number prefix")
@@ -431,6 +433,7 @@ def main() -> None:
         "--source-rows",
         help="comma-separated original CSV row numbers; required for --apply",
     )
+    parser.add_argument("--actor-user-id", type=int, help="existing users.user_id recorded for --apply")
     parser.add_argument(
         "--fail-after-draft",
         action="store_true",
@@ -440,10 +443,15 @@ def main() -> None:
     for label, path in (("--csv", args.csv), ("--xlsx", args.xlsx), ("--report", args.report)):
         if not path.is_file():
             raise SystemExit(f"{label} file not found: {path}")
+    if args.apply:
+        if args.actor_user_id is None:
+            raise SystemExit("--apply requires --actor-user-id")
+        if not actor_user_exists(args.actor_user_id):
+            raise SystemExit(f"--actor-user-id does not exist: {args.actor_user_id}")
     order_prefix = str(args.order_prefix or "").strip().upper()
     if not order_prefix or any(char.isspace() for char in order_prefix):
         raise SystemExit("--order-prefix must be a non-empty token without whitespace")
-    output_report = args.output_report or (DEFAULT_APPLY_REPORT if args.apply else DEFAULT_OUTPUT_REPORT)
+    output_report = args.output_report
     selected = None
     if args.source_rows:
         try:
@@ -451,6 +459,8 @@ def main() -> None:
         except ValueError as exc:
             raise SystemExit("--source-rows must contain comma-separated integers") from exc
     if args.apply and not selected:
+        if args.dry_run_report is None:
+            raise SystemExit("--apply requires --dry-run-report")
         if not args.dry_run_report.is_file():
             raise SystemExit("run --dry-run before bulk --apply")
         with args.dry_run_report.open("r", encoding="utf-8-sig", newline="") as report_file:
@@ -472,7 +482,14 @@ def main() -> None:
         applied: list[dict[str, str]] = []
         for source in source_rows:
             try:
-                applied.append(apply_one(source, fail_after_draft=args.fail_after_draft, order_prefix=order_prefix))
+                applied.append(
+                    apply_one(
+                        source,
+                        actor_user_id=args.actor_user_id,
+                        fail_after_draft=args.fail_after_draft,
+                        order_prefix=order_prefix,
+                    )
+                )
             except Exception as exc:
                 raise RuntimeError(f"source row {source['csv_row']}: {exc}") from exc
         with output_report.open("w", encoding="utf-8-sig", newline="") as output:
