@@ -64,17 +64,14 @@ def _position_matches(conn: Connection, name: str) -> list[dict[str, Any]]:
 
 
 def _insert_position(conn: Connection, name: str, category: str) -> None:
-    next_id = int(
-        conn.execute(text("SELECT COALESCE(MAX(position_id), 0) + 1 FROM public.positions")).scalar_one()
-    )
     conn.execute(
         text(
             """
-            INSERT INTO public.positions (position_id, name, category)
-            VALUES (:position_id, :name, :category)
+            INSERT INTO public.positions (name, category)
+            VALUES (:name, :category)
             """
         ),
-        {"position_id": next_id, "name": name, "category": category},
+        {"name": name, "category": category},
     )
 
 
@@ -177,8 +174,7 @@ def _one_by_code(conn: Connection, code: str, *, active: bool = True) -> dict[st
         for row in conn.execute(
             text(
                 """
-                SELECT unit_id, name, name_ru, name_en, code, parent_unit_id,
-                       group_id, is_active, unit_type, org_level, sort_order1, sort_order2
+                SELECT unit_id, name, code, parent_unit_id, group_id, is_active
                 FROM public.org_units
                 WHERE lower(btrim(code)) = lower(btrim(:code))
                 ORDER BY unit_id
@@ -196,12 +192,10 @@ def _org_unit_matches(conn: Connection, *, code: str, name: str) -> list[dict[st
     rows = conn.execute(
         text(
             f"""
-            SELECT unit_id, name, name_ru, name_en, code, parent_unit_id,
-                   group_id, is_active, unit_type, org_level, sort_order1, sort_order2
+            SELECT unit_id, name, code, parent_unit_id, group_id, is_active
             FROM public.org_units
             WHERE lower(btrim(code)) = lower(btrim(:code))
                OR {_normalized('name')} = {_normalized(':name')}
-               OR {_normalized("COALESCE(name_ru, name)")} = {_normalized(':name')}
             ORDER BY unit_id
             """
         ),
@@ -232,38 +226,13 @@ def _ensure_unit(
             f"Required existing organizational unit '{expected['code']}' is missing"
         )
 
-    if expected["sort_order1"] is not None:
-        sort_conflicts = conn.execute(
-            text(
-                """
-                SELECT unit_id, code, name
-                FROM public.org_units
-                WHERE parent_unit_id = :parent_unit_id
-                  AND group_id = :group_id
-                  AND sort_order1 = :sort_order1
-                ORDER BY unit_id
-                """
-            ),
-            {
-                "parent_unit_id": expected["parent_unit_id"],
-                "group_id": expected["group_id"],
-                "sort_order1": expected["sort_order1"],
-            },
-        ).mappings().all()
-        if sort_conflicts:
-            raise RuntimeError(
-                f"Conflicting sort order for '{expected['code']}': {list(sort_conflicts)}"
-            )
-
     conn.execute(
         text(
             """
             INSERT INTO public.org_units
-                (name, name_ru, name_en, code, parent_unit_id, group_id, is_active,
-                 unit_type, org_level, sort_order1, sort_order2)
+                (name, code, parent_unit_id, group_id, is_active)
             VALUES
-                (:name, :name_ru, :name_en, :code, :parent_unit_id, :group_id, :is_active,
-                 :unit_type, :org_level, :sort_order1, :sort_order2)
+                (:name, :code, :parent_unit_id, :group_id, :is_active)
             """
         ),
         expected,
@@ -289,23 +258,15 @@ def _ensure_org_units(conn: Connection) -> None:
     if root_is_active is not True:
         raise RuntimeError("DISP must reference an active parent organizational unit")
 
-    common = {
-        "is_active": True,
-        "sort_order2": None,
-    }
+    common = {"is_active": True}
     _ensure_unit(
         conn,
         expected={
             **common,
             "name": "Трансфузиология",
-            "name_ru": "Трансфузиология",
-            "name_en": None,
             "code": "TRANSFUSE",
             "parent_unit_id": root_unit_id,
             "group_id": 2,
-            "unit_type": None,
-            "org_level": None,
-            "sort_order1": None,
         },
         create_if_missing=True,
     )
@@ -314,14 +275,9 @@ def _ensure_org_units(conn: Connection) -> None:
         expected={
             **common,
             "name": "Секция амбулаторной химиотерапии",
-            "name_ru": "Секция амбулаторной химиотерапии",
-            "name_en": "Amb chemotherapy section",
             "code": "Amb_chem",
             "parent_unit_id": dispensary["unit_id"],
             "group_id": 1,
-            "unit_type": "BRANCH",
-            "org_level": 2,
-            "sort_order1": 59,
         },
         create_if_missing=True,
     )
@@ -330,14 +286,9 @@ def _ensure_org_units(conn: Connection) -> None:
         expected={
             **common,
             "name": "Комплаенс",
-            "name_ru": "Комплаенс",
-            "name_en": None,
             "code": "COMPL",
             "parent_unit_id": root_unit_id,
             "group_id": 3,
-            "unit_type": None,
-            "org_level": None,
-            "sort_order1": 58,
         },
         create_if_missing=True,
     )
@@ -350,7 +301,26 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError(
-        "Downgrade of t3u4v5w6x7y is intentionally blocked: the migration may have "
-        "accepted pre-existing reference rows and cannot identify ownership safely"
+    # TRANSFUSE belongs to s2t3u4v5w6x.  Position rows may also predate this
+    # migration, so removing them here could damage assignments or reference data.
+    op.execute(
+        """
+        DELETE FROM public.org_units target
+        USING public.org_units dispensary
+        WHERE dispensary.code = 'DISP'
+          AND dispensary.is_active IS TRUE
+          AND dispensary.parent_unit_id IS NOT NULL
+          AND target.is_active IS TRUE
+          AND (
+              (target.name = 'Секция амбулаторной химиотерапии'
+               AND target.code = 'Amb_chem'
+               AND target.parent_unit_id = dispensary.unit_id
+               AND target.group_id = 1)
+              OR
+              (target.name = 'Комплаенс'
+               AND target.code = 'COMPL'
+               AND target.parent_unit_id = dispensary.parent_unit_id
+               AND target.group_id = 3)
+          )
+        """
     )

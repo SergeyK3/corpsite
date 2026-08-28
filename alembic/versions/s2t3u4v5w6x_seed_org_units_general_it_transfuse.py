@@ -17,73 +17,42 @@ def upgrade() -> None:
         """
         DO $$
         DECLARE
+            v_parent_unit_id bigint;
+            v_disp_count integer;
             v_conflicts text;
         BEGIN
+            SELECT COUNT(*), MIN(parent_unit_id)
+            INTO v_disp_count, v_parent_unit_id
+            FROM public.org_units
+            WHERE code = 'DISP'
+              AND is_active IS TRUE;
+
+            IF v_disp_count <> 1 OR v_parent_unit_id IS NULL THEN
+                RAISE EXCEPTION
+                    'Cannot seed organizational units: expected one active DISP with a parent, found %',
+                    v_disp_count;
+            END IF;
+
             SELECT string_agg(
                 format('unit_id=%s, code=%s', unit_id, code),
                 '; ' ORDER BY unit_id
             )
             INTO v_conflicts
             FROM public.org_units
-            WHERE unit_id IN (79, 80, 81)
-               OR code IN ('GENERAL', 'IT', 'TRANSFUSE');
+            WHERE code IN ('GENERAL', 'IT', 'TRANSFUSE');
 
             IF v_conflicts IS NOT NULL THEN
                 RAISE EXCEPTION
-                    'Cannot seed organizational units: unit_id or code is already occupied: %',
+                    'Cannot seed organizational units: target code is already occupied: %',
                     v_conflicts;
             END IF;
 
-            IF NOT EXISTS (
-                SELECT 1
-                FROM public.deps_group
-                WHERE group_id = 2
-            ) THEN
-                RAISE EXCEPTION
-                    'Cannot seed TRANSFUSE: expected paraclinical group_id=2 is missing';
-            END IF;
-
-            IF NOT EXISTS (
-                SELECT 1
-                FROM public.deps_group
-                WHERE group_id = 3
-            ) THEN
-                RAISE EXCEPTION
-                    'Cannot seed GENERAL and IT: expected administrative-household group_id=3 is missing';
-            END IF;
-
-            IF NOT EXISTS (
-                SELECT 1
-                FROM public.org_units
-                WHERE unit_id = 41 AND is_active IS TRUE
-            ) THEN
-                RAISE EXCEPTION
-                    'Cannot seed organizational units: active parent_unit_id=41 is missing';
-            END IF;
-        END
-        $$;
-        """
-    )
-    op.execute(
-        """
-        INSERT INTO public.org_units
-            (unit_id, name, name_ru, code, parent_unit_id, group_id, is_active)
-        VALUES
-            (79, 'Общебольничный', NULL, 'GENERAL', 41, 3, TRUE),
-            (80, 'IT бөлімі', NULL, 'IT', 41, 3, TRUE),
-            (81, 'Трансфузиология', 'Трансфузиология', 'TRANSFUSE', 41, 2, TRUE);
-        """
-    )
-    op.execute(
-        """
-        DO $$
-        DECLARE
-            v_sequence_name text;
-        BEGIN
-            v_sequence_name := pg_get_serial_sequence('public.org_units', 'unit_id');
-            IF v_sequence_name IS NOT NULL THEN
-                PERFORM setval(v_sequence_name::regclass, 81, TRUE);
-            END IF;
+            INSERT INTO public.org_units
+                (name, code, parent_unit_id, group_id, is_active)
+            VALUES
+                ('Общебольничный', 'GENERAL', v_parent_unit_id, 3, TRUE),
+                ('IT бөлімі', 'IT', v_parent_unit_id, 3, TRUE),
+                ('Трансфузиология', 'TRANSFUSE', v_parent_unit_id, 2, TRUE);
         END
         $$;
         """
@@ -96,16 +65,17 @@ def downgrade() -> None:
     # deleting or altering related records.
     op.execute(
         """
-        DELETE FROM public.org_units
-        WHERE (unit_id = 79 AND name = 'Общебольничный' AND name_ru IS NULL
-               AND code = 'GENERAL' AND parent_unit_id = 41 AND group_id = 3
-               AND is_active IS TRUE)
-           OR (unit_id = 80 AND name = 'IT бөлімі' AND name_ru IS NULL
-               AND code = 'IT' AND parent_unit_id = 41 AND group_id = 3
-               AND is_active IS TRUE)
-           OR (unit_id = 81 AND name = 'Трансфузиология'
-               AND (name_ru IS NULL OR name_ru = 'Трансфузиология')
-               AND code = 'TRANSFUSE' AND parent_unit_id = 41 AND group_id = 2
-               AND is_active IS TRUE);
+        DELETE FROM public.org_units target
+        USING public.org_units dispensary
+        WHERE dispensary.code = 'DISP'
+          AND dispensary.is_active IS TRUE
+          AND dispensary.parent_unit_id IS NOT NULL
+          AND target.parent_unit_id = dispensary.parent_unit_id
+          AND target.is_active IS TRUE
+          AND (
+              (target.name = 'Общебольничный' AND target.code = 'GENERAL' AND target.group_id = 3)
+              OR (target.name = 'IT бөлімі' AND target.code = 'IT' AND target.group_id = 3)
+              OR (target.name = 'Трансфузиология' AND target.code = 'TRANSFUSE' AND target.group_id = 2)
+          )
         """
     )
