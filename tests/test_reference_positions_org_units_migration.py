@@ -64,7 +64,7 @@ def _migration_module():
 
 
 @contextmanager
-def _ephemeral_database():
+def _ephemeral_database(*, root_code: str = "mmc_root", seed_exact_units: bool = False):
     db_name = f"corpsite_ref_seed_{uuid4().hex[:12]}"
     admin_url = str(engine.url.render_as_string(hide_password=False)).rsplit("/", 1)[0] + "/postgres"
     test_url = admin_url.rsplit("/", 1)[0] + f"/{db_name}"
@@ -84,7 +84,7 @@ def _ephemeral_database():
                         name TEXT NOT NULL,
                         category VARCHAR NULL
                     );
-                    CREATE TABLE public.deps_group (
+                    CREATE TABLE public.org_unit_groups (
                         group_id INTEGER PRIMARY KEY,
                         group_name TEXT NOT NULL
                     );
@@ -100,7 +100,7 @@ def _ephemeral_database():
                         org_level INTEGER NULL,
                         sort_order1 INTEGER NULL,
                         sort_order2 INTEGER NULL,
-                        group_id INTEGER NULL REFERENCES public.deps_group(group_id)
+                        group_id INTEGER NULL
                     );
                     CREATE TABLE public.employees (
                         employee_id BIGINT PRIMARY KEY,
@@ -118,29 +118,51 @@ def _ephemeral_database():
             conn.execute(
                 text(
                     """
-                    INSERT INTO public.deps_group (group_id, group_name)
-                    VALUES
-                        (101, 'Клинические'),
-                        (202, 'Параклинические'),
-                        (303, 'Административно-хозяйственные');
-
                     INSERT INTO public.positions (position_id, name, category)
                     VALUES
                         (501, 'Инженер', 'technical'),
                         (502, 'инженер', 'technical'),
                         (900, 'Базовая должность', 'other');
-
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
                     INSERT INTO public.org_units
                         (unit_id, name, name_ru, code, parent_unit_id, group_id, is_active)
                     VALUES
-                        (1001, 'Организация', NULL, 'ORG_MAIN', NULL, NULL, TRUE),
-                        (2002, 'Диспансер', NULL, 'DISP', 1001, 101, TRUE),
-                        (3003, 'Трансфузиология', 'Трансфузиология', 'TRANSFUSE', 1001, 202, TRUE);
-
+                        (1001, 'Организация', NULL, :root_code, NULL, NULL, TRUE),
+                        (2002, 'Диспансер', NULL, 'DISP', 1001, 1, TRUE)
+                    """
+                ),
+                {"root_code": root_code},
+            )
+            if seed_exact_units:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO public.org_units
+                            (unit_id, name, name_ru, name_en, code, parent_unit_id,
+                             group_id, is_active, unit_type, org_level, sort_order1, sort_order2)
+                        VALUES
+                            (3003, 'Трансфузиология', 'Трансфузиология', NULL,
+                             'TRANSFUSE', 1001, 2, TRUE, NULL, NULL, NULL, NULL),
+                            (3004, 'Секция амбулаторной химиотерапии',
+                             'Секция амбулаторной химиотерапии', 'Amb chemotherapy section',
+                             'Amb_chem', 2002, 1, TRUE, 'BRANCH', 2, 59, NULL),
+                            (3005, 'Комплаенс', 'Комплаенс', NULL,
+                             'COMPL', 1001, 3, TRUE, NULL, NULL, 58, NULL)
+                        """
+                    )
+                )
+            conn.execute(
+                text(
+                    """
                     INSERT INTO public.employees (employee_id, position_id, org_unit_id)
                     VALUES (1, 900, 1001);
                     INSERT INTO public.person_assignments (assignment_id, position_id, org_unit_id)
-                    VALUES (1, 900, 1001);
+                    VALUES (1, 900, 1001)
                     """
                 )
             )
@@ -177,16 +199,14 @@ def test_revision_extends_single_head() -> None:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_upgrade_seeds_by_names_and_codes_idempotently_on_separate_database() -> None:
+def test_upgrade_creates_units_for_production_shape_without_group_rows() -> None:
     with _ephemeral_database() as test_engine:
         with test_engine.begin() as conn:
             before_employees = conn.execute(text("SELECT COUNT(*) FROM public.employees")).scalar_one()
             before_assignments = conn.execute(
                 text("SELECT COUNT(*) FROM public.person_assignments")
             ).scalar_one()
-            transfuse_id = conn.execute(
-                text("SELECT unit_id FROM public.org_units WHERE code = 'TRANSFUSE'")
-            ).scalar_one()
+            assert conn.execute(text("SELECT COUNT(*) FROM public.org_unit_groups")).scalar_one() == 0
             _run_upgrade(conn)
             _run_upgrade(conn)
 
@@ -224,16 +244,17 @@ def test_upgrade_seeds_by_names_and_codes_idempotently_on_separate_database() ->
                     )
                 ).all()
             }
-            assert units["TRANSFUSE"].unit_id == transfuse_id
-            assert units["TRANSFUSE"].group_id == 202
+            assert units["TRANSFUSE"].name == "Трансфузиология"
+            assert units["TRANSFUSE"].parent_unit_id == 1001
+            assert units["TRANSFUSE"].group_id == 2
             assert units["Amb_chem"].name == "Секция амбулаторной химиотерапии"
             assert units["Amb_chem"].parent_unit_id == 2002
-            assert units["Amb_chem"].group_id == 101
+            assert units["Amb_chem"].group_id == 1
             assert units["Amb_chem"].unit_type == "BRANCH"
             assert units["Amb_chem"].org_level == 2
             assert units["COMPL"].name == "Комплаенс"
             assert units["COMPL"].parent_unit_id == 1001
-            assert units["COMPL"].group_id == 303
+            assert units["COMPL"].group_id == 3
 
             assert conn.execute(text("SELECT COUNT(*) FROM public.employees")).scalar_one() == before_employees
             assert conn.execute(
@@ -242,7 +263,39 @@ def test_upgrade_seeds_by_names_and_codes_idempotently_on_separate_database() ->
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_upgrade_rejects_conflicting_org_unit_code_atomically() -> None:
+def test_upgrade_accepts_exact_local_units_without_duplicates() -> None:
+    with _ephemeral_database(root_code="ORG_MAIN", seed_exact_units=True) as test_engine:
+        with test_engine.begin() as conn:
+            before = dict(
+                conn.execute(
+                    text(
+                        """
+                        SELECT code, unit_id
+                        FROM public.org_units
+                        WHERE code IN ('TRANSFUSE', 'Amb_chem', 'COMPL')
+                        """
+                    )
+                ).all()
+            )
+            _run_upgrade(conn)
+            _run_upgrade(conn)
+            after = dict(
+                conn.execute(
+                    text(
+                        """
+                        SELECT code, unit_id
+                        FROM public.org_units
+                        WHERE code IN ('TRANSFUSE', 'Amb_chem', 'COMPL')
+                        """
+                    )
+                ).all()
+            )
+            assert after == before
+            assert len(after) == 3
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_upgrade_rejects_conflicting_transfuse_atomically() -> None:
     with _ephemeral_database() as test_engine:
         with test_engine.begin() as conn:
             conn.execute(
@@ -250,7 +303,8 @@ def test_upgrade_rejects_conflicting_org_unit_code_atomically() -> None:
                     """
                     INSERT INTO public.org_units
                         (name, name_ru, code, parent_unit_id, group_id, is_active)
-                    VALUES ('Чужое подразделение', 'Чужое подразделение', 'COMPL', 1001, 303, TRUE)
+                    VALUES ('Конфликтующая трансфузиология', 'Конфликтующая трансфузиология',
+                            'TRANSFUSE', 2002, 3, TRUE)
                     """
                 )
             )

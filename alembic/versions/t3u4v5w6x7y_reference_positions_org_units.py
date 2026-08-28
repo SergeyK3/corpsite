@@ -192,28 +192,6 @@ def _one_by_code(conn: Connection, code: str, *, active: bool = True) -> dict[st
     return rows[0]
 
 
-def _one_group(conn: Connection, *names: str) -> int:
-    conditions = " OR ".join(
-        f"{_normalized('group_name')} = {_normalized(f':name_{index}')}"
-        for index, _ in enumerate(names)
-    )
-    params = {f"name_{index}": name for index, name in enumerate(names)}
-    rows = conn.execute(
-        text(
-            f"""
-            SELECT group_id, group_name
-            FROM public.deps_group
-            WHERE {conditions}
-            ORDER BY group_id
-            """
-        ),
-        params,
-    ).mappings().all()
-    if len(rows) != 1:
-        raise RuntimeError(f"Expected one organizational group named in {names}: {list(rows)}")
-    return int(rows[0]["group_id"])
-
-
 def _org_unit_matches(conn: Connection, *, code: str, name: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         text(
@@ -294,14 +272,22 @@ def _ensure_unit(
 
 def _ensure_org_units(conn: Connection) -> None:
     conn.execute(text("LOCK TABLE public.org_units IN SHARE ROW EXCLUSIVE MODE"))
-    root = _one_by_code(conn, "ORG_MAIN")
     dispensary = _one_by_code(conn, "DISP")
-    if dispensary["parent_unit_id"] != root["unit_id"]:
-        raise RuntimeError("DISP must be a direct child of ORG_MAIN")
-
-    clinical_group = _one_group(conn, "Клинические")
-    paraclinical_group = _one_group(conn, "Параклинические")
-    admin_group = _one_group(conn, "Адмхоз", "Административно-хозяйственные")
+    root_unit_id = dispensary["parent_unit_id"]
+    if root_unit_id is None:
+        raise RuntimeError("DISP must have a parent organizational unit")
+    root_is_active = conn.execute(
+        text(
+            """
+            SELECT is_active
+            FROM public.org_units
+            WHERE unit_id = :unit_id
+            """
+        ),
+        {"unit_id": root_unit_id},
+    ).scalar_one_or_none()
+    if root_is_active is not True:
+        raise RuntimeError("DISP must reference an active parent organizational unit")
 
     common = {
         "is_active": True,
@@ -315,13 +301,13 @@ def _ensure_org_units(conn: Connection) -> None:
             "name_ru": "Трансфузиология",
             "name_en": None,
             "code": "TRANSFUSE",
-            "parent_unit_id": root["unit_id"],
-            "group_id": paraclinical_group,
+            "parent_unit_id": root_unit_id,
+            "group_id": 2,
             "unit_type": None,
             "org_level": None,
             "sort_order1": None,
         },
-        create_if_missing=False,
+        create_if_missing=True,
     )
     _ensure_unit(
         conn,
@@ -332,7 +318,7 @@ def _ensure_org_units(conn: Connection) -> None:
             "name_en": "Amb chemotherapy section",
             "code": "Amb_chem",
             "parent_unit_id": dispensary["unit_id"],
-            "group_id": clinical_group,
+            "group_id": 1,
             "unit_type": "BRANCH",
             "org_level": 2,
             "sort_order1": 59,
@@ -347,8 +333,8 @@ def _ensure_org_units(conn: Connection) -> None:
             "name_ru": "Комплаенс",
             "name_en": None,
             "code": "COMPL",
-            "parent_unit_id": root["unit_id"],
-            "group_id": admin_group,
+            "parent_unit_id": root_unit_id,
+            "group_id": 3,
             "unit_type": None,
             "org_level": None,
             "sort_order1": 58,
