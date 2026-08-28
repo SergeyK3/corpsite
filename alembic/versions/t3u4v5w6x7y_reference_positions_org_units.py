@@ -163,7 +163,7 @@ def _ensure_positions(conn: Connection) -> None:
         if not matches:
             _insert_position(conn, name, category)
             continue
-        if len(matches) == 1 and matches[0]["name"] == name and matches[0]["category"] == category:
+        if len(matches) == 1 and matches[0]["name"] == name:
             continue
         raise RuntimeError(f"Conflicting normalized position name for '{name}': {matches}")
 

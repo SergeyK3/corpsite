@@ -278,6 +278,60 @@ def test_s2_then_t3_upgrade_on_exact_production_schema() -> None:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_upgrade_accepts_exact_position_names_with_existing_categories() -> None:
+    existing_positions = {
+        "Машинист по стирке белья": (24, "other"),
+        "Социальный работник": (47, "other"),
+        "Техник": (52, "other"),
+    }
+
+    with _ephemeral_database() as test_engine:
+        with test_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO public.positions (position_id, name, category)
+                    VALUES
+                        (24, 'Машинист по стирке белья', 'other'),
+                        (47, 'Социальный работник', 'other'),
+                        (52, 'Техник', 'other')
+                    """
+                )
+            )
+
+            _run_migration(conn)
+
+            for name, (position_id, category) in existing_positions.items():
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT position_id, category
+                        FROM public.positions
+                        WHERE name = :name
+                        """
+                    ),
+                    {"name": name},
+                ).all()
+                assert rows == [(position_id, category)]
+
+            created = dict(
+                conn.execute(
+                    text(
+                        """
+                        SELECT name, category
+                        FROM public.positions
+                        WHERE name IN ('Медицинский статистик', 'Главный инженер')
+                        """
+                    )
+                ).all()
+            )
+            assert created == {
+                "Медицинский статистик": "medical",
+                "Главный инженер": "technical",
+            }
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_upgrade_accepts_exact_local_units_without_duplicates() -> None:
     with _ephemeral_database(root_code="ORG_MAIN", seed_exact_units=True) as test_engine:
         with test_engine.begin() as conn:
