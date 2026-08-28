@@ -17,11 +17,10 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         """
-        INSERT INTO public.roles (code, name, is_active)
-        VALUES ('HR_reg', 'сотрудник1 ОК', TRUE)
+        INSERT INTO public.roles (code, name)
+        VALUES ('HR_reg', 'сотрудник1 ОК')
         ON CONFLICT (code) DO UPDATE SET
-            name = EXCLUDED.name,
-            is_active = TRUE
+            name = EXCLUDED.name
         """
     )
     op.execute(
