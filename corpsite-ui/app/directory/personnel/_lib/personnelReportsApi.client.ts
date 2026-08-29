@@ -14,32 +14,69 @@ export type PersonnelReportOptions = {
   departments: PersonnelReportDepartment[];
 };
 export type PersonnelRosterItem = {
+  employee_id: number;
   number: number;
   full_name: string;
   position: string;
   rate: string;
+  rate_value: number | null;
+};
+export type PersonnelRosterSummaryItem = {
+  number: number;
+  group: { id: number; name: string };
+  department: { id: number; name: string };
+  employee_count: number;
+  rate_total: number;
+};
+export type PersonnelRosterDepartment = {
+  id: number;
+  name: string;
+  items: PersonnelRosterItem[];
+};
+export type PersonnelRosterGroup = {
+  id: number;
+  name: string;
+  departments: PersonnelRosterDepartment[];
 };
 export type PersonnelRosterReport = {
   report_code: "personnel_roster";
   report_name: string;
   generated_at: string;
-  group: { id: number; name: string };
-  department: { id: number; name: string };
+  filters: {
+    group: { id: number; name: string } | null;
+    department: { id: number; name: string } | null;
+  };
+  summary: PersonnelRosterSummaryItem[];
+  total: number;
+  total_rate: number;
+  missing_rate_count: number;
+  groups: PersonnelRosterGroup[];
   items: PersonnelRosterItem[];
 };
+
+export type PersonnelRosterFilters = {
+  groupId?: number;
+  orgUnitId?: number;
+};
+
+function rosterPath(filters: PersonnelRosterFilters, suffix = ""): string {
+  const params = new URLSearchParams();
+  if (filters.groupId) params.set("group_id", String(filters.groupId));
+  if (filters.orgUnitId) params.set("org_unit_id", String(filters.orgUnitId));
+  const query = params.toString();
+  return `/directory/personnel/reports/personnel-roster${suffix}${query ? `?${query}` : ""}`;
+}
 
 export function getPersonnelReportOptions(): Promise<PersonnelReportOptions> {
   return apiFetchJson<PersonnelReportOptions>("/directory/personnel/reports/options");
 }
 
-export function getPersonnelRoster(orgUnitId: number): Promise<PersonnelRosterReport> {
-  return apiFetchJson<PersonnelRosterReport>(
-    `/directory/personnel/reports/personnel-roster/${orgUnitId}`,
-  );
+export function getPersonnelRoster(filters: PersonnelRosterFilters): Promise<PersonnelRosterReport> {
+  return apiFetchJson<PersonnelRosterReport>(rosterPath(filters));
 }
 
-export async function downloadPersonnelRoster(orgUnitId: number): Promise<void> {
-  const url = buildUrl(`/directory/personnel/reports/personnel-roster/${orgUnitId}/excel`);
+export async function downloadPersonnelRoster(filters: PersonnelRosterFilters): Promise<void> {
+  const url = buildUrl(rosterPath(filters, "/excel"));
   const response = await fetch(url, { headers: buildHeaders(), cache: "no-store" });
   if (!response.ok) {
     handleAuthFailureIfNeeded(response.status);

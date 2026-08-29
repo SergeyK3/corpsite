@@ -7,12 +7,22 @@ import {
   getPersonnelReportOptions,
   getPersonnelRoster,
   type PersonnelReportOptions,
+  type PersonnelRosterFilters,
   type PersonnelRosterReport,
 } from "../_lib/personnelReportsApi.client";
 
 function errorMessage(error: unknown): string {
   if (error && typeof error === "object" && "message" in error) return String(error.message);
   return "Не удалось сформировать отчёт.";
+}
+
+function parseFilter(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function formatRate(value: number): string {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value);
 }
 
 export default function PersonnelReportsPageClient() {
@@ -42,9 +52,13 @@ export default function PersonnelReportsPageClient() {
     };
   }, []);
 
+  const filters = React.useMemo<PersonnelRosterFilters>(
+    () => ({ groupId: parseFilter(groupId), orgUnitId: parseFilter(departmentId) }),
+    [departmentId, groupId],
+  );
+
   React.useEffect(() => {
-    const id = Number(departmentId);
-    if (!Number.isSafeInteger(id) || id < 1) {
+    if (optionsLoading || options.departments.length === 0) {
       setReport(null);
       setReportLoading(false);
       return;
@@ -52,7 +66,7 @@ export default function PersonnelReportsPageClient() {
     let cancelled = false;
     setReportLoading(true);
     setError(null);
-    getPersonnelRoster(id)
+    getPersonnelRoster(filters)
       .then((data) => {
         if (!cancelled) setReport(data);
       })
@@ -68,26 +82,38 @@ export default function PersonnelReportsPageClient() {
     return () => {
       cancelled = true;
     };
-  }, [departmentId]);
+  }, [filters, options.departments.length, optionsLoading]);
 
   const departments = React.useMemo(
-    () => options.departments.filter((item) => String(item.group_id) === groupId),
+    () => options.departments.filter((item) => !groupId || String(item.group_id) === groupId),
     [options.departments, groupId],
   );
 
+  function handleGroupChange(nextGroupId: string) {
+    const currentDepartment = options.departments.find(
+      (department) => String(department.unit_id) === departmentId,
+    );
+    const isCompatible =
+      !nextGroupId || !currentDepartment || String(currentDepartment.group_id) === nextGroupId;
+    setGroupId(nextGroupId);
+    if (!isCompatible) setDepartmentId("");
+    setError(null);
+  }
+
   async function handleDownload() {
-    const id = Number(departmentId);
-    if (!Number.isSafeInteger(id) || id < 1) return;
+    if (options.departments.length === 0) return;
     setDownloading(true);
     setError(null);
     try {
-      await downloadPersonnelRoster(id);
+      await downloadPersonnelRoster(filters);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
       setDownloading(false);
     }
   }
+
+  const hasOptions = options.groups.length > 0 && options.departments.length > 0;
 
   return (
     <div className="space-y-5 px-4 py-5">
@@ -98,15 +124,10 @@ export default function PersonnelReportsPageClient() {
             aria-label="Группа отделений"
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             value={groupId}
-            disabled={optionsLoading}
-            onChange={(event) => {
-              setGroupId(event.target.value);
-              setDepartmentId("");
-              setReport(null);
-              setError(null);
-            }}
+            disabled={optionsLoading || !hasOptions}
+            onChange={(event) => handleGroupChange(event.target.value)}
           >
-            <option value="">Выберите группу</option>
+            <option value="">Все группы</option>
             {options.groups.map((group) => (
               <option key={group.group_id} value={group.group_id}>
                 {group.group_name}
@@ -120,10 +141,10 @@ export default function PersonnelReportsPageClient() {
             aria-label="Отделение"
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 disabled:cursor-not-allowed disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950"
             value={departmentId}
-            disabled={!groupId || optionsLoading}
+            disabled={optionsLoading || !hasOptions}
             onChange={(event) => setDepartmentId(event.target.value)}
           >
-            <option value="">Выберите отделение</option>
+            <option value="">Все отделения</option>
             {departments.map((department) => (
               <option key={department.unit_id} value={department.unit_id}>
                 {department.unit_name}
@@ -140,7 +161,7 @@ export default function PersonnelReportsPageClient() {
         </div>
         <button
           type="button"
-          disabled={!departmentId || downloading}
+          disabled={!hasOptions || reportLoading || downloading}
           onClick={handleDownload}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -153,35 +174,98 @@ export default function PersonnelReportsPageClient() {
           Предварительный просмотр
         </div>
         {error ? <div role="alert" className="px-4 py-8 text-center text-red-600">{error}</div> : null}
-        {!error && reportLoading ? <div className="px-4 py-8 text-center text-zinc-500">Загрузка…</div> : null}
-        {!error && !reportLoading && !departmentId ? (
-          <div className="px-4 py-8 text-center text-zinc-500">Выберите отделение для формирования отчёта.</div>
+        {!error && (optionsLoading || reportLoading) ? (
+          <div className="px-4 py-8 text-center text-zinc-500">Загрузка…</div>
         ) : null}
-        {!error && !reportLoading && departmentId && report?.items.length === 0 ? (
-          <div className="px-4 py-8 text-center text-zinc-500">Сотрудники не найдены.</div>
+        {!error && !optionsLoading && !hasOptions ? (
+          <div className="px-4 py-8 text-center text-zinc-500">
+            Нет доступных групп или отделений.
+          </div>
         ) : null}
-        {!error && !reportLoading && report && report.items.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
-                <tr>
-                  <th className="w-16 px-4 py-3 text-right">№</th>
-                  <th className="px-4 py-3">ФИО</th>
-                  <th className="px-4 py-3">Должность</th>
-                  <th className="w-28 px-4 py-3 text-right">Ставка</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.items.map((item) => (
-                  <tr key={item.number} className="border-t border-zinc-100 dark:border-zinc-800">
-                    <td className="px-4 py-3 text-right">{item.number}</td>
-                    <td className="px-4 py-3">{item.full_name}</td>
-                    <td className="px-4 py-3">{item.position}</td>
-                    <td className="px-4 py-3 text-right">{item.rate}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {!error && !optionsLoading && !reportLoading && hasOptions && report?.total === 0 ? (
+          <div className="px-4 py-8 text-center text-zinc-500">
+            Действующие сотрудники не найдены.
+          </div>
+        ) : null}
+        {!error && !optionsLoading && !reportLoading && report && report.total > 0 ? (
+          <div className="space-y-8 p-4">
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Сводный состав по отделениям</h2>
+              <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
+                    <tr>
+                      <th className="w-16 px-4 py-3 text-right">№</th>
+                      <th className="px-4 py-3">Группа отделений</th>
+                      <th className="px-4 py-3">Отделение</th>
+                      <th className="w-40 px-4 py-3 text-right">Количество человек</th>
+                      <th className="w-40 px-4 py-3 text-right">Количество ставок</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.summary.map((item) => (
+                      <tr key={item.department.id} className="border-t border-zinc-100 dark:border-zinc-800">
+                        <td className="px-4 py-3 text-right">{item.number}</td>
+                        <td className="px-4 py-3">{item.group.name}</td>
+                        <td className="px-4 py-3">{item.department.name}</td>
+                        <td className="px-4 py-3 text-right">{item.employee_count}</td>
+                        <td className="px-4 py-3 text-right">{formatRate(item.rate_total)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-zinc-300 font-semibold dark:border-zinc-700">
+                      <td className="px-4 py-3" colSpan={3}>ВСЕГО</td>
+                      <td className="px-4 py-3 text-right">{report.total}</td>
+                      <td className="px-4 py-3 text-right">{formatRate(report.total_rate)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {report.missing_rate_count > 0 ? (
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Ставка не указана у {report.missing_rate_count} сотрудников
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-5">
+              <h2 className="text-lg font-semibold">Личный состав</h2>
+              {report.groups.map((group) => (
+                <section key={group.id} className="space-y-4">
+                  <h3 className="rounded-lg bg-slate-700 px-4 py-2 text-base font-semibold text-white">
+                    {group.name}
+                  </h3>
+                  {group.departments.map((department) => (
+                    <div key={department.id} className="space-y-2">
+                      <h4 className="rounded-md bg-blue-50 px-4 py-2 font-semibold text-blue-950 dark:bg-blue-950 dark:text-blue-100">
+                        {department.name}
+                      </h4>
+                      <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
+                            <tr>
+                              <th className="w-16 px-4 py-3 text-right">№</th>
+                              <th className="px-4 py-3">ФИО</th>
+                              <th className="px-4 py-3">Должность</th>
+                              <th className="w-28 px-4 py-3 text-right">Ставка</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {department.items.map((item) => (
+                              <tr key={item.employee_id} className="border-t border-zinc-100 dark:border-zinc-800">
+                                <td className="px-4 py-3 text-right">{item.number}</td>
+                                <td className="px-4 py-3">{item.full_name}</td>
+                                <td className="px-4 py-3">{item.position}</td>
+                                <td className="px-4 py-3 text-right">{item.rate}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              ))}
+            </div>
           </div>
         ) : null}
       </section>
