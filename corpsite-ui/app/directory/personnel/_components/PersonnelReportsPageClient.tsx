@@ -274,38 +274,118 @@ function PersonnelRosterReportPanel() {
   );
 }
 
-type ReportCode = "personnel_roster" | "personnel_orders_summary";
+type PersonnelReportDefinition = {
+  id: string;
+  label: string;
+  Component: React.ComponentType;
+};
+
+type PersonnelReportSection = {
+  id: string;
+  label: string;
+  reports: readonly PersonnelReportDefinition[];
+};
+
+const PERSONNEL_REPORT_SECTIONS = [
+  {
+    id: "personnel",
+    label: "Персонал",
+    reports: [
+      {
+        id: "personnel-roster",
+        label: "Личный состав",
+        Component: PersonnelRosterReportPanel,
+      },
+    ],
+  },
+  {
+    id: "orders",
+    label: "Приказы",
+    reports: [
+      {
+        id: "orders-summary",
+        label: "Общая сводка по приказам",
+        Component: PersonnelOrdersSummaryReportPanel,
+      },
+    ],
+  },
+] as const satisfies readonly PersonnelReportSection[];
 
 export default function PersonnelReportsPageClient() {
-  const [activeReport, setActiveReport] = React.useState<ReportCode>("personnel_roster");
+  const defaultSection = PERSONNEL_REPORT_SECTIONS[0];
+  const [activeSectionId, setActiveSectionId] = React.useState<string>(defaultSection.id);
+  const [activeReportId, setActiveReportId] = React.useState<string>(defaultSection.reports[0].id);
+  const activeSection =
+    PERSONNEL_REPORT_SECTIONS.find((section) => section.id === activeSectionId) ?? defaultSection;
+  const activeReport =
+    activeSection.reports.find((reportDefinition) => reportDefinition.id === activeReportId) ??
+    activeSection.reports[0];
+  const ActiveReportComponent = activeReport.Component;
+
+  function selectSection(section: (typeof PERSONNEL_REPORT_SECTIONS)[number]) {
+    setActiveSectionId(section.id);
+    setActiveReportId(section.reports[0].id);
+  }
 
   return (
     <div>
-      <nav aria-label="Выбор кадрового отчёта" className="flex flex-wrap gap-3 px-4 pt-5">
-        <button
-          type="button"
-          aria-pressed={activeReport === "personnel_roster"}
-          onClick={() => setActiveReport("personnel_roster")}
-          className="rounded-xl border border-zinc-200 px-4 py-3 text-left aria-pressed:border-blue-600 aria-pressed:bg-blue-50 dark:border-zinc-800 dark:aria-pressed:bg-blue-950"
+      <div className="space-y-3 px-4 pt-5">
+        <section
+          aria-labelledby="personnel-report-sections-heading"
+          className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/60"
         >
-          <span className="block text-xs uppercase tracking-wide text-zinc-500">Отчёт</span>
-          <span className="font-semibold">Личный состав</span>
-        </button>
-        <button
-          type="button"
-          aria-pressed={activeReport === "personnel_orders_summary"}
-          onClick={() => setActiveReport("personnel_orders_summary")}
-          className="rounded-xl border border-zinc-200 px-4 py-3 text-left aria-pressed:border-blue-600 aria-pressed:bg-blue-50 dark:border-zinc-800 dark:aria-pressed:bg-blue-950"
+          <h2
+            id="personnel-report-sections-heading"
+            className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          >
+            Раздел отчётов
+          </h2>
+          <div role="group" aria-labelledby="personnel-report-sections-heading" className="flex flex-wrap gap-3">
+            {PERSONNEL_REPORT_SECTIONS.map((section) => {
+              const isActive = section.id === activeSection.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => selectSection(section)}
+                  className="inline-flex min-w-36 items-center justify-between gap-3 rounded-lg border-2 border-zinc-300 bg-white px-4 py-2.5 font-semibold hover:border-zinc-400 aria-pressed:border-blue-700 aria-pressed:shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:aria-pressed:border-blue-400"
+                >
+                  <span>{section.label}</span>
+                  {isActive ? <span aria-hidden="true">✓</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="personnel-section-reports-heading"
+          className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
         >
-          <span className="block text-xs uppercase tracking-wide text-zinc-500">Отчёт</span>
-          <span className="font-semibold">Общая сводка по приказам</span>
-        </button>
-      </nav>
-      {activeReport === "personnel_roster" ? (
-        <PersonnelRosterReportPanel />
-      ) : (
-        <PersonnelOrdersSummaryReportPanel />
-      )}
+          <h2 id="personnel-section-reports-heading" className="mb-3 text-sm font-medium text-zinc-600 dark:text-zinc-300">
+            Отчёты раздела «{activeSection.label}»
+          </h2>
+          <div role="group" aria-labelledby="personnel-section-reports-heading" className="flex flex-wrap gap-2">
+            {activeSection.reports.map((reportDefinition) => {
+              const isActive = reportDefinition.id === activeReport.id;
+              return (
+                <button
+                  key={reportDefinition.id}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setActiveReportId(reportDefinition.id)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 aria-pressed:border-blue-600 aria-pressed:font-semibold aria-pressed:outline aria-pressed:outline-1 aria-pressed:outline-blue-600 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                >
+                  {isActive ? <span aria-hidden="true">✓</span> : null}
+                  <span>{reportDefinition.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+      <ActiveReportComponent />
     </div>
   );
 }

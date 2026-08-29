@@ -210,20 +210,54 @@ describe("PersonnelReportsPageClient", () => {
     expect(screen.getByRole("button", { name: "Скачать Excel" })).toBeDisabled();
   });
 
-  it("keeps the personnel roster as the default report and opens the orders summary", async () => {
+  it("uses a two-level classifier and mounts only the selected section report", async () => {
     vi.mocked(getPersonnelReportOptions).mockResolvedValue(options);
     vi.mocked(getPersonnelRoster).mockResolvedValue(report);
     vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
 
     render(<PersonnelReportsPageClient />);
 
-    expect(screen.getByRole("button", { name: /Личный состав/ })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: /Общая сводка по приказам/ }));
+    const sections = screen.getByRole("group", { name: "Раздел отчётов" });
+    const personnelSection = within(sections).getByRole("button", { name: "Персонал" });
+    const ordersSection = within(sections).getByRole("button", { name: "Приказы" });
+    expect(personnelSection).toHaveAttribute("aria-pressed", "true");
+    expect(ordersSection).toHaveAttribute("aria-pressed", "false");
+
+    const personnelReports = screen.getByRole("group", { name: "Отчёты раздела «Персонал»" });
+    expect(within(personnelReports).getByRole("button", { name: "Личный состав" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(personnelReports).queryByRole("button", { name: "Общая сводка по приказам" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Группа отделений" })).toBeInTheDocument();
+    expect(getPersonnelOrdersSummary).not.toHaveBeenCalled();
+    await waitFor(() => expect(getPersonnelRoster).toHaveBeenCalled());
+
+    vi.mocked(getPersonnelReportOptions).mockClear();
+    vi.mocked(getPersonnelRoster).mockClear();
+    fireEvent.click(ordersSection);
 
     await waitFor(() => expect(getPersonnelOrdersSummary).toHaveBeenCalledWith({ dateFrom: undefined, dateTo: undefined }));
-    expect(screen.getByRole("button", { name: /Общая сводка по приказам/ })).toHaveAttribute("aria-pressed", "true");
+    expect(ordersSection).toHaveAttribute("aria-pressed", "true");
+    const orderReports = screen.getByRole("group", { name: "Отчёты раздела «Приказы»" });
+    expect(within(orderReports).getByRole("button", { name: "Общая сводка по приказам" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(orderReports).queryByRole("button", { name: "Личный состав" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "В том числе без номера или даты" })).toBeInTheDocument();
     expect(screen.getByRole("rowheader", { name: "Всего" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Группа отделений" })).not.toBeInTheDocument();
+    expect(getPersonnelReportOptions).not.toHaveBeenCalled();
+    expect(getPersonnelRoster).not.toHaveBeenCalled();
+
+    vi.mocked(getPersonnelOrdersSummary).mockClear();
+    fireEvent.click(personnelSection);
+    expect(screen.getByRole("group", { name: "Отчёты раздела «Персонал»" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "В том числе без номера или даты" })).not.toBeInTheDocument();
+    expect(getPersonnelOrdersSummary).not.toHaveBeenCalled();
+    expect(await screen.findByRole("combobox", { name: "Группа отделений" })).toBeInTheDocument();
+    await waitFor(() => expect(getPersonnelRoster).toHaveBeenCalled());
   });
 
   it("starts categories collapsed and independently expands and collapses accessible details", async () => {
@@ -232,7 +266,7 @@ describe("PersonnelReportsPageClient", () => {
     vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
 
     render(<PersonnelReportsPageClient />);
-    fireEvent.click(screen.getByRole("button", { name: /Общая сводка по приказам/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Приказы" }));
 
     const expandHire = await screen.findByRole("button", { name: "Раскрыть категорию Приём" });
     expect(expandHire).toHaveAttribute("aria-expanded", "false");
@@ -260,7 +294,7 @@ describe("PersonnelReportsPageClient", () => {
     vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
 
     render(<PersonnelReportsPageClient />);
-    fireEvent.click(screen.getByRole("button", { name: /Общая сводка по приказам/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Приказы" }));
     fireEvent.click(await screen.findByRole("button", { name: "Раскрыть категорию Увольнение" }));
     expect(screen.getByText("Приказы отсутствуют")).toBeInTheDocument();
 
