@@ -320,7 +320,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         (f"e.{date_from_col} AS e_date_from" if date_from_col else "NULL AS e_date_from"),
         (f"e.{date_to_col} AS e_date_to" if date_to_col else "NULL AS e_date_to"),
         (f"e.{dept_fk} AS e_dept_id" if dept_fk else "NULL AS e_dept_id"),
-        (f"e.{pos_fk} AS e_pos_id" if pos_fk else "NULL AS e_pos_id"),
+        (f"e.{pos_fk} AS e_legacy_pos_id" if pos_fk else "NULL AS e_legacy_pos_id"),
         f"e.{org_unit_fk} AS e_org_unit_id",
         ("e.person_id AS e_person_id" if "person_id" in set(emp_cols) else "NULL AS e_person_id"),
     ]
@@ -347,14 +347,68 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     pos_name_col = _dict_name_col(pos_cols, ["position_name", "pos_name"]) if pos_rel else None
     pos_category_col = "category" if "category" in set(pos_cols) else None
 
+    current_position_available = bool(
+        "person_id" in set(emp_cols)
+        and ("person_assignments", "table") in _list_relations()
+        and pos_fk
+        and pos_rel
+        and pos_id_col
+        and pos_name_col
+    )
     if pos_fk and pos_rel and pos_id_col and pos_name_col:
-        select_parts.append(f"p.{pos_name_col} AS pos_name")
         join_sql += (
             f" LEFT JOIN public.{pos_rel} p"
             f" ON CAST(p.{pos_id_col} AS TEXT) = CAST(e.{pos_fk} AS TEXT)"
         )
+        if current_position_available:
+            join_sql += (
+                " LEFT JOIN LATERAL ("
+                " SELECT pa.assignment_id, pa.position_id"
+                " FROM public.person_assignments pa"
+                " WHERE pa.person_id = e.person_id"
+                " AND pa.active_flag IS TRUE"
+                " AND pa.is_primary IS TRUE"
+                " AND pa.lifecycle_status = 'active'"
+                " AND pa.start_date <= CURRENT_DATE"
+                " AND (pa.end_date IS NULL OR pa.end_date >= CURRENT_DATE)"
+                " ORDER BY pa.start_date DESC, pa.assignment_id DESC"
+                " LIMIT 1"
+                ") current_pa ON TRUE"
+                f" LEFT JOIN public.{pos_rel} current_p"
+                f" ON CAST(current_p.{pos_id_col} AS TEXT) = CAST(current_pa.position_id AS TEXT)"
+            )
+            effective_position_id_expr = f"COALESCE(current_p.{pos_id_col}, p.{pos_id_col})"
+            effective_position_name_expr = f"COALESCE(current_p.{pos_name_col}, p.{pos_name_col})"
+            effective_position_category_expr = (
+                f"COALESCE(current_p.{pos_category_col}, p.{pos_category_col})"
+                if pos_category_col
+                else "NULL"
+            )
+            has_current_assignment_expr = "current_pa.assignment_id IS NOT NULL"
+        else:
+            effective_position_id_expr = f"p.{pos_id_col}"
+            effective_position_name_expr = f"p.{pos_name_col}"
+            effective_position_category_expr = (
+                f"p.{pos_category_col}" if pos_category_col else "NULL"
+            )
+            has_current_assignment_expr = "FALSE"
+        select_parts.extend(
+            [
+                f"{effective_position_id_expr} AS e_pos_id",
+                f"{effective_position_name_expr} AS pos_name",
+            ]
+        )
     else:
-        select_parts.append("NULL AS pos_name")
+        effective_position_id_expr = f"e.{pos_fk}" if pos_fk else "NULL"
+        effective_position_name_expr = "NULL"
+        effective_position_category_expr = "NULL"
+        has_current_assignment_expr = "FALSE"
+        select_parts.extend(
+            [
+                f"{effective_position_id_expr} AS e_pos_id",
+                "NULL AS pos_name",
+            ]
+        )
 
     # Org Units (canonical table)
     select_parts += [
@@ -387,14 +441,8 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         ]
 
     sql = "SELECT " + ", ".join(select_parts) + f" FROM public.{emp_rel} e" + join_sql
-    position_expr = (
-        f"p.{pos_name_col}" if pos_fk and pos_rel and pos_id_col and pos_name_col else "NULL"
-    )
-    position_category_expr = (
-        f"p.{pos_category_col}"
-        if pos_fk and pos_rel and pos_id_col and pos_name_col and pos_category_col
-        else "NULL"
-    )
+    position_expr = effective_position_name_expr
+    position_category_expr = effective_position_category_expr
     if dept_fk and dept_rel and dept_id_col and dept_name_col:
         department_expr = f"COALESCE(ou.name, d.{dept_name_col})"
     else:
@@ -407,7 +455,9 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         "rate_col": rate_col,
         "status_col": status_col,
         "position_expr": position_expr,
+        "position_id_expr": effective_position_id_expr,
         "position_category_expr": position_category_expr,
+        "has_current_assignment_expr": has_current_assignment_expr,
         "department_expr": department_expr,
     }
 
@@ -825,7 +875,10 @@ def list_employees(
         params["department_id_text"] = str(int(department_id))
 
     if position_id is not None and pos_fk:
-        where.append(f"CAST(e.{pos_fk} AS TEXT) = :position_id_text")
+        effective_position_id_expr = str(
+            select_meta.get("position_id_expr") or f"e.{pos_fk}"
+        )
+        where.append(f"CAST({effective_position_id_expr} AS TEXT) = :position_id_text")
         params["position_id_text"] = str(int(position_id))
 
     where_sql = " AND ".join(where) if where else "TRUE"
@@ -844,18 +897,8 @@ def list_employees(
         status_col=select_meta.get("status_col"),
         group_id_expr="ou.group_id",
         position_category_expr=str(select_meta.get("position_category_expr") or "NULL"),
-        has_current_assignment_expr=(
-            "EXISTS (SELECT 1 FROM public.person_assignments current_pa "
-            "WHERE current_pa.person_id = e.person_id "
-            "AND current_pa.active_flag IS TRUE "
-            "AND current_pa.is_primary IS TRUE "
-            "AND current_pa.lifecycle_status = 'active' "
-            "AND current_pa.start_date <= CURRENT_DATE "
-            "AND (current_pa.end_date IS NULL OR current_pa.end_date >= CURRENT_DATE) "
-            "AND current_pa.org_unit_id = e.org_unit_id "
-            "AND current_pa.position_id IS NOT DISTINCT FROM e.position_id)"
-            if "person_id" in set(emp_cols)
-            else "FALSE"
+        has_current_assignment_expr=str(
+            select_meta.get("has_current_assignment_expr") or "FALSE"
         ),
     )
 
@@ -873,8 +916,10 @@ def list_employees(
         f"""
         {cte_prefix}
         SELECT COUNT(*) AS cnt
-        FROM public.{emp_rel} e
-        WHERE {where_sql}
+        FROM (
+            {base_sql}
+            WHERE {where_sql}
+        ) filtered_employees
         """
     )
 

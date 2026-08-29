@@ -9,6 +9,10 @@ import pytest
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.services.personnel_position_ordering import (
+    personnel_position_rank,
+    personnel_position_rank_sql,
+)
 from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 from tests.conftest import auth_headers, get_columns, insert_returning_id, table_exists
 
@@ -130,6 +134,21 @@ def _insert_position(conn, *, name: str, category: str) -> int:
     )
 
 
+def _insert_admin_unit(conn, *, marker: str) -> int:
+    return int(
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.org_units (name, code, group_id, is_active)
+                VALUES (:name, :code, 3, TRUE)
+                RETURNING unit_id
+                """
+            ),
+            {"name": marker, "code": marker},
+        ).scalar_one()
+    )
+
+
 def _insert_person(conn, *, full_name: str, marker: str) -> int:
     return insert_returning_id(
         conn,
@@ -224,6 +243,254 @@ def _rate_list(payload: dict) -> List[float]:
         else:
             out.append(float(raw))
     return out
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_administrative_python_and_postgresql_case_are_equivalent():
+    samples = [
+        (3, "Руководитель отдела", "leaders", True),
+        (3, "Главный бухгалтер", "admin", True),
+        (3, "Заместитель руководителя", "leaders", True),
+        (3, "зам рук-ля отдела статистики", "leaders", True),
+        (3, "Главный специалист", "admin", True),
+        (3, "Старший менеджер", "admin", True),
+        (3, "Менеджер", "admin", True),
+        (3, "экономист1", "admin", True),
+        (3, "Секретарь-референт", "admin", True),
+        (3, "Техник", "technical", True),
+        (3, "Санитар", "medical", True),
+        (3, "Неизвестная должность", "other", True),
+        (3, "Руководитель отдела", "leaders", False),
+        (3, "Менеджер", "admin", False),
+        (3, "Секретарь-референт", "admin", False),
+        (3, None, None, False),
+        (1, "Врач", "medical", False),
+        (2, "Заведующий отделением", "leaders", False),
+    ]
+    values_sql = ", ".join(
+        f"(:idx_{index}, :group_{index}, :name_{index}, :category_{index}, :assigned_{index})"
+        for index in range(len(samples))
+    )
+    params: Dict[str, Any] = {}
+    for index, (group_id, position_name, category, assigned) in enumerate(samples):
+        params[f"idx_{index}"] = index
+        params[f"group_{index}"] = group_id
+        params[f"name_{index}"] = position_name
+        params[f"category_{index}"] = category
+        params[f"assigned_{index}"] = assigned
+    rank_sql = personnel_position_rank_sql(
+        group_id_expr="sample.group_id",
+        position_name_expr="sample.position_name",
+        position_category_expr="sample.position_category",
+        has_current_assignment_expr="sample.has_assignment",
+    )
+    with engine.connect() as conn:
+        sql_ranks = conn.execute(
+            text(
+                f"""
+                SELECT sample.idx, {rank_sql} AS rank
+                FROM (VALUES {values_sql}) AS sample(
+                    idx, group_id, position_name, position_category, has_assignment
+                )
+                ORDER BY sample.idx
+                """
+            ),
+            params,
+        ).mappings().all()
+
+    python_ranks = [
+        personnel_position_rank(
+            group_id=group_id,
+            position_name=position_name,
+            position_category=category,
+            has_current_assignment=assigned,
+        )
+        for group_id, position_name, category, assigned in samples
+    ]
+    assert [int(row["rank"]) for row in sql_ranks] == python_ranks
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_administrative_rank_is_applied_before_pagination_with_filters(
+    client, employees_seed
+):
+    prefix = f"PytestAdminRank_{uuid4().hex[:8]}"
+    employee_ids: List[int] = []
+    person_ids: List[int] = []
+    position_ids: List[int] = []
+    unit_id: Optional[int] = None
+    admin_user_id: Optional[int] = None
+    legacy_head_name = f"{prefix} Яковлев Legacy руководитель"
+    current_manager_name = f"{prefix} Борисов Текущий менеджер"
+    legacy_manager_name = f"{prefix} Антонов Legacy менеджер"
+    priority_name = f"{prefix} Власов Текущее назначение"
+    legacy_secretary_name = f"{prefix} Громова Legacy секретарь"
+    empty_position_name = f"{prefix} Дятлов Без должности"
+
+    try:
+        with engine.begin() as conn:
+            admin_user_id = _admin_user_id(conn)
+            unit_id = _insert_admin_unit(conn, marker=prefix.lower())
+            manager_position_id = _insert_position(
+                conn, name="Менеджер", category="admin"
+            )
+            head_position_id = _insert_position(
+                conn, name="Руководитель отдела", category="leaders"
+            )
+            position_ids.extend([manager_position_id, head_position_id])
+            secretary_position_id = _insert_position(
+                conn, name="Секретарь-референт", category="admin"
+            )
+            position_ids.append(secretary_position_id)
+
+            for full_name, position_id in (
+                (legacy_head_name, head_position_id),
+                (legacy_manager_name, manager_position_id),
+                (legacy_secretary_name, secretary_position_id),
+                (empty_position_name, None),
+            ):
+                employee_ids.append(
+                    int(
+                        _insert_sort_employee(
+                            conn,
+                            full_name=full_name,
+                            org_unit_id=unit_id,
+                            position_id=position_id,
+                        )
+                    )
+                )
+
+            for full_name, legacy_position_id, current_position_id, suffix in (
+                (
+                    current_manager_name,
+                    manager_position_id,
+                    manager_position_id,
+                    "current-manager",
+                ),
+                (
+                    priority_name,
+                    head_position_id,
+                    manager_position_id,
+                    "current-priority",
+                ),
+            ):
+                marker = f"{prefix.lower()}-{suffix}"
+                person_id = _insert_person(conn, full_name=full_name, marker=marker)
+                person_ids.append(person_id)
+                employee_id = int(
+                    _insert_sort_employee(
+                        conn,
+                        full_name=full_name,
+                        person_id=person_id,
+                        org_unit_id=unit_id,
+                        position_id=legacy_position_id,
+                    )
+                )
+                employee_ids.append(employee_id)
+                _insert_current_assignment(
+                    conn,
+                    person_id=person_id,
+                    org_unit_id=unit_id,
+                    position_id=current_position_id,
+                    marker=marker,
+                )
+
+        first_page = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=prefix,
+            org_group_id=3,
+            org_unit_id=int(unit_id),
+            limit=1,
+            offset=0,
+        )
+        assert first_page.status_code == 200, first_page.text
+        assert first_page.json()["total"] == 6
+        assert _fio_list(first_page.json()) == [legacy_head_name]
+
+        second_page = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=prefix,
+            org_group_id=3,
+            org_unit_id=int(unit_id),
+            limit=1,
+            offset=1,
+        )
+        assert second_page.status_code == 200, second_page.text
+        assert _fio_list(second_page.json()) == [legacy_manager_name]
+
+        full_list = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=prefix,
+            org_group_id=3,
+            org_unit_id=int(unit_id),
+            limit=20,
+            offset=0,
+        )
+        assert full_list.status_code == 200, full_list.text
+        assert _fio_list(full_list.json()) == [
+            legacy_head_name,
+            legacy_manager_name,
+            current_manager_name,
+            priority_name,
+            legacy_secretary_name,
+            empty_position_name,
+        ]
+        by_fio = {item["fio"]: item for item in full_list.json()["items"]}
+        assert by_fio[legacy_head_name]["position"]["name"] == "Руководитель отдела"
+        assert by_fio[legacy_manager_name]["position"]["name"] == "Менеджер"
+        assert by_fio[legacy_secretary_name]["position"]["name"] == "Секретарь-референт"
+        assert by_fio[empty_position_name]["position"] == {"id": None, "name": None}
+        assert by_fio[priority_name]["position"]["name"] == "Менеджер"
+
+        manager_filter = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=prefix,
+            org_group_id=3,
+            org_unit_id=int(unit_id),
+            position_id=manager_position_id,
+            limit=20,
+            offset=0,
+        )
+        assert manager_filter.status_code == 200, manager_filter.text
+        assert manager_filter.json()["total"] == 3
+        assert _fio_list(manager_filter.json()) == [
+            legacy_manager_name,
+            current_manager_name,
+            priority_name,
+        ]
+
+        wrong_group = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=prefix,
+            org_group_id=1,
+            org_unit_id=int(unit_id),
+            limit=1,
+            offset=0,
+        )
+        assert wrong_group.status_code == 200, wrong_group.text
+        assert wrong_group.json()["total"] == 0
+    finally:
+        _cleanup_rank_graph(
+            employee_ids=employee_ids,
+            person_ids=person_ids,
+            position_ids=position_ids,
+        )
+        if unit_id is not None:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM public.org_units WHERE unit_id = :unit_id"),
+                    {"unit_id": int(unit_id)},
+                )
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

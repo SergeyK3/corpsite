@@ -295,7 +295,7 @@ def test_specific_nurse_categories_and_unknown_fallback_are_stable():
     ) == 6
 
 
-def test_administrative_leaders_are_first_and_equal_ranks_are_sorted_by_name():
+def test_administrative_report_uses_shared_eight_rank_order():
     options = [
         {"unit_id": 30, "unit_name": "Администрация", "group_id": 3, "group_name": "АХО"}
     ]
@@ -312,20 +312,28 @@ def test_administrative_leaders_are_first_and_equal_ranks_are_sorted_by_name():
             "rate": 1,
         }
         for employee_id, full_name, position_name, category in [
-            (1, "Абдулов А.А.", "Бухгалтер", "admin"),
-            (2, "Яковлев Я.Я.", "Руководитель отдела", "leaders"),
-            (3, "Беков Б.Б.", "Специалист", "admin"),
-            (4, "Волкова В.В.", "Начальник отдела", "leaders"),
+            (1, "Андреев А.А.", "Неизвестная должность", "other"),
+            (2, "Борисов Б.Б.", "Уборщик помещений", "service"),
+            (3, "Волков В.В.", "Техник", "technical"),
+            (4, "Громова Г.Г.", "Секретарь-референт", "admin"),
+            (5, "Денисов Д.Д.", "Менеджер", "admin"),
+            (6, "Егоров Е.Е.", "Главный специалист", "admin"),
+            (7, "Жуков Ж.Ж.", "Заместитель руководителя", "leaders"),
+            (8, "Яковлев Я.Я.", "Руководитель отдела", "leaders"),
         ]
     ]
 
     report = build_personnel_roster(_Engine(options, rows), scope_unit_ids=[30])
 
     assert [item["full_name"] for item in report["items"]] == [
-        "Волкова В.В.",
         "Яковлев Я.Я.",
-        "Абдулов А.А.",
-        "Беков Б.Б.",
+        "Жуков Ж.Ж.",
+        "Егоров Е.Е.",
+        "Денисов Д.Д.",
+        "Громова Г.Г.",
+        "Волков В.В.",
+        "Борисов Б.Б.",
+        "Андреев А.А.",
     ]
 
 

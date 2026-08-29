@@ -27,7 +27,52 @@ RANK_ORDERLY = 5
 RANK_OTHER = 6
 
 RANK_ADMIN_LEADER = 0
-RANK_ADMIN_OTHER = 1
+RANK_ADMIN_DEPUTY = 1
+RANK_ADMIN_SENIOR_SPECIALIST = 2
+RANK_ADMIN_SPECIALIST = 3
+RANK_ADMIN_CLERICAL = 4
+RANK_ADMIN_TECHNICAL = 5
+RANK_ADMIN_SERVICE = 6
+RANK_ADMIN_OTHER = 7
+
+_ADMIN_DEPUTY_STEMS = ("заместител", "зам")
+_ADMIN_LEADER_STEMS = ("руководител", "начальник", "заведующ", "директор")
+_ADMIN_SENIOR_STEMS = ("главн", "ведущ", "старш")
+_ADMIN_SPECIALIST_STEMS = (
+    "менеджер",
+    "бухгалтер",
+    "экономист",
+    "юрист",
+    "юрисконсульт",
+    "специалист",
+    "инспектор",
+    "инженер",
+    "программист",
+    "администратор",
+    "переводчик",
+    "психолог",
+    "аналитик",
+    "эксперт",
+)
+_ADMIN_CLERICAL_STEMS = ("архивариус", "делопроизводител", "секретар", "оператор")
+_ADMIN_TECHNICAL_STEMS = (
+    "техник",
+    "водител",
+    "электрик",
+    "сантехник",
+    "слесар",
+    "кладовщик",
+    "рабоч",
+    "машинист",
+)
+_ADMIN_SERVICE_STEMS = (
+    "уборщ",
+    "дворник",
+    "гардеробщ",
+    "сторож",
+    "вахтер",
+    "санитар",
+)
 
 
 def normalize_position_name(value: str | None) -> str:
@@ -46,6 +91,39 @@ def _is_nurse(position_name: str) -> bool:
     )
 
 
+def _has_stem(position_name: str, stems: tuple[str, ...]) -> bool:
+    alternatives = "|".join(re.escape(stem) for stem in stems)
+    return bool(re.search(rf"\b(?:{alternatives})\w*\b", position_name))
+
+
+def _administrative_position_rank(position_name: str, category: str) -> int:
+    # Compound deputy names must precede the general structured leaders category.
+    if _has_stem(position_name, _ADMIN_DEPUTY_STEMS):
+        return RANK_ADMIN_DEPUTY
+    if (
+        _has_stem(position_name, ("главн",))
+        and _has_stem(position_name, ("бухгалтер",))
+    ):
+        return RANK_ADMIN_LEADER
+    if category == LEADER_POSITION_CATEGORY or _has_stem(
+        position_name, _ADMIN_LEADER_STEMS
+    ):
+        return RANK_ADMIN_LEADER
+    if _has_stem(position_name, _ADMIN_SENIOR_STEMS) and _has_stem(
+        position_name, _ADMIN_SPECIALIST_STEMS
+    ):
+        return RANK_ADMIN_SENIOR_SPECIALIST
+    if _has_stem(position_name, _ADMIN_SPECIALIST_STEMS):
+        return RANK_ADMIN_SPECIALIST
+    if _has_stem(position_name, _ADMIN_CLERICAL_STEMS):
+        return RANK_ADMIN_CLERICAL
+    if _has_stem(position_name, _ADMIN_TECHNICAL_STEMS):
+        return RANK_ADMIN_TECHNICAL
+    if _has_stem(position_name, _ADMIN_SERVICE_STEMS):
+        return RANK_ADMIN_SERVICE
+    return RANK_ADMIN_OTHER
+
+
 def personnel_position_rank(
     *,
     group_id: int,
@@ -54,13 +132,20 @@ def personnel_position_rank(
     has_current_assignment: bool = True,
 ) -> int:
     """Return the canonical position rank; lower values are shown first."""
-    if not has_current_assignment:
-        return RANK_OTHER
     normalized = normalize_position_name(position_name)
     category = str(position_category or "").strip().casefold()
 
+    if group_id in MEDICAL_GROUP_IDS and not has_current_assignment:
+        return RANK_OTHER
+
+    # ``position_name`` is the effective position displayed by the caller.  A
+    # legacy projection remains rankable when no current assignment exists;
+    # only a genuinely empty displayed position uses the fallback rank.
+    if not normalized:
+        return RANK_ADMIN_OTHER if group_id == ADMINISTRATIVE_GROUP_ID else RANK_OTHER
+
     if group_id == ADMINISTRATIVE_GROUP_ID:
-        return RANK_ADMIN_LEADER if category == LEADER_POSITION_CATEGORY else RANK_ADMIN_OTHER
+        return _administrative_position_rank(normalized, category)
     if group_id not in MEDICAL_GROUP_IDS:
         return RANK_OTHER
 
@@ -122,6 +207,11 @@ def normalized_position_name_sql(position_name_expr: str) -> str:
     )
 
 
+def _sql_stem_pattern(stems: tuple[str, ...]) -> str:
+    alternatives = "|".join(stems)
+    return f"(^| )({alternatives})[[:alnum:]_]*($| )"
+
+
 def personnel_position_rank_sql(
     *,
     group_id_expr: str,
@@ -136,13 +226,34 @@ def personnel_position_rank_sql(
         f"({normalized} ~ '(^| )(медсестр[[:alnum:]_]*|медбрат[[:alnum:]_]*|"
         "медицинск[[:alnum:]_]* (сестр[[:alnum:]_]*|брат[[:alnum:]_]*))($| )')"
     )
+    admin_deputy = _sql_stem_pattern(_ADMIN_DEPUTY_STEMS)
+    admin_leader = _sql_stem_pattern(_ADMIN_LEADER_STEMS)
+    admin_senior = _sql_stem_pattern(_ADMIN_SENIOR_STEMS)
+    admin_specialist = _sql_stem_pattern(_ADMIN_SPECIALIST_STEMS)
+    admin_clerical = _sql_stem_pattern(_ADMIN_CLERICAL_STEMS)
+    admin_technical = _sql_stem_pattern(_ADMIN_TECHNICAL_STEMS)
+    admin_service = _sql_stem_pattern(_ADMIN_SERVICE_STEMS)
     clauses: list[str] = ["CASE"]
     if has_current_assignment_expr:
-        clauses.append(f"WHEN NOT ({has_current_assignment_expr}) THEN {RANK_OTHER}")
+        clauses.append(
+            f"WHEN {group_id_expr} IN ({CLINICAL_GROUP_ID}, {PARACLINICAL_GROUP_ID}) "
+            f"AND NOT ({has_current_assignment_expr}) THEN {RANK_OTHER}"
+        )
     clauses.extend(
         [
-            f"WHEN {group_id_expr} = {ADMINISTRATIVE_GROUP_ID} THEN CASE ",
-            f"    WHEN {category} = '{LEADER_POSITION_CATEGORY}' THEN {RANK_ADMIN_LEADER} ",
+            f"WHEN {group_id_expr} = {ADMINISTRATIVE_GROUP_ID} THEN CASE",
+            f"    WHEN {normalized} ~ '{admin_deputy}' THEN {RANK_ADMIN_DEPUTY}",
+            f"    WHEN ({normalized} ~ '{_sql_stem_pattern(('главн',))}' "
+            f"AND {normalized} ~ '{_sql_stem_pattern(('бухгалтер',))}') "
+            f"THEN {RANK_ADMIN_LEADER}",
+            f"    WHEN {category} = '{LEADER_POSITION_CATEGORY}' "
+            f"OR {normalized} ~ '{admin_leader}' THEN {RANK_ADMIN_LEADER}",
+            f"    WHEN {normalized} ~ '{admin_senior}' "
+            f"AND {normalized} ~ '{admin_specialist}' THEN {RANK_ADMIN_SENIOR_SPECIALIST}",
+            f"    WHEN {normalized} ~ '{admin_specialist}' THEN {RANK_ADMIN_SPECIALIST}",
+            f"    WHEN {normalized} ~ '{admin_clerical}' THEN {RANK_ADMIN_CLERICAL}",
+            f"    WHEN {normalized} ~ '{admin_technical}' THEN {RANK_ADMIN_TECHNICAL}",
+            f"    WHEN {normalized} ~ '{admin_service}' THEN {RANK_ADMIN_SERVICE}",
             f"    ELSE {RANK_ADMIN_OTHER} END",
             f"WHEN {group_id_expr} IN ({CLINICAL_GROUP_ID}, {PARACLINICAL_GROUP_ID}) THEN CASE",
             f"    WHEN {category} = '{LEADER_POSITION_CATEGORY}' "

@@ -6,6 +6,14 @@ import pytest
 
 from app.services import directory_service
 from app.services.personnel_position_ordering import (
+    RANK_ADMIN_CLERICAL,
+    RANK_ADMIN_DEPUTY,
+    RANK_ADMIN_LEADER,
+    RANK_ADMIN_OTHER,
+    RANK_ADMIN_SERVICE,
+    RANK_ADMIN_SENIOR_SPECIALIST,
+    RANK_ADMIN_SPECIALIST,
+    RANK_ADMIN_TECHNICAL,
     RANK_OTHER,
     normalize_position_name,
     personnel_position_rank,
@@ -59,16 +67,43 @@ def test_specific_position_checks_precede_general_checks_and_normalize_variants(
     ) == 4
 
 
-def test_administrative_leader_category_is_first() -> None:
+@pytest.mark.parametrize(
+    ("position_name", "category", "expected_rank"),
+    [
+        ("Руководитель отдела", "leaders", RANK_ADMIN_LEADER),
+        ("Главный бухгалтер", "admin", RANK_ADMIN_LEADER),
+        ("Заведующая прачечной", "leaders", RANK_ADMIN_LEADER),
+        ("Заместитель руководителя", "leaders", RANK_ADMIN_DEPUTY),
+        ("зам рук-ля отдела статистики", "leaders", RANK_ADMIN_DEPUTY),
+        ("Зам по административным вопросам", "leaders", RANK_ADMIN_DEPUTY),
+        ("Главный специалист", "admin", RANK_ADMIN_SENIOR_SPECIALIST),
+        ("Ведущий специалист", "admin", RANK_ADMIN_SENIOR_SPECIALIST),
+        ("Старший менеджер", "admin", RANK_ADMIN_SENIOR_SPECIALIST),
+        ("Менеджер", "admin", RANK_ADMIN_SPECIALIST),
+        ("Бухгалтер-кассир", "admin", RANK_ADMIN_SPECIALIST),
+        ("экономист1", "admin", RANK_ADMIN_SPECIALIST),
+        ("Аналитик ЭРОБ", "admin", RANK_ADMIN_SPECIALIST),
+        ("Переводчик казахского языка", "admin", RANK_ADMIN_SPECIALIST),
+        ("Секретарь-референт", "admin", RANK_ADMIN_CLERICAL),
+        ("Архивариус", "admin", RANK_ADMIN_CLERICAL),
+        ("Техник", "technical", RANK_ADMIN_TECHNICAL),
+        ("Водитель", "technical", RANK_ADMIN_TECHNICAL),
+        ("Уборщик помещений", "service", RANK_ADMIN_SERVICE),
+        ("Санитар", "medical", RANK_ADMIN_SERVICE),
+        ("Неизвестная должность", "other", RANK_ADMIN_OTHER),
+    ],
+)
+def test_administrative_eight_rank_hierarchy(
+    position_name: str, category: str, expected_rank: int
+) -> None:
     assert personnel_position_rank(
-        group_id=3, position_name="Я Руководитель", position_category="leaders"
-    ) == 0
-    assert personnel_position_rank(
-        group_id=3, position_name="А Специалист", position_category="admin"
-    ) == 1
+        group_id=3,
+        position_name=position_name,
+        position_category=category,
+    ) == expected_rank
 
 
-def test_unknown_position_and_missing_assignment_use_other_fallback() -> None:
+def test_missing_assignment_fallback_depends_on_effective_displayed_position() -> None:
     assert personnel_position_rank(
         group_id=1, position_name="Неизвестная должность", position_category=None
     ) == RANK_OTHER
@@ -77,7 +112,50 @@ def test_unknown_position_and_missing_assignment_use_other_fallback() -> None:
         position_name="Руководитель",
         position_category="leaders",
         has_current_assignment=False,
+    ) == RANK_ADMIN_LEADER
+    assert personnel_position_rank(
+        group_id=3,
+        position_name="Менеджер",
+        position_category="admin",
+        has_current_assignment=False,
+    ) == RANK_ADMIN_SPECIALIST
+    assert personnel_position_rank(
+        group_id=3,
+        position_name="Секретарь-референт",
+        position_category="admin",
+        has_current_assignment=False,
+    ) == RANK_ADMIN_CLERICAL
+    assert personnel_position_rank(
+        group_id=3,
+        position_name=None,
+        position_category=None,
+        has_current_assignment=False,
+    ) == RANK_ADMIN_OTHER
+    assert personnel_position_rank(
+        group_id=1,
+        position_name="Врач",
+        position_category="medical",
+        has_current_assignment=False,
     ) == RANK_OTHER
+
+
+def test_administrative_same_rank_orders_by_fio_then_employee_id() -> None:
+    rows = [
+        (10, "Борисов", "Менеджер"),
+        (20, "Антонов", "Экономист"),
+        (3, "Антонов", "Юрист"),
+    ]
+    ordered = sorted(
+        rows,
+        key=lambda row: personnel_position_sort_key(
+            group_id=3,
+            position_name=row[2],
+            position_category="admin",
+            full_name=row[1],
+            employee_id=row[0],
+        ),
+    )
+    assert [row[0] for row in ordered] == [3, 20, 10]
 
 
 def test_same_rank_orders_by_fio_then_numeric_employee_id() -> None:
@@ -225,7 +303,9 @@ def test_directory_sql_ranks_after_filters_and_before_pagination(monkeypatch: py
             "LEFT JOIN public.positions p ON p.position_id = e.position_id",
             {
                 "position_expr": "p.name",
+                "position_id_expr": "e.position_id",
                 "position_category_expr": "p.category",
+                "has_current_assignment_expr": "FALSE",
                 "department_expr": "ou.name",
                 "rate_col": None,
                 "status_col": "is_active",
@@ -250,7 +330,7 @@ def test_directory_sql_ranks_after_filters_and_before_pagination(monkeypatch: py
     assert "LOWER(CAST(e.full_name AS TEXT)) LIKE :q" in list_sql
     assert "CAST(e.position_id AS TEXT) = :position_id_text" in list_sql
     assert "p.category" in list_sql
-    assert "person_assignments current_pa" in list_sql
+    assert "ou.group_id IN (1, 2) AND NOT (FALSE)" in list_sql
     assert list_sql.index("WHERE") < list_sql.index("ORDER BY") < list_sql.index("LIMIT")
     assert fake_engine.connection.params[-1]["limit"] == 2
     assert fake_engine.connection.params[-1]["offset"] == 2
@@ -264,7 +344,12 @@ def test_sql_rank_expression_matches_shared_categories() -> None:
         has_current_assignment_expr="has_assignment",
     )
 
-    assert sql.index("NOT (has_assignment)") < sql.index("ou.group_id = 3")
+    assert "ou.group_id IN (1, 2) AND NOT (has_assignment)" in sql
+    assert sql.index("заместител") < sql.index("руководител")
+    assert sql.index("главн") < sql.index("менеджер")
+    assert sql.index("менеджер") < sql.index("секретар")
+    assert sql.index("секретар") < sql.index("техник")
+    assert sql.index("техник") < sql.index("уборщ")
     assert sql.index("заведующ") < sql.index("врач")
     assert sql.index("старш") < sql.index("медсестр")
     assert "WHEN p.category" not in sql  # category is normalized, not compared raw
