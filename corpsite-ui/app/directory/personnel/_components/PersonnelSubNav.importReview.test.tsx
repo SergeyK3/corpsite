@@ -3,54 +3,64 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelSubNav from "./PersonnelSubNav";
 
+const navigation = vi.hoisted(() => ({ pathname: "/directory/personnel/import" }));
+
 vi.mock("next/link", () => ({
-  default: ({
-    children,
-    href,
-    className,
-  }: {
-    children: React.ReactNode;
-    href: string;
-    className?: string;
-  }) => (
-    <a href={href} className={className}>
+  default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+    <a href={href} {...props}>
       {children}
     </a>
   ),
 }));
 
-const mockSearchParams = new URLSearchParams("mode=declaration");
-
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/directory/personnel/import/148/review",
-  useSearchParams: () => mockSearchParams,
-}));
-
-vi.mock("../_lib/importApi.client", () => ({
-  listImportBatches: vi.fn(async () => ({ items: [{ batch_id: 148 }] })),
+  usePathname: () => navigation.pathname,
 }));
 
 afterEach(() => {
   cleanup();
+  navigation.pathname = "/directory/personnel/import";
 });
 
-describe("PersonnelSubNav import review tabs", () => {
-  it("keeps active import sections and removes obsolete sections", async () => {
+describe("PersonnelSubNav control list parent", () => {
+  it("renders one control-list parent and keeps former child sections out of the top level", () => {
     render(<PersonnelSubNav />);
 
-    expect(await screen.findByRole("link", { name: "Импорт" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Контрольный список" })).toHaveAttribute(
       "href",
       "/directory/personnel/import",
     );
-    expect(screen.queryByRole("link", { name: "Baseline" })).not.toBeInTheDocument();
+    for (const title of ["Аналитика", "Проверка записей", "Изменения реестра", "Миграция", "Мед. категории"]) {
+      expect(screen.queryByRole("link", { name: title })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "Отчёты" })).toHaveAttribute(
+      "href",
+      "/directory/personnel/reports",
+    );
+  });
 
-    const medicalLink = screen.getByRole("link", { name: "Мед. категории" });
-    expect(medicalLink).toHaveAttribute("href", "/directory/personnel/import/148/review?mode=personnel");
-    expect(medicalLink.className).toContain("bg-blue-600");
-    expect(screen.queryByRole("link", { name: "Декларации" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Технические" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Обучение" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Аналитика" })).toBeInTheDocument();
-    expect(screen.queryByTestId("import-review-mode-tabs")).not.toBeInTheDocument();
+  it.each([
+    "/directory/personnel/import",
+    "/directory/personnel/import/148",
+    "/directory/personnel/import/review",
+    "/directory/personnel/import/148/review",
+    "/directory/personnel/hr-change-events",
+    "/directory/personnel/migration/employment/42",
+    "/directory/personnel/baselines",
+    "/directory/personnel/monthly-references/17",
+  ])("marks the parent active on %s", (pathname) => {
+    navigation.pathname = pathname;
+    render(<PersonnelSubNav />);
+    expect(screen.getByRole("link", { name: "Контрольный список" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("does not mark the parent active on reports", () => {
+    navigation.pathname = "/directory/personnel/reports";
+    render(<PersonnelSubNav />);
+    expect(screen.getByRole("link", { name: "Контрольный список" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Отчёты" })).toHaveAttribute("aria-current", "page");
   });
 });

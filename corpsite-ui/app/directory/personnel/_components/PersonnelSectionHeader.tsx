@@ -4,6 +4,7 @@
 import { Suspense } from "react";
 
 import PersonnelSubNav from "./PersonnelSubNav";
+import PersonnelControlListSubNav from "./PersonnelControlListSubNav";
 
 export default function PersonnelSectionHeader() {
   return (
@@ -14,6 +15,9 @@ export default function PersonnelSectionHeader() {
           <PersonnelSubNav />
         </Suspense>
       </div>
+      <Suspense fallback={null}>
+        <PersonnelControlListSubNav />
+      </Suspense>
     </div>
   );
 }
