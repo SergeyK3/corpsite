@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 describe("PersonnelSubNav import review tabs", () => {
-  it("renders import tab label and review mode tabs before Обучение", async () => {
+  it("keeps active import sections and removes obsolete sections", async () => {
     render(<PersonnelSubNav />);
 
     expect(await screen.findByRole("link", { name: "Импорт" })).toHaveAttribute(
@@ -45,20 +45,12 @@ describe("PersonnelSubNav import review tabs", () => {
     expect(screen.queryByRole("link", { name: "Baseline" })).not.toBeInTheDocument();
 
     const medicalLink = screen.getByRole("link", { name: "Мед. категории" });
-    const declarationsLink = screen.getByRole("link", { name: "Декларации" });
-    const technicalLink = screen.getByRole("link", { name: "Технические" });
-    const trainingLink = screen.getByRole("link", { name: "Обучение" });
-
     expect(medicalLink).toHaveAttribute("href", "/directory/personnel/import/148/review?mode=personnel");
-    expect(declarationsLink).toHaveAttribute(
-      "href",
-      "/directory/personnel/import/148/review?mode=declaration",
-    );
-    expect(technicalLink).toHaveAttribute("href", "/directory/personnel/import/148/review?mode=technical");
-    expect(trainingLink).toHaveAttribute("href", "/directory/personnel/import/148/training");
-
-    expect(declarationsLink.className).toContain("bg-blue-600");
-    expect(medicalLink.className).not.toContain("bg-blue-600");
+    expect(medicalLink.className).toContain("bg-blue-600");
+    expect(screen.queryByRole("link", { name: "Декларации" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Технические" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Обучение" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Аналитика" })).toBeInTheDocument();
     expect(screen.queryByTestId("import-review-mode-tabs")).not.toBeInTheDocument();
   });
 });

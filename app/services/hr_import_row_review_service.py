@@ -1,13 +1,10 @@
 """HR import row review detail and declaration export (Phase 2F)."""
 from __future__ import annotations
 
-import io
 import re
 from datetime import date
 from typing import Any, Optional
 
-from openpyxl import Workbook
-from openpyxl.styles import Font
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
@@ -21,7 +18,6 @@ from app.services.hr_import_analytics_service import (
     calc_category_validity_note,
     _infer_staff_type,
     _medical_category_entries,
-    is_declaration_row,
     is_real_employee_row,
     load_row_payload,
 )
@@ -242,76 +238,3 @@ def get_row_medical_category_history(conn: Connection, batch_id: int, row_id: in
             for entry in sorted_entries
         ],
     }
-
-
-def export_declarations_excel(
-    conn: Connection,
-    batch_id: int,
-    *,
-    department_group: Optional[str] = None,
-    org_group_id: Optional[int] = None,
-    org_unit_id: Optional[int] = None,
-    org_unit_name: Optional[str] = None,
-    staff_type: Optional[str] = None,
-    q_name: Optional[str] = None,
-) -> bytes:
-    from app.services.hr_import_analytics_service import _canonical_department_label, _load_staging_rows
-
-    rows = [r for r in _load_staging_rows(conn, batch_id) if is_declaration_row(r)]
-
-    effective_org_group_id = org_group_id
-    if effective_org_group_id is None and department_group:
-        from app.medical_org_groups import resolve_group_id_from_filter
-
-        effective_org_group_id = resolve_group_id_from_filter(
-            org_group_id=org_group_id,
-            effective_log_group=department_group,
-            department_group=department_group,
-        )
-
-    filtered: list[dict[str, Any]] = []
-    for row in rows:
-        if effective_org_group_id is not None and row.get("org_group_id") != effective_org_group_id:
-            continue
-        if org_unit_id is not None:
-            if row.get("org_unit_id") != org_unit_id and not (
-                org_unit_name
-                and (row.get("org_unit_name") or "").strip().lower()
-                == org_unit_name.strip().lower()
-            ):
-                continue
-        elif org_unit_name:
-            if (row.get("org_unit_name") or "").strip().lower() != org_unit_name.strip().lower():
-                continue
-        if staff_type and _infer_staff_type(row) != staff_type:
-            continue
-        if q_name and q_name.strip().lower() not in row["full_name"].lower():
-            continue
-        filtered.append(row)
-
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in filtered:
-        dept_label = _canonical_department_label(row)
-        grouped.setdefault(dept_label, []).append(row)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Декларации"
-    row_idx = 1
-    header_font = Font(bold=True)
-    for dept_name in sorted(grouped.keys()):
-        ws.cell(row=row_idx, column=1, value=dept_name.upper()).font = header_font
-        row_idx += 1
-        ws.cell(row=row_idx, column=1, value="ФИО").font = header_font
-        ws.cell(row=row_idx, column=2, value="Тип декларации").font = header_font
-        row_idx += 1
-        for item in grouped[dept_name]:
-            decl_type = item.get("declaration_group") or item.get("sheet_type") or "—"
-            ws.cell(row=row_idx, column=1, value=item.get("full_name") or "—")
-            ws.cell(row=row_idx, column=2, value=decl_type)
-            row_idx += 1
-        row_idx += 1
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()

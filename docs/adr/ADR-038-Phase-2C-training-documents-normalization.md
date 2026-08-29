@@ -183,19 +183,12 @@ Specialist key: `row_id` or grouping by `full_name+iin` for unmatched employees.
 
 ---
 
-## Решение 5 — UI
+## Решение 5 — UI (историческое)
 
-Новая страница: `/directory/personnel/import/{batchId}/training`
-
-| Block | Content |
-|-------|---------|
-| Summary cards | total candidates, training / certification split, pending review |
-| Filters | kind, department, status, search by name |
-| Table | employee, department, title, hours, issued_at, valid_until, status, raw_text preview |
-| Detail drawer | full raw_text, external_url / Google Drive link field (read from candidate), link to source row |
-| Navigation | link from analytics dashboard + sub-nav within batch context |
-
-`external_url` / `storage_type=google_drive` — поля для ссылки на обменный диск (заполняются при apply/review в Phase 3; Phase 2C показывает placeholder + parsed data).
+Самостоятельная страница «Обучение» и ссылки на неё удалены из пользовательского раздела
+«Кадровые процессы». Нормализация обучения и образования, образовательные профили,
+`person_training` и их API сохранены: они используются импортом, аналитикой, карточками
+сотрудников и обработкой контрольных списков.
 
 ---
 

@@ -1,13 +1,11 @@
-export type ImportReviewMode = "personnel" | "declaration" | "technical";
+export type ImportReviewMode = "personnel";
 
 export const IMPORT_REVIEW_MODE_TABS = [
   { key: "import-review-personnel", mode: "personnel" as const, title: "Мед. категории" },
-  { key: "import-review-declaration", mode: "declaration" as const, title: "Декларации" },
-  { key: "import-review-technical", mode: "technical" as const, title: "Технические" },
 ];
 
 export function parseImportReviewMode(value: string | null | undefined): ImportReviewMode {
-  if (value === "declaration" || value === "technical") return value;
+  void value;
   return "personnel";
 }
 

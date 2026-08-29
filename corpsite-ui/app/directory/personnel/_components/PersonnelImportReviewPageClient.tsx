@@ -9,11 +9,9 @@ import ImportDiffStatusBadge from "./ImportDiffStatusBadge";
 import ImportMonthlyDiffSummaryPanel from "./ImportMonthlyDiffSummaryPanel";
 import ImportReviewExceptionDrawer from "./ImportReviewExceptionDrawer";
 import ImportTrainingDateQualityPanel from "./ImportTrainingDateQualityPanel";
-import { parseImportReviewMode, type ImportReviewMode } from "../_lib/importReviewNav";
 import {
   departmentFilterOptionValue,
   getDepartmentRecodingOptions,
-  getDeclarationsExportUrl,
   listStagingRows,
   mapImportApiError,
   parseDepartmentFilterValue,
@@ -29,39 +27,11 @@ import {
   MEDICAL_CATEGORY_FILTER_OPTIONS,
 } from "../_lib/importCategoryUtils";
 
-type ReviewMode = ImportReviewMode;
-
-const DECLARATION_TYPE_LABELS: Record<string, string> = {
-  doctors: "Врачи",
-  nurses: "Медсестры / СМР",
-  junior_staff: "Младший персонал",
-  other_staff: "Прочие",
-  part_time: "Совместители",
-};
-
-const STAFF_TYPE_LABELS: Record<string, string> = {
-  doctors: "Врачи",
-  nurses: "Медсестры",
-  junior_staff: "Санитарки",
-  other_staff: "Прочие",
-};
-
-const TECHNICAL_CATEGORY_LABELS: Record<string, string> = {
-  highest: "Высшая",
-  first: "Первая",
-  second: "Вторая",
-  none: "Без категории",
-  certificate: "Сертификат",
-  other: "Прочая",
-};
-
 function ReviewFilters({
-  mode,
   options,
   values,
   onChange,
 }: {
-  mode: ReviewMode;
   options: DepartmentRecodingOptions | null;
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
@@ -98,8 +68,7 @@ function ReviewFilters({
           </option>
         ))}
       </select>
-      {mode === "personnel" ? (
-        <>
+      <>
           <select
             className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
             value={values.certification_category}
@@ -120,36 +89,7 @@ function ReviewFilters({
             <option value="only">Только совместители</option>
             <option value="exclude">Только основные</option>
           </select>
-        </>
-      ) : null}
-      {mode === "declaration" || mode === "technical" ? (
-        <select
-          className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          value={values.staff_type}
-          onChange={(e) => onChange("staff_type", e.target.value)}
-        >
-          <option value="">Все типы персонала</option>
-          {Object.entries(STAFF_TYPE_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
-      ) : null}
-      {mode === "technical" ? (
-        <select
-          className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          value={values.certification_category}
-          onChange={(e) => onChange("certification_category", e.target.value)}
-        >
-          <option value="">Все категории</option>
-          {Object.entries(TECHNICAL_CATEGORY_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
-      ) : null}
+      </>
       <input
         className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         placeholder="Поиск по ФИО"
@@ -162,7 +102,6 @@ function ReviewFilters({
 
 export default function PersonnelImportReviewPageClient({ batchId }: { batchId: number }) {
   const searchParams = useSearchParams();
-  const mode = parseImportReviewMode(searchParams.get("mode"));
 
   const [items, setItems] = React.useState<StagingRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -189,7 +128,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
     setOffset(0);
     setCategoryRowId(null);
     setExceptionKey(null);
-  }, [batchId, mode, showUnchanged]);
+  }, [batchId, showUnchanged]);
 
   React.useEffect(() => {
     const fromQuery = searchParams.get("adr059_exception");
@@ -214,7 +153,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
   const load = React.useCallback(() => {
     setLoading(true);
     const params: Record<string, string | number | boolean | null | undefined> = {
-      roster_scope: mode,
+      roster_scope: "personnel",
       ...parseGroupFilterValue(filters.org_group_id),
       ...parseDepartmentFilterValue(filters.org_unit_id),
       certification_category: filters.certification_category || undefined,
@@ -225,11 +164,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       offset,
     };
 
-    if (mode === "personnel") {
-      params.staff_types = "doctors,nurses";
-    } else if (filters.staff_type) {
-      params.staff_type = filters.staff_type;
-    }
+    params.staff_types = "doctors,nurses";
 
     listStagingRows(batchId, params)
       .then((data) => {
@@ -239,7 +174,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       })
       .catch((e) => setError(mapImportApiError(e)))
       .finally(() => setLoading(false));
-  }, [batchId, mode, filters, offset, showUnchanged]);
+  }, [batchId, filters, offset, showUnchanged]);
 
   React.useEffect(() => {
     load();
@@ -255,20 +190,6 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
     });
     setOffset(0);
   }
-
-  function handlePrint() {
-    window.print();
-  }
-
-  const exportUrl = getDeclarationsExportUrl(batchId, {
-    ...parseGroupFilterValue(filters.org_group_id),
-    ...parseDepartmentFilterValue(filters.org_unit_id),
-    staff_type: filters.staff_type || undefined,
-    q_name: filters.q_name || undefined,
-  });
-
-  const modeLabel =
-    mode === "declaration" ? "Декларации" : mode === "technical" ? "Технические" : "Мед. категории";
 
   function refreshReviewPage() {
     load();
@@ -293,9 +214,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       setExceptionKey(stagingRowExceptionKey(row.row_id));
       return;
     }
-    if (mode === "personnel") {
-      setCategoryRowId(row.row_id);
-    }
+    setCategoryRowId(row.row_id);
   }
 
   return (
@@ -318,27 +237,8 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
       <ImportBatchContextHeader batchId={batchId} className="mb-4" />
 
       <div className="print:hidden">
-        {mode === "declaration" ? (
-          <div className="mb-4 flex flex-wrap justify-end gap-2">
-            <a
-              href={exportUrl}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700"
-            >
-              Скачать Excel
-            </a>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700"
-            >
-              Печать
-            </button>
-          </div>
-        ) : null}
-
         <p className="mb-4 text-sm text-zinc-500">
-          Сравнение с каноническим эталоном · {modeLabel}
-          {mode === "personnel" ? " · только врачи и медсёстры" : ""}
+          Сравнение с каноническим эталоном · Мед. категории · только врачи и медсёстры
         </p>
 
         <ImportMonthlyDiffSummaryPanel
@@ -360,7 +260,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
           }
         />
 
-        <ReviewFilters mode={mode} options={options} values={filters} onChange={updateFilter} />
+        <ReviewFilters options={options} values={filters} onChange={updateFilter} />
       </div>
 
       {error ? <div className="mb-4 text-sm text-red-600">{error}</div> : null}
@@ -369,25 +269,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
         <table className="min-w-full text-sm">
           <thead className="bg-zinc-50 text-left text-[11px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
             <tr>
-              {mode === "declaration" ? (
-                <>
-                  <th className="px-3 py-2">ФИО</th>
-                  <th className="px-3 py-2">Diff</th>
-                  <th className="px-3 py-2">Отделение</th>
-                  <th className="px-3 py-2">Тип декларации</th>
-                </>
-              ) : mode === "technical" ? (
-                <>
-                  <th className="px-3 py-2">Название строки</th>
-                  <th className="px-3 py-2">Diff</th>
-                  <th className="px-3 py-2">Возраст</th>
-                  <th className="px-3 py-2">Отделение</th>
-                  <th className="px-3 py-2">Должность</th>
-                  <th className="px-3 py-2">Категория</th>
-                  <th className="px-3 py-2" />
-                </>
-              ) : (
-                <>
+              <>
                   <th className="px-3 py-2">ФИО</th>
                   <th className="px-3 py-2">Diff</th>
                   <th className="px-3 py-2">Отделение</th>
@@ -395,8 +277,7 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                   <th className="px-3 py-2">Категория</th>
                   <th className="px-3 py-2">Дата категории</th>
                   <th className="px-3 py-2" />
-                </>
-              )}
+              </>
             </tr>
           </thead>
           <tbody>
@@ -421,45 +302,6 @@ export default function PersonnelImportReviewPageClient({ batchId }: { batchId: 
                   )}
                 </td>
               </tr>
-            ) : mode === "declaration" ? (
-              items.map((row) => (
-                <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="px-3 py-2">{row.full_name || "—"}</td>
-                  <td className="px-3 py-2">
-                    <ImportDiffStatusBadge status={row.diff_status} compact />
-                  </td>
-                  <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
-                  <td className="px-3 py-2">
-                    {DECLARATION_TYPE_LABELS[row.declaration_group || ""] ||
-                      row.declaration_group ||
-                      "—"}
-                  </td>
-                </tr>
-              ))
-            ) : mode === "technical" ? (
-              items.map((row) => (
-                <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="px-3 py-2">{row.full_name || row.classification || "—"}</td>
-                  <td className="px-3 py-2">
-                    <ImportDiffStatusBadge status={row.diff_status} compact />
-                  </td>
-                  <td className="px-3 py-2">{row.age ?? "—"}</td>
-                  <td className="px-3 py-2">{row.org_unit_name || row.department || "—"}</td>
-                  <td className="px-3 py-2">{row.position_raw || "—"}</td>
-                  <td className="px-3 py-2">
-                    {TECHNICAL_CATEGORY_LABELS[row.certification_group || "none"] || "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openRowReview(row)}
-                      className="text-blue-600 hover:underline"
-                    >
-                      Открыть
-                    </button>
-                  </td>
-                </tr>
-              ))
             ) : (
               items.map((row) => (
                 <tr key={row.row_id} className="border-t border-zinc-100 dark:border-zinc-800">

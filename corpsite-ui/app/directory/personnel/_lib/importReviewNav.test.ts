@@ -7,15 +7,15 @@ import {
 } from "./importReviewNav";
 
 describe("importReviewNav", () => {
-  it("parses review mode from search params", () => {
-    expect(parseImportReviewMode("declaration")).toBe("declaration");
-    expect(parseImportReviewMode("technical")).toBe("technical");
+  it("routes removed review modes to the remaining personnel mode", () => {
+    expect(parseImportReviewMode("declaration")).toBe("personnel");
+    expect(parseImportReviewMode("technical")).toBe("personnel");
     expect(parseImportReviewMode(null)).toBe("personnel");
   });
 
   it("builds review mode href", () => {
-    expect(buildImportReviewModeHref(148, "declaration")).toBe(
-      "/directory/personnel/import/148/review?mode=declaration",
+    expect(buildImportReviewModeHref(148, "personnel")).toBe(
+      "/directory/personnel/import/148/review?mode=personnel",
     );
   });
 
@@ -24,23 +24,15 @@ describe("importReviewNav", () => {
     expect(
       isImportReviewModeNavActive(
         "/directory/personnel/import/148/review",
-        "declaration",
+        "personnel",
         148,
         sp,
       ),
     ).toBe(true);
     expect(
       isImportReviewModeNavActive(
-        "/directory/personnel/import/148/review",
-        "personnel",
-        148,
-        sp,
-      ),
-    ).toBe(false);
-    expect(
-      isImportReviewModeNavActive(
         "/directory/personnel/import/148/review/42",
-        "declaration",
+        "personnel",
         148,
         sp,
       ),

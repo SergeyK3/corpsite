@@ -41,5 +41,9 @@ describe("PersonnelSubNav", () => {
     expect(lkLink.className).toContain("bg-blue-600");
     expect(screen.queryByRole("link", { name: "Претенденты" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Кадровые обращения" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Отчёты" })).toHaveAttribute(
+      "href",
+      "/directory/personnel/reports",
+    );
   });
 });

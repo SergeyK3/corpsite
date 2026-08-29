@@ -940,16 +940,6 @@ export async function getEducationPortfolio(batchId: number): Promise<EducationP
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/education-portfolio`);
 }
 
-export function getDeclarationsExportUrl(
-  batchId: number,
-  params: Record<string, string | number | undefined> = {}
-): string {
-  const q = buildQuery(params as Record<string, string | number | boolean | null | undefined>);
-  return resolveApiUrl(
-    `/directory/personnel/import/batches/${batchId}/declarations/export${q ? `?${q}` : ""}`
-  );
-}
-
 export async function getImportSummary(batchId: number): Promise<ImportSummary> {
   return apiGetJson(`/directory/personnel/import/batches/${batchId}/summary`);
 }

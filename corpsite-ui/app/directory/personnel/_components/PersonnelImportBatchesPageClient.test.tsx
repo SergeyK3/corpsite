@@ -87,10 +87,7 @@ describe("PersonnelImportBatchesPageClient batch actions", () => {
       "href",
       "/directory/personnel/import/801/review",
     );
-    expect(screen.getByRole("link", { name: "Обучение" })).toHaveAttribute(
-      "href",
-      "/directory/personnel/import/801/training",
-    );
+    expect(screen.queryByRole("link", { name: "Обучение" })).not.toBeInTheDocument();
     expect(screen.getByTestId("personnel-baselines-journal-mock")).toBeInTheDocument();
   });
 

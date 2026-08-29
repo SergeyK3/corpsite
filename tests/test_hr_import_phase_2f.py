@@ -151,16 +151,6 @@ def test_recoding_options_api(client: TestClient, privileged_headers, staged_bat
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_declarations_export_api(client: TestClient, privileged_headers, staged_batch):
-    resp = client.get(
-        f"/directory/personnel/import/batches/{staged_batch}/declarations/export",
-        headers=privileged_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    assert "spreadsheetml" in resp.headers.get("content-type", "")
-
-
-@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_many_aliases_one_canonical_department():
     """Three import aliases → one canonical org unit; filter by org_unit_id returns all."""
     _require_phase_2f()

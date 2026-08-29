@@ -45,6 +45,11 @@ const BASE_ITEMS = [
     title: "Проверка биографии",
     prefixes: ["/directory/personnel/employment-verification"],
   },
+  {
+    href: "/directory/personnel/reports",
+    title: "Отчёты",
+    prefixes: ["/directory/personnel/reports"],
+  },
 ] as const;
 
 type ImportNavItem =
@@ -113,13 +118,6 @@ const IMPORT_ITEMS: ImportNavItem[] = [
     isActive: (pathname: string, batchId: number | null) =>
       isImportReviewModeNavActive(pathname, tab.mode, batchId, new URLSearchParams()),
   })),
-  {
-    key: "import-training",
-    title: "Обучение",
-    hrefForBatch: (batchId: number) => `/directory/personnel/import/${batchId}/training`,
-    isActive: (pathname: string, batchId: number | null) =>
-      batchId != null && pathname.startsWith(`/directory/personnel/import/${batchId}/training`),
-  },
 ];
 
 function isBaseItemActive(pathname: string, prefixes: readonly string[], href: string): boolean {

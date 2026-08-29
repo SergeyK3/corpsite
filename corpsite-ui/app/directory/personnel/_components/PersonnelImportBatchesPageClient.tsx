@@ -265,12 +265,6 @@ export default function PersonnelImportBatchesPageClient() {
                         >
                           Review
                         </Link>
-                        <Link
-                          href={`/directory/personnel/import/${row.batch_id}/training`}
-                          className="text-blue-600 hover:underline dark:text-blue-400"
-                        >
-                          Обучение
-                        </Link>
                         {row.can_delete ? (
                           <button
                             type="button"

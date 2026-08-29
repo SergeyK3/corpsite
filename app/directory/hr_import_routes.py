@@ -79,7 +79,6 @@ from app.services.hr_import_employee_card_service import (
 )
 from app.services.personnel_card_read_dispatcher import PersonnelCardReadDispatcher
 from app.services.hr_import_row_review_service import (
-    export_declarations_excel,
     get_row_medical_category_history,
     get_row_review_detail,
 )
@@ -1424,45 +1423,6 @@ def post_import_batch_row_ai_extraction(
     require_personnel_admin_or_403(user)
     try:
         return _with_conn(run_ai_extraction, batch_id=batch_id, row_id=row_id)
-    except BatchNotFoundError as e:
-        raise _batch_not_found(e)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise as_http500(e)
-
-
-@router.get("/personnel/import/batches/{batch_id}/declarations/export")
-def get_import_batch_declarations_export(
-    batch_id: int,
-    department_group: Optional[str] = Query(default=None),
-    org_group_id: Optional[int] = Query(default=None, ge=1),
-    org_unit_id: Optional[int] = Query(default=None),
-    org_unit_name: Optional[str] = Query(default=None),
-    staff_type: Optional[str] = Query(default=None),
-    q_name: Optional[str] = Query(default=None),
-    user: Dict[str, Any] = Depends(get_current_user),
-) -> Response:
-    require_personnel_admin_or_403(user)
-    try:
-        with engine.begin() as conn:
-            content = export_declarations_excel(
-                conn,
-                batch_id,
-                department_group=department_group,
-                org_group_id=org_group_id,
-                org_unit_id=org_unit_id,
-                org_unit_name=org_unit_name,
-                staff_type=staff_type,
-                q_name=q_name,
-            )
-        return Response(
-            content=content,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={
-                "Content-Disposition": f'attachment; filename="declarations_batch_{batch_id}.xlsx"'
-            },
-        )
     except BatchNotFoundError as e:
         raise _batch_not_found(e)
     except HTTPException:
