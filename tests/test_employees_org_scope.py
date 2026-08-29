@@ -17,6 +17,7 @@ from tests.conftest import (
     table_exists,
 )
 from tests.personnel_visibility_test_helpers import (
+    ACCESS_MANAGER_CODE,
     grant_dept_manager_visibility,
     revoke_user_access_grants,
 )
@@ -193,8 +194,50 @@ def _cleanup_units(unit_ids: List[int]) -> None:
         )
 
 
+@pytest.fixture
+def access_manager_role():
+    """Provide the canonical visibility role when the isolated DB has no reference seed."""
+    with engine.begin() as conn:
+        created_role_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.access_roles (
+                    code, name, description, access_level, level_rank, is_system, is_active
+                )
+                VALUES (
+                    :code, 'Pytest Access Manager',
+                    'Test-only canonical manager visibility role',
+                    'MANAGER', 20, TRUE, TRUE
+                )
+                ON CONFLICT (code) DO NOTHING
+                RETURNING access_role_id
+                """
+            ),
+            {"code": ACCESS_MANAGER_CODE},
+        ).scalar_one_or_none()
+    try:
+        yield
+    finally:
+        if created_role_id is not None:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.access_roles ar
+                        WHERE ar.access_role_id = :role_id
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM public.access_grants ag
+                              WHERE ag.access_role_id = ar.access_role_id
+                          )
+                        """
+                    ),
+                    {"role_id": int(created_role_id)},
+                )
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_without_org_group_id_unchanged(client, seed):
+def test_list_employees_without_org_group_id_unchanged(client, employees_seed):
     unique_name = "PytestEmpOrgScopeNoGroupFilter"
     created_names: List[str] = []
     admin_user_id: Optional[int] = None
@@ -205,7 +248,7 @@ def test_list_employees_without_org_group_id_unchanged(client, seed):
             _insert_employee(
                 conn,
                 full_name=unique_name,
-                org_unit_id=int(seed["unit_id"]),
+                org_unit_id=int(employees_seed["unit_id"]),
             )
             created_names.append(unique_name)
 
@@ -226,7 +269,7 @@ def test_list_employees_without_org_group_id_unchanged(client, seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_filters_by_org_group_id(client, seed):
+def test_list_employees_filters_by_org_group_id(client, employees_seed):
     unique_a = "PytestEmpOrgScopeGroupA"
     unique_b = "PytestEmpOrgScopeGroupB"
     created_names: List[str] = []
@@ -288,7 +331,7 @@ def test_list_employees_filters_by_org_group_id(client, seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_filters_by_org_unit_id_exact_match_without_include_children(client, seed):
+def test_list_employees_filters_by_org_unit_id_exact_match_without_include_children(client, employees_seed):
     """Legacy: org_unit_id alone (include_children=false) matches the unit exactly, not subtree."""
     unique_parent = "PytestEmpOrgScopeExactParent"
     unique_child = "PytestEmpOrgScopeExactChild"
@@ -341,7 +384,7 @@ def test_list_employees_filters_by_org_unit_id_exact_match_without_include_child
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_filters_by_org_unit_id_subtree_via_include_children(client, seed):
+def test_list_employees_filters_by_org_unit_id_subtree_via_include_children(client, employees_seed):
     """Subtree via include_children=true (frontend sidebar path); not legacy exact match."""
     unique_name = "PytestEmpOrgScopeSubtreeChild"
     created_names: List[str] = []
@@ -392,7 +435,7 @@ def test_list_employees_filters_by_org_unit_id_subtree_via_include_children(clie
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_org_group_and_unit_combined_with_and(client, seed):
+def test_list_employees_org_group_and_unit_combined_with_and(client, employees_seed):
     unique_child = "PytestEmpOrgScopeAndChild"
     unique_sibling = "PytestEmpOrgScopeAndSibling"
     created_names: List[str] = []
@@ -464,7 +507,9 @@ def test_list_employees_org_group_and_unit_combined_with_and(client, seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_rbac_not_bypassed_by_org_group_id(client, seed, monkeypatch):
+def test_list_employees_rbac_not_bypassed_by_org_group_id(
+    client, employees_seed, access_manager_role, monkeypatch
+):
     unique_name = "PytestEmpOrgScopeRbacBypass"
     created_names: List[str] = []
     created_unit_ids: List[int] = []
@@ -478,7 +523,7 @@ def test_list_employees_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
             group_ids = _find_distinct_group_ids(conn, limit=1)
             group_id = group_ids[0] if group_ids else 3
 
-            scoped_unit = int(seed["unit_id"])
+            scoped_unit = int(employees_seed["unit_id"])
             outsider_unit = _create_unit_with_group(
                 conn,
                 name="pytest_emp_org_scope_rbac_outsider",
@@ -490,13 +535,13 @@ def test_list_employees_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
             created_names.append(unique_name)
 
         grant_dept_manager_visibility(
-            int(seed["executor_user_id"]),
-            granted_by_user_id=int(seed["initiator_user_id"]),
+            int(employees_seed["executor_user_id"]),
+            granted_by_user_id=int(employees_seed["initiator_user_id"]),
         )
 
         scoped_resp = _list_employees(
             client,
-            int(seed["executor_user_id"]),
+            int(employees_seed["executor_user_id"]),
             status="all",
             org_group_id=group_id,
             q=unique_name,
@@ -517,6 +562,6 @@ def test_list_employees_rbac_not_bypassed_by_org_group_id(client, seed, monkeypa
 
         _ = scoped_unit
     finally:
-        revoke_user_access_grants(int(seed["executor_user_id"]))
+        revoke_user_access_grants(int(employees_seed["executor_user_id"]))
         _cleanup_employees(created_names)
         _cleanup_units(created_unit_ids)

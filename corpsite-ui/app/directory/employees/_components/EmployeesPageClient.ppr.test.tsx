@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeesPageClient from "./EmployeesPageClient";
 import { OPEN_PERSONAL_CARD_CTA } from "@/lib/personnelCardTerminology";
+import { getEmployees } from "../_lib/api.client";
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
@@ -88,5 +89,15 @@ describe("EmployeesPageClient staff canonical navigation", () => {
     await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
     expect(screen.queryByTestId("employee-drawer")).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
+  });
+
+  it("requests backend order and does not send a page-local sort override", async () => {
+    render(<EmployeesPageClient {...baseProps} />);
+
+    await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    const args = vi.mocked(getEmployees).mock.calls.at(-1)?.[0];
+    expect(args).not.toHaveProperty("sort");
+    expect(args).not.toHaveProperty("order");
+    expect(screen.queryByRole("button", { name: /ФИО, сортир/i })).not.toBeInTheDocument();
   });
 });

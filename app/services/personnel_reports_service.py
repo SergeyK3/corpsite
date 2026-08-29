@@ -14,15 +14,16 @@ from openpyxl.worksheet.pagebreak import Break
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from app.services.personnel_position_ordering import (
+    normalize_position_name,
+    personnel_position_rank,
+    personnel_position_sort_key,
+)
+
 
 NOT_SPECIFIED = "Не указано"
 ALL_GROUPS = "Все группы"
 ALL_DEPARTMENTS = "Все отделения"
-CLINICAL_GROUP_ID = 1
-PARACLINICAL_GROUP_ID = 2
-ADMINISTRATIVE_GROUP_ID = 3
-MEDICAL_GROUP_IDS = frozenset({CLINICAL_GROUP_ID, PARACLINICAL_GROUP_ID})
-LEADER_POSITION_CATEGORY = "leaders"
 
 
 class PersonnelReportAccessError(ValueError):
@@ -31,52 +32,6 @@ class PersonnelReportAccessError(ValueError):
 
 class PersonnelReportFilterError(ValueError):
     """The requested organization filters contradict each other."""
-
-
-def normalize_position_name(value: str | None) -> str:
-    """Normalize a displayed position name for centralized roster ranking."""
-    normalized = str(value or "").casefold().replace("ё", "е")
-    normalized = re.sub(r"[-‐‑‒–—−]+", " ", normalized)
-    normalized = re.sub(r"[^\w\s]+", " ", normalized, flags=re.UNICODE)
-    return " ".join(normalized.split())
-
-
-def _is_nurse(position_name: str) -> bool:
-    return bool(
-        re.search(r"\bмедсестр\w*\b", position_name)
-        or re.search(r"\bмедбрат\w*\b", position_name)
-        or re.search(r"\bмедицинск\w*\s+(?:сестр\w*|брат\w*)\b", position_name)
-    )
-
-
-def personnel_position_rank(
-    *,
-    group_id: int,
-    position_name: str | None,
-    position_category: str | None,
-) -> int:
-    """Return the report-specific position rank; lower values are shown first."""
-    normalized = normalize_position_name(position_name)
-    category = str(position_category or "").strip().casefold()
-
-    if group_id == ADMINISTRATIVE_GROUP_ID:
-        return 0 if category == LEADER_POSITION_CATEGORY else 1
-    if group_id not in MEDICAL_GROUP_IDS:
-        return 0
-
-    if category == LEADER_POSITION_CATEGORY or re.search(r"\bзаведующ\w*\b", normalized):
-        return 0
-    if re.search(r"\bврач\w*\b", normalized):
-        return 1
-    if re.search(r"\bстарш\w*\b", normalized) and _is_nurse(normalized):
-        return 2
-    if re.search(r"\bсестр\w*\s+хозяйк\w*\b", normalized):
-        return 4
-    if _is_nurse(normalized):
-        return 3
-    if re.search(r"\bсанитарк\w*\b|\bсанитар\w*\b", normalized):
-        return 5
-    return 6
 
 
 def _load_report_org_options(
@@ -262,15 +217,12 @@ def build_personnel_roster(
             items: list[dict[str, Any]] = []
             sorted_department_rows = sorted(
                 department_rows[department_key],
-                key=lambda row: (
-                    personnel_position_rank(
-                        group_id=group_key,
-                        position_name=row.get("position_name"),
-                        position_category=row.get("position_category"),
-                    ),
-                    str(row.get("full_name") or NOT_SPECIFIED).casefold(),
-                    str(row.get("full_name") or NOT_SPECIFIED),
-                    int(row["employee_id"]),
+                key=lambda row: personnel_position_sort_key(
+                    group_id=group_key,
+                    position_name=row.get("position_name"),
+                    position_category=row.get("position_category"),
+                    full_name=str(row.get("full_name") or NOT_SPECIFIED),
+                    employee_id=int(row["employee_id"]),
                 ),
             )
             department_rate_total = Decimal("0")

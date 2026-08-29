@@ -24,12 +24,6 @@ import {
 } from "../_lib/api.client";
 import { useCurrentUser } from "@/lib/currentUser";
 import { canHardDeleteEmployee } from "@/lib/employeeHardDelete";
-import {
-  isEmployeeSortColumn,
-  parseSortOrder,
-  toggleEmployeeSort,
-  type EmployeeSortColumn,
-} from "../_lib/employeeSort";
 import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 import type {
   EmployeeDTO,
@@ -169,12 +163,7 @@ export default function EmployeesPageClient(props: Props) {
   const orgUnitId = sp.get("org_unit_id") ?? "";
   const limitStr = sp.get("limit") ?? "50";
   const offsetStr = sp.get("offset") ?? "0";
-  const sortParam = sp.get("sort") ?? "";
-  const orderParam = sp.get("order") ?? "";
   const deepLinkEmployeeId = (sp.get("employeeId") ?? "").trim();
-
-  const sortColumn = isStaffRoute && isEmployeeSortColumn(sortParam) ? sortParam : null;
-  const sortOrder = sortColumn ? parseSortOrder(orderParam) ?? "asc" : null;
 
   const limitNum = React.useMemo(() => Math.max(1, toInt(limitStr, 50)), [limitStr]);
   const offsetNum = React.useMemo(() => Math.max(0, toInt(offsetStr, 0)), [offsetStr]);
@@ -371,8 +360,6 @@ export default function EmployeesPageClient(props: Props) {
         q: qText || null,
         limit: String(limitNum),
         offset: String(offsetNum),
-        sort: sortColumn ?? undefined,
-        order: sortOrder ?? undefined,
       });
 
       if (seq !== loadSeqRef.current) return;
@@ -388,19 +375,11 @@ export default function EmployeesPageClient(props: Props) {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum, sortColumn, sortOrder]);
+  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum]);
 
   React.useEffect(() => {
     void loadItems();
   }, [loadItems]);
-
-  function handleSortColumn(column: EmployeeSortColumn) {
-    const next = toggleEmployeeSort(
-      sortColumn ? { sort: sortColumn, order: sortOrder ?? "asc" } : {},
-      column,
-    );
-    updateUrl({ sort: next.sort, order: next.order }, { resetOffset: true });
-  }
 
   React.useEffect(() => {
     if (!deepLinkEmployeeId) return;
@@ -674,10 +653,7 @@ export default function EmployeesPageClient(props: Props) {
               showAdminDelete={showStaffAdminDelete}
               deletingEmployeeId={deletingEmployeeId}
               onDeleteEmployee={showStaffAdminDelete ? handleDeleteEmployee : undefined}
-              sortable={isStaffRoute}
-              sortColumn={sortColumn}
-              sortOrder={sortOrder}
-              onSortColumn={isStaffRoute ? handleSortColumn : undefined}
+              sortable={false}
             />
           </div>
     </>

@@ -21,7 +21,9 @@ if _probe_dir:
 
 from app.auth import create_access_token
 from app.db.engine import engine
+from app.medical_org_groups import MEDICAL_ORG_GROUPS
 from app.security.directory_scope import is_privileged, privileged_role_ids, privileged_user_ids
+from app.services.tasks_service import SYSTEM_ADMIN_ROLE_ID
 
 # Snapshot dev .env allowlists at import so per-test monkeypatch isolation cannot
 # skip seed user-id floors or reserved-role skipping (WP-II-005R3).
@@ -787,6 +789,52 @@ def client() -> TestClient:
 
 
 @pytest.fixture(scope="function")
+def canonical_deps_groups() -> Iterator[None]:
+    """Provide canonical org groups and remove only rows created by this fixture."""
+    created_group_ids: list[int] = []
+    with engine.begin() as conn:
+        if not table_exists(conn, "deps_group"):
+            pytest.skip("deps_group table not available")
+        for group in MEDICAL_ORG_GROUPS:
+            created = conn.execute(
+                text(
+                    """
+                    INSERT INTO public.deps_group (group_id, group_name)
+                    VALUES (:group_id, :group_name)
+                    ON CONFLICT (group_id) DO NOTHING
+                    RETURNING group_id
+                    """
+                ),
+                {
+                    "group_id": int(group.group_id),
+                    "group_name": group.display_name_ru,
+                },
+            ).scalar_one_or_none()
+            if created is not None:
+                created_group_ids.append(int(created))
+
+    try:
+        yield
+    finally:
+        if created_group_ids:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.deps_group dg
+                        WHERE dg.group_id = ANY(:group_ids)
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM public.org_units ou
+                              WHERE ou.group_id = dg.group_id
+                          )
+                        """
+                    ),
+                    {"group_ids": created_group_ids},
+                )
+
+
+@pytest.fixture(scope="function")
 def seed() -> Iterator[Dict[str, Any]]:
     created_unit_id: Optional[int] = None
     created_role_ids: list[int] = []
@@ -964,6 +1012,90 @@ def seed() -> Iterator[Dict[str, Any]]:
                     exec_sql(conn, f"DELETE FROM public.{ut} WHERE id = :u", u=created_unit_id)
 
             sync_common_seed_sequences(conn)
+
+
+@pytest.fixture(scope="function")
+def employees_seed(canonical_deps_groups, seed) -> Iterator[Dict[str, Any]]:
+    """Build self-contained employee fixtures after canonical org groups exist."""
+    created_admin_role = False
+    created_admin_user_id: Optional[int] = None
+    with engine.begin() as conn:
+        admin_role_exists = conn.execute(
+            text("SELECT 1 FROM public.roles WHERE role_id = :role_id LIMIT 1"),
+            {"role_id": int(SYSTEM_ADMIN_ROLE_ID)},
+        ).scalar_one_or_none()
+        if admin_role_exists is None:
+            role_cols = get_columns(conn, "roles")
+            role_values: Dict[str, Any] = {
+                "role_id": int(SYSTEM_ADMIN_ROLE_ID),
+                "name": "Pytest Employees System Admin",
+            }
+            if "code" in role_cols:
+                role_values["code"] = "PYTEST_EMPLOYEES_SYSTEM_ADMIN"
+            if "created_at" in role_cols:
+                role_values["created_at"] = utcnow()
+            insert_returning_id(
+                conn,
+                table="roles",
+                id_col="role_id",
+                values=role_values,
+            )
+            created_admin_role = True
+
+        admin_user_id = conn.execute(
+            text(
+                """
+                SELECT user_id
+                FROM public.users
+                WHERE role_id = :role_id
+                  AND COALESCE(is_active, TRUE) = TRUE
+                ORDER BY user_id
+                LIMIT 1
+                """
+            ),
+            {"role_id": int(SYSTEM_ADMIN_ROLE_ID)},
+        ).scalar_one_or_none()
+        if admin_user_id is None:
+            admin_user_id = create_user(
+                conn,
+                full_name=f"Pytest Employees Admin {uuid4().hex[:8]}",
+                role_id=int(SYSTEM_ADMIN_ROLE_ID),
+                unit_id=int(seed["unit_id"]),
+            )
+            created_admin_user_id = int(admin_user_id)
+
+    try:
+        yield {**seed, "admin_user_id": int(admin_user_id)}
+    finally:
+        with engine.begin() as conn:
+            if created_admin_user_id is not None:
+                membership_table = _detect_user_role_table(conn)
+                if membership_table:
+                    safe_delete_many(
+                        conn,
+                        membership_table,
+                        "user_id",
+                        [created_admin_user_id],
+                    )
+                safe_delete_many(
+                    conn,
+                    "users",
+                    "user_id",
+                    [created_admin_user_id],
+                )
+            if created_admin_role:
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM public.roles r
+                        WHERE r.role_id = :role_id
+                          AND NOT EXISTS (
+                              SELECT 1 FROM public.users u WHERE u.role_id = r.role_id
+                          )
+                        """
+                    ),
+                    {"role_id": int(SYSTEM_ADMIN_ROLE_ID)},
+                )
 
 
 @pytest.fixture(autouse=True)

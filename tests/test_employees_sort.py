@@ -53,6 +53,8 @@ def _insert_sort_employee(
     *,
     full_name: str,
     org_unit_id: int,
+    person_id: Optional[int] = None,
+    position_id: Optional[int] = None,
     employment_rate: Optional[float] = None,
     status: Optional[str] = None,
 ) -> str:
@@ -65,6 +67,10 @@ def _insert_sort_employee(
         "org_unit_id": int(org_unit_id),
         "is_active": True,
     }
+    if person_id is not None and "person_id" in cols:
+        values["person_id"] = int(person_id)
+    if position_id is not None and "position_id" in cols:
+        values["position_id"] = int(position_id)
     if employment_rate is not None and "employment_rate" in cols:
         values["employment_rate"] = float(employment_rate)
     elif "employment_rate" in cols:
@@ -109,6 +115,92 @@ def _insert_sort_employee(
     return str(row[0])
 
 
+def _insert_position(conn, *, name: str, category: str) -> int:
+    return int(
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.positions (name, category)
+                VALUES (:name, :category)
+                RETURNING position_id
+                """
+            ),
+            {"name": name, "category": category},
+        ).scalar_one()
+    )
+
+
+def _insert_person(conn, *, full_name: str, marker: str) -> int:
+    return insert_returning_id(
+        conn,
+        table="persons",
+        id_col="person_id",
+        values={
+            "full_name": full_name,
+            "match_key": f"name:{marker}",
+            "source": "manual",
+            "person_status": "active",
+        },
+    )
+
+
+def _insert_current_assignment(
+    conn,
+    *,
+    person_id: int,
+    org_unit_id: int,
+    position_id: int,
+    marker: str,
+) -> int:
+    return insert_returning_id(
+        conn,
+        table="person_assignments",
+        id_col="assignment_id",
+        values={
+            "person_id": int(person_id),
+            "org_unit_id": int(org_unit_id),
+            "position_id": int(position_id),
+            "employment_type": "primary",
+            "rate": 1.0,
+            "start_date": date.today(),
+            "active_flag": True,
+            "is_primary": True,
+            "lifecycle_status": "active",
+            "assignment_key": marker,
+            "source": "manual",
+        },
+    )
+
+
+def _cleanup_rank_graph(
+    *,
+    employee_ids: List[int],
+    person_ids: List[int],
+    position_ids: List[int],
+) -> None:
+    with engine.begin() as conn:
+        if person_ids:
+            conn.execute(
+                text("DELETE FROM public.person_assignments WHERE person_id = ANY(:ids)"),
+                {"ids": [int(value) for value in person_ids]},
+            )
+        if employee_ids:
+            conn.execute(
+                text("DELETE FROM public.employees WHERE employee_id = ANY(:ids)"),
+                {"ids": [int(value) for value in employee_ids]},
+            )
+        if person_ids:
+            conn.execute(
+                text("DELETE FROM public.persons WHERE person_id = ANY(:ids)"),
+                {"ids": [int(value) for value in person_ids]},
+            )
+        if position_ids:
+            conn.execute(
+                text("DELETE FROM public.positions WHERE position_id = ANY(:ids)"),
+                {"ids": [int(value) for value in position_ids]},
+            )
+
+
 def _cleanup_employees(full_names: List[str]) -> None:
     if not full_names:
         return
@@ -135,17 +227,20 @@ def _rate_list(payload: dict) -> List[float]:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_sort_fio_asc_and_desc(client, seed):
+def test_list_employees_sort_fio_asc_and_desc(client, employees_seed):
     prefix = f"PytestEmpSortFio_{uuid4().hex[:8]}"
     names = [f"{prefix} Антонов", f"{prefix} Борисов", f"{prefix} Ёжиков"]
     created_names: List[str] = []
+    rank_employee_ids: List[int] = []
+    rank_person_ids: List[int] = []
+    rank_position_ids: List[int] = []
     admin_user_id: Optional[int] = None
 
     try:
         with engine.begin() as conn:
             admin_user_id = _admin_user_id(conn)
             for name in names:
-                _insert_sort_employee(conn, full_name=name, org_unit_id=int(seed["unit_id"]))
+                _insert_sort_employee(conn, full_name=name, org_unit_id=int(employees_seed["unit_id"]))
                 created_names.append(name)
 
         asc = _list_employees(
@@ -175,12 +270,93 @@ def test_list_employees_sort_fio_asc_and_desc(client, seed):
         assert desc.status_code == 200, desc.text
         desc_names = _fio_list(desc.json())
         assert desc_names == sorted(desc_names, key=lambda s: s.casefold(), reverse=True)
+
+        rank_prefix = f"PytestEmpRank_{uuid4().hex[:8]}"
+        doctor_name = f"{rank_prefix} Абаев Врач"
+        head_name = f"{rank_prefix} Яковлев Заведующий"
+        with engine.begin() as conn:
+            doctor_position_id = _insert_position(
+                conn, name="Врач", category="medical"
+            )
+            head_position_id = _insert_position(
+                conn, name="Заведующий отделением", category="leaders"
+            )
+            rank_position_ids.extend([doctor_position_id, head_position_id])
+            for full_name, position_id, suffix in (
+                (doctor_name, doctor_position_id, "doctor"),
+                (head_name, head_position_id, "head"),
+            ):
+                marker = f"{rank_prefix.lower()}-{suffix}"
+                person_id = _insert_person(conn, full_name=full_name, marker=marker)
+                rank_person_ids.append(person_id)
+                employee_id = int(
+                    _insert_sort_employee(
+                        conn,
+                        full_name=full_name,
+                        person_id=person_id,
+                        org_unit_id=int(employees_seed["unit_id"]),
+                        position_id=position_id,
+                    )
+                )
+                rank_employee_ids.append(employee_id)
+                _insert_current_assignment(
+                    conn,
+                    person_id=person_id,
+                    org_unit_id=int(employees_seed["unit_id"]),
+                    position_id=position_id,
+                    marker=marker,
+                )
+
+        first_page = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=rank_prefix,
+            org_group_id=1,
+            org_unit_id=int(employees_seed["unit_id"]),
+            limit=1,
+            offset=0,
+        )
+        assert first_page.status_code == 200, first_page.text
+        assert first_page.json()["total"] == 2
+        assert _fio_list(first_page.json()) == [head_name]
+
+        second_page = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=rank_prefix,
+            org_group_id=1,
+            org_unit_id=int(employees_seed["unit_id"]),
+            limit=1,
+            offset=1,
+        )
+        assert second_page.status_code == 200, second_page.text
+        assert _fio_list(second_page.json()) == [doctor_name]
+
+        mismatched_group = _list_employees(
+            client,
+            int(admin_user_id),
+            status="all",
+            q=rank_prefix,
+            org_group_id=3,
+            org_unit_id=int(employees_seed["unit_id"]),
+            limit=1,
+            offset=0,
+        )
+        assert mismatched_group.status_code == 200, mismatched_group.text
+        assert mismatched_group.json()["total"] == 0
     finally:
+        _cleanup_rank_graph(
+            employee_ids=rank_employee_ids,
+            person_ids=rank_person_ids,
+            position_ids=rank_position_ids,
+        )
         _cleanup_employees(created_names)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_sort_rate_and_switch_column(client, seed):
+def test_list_employees_sort_rate_and_switch_column(client, employees_seed):
     prefix = f"PytestEmpSortRate_{uuid4().hex[:8]}"
     rows = [
         (f"{prefix} Низкая ставка", 0.25),
@@ -197,7 +373,7 @@ def test_list_employees_sort_rate_and_switch_column(client, seed):
                 _insert_sort_employee(
                     conn,
                     full_name=name,
-                    org_unit_id=int(seed["unit_id"]),
+                    org_unit_id=int(employees_seed["unit_id"]),
                     employment_rate=rate,
                 )
                 created_names.append(name)
@@ -247,7 +423,7 @@ def test_list_employees_sort_rate_and_switch_column(client, seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_list_employees_sort_puts_empty_values_last(client, seed):
+def test_list_employees_sort_puts_empty_values_last(client, employees_seed):
     prefix = f"PytestEmpSortEmpty_{uuid4().hex[:8]}"
     names = [f"{prefix} Без ставки", f"{prefix} Со ставкой"]
     created_names: List[str] = []
@@ -260,7 +436,7 @@ def test_list_employees_sort_puts_empty_values_last(client, seed):
             _insert_sort_employee(
                 conn,
                 full_name=names[0],
-                org_unit_id=int(seed["unit_id"]),
+                org_unit_id=int(employees_seed["unit_id"]),
             )
             created_names.append(names[0])
             if "employment_rate" in cols:
@@ -276,7 +452,7 @@ def test_list_employees_sort_puts_empty_values_last(client, seed):
                 )
             values: Dict[str, Any] = {
                 "full_name": names[1],
-                "org_unit_id": int(seed["unit_id"]),
+                "org_unit_id": int(employees_seed["unit_id"]),
                 "is_active": True,
             }
             if "employment_rate" in cols:

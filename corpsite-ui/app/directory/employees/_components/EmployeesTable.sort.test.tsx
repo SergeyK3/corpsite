@@ -82,4 +82,21 @@ describe("EmployeesTable staff sorting headers", () => {
     expect(screen.queryByRole("button", { name: /ФИО/i })).not.toBeInTheDocument();
     expect(screen.getByText("ФИО")).toBeInTheDocument();
   });
+
+  it("renders rows in API order without local re-sorting", () => {
+    render(
+      <EmployeesTable
+        {...baseProps}
+        sortable={false}
+        items={[
+          { employee_id: 2, fio: "Яковлев Заведующий", status: "active", employment_rate: 1 },
+          { employee_id: 1, fio: "Абдулов Врач", status: "active", employment_rate: 1 },
+        ]}
+      />,
+    );
+
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows[0]).toHaveTextContent("Яковлев Заведующий");
+    expect(rows[1]).toHaveTextContent("Абдулов Врач");
+  });
 });

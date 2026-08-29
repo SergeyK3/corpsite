@@ -16,6 +16,7 @@ from app.services.hr_event_registry import (
     resolve_journal_event_codes,
 )
 from app.services.personnel_orders_query_service import personnel_orders_available
+from app.services.personnel_position_ordering import personnel_position_rank_sql
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import build_dept_scope_cte
@@ -344,6 +345,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     pos_rel, pos_cols = _positions_relation()
     pos_id_col = _dict_id_col(pos_cols, ["position_id", "pos_id"]) if pos_rel else None
     pos_name_col = _dict_name_col(pos_cols, ["position_name", "pos_name"]) if pos_rel else None
+    pos_category_col = "category" if "category" in set(pos_cols) else None
 
     if pos_fk and pos_rel and pos_id_col and pos_name_col:
         select_parts.append(f"p.{pos_name_col} AS pos_name")
@@ -388,6 +390,11 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     position_expr = (
         f"p.{pos_name_col}" if pos_fk and pos_rel and pos_id_col and pos_name_col else "NULL"
     )
+    position_category_expr = (
+        f"p.{pos_category_col}"
+        if pos_fk and pos_rel and pos_id_col and pos_name_col and pos_category_col
+        else "NULL"
+    )
     if dept_fk and dept_rel and dept_id_col and dept_name_col:
         department_expr = f"COALESCE(ou.name, d.{dept_name_col})"
     else:
@@ -400,6 +407,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         "rate_col": rate_col,
         "status_col": status_col,
         "position_expr": position_expr,
+        "position_category_expr": position_category_expr,
         "department_expr": department_expr,
     }
 
@@ -595,10 +603,40 @@ def _build_employees_order_sql(
     department_expr: str,
     rate_col: Optional[str],
     status_col: Optional[str],
+    group_id_expr: str = "ou.group_id",
+    position_category_expr: str = "NULL",
+    has_current_assignment_expr: str = "TRUE",
 ) -> str:
     ord_dir = "DESC" if (order or "").lower() == "desc" else "ASC"
     sort_key = (sort or "").lower().strip()
     tie_breaker = f"CAST(e.{emp_id_col} AS TEXT) ASC"
+
+    if not sort_key:
+        if fio_col:
+            fio_expr = f"e.{fio_col}"
+        elif last_col and first_col:
+            fio_expr = f"CONCAT_WS(' ', e.{last_col}, e.{first_col})"
+        elif last_col:
+            fio_expr = f"e.{last_col}"
+        else:
+            fio_expr = "NULL"
+        rank_expr = personnel_position_rank_sql(
+            group_id_expr=group_id_expr,
+            position_name_expr=position_expr,
+            position_category_expr=position_category_expr,
+            has_current_assignment_expr=has_current_assignment_expr,
+        )
+        return (
+            f"CASE {group_id_expr} WHEN 1 THEN 1 WHEN 2 THEN 2 WHEN 3 THEN 3 ELSE 4 END ASC, "
+            f"{_empty_last_prefix(department_expr)} ASC, "
+            f"{_ru_text_sort_expr(department_expr)} ASC NULLS LAST, "
+            f"CAST(e.org_unit_id AS TEXT) ASC, "
+            f"{rank_expr} ASC, "
+            f"{_empty_last_prefix(fio_expr)} ASC, "
+            f"{_ru_text_sort_expr(fio_expr)} ASC NULLS LAST, "
+            f"CAST({fio_expr} AS TEXT) ASC NULLS LAST, "
+            f"{tie_breaker}"
+        )
 
     if sort_key in ("fio", "full_name", "name"):
         if fio_col:
@@ -804,6 +842,21 @@ def list_employees(
         department_expr=str(select_meta.get("department_expr") or "ou.name"),
         rate_col=select_meta.get("rate_col"),
         status_col=select_meta.get("status_col"),
+        group_id_expr="ou.group_id",
+        position_category_expr=str(select_meta.get("position_category_expr") or "NULL"),
+        has_current_assignment_expr=(
+            "EXISTS (SELECT 1 FROM public.person_assignments current_pa "
+            "WHERE current_pa.person_id = e.person_id "
+            "AND current_pa.active_flag IS TRUE "
+            "AND current_pa.is_primary IS TRUE "
+            "AND current_pa.lifecycle_status = 'active' "
+            "AND current_pa.start_date <= CURRENT_DATE "
+            "AND (current_pa.end_date IS NULL OR current_pa.end_date >= CURRENT_DATE) "
+            "AND current_pa.org_unit_id = e.org_unit_id "
+            "AND current_pa.position_id IS NOT DISTINCT FROM e.position_id)"
+            if "person_id" in set(emp_cols)
+            else "FALSE"
+        ),
     )
 
     q_list = text(
