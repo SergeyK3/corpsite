@@ -59,6 +59,44 @@ export type PersonnelRosterFilters = {
   orgUnitId?: number;
 };
 
+export type PersonnelOrdersSummaryOrder = {
+  order_id: number;
+  order_number: string | null;
+  order_date: string | null;
+  order_type_code: string;
+  item_type_codes: string[];
+  type_label: string;
+  employee_names: string[];
+  department_names: string[];
+  status: string;
+  status_label: string;
+  category_code: string;
+};
+
+export type PersonnelOrdersSummaryCategory = {
+  code: string;
+  name: string;
+  count: number;
+  incomplete_count: number;
+  orders: PersonnelOrdersSummaryOrder[];
+};
+
+export type PersonnelOrdersSummaryReport = {
+  report_code: "personnel_orders_summary";
+  report_name: string;
+  generated_at: string;
+  filters: { date_from: string | null; date_to: string | null };
+  period_note: string | null;
+  categories: PersonnelOrdersSummaryCategory[];
+  total_count: number;
+  total_incomplete_count: number;
+};
+
+export type PersonnelOrdersSummaryFilters = {
+  dateFrom?: string;
+  dateTo?: string;
+};
+
 function rosterPath(filters: PersonnelRosterFilters, suffix = ""): string {
   const params = new URLSearchParams();
   if (filters.groupId) params.set("group_id", String(filters.groupId));
@@ -73,6 +111,18 @@ export function getPersonnelReportOptions(): Promise<PersonnelReportOptions> {
 
 export function getPersonnelRoster(filters: PersonnelRosterFilters): Promise<PersonnelRosterReport> {
   return apiFetchJson<PersonnelRosterReport>(rosterPath(filters));
+}
+
+export function getPersonnelOrdersSummary(
+  filters: PersonnelOrdersSummaryFilters,
+): Promise<PersonnelOrdersSummaryReport> {
+  const params = new URLSearchParams();
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters.dateTo) params.set("date_to", filters.dateTo);
+  const query = params.toString();
+  return apiFetchJson<PersonnelOrdersSummaryReport>(
+    `/directory/personnel/reports/orders-summary${query ? `?${query}` : ""}`,
+  );
 }
 
 export async function downloadPersonnelRoster(filters: PersonnelRosterFilters): Promise<void> {

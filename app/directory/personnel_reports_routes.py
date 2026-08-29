@@ -1,6 +1,7 @@
 """Personnel reports preview and Excel endpoints."""
 from __future__ import annotations
 
+from datetime import date
 from io import BytesIO
 from typing import Any
 from urllib.parse import quote
@@ -18,12 +19,34 @@ from app.services.personnel_reports_service import (
     list_report_org_options,
     roster_filename,
 )
+from app.services.personnel_orders_summary_report_service import (
+    PersonnelOrdersSummaryFilterError,
+    build_personnel_orders_summary,
+)
 
 from .common import as_http500
-from .rbac import compute_scope, require_personnel_visibility_or_403
+from .rbac import compute_scope, require_personnel_admin_or_403, require_personnel_visibility_or_403
 
 
 router = APIRouter(prefix="/personnel/reports", tags=["personnel-reports"])
+
+
+@router.get("/orders-summary")
+def preview_personnel_orders_summary(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Organization-wide read-only summary using the personnel orders journal access rule."""
+    try:
+        require_personnel_admin_or_403(user)
+        return build_personnel_orders_summary(engine, date_from=date_from, date_to=date_to)
+    except PersonnelOrdersSummaryFilterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
 
 
 def _scope(user: dict[str, Any]) -> dict[str, Any]:

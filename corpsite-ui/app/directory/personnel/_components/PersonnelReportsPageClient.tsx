@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import PersonnelOrdersSummaryReportPanel from "./PersonnelOrdersSummaryReport";
 import {
   downloadPersonnelRoster,
   getPersonnelReportOptions,
@@ -25,7 +26,7 @@ function formatRate(value: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value);
 }
 
-export default function PersonnelReportsPageClient() {
+function PersonnelRosterReportPanel() {
   const [options, setOptions] = React.useState<PersonnelReportOptions>({ groups: [], departments: [] });
   const [groupId, setGroupId] = React.useState("");
   const [departmentId, setDepartmentId] = React.useState("");
@@ -269,6 +270,42 @@ export default function PersonnelReportsPageClient() {
           </div>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+type ReportCode = "personnel_roster" | "personnel_orders_summary";
+
+export default function PersonnelReportsPageClient() {
+  const [activeReport, setActiveReport] = React.useState<ReportCode>("personnel_roster");
+
+  return (
+    <div>
+      <nav aria-label="Выбор кадрового отчёта" className="flex flex-wrap gap-3 px-4 pt-5">
+        <button
+          type="button"
+          aria-pressed={activeReport === "personnel_roster"}
+          onClick={() => setActiveReport("personnel_roster")}
+          className="rounded-xl border border-zinc-200 px-4 py-3 text-left aria-pressed:border-blue-600 aria-pressed:bg-blue-50 dark:border-zinc-800 dark:aria-pressed:bg-blue-950"
+        >
+          <span className="block text-xs uppercase tracking-wide text-zinc-500">Отчёт</span>
+          <span className="font-semibold">Личный состав</span>
+        </button>
+        <button
+          type="button"
+          aria-pressed={activeReport === "personnel_orders_summary"}
+          onClick={() => setActiveReport("personnel_orders_summary")}
+          className="rounded-xl border border-zinc-200 px-4 py-3 text-left aria-pressed:border-blue-600 aria-pressed:bg-blue-50 dark:border-zinc-800 dark:aria-pressed:bg-blue-950"
+        >
+          <span className="block text-xs uppercase tracking-wide text-zinc-500">Отчёт</span>
+          <span className="font-semibold">Общая сводка по приказам</span>
+        </button>
+      </nav>
+      {activeReport === "personnel_roster" ? (
+        <PersonnelRosterReportPanel />
+      ) : (
+        <PersonnelOrdersSummaryReportPanel />
+      )}
     </div>
   );
 }
