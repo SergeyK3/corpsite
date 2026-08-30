@@ -112,16 +112,32 @@ def test_archive_review_summary_pagination_and_safe_paths(client, oo_intake_head
     body = response.json()
     assert body["batch"]["batch_id"] == archive_review_batch
     assert body["stats"] == {
-        "total_records": 4,
-        "preconfirmed_records": 1,
-        "requires_processing": 3,
-        "archive_section_count": 2,
-        "state_counts": {
-            "REQUISITES_PRECONFIRMED": 1,
-            "NEEDS_REQUISITES": 1,
-            "NEEDS_DOCUMENT_TYPE": 1,
-            "POSSIBLE_NON_ORDER": 1,
+        "initial_quality": {
+            "total": 4,
+            "preconfirmed": 1,
+            "incomplete": 3,
+            "state_counts": {
+                "REQUISITES_PRECONFIRMED": 1,
+                "NEEDS_REQUISITES": 1,
+                "NEEDS_DOCUMENT_TYPE": 1,
+                "POSSIBLE_NON_ORDER": 1,
+            },
         },
+        "work_queue": {
+            "pending_review": 4,
+            "needs_clarification": 0,
+            "completed_review": 0,
+            "outcome_counts": {
+                "CONFIRMED": 0,
+                "DRAFT_ORDER": 0,
+                "DUPLICATE": 0,
+                "NEEDS_CLARIFICATION": 0,
+                "NOT_AN_ORDER": 0,
+                "ORDER_ANNEX": 0,
+                "SUPPORTING_DOCUMENT": 0,
+            },
+        },
+        "archive_section_count": 2,
         "extension_counts": {".doc": 1, ".docx": 2, ".pdf": 1},
         "duplicate_sha_excel_rows": [2, 3],
         "repeated_298_excel_rows": [4],
@@ -150,6 +166,7 @@ def test_archive_review_summary_pagination_and_safe_paths(client, oo_intake_head
         ({"search": "%"}, []),
         ({"search": "_"}, []),
         ({"initial_review_state": "POSSIBLE_NON_ORDER"}, [5]),
+        ({"review_outcome": "UNREVIEWED"}, [2, 3, 4, 5]),
         ({"archive_section": "Раздел Б"}, [4, 5]),
         ({"only_missing_requisites": True}, [3, 5]),
         ({"only_duplicate_sha": True}, [2, 3]),
@@ -162,6 +179,64 @@ def test_archive_review_filters(client, oo_intake_headers, archive_review_batch,
     body = response.json()
     assert body["total"] == len(expected_excel_rows)
     assert [item["excel_row"] for item in body["items"]] == expected_excel_rows
+
+
+def test_initial_quality_and_work_queue_are_independent(client, oo_intake_headers, archive_review_batch, seed):
+    reviewer_id = int(seed["executor_user_id"])
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE operational_order_import_rows
+                SET review_outcome='CONFIRMED', confirmed_document_type='Приказ',
+                    confirmed_order_number='101-ө', confirmed_order_date=DATE '2026-01-01',
+                    confirmed_subject='Назначение директора', reviewed_by_user_id=:reviewer,
+                    reviewed_at=clock_timestamp(), version=version+1
+                WHERE batch_id=:batch AND source_row_number='1'
+                """
+            ),
+            {"batch": archive_review_batch, "reviewer": reviewer_id},
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE operational_order_import_rows
+                SET review_outcome='NEEDS_CLARIFICATION', review_comment='Уточнить дату',
+                    reviewed_by_user_id=:reviewer, reviewed_at=clock_timestamp(), version=version+1
+                WHERE batch_id=:batch AND source_row_number='2'
+                """
+            ),
+            {"batch": archive_review_batch, "reviewer": reviewer_id},
+        )
+
+    body = client.get(BASE, headers=oo_intake_headers).json()
+    assert body["stats"]["initial_quality"] == {
+        "total": 4,
+        "preconfirmed": 1,
+        "incomplete": 3,
+        "state_counts": {
+            "REQUISITES_PRECONFIRMED": 1,
+            "NEEDS_REQUISITES": 1,
+            "NEEDS_DOCUMENT_TYPE": 1,
+            "POSSIBLE_NON_ORDER": 1,
+        },
+    }
+    queue = body["stats"]["work_queue"]
+    assert queue["pending_review"] == 2
+    assert queue["needs_clarification"] == 1
+    assert queue["completed_review"] == 1
+    assert queue["outcome_counts"]["CONFIRMED"] == 1
+    assert queue["outcome_counts"]["NEEDS_CLARIFICATION"] == 1
+    assert queue["pending_review"] + queue["needs_clarification"] + queue["completed_review"] == 4
+    confirmed = next(item for item in body["items"] if item["review_outcome"] == "CONFIRMED")
+    assert confirmed["reviewer_display_name"] == "Pytest Executor"
+    assert confirmed["reviewed_at"] is not None
+    assert "email" not in str(body).lower()
+    assert "password" not in str(body).lower()
+
+    assert [item["excel_row"] for item in client.get(BASE, params={"review_outcome": "UNREVIEWED"}, headers=oo_intake_headers).json()["items"]] == [4, 5]
+    assert [item["excel_row"] for item in client.get(BASE, params={"review_outcome": "CONFIRMED"}, headers=oo_intake_headers).json()["items"]] == [2]
+    assert [item["excel_row"] for item in client.get(BASE, params={"review_outcome": "NEEDS_CLARIFICATION"}, headers=oo_intake_headers).json()["items"]] == [3]
 
 
 def test_archive_review_empty_state(client, oo_intake_headers, monkeypatch):
@@ -182,3 +257,8 @@ def test_archive_review_empty_state(client, oo_intake_headers, monkeypatch):
     assert response.status_code == 200
     assert response.json()["batch"] is None
     assert response.json()["items"] == []
+
+
+def test_archive_review_rejects_unknown_outcome_filter(client, oo_intake_headers):
+    response = client.get(BASE, params={"review_outcome": "UNKNOWN"}, headers=oo_intake_headers)
+    assert response.status_code == 422
