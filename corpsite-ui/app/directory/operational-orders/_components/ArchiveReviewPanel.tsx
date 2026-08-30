@@ -46,6 +46,10 @@ const REVIEW_OUTCOME_OPTIONS: Array<{ value: ArchiveReviewOutcomeFilter; label: 
   { value: "NOT_AN_ORDER", label: "Не относится к приказам" },
 ];
 
+function canReviewRow(canReview: boolean, outcome: ArchiveReviewOutcome | null | undefined): boolean {
+  return canReview && (outcome === null || outcome === "NEEDS_CLARIFICATION");
+}
+
 type Filters = {
   search: string;
   initialReviewState: "" | ArchiveInitialReviewState;
@@ -277,7 +281,10 @@ export default function ArchiveReviewPanel({
       {selectedRowId != null ? (
         <ArchiveReviewDialog
           rowId={selectedRowId}
-          canReview={canReview}
+          canReview={canReviewRow(
+            canReview,
+            data?.items.find((item) => item.row_id === selectedRowId)?.review_outcome,
+          )}
           reviewerName={reviewerName}
           onClose={() => setSelectedRowId(null)}
           onSaved={(saved) => {
@@ -362,7 +369,7 @@ function ArchiveRowsTable({ items, canReview, onReview }: { items: ArchiveReview
               </td>
               <td className="whitespace-nowrap px-3 py-2">
                 <button type="button" className="rounded-md border px-3 py-1.5" onClick={() => onReview(item.row_id)}>
-                  {canReview ? "Проверить" : "Просмотреть"}
+                  {canReviewRow(canReview, item.review_outcome) ? "Проверить" : "Просмотреть"}
                 </button>
               </td>
             </tr>

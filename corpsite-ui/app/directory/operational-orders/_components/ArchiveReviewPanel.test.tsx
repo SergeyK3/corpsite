@@ -28,6 +28,21 @@ const states: ArchiveReviewRow["initial_review_state"][] = [
   "POSSIBLE_NON_ORDER",
 ];
 
+const terminalOutcomes: Array<NonNullable<ArchiveReviewRow["review_outcome"]>> = [
+  "CONFIRMED",
+  "DRAFT_ORDER",
+  "ORDER_ANNEX",
+  "SUPPORTING_DOCUMENT",
+  "DUPLICATE",
+  "NOT_AN_ORDER",
+];
+
+const allOutcomes: ArchiveReviewRow["review_outcome"][] = [
+  null,
+  "NEEDS_CLARIFICATION",
+  ...terminalOutcomes,
+];
+
 function response(overrides: Partial<ArchiveReviewResponse> = {}): ArchiveReviewResponse {
   const items = states.map((state, index): ArchiveReviewRow => ({
     row_id: index + 1,
@@ -241,6 +256,63 @@ describe("ArchiveReviewPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Excel-строки 45");
     await waitFor(() => expect(mockedListArchiveReview.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it.each([
+    [null, "непроверенной"],
+    ["NEEDS_CLARIFICATION" as const, "требующей уточнения"],
+  ])("offers review for a registrar on a %s row", async (reviewOutcome) => {
+    const item = { ...response().items[0], review_outcome: reviewOutcome };
+    mockedListArchiveReview.mockResolvedValueOnce(response({ items: [item], total: 1 }));
+
+    render(<ArchiveReviewPanel />);
+
+    expect(await screen.findByRole("button", { name: "Проверить" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Просмотреть" })).toBeNull();
+  });
+
+  it.each(terminalOutcomes)("offers viewing for a registrar on terminal outcome %s", async (reviewOutcome) => {
+    const item = { ...response().items[0], review_outcome: reviewOutcome };
+    mockedListArchiveReview.mockResolvedValueOnce(response({ items: [item], total: 1 }));
+
+    render(<ArchiveReviewPanel />);
+
+    expect(await screen.findByRole("button", { name: "Просмотреть" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Проверить" })).toBeNull();
+  });
+
+  it.each(allOutcomes)("always offers viewing without capability for outcome %s", async (reviewOutcome) => {
+    const item = { ...response().items[0], review_outcome: reviewOutcome };
+    mockedListArchiveReview.mockResolvedValueOnce(response({ items: [item], total: 1 }));
+
+    render(<ArchiveReviewPanelView canReview={false} />);
+
+    expect(await screen.findByRole("button", { name: "Просмотреть" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Проверить" })).toBeNull();
+  });
+
+  it("opens a terminal row read-only and cannot issue PATCH", async () => {
+    const item = { ...response().items[0], review_outcome: "NOT_AN_ORDER" as const };
+    const terminalDetail: ArchiveReviewDetail = {
+      ...item,
+      source_document_type: "Приказ",
+      confirmed_document_type: null,
+      confirmed_order_number: null,
+      confirmed_order_date: null,
+      confirmed_subject: null,
+      review_comment: "Не относится к приказам",
+    };
+    mockedListArchiveReview.mockResolvedValueOnce(response({ items: [item], total: 1 }));
+    mockedGetArchiveReviewRow.mockResolvedValueOnce(terminalDetail);
+
+    render(<ArchiveReviewPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: "Просмотреть" }));
+
+    expect(await screen.findByRole("dialog", { name: "Просмотр записи архива" })).toBeTruthy();
+    expect(screen.queryByLabelText("Решение проверки")).toBeNull();
+    expect(screen.getByLabelText("Комментарий проверяющего")).toHaveProperty("readOnly", true);
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
+    expect(mockedSaveArchiveReviewRow).not.toHaveBeenCalled();
   });
 
   it("offers read-only viewing without capability and cannot issue PATCH", async () => {
