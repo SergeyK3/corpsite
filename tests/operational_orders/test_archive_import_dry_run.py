@@ -402,7 +402,12 @@ def test_json_report_matches_summary_and_cannot_modify_inputs(
 def test_importer_has_no_database_write_dependency() -> None:
     module_dir = Path(__file__).parents[2] / "app" / "operational_orders" / "archive_import"
     cli = Path(__file__).parents[2] / "scripts" / "dry_run_operational_orders_archive_import.py"
-    source = "\n".join(path.read_text(encoding="utf-8") for path in module_dir.glob("*.py"))
+    stage_one_files = (
+        module_dir / "__init__.py",
+        module_dir / "models.py",
+        module_dir / "dry_run.py",
+    )
+    source = "\n".join(path.read_text(encoding="utf-8") for path in stage_one_files)
     source += cli.read_text(encoding="utf-8")
 
     forbidden = (

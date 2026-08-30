@@ -77,6 +77,12 @@ from app.db.models.operational_orders import (
     OperationalOrderTextProvenance,
     OperationalOrderTranslationAssignment,
 )
+from app.db.models.operational_order_archive_import import (
+    IMPORT_BATCH_STATUSES,
+    INITIAL_REVIEW_STATES,
+    OperationalOrderImportBatch,
+    OperationalOrderImportRow,
+)
 from app.db.models.personnel_record_metadata import (
     HR_RELATIONSHIP_CONTEXTS,
     HR_RELATIONSHIP_UNKNOWN,
@@ -406,6 +412,10 @@ __all__ = [
     "OperationalOrderPromotionAudit",
     "OperationalOrderTextProvenance",
     "OperationalOrderTranslationAssignment",
+    "OperationalOrderImportBatch",
+    "OperationalOrderImportRow",
+    "IMPORT_BATCH_STATUSES",
+    "INITIAL_REVIEW_STATES",
     "OrgUnitAllowedPosition",
     "PositionAlias",
     "SOURCE_TYPE_HR_CONTROL_LIST",
