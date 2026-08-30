@@ -100,6 +100,7 @@ export default function ArchiveReviewDialog({
 
   const dirty = hasUnsavedReviewChanges(form, initialForm);
   const completed = detail?.review_outcome != null && detail.review_outcome !== "NEEDS_CLARIFICATION";
+  const editable = canReview && detail != null && !completed;
   const availableOutcomes = detail?.review_outcome === "NEEDS_CLARIFICATION"
     ? OUTCOMES.filter((item) => item.value !== "NEEDS_CLARIFICATION")
     : OUTCOMES;
@@ -117,7 +118,7 @@ export default function ArchiveReviewDialog({
   }, [dirty]);
 
   function requestClose() {
-    if (canReview && dirty) {
+    if (editable && dirty) {
       setDiscardConfirmationOpen(true);
       return;
     }
@@ -126,7 +127,7 @@ export default function ArchiveReviewDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!canReview || !detail || !form || !form.outcome || completed) return;
+    if (!editable || !detail || !form || !form.outcome) return;
     if (
       form.outcome === "CONFIRMED" &&
       (!form.documentType.trim() || !form.orderNumber.trim() || !form.orderDate || !form.subject.trim())
@@ -166,7 +167,7 @@ export default function ArchiveReviewDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="archive-review-dialog-title" className="text-lg font-semibold">
-              {canReview ? "Проверка записи архива" : "Просмотр записи архива"}
+              {editable ? "Проверка записи архива" : "Просмотр записи архива"}
             </h2>
             {detail ? <p className="text-sm text-zinc-500">Excel-строка {detail.excel_row} · версия {detail.version}</p> : null}
           </div>
@@ -192,15 +193,10 @@ export default function ArchiveReviewDialog({
               <ReadOnly label="Официальный документ" value={detail.official_document_id ? `Документ #${detail.official_document_id}` : "Не связан"} />
             </fieldset>
 
-            {canReview ? (
-            <fieldset className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2" disabled={completed || saving}>
+            {editable ? (
+            <fieldset className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2" disabled={saving}>
               <legend className="px-1 font-medium">Результат проверки</legend>
-              {completed ? <p className="sm:col-span-2 rounded-md bg-zinc-100 p-2 text-sm">Завершённое решение доступно только для чтения.</p> : null}
-              {completed && detail.reviewer_display_name && detail.reviewed_at ? (
-                <p className="sm:col-span-2 text-sm">Проверил: {detail.reviewer_display_name}, {formatReviewedAt(detail.reviewed_at)}</p>
-              ) : (
-                <p className="sm:col-span-2 text-sm">Проверку сохранит: {reviewerName}</p>
-              )}
+              <p className="sm:col-span-2 text-sm">Проверку сохранит: {reviewerName}</p>
               <label className="sm:col-span-2 flex flex-col gap-1 text-sm">Решение
                 <select aria-label="Решение проверки" className="rounded-md border px-2 py-2 dark:bg-zinc-900" value={form.outcome} onChange={(e) => { setForm({ ...form, outcome: e.target.value as FormState["outcome"] }); setValidation(null); }}>
                   <option value="">Выберите решение</option>
@@ -229,7 +225,11 @@ export default function ArchiveReviewDialog({
             ) : (
               <fieldset className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2" disabled>
                 <legend className="px-1 font-medium">Результат проверки</legend>
-                <p className="sm:col-span-2 rounded-md bg-zinc-100 p-2 text-sm">Просмотр без права проверки записи</p>
+                <p className="sm:col-span-2 rounded-md bg-zinc-100 p-2 text-sm">
+                  {canReview
+                    ? "Проверка завершена. Запись доступна только для просмотра."
+                    : "Просмотр без права проверки записи."}
+                </p>
                 <ReadOnly label="Результат проверки" value={detail.review_outcome ? outcomeLabel(detail.review_outcome) : "Не проверено"} />
                 {detail.review_outcome === "CONFIRMED" ? (
                   <>
@@ -247,9 +247,9 @@ export default function ArchiveReviewDialog({
             )}
             {validation ? <p className="text-sm text-red-700" role="alert">{validation}</p> : null}
             <div className="flex justify-end gap-2">
-              <button type="button" className="rounded-md border px-4 py-2" onClick={requestClose}>{canReview ? "Отмена" : "Закрыть"}</button>
-              {canReview ? (
-                <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={saving || completed || !form.outcome}>{saving ? "Сохранение…" : "Сохранить"}</button>
+              <button type="button" className="rounded-md border px-4 py-2" onClick={requestClose}>{editable ? "Отмена" : "Закрыть"}</button>
+              {editable ? (
+                <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={saving || !form.outcome}>{saving ? "Сохранение…" : "Сохранить"}</button>
               ) : null}
             </div>
           </form>

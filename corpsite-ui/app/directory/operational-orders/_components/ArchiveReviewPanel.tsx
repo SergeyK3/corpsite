@@ -281,10 +281,7 @@ export default function ArchiveReviewPanel({
       {selectedRowId != null ? (
         <ArchiveReviewDialog
           rowId={selectedRowId}
-          canReview={canReviewRow(
-            canReview,
-            data?.items.find((item) => item.row_id === selectedRowId)?.review_outcome,
-          )}
+          canReview={canReview}
           reviewerName={reviewerName}
           onClose={() => setSelectedRowId(null)}
           onSaved={(saved) => {

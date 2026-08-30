@@ -22,6 +22,21 @@ vi.mock("../_lib/api", () => ({
 const mockedGet = vi.mocked(getArchiveReviewRow);
 const mockedSave = vi.mocked(saveArchiveReviewRow);
 
+const terminalOutcomes: NonNullable<ArchiveReviewDetail["review_outcome"]>[] = [
+  "CONFIRMED",
+  "DRAFT_ORDER",
+  "ORDER_ANNEX",
+  "SUPPORTING_DOCUMENT",
+  "DUPLICATE",
+  "NOT_AN_ORDER",
+];
+
+const allOutcomes: ArchiveReviewDetail["review_outcome"][] = [
+  null,
+  "NEEDS_CLARIFICATION",
+  ...terminalOutcomes,
+];
+
 const detail: ArchiveReviewDetail = {
   row_id: 10,
   excel_row: 45,
@@ -299,13 +314,66 @@ describe("ArchiveReviewDialog", () => {
     );
 
     expect(await screen.findByRole("dialog", { name: "Просмотр записи архива" })).toBeTruthy();
-    expect(screen.getByText("Просмотр без права проверки записи")).toBeTruthy();
+    expect(screen.getByText("Просмотр без права проверки записи.")).toBeTruthy();
     expect(screen.queryByLabelText("Решение проверки")).toBeNull();
     expect(screen.queryByLabelText("Комментарий проверяющего")).toBeNull();
     expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Закрыть" })[0]);
     expect(onClose).toHaveBeenCalled();
     expect(mockedSave).not.toHaveBeenCalled();
+  });
+
+  it.each(terminalOutcomes)("explains completed read-only state to a registrar for %s", async (reviewOutcome) => {
+    mockedGet.mockResolvedValueOnce({
+      ...detail,
+      review_outcome: reviewOutcome,
+      review_comment: reviewOutcome === "CONFIRMED" ? null : "Причина решения",
+    });
+
+    render(<ArchiveReviewDialog rowId={10} onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    expect(await screen.findByText("Проверка завершена. Запись доступна только для просмотра.")).toBeTruthy();
+    expect(screen.queryByText("Просмотр без права проверки записи.")).toBeNull();
+    expect(screen.queryByLabelText("Решение проверки")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
+    expect(mockedSave).not.toHaveBeenCalled();
+  });
+
+  it.each(allOutcomes)("prioritizes missing capability message for outcome %s", async (reviewOutcome) => {
+    mockedGet.mockResolvedValueOnce({
+      ...detail,
+      review_outcome: reviewOutcome,
+      review_comment: reviewOutcome && reviewOutcome !== "CONFIRMED" ? "Причина решения" : null,
+    });
+
+    render(
+      <ArchiveReviewDialogView
+        rowId={10}
+        canReview={false}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Просмотр без права проверки записи.")).toBeTruthy();
+    expect(screen.queryByText("Проверка завершена. Запись доступна только для просмотра.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
+    expect(mockedSave).not.toHaveBeenCalled();
+  });
+
+  it.each([null, "NEEDS_CLARIFICATION"] as const)("keeps outcome %s editable for a registrar without a read-only message", async (reviewOutcome) => {
+    mockedGet.mockResolvedValueOnce({
+      ...detail,
+      review_outcome: reviewOutcome,
+      review_comment: reviewOutcome === "NEEDS_CLARIFICATION" ? "Нужно уточнение" : null,
+    });
+
+    render(<ArchiveReviewDialog rowId={10} onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    expect(await screen.findByLabelText("Решение проверки")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeTruthy();
+    expect(screen.queryByText("Просмотр без права проверки записи.")).toBeNull();
+    expect(screen.queryByText("Проверка завершена. Запись доступна только для просмотра.")).toBeNull();
   });
 });
 

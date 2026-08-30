@@ -309,6 +309,8 @@ describe("ArchiveReviewPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Просмотреть" }));
 
     expect(await screen.findByRole("dialog", { name: "Просмотр записи архива" })).toBeTruthy();
+    expect(screen.getByText("Проверка завершена. Запись доступна только для просмотра.")).toBeTruthy();
+    expect(screen.queryByText("Просмотр без права проверки записи.")).toBeNull();
     expect(screen.queryByLabelText("Решение проверки")).toBeNull();
     expect(screen.getByLabelText("Комментарий проверяющего")).toHaveProperty("readOnly", true);
     expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
@@ -321,7 +323,7 @@ describe("ArchiveReviewPanel", () => {
     expect(screen.queryByRole("button", { name: "Проверить" })).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Просмотреть" })[0]);
     expect(await screen.findByRole("dialog", { name: "Просмотр записи архива" })).toBeTruthy();
-    expect(screen.getByText("Просмотр без права проверки записи")).toBeTruthy();
+    expect(screen.getByText("Просмотр без права проверки записи.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
     expect(mockedSaveArchiveReviewRow).not.toHaveBeenCalled();
   });
