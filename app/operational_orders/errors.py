@@ -177,3 +177,11 @@ class OperationalOrderSignOverrideReasonRequiredError(OperationalOrderValidation
 
 class OperationalOrderDocumentScopeForbiddenError(PermissionError):
     code = "OO_DOCUMENT_SCOPE_FORBIDDEN"
+
+
+class OperationalOrderArchiveRowNotFoundError(LookupError):
+    code = "OO_ARCHIVE_ROW_NOT_FOUND"
+
+
+class OperationalOrderArchiveReviewConflictError(OperationalOrderError):
+    code = "OO_ARCHIVE_REVIEW_CONFLICT"

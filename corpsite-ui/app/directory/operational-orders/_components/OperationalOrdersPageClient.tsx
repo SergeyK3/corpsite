@@ -16,7 +16,7 @@ import {
 } from "../_lib/api";
 import type { DocumentSummary, WorkspaceSummary } from "../_lib/types";
 import { WORKSPACE_STAGE_FILTER_OPTIONS, DOCUMENT_STATUS_FILTER_OPTIONS } from "../_lib/status";
-import { canSeeOperationalOrdersNav } from "../_lib/permissions";
+import { canReviewOperationalOrderArchive, canSeeOperationalOrdersNav } from "../_lib/permissions";
 import WorkspacesTable from "./WorkspacesTable";
 import DocumentsTable from "./DocumentsTable";
 import AccessDeniedPanel from "./AccessDeniedPanel";
@@ -36,12 +36,15 @@ export default function OperationalOrdersPageClient() {
   const orgFilters = React.useMemo(() => readTaskOrgFiltersFromSearchParams(searchParams), [searchParams]);
 
   const [me, setMe] = React.useState<MeInfo | null>(null);
+  const [authLoaded, setAuthLoaded] = React.useState(false);
   const [workspaces, setWorkspaces] = React.useState<WorkspaceSummary[]>([]);
   const [documents, setDocuments] = React.useState<DocumentSummary[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const requestSequence = React.useRef(0);
+  const canReadOfficialContours = Boolean(me?.is_privileged || me?.has_operational_orders_read);
+  const canReviewArchive = canReviewOperationalOrderArchive(me);
 
   const stage = searchParams.get("stage") || "";
   const docStatus = searchParams.get("doc_status") || "";
@@ -50,10 +53,22 @@ export default function OperationalOrdersPageClient() {
   const lang = searchParams.get("lang") || "";
 
   React.useEffect(() => {
-    apiAuthMe().then(setMe).catch(() => setMe(null));
+    apiAuthMe()
+      .then(setMe)
+      .catch(() => setMe(null))
+      .finally(() => setAuthLoaded(true));
   }, []);
 
+  React.useEffect(() => {
+    if (authLoaded && me && !canReadOfficialContours && canReviewArchive && tab !== "archive-review") {
+      router.replace(`${OO_BASE_PATH}?tab=archive-review`);
+    }
+  }, [authLoaded, canReadOfficialContours, canReviewArchive, me, router, tab]);
+
   const load = React.useCallback(async () => {
+    if (!authLoaded) return;
+    if (tab !== "archive-review" && !canReadOfficialContours) return;
+    if (tab === "archive-review" && !canReadOfficialContours && !canReviewArchive) return;
     const requestId = ++requestSequence.current;
     const isCurrent = () => requestId === requestSequence.current;
     setLoading(true);
@@ -102,7 +117,7 @@ export default function OperationalOrdersPageClient() {
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [tab, stage, docStatus, scope, promoted, lang, orgFilters.org_unit_id, me?.user_id]);
+  }, [authLoaded, canReadOfficialContours, canReviewArchive, tab, stage, docStatus, scope, promoted, lang, orgFilters.org_unit_id, me?.user_id]);
 
   React.useEffect(() => {
     void load();
@@ -117,31 +132,43 @@ export default function OperationalOrdersPageClient() {
     router.replace(`${OO_BASE_PATH}?${params.toString()}`);
   }
 
-  if (me && !canSeeOperationalOrdersNav(me)) {
+  if (!authLoaded) {
+    return <p className="text-sm text-zinc-500" data-testid="operational-orders-access-loading">Проверка доступа…</p>;
+  }
+
+  if (!me || !canSeeOperationalOrdersNav(me)) {
     return <AccessDeniedPanel me={me} />;
+  }
+
+  if (me && !canReadOfficialContours && canReviewArchive && tab !== "archive-review") {
+    return <p className="text-sm text-zinc-500">Открываем архив на проверке…</p>;
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Разделы производственных приказов">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "workspaces"}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "workspaces" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
-          onClick={() => updateParams({ tab: "workspaces" })}
-        >
-          Рабочие проекты
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "documents"}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "documents" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
-          onClick={() => updateParams({ tab: "documents" })}
-        >
-          Официальные документы
-        </button>
+        {canReadOfficialContours ? (
+          <>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "workspaces"}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "workspaces" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
+              onClick={() => updateParams({ tab: "workspaces" })}
+            >
+              Рабочие проекты
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "documents"}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "documents" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
+              onClick={() => updateParams({ tab: "documents" })}
+            >
+              Официальные документы
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           role="tab"
@@ -234,7 +261,10 @@ export default function OperationalOrdersPageClient() {
       ) : null}
 
       {tab === "archive-review" ? (
-        <ArchiveReviewPanel />
+        <ArchiveReviewPanel
+          canReview={canReviewArchive}
+          reviewerName={me.full_name?.trim() || me.login?.trim() || "Текущий пользователь"}
+        />
       ) : tab === "workspaces" ? (
         <>
           <p className="text-xs text-zinc-500">Всего: {total}</p>

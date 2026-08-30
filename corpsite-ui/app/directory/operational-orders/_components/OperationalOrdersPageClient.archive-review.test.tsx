@@ -54,7 +54,7 @@ describe("OperationalOrdersPageClient archive-review tab", () => {
   it("renders the third tab without loading official workspaces or documents", async () => {
     render(<OperationalOrdersPageClient />);
 
-    expect(screen.getByRole("tab", { name: "Рабочие проекты" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "Рабочие проекты" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Официальные документы" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Архив на проверке", selected: true })).toBeTruthy();
     expect(await screen.findByTestId("archive-review-no-batch")).toBeTruthy();
@@ -64,9 +64,25 @@ describe("OperationalOrdersPageClient archive-review tab", () => {
     expect(listDocuments).not.toHaveBeenCalled();
   });
 
+  it("allows a specialized reviewer to see only the archive tab", async () => {
+    vi.mocked(apiAuthMe).mockResolvedValue({
+      user_id: 8,
+      has_operational_orders_read: false,
+      operational_orders_permissions: { archive_review: true } as never,
+    });
+
+    render(<OperationalOrdersPageClient />);
+
+    expect(await screen.findByTestId("archive-review-no-batch")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Архив на проверке", selected: true })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Рабочие проекты" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Официальные документы" })).toBeNull();
+    expect(listWorkspaces).not.toHaveBeenCalled();
+    expect(listDocuments).not.toHaveBeenCalled();
+  });
+
   it("ignores a stale workspace response after switching tabs", async () => {
     searchParamsValue = "tab=workspaces";
-    vi.mocked(apiAuthMe).mockReturnValue(new Promise(() => {}));
     let resolveFirst!: (value: Awaited<ReturnType<typeof listWorkspaces>>) => void;
     const first = new Promise<Awaited<ReturnType<typeof listWorkspaces>>>((resolve) => {
       resolveFirst = resolve;
@@ -95,5 +111,22 @@ describe("OperationalOrdersPageClient archive-review tab", () => {
     view.rerender(<OperationalOrdersPageClient />);
     await waitFor(() => expect(listWorkspaces).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("workspace-items").textContent).not.toContain("Устаревший проект");
+  });
+
+  it("redirects a specialized reviewer before requesting a forbidden direct tab", async () => {
+    searchParamsValue = "tab=workspaces";
+    vi.mocked(apiAuthMe).mockResolvedValue({
+      user_id: 8,
+      has_operational_orders_read: false,
+      operational_orders_permissions: { archive_review: true } as never,
+    });
+
+    render(<OperationalOrdersPageClient />);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(
+      "/directory/operational-orders?tab=archive-review",
+    ));
+    expect(listWorkspaces).not.toHaveBeenCalled();
+    expect(listDocuments).not.toHaveBeenCalled();
   });
 });

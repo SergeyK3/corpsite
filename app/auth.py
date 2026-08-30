@@ -231,6 +231,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                     r.name AS role_name_ru,
                     u.unit_id,
                     u.is_active,
+                    u.full_name,
                     u.login,
                     u.telegram_id,
                     u.telegram_username,
@@ -259,6 +260,9 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         "role_name_ru": str(row["role_name_ru"]) if row["role_name_ru"] is not None else None,
         "unit_id": int(row["unit_id"]) if row["unit_id"] is not None else None,
         "is_active": bool(row["is_active"]),
+        "full_name": str(row["full_name"]).strip()
+        if row.get("full_name") is not None and str(row["full_name"]).strip()
+        else None,
         "login": str(row["login"]) if row["login"] is not None else None,
         "telegram_bound": _telegram_bound_from_id(row.get("telegram_id")),
         "telegram_username": _normalize_telegram_username(row.get("telegram_username")),
@@ -302,6 +306,9 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
 
     out["operational_orders_permissions"] = build_operational_orders_permissions(out)
     out["has_operational_orders_read"] = has_any_operational_orders_read(out)
+    out["has_operational_order_archive_review"] = bool(
+        out["operational_orders_permissions"].get("archive_review")
+    )
 
     from app.incoming_information.auth_projection import (
         build_incoming_information_permissions,

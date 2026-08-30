@@ -26,6 +26,8 @@ from app.operational_orders.promotion_permissions import PERMISSION_PROMOTE
 from app.security.admin_permissions import has_admin_permission
 from app.security.directory_scope import is_privileged
 
+PERMISSION_ARCHIVE_REVIEW = "OPERATIONAL_ORDER_ARCHIVE_REVIEW"
+
 
 def build_operational_orders_permissions(user: dict[str, Any]) -> dict[str, bool]:
     """Authoritative OO permission flags for frontend action gating."""
@@ -34,7 +36,9 @@ def build_operational_orders_permissions(user: dict[str, Any]) -> dict[str, bool
         return {key: False for key in _PERMISSION_KEYS}
 
     if is_privileged(user):
-        return {key: True for key in _PERMISSION_KEYS}
+        permissions = {key: True for key in _PERMISSION_KEYS}
+        permissions["archive_review"] = has_admin_permission(uid, PERMISSION_ARCHIVE_REVIEW)
+        return permissions
 
     return {
         "intake_create": has_admin_permission(uid, PERMISSION_INTAKE_CREATE),
@@ -51,6 +55,7 @@ def build_operational_orders_permissions(user: dict[str, Any]) -> dict[str, bool
         "mark_ready_for_signature": has_admin_permission(uid, PERMISSION_MARK_READY_FOR_SIGNATURE),
         "return_from_signature": has_admin_permission(uid, PERMISSION_RETURN_FROM_SIGNATURE),
         "sign_document": has_admin_permission(uid, PERMISSION_SIGN),
+        "archive_review": has_admin_permission(uid, PERMISSION_ARCHIVE_REVIEW),
     }
 
 
@@ -88,4 +93,5 @@ _PERMISSION_KEYS = (
     "mark_ready_for_signature",
     "return_from_signature",
     "sign_document",
+    "archive_review",
 )

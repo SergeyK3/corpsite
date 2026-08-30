@@ -22,6 +22,7 @@ export function getOperationalOrdersPermissions(
         assign_signing_authority: true,
         mark_ready_for_signature: true,
         return_from_signature: true,
+        archive_review: false,
       };
     }
     return {};
@@ -31,7 +32,11 @@ export function getOperationalOrdersPermissions(
 
 export function canSeeOperationalOrdersNav(me: MeInfo | null | undefined): boolean {
   if (me?.is_privileged) return true;
-  return me?.has_operational_orders_read === true;
+  return me?.has_operational_orders_read === true || canReviewOperationalOrderArchive(me);
+}
+
+export function canReviewOperationalOrderArchive(me: MeInfo | null | undefined): boolean {
+  return getOperationalOrdersPermissions(me).archive_review === true;
 }
 
 export function canOperateWorkspace(

@@ -1,16 +1,25 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listArchiveReview } from "../_lib/api";
-import type { ArchiveReviewResponse, ArchiveReviewRow } from "../_lib/types";
-import ArchiveReviewPanel from "./ArchiveReviewPanel";
+import { getArchiveReviewRow, listArchiveReview, saveArchiveReviewRow } from "../_lib/api";
+import type { ArchiveReviewDetail, ArchiveReviewResponse, ArchiveReviewRow } from "../_lib/types";
+import ArchiveReviewPanelView from "./ArchiveReviewPanel";
+
+function ArchiveReviewPanel(props: Omit<ComponentProps<typeof ArchiveReviewPanelView>, "canReview"> = {}) {
+  return <ArchiveReviewPanelView canReview {...props} />;
+}
 
 vi.mock("../_lib/api", () => ({
   listArchiveReview: vi.fn(),
+  getArchiveReviewRow: vi.fn(),
+  saveArchiveReviewRow: vi.fn(),
   mapOoApiError: (_error: unknown, fallback: string) => fallback,
 }));
 
 const mockedListArchiveReview = vi.mocked(listArchiveReview);
+const mockedGetArchiveReviewRow = vi.mocked(getArchiveReviewRow);
+const mockedSaveArchiveReviewRow = vi.mocked(saveArchiveReviewRow);
 
 const states: ArchiveReviewRow["initial_review_state"][] = [
   "REQUISITES_PRECONFIRMED",
@@ -34,6 +43,10 @@ function response(overrides: Partial<ArchiveReviewResponse> = {}): ArchiveReview
     duplicate_sha: index < 2,
     repeated_298: index === 2,
     official_document_id: null,
+    review_outcome: null,
+    reviewer_display_name: null,
+    reviewed_at: null,
+    version: 1,
   }));
   return {
     batch: {
@@ -44,11 +57,27 @@ function response(overrides: Partial<ArchiveReviewResponse> = {}): ArchiveReview
       actor_user_id: 25,
     },
     stats: {
-      total_records: 193,
-      preconfirmed_records: 93,
-      requires_processing: 100,
+      initial_quality: {
+        total: 193,
+        preconfirmed: 93,
+        incomplete: 100,
+        state_counts: {},
+      },
+      work_queue: {
+        pending_review: 193,
+        needs_clarification: 0,
+        completed_review: 0,
+        outcome_counts: {
+          CONFIRMED: 0,
+          NEEDS_CLARIFICATION: 0,
+          DRAFT_ORDER: 0,
+          ORDER_ANNEX: 0,
+          SUPPORTING_DOCUMENT: 0,
+          DUPLICATE: 0,
+          NOT_AN_ORDER: 0,
+        },
+      },
       archive_section_count: 26,
-      state_counts: {},
       extension_counts: { ".docx": 183, ".doc": 8, ".pdf": 2 },
       duplicate_sha_excel_rows: [45, 46],
       repeated_298_excel_rows: [137, 193, 194],
@@ -65,6 +94,27 @@ function response(overrides: Partial<ArchiveReviewResponse> = {}): ArchiveReview
 beforeEach(() => {
   mockedListArchiveReview.mockReset();
   mockedListArchiveReview.mockResolvedValue(response());
+  mockedGetArchiveReviewRow.mockReset();
+  mockedSaveArchiveReviewRow.mockReset();
+  const row = response().items[0];
+  const detail: ArchiveReviewDetail = {
+    ...row,
+    source_document_type: "Приказ",
+    confirmed_document_type: null,
+    confirmed_order_number: null,
+    confirmed_order_date: null,
+    confirmed_subject: null,
+    review_comment: null,
+  };
+  mockedGetArchiveReviewRow.mockResolvedValue(detail);
+  mockedSaveArchiveReviewRow.mockResolvedValue({
+    ...detail,
+    review_outcome: "DUPLICATE",
+    review_comment: "Дубль",
+    reviewer_display_name: "Кадровый регистратор",
+    reviewed_at: "2026-08-30T12:00:00Z",
+    version: 2,
+  });
 });
 
 afterEach(() => cleanup());
@@ -74,13 +124,17 @@ describe("ArchiveReviewPanel", () => {
     render(<ArchiveReviewPanel />);
     expect(screen.getByTestId("archive-review-loading")).toBeTruthy();
 
-    expect(await screen.findByText(/193 записей · 93 .* · 100 требуют обработки/)).toBeTruthy();
+    const summary = await screen.findByTestId("archive-review-summary");
+    expect(summary).toHaveTextContent(/Исходное качество: 193 записей · 93 предварительно подтверждены · 100 с неполными/i);
+    expect(summary).toHaveTextContent(/Рабочая очередь: 193 не проверено · 0 требуют уточнения · 0 завершено/i);
     expect(screen.getByText("⚠ Одинаковый файл: Excel-строки 45–46")).toBeTruthy();
     expect(screen.getByText("⚠ Повтор номера 298-ө: Excel-строки 137, 193, 194")).toBeTruthy();
     expect(screen.getAllByText("Реквизиты предварительно подтверждены").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Требуется уточнить номер или дату").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Требуется проверить тип документа").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Возможно, не является приказом").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("⚠ Дубликат файла").length).toBeGreaterThan(0);
+    expect(screen.queryByText("NEEDS_REQUISITES")).toBeNull();
     expect(screen.getByTestId("archive-review-table").className).toContain("overflow-x-auto");
     expect(screen.getByRole("table", { name: "Импортированный архив производственных приказов" })).toBeTruthy();
   });
@@ -92,12 +146,15 @@ describe("ArchiveReviewPanel", () => {
     fireEvent.change(screen.getByPlaceholderText("Имя, номер, предмет или путь"), { target: { value: "298-ө" } });
     await waitFor(() => expect(mockedListArchiveReview).toHaveBeenLastCalledWith(expect.objectContaining({ search: "298-ө" })));
 
-    fireEvent.change(screen.getByLabelText("Состояние проверки"), { target: { value: "NEEDS_REQUISITES" } });
+    fireEvent.change(screen.getByLabelText("Исходное состояние"), { target: { value: "NEEDS_REQUISITES" } });
     await waitFor(() => expect(mockedListArchiveReview).toHaveBeenLastCalledWith(expect.objectContaining({ initial_review_state: "NEEDS_REQUISITES" })));
+
+    fireEvent.change(screen.getByLabelText("Результат проверки"), { target: { value: "UNREVIEWED" } });
+    await waitFor(() => expect(mockedListArchiveReview).toHaveBeenLastCalledWith(expect.objectContaining({ review_outcome: "UNREVIEWED" })));
 
     fireEvent.change(screen.getByLabelText("Раздел архива"), { target: { value: "Раздел Б" } });
     fireEvent.click(screen.getByLabelText("Без номера/даты"));
-    fireEvent.click(screen.getByLabelText("Duplicate SHA"));
+    fireEvent.click(screen.getByLabelText("Дубликат файла"));
     fireEvent.click(screen.getByLabelText("Номер 298-ө"));
     await waitFor(() => expect(mockedListArchiveReview).toHaveBeenLastCalledWith(expect.objectContaining({
       archive_section: "Раздел Б",
@@ -110,6 +167,7 @@ describe("ArchiveReviewPanel", () => {
     await waitFor(() => expect(mockedListArchiveReview).toHaveBeenLastCalledWith({
       search: undefined,
       initial_review_state: undefined,
+      review_outcome: undefined,
       archive_section: undefined,
       only_missing_requisites: undefined,
       only_duplicate_sha: undefined,
@@ -117,6 +175,21 @@ describe("ArchiveReviewPanel", () => {
       limit: 25,
       offset: 0,
     }));
+  });
+
+  it("shows a Russian review result and reviewer projection", async () => {
+    const reviewed = {
+      ...response().items[0],
+      review_outcome: "SUPPORTING_DOCUMENT" as const,
+      reviewer_display_name: "Кадровый регистратор",
+      reviewed_at: "2026-08-30T12:00:00Z",
+    };
+    mockedListArchiveReview.mockResolvedValueOnce(response({ items: [reviewed], total: 1 }));
+    render(<ArchiveReviewPanel />);
+
+    expect(await screen.findByText("Документ-основание или сопроводительный документ")).toBeTruthy();
+    expect(screen.getByText(/Проверил: Кадровый регистратор,/)).toBeTruthy();
+    expect(screen.queryByText("SUPPORTING_DOCUMENT")).toBeNull();
   });
 
   it("loads the next page", async () => {
@@ -156,5 +229,28 @@ describe("ArchiveReviewPanel", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("Не удалось загрузить архив на проверке");
     expect(alert.textContent).not.toContain("database connection secret");
+  });
+
+  it("opens a row card and refreshes the row and counts after save", async () => {
+    render(<ArchiveReviewPanel />);
+    await screen.findByTestId("archive-review-table");
+    fireEvent.click(screen.getAllByRole("button", { name: "Проверить" })[0]);
+    expect(await screen.findByRole("dialog", { name: "Проверка записи архива" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Решение проверки"), { target: { value: "DUPLICATE" } });
+    fireEvent.change(screen.getByLabelText("Комментарий проверяющего"), { target: { value: "Дубль" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Excel-строки 45");
+    await waitFor(() => expect(mockedListArchiveReview.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("offers read-only viewing without capability and cannot issue PATCH", async () => {
+    render(<ArchiveReviewPanelView canReview={false} reviewerName="Руководитель отдела кадров" />);
+    await screen.findByTestId("archive-review-table");
+    expect(screen.queryByRole("button", { name: "Проверить" })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Просмотреть" })[0]);
+    expect(await screen.findByRole("dialog", { name: "Просмотр записи архива" })).toBeTruthy();
+    expect(screen.getByText("Просмотр без права проверки записи")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
+    expect(mockedSaveArchiveReviewRow).not.toHaveBeenCalled();
   });
 });

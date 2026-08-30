@@ -13,6 +13,9 @@ describe("operationalOrdersNav", () => {
     expect(canSeeOperationalOrdersNav({ has_operational_orders_read: true })).toBe(true);
     expect(canSeeOperationalOrdersNav({ operational_orders_permissions: { intake_read: true } })).toBe(false);
     expect(canSeeOperationalOrdersNav({ has_personnel_admin: true })).toBe(false);
+    expect(
+      canSeeOperationalOrdersNav({ operational_orders_permissions: { archive_review: true } as never }),
+    ).toBe(true);
   });
 
   it("detects operational orders routes", () => {
@@ -27,6 +30,9 @@ describe("operationalOrdersNav", () => {
 
   it("route access matches nav visibility", () => {
     expect(canAccessOperationalOrdersRoute({ has_operational_orders_read: true })).toBe(true);
+    expect(
+      canAccessOperationalOrdersRoute({ operational_orders_permissions: { archive_review: true } as never }),
+    ).toBe(true);
     expect(canAccessOperationalOrdersRoute({ has_personnel_admin: true })).toBe(false);
   });
 });

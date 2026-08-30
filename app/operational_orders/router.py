@@ -10,6 +10,8 @@ from app.directory.common import as_http500, call_service
 from app.operational_orders.auth_projection import has_any_operational_orders_read
 from app.operational_orders.errors import (
     OperationalOrderBlockNotFoundError,
+    OperationalOrderArchiveReviewConflictError,
+    OperationalOrderArchiveRowNotFoundError,
     OperationalOrderClarificationNotFoundError,
     OperationalOrderConfirmationConflictError,
     OperationalOrderConfirmationNotFoundError,
@@ -124,7 +126,10 @@ from app.operational_orders.schemas.editorial_workflow import (
 )
 from app.operational_orders.schemas.archive_review import (
     ArchiveInitialReviewState,
+    ArchiveReviewDetailOut,
     ArchiveReviewListOut,
+    ArchiveReviewOutcomeFilter,
+    ArchiveReviewUpdateIn,
 )
 from app.operational_orders.services import draft_intake_service as svc
 from app.operational_orders.services import archive_review_service as archive_review_svc
@@ -135,6 +140,7 @@ from app.operational_orders.repository import lifecycle_available
 from app.operational_orders.schemas import mappers
 
 router = APIRouter(prefix="/api/operational-orders", tags=["operational-orders"])
+PERMISSION_ARCHIVE_REVIEW = "OPERATIONAL_ORDER_ARCHIVE_REVIEW"
 
 
 def _require_user_id(user: dict[str, Any]) -> int:
@@ -146,6 +152,10 @@ def _require_user_id(user: dict[str, Any]) -> int:
 
 def _domain_http(exc: Exception) -> HTTPException:
     code = getattr(exc, "code", "OO_ERROR")
+    if isinstance(exc, OperationalOrderArchiveRowNotFoundError):
+        return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
+    if isinstance(exc, OperationalOrderArchiveReviewConflictError):
+        return HTTPException(status_code=409, detail={"code": code, "message": str(exc)})
     if isinstance(exc, OperationalOrderWorkspaceNotFoundError):
         return HTTPException(status_code=404, detail={"code": code, "message": str(exc)})
     if isinstance(exc, (OperationalOrderDocumentNotFoundError, OperationalOrderDocumentVersionNotFoundError)):
@@ -210,6 +220,7 @@ def _domain_http(exc: Exception) -> HTTPException:
 def list_archive_review_endpoint(
     search: str | None = Query(default=None, max_length=200),
     initial_review_state: ArchiveInitialReviewState | None = Query(default=None),
+    review_outcome: ArchiveReviewOutcomeFilter | None = Query(default=None),
     archive_section: str | None = Query(default=None, max_length=500),
     only_missing_requisites: bool = Query(default=False),
     only_duplicate_sha: bool = Query(default=False),
@@ -218,19 +229,63 @@ def list_archive_review_endpoint(
     offset: int = Query(default=0, ge=0),
     user: dict[str, Any] = Depends(get_current_user),
 ):
-    if not (is_privileged(user) or has_any_operational_orders_read(user)):
+    user_id = _require_user_id(user)
+    if not (
+        is_privileged(user)
+        or has_any_operational_orders_read(user)
+        or has_admin_permission(user_id, PERMISSION_ARCHIVE_REVIEW)
+    ):
         raise HTTPException(status_code=403, detail={"code": "OO_FORBIDDEN", "message": "Access denied."})
     try:
         return call_service(
             archive_review_svc.list_latest_archive_review,
             search=search,
             initial_review_state=initial_review_state,
+            review_outcome=review_outcome,
             archive_section=archive_section,
             only_missing_requisites=only_missing_requisites,
             only_duplicate_sha=only_duplicate_sha,
             only_order_298=only_order_298,
             limit=limit,
             offset=offset,
+        )
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.get("/archive-review/rows/{row_id}", response_model=ArchiveReviewDetailOut)
+def get_archive_review_row_endpoint(
+    row_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    user_id = _require_user_id(user)
+    if not (
+        is_privileged(user)
+        or has_any_operational_orders_read(user)
+        or has_admin_permission(user_id, PERMISSION_ARCHIVE_REVIEW)
+    ):
+        raise HTTPException(status_code=403, detail={"code": "OO_FORBIDDEN", "message": "Access denied."})
+    try:
+        return call_service(archive_review_svc.get_archive_review_row, row_id=row_id)
+    except Exception as exc:
+        raise _domain_http(exc) from exc
+
+
+@router.patch("/archive-review/rows/{row_id}", response_model=ArchiveReviewDetailOut)
+def save_archive_review_endpoint(
+    row_id: int,
+    body: ArchiveReviewUpdateIn,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    user_id = _require_user_id(user)
+    if not has_admin_permission(user_id, PERMISSION_ARCHIVE_REVIEW):
+        raise HTTPException(status_code=403, detail={"code": "OO_FORBIDDEN", "message": "Access denied."})
+    try:
+        return call_service(
+            archive_review_svc.save_archive_review,
+            row_id=row_id,
+            actor_user_id=user_id,
+            **body.model_dump(),
         )
     except Exception as exc:
         raise _domain_http(exc) from exc
@@ -280,6 +335,8 @@ def list_draft_workspaces(
     offset: int = Query(default=0, ge=0),
     user: dict[str, Any] = Depends(get_current_user),
 ):
+    if not (can_create_intake(user) or has_any_operational_orders_read(user)):
+        raise HTTPException(status_code=403, detail={"code": "OO_FORBIDDEN", "message": "Access denied."})
     creator_filter = record_creator_user_id
     user_id = _require_user_id(user)
     scope_unit_ids = resolve_user_scope_unit_ids(user)

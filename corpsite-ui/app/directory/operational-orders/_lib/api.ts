@@ -4,7 +4,10 @@ import { resolveApiUrl } from "@/lib/apiBase";
 import { mapOperationalOrdersApiError } from "./errors";
 import type {
   ArchiveInitialReviewState,
+  ArchiveReviewDetail,
+  ArchiveReviewOutcomeFilter,
   ArchiveReviewResponse,
+  ArchiveReviewUpdate,
   ContentConfirmation,
   DocumentDetail,
   DocumentListResponse,
@@ -86,6 +89,7 @@ export type DocumentListParams = {
 export type ArchiveReviewParams = {
   search?: string;
   initial_review_state?: ArchiveInitialReviewState;
+  review_outcome?: ArchiveReviewOutcomeFilter;
   archive_section?: string;
   only_missing_requisites?: boolean;
   only_duplicate_sha?: boolean;
@@ -118,6 +122,20 @@ export async function listDocuments(params: DocumentListParams = {}): Promise<Do
 
 export async function listArchiveReview(params: ArchiveReviewParams = {}): Promise<ArchiveReviewResponse> {
   return requestJson(`${OO_API_PREFIX}/archive-review${buildQuery(params)}`);
+}
+
+export async function getArchiveReviewRow(rowId: number): Promise<ArchiveReviewDetail> {
+  return requestJson(`${OO_API_PREFIX}/archive-review/rows/${rowId}`);
+}
+
+export async function saveArchiveReviewRow(
+  rowId: number,
+  payload: ArchiveReviewUpdate,
+): Promise<ArchiveReviewDetail> {
+  return requestJson(`${OO_API_PREFIX}/archive-review/rows/${rowId}`, {
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export async function getDocument(documentId: number): Promise<DocumentDetail> {

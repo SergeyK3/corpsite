@@ -287,6 +287,17 @@ export type ArchiveInitialReviewState =
   | "NEEDS_DOCUMENT_TYPE"
   | "POSSIBLE_NON_ORDER";
 
+export type ArchiveReviewOutcome =
+  | "CONFIRMED"
+  | "NEEDS_CLARIFICATION"
+  | "DRAFT_ORDER"
+  | "ORDER_ANNEX"
+  | "SUPPORTING_DOCUMENT"
+  | "DUPLICATE"
+  | "NOT_AN_ORDER";
+
+export type ArchiveReviewOutcomeFilter = "UNREVIEWED" | ArchiveReviewOutcome;
+
 export type ArchiveReviewBatch = {
   batch_id: number;
   batch_fingerprint: string;
@@ -296,11 +307,19 @@ export type ArchiveReviewBatch = {
 };
 
 export type ArchiveReviewStats = {
-  total_records: number;
-  preconfirmed_records: number;
-  requires_processing: number;
+  initial_quality: {
+    total: number;
+    preconfirmed: number;
+    incomplete: number;
+    state_counts: Record<string, number>;
+  };
+  work_queue: {
+    pending_review: number;
+    needs_clarification: number;
+    completed_review: number;
+    outcome_counts: Record<ArchiveReviewOutcome, number>;
+  };
   archive_section_count: number;
-  state_counts: Record<string, number>;
   extension_counts: Record<string, number>;
   duplicate_sha_excel_rows: number[];
   repeated_298_excel_rows: number[];
@@ -320,6 +339,29 @@ export type ArchiveReviewRow = {
   duplicate_sha: boolean;
   repeated_298: boolean;
   official_document_id: number | null;
+  review_outcome: ArchiveReviewOutcome | null;
+  reviewer_display_name: string | null;
+  reviewed_at: string | null;
+  version: number;
+};
+
+export type ArchiveReviewDetail = ArchiveReviewRow & {
+  source_document_type: string;
+  confirmed_document_type: string | null;
+  confirmed_order_number: string | null;
+  confirmed_order_date: string | null;
+  confirmed_subject: string | null;
+  review_comment: string | null;
+};
+
+export type ArchiveReviewUpdate = {
+  expected_version: number;
+  review_outcome: ArchiveReviewOutcome;
+  confirmed_document_type?: string | null;
+  confirmed_order_number?: string | null;
+  confirmed_order_date?: string | null;
+  confirmed_subject?: string | null;
+  review_comment?: string | null;
 };
 
 export type ArchiveReviewResponse = {
@@ -391,4 +433,5 @@ export type OperationalOrdersPermissions = {
   assign_signing_authority?: boolean;
   mark_ready_for_signature?: boolean;
   return_from_signature?: boolean;
+  archive_review?: boolean;
 };

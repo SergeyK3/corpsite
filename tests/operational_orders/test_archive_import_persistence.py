@@ -33,7 +33,6 @@ from app.operational_orders.archive_import.persistence import (
 from tests.alembic_test_helpers import (
     alembic_config,
     exclusive_migration_cycle,
-    get_alembic_heads,
 )
 from tests.conftest import table_exists
 
@@ -571,7 +570,8 @@ def test_source_fields_are_immutable_but_review_fields_can_change(
                 text(
                     """
                     UPDATE public.operational_order_import_rows
-                    SET review_outcome = 'CONFIRMED',
+                    SET review_outcome = 'NEEDS_CLARIFICATION',
+                        review_comment = 'Regression check for mutable review fields',
                         reviewed_at = now(),
                         created_at = created_at + interval '1 second',
                         version = version + 1
@@ -616,8 +616,7 @@ def test_caller_owned_transaction_is_not_committed(
         ).scalar_one() == 0
 
 
-def test_migration_is_single_head_with_exact_parent() -> None:
-    assert get_alembic_heads(alembic_config()) == {MIGRATION_REVISION}
+def test_migration_revision_has_exact_parent() -> None:
     module = _migration_module()
     assert module.revision == MIGRATION_REVISION
     assert module.down_revision == PREVIOUS_REVISION

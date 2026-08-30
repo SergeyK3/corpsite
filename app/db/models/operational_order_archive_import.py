@@ -44,6 +44,23 @@ INITIAL_REVIEW_STATES = (
     INITIAL_REVIEW_POSSIBLE_NON_ORDER,
 )
 
+REVIEW_OUTCOME_CONFIRMED = "CONFIRMED"
+REVIEW_OUTCOME_NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
+REVIEW_OUTCOME_DRAFT_ORDER = "DRAFT_ORDER"
+REVIEW_OUTCOME_ORDER_ANNEX = "ORDER_ANNEX"
+REVIEW_OUTCOME_SUPPORTING_DOCUMENT = "SUPPORTING_DOCUMENT"
+REVIEW_OUTCOME_DUPLICATE = "DUPLICATE"
+REVIEW_OUTCOME_NOT_AN_ORDER = "NOT_AN_ORDER"
+REVIEW_OUTCOMES = (
+    REVIEW_OUTCOME_CONFIRMED,
+    REVIEW_OUTCOME_NEEDS_CLARIFICATION,
+    REVIEW_OUTCOME_DRAFT_ORDER,
+    REVIEW_OUTCOME_ORDER_ANNEX,
+    REVIEW_OUTCOME_SUPPORTING_DOCUMENT,
+    REVIEW_OUTCOME_DUPLICATE,
+    REVIEW_OUTCOME_NOT_AN_ORDER,
+)
+
 
 class OperationalOrderImportBatch(Base):
     """One idempotent archive manifest staging batch."""
@@ -170,6 +187,36 @@ class OperationalOrderImportRow(Base):
             name="chk_oo_import_rows_file_sha256",
         ),
         CheckConstraint("version > 0", name="chk_oo_import_rows_version"),
+        CheckConstraint(
+            "review_outcome IS NULL OR review_outcome IN "
+            "('CONFIRMED', 'NEEDS_CLARIFICATION', 'DRAFT_ORDER', 'ORDER_ANNEX', "
+            "'SUPPORTING_DOCUMENT', 'DUPLICATE', 'NOT_AN_ORDER')",
+            name="chk_oo_import_rows_review_outcome",
+        ),
+        CheckConstraint(
+            "review_outcome <> 'CONFIRMED' OR ("
+            "confirmed_document_type IS NOT NULL AND "
+            "btrim(confirmed_document_type) <> '' AND "
+            "confirmed_order_number IS NOT NULL AND "
+            "btrim(confirmed_order_number) <> '' AND "
+            "confirmed_order_date IS NOT NULL AND "
+            "confirmed_subject IS NOT NULL AND "
+            "btrim(confirmed_subject) <> '')",
+            name="chk_oo_import_rows_confirmed_fields",
+        ),
+        CheckConstraint(
+            "review_outcome IS NULL OR review_outcome = 'CONFIRMED' "
+            "OR (review_comment IS NOT NULL AND btrim(review_comment) <> '')",
+            name="chk_oo_import_rows_review_comment",
+        ),
+        CheckConstraint(
+            "review_outcome IS NULL OR review_outcome = 'CONFIRMED' OR ("
+            "confirmed_document_type IS NULL AND "
+            "confirmed_order_number IS NULL AND "
+            "confirmed_order_date IS NULL AND "
+            "confirmed_subject IS NULL)",
+            name="chk_oo_import_rows_nonconfirmed_fields",
+        ),
         Index("ix_oo_import_rows_batch", "batch_id"),
         Index("ix_oo_import_rows_file_sha256", "file_sha256"),
         Index("ix_oo_import_rows_initial_review", "initial_review_state"),
@@ -199,7 +246,9 @@ class OperationalOrderImportRow(Base):
     confirmed_document_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confirmed_order_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confirmed_order_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    confirmed_subject: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     review_outcome: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    review_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reviewed_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         ForeignKey("users.user_id", ondelete="SET NULL"),
