@@ -3,6 +3,8 @@ import { resolveApiUrl } from "@/lib/apiBase";
 
 import { mapOperationalOrdersApiError } from "./errors";
 import type {
+  ArchiveInitialReviewState,
+  ArchiveReviewResponse,
   ContentConfirmation,
   DocumentDetail,
   DocumentListResponse,
@@ -81,6 +83,17 @@ export type DocumentListParams = {
   offset?: number;
 };
 
+export type ArchiveReviewParams = {
+  search?: string;
+  initial_review_state?: ArchiveInitialReviewState;
+  archive_section?: string;
+  only_missing_requisites?: boolean;
+  only_duplicate_sha?: boolean;
+  only_order_298?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -101,6 +114,10 @@ export async function getWorkspace(workspaceId: number): Promise<WorkspaceDetail
 
 export async function listDocuments(params: DocumentListParams = {}): Promise<DocumentListResponse> {
   return requestJson(`${OO_API_PREFIX}/documents${buildQuery(params)}`);
+}
+
+export async function listArchiveReview(params: ArchiveReviewParams = {}): Promise<ArchiveReviewResponse> {
+  return requestJson(`${OO_API_PREFIX}/archive-review${buildQuery(params)}`);
 }
 
 export async function getDocument(documentId: number): Promise<DocumentDetail> {

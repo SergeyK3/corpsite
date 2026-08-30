@@ -281,6 +281,57 @@ export type DocumentListResponse = {
   offset: number;
 };
 
+export type ArchiveInitialReviewState =
+  | "REQUISITES_PRECONFIRMED"
+  | "NEEDS_REQUISITES"
+  | "NEEDS_DOCUMENT_TYPE"
+  | "POSSIBLE_NON_ORDER";
+
+export type ArchiveReviewBatch = {
+  batch_id: number;
+  batch_fingerprint: string;
+  source_manifest_name: string;
+  imported_at: string;
+  actor_user_id: number;
+};
+
+export type ArchiveReviewStats = {
+  total_records: number;
+  preconfirmed_records: number;
+  requires_processing: number;
+  archive_section_count: number;
+  state_counts: Record<string, number>;
+  extension_counts: Record<string, number>;
+  duplicate_sha_excel_rows: number[];
+  repeated_298_excel_rows: number[];
+};
+
+export type ArchiveReviewRow = {
+  row_id: number;
+  excel_row: number;
+  archive_section: string;
+  file_name: string;
+  source_status: string;
+  initial_review_state: ArchiveInitialReviewState;
+  order_number: string | null;
+  order_date: string | null;
+  subject: string;
+  relative_path: string;
+  duplicate_sha: boolean;
+  repeated_298: boolean;
+  official_document_id: number | null;
+};
+
+export type ArchiveReviewResponse = {
+  batch: ArchiveReviewBatch | null;
+  stats: ArchiveReviewStats | null;
+  sections: string[];
+  items: ArchiveReviewRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type PromotionResult = {
   workspace_id: number;
   document: DocumentDetail;

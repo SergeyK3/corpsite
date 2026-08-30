@@ -20,10 +20,12 @@ import { canSeeOperationalOrdersNav } from "../_lib/permissions";
 import WorkspacesTable from "./WorkspacesTable";
 import DocumentsTable from "./DocumentsTable";
 import AccessDeniedPanel from "./AccessDeniedPanel";
+import ArchiveReviewPanel from "./ArchiveReviewPanel";
 
-type TabKey = "workspaces" | "documents";
+type TabKey = "workspaces" | "documents" | "archive-review";
 
 function parseTab(value: string | null): TabKey {
+  if (value === "archive-review") return "archive-review";
   return value === "documents" ? "documents" : "workspaces";
 }
 
@@ -39,6 +41,7 @@ export default function OperationalOrdersPageClient() {
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const requestSequence = React.useRef(0);
 
   const stage = searchParams.get("stage") || "";
   const docStatus = searchParams.get("doc_status") || "";
@@ -51,16 +54,24 @@ export default function OperationalOrdersPageClient() {
   }, []);
 
   const load = React.useCallback(async () => {
+    const requestId = ++requestSequence.current;
+    const isCurrent = () => requestId === requestSequence.current;
     setLoading(true);
     setError(null);
     try {
-      if (tab === "documents") {
+      if (tab === "archive-review") {
+        if (!isCurrent()) return;
+        setWorkspaces([]);
+        setDocuments([]);
+        setTotal(0);
+      } else if (tab === "documents") {
         const res = await listDocuments({
           status: docStatus || undefined,
           submitting_org_unit_id: orgFilters.org_unit_id ?? undefined,
           limit: 100,
           offset: 0,
         });
+        if (!isCurrent()) return;
         setDocuments(res.items);
         setTotal(res.total);
         setWorkspaces([]);
@@ -73,6 +84,7 @@ export default function OperationalOrdersPageClient() {
           limit: 100,
           offset: 0,
         });
+        if (!isCurrent()) return;
         let items = res.items;
         if (lang === "ru") items = items.filter((w) => w.ru_present);
         if (lang === "kk") items = items.filter((w) => w.kk_present);
@@ -82,12 +94,13 @@ export default function OperationalOrdersPageClient() {
         setDocuments([]);
       }
     } catch (e) {
+      if (!isCurrent()) return;
       setWorkspaces([]);
       setDocuments([]);
       setTotal(0);
       setError(mapOoApiError(e, "Не удалось загрузить данные"));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }, [tab, stage, docStatus, scope, promoted, lang, orgFilters.org_unit_id, me?.user_id]);
 
@@ -110,9 +123,11 @@ export default function OperationalOrdersPageClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Разделы производственных приказов">
         <button
           type="button"
+          role="tab"
+          aria-selected={tab === "workspaces"}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "workspaces" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
           onClick={() => updateParams({ tab: "workspaces" })}
         >
@@ -120,14 +135,25 @@ export default function OperationalOrdersPageClient() {
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={tab === "documents"}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "documents" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
           onClick={() => updateParams({ tab: "documents" })}
         >
           Официальные документы
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "archive-review"}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "archive-review" ? "bg-blue-600 text-white" : "bg-zinc-100 dark:bg-zinc-900"}`}
+          onClick={() => updateParams({ tab: "archive-review" })}
+        >
+          Архив на проверке
+        </button>
       </div>
 
-      <TaskOrgFiltersBar basePath={OO_BASE_PATH} />
+      {tab !== "archive-review" ? <TaskOrgFiltersBar basePath={OO_BASE_PATH} /> : null}
 
       {tab === "workspaces" ? (
         <div className="flex flex-wrap gap-3 text-sm">
@@ -183,7 +209,7 @@ export default function OperationalOrdersPageClient() {
             </select>
           </label>
         </div>
-      ) : (
+      ) : tab === "documents" ? (
         <div className="flex flex-wrap gap-3 text-sm">
           <label className="flex items-center gap-2">
             Статус
@@ -201,13 +227,15 @@ export default function OperationalOrdersPageClient() {
             </select>
           </label>
         </div>
-      )}
+      ) : null}
 
-      {error ? (
+      {error && tab !== "archive-review" ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       ) : null}
 
-      {tab === "workspaces" ? (
+      {tab === "archive-review" ? (
+        <ArchiveReviewPanel />
+      ) : tab === "workspaces" ? (
         <>
           <p className="text-xs text-zinc-500">Всего: {total}</p>
           <WorkspacesTable items={workspaces} loading={loading} />

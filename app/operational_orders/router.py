@@ -122,7 +122,12 @@ from app.operational_orders.schemas.editorial_workflow import (
     TranslationAssignmentCreateIn,
     TranslationAssignmentListOut,
 )
+from app.operational_orders.schemas.archive_review import (
+    ArchiveInitialReviewState,
+    ArchiveReviewListOut,
+)
 from app.operational_orders.services import draft_intake_service as svc
+from app.operational_orders.services import archive_review_service as archive_review_svc
 from app.operational_orders.services import editorial_workflow_service as editorial_svc
 from app.operational_orders.services import promotion_service as promotion_svc
 from app.operational_orders.services import lifecycle_service as lifecycle_svc
@@ -199,6 +204,36 @@ def _domain_http(exc: Exception) -> HTTPException:
         status = 422 if isinstance(exc, OperationalOrderValidationError) else 409
         return HTTPException(status_code=status, detail={"code": code, "message": str(exc)})
     return as_http500(exc)
+
+
+@router.get("/archive-review", response_model=ArchiveReviewListOut)
+def list_archive_review_endpoint(
+    search: str | None = Query(default=None, max_length=200),
+    initial_review_state: ArchiveInitialReviewState | None = Query(default=None),
+    archive_section: str | None = Query(default=None, max_length=500),
+    only_missing_requisites: bool = Query(default=False),
+    only_duplicate_sha: bool = Query(default=False),
+    only_order_298: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    if not (is_privileged(user) or has_any_operational_orders_read(user)):
+        raise HTTPException(status_code=403, detail={"code": "OO_FORBIDDEN", "message": "Access denied."})
+    try:
+        return call_service(
+            archive_review_svc.list_latest_archive_review,
+            search=search,
+            initial_review_state=initial_review_state,
+            archive_section=archive_section,
+            only_missing_requisites=only_missing_requisites,
+            only_duplicate_sha=only_duplicate_sha,
+            only_order_298=only_order_298,
+            limit=limit,
+            offset=offset,
+        )
+    except Exception as exc:
+        raise _domain_http(exc) from exc
 
 
 @router.post("/draft-workspaces", response_model=DraftWorkspaceDetailOut)
