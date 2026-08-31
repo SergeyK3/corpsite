@@ -55,6 +55,7 @@ function CategoryDetails({ category }: { category: PersonnelOrdersSummaryCategor
 export default function PersonnelOrdersSummaryReportPanel() {
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
+  const [categoryCode, setCategoryCode] = React.useState("");
   const [report, setReport] = React.useState<PersonnelOrdersSummaryReport | null>(null);
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const [loading, setLoading] = React.useState(true);
@@ -91,6 +92,15 @@ export default function PersonnelOrdersSummaryReportPanel() {
     });
   }
 
+  const visibleCategories = report
+    ? report.categories.filter((category) => !categoryCode || category.code === categoryCode)
+    : [];
+  const visibleTotalCount = visibleCategories.reduce((total, category) => total + category.count, 0);
+  const visibleIncompleteCount = visibleCategories.reduce(
+    (total, category) => total + category.incomplete_count,
+    0,
+  );
+
   return (
     <div className="space-y-5 px-4 py-5">
       <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
@@ -98,8 +108,8 @@ export default function PersonnelOrdersSummaryReportPanel() {
           <div className="text-xs uppercase tracking-wide text-zinc-500">Отчёт</div>
           <h2 className="font-semibold">Общая сводка по приказам</h2>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="space-y-1 text-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="w-full space-y-1 text-sm sm:w-40">
             <span className="font-medium">Дата с</span>
             <input
               aria-label="Дата с"
@@ -110,7 +120,7 @@ export default function PersonnelOrdersSummaryReportPanel() {
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             />
           </label>
-          <label className="space-y-1 text-sm">
+          <label className="w-full space-y-1 text-sm sm:w-40">
             <span className="font-medium">Дата по</span>
             <input
               aria-label="Дата по"
@@ -120,6 +130,20 @@ export default function PersonnelOrdersSummaryReportPanel() {
               onChange={(event) => setDateTo(event.target.value)}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             />
+          </label>
+          <label className="w-full min-w-0 flex-1 space-y-1 text-sm sm:min-w-56">
+            <span className="font-medium">Категория</span>
+            <select
+              aria-label="Категория"
+              value={categoryCode}
+              onChange={(event) => setCategoryCode(event.target.value)}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              <option value="">Все категории</option>
+              {report?.categories.map((category) => (
+                <option key={category.code} value={category.code}>{category.name}</option>
+              ))}
+            </select>
           </label>
         </div>
         <p className="text-sm text-zinc-500">
@@ -144,7 +168,7 @@ export default function PersonnelOrdersSummaryReportPanel() {
                 </tr>
               </thead>
               <tbody>
-                {report.categories.map((category) => {
+                {visibleCategories.map((category) => {
                   const isExpanded = expanded.has(category.code);
                   const detailsId = `orders-category-${category.code}`;
                   return (
@@ -176,8 +200,8 @@ export default function PersonnelOrdersSummaryReportPanel() {
                 })}
                 <tr className="border-t-2 border-zinc-300 font-bold dark:border-zinc-700">
                   <th scope="row" className="px-4 py-3 text-left">Всего</th>
-                  <td className="px-4 py-3 text-right">{report.total_count}</td>
-                  <td className="px-4 py-3 text-right">{report.total_incomplete_count}</td>
+                  <td className="px-4 py-3 text-right">{visibleTotalCount}</td>
+                  <td className="px-4 py-3 text-right">{visibleIncompleteCount}</td>
                 </tr>
               </tbody>
             </table>

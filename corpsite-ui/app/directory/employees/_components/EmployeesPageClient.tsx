@@ -49,6 +49,8 @@ type Props = {
   initialEmployees: EmployeesResponse;
   initialError?: string | null;
   refreshResetsOrgUnitFilter?: boolean;
+  /** Render only the workspace body when an owning page supplies the outer card and heading. */
+  embedded?: boolean;
 };
 
 const ORG_FILTER_PARAM_KEYS = [
@@ -661,7 +663,7 @@ export default function EmployeesPageClient(props: Props) {
 
   return (
     <>
-      {isPersonnelRoute ? (
+      {isPersonnelRoute || props.embedded ? (
         pageContent
       ) : (
         <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">

@@ -33,10 +33,7 @@ describe("PersonnelSubNav control list parent", () => {
     for (const title of ["Аналитика", "Проверка записей", "Изменения реестра", "Миграция", "Мед. категории"]) {
       expect(screen.queryByRole("link", { name: title })).not.toBeInTheDocument();
     }
-    expect(screen.getByRole("link", { name: "Отчёты" })).toHaveAttribute(
-      "href",
-      "/directory/personnel/reports",
-    );
+    expect(screen.queryByRole("link", { name: "Отчёты" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -57,10 +54,10 @@ describe("PersonnelSubNav control list parent", () => {
     );
   });
 
-  it("does not mark the parent active on reports", () => {
+  it("does not restore the removed reports tab on the legacy path", () => {
     navigation.pathname = "/directory/personnel/reports";
     render(<PersonnelSubNav />);
     expect(screen.getByRole("link", { name: "Контрольный список" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "Отчёты" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "Отчёты" })).not.toBeInTheDocument();
   });
 });

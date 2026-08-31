@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import PersonnelReportsPageClient from "./PersonnelReportsPageClient";
+import PersonnelOrdersSummaryReportPanel from "./PersonnelOrdersSummaryReport";
+import PersonnelRosterReportPanel from "./PersonnelRosterReport";
 import {
   downloadPersonnelRoster,
   getPersonnelOrdersSummary,
@@ -139,12 +140,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PersonnelReportsPageClient", () => {
+describe("personnel report panels", () => {
   it("offers all scopes and automatically renders matching summary and grouped details", async () => {
     vi.mocked(getPersonnelReportOptions).mockResolvedValue(options);
     vi.mocked(getPersonnelRoster).mockResolvedValue(report);
 
-    render(<PersonnelReportsPageClient />);
+    render(<PersonnelRosterReportPanel />);
 
     expect(await screen.findByRole("option", { name: "Все группы" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Все отделения" })).toBeInTheDocument();
@@ -170,7 +171,7 @@ describe("PersonnelReportsPageClient", () => {
     vi.mocked(getPersonnelReportOptions).mockResolvedValue(options);
     vi.mocked(getPersonnelRoster).mockResolvedValue(report);
 
-    render(<PersonnelReportsPageClient />);
+    render(<PersonnelRosterReportPanel />);
     const group = await screen.findByRole("combobox", { name: "Группа отделений" });
     const department = screen.getByRole("combobox", { name: "Отделение" });
 
@@ -189,7 +190,7 @@ describe("PersonnelReportsPageClient", () => {
     vi.mocked(getPersonnelRoster).mockResolvedValue(report);
     vi.mocked(downloadPersonnelRoster).mockResolvedValue();
 
-    render(<PersonnelReportsPageClient />);
+    render(<PersonnelRosterReportPanel />);
     const group = await screen.findByRole("combobox", { name: "Группа отделений" });
     const department = screen.getByRole("combobox", { name: "Отделение" });
     fireEvent.change(group, { target: { value: "1" } });
@@ -203,61 +204,11 @@ describe("PersonnelReportsPageClient", () => {
   it("shows a dedicated state when no groups or departments are accessible", async () => {
     vi.mocked(getPersonnelReportOptions).mockResolvedValue({ groups: [], departments: [] });
 
-    render(<PersonnelReportsPageClient />);
+    render(<PersonnelRosterReportPanel />);
 
     expect(await screen.findByText("Нет доступных групп или отделений.")).toBeInTheDocument();
     expect(getPersonnelRoster).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Скачать Excel" })).toBeDisabled();
-  });
-
-  it("uses a two-level classifier and mounts only the selected section report", async () => {
-    vi.mocked(getPersonnelReportOptions).mockResolvedValue(options);
-    vi.mocked(getPersonnelRoster).mockResolvedValue(report);
-    vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
-
-    render(<PersonnelReportsPageClient />);
-
-    const sections = screen.getByRole("group", { name: "Раздел отчётов" });
-    const personnelSection = within(sections).getByRole("button", { name: "Персонал" });
-    const ordersSection = within(sections).getByRole("button", { name: "Приказы" });
-    expect(personnelSection).toHaveAttribute("aria-pressed", "true");
-    expect(ordersSection).toHaveAttribute("aria-pressed", "false");
-
-    const personnelReports = screen.getByRole("group", { name: "Отчёты раздела «Персонал»" });
-    expect(within(personnelReports).getByRole("button", { name: "Личный состав" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(personnelReports).queryByRole("button", { name: "Общая сводка по приказам" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Группа отделений" })).toBeInTheDocument();
-    expect(getPersonnelOrdersSummary).not.toHaveBeenCalled();
-    await waitFor(() => expect(getPersonnelRoster).toHaveBeenCalled());
-
-    vi.mocked(getPersonnelReportOptions).mockClear();
-    vi.mocked(getPersonnelRoster).mockClear();
-    fireEvent.click(ordersSection);
-
-    await waitFor(() => expect(getPersonnelOrdersSummary).toHaveBeenCalledWith({ dateFrom: undefined, dateTo: undefined }));
-    expect(ordersSection).toHaveAttribute("aria-pressed", "true");
-    const orderReports = screen.getByRole("group", { name: "Отчёты раздела «Приказы»" });
-    expect(within(orderReports).getByRole("button", { name: "Общая сводка по приказам" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(orderReports).queryByRole("button", { name: "Личный состав" })).not.toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "В том числе без номера или даты" })).toBeInTheDocument();
-    expect(screen.getByRole("rowheader", { name: "Всего" })).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Группа отделений" })).not.toBeInTheDocument();
-    expect(getPersonnelReportOptions).not.toHaveBeenCalled();
-    expect(getPersonnelRoster).not.toHaveBeenCalled();
-
-    vi.mocked(getPersonnelOrdersSummary).mockClear();
-    fireEvent.click(personnelSection);
-    expect(screen.getByRole("group", { name: "Отчёты раздела «Персонал»" })).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "В том числе без номера или даты" })).not.toBeInTheDocument();
-    expect(getPersonnelOrdersSummary).not.toHaveBeenCalled();
-    expect(await screen.findByRole("combobox", { name: "Группа отделений" })).toBeInTheDocument();
-    await waitFor(() => expect(getPersonnelRoster).toHaveBeenCalled());
   });
 
   it("starts categories collapsed and independently expands and collapses accessible details", async () => {
@@ -265,8 +216,7 @@ describe("PersonnelReportsPageClient", () => {
     vi.mocked(getPersonnelRoster).mockResolvedValue(report);
     vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
 
-    render(<PersonnelReportsPageClient />);
-    fireEvent.click(screen.getByRole("button", { name: "Приказы" }));
+    render(<PersonnelOrdersSummaryReportPanel />);
 
     const expandHire = await screen.findByRole("button", { name: "Раскрыть категорию Приём" });
     expect(expandHire).toHaveAttribute("aria-expanded", "false");
@@ -288,15 +238,39 @@ describe("PersonnelReportsPageClient", () => {
     expect(screen.queryByText("Абдулов А.А., Бекова Б.Б.")).not.toBeInTheDocument();
   });
 
+  it("filters the orders summary by a category supplied by the report", async () => {
+    vi.mocked(getPersonnelReportOptions).mockResolvedValue(options);
+    vi.mocked(getPersonnelRoster).mockResolvedValue(report);
+    vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
+
+    render(<PersonnelOrdersSummaryReportPanel />);
+
+    const category = await screen.findByRole("combobox", { name: "Категория" });
+    expect(category).toHaveValue("");
+    expect(within(category).getByRole("option", { name: "Все категории" })).toBeInTheDocument();
+    expect(within(category).getByRole("option", { name: "Приём" })).toHaveValue("hire");
+    expect(screen.getByRole("button", { name: "Раскрыть категорию Приём" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Раскрыть категорию Увольнение" })).toBeInTheDocument();
+
+    fireEvent.change(category, { target: { value: "termination" } });
+
+    expect(screen.queryByRole("button", { name: "Раскрыть категорию Приём" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Раскрыть категорию Увольнение" })).toBeInTheDocument();
+    const totalRow = screen.getByRole("rowheader", { name: "Всего" }).closest("tr");
+    expect(within(totalRow!).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["0", "0"]);
+    expect(getPersonnelOrdersSummary).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an empty-category message and applies the official-date period", async () => {
     vi.mocked(getPersonnelReportOptions).mockResolvedValue(options);
     vi.mocked(getPersonnelRoster).mockResolvedValue(report);
     vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
 
-    render(<PersonnelReportsPageClient />);
-    fireEvent.click(screen.getByRole("button", { name: "Приказы" }));
+    render(<PersonnelOrdersSummaryReportPanel />);
     fireEvent.click(await screen.findByRole("button", { name: "Раскрыть категорию Увольнение" }));
     expect(screen.getByText("Приказы отсутствуют")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Категория" }), { target: { value: "termination" } });
 
     fireEvent.change(screen.getByLabelText("Дата с"), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText("Дата по"), { target: { value: "2026-08-31" } });
@@ -306,6 +280,8 @@ describe("PersonnelReportsPageClient", () => {
         dateTo: "2026-08-31",
       }),
     );
+    expect(screen.queryByRole("button", { name: "Раскрыть категорию Приём" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Категория" })).toHaveValue("termination");
     expect(
       screen.getByText(/При заданном периоде приказы без официальной даты не включаются/),
     ).toBeInTheDocument();

@@ -1,7 +1,7 @@
-import PersonnelOrdersPageClient from "../_components/PersonnelOrdersPageClient";
+import PersonnelOrdersSectionPageClient from "../_components/PersonnelOrdersSectionPageClient";
 
 export const dynamic = "force-dynamic";
 
 export default function PersonnelOrdersPage() {
-  return <PersonnelOrdersPageClient />;
+  return <PersonnelOrdersSectionPageClient />;
 }

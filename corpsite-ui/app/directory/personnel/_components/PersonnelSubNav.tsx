@@ -25,7 +25,6 @@ const BASE_ITEMS = [
     title: "Проверка биографии",
     prefixes: ["/directory/personnel/employment-verification"],
   },
-  { href: "/directory/personnel/reports", title: "Отчёты", prefixes: ["/directory/personnel/reports"] },
 ] as const;
 
 function isBaseItemActive(pathname: string, prefixes: readonly string[], href: string): boolean {
