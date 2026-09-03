@@ -9,11 +9,13 @@ from app.auth import get_current_user
 from app.services.access_resolver_service import list_active_access_role_codes
 
 HR_ENROLLMENT_MANAGER_CODE = "HR_ENROLLMENT_MANAGER"
+CONTROL_LIST_EXPORT_PERMISSION = "CONTROL_LIST_EXPORT"
 
 PERMISSION_CODES: FrozenSet[str] = frozenset(
     {
         "SYSADMIN_CABINET",
         "HR_ENROLLMENT_MANAGER",
+        CONTROL_LIST_EXPORT_PERMISSION,
         "ACCESS_MANAGER",
         "SECURITY_AUDITOR",
         "ACCESS_ADMIN",
