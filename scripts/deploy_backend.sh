@@ -7,6 +7,7 @@ SERVICE_NAME="${CORPSITE_BACKEND_SERVICE:-corpsite-backend}"
 HEALTH_URL="${CORPSITE_BACKEND_HEALTH_URL:-http://127.0.0.1:8000/health}"
 ENSURE_PORT="${REPO_ROOT}/scripts/ops/ensure_port_free.sh"
 SCHEDULER_SMOKE="${REPO_ROOT}/scripts/ops/scheduler_post_deploy_smoke.sh"
+ALEMBIC="${REPO_ROOT}/.venv/bin/alembic"
 
 log() {
   echo "[deploy-backend] $*"
@@ -47,9 +48,48 @@ run_scheduler_smoke() {
   "${SCHEDULER_SMOKE}" || fail "scheduler post-deploy smoke failed"
 }
 
+run_migrations() {
+  if [[ ! -x "${ALEMBIC}" ]]; then
+    fail "missing executable: ${ALEMBIC}"
+  fi
+
+  log "database migration upgrade to head"
+  (cd "${REPO_ROOT}" && "${ALEMBIC}" upgrade head) \
+    || fail "alembic upgrade head failed"
+
+  local heads_output
+  local current_output
+  local expected_head
+  local current_revision
+  local head_count
+  local current_count
+
+  heads_output="$(cd "${REPO_ROOT}" && "${ALEMBIC}" heads)" \
+    || fail "alembic heads failed"
+  head_count="$(printf '%s\n' "${heads_output}" | awk 'NF { count += 1 } END { print count + 0 }')"
+  if [[ "${head_count}" != "1" ]]; then
+    fail "expected exactly one Alembic head, found ${head_count}"
+  fi
+  expected_head="$(printf '%s\n' "${heads_output}" | awk 'NF { print $1; exit }')"
+
+  current_output="$(cd "${REPO_ROOT}" && "${ALEMBIC}" current)" \
+    || fail "alembic current failed"
+  current_count="$(printf '%s\n' "${current_output}" | awk 'NF { count += 1 } END { print count + 0 }')"
+  if [[ "${current_count}" != "1" ]]; then
+    fail "expected exactly one current Alembic revision, found ${current_count}"
+  fi
+  current_revision="$(printf '%s\n' "${current_output}" | awk 'NF { print $1; exit }')"
+  if [[ -z "${current_revision}" || "${current_revision}" != "${expected_head}" ]]; then
+    fail "database revision does not match the single Alembic head"
+  fi
+  log "database migration OK (revision ${current_revision})"
+}
+
 if ! command -v systemctl >/dev/null 2>&1 || ! systemctl_cmd cat "${SERVICE_NAME}" >/dev/null 2>&1; then
   fail "systemd unit ${SERVICE_NAME} not found"
 fi
+
+run_migrations
 
 log "reset-failed ${SERVICE_NAME}"
 systemctl_cmd reset-failed "${SERVICE_NAME}" 2>/dev/null || true

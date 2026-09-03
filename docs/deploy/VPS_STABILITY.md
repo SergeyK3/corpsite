@@ -63,8 +63,7 @@ Build was present (`BUILD_ID` OK). **Not** a missing `.next` issue.
 cd /opt/projects/corpsite/app
 git pull
 
-# Backend (migrations if needed first)
-.venv/bin/alembic upgrade head   # when schema changed
+# Backend (always migrates to the single Alembic head before restart)
 sudo ./scripts/deploy_backend.sh
 
 # Frontend (always builds)
@@ -182,10 +181,12 @@ systemctl list-timers corpsite-healthcheck.timer
 
 `sudo ./scripts/deploy_backend.sh` runs **scheduler post-deploy smoke** after a successful `/health` check (unless `CORPSITE_SKIP_SCHEDULER_SMOKE=1`).
 
+Before restarting the service, the script runs `.venv/bin/alembic upgrade head` and verifies that `alembic current` matches the single revision reported by `alembic heads`. A migration or revision-check failure stops deployment before restart and cannot print `deploy backend OK`.
+
 Pipeline:
 
 ```
-Backend restart → Healthcheck → Scheduler smoke → Deploy OK
+Alembic upgrade and revision check → Backend restart → Healthcheck → Scheduler smoke → Deploy OK
 ```
 
 Manual run (same checks):

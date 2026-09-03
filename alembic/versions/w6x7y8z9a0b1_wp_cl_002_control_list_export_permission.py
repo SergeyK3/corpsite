@@ -36,12 +36,11 @@ def upgrade() -> None:
             SELECT COUNT(*), MIN(role_id)
               INTO v_role_count, v_role_id
               FROM public.roles
-             WHERE code = '{_ROLE_CODE}'
-               AND is_active = TRUE;
+             WHERE code = '{_ROLE_CODE}';
 
             IF v_role_count <> 1 THEN
                 RAISE EXCEPTION
-                    'w6x7y8z9a0b1 requires exactly one active role %, found %',
+                    'w6x7y8z9a0b1 requires exactly one role %, found %',
                     '{_ROLE_CODE}', v_role_count;
             END IF;
 
