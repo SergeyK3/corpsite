@@ -73,6 +73,15 @@ _COLUMN_WIDTHS = (
 )
 _ILLEGAL_XML_CHARACTERS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 _FORMULA_PREFIXES = frozenset("=+-@")
+_POSITION_CATEGORY_LABELS = {
+    # Keep aligned with the canonical position catalog and its existing HR UI labels.
+    "leaders": "Руководители",
+    "medical": "Медицинские",
+    "admin": "Административные",
+    "technical": "Технические",
+    "other": "Прочие",
+}
+_UNKNOWN_POSITION_CATEGORY_LABEL = "—"
 
 
 class ControlListWorkbookError(RuntimeError):
@@ -110,6 +119,15 @@ def _excel_safe_text(value: Any) -> str | None:
     if stripped and stripped[0] in _FORMULA_PREFIXES:
         return "'" + text
     return text
+
+
+def _position_category_label(value: str | None) -> str | None:
+    if value is None:
+        return None
+    category = value.strip().lower()
+    if not category:
+        return None
+    return _POSITION_CATEGORY_LABELS.get(category, _UNKNOWN_POSITION_CATEGORY_LABEL)
 
 
 def _indexed_lines(values: Iterable[str | None]) -> str | None:
@@ -211,7 +229,7 @@ def _row_values(row: ControlListProjectionRow) -> tuple[Any, ...]:
         row.birth_date,
         _excel_safe_text(row.iin),
         _excel_safe_text(row.position),
-        _excel_safe_text(row.position_category),
+        _position_category_label(row.position_category),
         float(row.employment_rate) if row.employment_rate is not None else None,
         row.assignment_start_date,
         _excel_safe_text(institutions),

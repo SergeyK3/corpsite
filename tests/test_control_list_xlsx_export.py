@@ -141,6 +141,7 @@ def test_real_xlsx_has_exact_schema_types_and_formatting() -> None:
     assert sheet["A2"].value == 1 and sheet["A2"].data_type == "n"
     assert sheet["E2"].is_date and sheet["E2"].value.date() == date(1990, 1, 2)
     assert sheet["F2"].value == "001234567890" and sheet["F2"].data_type == "s"
+    assert sheet["H2"].value == "—"
     assert sheet["I2"].value == 0.75 and sheet["I2"].data_type == "n"
     assert sheet["J2"].is_date and sheet["J2"].value.date() == date(2024, 6, 7)
     assert sheet["R2"].value == "42" and sheet["R2"].data_type == "s"
@@ -164,6 +165,35 @@ def test_real_xlsx_has_exact_schema_types_and_formatting() -> None:
     assert metadata["B9"].value == "request-123"
     assert "персональные данные" in metadata["B10"].value
     assert "001234567890" not in " ".join(str(cell.value) for row in metadata for cell in row)
+
+
+@pytest.mark.parametrize(
+    ("category", "expected"),
+    [
+        ("leaders", "Руководители"),
+        ("medical", "Медицинские"),
+        ("admin", "Административные"),
+        ("technical", "Технические"),
+        ("other", "Прочие"),
+        (None, None),
+        ("", None),
+        ("unsupported-category", "—"),
+    ],
+)
+def test_position_category_uses_canonical_hr_labels(
+    category: str | None,
+    expected: str | None,
+) -> None:
+    projection = _projection()
+    row = projection.items[0].model_copy(update={"position_category": category})
+    workbook = _open(projection.model_copy(update={"items": [row]}))[1]
+    assert workbook["Контрольный список"]["H2"].value == expected
+
+
+def test_position_category_labels_cover_the_canonical_server_catalog() -> None:
+    from app.directory.positions_routes import ALLOWED_CATEGORIES
+
+    assert set(workbook_module._POSITION_CATEGORY_LABELS) == ALLOWED_CATEGORIES
 
 
 def test_explicit_none_and_unfilled_collections_both_remain_empty_cells() -> None:
