@@ -10,6 +10,7 @@ describe("personnelControlListNav", () => {
   it("classifies control-list and unrelated routes", () => {
     expect(isPersonnelControlListPath("/directory/personnel/import/148/review")).toBe(true);
     expect(isPersonnelControlListPath("/directory/personnel/hr-change-events")).toBe(true);
+    expect(isPersonnelControlListPath("/directory/personnel/control-list/export")).toBe(true);
     expect(isPersonnelControlListPath("/directory/personnel/reports")).toBe(false);
   });
 
@@ -19,6 +20,7 @@ describe("personnelControlListNav", () => {
     expect(resolvePersonnelControlListSection("/directory/personnel/import/review/19")).toBe("review");
     expect(resolvePersonnelControlListSection("/directory/personnel/import/148/review/19")).toBe("medical");
     expect(resolvePersonnelControlListSection("/directory/personnel/monthly-references/7")).toBe("upload");
+    expect(resolvePersonnelControlListSection("/directory/personnel/control-list/export")).toBe("export");
   });
 
   it("extracts only a valid batch id", () => {

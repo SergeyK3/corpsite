@@ -4,7 +4,8 @@ export type PersonnelControlListSection =
   | "review"
   | "changes"
   | "migration"
-  | "medical";
+  | "medical"
+  | "export";
 
 const PERSONNEL_ROOT = "/directory/personnel";
 const IMPORT_ROOT = `${PERSONNEL_ROOT}/import`;
@@ -20,7 +21,8 @@ export function isPersonnelControlListPath(pathname: string): boolean {
     pathname === `${PERSONNEL_ROOT}/hr-change-events` ||
     pathname.startsWith(`${PERSONNEL_ROOT}/hr-change-events/`) ||
     pathname === `${PERSONNEL_ROOT}/migration` ||
-    pathname.startsWith(`${PERSONNEL_ROOT}/migration/`)
+    pathname.startsWith(`${PERSONNEL_ROOT}/migration/`) ||
+    pathname === `${PERSONNEL_ROOT}/control-list/export`
   );
 }
 
@@ -33,6 +35,7 @@ export function parsePersonnelImportBatchId(pathname: string): number | null {
 
 export function resolvePersonnelControlListSection(pathname: string): PersonnelControlListSection | null {
   if (!isPersonnelControlListPath(pathname)) return null;
+  if (pathname === `${PERSONNEL_ROOT}/control-list/export`) return "export";
   if (
     pathname === `${PERSONNEL_ROOT}/hr-change-events` ||
     pathname.startsWith(`${PERSONNEL_ROOT}/hr-change-events/`)

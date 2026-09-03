@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import { useCurrentUser } from "@/lib/currentUser";
+
 import { listImportBatches } from "../_lib/importApi.client";
 import { buildImportReviewModeHref } from "../_lib/importReviewNav";
 import {
@@ -20,6 +22,7 @@ type ControlListNavItem = {
   title: string;
   href: (batchId: number | null) => string;
   requiresBatch?: boolean;
+  requiresExportPermission?: boolean;
 };
 
 const CONTROL_LIST_ITEMS: ControlListNavItem[] = [
@@ -40,6 +43,12 @@ const CONTROL_LIST_ITEMS: ControlListNavItem[] = [
       batchId == null ? IMPORT_LIST_HREF : buildImportReviewModeHref(batchId, "personnel"),
     requiresBatch: true,
   },
+  {
+    key: "export",
+    title: "Экспорт",
+    href: () => "/directory/personnel/control-list/export",
+    requiresExportPermission: true,
+  },
 ];
 
 function itemClassName(active: boolean, disabled: boolean): string {
@@ -55,6 +64,7 @@ function itemClassName(active: boolean, disabled: boolean): string {
 }
 
 export default function PersonnelControlListSubNav() {
+  const me = useCurrentUser();
   const pathname = usePathname() || "";
   const visible = isPersonnelControlListPath(pathname);
   const [latestBatchId, setLatestBatchId] = React.useState<number | null>(null);
@@ -85,6 +95,9 @@ export default function PersonnelControlListSubNav() {
     <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
       <nav aria-label="Разделы контрольного списка" className="flex flex-wrap gap-1.5">
         {CONTROL_LIST_ITEMS.map((item) => {
+          if (item.requiresExportPermission && me?.has_control_list_export !== true) {
+            return null;
+          }
           const disabled = item.requiresBatch === true && batchId == null;
           const active = currentSection === item.key;
           if (disabled) {

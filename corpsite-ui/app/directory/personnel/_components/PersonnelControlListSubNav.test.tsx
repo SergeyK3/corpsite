@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelControlListSubNav from "./PersonnelControlListSubNav";
 import { listImportBatches } from "../_lib/importApi.client";
+import { CurrentUserProvider } from "@/lib/currentUser";
 
 const navigation = vi.hoisted(() => ({ pathname: "/directory/personnel/import" }));
 
@@ -85,5 +86,35 @@ describe("PersonnelControlListSubNav", () => {
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByRole("navigation", { name: "Разделы контрольного списка" })).not.toBeInTheDocument();
     expect(listImportBatches).not.toHaveBeenCalled();
+  });
+
+  it("shows Export beside Medical categories only with the exact capability", async () => {
+    vi.mocked(listImportBatches).mockResolvedValue({ items: [{ batch_id: 148 }] } as never);
+    const { rerender } = render(
+      <CurrentUserProvider value={{ user_id: 7, has_control_list_export: false }}>
+        <PersonnelControlListSubNav />
+      </CurrentUserProvider>,
+    );
+    expect(screen.queryByRole("link", { name: "Экспорт" })).not.toBeInTheDocument();
+
+    rerender(
+      <CurrentUserProvider value={{ user_id: 7, has_control_list_export: true }}>
+        <PersonnelControlListSubNav />
+      </CurrentUserProvider>,
+    );
+    const exportLink = screen.getByRole("link", { name: "Экспорт" });
+    expect(exportLink).toHaveAttribute("href", "/directory/personnel/control-list/export");
+    expect(exportLink.previousElementSibling).toHaveTextContent("Мед. категории");
+  });
+
+  it("marks the export subsection active", () => {
+    navigation.pathname = "/directory/personnel/control-list/export";
+    vi.mocked(listImportBatches).mockResolvedValue({ items: [] } as never);
+    render(
+      <CurrentUserProvider value={{ user_id: 7, has_control_list_export: true }}>
+        <PersonnelControlListSubNav />
+      </CurrentUserProvider>,
+    );
+    expect(screen.getByRole("link", { name: "Экспорт" })).toHaveAttribute("aria-current", "page");
   });
 });
