@@ -5,6 +5,8 @@ import os
 
 from fastapi import APIRouter
 
+from app.control_list_export.router import router as control_list_export_router
+
 from .contacts_routes import router as contacts_router
 from .debug_routes import router as debug_router
 from .org_units_routes import router as org_units_router
@@ -55,6 +57,7 @@ router.include_router(personnel_applications_router)
 router.include_router(personnel_lk_router)
 router.include_router(personnel_intake_router)
 router.include_router(personnel_reports_router)
+router.include_router(control_list_export_router)
 router.include_router(employee_onboarding_router)
 router.include_router(hr_import_router)
 router.include_router(mrd_router)
