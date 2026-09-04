@@ -4,8 +4,10 @@ from __future__ import annotations
 from typing import Any, Dict, FrozenSet
 
 from fastapi import Depends, HTTPException
+from sqlalchemy import text
 
 from app.auth import get_current_user
+from app.db.engine import engine
 from app.services.access_resolver_service import list_active_access_role_codes
 
 HR_ENROLLMENT_MANAGER_CODE = "HR_ENROLLMENT_MANAGER"
@@ -14,6 +16,12 @@ TEST_PERSONNEL_DELETION_REQUEST = "TEST_PERSONNEL_DELETION_REQUEST"
 TEST_PERSONNEL_DELETION_APPROVE = "TEST_PERSONNEL_DELETION_APPROVE"
 TEST_PERSONNEL_DELETION_EXECUTE = "TEST_PERSONNEL_DELETION_EXECUTE"
 TEST_PERSONNEL_DELETION_AUDIT_READ = "TEST_PERSONNEL_DELETION_AUDIT_READ"
+
+TEST_PERSONNEL_DELETION_CAPABILITY_BY_PERMISSION = {
+    TEST_PERSONNEL_DELETION_REQUEST: "can_request_test_personnel_deletion",
+    TEST_PERSONNEL_DELETION_APPROVE: "can_approve_test_personnel_deletion",
+    TEST_PERSONNEL_DELETION_AUDIT_READ: "can_read_test_personnel_deletion_audit",
+}
 
 PERMISSION_CODES: FrozenSet[str] = frozenset(
     {
@@ -96,6 +104,47 @@ def has_admin_permission(user_id: int, permission_code: str) -> bool:
     except ValueError:
         return False
     return code in active_codes
+
+
+def get_test_personnel_deletion_capabilities(
+    user_id: int, *, primary_role_code: str | None = None,
+) -> Dict[str, bool]:
+    """Project the exact primary-role + permission rules used by WP-TD endpoints."""
+    result = {capability: False for capability in TEST_PERSONNEL_DELETION_CAPABILITY_BY_PERMISSION.values()}
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return result
+    primary_role = (primary_role_code or "").strip().upper() or None
+    if primary_role is None:
+        with engine.connect() as conn:
+            primary_role = conn.execute(
+                text("""SELECT r.code FROM public.users u
+                    JOIN public.roles r ON r.role_id=u.role_id
+                    WHERE u.user_id=:user_id AND u.is_active=TRUE"""),
+                {"user_id": uid},
+            ).scalar_one_or_none()
+    if primary_role not in {"ADMIN", "HR_HEAD"}:
+        return result
+    result["can_request_test_personnel_deletion"] = (
+        primary_role == "ADMIN" and has_admin_permission(uid, TEST_PERSONNEL_DELETION_REQUEST)
+    )
+    result["can_approve_test_personnel_deletion"] = (
+        primary_role == "HR_HEAD" and has_admin_permission(uid, TEST_PERSONNEL_DELETION_APPROVE)
+    )
+    result["can_read_test_personnel_deletion_audit"] = (
+        has_admin_permission(uid, TEST_PERSONNEL_DELETION_AUDIT_READ)
+    )
+    return result
+
+
+def has_test_personnel_deletion_permission(user_id: int, permission_code: str) -> bool:
+    capability = TEST_PERSONNEL_DELETION_CAPABILITY_BY_PERMISSION.get(
+        (permission_code or "").strip().upper()
+    )
+    if not capability:
+        return False
+    return get_test_personnel_deletion_capabilities(user_id)[capability]
 
 
 def has_any_admin_api_permission(user_id: int) -> bool:

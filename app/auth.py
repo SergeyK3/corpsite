@@ -286,6 +286,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
         has_admin_permission,
         has_any_personnel_read_permission,
         has_hr_governance_permission,
+        get_test_personnel_deletion_capabilities,
     )
 
     out = dict(user)
@@ -303,6 +304,9 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     )
     out["has_personnel_orders_archive"] = has_admin_permission(uid, "PERSONNEL_ORDERS_ARCHIVE")
     out["has_personnel_orders_restore"] = has_admin_permission(uid, "PERSONNEL_ORDERS_RESTORE")
+    out.update(get_test_personnel_deletion_capabilities(
+        uid, primary_role_code=str(out.get("role_code") or ""),
+    ))
 
     from app.operational_orders.auth_projection import (
         build_operational_orders_permissions,

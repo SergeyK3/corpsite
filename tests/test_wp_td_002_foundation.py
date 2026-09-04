@@ -8,9 +8,11 @@ from datetime import date, datetime, timedelta, timezone
 from threading import Event
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
+from app import auth
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.main import app
@@ -20,9 +22,14 @@ from app.security.admin_permissions import (
     TEST_PERSONNEL_DELETION_EXECUTE,
     TEST_PERSONNEL_DELETION_REQUEST,
     has_admin_permission,
+    get_test_personnel_deletion_capabilities,
 )
+from app.security import admin_permissions
 from app.services import test_personnel_deletion_service as service
 from app.directory import test_personnel_deletion_routes as td_routes
+from app.directory.test_personnel_deletion_schemas import (
+    TestPersonnelDraftCreateIn as PersonnelDraftCreateIn,
+)
 
 
 @pytest.fixture
@@ -128,6 +135,56 @@ def test_permission_matrix_is_exact(td_actors):
     assert has_admin_permission(hr, TEST_PERSONNEL_DELETION_AUDIT_READ)
     assert not has_admin_permission(hr, TEST_PERSONNEL_DELETION_REQUEST)
     assert not has_admin_permission(hr, TEST_PERSONNEL_DELETION_EXECUTE)
+
+
+def test_auth_me_projects_exact_test_personnel_capabilities(client, td_actors):
+    admin = auth._enrich_user_context(dict(td_actors["ADMIN"]))
+    hr = auth._enrich_user_context(dict(td_actors["HR_HEAD"]))
+    assert admin["can_request_test_personnel_deletion"] is True
+    assert admin["can_approve_test_personnel_deletion"] is False
+    assert admin["can_read_test_personnel_deletion_audit"] is True
+    assert hr["can_request_test_personnel_deletion"] is False
+    assert hr["can_approve_test_personnel_deletion"] is True
+    assert hr["can_read_test_personnel_deletion_audit"] is True
+    assert "can_execute_test_personnel_deletion" not in admin
+    assert "can_execute_test_personnel_deletion" not in hr
+    previous_override = app.dependency_overrides.get(get_current_user)
+    try:
+        app.dependency_overrides[get_current_user] = lambda: admin
+        admin_me = client.get("/auth/me")
+        assert admin_me.status_code == 200
+        assert admin_me.json()["can_request_test_personnel_deletion"] is True
+        assert "can_execute_test_personnel_deletion" not in admin_me.json()
+        app.dependency_overrides[get_current_user] = lambda: hr
+        hr_me = client.get("/auth/me")
+        assert hr_me.status_code == 200
+        assert hr_me.json()["can_approve_test_personnel_deletion"] is True
+        assert "can_execute_test_personnel_deletion" not in hr_me.json()
+    finally:
+        if previous_override is None:
+            app.dependency_overrides.pop(get_current_user, None)
+        else:
+            app.dependency_overrides[get_current_user] = previous_override
+
+
+def test_admissible_primary_role_without_permission_has_no_capability(monkeypatch, td_actors):
+    monkeypatch.setattr(admin_permissions, "has_admin_permission", lambda _user_id, _code: False)
+    capabilities = admin_permissions.get_test_personnel_deletion_capabilities(
+        td_actors["ADMIN"]["user_id"]
+    )
+    assert capabilities == {
+        "can_request_test_personnel_deletion": False,
+        "can_approve_test_personnel_deletion": False,
+        "can_read_test_personnel_deletion_audit": False,
+    }
+
+
+def test_create_schema_still_rejects_unknown_comment(td_candidates):
+    with pytest.raises(ValidationError):
+        PersonnelDraftCreateIn.model_validate({
+            **_draft_payload(td_candidates["pending"], suffix="schema-comment"),
+            "comment": "Свободный комментарий создания запрещён",
+        })
 
 
 def test_mask_contract_and_preview_are_read_only(td_candidates):
@@ -623,6 +680,10 @@ def test_cross_role_personal_grants_do_not_cross_duties(client, td_actors, td_ca
                 SELECT access_role_id,'USER',:target,:grantor,:reason FROM access_roles WHERE code=:code
                 RETURNING grant_id"""), {"target": user_id, "grantor": admin_id, "reason": f"wp-td-cross-{uuid.uuid4().hex}", "code": code}).scalar_one()))
     try:
+        admin_capabilities = get_test_personnel_deletion_capabilities(admin_id)
+        hr_capabilities = get_test_personnel_deletion_capabilities(hr_id)
+        assert admin_capabilities["can_approve_test_personnel_deletion"] is False
+        assert hr_capabilities["can_request_test_personnel_deletion"] is False
         admin = _as(client, td_actors["ADMIN"])
         denied_approve = admin.post(f"/directory/test-personnel-deletion/approvals/{uuid.uuid4()}/approve", json={
             "expected_version": 1, "idempotency_key": uuid.uuid4().hex,
@@ -999,6 +1060,13 @@ def test_hr_wide_scope_still_receives_only_masked_iin(client, td_actors, td_cand
     synthetic_iin = "990101123456"
     with engine.begin() as conn:
         conn.execute(text("UPDATE persons SET iin=:iin WHERE person_id=:id"), {"iin": synthetic_iin, "id": person_id})
+    preview = admin.post("/directory/test-personnel-deletion/preview", json={"person_ids": [person_id]})
+    assert preview.status_code == 200
+    preview_target = preview.json()["items"][0]
+    assert "display_name" not in preview_target
+    assert preview_target["subject"]
+    assert preview_target["masked_iin"] == "********3456"
+    assert synthetic_iin not in preview.text
     draft = admin.post("/directory/test-personnel-deletion/requests", json=_draft_payload(
         td_candidates["pending"], suffix=f"iin-{uuid.uuid4().hex[:8]}"
     )).json()
@@ -1008,12 +1076,15 @@ def test_hr_wide_scope_still_receives_only_masked_iin(client, td_actors, td_cand
     admin_detail = admin.get(f"/directory/test-personnel-deletion/requests/{draft['request_id']}")
     assert admin_detail.status_code == 200
     assert synthetic_iin not in admin_detail.text
+    assert admin_detail.json()["targets"][0]["subject"]
+    assert admin_detail.json()["targets"][0]["masked_iin"] == "********3456"
     monkeypatch.setattr(td_routes, "assert_ppr_read_allowed_for_person", lambda *_args, **_kwargs: None)
     hr = _as(client, td_actors["HR_HEAD"])
     detail = hr.get(f"/directory/test-personnel-deletion/approvals/{draft['request_id']}")
     assert detail.status_code == 200
     assert synthetic_iin not in detail.text
-    assert detail.json()["targets"][0]["subject"]["iin"] == "********3456"
+    assert detail.json()["targets"][0]["subject"]
+    assert detail.json()["targets"][0]["masked_iin"] == "********3456"
 
 
 def test_safe_identity_has_no_full_iin_escape_hatch(td_candidates):
@@ -1022,10 +1093,88 @@ def test_safe_identity_has_no_full_iin_escape_hatch(td_candidates):
     with engine.begin() as conn:
         conn.execute(text("UPDATE persons SET iin=:iin WHERE person_id=:id"), {"iin": synthetic_iin, "id": person_id})
     identity = service.safe_identity(person_id)
-    assert identity["iin"] == "********3456"
+    assert identity["masked_iin"] == "********3456"
+    assert identity["subject"]
     assert synthetic_iin not in str(identity)
     with pytest.raises(TypeError):
         service.safe_identity(person_id, include_full_iin=True)
+
+
+def test_request_read_projection_returns_participant_display_names(
+    client, td_actors, td_candidates, monkeypatch,
+):
+    admin_id = int(td_actors["ADMIN"]["user_id"])
+    hr_id = int(td_actors["HR_HEAD"]["user_id"])
+    with engine.connect() as conn:
+        names = dict(conn.execute(text("SELECT user_id,full_name FROM users WHERE user_id=ANY(:ids)"), {
+            "ids": [admin_id, hr_id],
+        }).all())
+    admin = _as(client, td_actors["ADMIN"])
+    draft = admin.post("/directory/test-personnel-deletion/requests", json=_draft_payload(
+        td_candidates["drift"], suffix=f"display-{uuid.uuid4().hex[:8]}"
+    )).json()
+    pending = admin.post(f"/directory/test-personnel-deletion/requests/{draft['request_id']}/submit", json={
+        "expected_version": 1, "idempotency_key": f"display-submit-{uuid.uuid4().hex}",
+    })
+    assert pending.status_code == 200
+    monkeypatch.setattr(td_routes, "assert_ppr_read_allowed_for_person", lambda *_a, **_k: None)
+    hr = _as(client, td_actors["HR_HEAD"])
+    approved = hr.post(f"/directory/test-personnel-deletion/approvals/{draft['request_id']}/approve", json={
+        "expected_version": 2, "idempotency_key": f"display-approve-{uuid.uuid4().hex}",
+        "comment": "Синтетическая запись подтверждена",
+    })
+    assert approved.status_code == 200
+    admin = _as(client, td_actors["ADMIN"])
+    detail = admin.get(f"/directory/test-personnel-deletion/requests/{draft['request_id']}")
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["initiated_by_user_id"] == admin_id
+    assert payload["initiated_by_display_name"] == names[admin_id]
+    assert payload["decisions"][-1]["actor_user_id"] == hr_id
+    assert payload["decisions"][-1]["actor_display_name"] == names[hr_id]
+    serialized_history = str(payload["history"])
+    assert names[admin_id] not in serialized_history
+    assert names[hr_id] not in serialized_history
+
+
+def test_identity_and_display_name_projection_is_batched(td_actors, td_candidates):
+    admin_id = int(td_actors["ADMIN"]["user_id"])
+    targets = [
+        {"person_id": person_id, "application_id": application_id}
+        for person_id, application_id in (
+            td_candidates["pending"], td_candidates["submitted"], td_candidates["drift"]
+        )
+    ]
+    draft = service.create_draft(
+        actor_user_id=admin_id, basis="LEGACY_MANIFEST",
+        reason_code="LEGACY_SYNTHETIC_TEST_DATA", preview_criteria={"selection": "EXACT_MANIFEST"},
+        original_mask=None, targets=targets, idempotency_key=f"projection-batch-{uuid.uuid4().hex}",
+    )
+    statements = []
+    def observe(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+    event.listen(engine, "before_cursor_execute", observe)
+    try:
+        detail = service.get_request(draft["request_id"])
+    finally:
+        event.remove(engine, "before_cursor_execute", observe)
+    assert len(detail["targets"]) == 3
+    assert all("subject" in target and "masked_iin" in target for target in detail["targets"])
+    assert sum("SELECT person_id,full_name,iin FROM public.persons" in sql for sql in statements) == 1
+    assert sum("SELECT user_id,full_name FROM public.users" in sql for sql in statements) == 1
+
+
+def test_read_projection_uses_safe_missing_identity_and_user_fallbacks():
+    missing_person_id = 9_223_372_036_854_000_001
+    missing_user_id = 9_223_372_036_854_000_002
+    with engine.connect() as conn:
+        identity = service._identity_projections(conn, [missing_person_id])[missing_person_id]
+        display_name = service._user_display_names(conn, [missing_user_id])[missing_user_id]
+    assert identity == {
+        "subject": f"Запись #{missing_person_id} недоступна",
+        "masked_iin": None,
+    }
+    assert display_name == f"Пользователь #{missing_user_id}"
 
 
 def test_legacy_endpoints_never_call_delete_service(client, td_actors, monkeypatch):

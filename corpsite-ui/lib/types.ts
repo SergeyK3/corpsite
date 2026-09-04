@@ -20,6 +20,10 @@ export type MeInfo = {
   is_system_admin?: boolean;
   /** GET /auth/me — mirrors DELETE /directory/employees/{id} guard. */
   can_hard_delete_employee?: boolean;
+  /** WP-TD-003A — exact primary-role + permission projections; no execute capability. */
+  can_request_test_personnel_deletion?: boolean;
+  can_approve_test_personnel_deletion?: boolean;
+  can_read_test_personnel_deletion_audit?: boolean;
   /** Sysadmin cabinet API (/admin/users, /admin/access/*, …) — not directory privileged roles. */
   has_sysadmin_api?: boolean;
   /** ADR-043 C4.2 — personnel lifecycle admin (ADMIN or HR_ENROLLMENT_MANAGER). */

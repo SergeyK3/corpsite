@@ -13,7 +13,8 @@ from app.security.admin_permissions import (
     TEST_PERSONNEL_DELETION_APPROVE,
     TEST_PERSONNEL_DELETION_AUDIT_READ,
     TEST_PERSONNEL_DELETION_REQUEST,
-    has_admin_permission,
+    has_test_personnel_deletion_permission,
+    get_test_personnel_deletion_capabilities,
 )
 from app.services import test_personnel_deletion_service as service
 
@@ -31,9 +32,9 @@ def _error(exc: service.TestPersonnelDeletionError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message})
 
 
-def _require(user: dict[str, Any], permission: str, role_code: str) -> int:
+def _require(user: dict[str, Any], permission: str) -> int:
     user_id = int(user["user_id"])
-    if service.actor_role_code(user_id) != role_code or not has_admin_permission(user_id, permission):
+    if not has_test_personnel_deletion_permission(user_id, permission):
         raise HTTPException(status_code=403, detail={"code": "TD_PERMISSION_REQUIRED", "permission": permission})
     return user_id
 
@@ -41,27 +42,25 @@ def _require(user: dict[str, Any], permission: str, role_code: str) -> int:
 def _scope_hr_detail(user: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any]:
     for target in detail.get("targets", []):
         assert_ppr_read_allowed_for_person(user, int(target["person_id"]))
-        # No canonical permission dedicated to full-IIN disclosure exists yet.
-        # WP-TD-002B therefore always returns the masked representation.
-        target["subject"] = service.safe_identity(int(target["person_id"]))
     return detail
 
 
 def _authorize_detail(user: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any]:
     actor = int(user["user_id"])
     role = service.actor_role_code(actor)
-    if role == "ADMIN" and int(detail["initiated_by_user_id"]) == actor and has_admin_permission(actor, TEST_PERSONNEL_DELETION_REQUEST):
+    capabilities = get_test_personnel_deletion_capabilities(actor)
+    if role == "ADMIN" and int(detail["initiated_by_user_id"]) == actor and capabilities["can_request_test_personnel_deletion"]:
         return detail
-    if role == "ADMIN" and has_admin_permission(actor, TEST_PERSONNEL_DELETION_AUDIT_READ):
+    if role == "ADMIN" and capabilities["can_read_test_personnel_deletion_audit"]:
         return detail
-    if role == "HR_HEAD" and (has_admin_permission(actor, TEST_PERSONNEL_DELETION_APPROVE) or has_admin_permission(actor, TEST_PERSONNEL_DELETION_AUDIT_READ)):
+    if role == "HR_HEAD" and (capabilities["can_approve_test_personnel_deletion"] or capabilities["can_read_test_personnel_deletion_audit"]):
         return _scope_hr_detail(user, detail)
     raise HTTPException(status_code=404, detail={"code": "TD_REQUEST_NOT_FOUND"})
 
 
 @router.post("/preview")
 def preview(body: TestPersonnelPreviewIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    _require(user, TEST_PERSONNEL_DELETION_REQUEST, "ADMIN")
+    _require(user, TEST_PERSONNEL_DELETION_REQUEST)
     try:
         return service.preview_candidates(
             mask=body.mask,
@@ -75,7 +74,7 @@ def preview(body: TestPersonnelPreviewIn, user: dict[str, Any] = Depends(get_cur
 
 @router.post("/requests", status_code=201)
 def create_request(body: TestPersonnelDraftCreateIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST, "ADMIN")
+    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST)
     try:
         return service.create_draft(
             actor_user_id=actor,
@@ -92,8 +91,8 @@ def create_request(body: TestPersonnelDraftCreateIn, user: dict[str, Any] = Depe
 
 @router.get("/requests")
 def requests(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST, "ADMIN")
-    audit_reader = has_admin_permission(actor, TEST_PERSONNEL_DELETION_AUDIT_READ)
+    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST)
+    audit_reader = has_test_personnel_deletion_permission(actor, TEST_PERSONNEL_DELETION_AUDIT_READ)
     return {"items": service.list_requests(initiator_user_id=None if audit_reader else actor)}
 
 
@@ -107,7 +106,7 @@ def request_detail(request_id: UUID, user: dict[str, Any] = Depends(get_current_
 
 @router.post("/requests/{request_id}/submit")
 def submit(request_id: UUID, body: TestPersonnelCommandIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST, "ADMIN")
+    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST)
     try:
         result, conflict = service.submit_request(
             request_id=request_id, actor_user_id=actor, expected_version=body.expected_version,
@@ -122,7 +121,7 @@ def submit(request_id: UUID, body: TestPersonnelCommandIn, user: dict[str, Any] 
 
 @router.post("/requests/{request_id}/cancel")
 def cancel(request_id: UUID, body: TestPersonnelCommandIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST, "ADMIN")
+    actor = _require(user, TEST_PERSONNEL_DELETION_REQUEST)
     try:
         return service.cancel_request(
             request_id=request_id, actor_user_id=actor, expected_version=body.expected_version,
@@ -134,7 +133,7 @@ def cancel(request_id: UUID, body: TestPersonnelCommandIn, user: dict[str, Any] 
 
 @router.get("/approvals")
 def approvals(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    _require(user, TEST_PERSONNEL_DELETION_APPROVE, "HR_HEAD")
+    _require(user, TEST_PERSONNEL_DELETION_APPROVE)
     visible = []
     for item in service.list_requests(pending_only=True):
         try:
@@ -147,7 +146,7 @@ def approvals(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any
 
 @router.get("/approvals/{request_id}")
 def approval_detail(request_id: UUID, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    _require(user, TEST_PERSONNEL_DELETION_APPROVE, "HR_HEAD")
+    _require(user, TEST_PERSONNEL_DELETION_APPROVE)
     try:
         return _scope_hr_detail(user, service.get_request(request_id))
     except service.TestPersonnelDeletionError as exc:
@@ -155,7 +154,7 @@ def approval_detail(request_id: UUID, user: dict[str, Any] = Depends(get_current
 
 
 def _decide(request_id: UUID, body: TestPersonnelDecisionIn, user: dict[str, Any], decision: str) -> dict[str, Any]:
-    actor = _require(user, TEST_PERSONNEL_DELETION_APPROVE, "HR_HEAD")
+    actor = _require(user, TEST_PERSONNEL_DELETION_APPROVE)
     try:
         result, conflict = service.decide_request(
             request_id=request_id, actor_user_id=actor, expected_version=body.expected_version,

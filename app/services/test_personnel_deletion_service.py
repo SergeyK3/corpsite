@@ -212,6 +212,15 @@ def _canonical_state_digest(states: Iterable[Any]) -> str:
     return _canonical_hash(sorted(_canonical_hash(state) for state in states))
 
 
+def _masked_iin(value: Any) -> str | None:
+    digits = str(value or "").strip()
+    return "********" + digits[-4:] if len(digits) == 12 and digits.isdigit() else None
+
+
+def _missing_subject(person_id: int) -> str:
+    return f"Запись #{int(person_id)} недоступна"
+
+
 def normalize_mask(mask: str) -> str:
     value = " ".join(unicodedata.normalize("NFC", mask or "").strip().split())
     if not 3 <= len(value) <= 100: raise TestPersonnelDeletionError("TD_MASK_LENGTH", "Mask length must be between 3 and 100.", 422)
@@ -396,7 +405,9 @@ def _evaluate_candidates(conn: Connection, pairs: Iterable[tuple[int, int]]) -> 
         stage_admissibility = _stage_admissibility(present_rules)
         eligibility = "BLOCKED" if category_codes[BLOCK] else "HR_ATTESTATION_REQUIRED" if category_codes[HR_ATTESTATION_REQUIRED] else "TOMBSTONE_REQUIRED" if category_codes[TOMBSTONE_REQUIRED] else "ELIGIBLE"
         candidates.append({"target_type": "APPLICANT", "person_id": person_id,
-            "application_id": application_id, "display_name": person["full_name"],
+            "application_id": application_id,
+            "subject": str(person["full_name"]).strip() if person["full_name"] else _missing_subject(person_id),
+            "masked_iin": _masked_iin(person["raw"].get("iin")),
             "person_status": person["person_status"], "application_status": str(application["status"]),
             "has_test_provenance": has_provenance, "eligibility_status": eligibility,
             "stage_admissibility": stage_admissibility,
@@ -499,19 +510,70 @@ def _effective(row):
     now=row.pop("db_now",None); row["stored_status"]=row["status"]; row["approval_valid"]=bool(row["status"]=="APPROVED" and row.get("approval_expires_at") and now and row["approval_expires_at"]>now)
     if row["status"]=="APPROVED" and not row["approval_valid"]: row["status"]="EXPIRED"
     return row
+
+
+def _identity_projections(conn: Connection, person_ids: Iterable[int]) -> dict[int, dict[str, Any]]:
+    ids = sorted({int(person_id) for person_id in person_ids})
+    projections = {
+        person_id: {"subject": _missing_subject(person_id), "masked_iin": None}
+        for person_id in ids
+    }
+    if not ids:
+        return projections
+    for row in conn.execute(text("""SELECT person_id,full_name,iin FROM public.persons
+            WHERE person_id=ANY(:person_ids)"""), {"person_ids": ids}).mappings():
+        person_id = int(row["person_id"])
+        projections[person_id] = {
+            "subject": str(row["full_name"]).strip() if row["full_name"] else _missing_subject(person_id),
+            "masked_iin": _masked_iin(row["iin"]),
+        }
+    return projections
+
+
+def _user_display_names(conn: Connection, user_ids: Iterable[int]) -> dict[int, str]:
+    ids = sorted({int(user_id) for user_id in user_ids})
+    names = {user_id: f"Пользователь #{user_id}" for user_id in ids}
+    if not ids:
+        return names
+    for row in conn.execute(text("""SELECT user_id,full_name FROM public.users
+            WHERE user_id=ANY(:user_ids)"""), {"user_ids": ids}).mappings():
+        user_id = int(row["user_id"])
+        value = str(row["full_name"] or "").strip()
+        if value:
+            names[user_id] = value
+    return names
+
+
+def _decorate_request_read_projection(conn: Connection, detail: dict[str, Any]) -> dict[str, Any]:
+    targets = detail.get("targets") or []
+    identities = _identity_projections(conn, (int(target["person_id"]) for target in targets))
+    for target in targets:
+        target.update(identities[int(target["person_id"])])
+    decisions = detail.get("decisions") or []
+    participant_ids = [int(detail["initiated_by_user_id"])]
+    participant_ids.extend(int(decision["actor_user_id"]) for decision in decisions)
+    names = _user_display_names(conn, participant_ids)
+    detail["initiated_by_display_name"] = names[int(detail["initiated_by_user_id"])]
+    for decision in decisions:
+        decision["actor_display_name"] = names[int(decision["actor_user_id"])]
+    return detail
+
+
 def _request_detail(conn,rid):
-    out=_effective(_request_row(conn,rid)); out["targets"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_targets WHERE request_id=:id ORDER BY manifest_order"),{"id":rid}).mappings()]; out["decisions"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_decisions WHERE request_id=:id ORDER BY decision_id"),{"id":rid}).mappings()]; out["history"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_history WHERE request_id=:id ORDER BY history_id"),{"id":rid}).mappings()]; return out
+    out=_effective(_request_row(conn,rid)); out["targets"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_targets WHERE request_id=:id ORDER BY manifest_order"),{"id":rid}).mappings()]; out["decisions"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_decisions WHERE request_id=:id ORDER BY decision_id"),{"id":rid}).mappings()]; out["history"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_history WHERE request_id=:id ORDER BY history_id"),{"id":rid}).mappings()]; return _decorate_request_read_projection(conn,out)
 def get_request(rid):
     with engine.connect() as c:return _request_detail(c,rid)
 def list_requests(*,pending_only=False,initiator_user_id=None):
     clauses=[]; params={}
     if pending_only: clauses.append("status='PENDING_HR_APPROVAL'")
     if initiator_user_id is not None: clauses.append("initiated_by_user_id=:i");params["i"]=initiator_user_id
-    with engine.connect() as c:return [_effective(dict(r)) for r in c.execute(text("SELECT r.*,statement_timestamp() db_now FROM test_personnel_deletion_requests r"+(" WHERE "+" AND ".join(clauses) if clauses else "")+" ORDER BY created_at DESC,request_id"),params).mappings()]
+    with engine.connect() as c:
+        rows=[_effective(dict(r)) for r in c.execute(text("SELECT r.*,statement_timestamp() db_now FROM test_personnel_deletion_requests r"+(" WHERE "+" AND ".join(clauses) if clauses else "")+" ORDER BY created_at DESC,request_id"),params).mappings()]
+        names=_user_display_names(c,(int(row["initiated_by_user_id"]) for row in rows))
+        for row in rows:row["initiated_by_display_name"]=names[int(row["initiated_by_user_id"])]
+        return rows
 def safe_identity(person_id):
-    with engine.connect() as c:r=c.execute(text("SELECT full_name,iin FROM persons WHERE person_id=:id"),{"id":person_id}).mappings().first()
-    if not r:return None
-    iin=str(r["iin"] or "");return {"display_name":r["full_name"],"iin":"********"+iin[-4:] if len(iin)==12 else None}
+    with engine.connect() as c:return _identity_projections(c,[int(person_id)])[int(person_id)]
 
 
 def _validate_manifest(conn,pairs):
