@@ -11,12 +11,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.security.directory_scope import is_privileged as _is_privileged, is_system_admin
+from app.security.directory_scope import is_privileged as _is_privileged
 from app.security.admin_permissions import HR_ENROLLMENT_MANAGER_CODE, has_admin_permission
 from app.services.employee_hard_delete_service import (
     BULK_HARD_DELETE_MAX,
-    bulk_hard_delete_employees as svc_bulk_hard_delete_employees,
-    hard_delete_employee as svc_hard_delete_employee,
 )
 
 from app.services.directory_service import (
@@ -527,20 +525,10 @@ def bulk_hard_delete_employees_route(
     body: EmployeeBulkDeleteIn,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    try:
-        if not is_system_admin(user):
-            raise HTTPException(status_code=403, detail="Forbidden.")
-
-        return call_service(
-            svc_bulk_hard_delete_employees,
-            employee_ids=body.employee_ids,
-            actor_user_id=int(user["user_id"]),
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise as_http500(e)
+    raise HTTPException(
+        status_code=410,
+        detail={"code": "TD_LEGACY_HARD_DELETE_DISABLED", "message": "Legacy personnel hard-delete is disabled."},
+    )
 
 
 @router.patch("/employees/{employee_id}")
@@ -928,20 +916,10 @@ def hard_delete_employee_route(
     employee_id: str = Path(..., min_length=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    try:
-        if not is_system_admin(user):
-            raise HTTPException(status_code=403, detail="Forbidden.")
-
-        return call_service(
-            svc_hard_delete_employee,
-            employee_id=employee_id,
-            actor_user_id=int(user["user_id"]),
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise as_http500(e)
+    raise HTTPException(
+        status_code=410,
+        detail={"code": "TD_LEGACY_HARD_DELETE_DISABLED", "message": "Legacy personnel hard-delete is disabled."},
+    )
 
 
 @router.get("/employees/{employee_id}")

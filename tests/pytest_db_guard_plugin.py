@@ -20,10 +20,8 @@ def _write_probe(name: str, content: str = "1") -> None:
 
 def pytest_load_initial_conftests(early_config, parser, args):  # noqa: ARG001
     _write_probe("01_plugin_hook_ran")
-    from dotenv import load_dotenv
-
-    load_dotenv()
     from tests.db_guard import bind_app_engine_to_test_database
+    from tests.db_guard import normalize_database_url
 
     test_url = bind_app_engine_to_test_database()
-    _write_probe("02_plugin_bound_engine", test_url)
+    _write_probe("02_plugin_bound_engine", normalize_database_url(test_url).database)

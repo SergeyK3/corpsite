@@ -5,13 +5,16 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
+from dotenv import dotenv_values
 from sqlalchemy.engine.url import URL, make_url
 
 _GUARD_APPLIED = False
 _ENGINE_BOUND = False
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class PytestDatabaseGuardError(Exception):
@@ -47,13 +50,16 @@ def _normalize_port(port: Optional[int], *, dialect: str) -> int:
 
 
 def normalize_database_url(raw_url: str) -> NormalizedDatabaseTarget:
-    url: URL = make_url(raw_url.strip())
+    try:
+        url: URL = make_url(raw_url.strip())
+    except Exception as exc:
+        raise PytestDatabaseGuardError("Database URL is invalid.") from exc
     dialect = (url.drivername or "postgresql").split("+", 1)[0].lower()
     host = _normalize_host(url.host)
     port = _normalize_port(url.port, dialect=dialect)
     database = unquote((url.database or "").strip()).lower()
     if not database:
-        raise PytestDatabaseGuardError(f"Database name is missing in URL: {raw_url!r}")
+        raise PytestDatabaseGuardError("Database name is missing in URL.")
     return NormalizedDatabaseTarget(
         dialect=dialect,
         host=host,
@@ -81,6 +87,12 @@ def validate_test_database_url(
 
     test_target = normalize_database_url(str(test_database_url))
 
+    if test_target.host != "127.0.0.1":
+        raise PytestDatabaseGuardError(
+            "TEST_DATABASE_URL must use an explicitly allowed loopback host "
+            f"(127.0.0.1, localhost or ::1); got {test_target.host!r}."
+        )
+
     if not is_test_database_name(test_target.database):
         raise PytestDatabaseGuardError(
             "TEST_DATABASE_URL must point to a database whose name ends with "
@@ -101,6 +113,34 @@ def validate_test_database_url(
     return test_target
 
 
+def resolve_main_database_url(
+    *, process_database_url: Optional[str] = None, dotenv_path: Path | None = None,
+) -> Optional[str]:
+    """Read the application URL without mutating os.environ."""
+    process_value = process_database_url if process_database_url is not None else os.environ.get("DATABASE_URL")
+    if process_value and str(process_value).strip():
+        return str(process_value).strip()
+    values = dotenv_values(dotenv_path or (PROJECT_ROOT / ".env"))
+    dotenv_value = values.get("DATABASE_URL")
+    return str(dotenv_value).strip() if dotenv_value and str(dotenv_value).strip() else None
+
+
+def assert_connected_test_database(connection, expected: NormalizedDatabaseTarget) -> None:
+    """Fail closed unless the connected PostgreSQL database is the validated target."""
+    from sqlalchemy import text
+
+    actual = str(connection.execute(text("SELECT current_database()" )).scalar_one()).lower()
+    if actual != expected.database:
+        raise PytestDatabaseGuardError(
+            "Connected database does not match the validated test target: "
+            f"expected {expected.database!r}, got {actual!r}."
+        )
+    if not is_test_database_name(actual):
+        raise PytestDatabaseGuardError(
+            f"Connected database {actual!r} is not a permitted test database."
+        )
+
+
 def _fail_guard(message: str) -> None:
     print(message, file=sys.stderr)
     raise SystemExit(1)
@@ -117,7 +157,7 @@ def enforce_pytest_database_isolation() -> NormalizedDatabaseTarget:
     try:
         target = validate_test_database_url(
             test_database_url=os.environ.get("TEST_DATABASE_URL"),
-            app_database_url=os.environ.get("DATABASE_URL"),
+            app_database_url=resolve_main_database_url(),
         )
     except PytestDatabaseGuardError as exc:
         _fail_guard(str(exc))
@@ -130,7 +170,7 @@ def enforce_pytest_database_isolation() -> NormalizedDatabaseTarget:
 def bind_app_engine_to_test_database() -> str:
     """Point app.db.engine at TEST_DATABASE_URL after guard validation."""
     global _ENGINE_BOUND
-    enforce_pytest_database_isolation()
+    target = enforce_pytest_database_isolation()
     test_url = os.environ["TEST_DATABASE_URL"].strip()
 
     if _ENGINE_BOUND:
@@ -144,11 +184,17 @@ def bind_app_engine_to_test_database() -> str:
         engine_module.engine.dispose()
 
     engine_module.DATABASE_URL = test_url
-    engine_module.engine = create_engine(
+    guarded_engine = create_engine(
         test_url,
         pool_pre_ping=True,
         hide_parameters=True,
     )
+    # Force a connection and validate the server-reported database before any
+    # fixture, migration, or application code can issue DDL/DML.
+    with guarded_engine.connect() as connection:
+        assert_connected_test_database(connection, target)
+
+    engine_module.engine = guarded_engine
     _ENGINE_BOUND = True
     return test_url
 

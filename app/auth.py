@@ -291,7 +291,8 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(user)
     out["is_privileged"] = is_privileged(out)
     out["is_system_admin"] = int(out.get("role_id") or 0) == 2
-    out["can_hard_delete_employee"] = is_system_admin(out)
+    # WP-TD-002A: the web process never advertises the legacy delete capability.
+    out["can_hard_delete_employee"] = False
     uid = int(out.get("user_id") or 0)
     out["has_sysadmin_api"] = evaluate_admin_access(out)
     out["has_personnel_admin"] = out["has_sysadmin_api"] or has_any_personnel_read_permission(uid)

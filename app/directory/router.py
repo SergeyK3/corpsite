@@ -11,6 +11,7 @@ from .contacts_routes import router as contacts_router
 from .debug_routes import router as debug_router
 from .org_units_routes import router as org_units_router
 from .employees_routes import router as employees_router
+from .test_personnel_deletion_routes import router as test_personnel_deletion_router
 from .import_routes import router as import_router
 from .roles_routes import router as roles_router
 from .positions_routes import router as positions_router
@@ -44,6 +45,7 @@ if _debug_routes_enabled():
 
 router.include_router(org_units_router)
 router.include_router(employees_router)
+router.include_router(test_personnel_deletion_router)
 router.include_router(import_router)
 router.include_router(roles_router)
 router.include_router(positions_router)
