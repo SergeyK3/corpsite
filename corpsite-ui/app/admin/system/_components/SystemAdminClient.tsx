@@ -40,7 +40,7 @@ const TABS: { id: MainTab; label: string }[] = [
 
 function tabButtonClass(active: boolean): string {
   return [
-    "rounded-lg border px-3 py-1.5 text-sm font-medium transition",
+    "whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition xl:px-2 xl:text-xs 2xl:px-3 2xl:text-sm",
     active
       ? "border-blue-900 bg-blue-600 font-semibold text-white shadow-sm ring-2 ring-blue-300 dark:border-blue-200 dark:ring-blue-700"
       : "border-zinc-300 bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
@@ -62,7 +62,7 @@ export default function SystemAdminClient() {
 
       <TelegramStatusPanel />
 
-      <nav className="flex flex-wrap gap-2" aria-label="Разделы кабинета">
+      <nav className="flex flex-wrap gap-2 xl:flex-nowrap xl:gap-1 2xl:gap-2" aria-label="Разделы кабинета">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -75,11 +75,11 @@ export default function SystemAdminClient() {
           </button>
         ))}
         <Link href="/admin/system/personnel-lifecycle" className={tabButtonClass(false)}>
-          Жизненный цикл персонала
+          Жизненный цикл
         </Link>
         {canSeeTestPersonnelAdmin(me) ? (
           <Link href={TEST_PERSONNEL_ADMIN_HREF} className={tabButtonClass(false)}>
-            Тестовые данные персонала
+            Тестовые данные
           </Link>
         ) : null}
       </nav>

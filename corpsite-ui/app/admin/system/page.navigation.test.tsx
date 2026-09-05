@@ -50,14 +50,17 @@ describe("system admin page navigation", () => {
     );
 
     const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
-    const lifecycle = within(sections).getByRole("link", { name: "Жизненный цикл персонала" });
-    const testPersonnel = within(sections).getByRole("link", { name: "Тестовые данные персонала" });
+    const lifecycle = within(sections).getByRole("link", { name: "Жизненный цикл" });
+    const testPersonnel = within(sections).getByRole("link", { name: "Тестовые данные" });
     expect(lifecycle).toHaveAttribute("href", "/admin/system/personnel-lifecycle");
     expect(testPersonnel).toHaveAttribute("href", "/admin/system/test-personnel-data");
     expect(lifecycle.closest("nav")).toHaveAttribute("aria-label", "Разделы кабинета");
     expect(testPersonnel.closest("nav")).toBe(lifecycle.closest("nav"));
     expect(screen.queryByText("Жизненный цикл персонала →")).not.toBeInTheDocument();
     expect(screen.queryByText("Управление тестовыми данными персонала →")).not.toBeInTheDocument();
+    expect(sections).toHaveClass("flex-wrap", "xl:flex-nowrap");
+    expect(lifecycle).toHaveClass("whitespace-nowrap");
+    expect(testPersonnel).toHaveClass("whitespace-nowrap");
 
     const activeSection = within(sections).getByRole("button", { name: "Пользователи" });
     expect(activeSection).toHaveAttribute("aria-current", "page");
@@ -81,8 +84,8 @@ describe("system admin page navigation", () => {
     );
 
     const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
-    expect(within(sections).queryByRole("link", { name: "Тестовые данные персонала" })).not.toBeInTheDocument();
-    expect(within(sections).getByRole("link", { name: "Жизненный цикл персонала" })).toHaveAttribute(
+    expect(within(sections).queryByRole("link", { name: "Тестовые данные" })).not.toBeInTheDocument();
+    expect(within(sections).getByRole("link", { name: "Жизненный цикл" })).toHaveAttribute(
       "href",
       "/admin/system/personnel-lifecycle",
     );
