@@ -103,6 +103,15 @@ afterEach(() => {
 });
 
 describe("TestPersonnelDataAdminClient", () => {
+  it("uses Russian copy for the preliminary view without exposing Preview text", () => {
+    render(<TestPersonnelDataAdminClient />);
+    expect(screen.getByText(
+      "Предварительный просмотр не изменяет зафиксированный список. Запрос создаётся только из вручную выбранных записей.",
+    )).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Безопасный предварительный просмотр" })).toBeInTheDocument();
+    expect(screen.queryByText(/preview/i)).not.toBeInTheDocument();
+  });
+
   it("is capability-gated and does not admit HR_HEAD approval-only capability", () => {
     currentUser = { user_id: 2, can_approve_test_personnel_deletion: true };
     render(<TestPersonnelDataAdminClient />);

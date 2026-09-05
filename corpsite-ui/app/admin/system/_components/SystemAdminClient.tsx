@@ -40,10 +40,10 @@ const TABS: { id: MainTab; label: string }[] = [
 
 function tabButtonClass(active: boolean): string {
   return [
-    "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+    "rounded-lg border px-3 py-1.5 text-sm font-medium transition",
     active
-      ? "bg-blue-600 text-white"
-      : "bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
+      ? "border-blue-900 bg-blue-600 font-semibold text-white shadow-sm ring-2 ring-blue-300 dark:border-blue-200 dark:ring-blue-700"
+      : "border-zinc-300 bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
   ].join(" ");
 }
 
@@ -58,24 +58,6 @@ export default function SystemAdminClient() {
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
           Управление пользователями, доступами, зачислением и аудитом (ADR-042 Phase C1).
         </p>
-        <p className="mt-2">
-          <Link
-            href="/admin/system/personnel-lifecycle"
-            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-          >
-            Жизненный цикл персонала →
-          </Link>
-        </p>
-        {canSeeTestPersonnelAdmin(me) ? (
-          <p className="mt-2">
-            <Link
-              href={TEST_PERSONNEL_ADMIN_HREF}
-              className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-            >
-              Управление тестовыми данными персонала →
-            </Link>
-          </p>
-        ) : null}
       </header>
 
       <TelegramStatusPanel />
@@ -87,10 +69,19 @@ export default function SystemAdminClient() {
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={tabButtonClass(activeTab === tab.id)}
+            aria-current={activeTab === tab.id ? "page" : undefined}
           >
             {tab.label}
           </button>
         ))}
+        <Link href="/admin/system/personnel-lifecycle" className={tabButtonClass(false)}>
+          Жизненный цикл персонала
+        </Link>
+        {canSeeTestPersonnelAdmin(me) ? (
+          <Link href={TEST_PERSONNEL_ADMIN_HREF} className={tabButtonClass(false)}>
+            Тестовые данные персонала
+          </Link>
+        ) : null}
       </nav>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950">

@@ -427,14 +427,14 @@ export default function TestPersonnelDataAdminClient() {
       <div className="space-y-6" inert={executionDialogOpen} aria-hidden={executionDialogOpen || undefined}>
       <header>
         <h1 id="test-personnel-admin-title" className="text-2xl font-semibold">Управление тестовыми данными персонала</h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Preview не изменяет manifest. Запрос создаётся только из вручную выбранных записей.</p>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Предварительный просмотр не изменяет зафиксированный список. Запрос создаётся только из вручную выбранных записей.</p>
       </header>
 
       {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">{error}</p> : null}
       {executionOutcome ? <p role="status" className="rounded-lg border border-zinc-300 p-3 text-sm">{executionOutcome}</p> : null}
 
       <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800" aria-labelledby="preview-title">
-        <h2 id="preview-title" className="text-lg font-semibold">Безопасный preview</h2>
+        <h2 id="preview-title" className="text-lg font-semibold">Безопасный предварительный просмотр</h2>
         <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void runPreview(); }}>
           <label className="min-w-64 flex-1 text-sm">
             Маска отображаемого имени

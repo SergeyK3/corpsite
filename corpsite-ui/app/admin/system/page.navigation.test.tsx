@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import SystemAdminPage from "./page";
@@ -42,17 +42,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("system admin page navigation", () => {
-  it("renders one capability-gated management link in page content and none in the global sidebar", async () => {
+  it("renders lifecycle and capability-gated test personnel links in the section row", async () => {
     render(
       <AppShell>
         <SystemAdminPage />
       </AppShell>,
     );
 
-    const links = await screen.findAllByRole("link", { name: /Управление тестовыми данными персонала/ });
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute("href", "/admin/system/test-personnel-data");
-    expect(links[0].closest("aside")).toBeNull();
+    const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
+    const lifecycle = within(sections).getByRole("link", { name: "Жизненный цикл персонала" });
+    const testPersonnel = within(sections).getByRole("link", { name: "Тестовые данные персонала" });
+    expect(lifecycle).toHaveAttribute("href", "/admin/system/personnel-lifecycle");
+    expect(testPersonnel).toHaveAttribute("href", "/admin/system/test-personnel-data");
+    expect(lifecycle.closest("nav")).toHaveAttribute("aria-label", "Разделы кабинета");
+    expect(testPersonnel.closest("nav")).toBe(lifecycle.closest("nav"));
+    expect(screen.queryByText("Жизненный цикл персонала →")).not.toBeInTheDocument();
+    expect(screen.queryByText("Управление тестовыми данными персонала →")).not.toBeInTheDocument();
+
+    const activeSection = within(sections).getByRole("button", { name: "Пользователи" });
+    expect(activeSection).toHaveAttribute("aria-current", "page");
+    expect(activeSection).toHaveClass("border-blue-900", "font-semibold", "ring-2");
   });
 
   it("renders no management link without the request capability", async () => {
@@ -71,7 +80,11 @@ describe("system admin page navigation", () => {
       </AppShell>,
     );
 
-    await waitFor(() => expect(screen.queryByText("Загрузка…")).not.toBeInTheDocument());
-    expect(screen.queryAllByRole("link", { name: /Управление тестовыми данными персонала/ })).toHaveLength(0);
+    const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
+    expect(within(sections).queryByRole("link", { name: "Тестовые данные персонала" })).not.toBeInTheDocument();
+    expect(within(sections).getByRole("link", { name: "Жизненный цикл персонала" })).toHaveAttribute(
+      "href",
+      "/admin/system/personnel-lifecycle",
+    );
   });
 });
