@@ -34,6 +34,7 @@ class TestPersonnelDraftCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     basis: Literal["PROVENANCE", "LEGACY_MANIFEST"]
+    process_type: Literal["APPLICANT_ONLY"] = "APPLICANT_ONLY"
     reason_code: Literal[
         "LEGACY_SYNTHETIC_TEST_DATA",
         "PROVENANCE_TEST_RUN_CLEANUP",

@@ -10,6 +10,9 @@ from sqlalchemy.exc import DBAPIError
 from app.db.engine import engine
 
 POLICY_VERSION = "WP-TD-002C/v4"
+MANIFEST_SCHEMA = "WP-TD-MANIFEST/v2"
+MANIFEST_VERSION = 2
+APPLICANT_PROCESS_TYPE = "APPLICANT_ONLY"
 MAX_PREVIEW_RESULTS = 200
 MAX_COMMENT_LENGTH = 500
 REQUEST_PERMISSION = "TEST_PERSONNEL_DELETION_REQUEST"
@@ -437,9 +440,29 @@ def preview_candidates(*,mask,field,person_ids,application_ids):
     return {"items":items,"count":len(items),"normalized_mask":normalize_mask(mask) if mask else None}
 
 
-def _target_set_hash(targets: Iterable[Mapping[str,Any]]) -> str:
-    rows=sorted(({"target_type":"APPLICANT","person_id":int(t["person_id"]),"application_id":int(t["application_id"])} for t in targets),key=lambda x:(x["person_id"],x["application_id"]))
-    return _canonical_hash({"schema":POLICY_VERSION,"targets":rows})
+def _manifest_v2_roots(targets: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    application_ids_by_person: dict[int, set[int]] = {}
+    for target in targets:
+        person_id = int(target["person_id"])
+        application_id = int(target["application_id"])
+        application_ids_by_person.setdefault(person_id, set()).add(application_id)
+    return [
+        {
+            "root_type": "PERSON",
+            "person_id": person_id,
+            "application_ids": sorted(application_ids),
+        }
+        for person_id, application_ids in sorted(application_ids_by_person.items())
+    ]
+
+
+def _target_set_hash(targets: Iterable[Mapping[str, Any]]) -> str:
+    return _canonical_hash({
+        "schema": MANIFEST_SCHEMA,
+        "manifest_version": MANIFEST_VERSION,
+        "process_type": APPLICANT_PROCESS_TYPE,
+        "targets": _manifest_v2_roots(targets),
+    })
 
 
 def _aggregate_fingerprint(candidates): return _canonical_hash({"policy_version":POLICY_VERSION,"targets":sorted((int(c["person_id"]),int(c["application_id"]),c["relationship_fingerprint"]) for c in candidates)})
@@ -459,6 +482,9 @@ def _command_result_projection(conn: Connection, request_id, result_code: str) -
         eligibility_status,blocking_codes,tombstone_required_codes,hr_attestation_codes,
         informational_codes,manifest_order,requires_hr_synthetic_confirmation
         FROM test_personnel_deletion_targets WHERE request_id=:id ORDER BY manifest_order"""),{"id":request_id}).mappings()]
+    manifest_targets=[dict(row) for row in conn.execute(text("""SELECT root_type,person_id,
+        application_ids,manifest_order FROM test_personnel_deletion_manifest_v2_targets
+        WHERE request_id=:id ORDER BY manifest_order"""),{"id":request_id}).mappings()] if request["manifest_version"] == MANIFEST_VERSION else []
     history=[dict(row) for row in conn.execute(text("""SELECT actor_user_id,actor_role_code,
         permission_code,action,old_status,new_status,old_version,new_version,target_set_hash,
         idempotency_key,command_payload_hash,occurred_at,result_code
@@ -472,12 +498,18 @@ def _command_result_projection(conn: Connection, request_id, result_code: str) -
         "status":request["status"], "stored_status":request["stored_status"],
         "approval_valid":request["approval_valid"], "basis":request["basis"],
         "reason_code":request["reason_code"], "target_set_hash":request["target_set_hash"],
+        "manifest_version":request["manifest_version"], "process_type":request["process_type"],
+        "manifest_read_only":request["manifest_read_only"],
+        "approval_eligible":request["approval_eligible"],
+        "execution_eligible":request["execution_eligible"],
+        "execution_block_code":request["execution_block_code"],
         "relationship_fingerprint":request["relationship_fingerprint"],
         "version":request["version"], "initiated_by_user_id":request["initiated_by_user_id"],
         "created_at":request["created_at"], "submitted_at":request["submitted_at"],
         "expires_at":request["expires_at"], "last_checked_at":request["last_checked_at"],
         "approved_at":request["approved_at"], "approval_expires_at":request["approval_expires_at"],
-        "result_code":result_code, "targets":targets, "history":history, "decisions":decisions,
+        "result_code":result_code, "targets":targets, "manifest_targets":manifest_targets,
+        "history":history, "decisions":decisions,
     }
     return json.loads(json.dumps(projection,default=str))
 
@@ -509,6 +541,17 @@ def _request_row(conn,rid,lock=False):
 def _effective(row):
     now=row.pop("db_now",None); row["stored_status"]=row["status"]; row["approval_valid"]=bool(row["status"]=="APPROVED" and row.get("approval_expires_at") and now and row["approval_expires_at"]>now)
     if row["status"]=="APPROVED" and not row["approval_valid"]: row["status"]="EXPIRED"
+    manifest_version=int(row.get("manifest_version") or 1)
+    row["manifest_version"]=manifest_version
+    row["process_type"]=row.get("process_type") or APPLICANT_PROCESS_TYPE
+    row["manifest_read_only"]=manifest_version < MANIFEST_VERSION
+    row["approval_eligible"]=manifest_version == MANIFEST_VERSION
+    row["execution_eligible"]=False
+    row["execution_block_code"]=(
+        "TD_MANIFEST_V1_READ_ONLY"
+        if row["manifest_read_only"]
+        else "TD_EXECUTION_NOT_IMPLEMENTED"
+    )
     return row
 
 
@@ -560,7 +603,7 @@ def _decorate_request_read_projection(conn: Connection, detail: dict[str, Any]) 
 
 
 def _request_detail(conn,rid):
-    out=_effective(_request_row(conn,rid)); out["targets"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_targets WHERE request_id=:id ORDER BY manifest_order"),{"id":rid}).mappings()]; out["decisions"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_decisions WHERE request_id=:id ORDER BY decision_id"),{"id":rid}).mappings()]; out["history"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_history WHERE request_id=:id ORDER BY history_id"),{"id":rid}).mappings()]; return _decorate_request_read_projection(conn,out)
+    out=_effective(_request_row(conn,rid)); out["targets"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_targets WHERE request_id=:id ORDER BY manifest_order"),{"id":rid}).mappings()]; out["manifest_targets"]=[dict(r) for r in conn.execute(text("SELECT root_type,person_id,application_ids,manifest_order,created_at FROM test_personnel_deletion_manifest_v2_targets WHERE request_id=:id ORDER BY manifest_order"),{"id":rid}).mappings()] if out["manifest_version"] == MANIFEST_VERSION else []; out["decisions"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_decisions WHERE request_id=:id ORDER BY decision_id"),{"id":rid}).mappings()]; out["history"]=[dict(r) for r in conn.execute(text("SELECT * FROM test_personnel_deletion_history WHERE request_id=:id ORDER BY history_id"),{"id":rid}).mappings()]; return _decorate_request_read_projection(conn,out)
 def get_request(rid):
     with engine.connect() as c:return _request_detail(c,rid)
 def list_requests(*,pending_only=False,initiator_user_id=None):
@@ -591,13 +634,45 @@ def _validate_manifest(conn,pairs):
         raise TestPersonnelDeletionError("TD_MANIFEST_APPLICATION_SET_INCOMPLETE","Manifest must contain every application for each Person.",409)
 
 
-def create_draft(*,actor_user_id,basis,reason_code,preview_criteria,original_mask,targets,idempotency_key):
+def _manifest_v2_pairs(conn: Connection, request_id: Any) -> list[tuple[int, int]]:
+    roots = conn.execute(text("""SELECT person_id,application_ids
+        FROM test_personnel_deletion_manifest_v2_targets
+        WHERE request_id=:id ORDER BY manifest_order"""), {"id": request_id}).mappings().all()
+    if not roots:
+        raise TestPersonnelDeletionError(
+            "TD_MANIFEST_V2_ROOTS_MISSING",
+            "Manifest v2 must contain at least one PERSON root.",
+            409,
+        )
+    pairs = [
+        (int(root["person_id"]), int(application_id))
+        for root in roots
+        for application_id in root["application_ids"]
+    ]
+    projection_pairs = [
+        (int(row[0]), int(row[1]))
+        for row in conn.execute(text("""SELECT person_id,application_id
+            FROM test_personnel_deletion_targets
+            WHERE request_id=:id ORDER BY manifest_order"""), {"id": request_id})
+    ]
+    if sorted(pairs) != sorted(projection_pairs):
+        raise TestPersonnelDeletionError(
+            "TD_MANIFEST_V2_PROJECTION_MISMATCH",
+            "Manifest v2 PERSON roots do not match application projections.",
+            409,
+        )
+    _validate_manifest(conn, pairs)
+    return pairs
+
+
+def create_draft(*,actor_user_id,basis,reason_code,preview_criteria,original_mask,targets,idempotency_key,process_type=APPLICANT_PROCESS_TYPE):
+    if process_type != APPLICANT_PROCESS_TYPE:raise TestPersonnelDeletionError("TD_PROCESS_TYPE_INVALID","Only applicant-only requests are supported.",422)
     if basis not in {"PROVENANCE","LEGACY_MANIFEST"}:raise TestPersonnelDeletionError("TD_BASIS_INVALID","Unsupported request basis.",422)
     if reason_code not in REASON_CODES:raise TestPersonnelDeletionError("TD_REASON_CODE_INVALID","Unsupported reason code.",422)
     if not targets or len(targets)>MAX_PREVIEW_RESULTS:raise TestPersonnelDeletionError("TD_TARGET_COUNT","Request must contain 1..200 targets.",422)
     key=idempotency_key.strip(); mask=normalize_mask(original_mask) if original_mask else None; pairs=sorted({(int(t["person_id"]),int(t["application_id"])) for t in targets})
     if len(pairs)!=len(targets):raise TestPersonnelDeletionError("TD_TARGET_DUPLICATE","Manifest contains duplicate targets.",422)
-    cmd=_command_hash("CREATE",None,{"basis":basis,"reason_code":reason_code,"criteria":dict(preview_criteria),"mask":mask,"targets":pairs})
+    cmd=_command_hash("CREATE",None,{"manifest_version":MANIFEST_VERSION,"process_type":process_type,"basis":basis,"reason_code":reason_code,"criteria":dict(preview_criteria),"mask":mask,"targets":pairs})
     def work(conn):
         old=_find_idempotent(conn,actor_user_id,"CREATE",key,cmd,None)
         if old:return dict(old["result_projection"])
@@ -605,14 +680,20 @@ def create_draft(*,actor_user_id,basis,reason_code,preview_criteria,original_mas
         if any(not c["stage_admissibility"]["create"] for c in candidates):raise TestPersonnelDeletionError("TD_TARGET_BLOCKED","Target has blocking relationships.",409)
         if basis=="PROVENANCE" and any(not c["has_test_provenance"] for c in candidates):raise TestPersonnelDeletionError("TD_PROVENANCE_REQUIRED","Protected provenance is missing.",409)
         rid=uuid.uuid4(); th=_target_set_hash(candidates); fp=_aggregate_fingerprint(candidates); number="TD-"+rid.hex[:16].upper()
-        conn.execute(text("INSERT INTO test_personnel_deletion_requests(request_id,request_number,basis,reason_code,preview_criteria,original_mask,target_set_hash,relationship_fingerprint,initiated_by_user_id) VALUES(:id,:n,:b,:r,CAST(:c AS jsonb),:m,:h,:f,:a)"),{"id":rid,"n":number,"b":basis,"r":reason_code,"c":json.dumps(dict(preview_criteria)),"m":mask,"h":th,"f":fp,"a":actor_user_id})
+        conn.execute(text("INSERT INTO test_personnel_deletion_requests(request_id,request_number,basis,reason_code,preview_criteria,original_mask,target_set_hash,relationship_fingerprint,manifest_version,process_type,initiated_by_user_id) VALUES(:id,:n,:b,:r,CAST(:c AS jsonb),:m,:h,:f,:mv,:pt,:a)"),{"id":rid,"n":number,"b":basis,"r":reason_code,"c":json.dumps(dict(preview_criteria)),"m":mask,"h":th,"f":fp,"mv":MANIFEST_VERSION,"pt":process_type,"a":actor_user_id})
+        for order,root in enumerate(_manifest_v2_roots(candidates)):conn.execute(text("INSERT INTO test_personnel_deletion_manifest_v2_targets(request_id,root_type,person_id,application_ids,manifest_order) VALUES(:request_id,:root_type,:person_id,:application_ids,:manifest_order)"),{**root,"request_id":rid,"manifest_order":order})
         for order,c in enumerate(candidates):conn.execute(text("INSERT INTO test_personnel_deletion_targets(request_id,target_type,person_id,application_id,eligibility_status,blocking_codes,tombstone_required_codes,hr_attestation_codes,informational_codes,relationship_snapshot,relationship_fingerprint,manifest_order,requires_hr_synthetic_confirmation) VALUES(:request_id,'APPLICANT',:person_id,:application_id,:eligibility_status,:blocking_codes,:tombstone_required_codes,:hr_attestation_codes,:informational_codes,CAST(:snapshot AS jsonb),:relationship_fingerprint,:manifest_order,:requires_hr_synthetic_confirmation)"),{**c,"request_id":rid,"snapshot":json.dumps(c["relationship_snapshot"],default=str),"manifest_order":order})
         return _history(conn,request_id=rid,actor=actor_user_id,role=role,permission=REQUEST_PERMISSION,action="CREATE",old_status=None,new_status="DRAFT",old_version=None,new_version=1,target_hash=th,comment=None,key=key,command_hash=cmd,result="TD_DRAFT_CREATED")
     return _serializable(work)
 
 
 def _current(conn,rid):
-    pairs=[(int(r[0]),int(r[1])) for r in conn.execute(text("SELECT person_id,application_id FROM test_personnel_deletion_targets WHERE request_id=:id ORDER BY manifest_order"),{"id":rid})];_validate_manifest(conn,pairs);return _evaluate_candidates(conn,pairs)
+    request=conn.execute(text("SELECT manifest_version,process_type FROM test_personnel_deletion_requests WHERE request_id=:id"),{"id":rid}).mappings().one()
+    if int(request["manifest_version"]) != MANIFEST_VERSION:
+        raise TestPersonnelDeletionError("TD_MANIFEST_V1_READ_ONLY","Manifest v1 is retained for viewing only.",409)
+    if request["process_type"] != APPLICANT_PROCESS_TYPE:
+        raise TestPersonnelDeletionError("TD_PROCESS_TYPE_INVALID","Only applicant-only requests are supported.",409)
+    return _evaluate_candidates(conn,_manifest_v2_pairs(conn,rid))
 def _mark_drift(conn,request,*,actor,role,permission,action,key,cmd):
     try: changed=_aggregate_fingerprint(_current(conn,request["request_id"]))!=request["relationship_fingerprint"];code="TD_FINGERPRINT_CHANGED"
     except TestPersonnelDeletionError as e:
@@ -634,6 +715,8 @@ def submit_request(*,request_id,actor_user_id,expected_version,idempotency_key):
         old=_find_idempotent(conn,actor_user_id,"SUBMIT",key,cmd,request_id)
         if old:return dict(old["result_projection"]),(None if old["result_code"]=="TD_SUBMITTED" else old["result_code"])
         r=_request_row(conn,request_id,True);role=_actor_role_code(conn,actor_user_id)
+        if int(r["manifest_version"]) != MANIFEST_VERSION:raise TestPersonnelDeletionError("TD_MANIFEST_V1_READ_ONLY","Manifest v1 cannot be submitted for a new approval.",409)
+        if r["process_type"] != APPLICANT_PROCESS_TYPE:raise TestPersonnelDeletionError("TD_PROCESS_TYPE_INVALID","Only applicant-only requests are supported.",409)
         if r["initiated_by_user_id"]!=actor_user_id:raise TestPersonnelDeletionError("TD_NOT_INITIATOR","Only the initiator may submit this request.",403)
         if r["status"] not in {"DRAFT","REAPPROVAL_REQUIRED"}:raise TestPersonnelDeletionError("TD_STATUS_CONFLICT","Request cannot be submitted in its current status.")
         if r["version"]!=expected_version:raise TestPersonnelDeletionError("TD_VERSION_CONFLICT","Request version has changed.")
@@ -670,6 +753,8 @@ def decide_request(*,request_id,actor_user_id,expected_version,decision,idempote
         if r["initiated_by_user_id"]==actor_user_id:raise TestPersonnelDeletionError("TD_SEPARATION_OF_DUTIES","The initiator cannot decide this request.",403)
         if r["status"]!="PENDING_HR_APPROVAL":raise TestPersonnelDeletionError("TD_STATUS_CONFLICT","Request is not pending HR approval.")
         if r["version"]!=expected_version:raise TestPersonnelDeletionError("TD_VERSION_CONFLICT","Request version has changed.")
+        if action=="APPROVE" and int(r["manifest_version"]) != MANIFEST_VERSION:raise TestPersonnelDeletionError("TD_MANIFEST_V1_READ_ONLY","Manifest v1 cannot receive a new approval.",409)
+        if action=="APPROVE" and r["process_type"] != APPLICANT_PROCESS_TYPE:raise TestPersonnelDeletionError("TD_PROCESS_TYPE_INVALID","Only applicant-only requests are supported.",409)
         if r["expires_at"] and r["expires_at"]<=r["db_now"]:
             nv=expected_version+1;conn.execute(text("UPDATE test_personnel_deletion_requests SET status='EXPIRED',version=:v WHERE request_id=:id AND version=:old"),{"v":nv,"id":request_id,"old":expected_version});projection=_history(conn,request_id=request_id,actor=actor_user_id,role=role,permission=APPROVE_PERMISSION,action=action,old_status="PENDING_HR_APPROVAL",new_status="EXPIRED",old_version=expected_version,new_version=nv,target_hash=r["target_set_hash"],comment=None,key=key,command_hash=cmd,result="TD_APPROVAL_WINDOW_EXPIRED");return projection,"TD_APPROVAL_WINDOW_EXPIRED"
         if action=="APPROVE":

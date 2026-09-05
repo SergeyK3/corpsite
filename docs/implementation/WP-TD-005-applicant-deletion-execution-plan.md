@@ -2,7 +2,7 @@
 
 | Поле | Значение |
 |---|---|
-| Статус | **Implementation plan — execution запрещён до закрытия всех gates** |
+| Статус | **Этап 1 завершён — execution запрещён, этапы 2–7 не начаты** |
 | Дата | 2026-09-05 |
 | Основание | `test-personnel-data-deletion-approval-plan.md`, `WP-TD-004-test-personnel-deletion-relationship-matrix.md` |
 | Scope | Только synthetic applicants без `Employee` и любых `BLOCK`-связей |
@@ -41,6 +41,14 @@
 **Старые запросы**
 
 Manifest v1/`LEGACY_MANIFEST` остаётся читаемым с исходными статусами и аудитом. Execute для него всегда отклоняется стабильным безопасным кодом; требуется новый v2 request и новое согласование `HR_HEAD`.
+
+### Результат этапа 1 — 2026-09-05
+
+**Завершено.** Добавлена revision `td005m1v2a01` поверх `b1c2d3e4f5a6`: request получил неизменяемые `manifest_version` и `process_type`, а канонические PERSON-roots сохраняются отдельно с полным строго возрастающим `application_ids[]`. Application-target rows оставлены как совместимая projection существующего preview/create/approval workflow.
+
+Backend создаёт только manifest v2/`APPLICANT_ONLY`, считает target-set hash по Person и полному списку applications, повторно проверяет полноту перед submit/approve и отклоняет v1 submit/approve кодом `TD_MANIFEST_V1_READ_ONLY`. Старые requests остаются доступными для чтения с `manifest_read_only=true`, `approval_eligible=false`, `execution_eligible=false`; автоматического upgrade нет.
+
+Проверено на одноразовых PostgreSQL-клонах: upgrade → downgrade → upgrade, одна Alembic head, 7 целевых тестов Manifest v2 и 224 существующих foundation/relationship regression-теста. Этап 2 разрешено планировать, но tombstone gate ещё не реализован и execution остаётся запрещён.
 
 ## 3. Этап 2 — PII-free tombstones
 
@@ -187,4 +195,4 @@ Rollout не меняет их статус и не делает их испол
 
 ## 9. Готовность execution
 
-Схема `b1c2d3e4f5a6` на момент этого плана не готова к execution. Готовность наступает только после последовательного закрытия этапов 1–7 и всех gates WP-TD-004; сам этот документ не разрешает миграции, API, UI, DML или удаление данных.
+Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этап 1 добавляет следующую revision `td005m1v2a01`, но готовность наступит только после последовательного закрытия этапов 2–7 и всех gates WP-TD-004. Физическое удаление, execution endpoint, кнопка удаления и tombstones на этапе 1 не создавались.

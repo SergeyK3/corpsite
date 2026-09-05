@@ -84,6 +84,7 @@ def create_request(body: TestPersonnelDraftCreateIn, user: dict[str, Any] = Depe
             original_mask=body.original_mask,
             targets=[target.model_dump() for target in body.targets],
             idempotency_key=body.idempotency_key,
+            process_type=body.process_type,
         )
     except service.TestPersonnelDeletionError as exc:
         raise _error(exc) from exc
