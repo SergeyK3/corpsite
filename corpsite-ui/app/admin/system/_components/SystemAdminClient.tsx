@@ -79,7 +79,7 @@ export default function SystemAdminClient() {
         </Link>
         {canSeeTestPersonnelAdmin(me) ? (
           <Link href={TEST_PERSONNEL_ADMIN_HREF} className={tabButtonClass(false)}>
-            Тестовые данные
+            Удаление тестовых данных
           </Link>
         ) : null}
       </nav>

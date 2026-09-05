@@ -140,7 +140,7 @@ export default function TestPersonnelDataAdminClient() {
   if (!allowed) {
     return (
       <section className="p-4 sm:p-6" aria-labelledby="test-personnel-admin-title">
-        <h1 id="test-personnel-admin-title" className="text-xl font-semibold">Управление тестовыми данными персонала</h1>
+        <h1 id="test-personnel-admin-title" className="text-xl font-semibold">Управление тестовыми данными</h1>
         <p role="alert" className="mt-3 text-sm text-red-800">Недостаточно прав для просмотра панели.</p>
       </section>
     );
@@ -426,7 +426,12 @@ export default function TestPersonnelDataAdminClient() {
     <main className="space-y-6 p-4 sm:p-6" data-testid="test-personnel-admin-panel">
       <div className="space-y-6" inert={executionDialogOpen} aria-hidden={executionDialogOpen || undefined}>
       <header>
-        <h1 id="test-personnel-admin-title" className="text-2xl font-semibold">Управление тестовыми данными персонала</h1>
+        <h1 id="test-personnel-admin-title" className="text-2xl font-semibold">Управление тестовыми данными</h1>
+      </header>
+
+      <section className="space-y-6" aria-labelledby="personnel-applicants-title">
+      <header className="border-b border-zinc-200 pb-3 dark:border-zinc-800">
+        <h2 id="personnel-applicants-title" className="text-xl font-semibold">Персонал и претенденты</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Предварительный просмотр не изменяет зафиксированный список. Запрос создаётся только из вручную выбранных записей.</p>
       </header>
 
@@ -434,7 +439,7 @@ export default function TestPersonnelDataAdminClient() {
       {executionOutcome ? <p role="status" className="rounded-lg border border-zinc-300 p-3 text-sm">{executionOutcome}</p> : null}
 
       <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800" aria-labelledby="preview-title">
-        <h2 id="preview-title" className="text-lg font-semibold">Безопасный предварительный просмотр</h2>
+        <h3 id="preview-title" className="text-lg font-semibold">Безопасный предварительный просмотр</h3>
         <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void runPreview(); }}>
           <label className="min-w-64 flex-1 text-sm">
             Маска отображаемого имени
@@ -475,7 +480,7 @@ export default function TestPersonnelDataAdminClient() {
       </section>
 
       <section className="space-y-3" aria-labelledby="requests-title">
-        <h2 id="requests-title" className="text-lg font-semibold">Созданные запросы</h2>
+        <h3 id="requests-title" className="text-lg font-semibold">Созданные запросы</h3>
         {requestsLoading && requests.length === 0 ? <p role="status">Загрузка запросов…</p> : requests.length === 0 ? (
           <p className="rounded-lg border border-dashed p-4 text-sm">Запросов пока нет.</p>
         ) : (
@@ -497,7 +502,7 @@ export default function TestPersonnelDataAdminClient() {
 
       {detail ? (
         <section className="space-y-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800" aria-labelledby="request-detail-title">
-          <h2 id="request-detail-title" className="text-lg font-semibold">Точный manifest {detail.request_number}</h2>
+          <h3 id="request-detail-title" className="text-lg font-semibold">Точный manifest {detail.request_number}</h3>
           <RequestSummary request={detail} />
           <StateNotice status={detail.status} />
           <TargetManifest targets={detail.targets ?? []} />
@@ -544,6 +549,7 @@ export default function TestPersonnelDataAdminClient() {
         </section>
       ) : null}
 
+      </section>
       </div>
 
       {executionDialogOpen && detail && readiness ? (
