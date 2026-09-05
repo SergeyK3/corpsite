@@ -18,12 +18,14 @@ vi.mock("@/lib/testPersonnelDeletion", async (importOriginal) => {
     getTestPersonnelDeletionRequest: vi.fn(),
     submitTestPersonnelDeletionRequest: vi.fn(),
     cancelTestPersonnelDeletionRequest: vi.fn(),
+    executeTestPersonnelDeletionRequest: vi.fn(),
   };
 });
 
 import {
   cancelTestPersonnelDeletionRequest,
   createTestPersonnelDeletionRequest,
+  executeTestPersonnelDeletionRequest,
   getTestPersonnelDeletionRequest,
   listTestPersonnelDeletionRequests,
   previewTestPersonnel,
@@ -56,6 +58,34 @@ function request(status = "DRAFT", version = 1): TestPersonnelRequest {
   };
 }
 
+function executionRequest(overrides: Partial<TestPersonnelRequest> = {}): TestPersonnelRequest {
+  return {
+    ...request("APPROVED", 5),
+    basis: "PROVENANCE",
+    manifest_version: 2,
+    process_type: "APPLICANT_ONLY",
+    fingerprint_version: "relationship-fingerprint/v2",
+    relationship_policy_version: "applicant-deletion-policy/v1",
+    catalog_version: "applicant-deletion-catalog/v1",
+    catalog_fingerprint: "c".repeat(64),
+    approval_expires_at: "2026-09-07T10:00:00Z",
+    approved_at: "2026-09-04T11:00:00Z",
+    decisions: [{
+      decision_id: 7, decision: "APPROVE", request_version: 5, actor_user_id: 2,
+      actor_display_name: "Руководитель кадров", comment: "Одобрено",
+      submitted_synthetic_confirmed: true, decided_at: "2026-09-04T11:00:00Z",
+    }],
+    execution_readiness: {
+      allowed: true,
+      reason_code: null,
+      required_confirmation_phrase: "УДАЛИТЬ TD-0001 / 1",
+      target_person_count: 1,
+      execution_enabled: true,
+    },
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   currentUser = { user_id: 1, can_request_test_personnel_deletion: true };
   vi.mocked(listTestPersonnelDeletionRequests).mockReset().mockResolvedValue([]);
@@ -64,9 +94,13 @@ beforeEach(() => {
   vi.mocked(getTestPersonnelDeletionRequest).mockReset();
   vi.mocked(submitTestPersonnelDeletionRequest).mockReset();
   vi.mocked(cancelTestPersonnelDeletionRequest).mockReset();
+  vi.mocked(executeTestPersonnelDeletionRequest).mockReset();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("TestPersonnelDataAdminClient", () => {
   it("is capability-gated and does not admit HR_HEAD approval-only capability", () => {
@@ -131,7 +165,7 @@ describe("TestPersonnelDataAdminClient", () => {
     const approved = {
       ...request("APPROVED", 3), approval_expires_at: "2026-09-06T10:00:00Z",
       decisions: [{
-        decision_id: 7, decision: "APPROVE" as const, actor_user_id: 2,
+        decision_id: 7, decision: "APPROVE" as const, request_version: 3, actor_user_id: 2,
         actor_display_name: "Руководитель кадров", comment: "Подтверждено",
         submitted_synthetic_confirmed: true, decided_at: "2026-09-04T11:00:00Z",
       }],
@@ -250,5 +284,262 @@ describe("TestPersonnelDataAdminClient", () => {
     fireEvent.change(screen.getByLabelText("Маска отображаемого имени"), { target: { value: "Тестовый*" } });
     fireEvent.click(screen.getByRole("button", { name: "Найти" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
+  });
+
+  it("does not render the execution button without execute capability", async () => {
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    await screen.findByText(/Точный manifest TD-0001/);
+    expect(screen.queryByRole("button", { name: "Удалить одобренных тестовых претендентов" })).not.toBeInTheDocument();
+  });
+
+  it("renders execution disabled with an explicit textual reason when the flag is off", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest({ execution_readiness: {
+      allowed: false, reason_code: "TD_EXECUTION_DISABLED",
+      required_confirmation_phrase: "УДАЛИТЬ TD-0001 / 1", target_person_count: 1,
+      execution_enabled: false,
+    } });
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    const execute = await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" });
+    expect(execute).toBeDisabled();
+    expect(execute).toHaveAccessibleDescription("Исполнение удаления отключено");
+    expect(screen.getByRole("note", { name: "" })).toHaveTextContent("Исполнение удаления отключено");
+  });
+
+  it.each([
+    ["v1", { manifest_version: 1 }, "TD_MANIFEST_V1_READ_ONLY"],
+    ["legacy", { basis: "LEGACY_MANIFEST" }, "TD_LEGACY_MANIFEST_NOT_EXECUTABLE"],
+    ["Employee", { process_type: "EMPLOYEE_ONLY" }, "TD_EMPLOYEE_DELETION_FORBIDDEN"],
+    ["stale", {}, "TD_FINGERPRINT_CHANGED"],
+    ["expired", { approval_expires_at: "2026-09-01T10:00:00Z" }, "TD_APPROVAL_EXPIRED"],
+    ["not approved", { status: "PENDING_HR_APPROVAL" }, "TD_EXECUTE_APPROVAL_REQUIRED"],
+  ])("keeps %s requests non-executable", async (_label, requestOverrides, reasonCode) => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest({
+      ...requestOverrides,
+      execution_readiness: {
+        allowed: false, reason_code: reasonCode,
+        required_confirmation_phrase: "УДАЛИТЬ TD-0001 / 1", target_person_count: 1,
+        execution_enabled: true,
+      },
+    });
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    expect(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Удалить одобренных тестовых сотрудников/ })).not.toBeInTheDocument();
+  });
+
+  it("shows all confirmation facts and requires an exact phrase", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    const execute = await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" });
+    expect(screen.getAllByRole("button", { name: "Удалить одобренных тестовых претендентов" })).toHaveLength(1);
+    expect(execute).toBeEnabled();
+    fireEvent.click(execute);
+    const dialog = screen.getByRole("dialog", { name: "Окончательное подтверждение удаления" });
+    expect(dialog).toHaveTextContent("TD-0001");
+    expect(dialog).toHaveTextContent("Тестовые претенденты");
+    expect(dialog).toHaveTextContent("Количество Person");
+    expect(dialog).toHaveTextContent("Количество applications");
+    expect(dialog).toHaveTextContent("Руководитель кадров");
+    expect(dialog).toHaveTextContent("физическое необратимое удаление");
+    expect(dialog).toHaveTextContent("abcdef12");
+    expect(dialog).toHaveTextContent("ffffffff");
+    const confirm = screen.getByRole("button", { name: "Подтвердить необратимое удаление" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1 " } });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    expect(confirm).toBeEnabled();
+  });
+
+  it("blocks a double click and retains one canonical UUID for a safe retry", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    let resolveRetry!: (value: { status: string; replayed: boolean }) => void;
+    vi.mocked(executeTestPersonnelDeletionRequest)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveRetry = resolve; }));
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" }));
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось связаться с сервером");
+    const retry = screen.getByRole("button", { name: "Подтвердить необратимое удаление" });
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    await waitFor(() => expect(executeTestPersonnelDeletionRequest).toHaveBeenCalledTimes(2));
+    const firstKey = vi.mocked(executeTestPersonnelDeletionRequest).mock.calls[0][1].idempotencyKey;
+    const retryKey = vi.mocked(executeTestPersonnelDeletionRequest).mock.calls[1][1].idempotencyKey;
+    expect(firstKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(retryKey).toBe(firstKey);
+    resolveRetry({ status: "COMPLETED", replayed: true });
+    expect(await screen.findByRole("status")).toHaveTextContent("сохранённый результат повторной отправки");
+  });
+
+  it.each([
+    ["COMPLETED", "Удаление тестовых претендентов завершено"],
+    ["REAPPROVAL_REQUIRED", "Требуется повторное согласование"],
+    ["FAILED", "Удаление не выполнено"],
+  ])("handles the safe %s result and refreshes detail and list", async (status, message) => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    vi.mocked(executeTestPersonnelDeletionRequest).mockResolvedValue({ status, replayed: false });
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" }));
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(message);
+    await waitFor(() => expect(getTestPersonnelDeletionRequest).toHaveBeenCalledTimes(3));
+    expect(listTestPersonnelDeletionRequests).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [503, "TD_EXECUTION_DISABLED", "Исполнение удаления отключено"],
+    [409, "TD_EXECUTE_ALREADY_COMPLETED", "Запрос уже завершён"],
+    [409, "TD_EXECUTE_IDEMPOTENCY_CONFLICT", "Ключ повторной попытки уже использован"],
+    [409, "TD_EXECUTION_SNAPSHOT_CHANGED", "Подтверждённые сведения изменились"],
+  ])("shows a safe execution error for HTTP %s", async (status, code, message) => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    vi.mocked(executeTestPersonnelDeletionRequest).mockRejectedValue(
+      Object.assign(new Error("raw SQL must not surface"), { status, details: { detail: { code } } }),
+    );
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" }));
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(message);
+    expect(alert).not.toHaveTextContent("raw SQL");
+  });
+
+  it("treats an unknown execution response as failure", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    vi.mocked(executeTestPersonnelDeletionRequest).mockResolvedValue({ status: "UNKNOWN", replayed: false });
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" }));
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Удаление не считается завершённым");
+    expect(screen.queryByText("Удаление тестовых претендентов завершено.")).not.toBeInTheDocument();
+  });
+
+  it("does not execute when the approved snapshot changes after the dialog opens", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    const reapproved = executionRequest({
+      version: 6,
+      target_set_hash: "d".repeat(64),
+      relationship_fingerprint: "e".repeat(64),
+      decisions: [{
+        ...approved.decisions![0], decision_id: 8, request_version: 6,
+        decided_at: "2026-09-04T12:00:00Z",
+      }],
+    });
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest)
+      .mockResolvedValueOnce(approved)
+      .mockResolvedValue(reapproved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" }));
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Подтверждённые сведения изменились");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(executeTestPersonnelDeletionRequest).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without Web Crypto and never sends execute", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    vi.stubGlobal("crypto", undefined);
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" }));
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Безопасный UUID недоступен");
+    expect(executeTestPersonnelDeletionRequest).not.toHaveBeenCalled();
+  });
+
+  it("retires a conflicting UUID and creates a new one only after manual reconfirmation", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    vi.mocked(executeTestPersonnelDeletionRequest)
+      .mockRejectedValueOnce(Object.assign(new Error("conflict"), {
+        status: 409, details: { detail: { code: "TD_EXECUTE_IDEMPOTENCY_CONFLICT" } },
+      }))
+      .mockResolvedValueOnce({ status: "COMPLETED", replayed: false });
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    const trigger = await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" });
+    fireEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ключ повторной попытки уже использован");
+    expect(executeTestPersonnelDeletionRequest).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText("Подтверждающая фраза"), { target: { value: "УДАЛИТЬ TD-0001 / 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить необратимое удаление" }));
+    await waitFor(() => expect(executeTestPersonnelDeletionRequest).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(executeTestPersonnelDeletionRequest).mock.calls[1][1].idempotencyKey)
+      .not.toBe(vi.mocked(executeTestPersonnelDeletionRequest).mock.calls[0][1].idempotencyKey);
+  });
+
+  it("traps modal focus, closes on Escape, restores focus, and makes the background inert", async () => {
+    currentUser = { user_id: 1, can_request_test_personnel_deletion: true, can_execute_test_personnel_deletion: true };
+    const approved = executionRequest();
+    vi.mocked(listTestPersonnelDeletionRequests).mockResolvedValue([approved]);
+    vi.mocked(getTestPersonnelDeletionRequest).mockResolvedValue(approved);
+    render(<TestPersonnelDataAdminClient />);
+    fireEvent.click(await screen.findByRole("button", { name: /TD-0001/ }));
+    const trigger = await screen.findByRole("button", { name: "Удалить одобренных тестовых претендентов" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog");
+    const input = screen.getByLabelText("Подтверждающая фраза");
+    const cancel = screen.getByRole("button", { name: "Отмена" });
+    expect(input).toHaveFocus();
+    expect(dialog.parentElement?.querySelector("[inert]")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(cancel, { key: "Tab" });
+    expect(input).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });

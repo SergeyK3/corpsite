@@ -38,13 +38,147 @@ def confirmation_phrase(request_number: str, target_count: int) -> str:
     )
 
 
-def _payload_hash(request_id: UUID, idempotency_key: UUID, confirmation: str) -> str:
+def assess_execution_readiness(
+    *, request_id: UUID, executor_user_id: int, expected_version: int,
+    expected_target_set_hash: str, expected_relationship_fingerprint: str,
+) -> dict[str, Any]:
+    """Return a server-owned, read-only hint; execute_request remains authoritative."""
+    with engine.connect() as conn:
+        request = approval_service._request_row(conn, request_id, False)
+        roots = conn.execute(text("""SELECT person_id,application_ids,root_type
+            FROM public.test_personnel_deletion_manifest_v2_targets
+            WHERE request_id=:request_id ORDER BY manifest_order"""), {
+            "request_id": request_id,
+        }).mappings().all()
+        person_count = len({int(root["person_id"]) for root in roots})
+        readiness = {
+            "allowed": False,
+            "reason_code": None,
+            "required_confirmation_phrase": confirmation_phrase(
+                str(request["request_number"]), person_count,
+            ),
+            "target_person_count": person_count,
+            "execution_enabled": feature_enabled(),
+        }
+
+        def denied(code: str) -> dict[str, Any]:
+            return {**readiness, "reason_code": code}
+
+        if (
+            int(request["version"]) != int(expected_version)
+            or request["target_set_hash"] != expected_target_set_hash
+            or request["relationship_fingerprint"] != expected_relationship_fingerprint
+        ):
+            return denied("TD_READ_SNAPSHOT_CHANGED")
+        try:
+            execute_audit.assert_executor_permission(
+                conn, executor_user_id=int(executor_user_id),
+            )
+        except execute_audit.ExecuteAuditContractError as error:
+            return denied(error.code)
+        if not readiness["execution_enabled"]:
+            return denied("TD_EXECUTION_DISABLED")
+        if int(request.get("manifest_version") or 1) != approval_service.MANIFEST_VERSION:
+            return denied("TD_MANIFEST_V1_READ_ONLY")
+        if request.get("process_type") != approval_service.APPLICANT_PROCESS_TYPE:
+            return denied("TD_EMPLOYEE_DELETION_FORBIDDEN")
+        if request.get("basis") != "PROVENANCE":
+            return denied("TD_LEGACY_MANIFEST_NOT_EXECUTABLE")
+        if request["status"] != "APPROVED" or not request.get("approval_expires_at"):
+            return denied("TD_EXECUTE_APPROVAL_REQUIRED")
+        if request["approval_expires_at"] <= request["db_now"]:
+            return denied("TD_APPROVAL_EXPIRED")
+        if not roots or any(root["root_type"] != "PERSON" for root in roots):
+            return denied("TD_MANIFEST_V2_ROOTS_INVALID")
+        try:
+            approval = execute_audit.assert_approver_executor_separation(
+                conn, request_id=request_id, executor_user_id=int(executor_user_id),
+            )
+            pairs = approval_service._manifest_v2_pairs(conn, request_id)
+            candidates = approval_service._evaluate_candidates(conn, pairs)
+            current = approval_service._request_fingerprint(
+                conn, candidates, str(request["basis"]),
+            )
+        except execute_audit.ExecuteAuditContractError as error:
+            return denied(error.code)
+        except approval_service.TestPersonnelDeletionError as error:
+            return denied(error.code)
+
+        approval_mismatch = (
+            int(approval["request_version"]) != int(request["version"])
+            or approval["target_set_hash"] != request["target_set_hash"]
+            or approval["relationship_fingerprint"] != request["relationship_fingerprint"]
+            or approval["fingerprint_version"] != request["fingerprint_version"]
+            or approval["catalog_fingerprint"] != request["catalog_fingerprint"]
+        )
+        current_mismatch = (
+            approval_service._target_set_hash(candidates) != request["target_set_hash"]
+            or current["fingerprint"] != request["relationship_fingerprint"]
+            or request.get("fingerprint_version") != fingerprints.FINGERPRINT_VERSION
+            or request.get("relationship_policy_version") != fingerprints.POLICY_VERSION
+            or request.get("catalog_version") != fingerprints.CATALOG_VERSION
+            or request.get("catalog_fingerprint") != current["catalog_fingerprint"]
+            or bool(current["blockers"])
+        )
+        if approval_mismatch:
+            return denied("TD_APPROVAL_FINGERPRINT_MISMATCH")
+        if current_mismatch:
+            return denied(
+                f"TD_RELATIONSHIP_BLOCK_{current['blockers'][0]}"
+                if current["blockers"] else "TD_FINGERPRINT_CHANGED"
+            )
+        return {**readiness, "allowed": True, "reason_code": None}
+
+
+def _payload_hash(
+    request_id: UUID, idempotency_key: UUID, confirmation: str,
+    expected_snapshot: Mapping[str, Any],
+) -> str:
     return fingerprints.canonical_hash({
         "contract": "WP-TD-005-EXECUTE/v1",
         "request_id": str(request_id),
         "idempotency_key": str(idempotency_key),
         "confirmation_phrase": confirmation,
+        "expected_snapshot": dict(expected_snapshot),
     })
+
+
+def _timestamp_text(value: Any) -> str:
+    rendered = value.isoformat() if hasattr(value, "isoformat") else str(value)
+    return f"{rendered[:-1]}+00:00" if rendered.endswith("Z") else rendered
+
+
+def _assert_execution_snapshot(
+    *, request: Mapping[str, Any], approval: Mapping[str, Any] | None,
+    target_person_count: int, expected_snapshot: Mapping[str, Any],
+) -> None:
+    actual = {
+        "request_version": int(request["version"]),
+        "approval_decision_id": int(approval["decision_id"]) if approval else None,
+        "approval_request_version": int(approval["request_version"]) if approval else None,
+        "target_set_hash": str(request["target_set_hash"]),
+        "relationship_fingerprint": str(request["relationship_fingerprint"]),
+        "fingerprint_version": str(request["fingerprint_version"]),
+        "relationship_policy_version": str(request["relationship_policy_version"]),
+        "catalog_version": str(request["catalog_version"]),
+        "catalog_fingerprint": str(request["catalog_fingerprint"]),
+        "approval_expires_at": _timestamp_text(request.get("approval_expires_at")),
+        "target_person_count": int(target_person_count),
+    }
+    expected = {
+        **dict(expected_snapshot),
+        "request_version": int(expected_snapshot["request_version"]),
+        "approval_decision_id": int(expected_snapshot["approval_decision_id"]),
+        "approval_request_version": int(expected_snapshot["approval_request_version"]),
+        "approval_expires_at": _timestamp_text(expected_snapshot["approval_expires_at"]),
+        "target_person_count": int(expected_snapshot["target_person_count"]),
+    }
+    if actual != expected:
+        raise approval_service.TestPersonnelDeletionError(
+            "TD_EXECUTION_SNAPSHOT_CHANGED",
+            "The approved execution snapshot changed; review it and confirm again.",
+            409,
+        )
 
 
 def _is_serialization_failure(error: DBAPIError) -> bool:
@@ -429,6 +563,7 @@ def _rule_rows_after_delete(
 def _execute_transaction(
     conn: Connection, *, request_id: UUID, executor_user_id: int,
     idempotency_key: UUID, confirmation: str, payload_hash: str,
+    expected_snapshot: Mapping[str, Any],
     fault_after_step: str | None,
     step_hook: Callable[[str], None] | None,
 ) -> dict[str, Any]:
@@ -463,6 +598,32 @@ def _execute_transaction(
         raise approval_service.TestPersonnelDeletionError(
             "TD_LEGACY_MANIFEST_NOT_EXECUTABLE", "Legacy manifests cannot be executed.", 409,
         )
+    roots = conn.execute(text("""SELECT person_id,application_ids,root_type
+        FROM public.test_personnel_deletion_manifest_v2_targets
+        WHERE request_id=:request_id ORDER BY manifest_order FOR SHARE"""), {
+        "request_id": request_id,
+    }).mappings().all()
+    person_ids = sorted(int(root["person_id"]) for root in roots)
+    application_ids = sorted(
+        int(application_id) for root in roots for application_id in root["application_ids"]
+    )
+    for person_id in person_ids:
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"), {
+            "key": f"WP-TD-005:PERSON:{person_id}",
+        })
+    _lock_execution_catalog(conn)
+    # Recheck permission after all permission/identity writer tables are locked.
+    execute_audit.assert_executor_permission(conn, executor_user_id=executor_user_id)
+    approval_snapshot = conn.execute(text("""SELECT decision_id,request_version
+        FROM public.test_personnel_deletion_decisions
+        WHERE request_id=:request_id AND decision='APPROVE'
+        ORDER BY decision_id DESC LIMIT 1 FOR SHARE"""), {
+        "request_id": request_id,
+    }).mappings().one_or_none()
+    _assert_execution_snapshot(
+        request=request, approval=approval_snapshot,
+        target_person_count=len(roots), expected_snapshot=expected_snapshot,
+    )
     if request["status"] != "APPROVED" or not request.get("approval_expires_at"):
         raise approval_service.TestPersonnelDeletionError(
             "TD_EXECUTE_APPROVAL_REQUIRED", "A current approval is required.", 409,
@@ -476,12 +637,6 @@ def _execute_transaction(
                 reason="TD_APPROVAL_EXPIRED",
             ),
         }
-
-    roots = conn.execute(text("""SELECT person_id,application_ids,root_type
-        FROM public.test_personnel_deletion_manifest_v2_targets
-        WHERE request_id=:request_id ORDER BY manifest_order FOR SHARE"""), {
-        "request_id": request_id,
-    }).mappings().all()
     if not roots or any(root["root_type"] != "PERSON" for root in roots):
         return {
             "status": "REAPPROVAL_REQUIRED", "replayed": False,
@@ -495,18 +650,6 @@ def _execute_transaction(
         raise approval_service.TestPersonnelDeletionError(
             "TD_EXECUTION_CONFIRMATION_MISMATCH", "The exact confirmation phrase is required.", 422,
         )
-
-    person_ids = sorted(int(root["person_id"]) for root in roots)
-    application_ids = sorted(
-        int(application_id) for root in roots for application_id in root["application_ids"]
-    )
-    for person_id in person_ids:
-        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"), {
-            "key": f"WP-TD-005:PERSON:{person_id}",
-        })
-    _lock_execution_catalog(conn)
-    # Recheck permission after all permission/identity writer tables are locked.
-    execute_audit.assert_executor_permission(conn, executor_user_id=executor_user_id)
     approval = execute_audit.assert_approver_executor_separation(
         conn, request_id=request_id, executor_user_id=executor_user_id,
     )
@@ -794,7 +937,8 @@ def _record_rejected_attempt_result(
 
 def execute_request(
     *, request_id: UUID, executor_user_id: int, idempotency_key: UUID,
-    confirmation: str, fault_after_step: str | None = None,
+    confirmation: str, expected_snapshot: Mapping[str, Any],
+    fault_after_step: str | None = None,
     _test_step_hook: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     if not feature_enabled():
@@ -803,7 +947,9 @@ def execute_request(
         )
     request_uuid = UUID(str(request_id))
     key_uuid = UUID(str(idempotency_key))
-    payload_hash = _payload_hash(request_uuid, key_uuid, confirmation)
+    payload_hash = _payload_hash(
+        request_uuid, key_uuid, confirmation, expected_snapshot,
+    )
     intent_prepared = False
     try:
         _prepare_attempt(
@@ -814,7 +960,8 @@ def execute_request(
         return _run_serializable(lambda conn: _execute_transaction(
             conn, request_id=request_uuid, executor_user_id=int(executor_user_id),
             idempotency_key=key_uuid, confirmation=confirmation,
-            payload_hash=payload_hash, fault_after_step=fault_after_step,
+            payload_hash=payload_hash, expected_snapshot=expected_snapshot,
+            fault_after_step=fault_after_step,
             step_hook=_test_step_hook,
         ))
     except execute_audit.ExecuteAuditContractError as error:

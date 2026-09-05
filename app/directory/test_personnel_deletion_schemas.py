@@ -1,6 +1,7 @@
 """HTTP contracts for WP-TD-002 (approval foundation only)."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -86,8 +87,25 @@ class TestPersonnelDecisionIn(TestPersonnelCommandIn):
     submitted_synthetic_confirmed: bool = False
 
 
+class TestPersonnelExecutionSnapshotIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_version: int = Field(..., ge=1)
+    approval_decision_id: int = Field(..., ge=1)
+    approval_request_version: int = Field(..., ge=1)
+    target_set_hash: str = Field(..., min_length=64, max_length=64)
+    relationship_fingerprint: str = Field(..., min_length=64, max_length=64)
+    fingerprint_version: str = Field(..., min_length=1, max_length=128)
+    relationship_policy_version: str = Field(..., min_length=1, max_length=128)
+    catalog_version: str = Field(..., min_length=1, max_length=128)
+    catalog_fingerprint: str = Field(..., min_length=64, max_length=64)
+    approval_expires_at: datetime
+    target_person_count: int = Field(..., ge=1, le=200)
+
+
 class TestPersonnelExecuteIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     idempotency_key: UUID
     confirmation_phrase: str = Field(..., min_length=1, max_length=128)
+    expected_snapshot: TestPersonnelExecutionSnapshotIn

@@ -56,6 +56,24 @@ def actors(execution_engine):
     return result
 
 
+def _execution_snapshot(detail):
+    decision = next(item for item in reversed(detail["decisions"]) if item["decision"] == "APPROVE")
+    expires_at = detail["approval_expires_at"]
+    return {
+        "request_version": int(detail["version"]),
+        "approval_decision_id": int(decision["decision_id"]),
+        "approval_request_version": int(decision["request_version"]),
+        "target_set_hash": detail["target_set_hash"],
+        "relationship_fingerprint": detail["relationship_fingerprint"],
+        "fingerprint_version": detail["fingerprint_version"],
+        "relationship_policy_version": detail["relationship_policy_version"],
+        "catalog_version": detail["catalog_version"],
+        "catalog_fingerprint": detail["catalog_fingerprint"],
+        "approval_expires_at": expires_at.isoformat(),
+        "target_person_count": len(detail["manifest_targets"]),
+    }
+
+
 def _approved_synthetic(
     execution_engine, actors, *, with_journals=True, basis="PROVENANCE",
     command_id: str | None = None, before_draft=None, after_approval=None,
@@ -142,6 +160,7 @@ def _approved_synthetic(
         submitted_synthetic_confirmed=False,
     )
     assert conflict is None
+    expected_snapshot = _execution_snapshot(approval.get_request(draft["request_id"]))
     if after_approval is not None:
         with execution_engine.begin() as connection:
             after_approval(connection, person_id, application_id, admin_id)
@@ -149,6 +168,7 @@ def _approved_synthetic(
         "request_id": uuid.UUID(approved["request_id"]),
         "request_number": approved["request_number"],
         "person_id": person_id, "application_id": application_id,
+        "expected_snapshot": expected_snapshot,
     }
 
 
@@ -158,6 +178,7 @@ def _execute(target, actors, *, key=None, phrase=None, fault=None):
         executor_user_id=int(actors["ADMIN"]["user_id"]),
         idempotency_key=key or uuid.uuid4(),
         confirmation=phrase or execution.confirmation_phrase(target["request_number"], 1),
+        expected_snapshot=target["expected_snapshot"],
         fault_after_step=fault,
     )
 
@@ -277,7 +298,8 @@ def test_feature_flag_defaults_off_and_api_makes_no_change(execution_engine, act
             response = client.post(
                 f"/directory/test-personnel-deletion/requests/{target['request_id']}/execute",
                 json={"idempotency_key": str(uuid.uuid4()),
-                      "confirmation_phrase": execution.confirmation_phrase(target["request_number"], 1)},
+                      "confirmation_phrase": execution.confirmation_phrase(target["request_number"], 1),
+                      "expected_snapshot": target["expected_snapshot"]},
             )
         assert response.status_code == 503
         assert response.json()["detail"]["code"] == "TD_EXECUTION_DISABLED"
@@ -422,6 +444,7 @@ def test_confirmation_permission_employee_and_drift_fail_closed(execution_engine
             request_id=target["request_id"], executor_user_id=int(actors["HR_HEAD"]["user_id"]),
             idempotency_key=uuid.uuid4(),
             confirmation=execution.confirmation_phrase(target["request_number"], 1),
+            expected_snapshot=target["expected_snapshot"],
         )
     assert role_error.value.code == "TD_EXECUTE_PERMISSION_REQUIRED"
     with execution_engine.begin() as connection:
@@ -435,6 +458,31 @@ def test_confirmation_permission_employee_and_drift_fail_closed(execution_engine
         ), {"id": target["person_id"]}).scalar_one() == 1
         assert connection.execute(text("""SELECT status FROM test_personnel_deletion_requests
             WHERE request_id=:id"""), {"id": target["request_id"]}).scalar_one() == "REAPPROVAL_REQUIRED"
+
+
+def test_expected_operator_snapshot_mismatch_returns_409_without_delete(
+    execution_engine, actors, monkeypatch,
+):
+    monkeypatch.setenv(execution.FEATURE_FLAG, "on")
+    target = _approved_synthetic(execution_engine, actors, with_journals=False)
+    stale_snapshot = {**target["expected_snapshot"], "request_version": 1}
+    with pytest.raises(approval.TestPersonnelDeletionError) as error:
+        execution.execute_request(
+            request_id=target["request_id"],
+            executor_user_id=int(actors["ADMIN"]["user_id"]),
+            idempotency_key=uuid.uuid4(),
+            confirmation=execution.confirmation_phrase(target["request_number"], 1),
+            expected_snapshot=stale_snapshot,
+        )
+    assert error.value.status_code == 409
+    assert error.value.code == "TD_EXECUTION_SNAPSHOT_CHANGED"
+    with execution_engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT EXISTS(SELECT 1 FROM public.persons WHERE person_id=:id)"
+        ), {"id": target["person_id"]}).scalar_one()
+        assert connection.execute(text(
+            "SELECT EXISTS(SELECT 1 FROM public.personnel_applications WHERE application_id=:id)"
+        ), {"id": target["application_id"]}).scalar_one()
 
 
 def test_same_key_different_payload_conflicts(execution_engine, actors, monkeypatch):
@@ -456,7 +504,9 @@ def test_expired_legacy_v1_and_employee_are_never_deleted(execution_engine, acto
             SET approved_at=statement_timestamp()-interval '2 hours',
                 approval_expires_at=statement_timestamp()-interval '1 hour'
             WHERE request_id=:id"""), {"id": expired["request_id"]})
-    assert _execute(expired, actors)["status"] == "REAPPROVAL_REQUIRED"
+    with pytest.raises(approval.TestPersonnelDeletionError) as expired_error:
+        _execute(expired, actors)
+    assert expired_error.value.code == "TD_EXECUTION_SNAPSHOT_CHANGED"
 
     legacy = _approved_synthetic(
         execution_engine, actors, with_journals=False, basis="LEGACY_MANIFEST",
@@ -491,7 +541,7 @@ def test_expired_legacy_v1_and_employee_are_never_deleted(execution_engine, acto
     with pytest.raises(approval.TestPersonnelDeletionError) as v1_error:
         execution.execute_request(
             request_id=request_id, executor_user_id=int(actors["ADMIN"]["user_id"]),
-            idempotency_key=uuid.uuid4(), confirmation="irrelevant",
+            idempotency_key=uuid.uuid4(), confirmation="irrelevant", expected_snapshot={},
         )
     assert v1_error.value.code == "TD_MANIFEST_V1_READ_ONLY"
 
@@ -557,6 +607,7 @@ def test_concurrent_legacy_logical_insert_blocks_then_fails_closed(
             executor_user_id=int(actors["ADMIN"]["user_id"]),
             idempotency_key=uuid.uuid4(),
             confirmation=execution.confirmation_phrase(target["request_number"], 1),
+            expected_snapshot=target["expected_snapshot"],
             _test_step_hook=hook,
         )
 
@@ -602,6 +653,7 @@ def test_concurrent_fk_child_insert_blocks_then_fails_closed(
             executor_user_id=int(actors["ADMIN"]["user_id"]),
             idempotency_key=uuid.uuid4(),
             confirmation=execution.confirmation_phrase(target["request_number"], 1),
+            expected_snapshot=target["expected_snapshot"],
             _test_step_hook=hook,
         )
 
@@ -792,6 +844,7 @@ def test_durable_intent_survives_execution_crash_for_recovery(
     request_id = target["request_id"]
     payload_hash = execution._payload_hash(
         request_id, key, execution.confirmation_phrase(target["request_number"], 1),
+        target["expected_snapshot"],
     )
     execution._prepare_attempt(
         request_id=request_id, executor_user_id=int(actors["ADMIN"]["user_id"]),

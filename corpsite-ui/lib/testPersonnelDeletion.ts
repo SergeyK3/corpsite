@@ -46,11 +46,40 @@ export type RelationshipSummary = {
 export type TestPersonnelDecision = {
   decision_id: number;
   decision: "APPROVE" | "REJECT";
+  request_version: number;
   actor_user_id: number;
   actor_display_name?: string;
   comment?: string | null;
   submitted_synthetic_confirmed: boolean;
   decided_at: string;
+};
+
+export type TestPersonnelExecutionReadiness = {
+  allowed: boolean;
+  reason_code: string | null;
+  required_confirmation_phrase: string;
+  target_person_count: number;
+  execution_enabled: boolean;
+};
+
+export type TestPersonnelExecutionResponse = {
+  status: "COMPLETED" | "REAPPROVAL_REQUIRED" | "FAILED" | string;
+  replayed: boolean;
+  result?: { result?: string } & Record<string, unknown>;
+};
+
+export type TestPersonnelExecutionSnapshot = {
+  request_version: number;
+  approval_decision_id: number;
+  approval_request_version: number;
+  target_set_hash: string;
+  relationship_fingerprint: string;
+  fingerprint_version: string;
+  relationship_policy_version: string;
+  catalog_version: string;
+  catalog_fingerprint: string;
+  approval_expires_at: string;
+  target_person_count: number;
 };
 
 export type TestPersonnelRequest = {
@@ -71,6 +100,13 @@ export type TestPersonnelRequest = {
   approved_at?: string | null;
   approval_expires_at?: string | null;
   approval_valid?: boolean;
+  manifest_version?: number;
+  process_type?: string;
+  fingerprint_version?: string;
+  relationship_policy_version?: string;
+  catalog_version?: string;
+  catalog_fingerprint?: string;
+  execution_readiness?: TestPersonnelExecutionReadiness;
   targets?: TestPersonnelTarget[];
   decisions?: TestPersonnelDecision[];
   result_code?: string;
@@ -90,8 +126,7 @@ export const REASON_OPTIONS: ReadonlyArray<{ value: TestPersonnelReasonCode; lab
 ];
 
 export function newIdempotencyKey(action: string): string {
-  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return `wp-td-003-${action}-${random}`;
+  return `wp-td-003-${action}-${secureUuid()}`;
 }
 
 export function stableIdempotencyKey(
@@ -115,8 +150,46 @@ export function forgetIdempotencyKey(
   registry.delete(`${action}:${commandSignature}`);
 }
 
+function secureUuid(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  if (!globalThis.crypto?.getRandomValues) {
+    throw Object.assign(new Error("Web Crypto is required for deletion commands."), {
+      code: "TD_EXECUTION_WEB_CRYPTO_REQUIRED",
+    });
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function stableExecutionIdempotencyKey(
+  registry: Map<string, string>, commandSignature: string,
+): string {
+  const registryKey = `execute:${commandSignature}`;
+  const existing = registry.get(registryKey);
+  if (existing) return existing;
+  const created = secureUuid();
+  registry.set(registryKey, created);
+  return created;
+}
+
+export function forgetExecutionIdempotencyKey(
+  registry: Map<string, string>, commandSignature: string,
+): void {
+  registry.delete(`execute:${commandSignature}`);
+}
+
 export function testPersonnelErrorStatus(error: unknown): number {
   return Number((error as TestPersonnelApiError | null)?.status ?? 0);
+}
+
+export function testPersonnelErrorCode(error: unknown): string {
+  const apiError = error as TestPersonnelApiError;
+  const details = apiError?.details as { detail?: { code?: string } } | undefined;
+  return String(apiError?.code ?? details?.detail?.code ?? "");
 }
 
 export function previewTestPersonnel(mask: string): Promise<{ items: TestPersonnelTarget[]; count: number }> {
@@ -178,6 +251,24 @@ export function cancelTestPersonnelDeletionRequest(
   });
 }
 
+export function executeTestPersonnelDeletionRequest(
+  requestId: string,
+  input: {
+    idempotencyKey: string;
+    confirmationPhrase: string;
+    expectedSnapshot: TestPersonnelExecutionSnapshot;
+  },
+): Promise<TestPersonnelExecutionResponse> {
+  return apiFetchJson(`/directory/test-personnel-deletion/requests/${encodeURIComponent(requestId)}/execute`, {
+    method: "POST",
+    body: {
+      idempotency_key: input.idempotencyKey,
+      confirmation_phrase: input.confirmationPhrase,
+      expected_snapshot: input.expectedSnapshot,
+    },
+  });
+}
+
 export async function listTestPersonnelDeletionApprovals(): Promise<TestPersonnelRequest[]> {
   const response = await apiFetchJson<{ items: TestPersonnelRequest[] }>(
     "/directory/test-personnel-deletion/approvals",
@@ -228,13 +319,16 @@ export function rejectTestPersonnelDeletionRequest(
 }
 
 export function testPersonnelErrorMessage(error: unknown): string {
-  const apiError = error as TestPersonnelApiError;
   const status = testPersonnelErrorStatus(error);
-  const details = apiError?.details as { detail?: { code?: string } } | undefined;
-  const code = String(apiError?.code ?? details?.detail?.code ?? "");
+  const code = testPersonnelErrorCode(error);
+  if (code === "TD_EXECUTION_WEB_CRYPTO_REQUIRED") return "Безопасный UUID недоступен в этом браузере. Исполнение не отправлено.";
+  if (status === 503 && code === "TD_EXECUTION_DISABLED") return "Исполнение удаления отключено.";
   if (status === 403) return "Недостаточно прав для выполнения операции.";
   if (status === 409) {
     if (code.includes("ATTESTATION")) return "Подтвердите синтетический характер отправленных анкет.";
+    if (code === "TD_EXECUTE_ALREADY_COMPLETED") return "Запрос уже завершён. Повторное удаление не выполнялось.";
+    if (code === "TD_EXECUTE_IDEMPOTENCY_CONFLICT") return "Ключ повторной попытки уже использован с другими данными. Удаление не выполнялось.";
+    if (code === "TD_EXECUTION_SNAPSHOT_CHANGED") return "Подтверждённые сведения изменились. Проверьте запрос и введите фразу заново.";
     return "Данные запроса изменились. Обновите сведения и повторите действие.";
   }
   if (status === 410) return "Операция отключена политикой безопасного удаления.";

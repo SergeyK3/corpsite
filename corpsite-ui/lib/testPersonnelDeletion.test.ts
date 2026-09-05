@@ -7,14 +7,31 @@ import {
   approveTestPersonnelDeletionRequest,
   cancelTestPersonnelDeletionRequest,
   createTestPersonnelDeletionRequest,
+  executeTestPersonnelDeletionRequest,
+  forgetExecutionIdempotencyKey,
   forgetIdempotencyKey,
   previewTestPersonnel,
   stableIdempotencyKey,
+  stableExecutionIdempotencyKey,
   submitTestPersonnelDeletionRequest,
   testPersonnelErrorMessage,
 } from "./testPersonnelDeletion";
+import type { TestPersonnelExecutionSnapshot } from "./testPersonnelDeletion";
 
 const fetchJson = vi.mocked(apiFetchJson);
+const executionSnapshot: TestPersonnelExecutionSnapshot = {
+  request_version: 5,
+  approval_decision_id: 7,
+  approval_request_version: 5,
+  target_set_hash: "a".repeat(64),
+  relationship_fingerprint: "b".repeat(64),
+  fingerprint_version: "relationship/v2",
+  relationship_policy_version: "policy/v1",
+  catalog_version: "catalog/v1",
+  catalog_fingerprint: "c".repeat(64),
+  approval_expires_at: "2026-09-07T10:00:00Z",
+  target_person_count: 1,
+};
 
 beforeEach(() => fetchJson.mockReset().mockResolvedValue({}));
 
@@ -61,9 +78,32 @@ describe("testPersonnelDeletion API contract", () => {
     });
   });
 
-  it("contains no execution API", async () => {
-    const deletionApi = await import("./testPersonnelDeletion");
-    expect(Object.keys(deletionApi).some((name) => /execute/i.test(name))).toBe(false);
+  it("sends only the opaque UUID and exact confirmation phrase to execution", async () => {
+    await executeTestPersonnelDeletionRequest("r/1", {
+      idempotencyKey: "018f4f47-6320-7a21-9f52-4a1fe0f01c5d",
+      confirmationPhrase: "УДАЛИТЬ TD-0001 / 1",
+      expectedSnapshot: executionSnapshot,
+    });
+    expect(fetchJson).toHaveBeenLastCalledWith(
+      "/directory/test-personnel-deletion/requests/r%2F1/execute",
+      {
+        method: "POST",
+        body: {
+          idempotency_key: "018f4f47-6320-7a21-9f52-4a1fe0f01c5d",
+          confirmation_phrase: "УДАЛИТЬ TD-0001 / 1",
+          expected_snapshot: executionSnapshot,
+        },
+      },
+    );
+  });
+
+  it("retains one canonical execution UUID for retry and rotates after completion", () => {
+    const registry = new Map<string, string>();
+    const first = stableExecutionIdempotencyKey(registry, "request-1:v5");
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(stableExecutionIdempotencyKey(registry, "request-1:v5")).toBe(first);
+    forgetExecutionIdempotencyKey(registry, "request-1:v5");
+    expect(stableExecutionIdempotencyKey(registry, "request-1:v5")).not.toBe(first);
   });
 
   it("keeps one idempotency key for an operation retry and rotates for a new operation", () => {

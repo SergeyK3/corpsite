@@ -61,6 +61,19 @@ def _authorize_detail(user: dict[str, Any], detail: dict[str, Any]) -> dict[str,
     raise HTTPException(status_code=404, detail={"code": "TD_REQUEST_NOT_FOUND"})
 
 
+def _with_execution_readiness(
+    user: dict[str, Any], detail: dict[str, Any],
+) -> dict[str, Any]:
+    detail["execution_readiness"] = execution_service.assess_execution_readiness(
+        request_id=UUID(str(detail["request_id"])),
+        executor_user_id=int(user["user_id"]),
+        expected_version=int(detail["version"]),
+        expected_target_set_hash=str(detail["target_set_hash"]),
+        expected_relationship_fingerprint=str(detail["relationship_fingerprint"]),
+    )
+    return detail
+
+
 @router.post("/preview")
 def preview(body: TestPersonnelPreviewIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     _require(user, TEST_PERSONNEL_DELETION_REQUEST)
@@ -103,7 +116,9 @@ def requests(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]
 @router.get("/requests/{request_id}")
 def request_detail(request_id: UUID, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     try:
-        return _authorize_detail(user, service.get_request(request_id))
+        return _with_execution_readiness(
+            user, _authorize_detail(user, service.get_request(request_id)),
+        )
     except service.TestPersonnelDeletionError as exc:
         raise _error(exc) from exc
 
@@ -152,7 +167,9 @@ def approvals(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any
 def approval_detail(request_id: UUID, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     _require(user, TEST_PERSONNEL_DELETION_APPROVE)
     try:
-        return _scope_hr_detail(user, service.get_request(request_id))
+        return _with_execution_readiness(
+            user, _scope_hr_detail(user, service.get_request(request_id)),
+        )
     except service.TestPersonnelDeletionError as exc:
         raise _error(exc) from exc
 
@@ -195,6 +212,7 @@ def execute(
             executor_user_id=actor,
             idempotency_key=body.idempotency_key,
             confirmation=body.confirmation_phrase,
+            expected_snapshot=body.expected_snapshot.model_dump(mode="json"),
         )
     except service.TestPersonnelDeletionError as exc:
         raise _error(exc) from exc

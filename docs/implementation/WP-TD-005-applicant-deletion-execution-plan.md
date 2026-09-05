@@ -213,7 +213,21 @@ PostgreSQL-набор покрывает template0 migration roundtrip, single h
 
 **Старые запросы**
 
-Для v1/legacy request кнопка исполнения не отображается; UI показывает причину несовместимости и действие создания нового v2 request. UI не предлагает миграцию или повторное использование старого approval.
+Для v1/legacy request кнопка исполнения отсутствует либо disabled и сопровождается причиной несовместимости; UI не предлагает миграцию, auto-conversion или повторное использование старого approval.
+
+**Результат этапа 6 (реализован)**
+
+Detail read-contract запроса дополнен server-owned `execution_readiness` с полями `allowed`, `reason_code`, `required_confirmation_phrase`, `target_person_count` и `execution_enabled`. Read-only проверка на сервере учитывает capability исполнителя, feature flag, `APPROVED`/expiry, manifest v2 с корнем `PERSON`, `APPLICANT_ONLY`, provenance basis, approval versions/hashes, актуальные policy/catalog/fingerprint и текущие `BLOCK`; любой drift даёт fail-closed reason. Это только UI hint: `POST .../execute` сохраняет полный авторитетный recheck.
+
+В ADMIN-панели добавлена ровно одна capability-gated кнопка **«Удалить одобренных тестовых претендентов»**. Без `can_execute_test_personnel_deletion` она отсутствует; при выключенном flag видна disabled вместе с текстом **«Исполнение удаления отключено»**. Для v1, legacy, Employee, stale, expired и не-`APPROVED` запросов она неактивна с текстовой причиной. Employee-кнопка не добавлена.
+
+Отдельный modal показывает номер и тип запроса, количества Person/applications, согласующего и время, expiry, сокращённые manifest/relationship/catalog hashes и явное предупреждение о физическом необратимом удалении. Подтверждение доступно только после посимвольного совпадения с серверной фразой. На логическую попытку создаётся один канонический UUID, который сохраняется при безопасном retry; синхронный in-flight guard блокирует двойной submit. После любого ответа перечитываются detail и список. `COMPLETED`, `REAPPROVAL_REQUIRED`, `FAILED` и replay отображаются явно; `503`, оба execution `409` и неизвестные ответы проецируются в безопасный русский текст без raw error/SQL/PII и без оптимистического успеха.
+
+После targeted review контракт усилен неизменяемым `expected_snapshot`: execute body содержит request version, approval decision/request versions, target/relationship hashes и fingerprint version, policy/catalog versions и catalog hash, approval expiry и Person count. Непосредственно перед execute UI перечитывает detail/readiness; любое отличие закрывает modal, очищает фразу и не отправляет command. Backend включает snapshot в command hash и атомарно сравнивает его с заблокированными request/latest approval/manifest rows до любого DELETE, возвращая `409 TD_EXECUTION_SNAPSHOT_CHANGED` при расхождении. Для будущего PostgreSQL-прогона добавлен regression test сохранности Person/Application при таком отказе, но по ограничению этапа он здесь не запускался.
+
+Execution UUID теперь создаётся исключительно через Web Crypto (`randomUUID` либо `getRandomValues`); отсутствие Web Crypto даёт fail-closed UI-ошибку без отправки. `TD_EXECUTE_IDEMPOTENCY_CONFLICT` завершает текущую UI-попытку, удаляет конфликтующий key и требует повторного открытия modal и ручного ввода; новый UUID создаётся только после нового подтверждения и preflight. Modal получает initial focus, циклический focus trap, Escape вне отправки, возврат фокуса на исходную кнопку и `inert`/`aria-hidden` для фонового содержимого.
+
+Mocked frontend regression suite этапа 6 (`44 passed`) покрывает capability/flag, v1/legacy/Employee/stale/expired/status gates, точный button count, отсутствие Employee-кнопки, доступность через native `disabled` и связанную текстовую причину, состав modal, точную фразу, double-click, стабильный UUID retry, race повторного согласования, отсутствие Web Crypto, новый manual attempt после UUID conflict, focus/keyboard/background isolation, terminal/replay/503/409/unknown responses и backend refresh. PostgreSQL physical-delete suite на этом этапе повторно не запускался; feature flag нигде не включён.
 
 ## 8. Этап 7 — PostgreSQL regression/concurrency tests и rollout
 
@@ -241,4 +255,4 @@ Rollout не меняет их статус и не делает их испол
 
 ## 9. Готовность execution
 
-Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–4 добавляют revisions `td005m1v2a01`, `td005tomb201`, `td005fp3v101` и `td005audit401`, но готовность наступит только после последовательного закрытия этапов 5–7 и всех gates WP-TD-004. Физическое удаление, запись tombstones из execution, execution endpoint и кнопка удаления не создавались; audit writer и tombstones не подключены к execution.
+Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–5 добавляют revisions `td005m1v2a01`, `td005tomb201`, `td005fp3v101`, `td005audit401` и `td005exec501`; этап 6 добавляет server-owned readiness и UI подтверждения без новой revision. Applicant-only backend и кнопка существуют, но feature flag остаётся выключенным. Эксплуатационная готовность и право включить execution наступят только после отдельного закрытия этапа 7 и всех rollout gates WP-TD-004/WP-TD-005; Employee-процесс отсутствует.
