@@ -2,7 +2,7 @@
 
 | Поле | Значение |
 |---|---|
-| Статус | **Этап 1 завершён — execution запрещён, этапы 2–7 не начаты** |
+| Статус | **Этапы 1–2 завершены — execution запрещён, этапы 3–7 не начаты** |
 | Дата | 2026-09-05 |
 | Основание | `test-personnel-data-deletion-approval-plan.md`, `WP-TD-004-test-personnel-deletion-relationship-matrix.md` |
 | Scope | Только synthetic applicants без `Employee` и любых `BLOCK`-связей |
@@ -72,6 +72,14 @@ Backend создаёт только manifest v2/`APPLICANT_ONLY`, считает
 **Старые запросы**
 
 Появление tombstone support не делает v1/legacy requests исполнимыми. Ранее согласованный v2 request требует нового fingerprint и повторного согласования, если tombstone policy/version не входили в его approval hash.
+
+### Результат этапа 2 — 2026-09-05
+
+**Завершено.** Добавлена revision `td005tomb201` поверх `td005m1v2a01` с тремя detached tombstone-таблицами для `personnel_record_events`, `ppr_command_executions` и разрешённых early-событий `personnel_application_lifecycle_audit`. В них сохраняются только technical source IDs, тип/действие, статус, исходные timestamps, допустимый numeric actor technical ID и SHA-256 digests. Единственная FK каждой tombstone-таблицы ведёт к сохраняемому deletion request с Manifest v2/`APPLICANT_ONLY`; FK на `Person` и application отсутствуют.
+
+Запись реализована отдельным transaction-neutral backend-сервисом, который не подключён к route, endpoint или execution workflow. Canonical digest детерминирован; повторная запись того же source ID с тем же содержимым идемпотентна, а конфликт request/digest отклоняется. `UPDATE`, `DELETE` и `TRUNCATE` запрещены PostgreSQL triggers; downgrade с сохранёнными tombstones также закрыт. Raw payload/comment/metadata и другие PII не переносятся, исходные строки не удаляются.
+
+Проверено только на одноразовых PostgreSQL-клонах: upgrade → downgrade → upgrade, запрет downgrade с сохранёнными tombstones, одна Alembic head `td005tomb201`, 9 целевых tombstone-тестов, совместный набор этапов 1–2 (`16 passed`) и 246 существующих migration/foundation/relationship regression-тестов. Tombstone gate этапа 2 закрыт; execution остаётся запрещён до последовательного завершения этапов 3–7 и всех gates WP-TD-004.
 
 ## 4. Этап 3 — Provenance, catalog и relationship fingerprint
 
@@ -195,4 +203,4 @@ Rollout не меняет их статус и не делает их испол
 
 ## 9. Готовность execution
 
-Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этап 1 добавляет следующую revision `td005m1v2a01`, но готовность наступит только после последовательного закрытия этапов 2–7 и всех gates WP-TD-004. Физическое удаление, execution endpoint, кнопка удаления и tombstones на этапе 1 не создавались.
+Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–2 добавляют revisions `td005m1v2a01` и `td005tomb201`, но готовность наступит только после последовательного закрытия этапов 3–7 и всех gates WP-TD-004. Физическое удаление, execution endpoint и кнопка удаления не создавались; tombstones этапа 2 не подключены к execution.

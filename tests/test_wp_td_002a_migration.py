@@ -389,6 +389,9 @@ def test_downgrade_fails_closed_when_external_grant_exists():
     with _ephemeral_database() as (url, db):
         cfg = _config(url)
         with db.begin() as conn:
+            revision_before = conn.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
             admin_user = conn.execute(text("SELECT user_id FROM users ORDER BY user_id LIMIT 1")).scalar_one()
             grant_id = conn.execute(text("""INSERT INTO access_grants(access_role_id,target_type,target_id,granted_by_user_id,reason)
                 SELECT access_role_id,'USER',:user_id,:user_id,'external grant' FROM access_roles
@@ -396,7 +399,7 @@ def test_downgrade_fails_closed_when_external_grant_exists():
         with pytest.raises(Exception, match="WP_TD_002_EXTERNAL_GRANTS_PRESENT"):
             command.downgrade(cfg, FOUNDATION_PREVIOUS)
         with db.begin() as conn:
-            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == REVISION
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == revision_before
             assert conn.execute(text("SELECT EXISTS(SELECT 1 FROM access_grants WHERE grant_id=:id)"), {"id": grant_id}).scalar_one()
             conn.execute(text("DELETE FROM access_grants WHERE grant_id=:id"), {"id": grant_id})
         command.downgrade(cfg, FOUNDATION_PREVIOUS)
