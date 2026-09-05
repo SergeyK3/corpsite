@@ -146,20 +146,20 @@ def test_auth_me_projects_exact_test_personnel_capabilities(client, td_actors):
     assert hr["can_request_test_personnel_deletion"] is False
     assert hr["can_approve_test_personnel_deletion"] is True
     assert hr["can_read_test_personnel_deletion_audit"] is True
-    assert "can_execute_test_personnel_deletion" not in admin
-    assert "can_execute_test_personnel_deletion" not in hr
+    assert admin["can_execute_test_personnel_deletion"] is True
+    assert hr["can_execute_test_personnel_deletion"] is False
     previous_override = app.dependency_overrides.get(get_current_user)
     try:
         app.dependency_overrides[get_current_user] = lambda: admin
         admin_me = client.get("/auth/me")
         assert admin_me.status_code == 200
         assert admin_me.json()["can_request_test_personnel_deletion"] is True
-        assert "can_execute_test_personnel_deletion" not in admin_me.json()
+        assert admin_me.json()["can_execute_test_personnel_deletion"] is True
         app.dependency_overrides[get_current_user] = lambda: hr
         hr_me = client.get("/auth/me")
         assert hr_me.status_code == 200
         assert hr_me.json()["can_approve_test_personnel_deletion"] is True
-        assert "can_execute_test_personnel_deletion" not in hr_me.json()
+        assert hr_me.json()["can_execute_test_personnel_deletion"] is False
     finally:
         if previous_override is None:
             app.dependency_overrides.pop(get_current_user, None)
@@ -175,6 +175,7 @@ def test_admissible_primary_role_without_permission_has_no_capability(monkeypatc
     assert capabilities == {
         "can_request_test_personnel_deletion": False,
         "can_approve_test_personnel_deletion": False,
+        "can_execute_test_personnel_deletion": False,
         "can_read_test_personnel_deletion_audit": False,
     }
 

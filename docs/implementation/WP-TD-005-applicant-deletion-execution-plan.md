@@ -2,7 +2,7 @@
 
 | Поле | Значение |
 |---|---|
-| Статус | **Этапы 1–3 завершены — execution запрещён, этапы 4–7 не начаты** |
+| Статус | **Этапы 1–4 завершены — execution запрещён, этапы 5–7 не начаты** |
 | Дата | 2026-09-05 |
 | Основание | `test-personnel-data-deletion-approval-plan.md`, `WP-TD-004-test-personnel-deletion-relationship-matrix.md` |
 | Scope | Только synthetic applicants без `Employee` и любых `BLOCK`-связей |
@@ -139,6 +139,16 @@ Canonical relationship fingerprint включает PERSON-root Manifest v2 и �
 
 Наличие permission никогда не разрешает исполнить v1/legacy request. Такая попытка получает отказ и отдельную PII-free audit-запись без domain DML.
 
+### Результат этапа 4 — 2026-09-05
+
+**Завершено.** Зарезервированная foundation permission `TEST_PERSONNEL_DELETION_EXECUTE` включена в действующую capability matrix как отдельное право: default role grant остаётся только у `ADMIN`, `HR_HEAD` его не получает, а `/auth/me` публикует `can_execute_test_personnel_deletion`. Request, approve и execute capabilities вычисляются независимо; наличие execute capability не создаёт route, endpoint или UI-кнопку.
+
+Добавлен неподключённый к workflow server-side contract проверки исполнителя: executor обязан быть active `ADMIN` с execute permission и не может совпадать с пользователем, записавшим действующее `APPROVE`-решение как `HR_HEAD`. Проверка сверяет frozen approval version и hashes, но сама ничего не исполняет.
+
+Revision `td005audit401` расширяет сохраняемую history действием `EXECUTE`, добавляет защиту от `TRUNCATE` и строгий PII-free INSERT contract. Projection допускает только request/executor technical IDs, approved manifest/fingerprint/policy/catalog versions и hashes, отсортированные table counts, before/after hashes, opaque UUID idempotency key, server timestamp, result и безопасный error code. ФИО, ИИН, контакты, raw payload, произвольные поля и тексты ошибок отклоняются PostgreSQL guard/check; `UPDATE`, `DELETE` и `TRUNCATE` запрещены. Transaction-neutral writer не подключён к route или workflow: одинаковый key/content возвращает сохранённую projection, другой content отклоняется.
+
+Проверено только на одноразовых PostgreSQL-клонах: upgrade → downgrade → upgrade, одна Alembic head `td005audit401`, 8 целевых permission/API/audit-тестов, совместный набор этапов 1–4 (`39 passed`) и полный regression suite (`341 passed`). В тестах EXECUTE rows всегда откатывались вместе с одноразовыми клонами; рабочая БД не изменялась. Этап 4 закрыт, но физическое удаление, tombstone writes, execution endpoint, кнопка и Employee-процесс не добавлялись.
+
 ## 6. Этап 5 — Транзакционный execution backend
 
 **Ожидаемые изменения**
@@ -213,4 +223,4 @@ Rollout не меняет их статус и не делает их испол
 
 ## 9. Готовность execution
 
-Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–3 добавляют revisions `td005m1v2a01`, `td005tomb201` и `td005fp3v101`, но готовность наступит только после последовательного закрытия этапов 4–7 и всех gates WP-TD-004. Физическое удаление, запись tombstones из execution, execution endpoint и кнопка удаления не создавались; tombstones этапа 2 не подключены к execution.
+Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–4 добавляют revisions `td005m1v2a01`, `td005tomb201`, `td005fp3v101` и `td005audit401`, но готовность наступит только после последовательного закрытия этапов 5–7 и всех gates WP-TD-004. Физическое удаление, запись tombstones из execution, execution endpoint и кнопка удаления не создавались; audit writer и tombstones не подключены к execution.

@@ -20,12 +20,16 @@ from sqlalchemy.engine import Connection
 FINGERPRINT_VERSION = "WP-TD-RELATIONSHIP/v2"
 POLICY_VERSION = "WP-TD-005-APPLICANT/v1"
 CATALOG_VERSION = "WP-TD-CATALOG/v1"
-COMPATIBLE_ALEMBIC_REVISIONS = frozenset({"td005fp3v101"})
+COMPATIBLE_ALEMBIC_REVISIONS = frozenset({"td005fp3v101", "td005audit401"})
 
-# Filled from the reviewed schema represented by revision td005fp3v101.  The
-# value is deliberately static: calculating an "expected" value from a drifted
-# runtime catalog would turn the safety check into a tautology.
+# Filled from reviewed schemas.  Values are deliberately static: calculating
+# an "expected" value from a drifted runtime catalog would turn the safety
+# check into a tautology.
 EXPECTED_CATALOG_FINGERPRINT = "c0a7bb93eb702a3caaaa19737cb6370bfe7529a4cddc61954194aaf3f2cc6874"
+EXPECTED_CATALOG_FINGERPRINTS = {
+    "td005fp3v101": EXPECTED_CATALOG_FINGERPRINT,
+    "td005audit401": "bba726918a242154dd710c56c1afb285673825e5af6525027e7af81e5ee3c935",
+}
 
 DELETE_RULES = frozenset({
     "ALL_APPLICATIONS_PRESENT",
@@ -290,10 +294,14 @@ def catalog_state(
         len(snapshot["alembic_revisions"]) == 1
         and snapshot["alembic_revisions"][0] in COMPATIBLE_ALEMBIC_REVISIONS
     )
+    expected_fingerprint = (
+        EXPECTED_CATALOG_FINGERPRINTS.get(snapshot["alembic_revisions"][0])
+        if len(snapshot["alembic_revisions"]) == 1 else None
+    )
     compatible = (
         revision_compatible
         and not snapshot["missing_tables"]
-        and digest == EXPECTED_CATALOG_FINGERPRINT
+        and digest == expected_fingerprint
     )
     result = {
         "version": CATALOG_VERSION,

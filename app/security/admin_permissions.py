@@ -20,6 +20,7 @@ TEST_PERSONNEL_DELETION_AUDIT_READ = "TEST_PERSONNEL_DELETION_AUDIT_READ"
 TEST_PERSONNEL_DELETION_CAPABILITY_BY_PERMISSION = {
     TEST_PERSONNEL_DELETION_REQUEST: "can_request_test_personnel_deletion",
     TEST_PERSONNEL_DELETION_APPROVE: "can_approve_test_personnel_deletion",
+    TEST_PERSONNEL_DELETION_EXECUTE: "can_execute_test_personnel_deletion",
     TEST_PERSONNEL_DELETION_AUDIT_READ: "can_read_test_personnel_deletion_audit",
 }
 
@@ -131,6 +132,9 @@ def get_test_personnel_deletion_capabilities(
     )
     result["can_approve_test_personnel_deletion"] = (
         primary_role == "HR_HEAD" and has_admin_permission(uid, TEST_PERSONNEL_DELETION_APPROVE)
+    )
+    result["can_execute_test_personnel_deletion"] = (
+        primary_role == "ADMIN" and has_admin_permission(uid, TEST_PERSONNEL_DELETION_EXECUTE)
     )
     result["can_read_test_personnel_deletion_audit"] = (
         has_admin_permission(uid, TEST_PERSONNEL_DELETION_AUDIT_READ)

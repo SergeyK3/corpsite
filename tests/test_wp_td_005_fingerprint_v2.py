@@ -87,7 +87,13 @@ def _append_provenance(connection, applicant, *, version, state="ACTIVE", artifa
 
 
 def test_alembic_has_single_fingerprint_head():
-    assert ScriptDirectory.from_config(_alembic_config()).get_heads() == [REVISION]
+    script = ScriptDirectory.from_config(_alembic_config())
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert REVISION in {
+        migration.revision
+        for migration in script.iterate_revisions(heads[0], "base")
+    }
 
 
 def test_fingerprint_migration_upgrade_downgrade_upgrade():
