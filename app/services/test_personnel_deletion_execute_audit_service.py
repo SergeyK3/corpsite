@@ -20,7 +20,7 @@ EXECUTE_PERMISSION = "TEST_PERSONNEL_DELETION_EXECUTE"
 _HASH = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_CODE = re.compile(r"^TD_[A-Z0-9_]{1,124}$")
 _SAFE_IDEMPOTENCY_KEY = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 _SAFE_TABLE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
@@ -74,7 +74,7 @@ def assert_approver_executor_separation(
             catalog_fingerprint,decided_at
         FROM public.test_personnel_deletion_decisions
         WHERE request_id=:request_id AND decision='APPROVE'
-        ORDER BY decision_id DESC LIMIT 1"""), {
+        ORDER BY decision_id DESC LIMIT 1 FOR SHARE"""), {
             "request_id": request_uuid,
         }).mappings().one_or_none()
     if approval is None:
@@ -120,6 +120,12 @@ def record_execute_audit(
     idempotency_key: str,
     result: str,
     error_code: str | None,
+    command_payload_hash: str | None = None,
+    old_status: str = "APPROVED",
+    new_status: str = "APPROVED",
+    old_version: int | None = None,
+    new_version: int | None = None,
+    allow_approval_drift: bool = False,
 ) -> dict[str, Any]:
     """Write a simulated EXECUTE audit row; caller owns the transaction.
 
@@ -147,21 +153,19 @@ def record_execute_audit(
         WHERE request_id=:request_id"""), {"request_id": request_uuid}).mappings().one_or_none()
     if request is None:
         raise ExecuteAuditContractError("TD_EXECUTE_REQUEST_NOT_FOUND", "Request was not found.")
-    if request["status"] != "APPROVED" or (
-        request["approval_expires_at"] is None
-        or request["approval_expires_at"] <= conn.execute(text("SELECT transaction_timestamp()" )).scalar_one()
-    ):
-        raise ExecuteAuditContractError("TD_EXECUTE_APPROVAL_REQUIRED", "Current approval is required.")
     assert_executor_permission(conn, executor_user_id=executor_id)
     approval = assert_approver_executor_separation(
         conn, request_id=request_uuid, executor_user_id=executor_id,
     )
-    if (
+    approval_drift = (
         int(approval["request_version"]) != int(request["version"])
         or approval["target_set_hash"] != request["target_set_hash"]
         or approval["relationship_fingerprint"] != request["relationship_fingerprint"]
         or approval["fingerprint_version"] != request["fingerprint_version"]
         or approval["catalog_fingerprint"] != request["catalog_fingerprint"]
+    )
+    if approval_drift and not (
+        allow_approval_drift and old_status == "APPROVED" and new_status == "REAPPROVAL_REQUIRED"
     ):
         raise ExecuteAuditContractError(
             "TD_EXECUTE_APPROVAL_FINGERPRINT_MISMATCH", "Approval does not match the frozen request.",
@@ -186,7 +190,10 @@ def record_execute_audit(
         "result": result_code,
         "error_code": safe_error,
     }
-    command_hash = canonical_hash(frozen)
+    command_hash = (
+        _safe_hash(command_payload_hash, "command_payload_hash")
+        if command_payload_hash is not None else canonical_hash(frozen)
+    )
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"), {
         "key": f"WP-TD-005:EXECUTE:{key}",
     })
@@ -206,6 +213,29 @@ def record_execute_audit(
             )
         return dict(existing["result_projection"])
 
+    approval_expired = (
+        request["approval_expires_at"] is None
+        or request["approval_expires_at"] <= conn.execute(text("SELECT transaction_timestamp()" )).scalar_one()
+    )
+    if request["status"] != "APPROVED" or (approval_expired and new_status != "REAPPROVAL_REQUIRED"):
+        raise ExecuteAuditContractError("TD_EXECUTE_APPROVAL_REQUIRED", "Current approval is required.")
+    previous_version = int(request["version"]) if old_version is None else int(old_version)
+    resulting_version = previous_version if new_version is None else int(new_version)
+    allowed_transition = (
+        old_status == "APPROVED"
+        and (
+            (new_status == "APPROVED" and resulting_version == previous_version)
+            or (
+                new_status in {"COMPLETED", "REAPPROVAL_REQUIRED"}
+                and resulting_version == previous_version + 1
+            )
+        )
+    )
+    if not allowed_transition:
+        raise ExecuteAuditContractError(
+            "TD_EXECUTE_AUDIT_TRANSITION_INVALID", "Invalid EXECUTE audit transition.",
+        )
+
     occurred_at = conn.execute(text("SELECT statement_timestamp()" )).scalar_one()
     projection = {**frozen, "timestamp": occurred_at.isoformat()}
     inserted = conn.execute(text("""INSERT INTO public.test_personnel_deletion_history(
@@ -213,13 +243,16 @@ def record_execute_audit(
             old_status,new_status,old_version,new_version,target_set_hash,comment,
             idempotency_key,command_payload_hash,occurred_at,result_code,result_projection)
         VALUES(:request_id,:executor,'ADMIN',:permission,'EXECUTE',
-            'APPROVED','APPROVED',:version,:version,:target_hash,NULL,
+            :old_status,:new_status,:old_version,:new_version,:target_hash,NULL,
             :key,:command_hash,:occurred_at,:result,CAST(:projection AS jsonb))
         RETURNING result_projection"""), {
             "request_id": request_uuid,
             "executor": executor_id,
             "permission": EXECUTE_PERMISSION,
-            "version": int(request["version"]),
+            "old_status": old_status,
+            "new_status": new_status,
+            "old_version": previous_version,
+            "new_version": resulting_version,
             "target_hash": request["target_set_hash"],
             "key": key,
             "command_hash": command_hash,

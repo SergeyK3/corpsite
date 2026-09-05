@@ -105,7 +105,12 @@ def _write(connection, request_id, actors, *, key="10000000-0000-4000-8000-00000
 
 
 def test_alembic_has_one_stage4_head():
-    assert ScriptDirectory.from_config(_alembic_config()).get_heads() == [REVISION]
+    script = ScriptDirectory.from_config(_alembic_config())
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert REVISION in {
+        migration.revision for migration in script.iterate_revisions(heads[0], "base")
+    }
 
 
 def test_stage4_upgrade_downgrade_upgrade():
@@ -149,7 +154,7 @@ def test_execute_permission_default_is_admin_only(audit_engine, actors):
     assert role_grants == ["ADMIN"]
 
 
-def test_auth_me_exposes_execute_capability_without_route(audit_engine, actors):
+def test_auth_me_exposes_execute_capability(audit_engine, actors):
     admin_caps = admin_permissions.get_test_personnel_deletion_capabilities(
         int(actors["ADMIN"]["user_id"]), primary_role_code="ADMIN",
     )
@@ -170,8 +175,6 @@ def test_auth_me_exposes_execute_capability_without_route(audit_engine, actors):
             app.dependency_overrides.pop(get_current_user, None)
         else:
             app.dependency_overrides[get_current_user] = previous
-    route_paths = {route.path for route in app.routes}
-    assert not any(path.endswith("/execute") for path in route_paths if "test-personnel-deletion" in path)
 
 
 def test_approver_executor_separation_and_permission(audit_engine, actors):

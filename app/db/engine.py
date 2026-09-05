@@ -2,7 +2,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from dotenv import load_dotenv
-load_dotenv()
+
+if os.getenv("CORPSITE_SKIP_DOTENV") != "1":
+    load_dotenv()
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")

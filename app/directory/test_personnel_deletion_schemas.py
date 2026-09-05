@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -83,3 +84,10 @@ class TestPersonnelCommandIn(BaseModel):
 
 class TestPersonnelDecisionIn(TestPersonnelCommandIn):
     submitted_synthetic_confirmed: bool = False
+
+
+class TestPersonnelExecuteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: UUID
+    confirmation_phrase: str = Field(..., min_length=1, max_length=128)

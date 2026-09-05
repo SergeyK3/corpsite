@@ -138,17 +138,35 @@ def capture_record_event_tombstone(
 
 
 def capture_command_tombstone(
-    conn: Connection, *, request_id: UUID | str, source_command_id: str,
+    conn: Connection, *, request_id: UUID | str,
+    source_command_execution_id: int | None = None,
+    source_command_id: str | None = None,
 ) -> dict[str, Any]:
+    has_technical_id = bool(conn.execute(text("""SELECT EXISTS(
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='ppr_command_executions'
+          AND column_name='command_execution_id')""")).scalar_one())
+    if has_technical_id and source_command_execution_id is None:
+        raise TestPersonnelDeletionError(
+            "TD_TOMBSTONE_TECHNICAL_SOURCE_REQUIRED",
+            "A server-generated command execution identity is required.", 409,
+        )
+    source_predicate = (
+        "command.command_execution_id=:source_id" if has_technical_id
+        else "command.command_id=:source_id"
+    )
+    source_value: Any = (
+        int(source_command_execution_id) if has_technical_id else str(source_command_id or "")
+    )
     row = conn.execute(text("""SELECT command.*
         FROM public.ppr_command_executions command
-        WHERE command.command_id=:source_id
+        WHERE """ + source_predicate + """
           AND EXISTS (
               SELECT 1 FROM public.test_personnel_deletion_manifest_v2_targets target
               WHERE target.request_id=:request_id AND target.person_id=command.person_id
           )
         FOR SHARE OF command"""), {
-            "source_id": source_command_id, "request_id": request_id,
+            "source_id": source_value, "request_id": request_id,
         }).mappings().one_or_none()
     if row is None:
         raise TestPersonnelDeletionError(
@@ -158,10 +176,31 @@ def capture_command_tombstone(
         )
     request_digest = canonical_digest(row["request_fingerprint"])
     result_digest = canonical_digest(row["result_payload"])
+    source_reference_digest = hashlib.sha256(str(row["command_id"]).encode("utf-8")).hexdigest()
+    if not has_technical_id:
+        # Compatibility for tests pinned to the historical stage-2 schema.
+        digest = canonical_digest({
+            "schema": TOMBSTONE_SCHEMA_VERSION, "source": "ppr_command_executions",
+            "source_command_id": str(row["command_id"]), "command_type": str(row["command_type"]),
+            "command_status": str(row["status"]), "source_created_at": row["created_at"],
+            "source_completed_at": row["completed_at"], "request_digest": request_digest,
+            "result_digest": result_digest,
+        })
+        return _insert_idempotent(
+            conn, table="test_personnel_deletion_command_tombstones",
+            source_column="source_command_id", values={
+                "request_id": request_id, "source_command_id": str(row["command_id"]),
+                "command_type": str(row["command_type"]), "command_status": str(row["status"]),
+                "source_created_at": row["created_at"], "source_completed_at": row["completed_at"],
+                "request_digest": request_digest, "result_digest": result_digest,
+                "canonical_digest": digest,
+            },
+        )
     digest = canonical_digest({
         "schema": TOMBSTONE_SCHEMA_VERSION,
         "source": "ppr_command_executions",
-        "source_command_id": str(row["command_id"]),
+        "source_command_execution_id": int(row["command_execution_id"]),
+        "source_reference_digest": source_reference_digest,
         "command_type": str(row["command_type"]),
         "command_status": str(row["status"]),
         "source_created_at": row["created_at"],
@@ -172,10 +211,11 @@ def capture_command_tombstone(
     return _insert_idempotent(
         conn,
         table="test_personnel_deletion_command_tombstones",
-        source_column="source_command_id",
+        source_column="source_command_execution_id",
         values={
             "request_id": request_id,
-            "source_command_id": str(row["command_id"]),
+            "source_command_execution_id": int(row["command_execution_id"]),
+            "source_reference_digest": source_reference_digest,
             "command_type": str(row["command_type"]),
             "command_status": str(row["status"]),
             "source_created_at": row["created_at"],
@@ -252,18 +292,26 @@ def capture_tombstones(
     *,
     request_id: UUID | str,
     record_event_ids: Iterable[int] = (),
+    command_execution_ids: Iterable[int] = (),
     command_ids: Iterable[str] = (),
     lifecycle_audit_ids: Iterable[int] = (),
 ) -> dict[str, list[dict[str, Any]]]:
     """Capture exact source sets in the caller-owned transaction; never commits."""
+    technical_command_ids = sorted(set(map(int, command_execution_ids)))
+    legacy_command_ids = sorted(set(map(str, command_ids)))
     return {
         "record_events": [
             capture_record_event_tombstone(conn, request_id=request_id, source_event_id=source_id)
             for source_id in sorted(set(map(int, record_event_ids)))
         ],
         "commands": [
+            capture_command_tombstone(
+                conn, request_id=request_id, source_command_execution_id=source_id,
+            )
+            for source_id in technical_command_ids
+        ] if technical_command_ids else [
             capture_command_tombstone(conn, request_id=request_id, source_command_id=source_id)
-            for source_id in sorted(set(map(str, command_ids)))
+            for source_id in legacy_command_ids
         ],
         "lifecycle": [
             capture_lifecycle_tombstone(conn, request_id=request_id, source_audit_id=source_id)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from contextlib import contextmanager
 from datetime import date
@@ -11,7 +12,6 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from dotenv import dotenv_values
 from pydantic import ValidationError
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -21,10 +21,13 @@ from app.directory.test_personnel_deletion_schemas import (
 )
 from app.services import test_personnel_deletion_service as service
 from tests.db_guard import assert_connected_test_database, validate_test_database_url
+from tests.db_guard import PytestDatabaseGuardError
 
 
 PREVIOUS_REVISION = "b1c2d3e4f5a6"
 REVISION = "td005m1v2a01"
+ROLE_BOOTSTRAP_REVISION = "g4b5c6d7e8f9"
+ORG_BOOTSTRAP_REVISION = "r1s2t3u4v5w6"
 
 
 def _canonical_hash(value) -> str:
@@ -41,26 +44,68 @@ def _alembic_config(url: str | None = None) -> Config:
 
 @contextmanager
 def _ephemeral_database(*, upgrade: bool = True):
-    source_url = str(dotenv_values(".env")["DATABASE_URL"])
+    source_url = os.environ.get("TEST_DATABASE_URL", "").strip()
+    expected_source = validate_test_database_url(test_database_url=source_url)
     source = make_url(source_url)
-    name = f"corpsite_td005_manifest_{uuid.uuid4().hex[:10]}_test"
-    admin_url = source.set(database="postgres").render_as_string(hide_password=False)
+    if not source.drivername.startswith("postgresql"):
+        raise RuntimeError("TEST_DATABASE_URL must use PostgreSQL.")
+    if not expected_source.database.startswith("test_"):
+        raise RuntimeError("TEST_DATABASE_URL database must have an explicit test_ prefix.")
+    name = f"test_corpsite_td005_{uuid.uuid4().hex[:12]}_test"
+    admin_url = source.render_as_string(hide_password=False)
     target_url = source.set(database=name).render_as_string(hide_password=False)
     expected = validate_test_database_url(
         test_database_url=target_url,
-        app_database_url=source_url,
     )
     admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     clone_engine = create_engine(target_url)
-    template_name = str(source.database)
-    assert template_name.replace("_", "").isalnum()
     with admin_engine.connect() as connection:
-        connection.execute(text(f'CREATE DATABASE "{name}" TEMPLATE "{template_name}"'))
+        assert_connected_test_database(connection, expected_source)
+        connection.execute(text(f'CREATE DATABASE "{name}" TEMPLATE template0'))
     try:
         with clone_engine.connect() as connection:
             assert_connected_test_database(connection, expected)
+        config = _alembic_config(target_url)
+        command.upgrade(config, ROLE_BOOTSTRAP_REVISION)
+        with clone_engine.begin() as connection:
+            connection.execute(text("""INSERT INTO public.roles(name,code)
+                VALUES('Synthetic test administrator','ADMIN'),
+                      ('Synthetic test HR head','HR_HEAD')
+                ON CONFLICT(code) DO NOTHING"""))
+            connection.execute(text("""INSERT INTO public.users(full_name,role_id,is_active,login)
+                SELECT 'Synthetic migration grantor',role_id,TRUE,'test.td005.admin'
+                FROM public.roles WHERE code='ADMIN'"""))
+        command.upgrade(config, ORG_BOOTSTRAP_REVISION)
+        with clone_engine.begin() as connection:
+            parent_id = int(connection.execute(text("""INSERT INTO public.org_units(
+                    name,code,group_id,is_active)
+                VALUES('Synthetic test root','TEST_ROOT',3,TRUE) RETURNING unit_id""")).scalar_one())
+            connection.execute(text("""INSERT INTO public.org_units(
+                    name,code,parent_unit_id,group_id,is_active)
+                VALUES('Synthetic test dispensary','DISP',:parent_id,2,TRUE)"""), {
+                "parent_id": parent_id,
+            })
+        command.upgrade(config, PREVIOUS_REVISION)
+        with clone_engine.begin() as connection:
+            # Optional legacy bridges are not owned by Alembic in production.
+            # Empty canonical test doubles make their logical writer paths
+            # explicit without copying any operational rows or PII.
+            for table, id_column in (
+                ("personnel", "personnel_id"),
+                ("contact_access", "contact_access_id"),
+                ("key_contacts", "key_contact_id"),
+                ("org_unit_key_staff", "org_unit_key_staff_id"),
+            ):
+                connection.execute(text(
+                    f'CREATE TABLE public."{table}" ('
+                    f'"{id_column}" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,'
+                    'person_id BIGINT NOT NULL)'
+                ))
+            connection.execute(text("""INSERT INTO public.users(full_name,role_id,is_active,login)
+                SELECT 'Synthetic HR approver',role_id,TRUE,'test.td005.hr'
+                FROM public.roles WHERE code='HR_HEAD'"""))
         if upgrade:
-            command.upgrade(_alembic_config(target_url), REVISION)
+            command.upgrade(config, REVISION)
         yield target_url, clone_engine
     finally:
         clone_engine.dispose()
@@ -150,6 +195,24 @@ def test_alembic_has_single_manifest_v2_head():
         migration.revision
         for migration in script.iterate_revisions(heads[0], "base")
     }
+
+
+@pytest.mark.parametrize("unsafe_url", [
+    "",
+    "postgresql://tester:secret@db.internal:5432/test_corpsite_test",
+    "postgresql://tester:secret@127.0.0.1:5432/corpsite_test",
+])
+def test_ephemeral_database_fails_before_connect_or_ddl(monkeypatch, unsafe_url):
+    calls = []
+    monkeypatch.setenv("TEST_DATABASE_URL", unsafe_url)
+    monkeypatch.setattr(
+        "tests.test_wp_td_005_manifest_v2.create_engine",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    with pytest.raises((PytestDatabaseGuardError, RuntimeError)):
+        with _ephemeral_database():
+            pass
+    assert calls == []
 
 
 def test_manifest_v2_migration_upgrade_downgrade_upgrade():

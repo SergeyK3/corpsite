@@ -14,7 +14,6 @@ from sqlalchemy.engine.url import URL, make_url
 
 _GUARD_APPLIED = False
 _ENGINE_BOUND = False
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class PytestDatabaseGuardError(Exception):
@@ -116,11 +115,13 @@ def validate_test_database_url(
 def resolve_main_database_url(
     *, process_database_url: Optional[str] = None, dotenv_path: Path | None = None,
 ) -> Optional[str]:
-    """Read the application URL without mutating os.environ."""
+    """Read an explicitly supplied comparison URL; never open workspace .env."""
     process_value = process_database_url if process_database_url is not None else os.environ.get("DATABASE_URL")
     if process_value and str(process_value).strip():
         return str(process_value).strip()
-    values = dotenv_values(dotenv_path or (PROJECT_ROOT / ".env"))
+    if dotenv_path is None:
+        return None
+    values = dotenv_values(dotenv_path)
     dotenv_value = values.get("DATABASE_URL")
     return str(dotenv_value).strip() if dotenv_value and str(dotenv_value).strip() else None
 
@@ -157,7 +158,9 @@ def enforce_pytest_database_isolation() -> NormalizedDatabaseTarget:
     try:
         target = validate_test_database_url(
             test_database_url=os.environ.get("TEST_DATABASE_URL"),
-            app_database_url=resolve_main_database_url(),
+            # Never inspect the workspace .env in a pytest process.  A
+            # process-level DATABASE_URL is sufficient to reject equality.
+            app_database_url=os.environ.get("DATABASE_URL"),
         )
     except PytestDatabaseGuardError as exc:
         _fail_guard(str(exc))
@@ -177,6 +180,12 @@ def bind_app_engine_to_test_database() -> str:
         return test_url
 
     from sqlalchemy import create_engine
+
+    # Must happen before app.db.engine is imported: this prevents python-dotenv
+    # from reading the workspace .env and prevents creation of a working-DB
+    # engine even transiently.
+    os.environ["CORPSITE_SKIP_DOTENV"] = "1"
+    os.environ["DATABASE_URL"] = test_url
 
     import app.db.engine as engine_module
 

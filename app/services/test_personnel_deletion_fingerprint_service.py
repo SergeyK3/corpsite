@@ -20,16 +20,28 @@ from sqlalchemy.engine import Connection
 FINGERPRINT_VERSION = "WP-TD-RELATIONSHIP/v2"
 POLICY_VERSION = "WP-TD-005-APPLICANT/v1"
 CATALOG_VERSION = "WP-TD-CATALOG/v1"
-COMPATIBLE_ALEMBIC_REVISIONS = frozenset({"td005fp3v101", "td005audit401"})
+COMPATIBLE_ALEMBIC_REVISIONS = frozenset({"td005fp3v101", "td005audit401", "td005exec501"})
 
 # Filled from reviewed schemas.  Values are deliberately static: calculating
 # an "expected" value from a drifted runtime catalog would turn the safety
 # check into a tautology.
-EXPECTED_CATALOG_FINGERPRINT = "c0a7bb93eb702a3caaaa19737cb6370bfe7529a4cddc61954194aaf3f2cc6874"
+EXPECTED_CATALOG_FINGERPRINT = "27aa61cead0a55840991fdaa4ea596c2e30277c254c918f265b50d20fc76f6a6"
 EXPECTED_CATALOG_FINGERPRINTS = {
     "td005fp3v101": EXPECTED_CATALOG_FINGERPRINT,
-    "td005audit401": "bba726918a242154dd710c56c1afb285673825e5af6525027e7af81e5ee3c935",
+    "td005audit401": "eabb56e613485f5fd72a789821b32403e323235b5437a28e90fb73824b18d1e9",
+    "td005exec501": "23a1eee9fbdb2b2aa2a2412f083ed97cc96c004abcdd2c25d4cead3be96e9495",
 }
+
+# Every relation from which stage 5 can issue DELETE.  All inbound foreign
+# keys to these tables are catalogued, including keys owned by otherwise
+# unknown tables.  This prevents an unreviewed CASCADE/SET NULL/RESTRICT from
+# being hidden behind a known parent delete.
+EXECUTION_DELETE_TABLES = frozenset({
+    "personnel_intake_drafts", "personnel_intake_links",
+    "personnel_record_events", "ppr_command_executions",
+    "personnel_application_lifecycle_audit", "personnel_record_metadata",
+    "personnel_applications", "persons",
+})
 
 DELETE_RULES = frozenset({
     "ALL_APPLICATIONS_PRESENT",
@@ -203,13 +215,17 @@ def _rule_registry(rules: Sequence[Any]) -> list[dict[str, Any]]:
 
 def catalog_snapshot(conn: Connection, rules: Sequence[Any]) -> dict[str, Any]:
     registry = _rule_registry(rules)
-    registered_tables = sorted(
-        STRUCTURAL_TABLES | ADDITIONAL_CATALOG_TABLES
-        | {item["table"] for item in registry}
-    )
     revision_rows = conn.execute(text(
         "SELECT version_num FROM public.alembic_version ORDER BY version_num"
     )).scalars().all()
+    revision_tables = (
+        {"test_personnel_deletion_execution_attempts"}
+        if revision_rows == ["td005exec501"] else set()
+    )
+    registered_tables = sorted(
+        STRUCTURAL_TABLES | revision_tables | ADDITIONAL_CATALOG_TABLES
+        | {item["table"] for item in registry}
+    )
     columns = [dict(row) for row in conn.execute(text("""SELECT
             c.relname AS table_name, a.attname AS column_name,
             pg_catalog.format_type(a.atttypid,a.atttypmod) AS data_type,
@@ -248,9 +264,13 @@ def catalog_snapshot(conn: Connection, rules: Sequence[Any]) -> dict[str, Any]:
         JOIN pg_catalog.pg_attribute target_column
           ON target_column.attrelid=target.oid AND target_column.attnum=target_key.attnum
         WHERE namespace.nspname='public' AND constraint_def.contype='f'
-          AND (source.relname=ANY(:tables) OR target.relname IN ('persons','personnel_applications','employees','users'))
+          AND (source.relname=ANY(:tables) OR target.relname=ANY(:delete_tables)
+               OR target.relname IN ('employees','users'))
         GROUP BY source.relname,constraint_def.conname,target.relname,constraint_def.confdeltype
-        ORDER BY source.relname,constraint_def.conname"""), {"tables": registered_tables}).mappings()]
+        ORDER BY source.relname,constraint_def.conname"""), {
+            "tables": registered_tables,
+            "delete_tables": sorted(EXECUTION_DELETE_TABLES),
+        }).mappings()]
     triggers = [dict(row) for row in conn.execute(text("""SELECT
             table_def.relname AS table_name, trigger_def.tgname AS trigger_name,
             regexp_replace(pg_get_triggerdef(trigger_def.oid),'\\s+',' ','g') AS definition,

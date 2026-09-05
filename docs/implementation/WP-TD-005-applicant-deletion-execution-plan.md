@@ -2,7 +2,7 @@
 
 | Поле | Значение |
 |---|---|
-| Статус | **Этапы 1–4 завершены — execution запрещён, этапы 5–7 не начаты** |
+| Статус | **Этапы 1–5 реализованы; Stage 5 hardening завершён, feature flag выключен; этапы 6–7 не начаты** |
 | Дата | 2026-09-05 |
 | Основание | `test-personnel-data-deletion-approval-plan.md`, `WP-TD-004-test-personnel-deletion-relationship-matrix.md` |
 | Scope | Только synthetic applicants без `Employee` и любых `BLOCK`-связей |
@@ -168,11 +168,29 @@ Revision `td005audit401` расширяет сохраняемую history де�
 
 **Gate**
 
-Не переходить к этапу 6, пока backend не проходит все PostgreSQL integration и failure-injection tests; endpoint остаётся недоступным для production grants.
+Не переходить к этапу 6, пока backend не проходит все PostgreSQL integration и failure-injection tests; feature flag остаётся выключенным по умолчанию и не включается до отдельного rollout-решения этапа 7.
 
 **Старые запросы**
 
 Backend принимает только manifest v2 и `APPLICANT_ONLY`. Для v1/legacy используется стабильный non-retryable отказ с указанием создать и заново согласовать v2 request; auto-conversion запрещён.
+
+**Результат этапа 5 (реализован)**
+
+Добавлен `POST /directory/test-personnel-deletion/requests/{request_id}/execute` с обязательными opaque UUID `idempotency_key` и точной фразой `УДАЛИТЬ {request_number} / {target_count}`. Endpoint доступен только активному `ADMIN` с `TEST_PERSONNEL_DELETION_EXECUTE` и по умолчанию закрыт `TEST_PERSONNEL_DELETION_EXECUTION_ENABLED=false`; UI и employee execution не добавлялись.
+
+Revision `td005exec501` добавляет terminal status `COMPLETED`, append-only execution attempts, разрешённые EXECUTE audit transitions и PostgreSQL advisory-lock guards для legacy Person relations без FK. Execution выполняет повторный fail-closed `R0` в новой `SERIALIZABLE` транзакции, блокирует request/approval/Person/frozen Application и server-owned relationship tables, проверяет manifest/provenance/catalog/fingerprint/approval/attestation и отсутствие всех `BLOCK`. Drift атомарно фиксируется как `REAPPROVAL_REQUIRED`, обнуляет approval timestamps, увеличивает version и сохраняет безопасный EXECUTE audit без DELETE.
+
+Разрешённый путь выполняет только explicit `DELETE … RETURNING` по frozen IDs в порядке `D1 → D2 → tombstones → journals → D3 → D4 → D5`, сверяет count/hash каждого source set, before/after IDs/count/digests всех `PRESERVE` rules и допустимые `SET NULL`, сохраняет request/targets/manifest/decision/history/provenance и записывает PII-free `TD_EXECUTION_COMPLETED` audit в той же транзакции. До domain transaction коммитится append-only `INTENT`; успех/`REAPPROVAL_REQUIRED` получает `RESULT` в domain transaction, а после rollback надёжно сохраняются `RESULT=TD_EXECUTION_FAILED` и безопасный audit. Crash между ними оставляет обнаруживаемый незавершённый `INTENT`. Одинаковый UUID/content возвращает сохранённую projection; тот же UUID с другим payload даёт `409`; для `COMPLETED` только исходный UUID replayable, новый UUID связывается с failed attempt и получает `409 TD_EXECUTE_ALREADY_COMPLETED`.
+
+После adversarial hardening F-CATALOG учитывает каждый входящий FK к любой D1–D5/journal delete table независимо от владельца и `ON DELETE`; неизвестный `CASCADE` даёт catalog drift до DELETE. Caller-controlled `ppr_command_executions.command_id` больше не сохраняется: tombstone содержит server-generated numeric source PK и SHA-256 source-reference digest с DB constraints. UUID-контракт принимает любой канонический UUID, включая v7. Downgrade выполняет preflight `COMPLETED`/несовместимых EXECUTE transitions/attempts/command tombstones до изменения constraints и fail closed на непустой несовместимой схеме.
+
+Upgrade также fail closed, если в старой command-tombstone таблице уже есть строки с caller-controlled `source_command_id`: автоматический перенос потенциальной PII запрещён. Перед rollout требуется отдельный read-only preflight и утверждённое решение по таким legacy tombstones; удалять или преобразовывать их эта revision не пытается.
+
+PostgreSQL-набор покрывает template0 migration roundtrip, single head/F-CATALOG, неизвестный FK-child с `ON DELETE CASCADE`, feature flag/API/permission/separation, success с тремя tombstone-классами, PII-shaped command IDs, DB digest constraint, v1/legacy/expired/Employee/drift, durable intent, replay/conflict/completed-key policy, rollback fault injection после каждого шага, параллельный execute, конкурентные FK и logical inserts, реальные User/onboarding, photo/file, incoming document/attachment, personnel order, operational-order signing, verification, Telegram и security-grant строки, а также допустимые applicant-only `PRESERVE`/`SET NULL` контуры. Employee-only PRESERVE-контуры остаются недостижимыми для успешного applicant execution, потому что `EMPLOYEE_PRESENT` раньше переводит запрос в `REAPPROVAL_REQUIRED`; их строки не мутируются.
+
+Все PostgreSQL-проверки запускаются только при явно заданном `TEST_DATABASE_URL` на loopback и с test-именем. Рабочий `.env` не читается. Каждый модульный DB fixture создаёт новую пустую БД `test_corpsite_td005_<random>_test` через `CREATE DATABASE … TEMPLATE template0`, применяет Alembic и добавляет только synthetic fixtures; копирование исходной БД или реальных данных отсутствует. При нарушении URL-условий guard завершает тест до создания engine/соединения/DDL. Feature flag остаётся выключенным по умолчанию; переход к UI/этапу 6 этим результатом не разрешён автоматически.
+
+Итоговый изолированный guard + WP-TD-005 regression suite: `106 passed`; `git diff --check` чист, Alembic имеет одну head `td005exec501`. Повторный adversarial review не выявил незакрытых Critical/High/Medium/Low findings в scope этапа 5.
 
 ## 7. Этап 6 — Кнопка «Удалить одобренных тестовых претендентов»
 

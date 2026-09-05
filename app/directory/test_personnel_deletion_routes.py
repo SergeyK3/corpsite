@@ -1,4 +1,4 @@
-"""WP-TD-002 API. There is deliberately no execution/delete endpoint here."""
+"""Test-personnel approval API and feature-gated applicant execution command."""
 from __future__ import annotations
 
 from typing import Any
@@ -12,16 +12,19 @@ from app.services.ppr_query_access_service import assert_ppr_read_allowed_for_pe
 from app.security.admin_permissions import (
     TEST_PERSONNEL_DELETION_APPROVE,
     TEST_PERSONNEL_DELETION_AUDIT_READ,
+    TEST_PERSONNEL_DELETION_EXECUTE,
     TEST_PERSONNEL_DELETION_REQUEST,
     has_test_personnel_deletion_permission,
     get_test_personnel_deletion_capabilities,
 )
 from app.services import test_personnel_deletion_service as service
+from app.services import test_personnel_deletion_execution_service as execution_service
 
 from .test_personnel_deletion_schemas import (
     TestPersonnelCommandIn,
     TestPersonnelDecisionIn,
     TestPersonnelDraftCreateIn,
+    TestPersonnelExecuteIn,
     TestPersonnelPreviewIn,
 )
 
@@ -177,3 +180,21 @@ def approve(request_id: UUID, body: TestPersonnelDecisionIn, user: dict[str, Any
 @router.post("/approvals/{request_id}/reject")
 def reject(request_id: UUID, body: TestPersonnelDecisionIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     return _decide(request_id, body, user, "REJECT")
+
+
+@router.post("/requests/{request_id}/execute")
+def execute(
+    request_id: UUID,
+    body: TestPersonnelExecuteIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    actor = _require(user, TEST_PERSONNEL_DELETION_EXECUTE)
+    try:
+        return execution_service.execute_request(
+            request_id=request_id,
+            executor_user_id=actor,
+            idempotency_key=body.idempotency_key,
+            confirmation=body.confirmation_phrase,
+        )
+    except service.TestPersonnelDeletionError as exc:
+        raise _error(exc) from exc

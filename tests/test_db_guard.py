@@ -276,63 +276,17 @@ def _run_pytest_with_isolated_conftest(
 
 
 class TestGuardPluginLoadOrder:
-    def test_env_only_guard_stops_before_conftest_or_database_access(self, tmp_path: Path):
-        sandbox_root = tmp_path / "env_only_root"
-        guard_package = sandbox_root / "tests"
-        suite = sandbox_root / "suite"
-        probe_dir = sandbox_root / "probe"
-        guard_package.mkdir(parents=True)
-        suite.mkdir(parents=True)
-        (guard_package / "__init__.py").write_text("", encoding="utf-8")
-        shutil.copy2(REPO_ROOT / "tests" / "db_guard.py", guard_package / "db_guard.py")
-        shutil.copy2(
-            REPO_ROOT / "tests" / "pytest_db_guard_plugin.py",
-            guard_package / "pytest_db_guard_plugin.py",
-        )
-        secret = "env-only-secret"
-        target_url = f"postgresql://postgres:{secret}@127.0.0.1:5432/corpsite_env_only_test"
-        (sandbox_root / ".env").write_text(f"DATABASE_URL={target_url}\n", encoding="utf-8")
-        (sandbox_root / "pytest.ini").write_text(
-            "[pytest]\naddopts = -p tests.pytest_db_guard_plugin\n",
+    def test_workspace_dotenv_is_never_an_implicit_database_source(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        secret = "workspace-env-must-not-be-read"
+        (tmp_path / ".env").write_text(
+            f"DATABASE_URL=postgresql://postgres:{secret}@127.0.0.1:5432/corpsite_test\n",
             encoding="utf-8",
         )
-        (suite / "conftest.py").write_text(
-            """from pathlib import Path
-import os
-Path(os.environ['PYTEST_DB_GUARD_PROBE_DIR'], 'conftest_or_ddl_dml_access').write_text('1')
-raise AssertionError('guard allowed conftest/DDL-DML boundary')
-""",
-            encoding="utf-8",
-        )
-        (suite / "test_noop.py").write_text("def test_noop(): pass\n", encoding="utf-8")
-        child_env = {
-            key: value for key, value in os.environ.items()
-            if key not in {"DATABASE_URL", "TEST_DATABASE_URL", "PYTHONPATH", "PYTEST_DB_GUARD_PROBE_DIR"}
-        }
-        child_env.update({
-            "TEST_DATABASE_URL": target_url,
-            "PYTHONPATH": str(sandbox_root),
-            "PYTEST_DB_GUARD_PROBE_DIR": str(probe_dir),
-        })
-        parent_database_url = os.environ.get("DATABASE_URL")
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(suite / "test_noop.py"), "-q",
-             "-c", str(sandbox_root / "pytest.ini"), f"--confcutdir={suite}",
-             "--rootdir", str(sandbox_root)],
-            cwd=sandbox_root,
-            env=child_env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        output = result.stdout + result.stderr
-        assert result.returncode == 1
-        assert "must not target the same database" in output
-        assert secret not in output
-        assert (probe_dir / "01_plugin_hook_ran").exists()
-        assert not (probe_dir / "02_plugin_bound_engine").exists()
-        assert not (probe_dir / "conftest_or_ddl_dml_access").exists()
-        assert os.environ.get("DATABASE_URL") == parent_database_url
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        assert resolve_main_database_url() is None
 
     def test_guard_blocks_before_isolated_conftest_imports_engine(self, tmp_path: Path):
         probe_dir = tmp_path / "probe_fail"
