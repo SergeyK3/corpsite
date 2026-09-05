@@ -127,7 +127,13 @@ def _capture_all(connection, source):
 
 
 def test_alembic_has_single_tombstone_head():
-    assert ScriptDirectory.from_config(_alembic_config()).get_heads() == [REVISION]
+    script = ScriptDirectory.from_config(_alembic_config())
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert REVISION in {
+        migration.revision
+        for migration in script.iterate_revisions(heads[0], "base")
+    }
 
 
 def test_tombstone_migration_upgrade_downgrade_upgrade():

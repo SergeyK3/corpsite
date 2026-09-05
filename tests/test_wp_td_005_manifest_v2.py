@@ -75,7 +75,8 @@ def _ephemeral_database(*, upgrade: bool = True):
 
 @pytest.fixture(scope="module")
 def manifest_engine():
-    with _ephemeral_database() as (_url, clone_engine):
+    with _ephemeral_database(upgrade=False) as (url, clone_engine):
+        command.upgrade(_alembic_config(url), "head")
         yield clone_engine
 
 

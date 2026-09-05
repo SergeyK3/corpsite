@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 from app.db.engine import engine
+from app.services import test_personnel_deletion_fingerprint_service as fingerprint_service
 
 POLICY_VERSION = "WP-TD-002C/v4"
 MANIFEST_SCHEMA = "WP-TD-MANIFEST/v2"
@@ -56,6 +57,7 @@ def _rule(code: str, table: str, category: str, where: str, *, lookup="person_id
 # Single server-owned matrix. Identifiers and predicates are constants, never client input.
 RELATIONSHIP_MATRIX: tuple[RelationshipRule, ...] = (
     _rule("ALL_APPLICATIONS_PRESENT", "personnel_applications", INFORMATIONAL, "t.person_id=:person_id"),
+    _rule("PERSON_ROOT_NOT_ELIGIBLE", "persons", BLOCK, "t.person_id=:person_id AND (t.person_status<>'active' OR t.merged_into_person_id IS NOT NULL)", lookup="applicant root status and outgoing merge link"),
     _rule("SUBMITTED_SYNTHETIC_CONFIRMATION_REQUIRED", "personnel_applications", HR_ATTESTATION_REQUIRED, "t.application_id=:application_id AND t.status='intake_submitted'", lookup="selected application status", keys=("application_id",), required_hr_decision="submitted_synthetic_confirmed=true"),
     _rule("APPLICATION_STATUS_NOT_ELIGIBLE", "personnel_applications", BLOCK, "t.application_id=:application_id AND t.status NOT IN ('intake_pending','intake_submitted')", lookup="selected application status", keys=("application_id",)),
     _rule("PERSONNEL_ORDER_PRESENT", "personnel_applications", BLOCK, "t.application_id=:application_id AND t.personnel_order_id IS NOT NULL", lookup="selected application order link", keys=("application_id",)),
@@ -109,7 +111,9 @@ RELATIONSHIP_MATRIX: tuple[RelationshipRule, ...] = (
             'source_artifact_hash', t.source_artifact_hash,
             'provenance_version', t.provenance_version, 'created_at', t.created_at,
             'expires_at', t.expires_at,
-            'active', (t.expires_at IS NULL OR t.expires_at > transaction_timestamp())
+            'provenance_state', COALESCE(to_jsonb(t)->>'provenance_state', 'ACTIVE'),
+            'active', (COALESCE(to_jsonb(t)->>'provenance_state', 'ACTIVE')='ACTIVE'
+                AND (t.expires_at IS NULL OR t.expires_at > transaction_timestamp()))
         ) state
         FROM public.test_personnel_provenance t
         WHERE t.environment=:environment AND (
@@ -158,7 +162,7 @@ RELATIONSHIP_MATRIX += (
     _joined_rule("PERSONNEL_ORDER_SIGNATORY_PRESENT", "personnel_orders", BLOCK, "signed_by_employee_id -> employee.person_id", "SELECT to_jsonb(t) state FROM public.personnel_orders t JOIN public.employees e ON e.employee_id=t.signed_by_employee_id WHERE e.person_id=:person_id"),
     _joined_rule("PERSONNEL_ORDER_AUDIT_RETAINED", "personnel_order_lifecycle_audit", INFORMATIONAL, "order item/signatory -> employee.person_id", "SELECT to_jsonb(t) state FROM public.personnel_order_lifecycle_audit t JOIN public.personnel_orders o ON o.order_id=t.order_id WHERE o.signed_by_employee_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id) OR EXISTS (SELECT 1 FROM public.personnel_order_items i JOIN public.employees e ON e.employee_id=i.employee_id WHERE i.order_id=o.order_id AND e.person_id=:person_id)"),
     _joined_rule("OPERATIONAL_ORDER_SIGNING_PRESENT", "operational_order_signing_attestations", BLOCK, "actor_employee_id -> employee.person_id", "SELECT to_jsonb(t) state FROM public.operational_order_signing_attestations t JOIN public.employees e ON e.employee_id=t.actor_employee_id WHERE e.person_id=:person_id"),
-    _joined_rule("ACCESS_GRANT_RETAINED", "access_grants", INFORMATIONAL, "polymorphic Person/Employee/User", "SELECT to_jsonb(t) state FROM public.access_grants t WHERE (t.target_type='PERSON' AND t.target_id=:person_id) OR (t.target_type='EMPLOYEE' AND t.target_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id)) OR (t.target_type='USER' AND t.target_id IN (SELECT user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id))"),
+    _joined_rule("ACCESS_GRANT_RETAINED", "access_grants", BLOCK, "polymorphic Person/Employee/User", "SELECT to_jsonb(t) state FROM public.access_grants t WHERE (t.target_type='PERSON' AND t.target_id=:person_id) OR (t.target_type='EMPLOYEE' AND t.target_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id)) OR (t.target_type='USER' AND t.target_id IN (SELECT user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id))"),
     _joined_rule("PERSONNEL_VISIBILITY_RETAINED", "personnel_visibility_assignments", INFORMATIONAL, "target_user -> employee.person_id", "SELECT to_jsonb(t) state FROM public.personnel_visibility_assignments t JOIN public.users u ON u.user_id=t.target_user_id JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id"),
     _joined_rule("LEGACY_IMPORT_STAGE_RETAINED", "employees_import_stage", INFORMATIONAL, "logical employee_id -> employee.person_id", "SELECT to_jsonb(t) state FROM public.employees_import_stage t JOIN public.employees e ON e.employee_id=t.employee_id WHERE e.person_id=:person_id"),
     _joined_rule("PERSONNEL_MIGRATION_RUN_PRESENT", "personnel_migration_runs", BLOCK, "person_id or employee_context_id -> employee.person_id", "SELECT to_jsonb(t) state FROM public.personnel_migration_runs t WHERE t.person_id=:person_id OR t.employee_context_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id)"),
@@ -189,6 +193,39 @@ RELATIONSHIP_MATRIX += (
     _joined_rule("ONBOARDING_TASK_AUDIT_PRESENT", "employee_onboarding_task_audit", BLOCK, "onboarding -> all Person applications/Employee", "SELECT to_jsonb(t) state FROM public.employee_onboarding_task_audit t JOIN public.employee_onboardings o ON o.onboarding_id=t.onboarding_id LEFT JOIN public.employees e ON e.employee_id=o.employee_id WHERE o.application_id=ANY(:application_ids) OR e.person_id=:person_id", keys=("person_id", "application_ids")),
     _joined_rule("USER_LINKAGE_EXECUTE_ITEM_PRESENT", "user_linkage_execute_items", BLOCK, "proposed Employee, source decision or linked User -> Person", "SELECT to_jsonb(t) state FROM public.user_linkage_execute_items t WHERE t.proposed_employee_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id) OR t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id) OR t.source_decision_id IN (SELECT d.decision_id FROM public.user_linkage_review_decisions d WHERE d.proposed_employee_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id))"),
     _joined_rule("USER_LINKAGE_REVIEW_DECISION_PRESENT", "user_linkage_review_decisions", BLOCK, "proposed Employee or linked User -> Person", "SELECT to_jsonb(t) state FROM public.user_linkage_review_decisions t WHERE t.proposed_employee_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id) OR t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+)
+
+
+# WP-TD-004 section 11: every previously implicit satellite now contributes
+# its own state digest even when its already-blocking parent is present.
+RELATIONSHIP_MATRIX += (
+    _joined_rule("PERSONNEL_ORDER_ITEM_EDITORIAL_BLOCK_PRESENT", "personnel_order_item_editorial_blocks", BLOCK, "editorial block -> order item -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.personnel_order_item_editorial_blocks t JOIN public.personnel_order_items i ON i.item_id=t.order_item_id JOIN public.employees e ON e.employee_id=i.employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("ONBOARDING_NOTIFICATION_RECIPIENT_PRESENT", "employee_onboarding_notification_recipients", BLOCK, "recipient -> notification -> onboarding/application or linked User", "SELECT to_jsonb(t) state FROM public.employee_onboarding_notification_recipients t JOIN public.employee_onboarding_notifications n ON n.notification_id=t.notification_id JOIN public.employee_onboardings o ON o.onboarding_id=n.onboarding_id LEFT JOIN public.users u ON u.user_id=t.user_id LEFT JOIN public.employees e ON e.employee_id=u.employee_id WHERE o.application_id=ANY(:application_ids) OR e.person_id=:person_id", keys=("person_id", "application_ids")),
+    _joined_rule("ONBOARDING_NOTIFICATION_DELIVERY_PRESENT", "employee_onboarding_notification_deliveries", BLOCK, "delivery -> notification -> onboarding/application or linked User", "SELECT to_jsonb(t) state FROM public.employee_onboarding_notification_deliveries t JOIN public.employee_onboarding_notifications n ON n.notification_id=t.notification_id JOIN public.employee_onboardings o ON o.onboarding_id=n.onboarding_id LEFT JOIN public.users u ON u.user_id=t.user_id LEFT JOIN public.employees e ON e.employee_id=u.employee_id WHERE o.application_id=ANY(:application_ids) OR e.person_id=:person_id", keys=("person_id", "application_ids")),
+    _joined_rule("PERSONNEL_MIGRATION_ITEM_PRESENT", "personnel_migration_items", BLOCK, "item -> migration run -> Person/Employee context", "SELECT to_jsonb(t) state FROM public.personnel_migration_items t JOIN public.personnel_migration_runs r ON r.run_id=t.run_id WHERE r.person_id=:person_id OR r.employee_context_id IN (SELECT employee_id FROM public.employees WHERE person_id=:person_id)"),
+    _joined_rule("ONBOARDING_MENTOR_PRESENT", "employee_onboardings", BLOCK, "mentor Employee -> Person", "SELECT to_jsonb(t) state FROM public.employee_onboardings t JOIN public.employees e ON e.employee_id=t.mentor_employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("ONBOARDING_ASSIGNEE_PRESENT", "employee_onboarding_checklist_items", BLOCK, "assignee Employee -> Person", "SELECT to_jsonb(t) state FROM public.employee_onboarding_checklist_items t JOIN public.employees e ON e.employee_id=t.assignee_employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("VERIFICATION_VERIFIER_PRESENT", "verification_attestations", BLOCK, "verifier Employee -> Person", "SELECT to_jsonb(t) state FROM public.verification_attestations t JOIN public.employees e ON e.employee_id=t.verifier_employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("IDENTITY_RECONCILIATION_EMPLOYEE_PRESENT", "identity_reconciliation_items", BLOCK, "matched Employee -> Person", "SELECT to_jsonb(t) state FROM public.identity_reconciliation_items t JOIN public.employees e ON e.employee_id=t.employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("PPR_EDUCATION_EMPLOYEE_CONTEXT_PRESENT", "person_education", BLOCK, "logical Employee context -> Person", "SELECT to_jsonb(t) state FROM public.person_education t JOIN public.employees e ON e.employee_id=t.employee_context_id WHERE e.person_id=:person_id"),
+    _joined_rule("PPR_TRAINING_EMPLOYEE_CONTEXT_PRESENT", "person_training", BLOCK, "logical Employee context -> Person", "SELECT to_jsonb(t) state FROM public.person_training t JOIN public.employees e ON e.employee_id=t.employee_context_id WHERE e.person_id=:person_id"),
+    _joined_rule("PPR_EXTERNAL_EMPLOYMENT_CONTEXT_PRESENT", "person_external_employment", BLOCK, "logical Employee context -> Person", "SELECT to_jsonb(t) state FROM public.person_external_employment t JOIN public.employees e ON e.employee_id=t.employee_context_id WHERE e.person_id=:person_id"),
+    _joined_rule("PPR_MILITARY_CONTEXT_PRESENT", "person_military_service", BLOCK, "logical Employee context -> Person", "SELECT to_jsonb(t) state FROM public.person_military_service t JOIN public.employees e ON e.employee_id=t.employee_context_id WHERE e.person_id=:person_id"),
+    _joined_rule("PPR_EVENT_EMPLOYEE_CONTEXT_PRESENT", "personnel_record_events", BLOCK, "event Employee context -> Person", "SELECT to_jsonb(t) state FROM public.personnel_record_events t JOIN public.employees e ON e.employee_id=t.employee_context_id WHERE e.person_id=:person_id"),
+    _joined_rule("HR_CANONICAL_SNAPSHOT_ENTRY_RETAINED", "hr_baseline_entries", INFORMATIONAL, "canonical baseline Employee -> Person", "SELECT to_jsonb(t) state FROM public.hr_baseline_entries t JOIN public.employees e ON e.employee_id=t.employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("SECURITY_AUDIT_EMPLOYEE_RETAINED", "security_audit_log", INFORMATIONAL, "target Employee -> Person", "SELECT to_jsonb(t) state FROM public.security_audit_log t JOIN public.employees e ON e.employee_id=t.target_employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("TASK_USER_SATELLITE_PRESENT", "tasks", BLOCK, "task actor User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.tasks t WHERE t.initiator_user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id) OR t.created_by_user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id) OR t.approver_user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("TASK_REPORT_USER_SATELLITE_PRESENT", "task_reports", BLOCK, "task report actor User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.task_reports t WHERE t.submitted_by IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id) OR t.approved_by IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("TASK_AUDIT_USER_SATELLITE_PRESENT", "task_audit_log", BLOCK, "task audit actor User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.task_audit_log t WHERE t.actor_user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("AUDIT_LOG_USER_SATELLITE_PRESENT", "audit_log", BLOCK, "generic audit actor User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.audit_log t WHERE t.actor_user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("TASK_EVENT_USER_SATELLITE_PRESENT", "task_events", BLOCK, "task event actor User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.task_events t WHERE t.actor_user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("TASK_EVENT_RECIPIENT_USER_SATELLITE_PRESENT", "task_event_recipients", BLOCK, "task event recipient User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.task_event_recipients t WHERE t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("TASK_EVENT_DELIVERY_USER_SATELLITE_PRESENT", "task_event_deliveries", BLOCK, "task event delivery User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.task_event_deliveries t WHERE t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("NOTIFICATION_USER_SATELLITE_PRESENT", "notifications", BLOCK, "recipient User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.notifications t JOIN public.users u ON u.user_id=t.recipient_user_id JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("TELEGRAM_USER_SATELLITE_PRESENT", "tg_bindings", BLOCK, "Telegram User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.tg_bindings t JOIN public.users u ON u.user_id=t.user_id JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id"),
+    _joined_rule("USER_ORG_RELATION_PRESENT", "user_org_units", BLOCK, "User organization relation -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.user_org_units t WHERE t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("USER_SUPERVISOR_RELATION_PRESENT", "user_supervisors", BLOCK, "User supervisor relation -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.user_supervisors t WHERE t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id) OR t.supervisor_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
+    _joined_rule("ORG_UNIT_MANAGER_RELATION_PRESENT", "org_unit_managers", BLOCK, "organization manager User -> Employee -> Person", "SELECT to_jsonb(t) state FROM public.org_unit_managers t WHERE t.user_id IN (SELECT u.user_id FROM public.users u JOIN public.employees e ON e.employee_id=u.employee_id WHERE e.person_id=:person_id)"),
 )
 
 
@@ -377,8 +414,8 @@ def _evaluate_candidates(conn: Connection, pairs: Iterable[tuple[int, int]]) -> 
         target_states = states_by_target[(person_id, application_id)]
         relationships: dict[str, Any] = {}
         categories = {category: [] for category in (BLOCK, TOMBSTONE_REQUIRED, HR_ATTESTATION_REQUIRED, INFORMATIONAL)}
-        for code, states in target_states.items():
-            rule = rules_by_code[code]
+        for code, rule in sorted(rules_by_code.items()):
+            states = target_states.get(code, [])
             relationships[code] = {
                 "table": rule.table, "category": rule.category, "count": len(states),
                 "state_digest": _canonical_state_digest(states),
@@ -387,7 +424,8 @@ def _evaluate_candidates(conn: Connection, pairs: Iterable[tuple[int, int]]) -> 
                 "future_execution_allowed": rule.future_execution_allowed,
                 "required_hr_decision": rule.required_hr_decision,
             }
-            categories[rule.category].append(code)
+            if states:
+                categories[rule.category].append(code)
         category_codes = {category: sorted(set(codes)) for category, codes in categories.items()}
         snapshot = {
             "policy_version": POLICY_VERSION, "environment": environment,
@@ -466,6 +504,15 @@ def _target_set_hash(targets: Iterable[Mapping[str, Any]]) -> str:
 
 
 def _aggregate_fingerprint(candidates): return _canonical_hash({"policy_version":POLICY_VERSION,"targets":sorted((int(c["person_id"]),int(c["application_id"]),c["relationship_fingerprint"]) for c in candidates)})
+
+
+def _request_fingerprint(conn: Connection, candidates, basis: str) -> dict[str, Any]:
+    try:
+        return fingerprint_service.build_fingerprint(
+            conn, candidates=candidates, basis=basis, rules=RELATIONSHIP_MATRIX,
+        )
+    except fingerprint_service.FingerprintGateError as error:
+        raise TestPersonnelDeletionError(error.code, str(error), 409) from error
 def _command_hash(action,request_id,payload): return _canonical_hash({"action":action,"request_id":str(request_id) if request_id else None,"payload":payload})
 
 
@@ -546,10 +593,16 @@ def _effective(row):
     row["process_type"]=row.get("process_type") or APPLICANT_PROCESS_TYPE
     row["manifest_read_only"]=manifest_version < MANIFEST_VERSION
     row["approval_eligible"]=manifest_version == MANIFEST_VERSION
+    row["fingerprint_version"]=row.get("fingerprint_version") or "WP-TD-RELATIONSHIP/v1"
+    row["fingerprint_read_only"]=(
+        row["fingerprint_version"] != fingerprint_service.FINGERPRINT_VERSION
+    )
     row["execution_eligible"]=False
     row["execution_block_code"]=(
         "TD_MANIFEST_V1_READ_ONLY"
         if row["manifest_read_only"]
+        else "TD_FINGERPRINT_VERSION_OBSOLETE"
+        if row["fingerprint_read_only"]
         else "TD_EXECUTION_NOT_IMPLEMENTED"
     )
     return row
@@ -629,7 +682,14 @@ def _validate_manifest(conn,pairs):
         ORDER BY person_id,application_id"""),{"person_ids":sorted(chosen)}).all()
     for person_id,application_id in rows:
         actual_by_person[int(person_id)].add(int(application_id))
-    if any(not actual_by_person[person_id] or actual_by_person[person_id]!=application_ids
+    if any(
+        not application_ids <= actual_by_person[person_id]
+        for person_id, application_ids in chosen.items()
+    ):
+        raise TestPersonnelDeletionError(
+            "TD_TARGET_STATE_MISSING", "Target state is no longer available.", 409,
+        )
+    if any(actual_by_person[person_id] != application_ids
            for person_id,application_ids in chosen.items()):
         raise TestPersonnelDeletionError("TD_MANIFEST_APPLICATION_SET_INCOMPLETE","Manifest must contain every application for each Person.",409)
 
@@ -679,8 +739,8 @@ def create_draft(*,actor_user_id,basis,reason_code,preview_criteria,original_mas
         role=_actor_role_code(conn,actor_user_id);_validate_manifest(conn,pairs); candidates=_evaluate_candidates(conn,pairs)
         if any(not c["stage_admissibility"]["create"] for c in candidates):raise TestPersonnelDeletionError("TD_TARGET_BLOCKED","Target has blocking relationships.",409)
         if basis=="PROVENANCE" and any(not c["has_test_provenance"] for c in candidates):raise TestPersonnelDeletionError("TD_PROVENANCE_REQUIRED","Protected provenance is missing.",409)
-        rid=uuid.uuid4(); th=_target_set_hash(candidates); fp=_aggregate_fingerprint(candidates); number="TD-"+rid.hex[:16].upper()
-        conn.execute(text("INSERT INTO test_personnel_deletion_requests(request_id,request_number,basis,reason_code,preview_criteria,original_mask,target_set_hash,relationship_fingerprint,manifest_version,process_type,initiated_by_user_id) VALUES(:id,:n,:b,:r,CAST(:c AS jsonb),:m,:h,:f,:mv,:pt,:a)"),{"id":rid,"n":number,"b":basis,"r":reason_code,"c":json.dumps(dict(preview_criteria)),"m":mask,"h":th,"f":fp,"mv":MANIFEST_VERSION,"pt":process_type,"a":actor_user_id})
+        rid=uuid.uuid4(); th=_target_set_hash(candidates); fingerprint=_request_fingerprint(conn,candidates,basis); fp=fingerprint["fingerprint"]; number="TD-"+rid.hex[:16].upper()
+        conn.execute(text("INSERT INTO test_personnel_deletion_requests(request_id,request_number,basis,reason_code,preview_criteria,original_mask,target_set_hash,relationship_fingerprint,manifest_version,process_type,fingerprint_version,relationship_policy_version,catalog_version,catalog_fingerprint,initiated_by_user_id) VALUES(:id,:n,:b,:r,CAST(:c AS jsonb),:m,:h,:f,:mv,:pt,:fv,:pv,:cv,:cf,:a)"),{"id":rid,"n":number,"b":basis,"r":reason_code,"c":json.dumps(dict(preview_criteria)),"m":mask,"h":th,"f":fp,"mv":MANIFEST_VERSION,"pt":process_type,"fv":fingerprint_service.FINGERPRINT_VERSION,"pv":fingerprint_service.POLICY_VERSION,"cv":fingerprint_service.CATALOG_VERSION,"cf":fingerprint["catalog_fingerprint"],"a":actor_user_id})
         for order,root in enumerate(_manifest_v2_roots(candidates)):conn.execute(text("INSERT INTO test_personnel_deletion_manifest_v2_targets(request_id,root_type,person_id,application_ids,manifest_order) VALUES(:request_id,:root_type,:person_id,:application_ids,:manifest_order)"),{**root,"request_id":rid,"manifest_order":order})
         for order,c in enumerate(candidates):conn.execute(text("INSERT INTO test_personnel_deletion_targets(request_id,target_type,person_id,application_id,eligibility_status,blocking_codes,tombstone_required_codes,hr_attestation_codes,informational_codes,relationship_snapshot,relationship_fingerprint,manifest_order,requires_hr_synthetic_confirmation) VALUES(:request_id,'APPLICANT',:person_id,:application_id,:eligibility_status,:blocking_codes,:tombstone_required_codes,:hr_attestation_codes,:informational_codes,CAST(:snapshot AS jsonb),:relationship_fingerprint,:manifest_order,:requires_hr_synthetic_confirmation)"),{**c,"request_id":rid,"snapshot":json.dumps(c["relationship_snapshot"],default=str),"manifest_order":order})
         return _history(conn,request_id=rid,actor=actor_user_id,role=role,permission=REQUEST_PERMISSION,action="CREATE",old_status=None,new_status="DRAFT",old_version=None,new_version=1,target_hash=th,comment=None,key=key,command_hash=cmd,result="TD_DRAFT_CREATED")
@@ -695,10 +755,12 @@ def _current(conn,rid):
         raise TestPersonnelDeletionError("TD_PROCESS_TYPE_INVALID","Only applicant-only requests are supported.",409)
     return _evaluate_candidates(conn,_manifest_v2_pairs(conn,rid))
 def _mark_drift(conn,request,*,actor,role,permission,action,key,cmd):
-    try: changed=_aggregate_fingerprint(_current(conn,request["request_id"]))!=request["relationship_fingerprint"];code="TD_FINGERPRINT_CHANGED"
+    try:
+        current=_request_fingerprint(conn,_current(conn,request["request_id"]),request["basis"])
+        changed=(current["fingerprint"]!=request["relationship_fingerprint"] or request.get("fingerprint_version")!=fingerprint_service.FINGERPRINT_VERSION or request.get("relationship_policy_version")!=fingerprint_service.POLICY_VERSION or request.get("catalog_version")!=fingerprint_service.CATALOG_VERSION or request.get("catalog_fingerprint")!=current["catalog_fingerprint"]);code="TD_FINGERPRINT_CHANGED"
     except TestPersonnelDeletionError as e:
-        if e.code not in {"TD_TARGET_STATE_MISSING","TD_MANIFEST_APPLICATION_SET_INCOMPLETE"}:raise
-        changed=True;code="TD_TARGET_STATE_MISSING"
+        if e.code not in {"TD_TARGET_STATE_MISSING","TD_MANIFEST_APPLICATION_SET_INCOMPLETE","TD_CATALOG_MISMATCH","TD_RELATIONSHIP_REGISTRY_MISMATCH","TD_RELATIONSHIP_SNAPSHOT_INCOMPLETE"}:raise
+        changed=True;code=e.code
     if not changed:return None,None
     nv=int(request["version"])+1;conn.execute(text("UPDATE test_personnel_deletion_requests SET status='REAPPROVAL_REQUIRED',version=:v,last_checked_at=statement_timestamp(),approved_at=NULL,approval_expires_at=NULL WHERE request_id=:id AND version=:old"),{"v":nv,"id":request["request_id"],"old":request["version"]});projection=_history(conn,request_id=request["request_id"],actor=actor,role=role,permission=permission,action=action,old_status=request["status"],new_status="REAPPROVAL_REQUIRED",old_version=request["version"],new_version=nv,target_hash=request["target_set_hash"],comment=None,key=key,command_hash=cmd,result=code);return projection,code
 def _refresh(conn,request):
@@ -706,7 +768,7 @@ def _refresh(conn,request):
     if any(not c["stage_admissibility"]["submit"] for c in cs):raise TestPersonnelDeletionError("TD_TARGET_BLOCKED","Target has blocking relationships.",409)
     if request["basis"]=="PROVENANCE" and any(not c["has_test_provenance"] for c in cs):raise TestPersonnelDeletionError("TD_PROVENANCE_REQUIRED","Protected provenance is missing.",409)
     for order,c in enumerate(cs):conn.execute(text("UPDATE test_personnel_deletion_targets SET eligibility_status=:eligibility_status,blocking_codes=:blocking_codes,tombstone_required_codes=:tombstone_required_codes,hr_attestation_codes=:hr_attestation_codes,informational_codes=:informational_codes,relationship_snapshot=CAST(:snapshot AS jsonb),relationship_fingerprint=:relationship_fingerprint,requires_hr_synthetic_confirmation=:requires_hr_synthetic_confirmation WHERE request_id=:rid AND manifest_order=:ord"),{**c,"snapshot":json.dumps(c["relationship_snapshot"],default=str),"rid":request["request_id"],"ord":order})
-    return _aggregate_fingerprint(cs)
+    return _request_fingerprint(conn,cs,request["basis"])
 
 
 def submit_request(*,request_id,actor_user_id,expected_version,idempotency_key):
@@ -720,12 +782,12 @@ def submit_request(*,request_id,actor_user_id,expected_version,idempotency_key):
         if r["initiated_by_user_id"]!=actor_user_id:raise TestPersonnelDeletionError("TD_NOT_INITIATOR","Only the initiator may submit this request.",403)
         if r["status"] not in {"DRAFT","REAPPROVAL_REQUIRED"}:raise TestPersonnelDeletionError("TD_STATUS_CONFLICT","Request cannot be submitted in its current status.")
         if r["version"]!=expected_version:raise TestPersonnelDeletionError("TD_VERSION_CONFLICT","Request version has changed.")
-        if r["status"]=="REAPPROVAL_REQUIRED":fp=_refresh(conn,r)
+        if r["status"]=="REAPPROVAL_REQUIRED":fingerprint=_refresh(conn,r);fp=fingerprint["fingerprint"]
         else:
             drift,code=_mark_drift(conn,r,actor=actor_user_id,role=role,permission=REQUEST_PERMISSION,action="SUBMIT",key=key,cmd=cmd)
             if drift:return drift,code
-            fp=r["relationship_fingerprint"]
-        nv=expected_version+1;conn.execute(text("UPDATE test_personnel_deletion_requests SET status='PENDING_HR_APPROVAL',version=:v,submitted_at=statement_timestamp(),expires_at=statement_timestamp()+interval '24 hours',last_checked_at=statement_timestamp(),relationship_fingerprint=:fp WHERE request_id=:id AND version=:old"),{"v":nv,"fp":fp,"id":request_id,"old":expected_version});projection=_history(conn,request_id=request_id,actor=actor_user_id,role=role,permission=REQUEST_PERMISSION,action="SUBMIT",old_status=r["status"],new_status="PENDING_HR_APPROVAL",old_version=expected_version,new_version=nv,target_hash=r["target_set_hash"],comment=None,key=key,command_hash=cmd,result="TD_SUBMITTED");return projection,None
+            fp=r["relationship_fingerprint"];fingerprint={"catalog_fingerprint":r.get("catalog_fingerprint")}
+        nv=expected_version+1;conn.execute(text("UPDATE test_personnel_deletion_requests SET status='PENDING_HR_APPROVAL',version=:v,submitted_at=statement_timestamp(),expires_at=statement_timestamp()+interval '24 hours',last_checked_at=statement_timestamp(),relationship_fingerprint=:fp,fingerprint_version=:fv,relationship_policy_version=:pv,catalog_version=:cv,catalog_fingerprint=:cf WHERE request_id=:id AND version=:old"),{"v":nv,"fp":fp,"fv":fingerprint_service.FINGERPRINT_VERSION,"pv":fingerprint_service.POLICY_VERSION,"cv":fingerprint_service.CATALOG_VERSION,"cf":fingerprint["catalog_fingerprint"],"id":request_id,"old":expected_version});projection=_history(conn,request_id=request_id,actor=actor_user_id,role=role,permission=REQUEST_PERMISSION,action="SUBMIT",old_status=r["status"],new_status="PENDING_HR_APPROVAL",old_version=expected_version,new_version=nv,target_hash=r["target_set_hash"],comment=None,key=key,command_hash=cmd,result="TD_SUBMITTED");return projection,None
     return _serializable(work)
 
 
@@ -765,8 +827,86 @@ def decide_request(*,request_id,actor_user_id,expected_version,decision,idempote
         status="APPROVED" if action=="APPROVE" else "REJECTED";nv=expected_version+1
         if action=="APPROVE":conn.execute(text("UPDATE test_personnel_deletion_requests SET status='APPROVED',version=:v,approved_at=statement_timestamp(),approval_expires_at=statement_timestamp()+interval '24 hours',last_checked_at=statement_timestamp() WHERE request_id=:id AND version=:old"),{"v":nv,"id":request_id,"old":expected_version})
         else:conn.execute(text("UPDATE test_personnel_deletion_requests SET status='REJECTED',version=:v,last_checked_at=statement_timestamp() WHERE request_id=:id AND version=:old"),{"v":nv,"id":request_id,"old":expected_version})
-        conn.execute(text("INSERT INTO test_personnel_deletion_decisions(request_id,decision,actor_user_id,actor_role_code,permission_code,request_version,target_set_hash,comment,submitted_synthetic_confirmed) VALUES(:id,:d,:a,:r,:p,:v,:h,:c,:s)"),{"id":request_id,"d":action,"a":actor_user_id,"r":role,"p":APPROVE_PERMISSION,"v":nv,"h":r["target_set_hash"],"c":comment,"s":submitted_synthetic_confirmed});projection=_history(conn,request_id=request_id,actor=actor_user_id,role=role,permission=APPROVE_PERMISSION,action=action,old_status="PENDING_HR_APPROVAL",new_status=status,old_version=expected_version,new_version=nv,target_hash=r["target_set_hash"],comment=None,key=key,command_hash=cmd,result="TD_"+status);return projection,None
+        conn.execute(text("INSERT INTO test_personnel_deletion_decisions(request_id,decision,actor_user_id,actor_role_code,permission_code,request_version,target_set_hash,comment,submitted_synthetic_confirmed,relationship_fingerprint,fingerprint_version,catalog_fingerprint) VALUES(:id,:d,:a,:r,:p,:v,:h,:c,:s,:rf,:fv,:cf)"),{"id":request_id,"d":action,"a":actor_user_id,"r":role,"p":APPROVE_PERMISSION,"v":nv,"h":r["target_set_hash"],"c":comment,"s":submitted_synthetic_confirmed,"rf":r["relationship_fingerprint"] if action=="APPROVE" else None,"fv":r.get("fingerprint_version") if action=="APPROVE" else None,"cf":r.get("catalog_fingerprint") if action=="APPROVE" else None});projection=_history(conn,request_id=request_id,actor=actor_user_id,role=role,permission=APPROVE_PERMISSION,action=action,old_status="PENDING_HR_APPROVAL",new_status=status,old_version=expected_version,new_version=nv,target_hash=r["target_set_hash"],comment=None,key=key,command_hash=cmd,result="TD_"+status);return projection,None
     return _serializable(work)
+
+
+def _assess_future_execution_readiness(conn: Connection, request_id: Any) -> dict[str, Any]:
+    """Read-only Stage 3 gate; no execution capability or mutation is granted."""
+    request = _request_row(conn, request_id)
+    blockers: list[str] = []
+    if int(request.get("manifest_version") or 1) != MANIFEST_VERSION:
+        blockers.append("TD_MANIFEST_V1_READ_ONLY")
+    if request.get("process_type") != APPLICANT_PROCESS_TYPE:
+        blockers.append("TD_PROCESS_TYPE_INVALID")
+    if request.get("basis") != "PROVENANCE":
+        blockers.append("TD_LEGACY_MANIFEST_NOT_EXECUTABLE")
+    if request.get("fingerprint_version") != fingerprint_service.FINGERPRINT_VERSION:
+        blockers.append("TD_FINGERPRINT_VERSION_OBSOLETE")
+    try:
+        current = _request_fingerprint(
+            conn, _current(conn, request_id), str(request["basis"]),
+        )
+    except TestPersonnelDeletionError as error:
+        return {
+            "request_id": str(request_id),
+            "fingerprint_version": request.get("fingerprint_version"),
+            "current_fingerprint": None,
+            "stored_fingerprint": request.get("relationship_fingerprint"),
+            "approval_revalidation_required": True,
+            "policy_execution_ready": False,
+            "execution_available": False,
+            "blockers": sorted(set(blockers + [error.code])),
+        }
+    if (
+        current["fingerprint"] != request.get("relationship_fingerprint")
+        or current["catalog_fingerprint"] != request.get("catalog_fingerprint")
+        or request.get("relationship_policy_version") != fingerprint_service.POLICY_VERSION
+        or request.get("catalog_version") != fingerprint_service.CATALOG_VERSION
+    ):
+        blockers.append("TD_REAPPROVAL_REQUIRED")
+    if request.get("status") != "APPROVED":
+        blockers.append("TD_APPROVAL_REQUIRED")
+    elif not request.get("approval_expires_at") or request["approval_expires_at"] <= request["db_now"]:
+        blockers.append("TD_APPROVAL_EXPIRED")
+    decision = conn.execute(text("""SELECT relationship_fingerprint,fingerprint_version,
+            catalog_fingerprint,submitted_synthetic_confirmed
+        FROM public.test_personnel_deletion_decisions
+        WHERE request_id=:request_id AND decision='APPROVE'
+        ORDER BY decision_id DESC LIMIT 1"""), {
+            "request_id": request_id,
+        }).mappings().one_or_none()
+    if not decision or (
+        decision["relationship_fingerprint"] != request.get("relationship_fingerprint")
+        or decision["fingerprint_version"] != fingerprint_service.FINGERPRINT_VERSION
+        or decision["catalog_fingerprint"] != request.get("catalog_fingerprint")
+    ):
+        blockers.append("TD_APPROVAL_FINGERPRINT_MISMATCH")
+    if any(
+        candidate["requires_hr_synthetic_confirmation"]
+        for candidate in _current(conn, request_id)
+    ) and not (decision and decision["submitted_synthetic_confirmed"]):
+        blockers.append("TD_SUBMITTED_ATTESTATION_REQUIRED")
+    blockers.extend(f"TD_RELATIONSHIP_BLOCK:{code}" for code in current["blockers"])
+    return {
+        "request_id": str(request_id),
+        "fingerprint_version": fingerprint_service.FINGERPRINT_VERSION,
+        "policy_version": fingerprint_service.POLICY_VERSION,
+        "catalog_version": fingerprint_service.CATALOG_VERSION,
+        "catalog_fingerprint": current["catalog_fingerprint"],
+        "current_fingerprint": current["fingerprint"],
+        "stored_fingerprint": request.get("relationship_fingerprint"),
+        "approval_revalidation_required": "TD_REAPPROVAL_REQUIRED" in blockers,
+        "policy_execution_ready": not blockers,
+        # Stage 5 owns execution; Stage 3 can never expose an executable action.
+        "execution_available": False,
+        "blockers": sorted(set(blockers)),
+    }
+
+
+def assess_future_execution_readiness(request_id: Any) -> dict[str, Any]:
+    with engine.connect() as conn:
+        return _assess_future_execution_readiness(conn, request_id)
 
 
 def legacy_hard_delete_enabled() -> bool:

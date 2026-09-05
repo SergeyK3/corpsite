@@ -2,7 +2,7 @@
 
 | Поле | Значение |
 |---|---|
-| Статус | **Этапы 1–2 завершены — execution запрещён, этапы 3–7 не начаты** |
+| Статус | **Этапы 1–3 завершены — execution запрещён, этапы 4–7 не начаты** |
 | Дата | 2026-09-05 |
 | Основание | `test-personnel-data-deletion-approval-plan.md`, `WP-TD-004-test-personnel-deletion-relationship-matrix.md` |
 | Scope | Только synthetic applicants без `Employee` и любых `BLOCK`-связей |
@@ -106,6 +106,16 @@ Backend создаёт только manifest v2/`APPLICANT_ONLY`, считает
 
 Запрос без текущих provenance, catalog и relationship policy versions не исполняется. Изменение любой версии аннулирует старое approval и требует нового v2 request либо `REAPPROVAL_REQUIRED` с повторным рассмотрением.
 
+### Результат этапа 3 — 2026-09-05
+
+**Завершено.** Добавлена revision `td005fp3v101` поверх `td005tomb201`. Provenance получил append-only состояния `ACTIVE`/`REVOKED`, строго возрастающую версию и защиту от `UPDATE`, `DELETE` и `TRUNCATE`. Future-execution readiness требует последнюю active PERSON-provenance текущего environment с валидным artifact SHA-256; отсутствие, отзыв, новая версия или новый artifact hash меняют fingerprint. `LEGACY_MANIFEST` и запросы со старой fingerprint version остаются читаемыми, но не могут считаться пригодными к будущему execution.
+
+Добавлены versioned server-owned `WP-TD-CATALOG/v1`, relationship policy `WP-TD-005-APPLICANT/v1` и fingerprint `WP-TD-RELATIONSHIP/v2`. `F-CATALOG` фиксирует совместимую Alembic revision, полный контракт значимых columns с defaults/collations, FK и `ON DELETE`, определения защитных triggers и их functions, а также versioned registry физических и legacy logical relations. Allowlist использует статический reviewed hash и закрывается при неизвестной revision, table/column/FK/trigger/function/logical-link drift или неполном/неизвестном rule.
+
+Canonical relationship fingerprint включает PERSON-root Manifest v2 и полный application set, F-ROOT/F-ROW/F-JOIN, PERSON-provenance, catalog/policy versions и полный отсортированный registry действий `DELETE`/`BLOCK`/`PRESERVE`. Добавлены отдельный `BLOCK` для inactive/merged root и отдельные rules для ранее неявных order/onboarding/migration, Employee-context, security и каждой перечисленной User satellite; polymorphic `access_grants` и legacy logical relations учитываются явно. Fingerprint и catalog hash фиксируются в request и approval decision; изменение данных, provenance, policy, catalog или состава manifest требует нового согласования.
+
+Проверено только на одноразовых PostgreSQL-клонах: upgrade → downgrade → upgrade, одна Alembic head `td005fp3v101`, 15 целевых Stage 3 тестов, совместный набор этапов 1–3 (`31 passed`), полный 116-rule relationship behavior suite и 186 существующих migration/foundation regression-тестов. Этап 3 закрыт; запись tombstones, физическое удаление, execution endpoint, кнопка и Employee-процесс не добавлялись. Переход к этапу 4 допустим как отдельное задание, но execution остаётся запрещён до завершения этапов 4–7 и всех gates WP-TD-004.
+
 ## 5. Этап 4 — Permission и append-only EXECUTE audit
 
 **Ожидаемые изменения**
@@ -203,4 +213,4 @@ Rollout не меняет их статус и не делает их испол
 
 ## 9. Готовность execution
 
-Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–2 добавляют revisions `td005m1v2a01` и `td005tomb201`, но готовность наступит только после последовательного закрытия этапов 3–7 и всех gates WP-TD-004. Физическое удаление, execution endpoint и кнопка удаления не создавались; tombstones этапа 2 не подключены к execution.
+Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–3 добавляют revisions `td005m1v2a01`, `td005tomb201` и `td005fp3v101`, но готовность наступит только после последовательного закрытия этапов 4–7 и всех gates WP-TD-004. Физическое удаление, запись tombstones из execution, execution endpoint и кнопка удаления не создавались; tombstones этапа 2 не подключены к execution.

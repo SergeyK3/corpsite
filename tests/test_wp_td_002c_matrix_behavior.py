@@ -11,7 +11,8 @@ import pytest
 from sqlalchemy import text
 
 from app.services import test_personnel_deletion_service as service
-from tests.test_wp_td_002a_migration import _ephemeral_database
+from tests.test_wp_td_005_manifest_v2 import _alembic_config, _ephemeral_database
+from alembic import command
 
 
 @pytest.fixture(autouse=True)
@@ -126,6 +127,40 @@ def _update_linked_row(conn, rule, locator):
             WHERE provenance_id=:provenance_id"""), locator).rowcount
         assert changed == 1
         return
+    if rule.code == "PERSON_ROOT_NOT_ELIGIBLE":
+        changed = conn.execute(text("""UPDATE public.persons SET full_name=full_name||' changed'
+            WHERE person_id=:person_id"""), locator).rowcount
+        assert changed == 1
+        return
+    if rule.code == "ONBOARDING_NOTIFICATION_RECIPIENT_PRESENT":
+        changed = conn.execute(text("""UPDATE public.employee_onboarding_notification_recipients r
+            SET notification_id=(
+                SELECT replacement.notification_id
+                FROM public.employee_onboarding_notifications current
+                JOIN public.employee_onboarding_notifications replacement
+                  ON replacement.onboarding_id=current.onboarding_id
+                 AND replacement.notification_id<>current.notification_id
+                WHERE current.notification_id=r.notification_id
+                ORDER BY replacement.notification_id LIMIT 1)
+            WHERE notification_id=:notification_id AND user_id=:user_id"""), locator).rowcount
+        assert changed == 1
+        return
+    if rule.code == "TASK_EVENT_RECIPIENT_USER_SATELLITE_PRESENT":
+        changed = conn.execute(text("""UPDATE public.task_event_recipients r
+            SET audit_id=(SELECT e.audit_id FROM public.task_events e
+                WHERE e.audit_id<>r.audit_id ORDER BY e.audit_id DESC LIMIT 1)
+            WHERE audit_id=:audit_id AND user_id=:user_id"""), locator).rowcount
+        assert changed == 1
+        return
+    if rule.code == "USER_SUPERVISOR_RELATION_PRESENT":
+        changed = conn.execute(text("""UPDATE public.user_supervisors
+            SET supervisor_id=(SELECT candidate.user_id FROM public.users candidate
+                WHERE candidate.user_id<>user_supervisors.supervisor_id
+                  AND candidate.user_id<>user_supervisors.user_id
+                ORDER BY candidate.user_id LIMIT 1)
+            WHERE user_id=:user_id"""), locator).rowcount
+        assert changed == 1
+        return
     predicate_names = {name.lower() for name in re.findall(r"[a-z_][a-z0-9_]*", rule.sql.lower())}
     candidates = [row for row in columns if row["column_name"] not in locator
         and row["column_name"].lower() not in predicate_names and row["is_generated"] == "NEVER"]
@@ -166,13 +201,14 @@ def _update_linked_row(conn, rule, locator):
 
 @pytest.fixture(scope="module")
 def matrix_graph():
-    with _ephemeral_database() as (_url, db):
+    with _ephemeral_database(upgrade=False) as (url, db):
+        command.upgrade(_alembic_config(url), "head")
         with db.begin() as conn:
             conn.execute(text("SET LOCAL session_replication_role='replica'"))
             tables = {rule.table for rule in service.RELATIONSHIP_MATRIX}
             _drop_test_only_checks(conn, tables)
             actor = conn.execute(text("SELECT user_id FROM users ORDER BY user_id LIMIT 1")).scalar_one()
-            person = _insert_minimal(conn, "persons", {"full_name": "WP TD 002C matrix person", "match_key": f"wp-td-002c-{uuid.uuid4().hex}", "source": "manual"})
+            person = _insert_minimal(conn, "persons", {"full_name": "WP TD 002C matrix person", "match_key": f"wp-td-002c-{uuid.uuid4().hex}", "source": "manual", "person_status": "inactive"})
             person_id = int(person["person_id"])
             application = _insert_minimal(conn, "personnel_applications", {"person_id": person_id, "status": "intake_pending", "registered_by_user_id": actor, "idempotency_key": f"wp-td-002c-app-{uuid.uuid4().hex}"})
             application_id = int(application["application_id"])
@@ -190,6 +226,7 @@ def matrix_graph():
 
             for code in ("ALL_APPLICATIONS_PRESENT", "SUBMITTED_SYNTHETIC_CONFIRMATION_REQUIRED", "APPLICATION_STATUS_NOT_ELIGIBLE", "PERSONNEL_ORDER_PRESENT", "DIRECTOR_RESOLUTION_PRESENT"):
                 rows[code] = ("personnel_applications", {"application_id": application_id})
+            rows["PERSON_ROOT_NOT_ELIGIBLE"] = ("persons", {"person_id": person_id})
             rows["EMPLOYEE_PRESENT"] = ("employees", {"employee_id": employee_id})
             rows["USER_IDENTITY_PRESENT"] = ("users", {"user_id": user_id})
 
@@ -231,7 +268,8 @@ def matrix_graph():
             item = add("ONBOARDING_ITEM_PRESENT", "employee_onboarding_checklist_items", {"onboarding_id": onboarding_id})
             item_id = int(item["item_id"])
             add("ONBOARDING_ATTACHMENT_PRESENT", "employee_onboarding_checklist_attachments", {"item_id": item_id})
-            add("ONBOARDING_NOTIFICATION_PRESENT", "employee_onboarding_notifications", {"onboarding_id": onboarding_id})
+            onboarding_notification = add("ONBOARDING_NOTIFICATION_PRESENT", "employee_onboarding_notifications", {"onboarding_id": onboarding_id})
+            _insert_minimal(conn, "employee_onboarding_notifications", {"onboarding_id": onboarding_id})
             add("ONBOARDING_TASK_AUDIT_PRESENT", "employee_onboarding_task_audit", {"onboarding_id": onboarding_id})
 
             override_id = int(created["HR_REVIEW_OVERRIDE_RETAINED"]["override_id"])
@@ -244,7 +282,7 @@ def matrix_graph():
                 "HR_CHANGE_EVENT_RETAINED":"hr_change_events", "HR_IMPORT_DOCUMENT_CANDIDATE_RETAINED":"hr_import_document_candidates",
                 "HR_MONTHLY_REFERENCE_ENTRY_RETAINED":"hr_monthly_reference_entries", "LEGACY_IMPORT_STAGE_RETAINED":"employees_import_stage",
             }
-            for code, table in employee_tables.items(): add(code, table, {"employee_id": employee_id})
+            for code, table in employee_tables.items(): created[code] = add(code, table, {"employee_id": employee_id})
             termination = add("TERMINATION_RECORD_PRESENT", "employee_termination_records", {"employee_id": employee_id})
             add("TERMINATION_AUDIT_RETAINED", "employee_termination_record_audit", {"termination_record_id": termination["termination_record_id"]})
 
@@ -277,6 +315,47 @@ def matrix_graph():
 
             decision = add("USER_LINKAGE_REVIEW_DECISION_PRESENT", "user_linkage_review_decisions", {"proposed_employee_id": employee_id, "user_id": user_id})
             add("USER_LINKAGE_EXECUTE_ITEM_PRESENT", "user_linkage_execute_items", {"proposed_employee_id": employee_id, "user_id": user_id, "source_decision_id": decision["decision_id"]})
+
+            add("PERSONNEL_ORDER_ITEM_EDITORIAL_BLOCK_PRESENT", "personnel_order_item_editorial_blocks", {"order_item_id": order_item_id})
+            add("ONBOARDING_NOTIFICATION_RECIPIENT_PRESENT", "employee_onboarding_notification_recipients", {"notification_id": onboarding_notification["notification_id"], "user_id": user_id})
+            add("ONBOARDING_NOTIFICATION_DELIVERY_PRESENT", "employee_onboarding_notification_deliveries", {"notification_id": onboarding_notification["notification_id"], "user_id": user_id})
+            add("PERSONNEL_MIGRATION_ITEM_PRESENT", "personnel_migration_items", {"run_id": created["PERSONNEL_MIGRATION_RUN_PRESENT"]["run_id"]})
+            rows["ONBOARDING_MENTOR_PRESENT"] = ("employee_onboardings", {"onboarding_id": onboarding_id})
+            conn.execute(text("UPDATE employee_onboardings SET mentor_employee_id=:employee_id WHERE onboarding_id=:id"), {"employee_id": employee_id, "id": onboarding_id})
+            rows["ONBOARDING_ASSIGNEE_PRESENT"] = ("employee_onboarding_checklist_items", {"item_id": item_id})
+            conn.execute(text("UPDATE employee_onboarding_checklist_items SET assignee_employee_id=:employee_id WHERE item_id=:id"), {"employee_id": employee_id, "id": item_id})
+            for code, original_code, table, key in (
+                ("VERIFICATION_VERIFIER_PRESENT", "VERIFICATION_ATTESTATION_PRESENT", "verification_attestations", "verifier_employee_id"),
+                ("IDENTITY_RECONCILIATION_EMPLOYEE_PRESENT", "IDENTITY_RECONCILIATION_PRESENT", "identity_reconciliation_items", "employee_id"),
+                ("PPR_EDUCATION_EMPLOYEE_CONTEXT_PRESENT", "PPR_EDUCATION_PRESENT", "person_education", "employee_context_id"),
+                ("PPR_TRAINING_EMPLOYEE_CONTEXT_PRESENT", "PPR_TRAINING_PRESENT", "person_training", "employee_context_id"),
+                ("PPR_EXTERNAL_EMPLOYMENT_CONTEXT_PRESENT", "PPR_EXTERNAL_EMPLOYMENT_PRESENT", "person_external_employment", "employee_context_id"),
+                ("PPR_MILITARY_CONTEXT_PRESENT", "PPR_MILITARY_PRESENT", "person_military_service", "employee_context_id"),
+                ("PPR_EVENT_EMPLOYEE_CONTEXT_PRESENT", "PPR_EVENT_TOMBSTONE_REQUIRED", "personnel_record_events", "employee_context_id"),
+            ):
+                locator = rows[original_code][1]
+                where = " AND ".join(f"{name}=:{name}" for name in locator)
+                conn.execute(text(f"UPDATE public.{table} SET {key}=:employee_id WHERE {where}"), {**locator, "employee_id": employee_id})
+                rows[code] = (table, locator)
+            rows["HR_CANONICAL_SNAPSHOT_ENTRY_RETAINED"] = ("hr_baseline_entries", _locator(conn, "hr_baseline_entries", created["HR_BASELINE_ENTRY_RETAINED"]))
+            add("SECURITY_AUDIT_EMPLOYEE_RETAINED", "security_audit_log", {"target_employee_id": employee_id})
+            task = add("TASK_USER_SATELLITE_PRESENT", "tasks", {"initiator_user_id": user_id})
+            task_id = int(task["task_id"])
+            add("TASK_REPORT_USER_SATELLITE_PRESENT", "task_reports", {"task_id": task_id, "submitted_by": user_id})
+            add("TASK_AUDIT_USER_SATELLITE_PRESENT", "task_audit_log", {"task_id": task_id, "actor_user_id": user_id})
+            add("AUDIT_LOG_USER_SATELLITE_PRESENT", "audit_log", {"actor_user_id": user_id})
+            task_event = add("TASK_EVENT_USER_SATELLITE_PRESENT", "task_events", {"task_id": task_id, "actor_user_id": user_id})
+            task_event_id = int(task_event["audit_id"])
+            _insert_minimal(conn, "task_events", {"task_id": task_id, "actor_user_id": user_id})
+            add("TASK_EVENT_RECIPIENT_USER_SATELLITE_PRESENT", "task_event_recipients", {"audit_id": task_event_id, "user_id": user_id})
+            add("TASK_EVENT_DELIVERY_USER_SATELLITE_PRESENT", "task_event_deliveries", {"audit_id": task_event_id, "user_id": user_id})
+            add("NOTIFICATION_USER_SATELLITE_PRESENT", "notifications", {"recipient_user_id": user_id})
+            add("TELEGRAM_USER_SATELLITE_PRESENT", "tg_bindings", {"user_id": user_id})
+            add("USER_ORG_RELATION_PRESENT", "user_org_units", {"user_id": user_id})
+            add("USER_SUPERVISOR_RELATION_PRESENT", "user_supervisors", {"user_id": user_id, "supervisor_id": actor})
+            add("ORG_UNIT_MANAGER_RELATION_PRESENT", "org_unit_managers", {
+                "manager_id": next(_SEQUENCE), "user_id": user_id,
+            })
             assert set(rows) == {rule.code for rule in service.RELATIONSHIP_MATRIX}
         special_application_rules = {"ALL_APPLICATIONS_PRESENT", "SUBMITTED_SYNTHETIC_CONFIRMATION_REQUIRED",
             "APPLICATION_STATUS_NOT_ELIGIBLE", "PERSONNEL_ORDER_PRESENT", "DIRECTOR_RESOLUTION_PRESENT"}
