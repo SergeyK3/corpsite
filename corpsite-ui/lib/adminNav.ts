@@ -7,6 +7,12 @@ import {
   isPersonnelDirectoryRoute,
 } from "./personnelNav";
 import { hasPersonnelVisibility } from "./visibilityNav";
+import {
+  canSeeTestPersonnelAdmin,
+  canSeeTestPersonnelApprovals,
+  isTestPersonnelAdminRoute,
+  isTestPersonnelApprovalsRoute,
+} from "./testPersonnelDeletionNav";
 
 /** Task/directory admin shell — unchanged: system admin role only. */
 export function isSystemAdminRole(me: MeInfo | null | undefined): boolean {
@@ -64,6 +70,12 @@ export function isForbiddenAdminRoute(
   pathname: string,
   me: MeInfo | null | undefined,
 ): boolean {
+  if (isTestPersonnelAdminRoute(pathname)) {
+    return !canSeeTestPersonnelAdmin(me);
+  }
+  if (isTestPersonnelApprovalsRoute(pathname)) {
+    return !canSeeTestPersonnelApprovals(me);
+  }
   if (isPersonnelLifecycleRoute(pathname)) {
     return !canSeePersonnelLifecycleNav(me);
   }

@@ -4,6 +4,12 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useCurrentUser } from "@/lib/currentUser";
+import {
+  canSeeTestPersonnelAdmin,
+  TEST_PERSONNEL_ADMIN_HREF,
+} from "@/lib/testPersonnelDeletionNav";
+
 import AccessTab from "./tabs/AccessTab";
 import AssignmentsTab from "./tabs/AssignmentsTab";
 import AuditTab from "./tabs/AuditTab";
@@ -42,6 +48,7 @@ function tabButtonClass(active: boolean): string {
 }
 
 export default function SystemAdminClient() {
+  const me = useCurrentUser();
   const [activeTab, setActiveTab] = useState<MainTab>("users");
 
   return (
@@ -59,6 +66,16 @@ export default function SystemAdminClient() {
             Жизненный цикл персонала →
           </Link>
         </p>
+        {canSeeTestPersonnelAdmin(me) ? (
+          <p className="mt-2">
+            <Link
+              href={TEST_PERSONNEL_ADMIN_HREF}
+              className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Управление тестовыми данными персонала →
+            </Link>
+          </p>
+        ) : null}
       </header>
 
       <TelegramStatusPanel />

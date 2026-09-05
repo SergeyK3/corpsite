@@ -5,6 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { isPersonnelControlListPath } from "../_lib/personnelControlListNav";
+import { useCurrentUser } from "@/lib/currentUser";
+import {
+  canSeeTestPersonnelApprovals,
+  TEST_PERSONNEL_APPROVALS_HREF,
+} from "@/lib/testPersonnelDeletionNav";
 
 const BASE_ITEMS = [
   { href: "/directory/personnel/journal", title: "Кадровый журнал", prefixes: ["/directory/personnel/journal"] },
@@ -45,6 +50,7 @@ function tabClassName(active: boolean): string {
 
 export default function PersonnelSubNav() {
   const pathname = usePathname() || "";
+  const me = useCurrentUser();
   const controlListActive = isPersonnelControlListPath(pathname);
 
   return (
@@ -69,6 +75,15 @@ export default function PersonnelSubNav() {
       >
         Контрольный список
       </Link>
+      {canSeeTestPersonnelApprovals(me) ? (
+        <Link
+          href={TEST_PERSONNEL_APPROVALS_HREF}
+          className={tabClassName(pathname === TEST_PERSONNEL_APPROVALS_HREF)}
+          aria-current={pathname === TEST_PERSONNEL_APPROVALS_HREF ? "page" : undefined}
+        >
+          Согласование удаления тестовых данных
+        </Link>
+      ) : null}
     </nav>
   );
 }

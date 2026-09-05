@@ -12,6 +12,10 @@ import {
 } from "./personnelNav";
 import { canSeeOperationalOrdersNav, isOperationalOrdersRoute } from "./operationalOrdersNav";
 import {
+  canSeeTestPersonnelApprovals,
+  isTestPersonnelApprovalsRoute,
+} from "./testPersonnelDeletionNav";
+import {
   canAccessIncomingInformationRoute,
   isIncomingInformationRoute,
 } from "./incomingInformationNav";
@@ -34,6 +38,7 @@ export function canViewPersonnelTasksReadOnly(me: MeInfo | null | undefined): bo
 }
 
 export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | undefined): boolean {
+  if (isTestPersonnelApprovalsRoute(pathname)) return canSeeTestPersonnelApprovals(me);
   if (isIncomingInformationRoute(pathname)) return canAccessIncomingInformationRoute(me);
   if (canSeeAdminShell(me)) return true;
 
