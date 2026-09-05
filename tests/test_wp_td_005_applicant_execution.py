@@ -504,9 +504,18 @@ def test_expired_legacy_v1_and_employee_are_never_deleted(execution_engine, acto
             SET approved_at=statement_timestamp()-interval '2 hours',
                 approval_expires_at=statement_timestamp()-interval '1 hour'
             WHERE request_id=:id"""), {"id": expired["request_id"]})
+    expired_key = uuid.uuid4()
     with pytest.raises(approval.TestPersonnelDeletionError) as expired_error:
-        _execute(expired, actors)
+        _execute(expired, actors, key=expired_key)
     assert expired_error.value.code == "TD_EXECUTION_SNAPSHOT_CHANGED"
+    with execution_engine.connect() as connection:
+        assert connection.execute(text("""SELECT result_code,result_projection->>'error_code'
+            FROM public.test_personnel_deletion_history
+            WHERE request_id=:request_id AND action='EXECUTE'
+              AND idempotency_key=:idempotency_key"""), {
+            "request_id": expired["request_id"],
+            "idempotency_key": str(expired_key),
+        }).one() == ("TD_EXECUTION_FAILED", "TD_EXECUTION_SNAPSHOT_CHANGED")
 
     legacy = _approved_synthetic(
         execution_engine, actors, with_journals=False, basis="LEGACY_MANIFEST",

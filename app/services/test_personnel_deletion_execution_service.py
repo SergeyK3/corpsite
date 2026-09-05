@@ -912,6 +912,11 @@ def _record_failed_attempt(
             table_counts={}, before_hash=digest, after_hash=digest,
             result="TD_EXECUTION_FAILED", error_code=safe_code,
             new_status="APPROVED", new_version=int(request["version"]),
+            # A rejected execution can be caused precisely by an approval
+            # snapshot/expiry drift.  The append-only failure audit must still
+            # be durable, while the execution transaction has already rolled
+            # back and no domain DELETE is allowed.
+            allow_approval_drift=True,
         )
     try:
         _run_serializable(write_audit)

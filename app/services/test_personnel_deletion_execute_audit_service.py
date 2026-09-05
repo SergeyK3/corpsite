@@ -164,8 +164,19 @@ def record_execute_audit(
         or approval["fingerprint_version"] != request["fingerprint_version"]
         or approval["catalog_fingerprint"] != request["catalog_fingerprint"]
     )
+    rejected_attempt_audit = (
+        allow_approval_drift
+        and result_code == "TD_EXECUTION_FAILED"
+        and old_status == "APPROVED"
+        and new_status == "APPROVED"
+    )
     if approval_drift and not (
-        allow_approval_drift and old_status == "APPROVED" and new_status == "REAPPROVAL_REQUIRED"
+        (
+            allow_approval_drift
+            and old_status == "APPROVED"
+            and new_status == "REAPPROVAL_REQUIRED"
+        )
+        or rejected_attempt_audit
     ):
         raise ExecuteAuditContractError(
             "TD_EXECUTE_APPROVAL_FINGERPRINT_MISMATCH", "Approval does not match the frozen request.",
@@ -217,7 +228,11 @@ def record_execute_audit(
         request["approval_expires_at"] is None
         or request["approval_expires_at"] <= conn.execute(text("SELECT transaction_timestamp()" )).scalar_one()
     )
-    if request["status"] != "APPROVED" or (approval_expired and new_status != "REAPPROVAL_REQUIRED"):
+    if request["status"] != "APPROVED" or (
+        approval_expired
+        and new_status != "REAPPROVAL_REQUIRED"
+        and not rejected_attempt_audit
+    ):
         raise ExecuteAuditContractError("TD_EXECUTE_APPROVAL_REQUIRED", "Current approval is required.")
     previous_version = int(request["version"]) if old_version is None else int(old_version)
     resulting_version = previous_version if new_version is None else int(new_version)

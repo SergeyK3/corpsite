@@ -2,7 +2,7 @@
 
 | Поле | Значение |
 |---|---|
-| Статус | **Этапы 1–5 реализованы; Stage 5 hardening завершён, feature flag выключен; этапы 6–7 не начаты** |
+| Статус | **Этапы 1–7 реализованы и проверены в disposable PostgreSQL; operational sign-off не закрыт, feature flag выключен** |
 | Дата | 2026-09-05 |
 | Основание | `test-personnel-data-deletion-approval-plan.md`, `WP-TD-004-test-personnel-deletion-relationship-matrix.md` |
 | Scope | Только synthetic applicants без `Employee` и любых `BLOCK`-связей |
@@ -227,7 +227,7 @@ Detail read-contract запроса дополнен server-owned `execution_rea
 
 Execution UUID теперь создаётся исключительно через Web Crypto (`randomUUID` либо `getRandomValues`); отсутствие Web Crypto даёт fail-closed UI-ошибку без отправки. `TD_EXECUTE_IDEMPOTENCY_CONFLICT` завершает текущую UI-попытку, удаляет конфликтующий key и требует повторного открытия modal и ручного ввода; новый UUID создаётся только после нового подтверждения и preflight. Modal получает initial focus, циклический focus trap, Escape вне отправки, возврат фокуса на исходную кнопку и `inert`/`aria-hidden` для фонового содержимого.
 
-Mocked frontend regression suite этапа 6 (`44 passed`) покрывает capability/flag, v1/legacy/Employee/stale/expired/status gates, точный button count, отсутствие Employee-кнопки, доступность через native `disabled` и связанную текстовую причину, состав modal, точную фразу, double-click, стабильный UUID retry, race повторного согласования, отсутствие Web Crypto, новый manual attempt после UUID conflict, focus/keyboard/background isolation, terminal/replay/503/409/unknown responses и backend refresh. PostgreSQL physical-delete suite на этом этапе повторно не запускался; feature flag нигде не включён.
+Mocked frontend regression suite этапа 6 покрывает capability/flag, v1/legacy/Employee/stale/expired/status gates, точный button count, отсутствие Employee-кнопки, доступность через native `disabled` и связанную текстовую причину, состав modal, точную фразу, double-click, стабильный UUID retry, race повторного согласования, отсутствие Web Crypto, новый manual attempt после UUID conflict, focus/keyboard/background isolation, terminal/replay/503/409/unknown responses и backend refresh. Актуальный повтор этапа 7: `38 passed` для ADMIN-компонента и `56 passed` в объединённом frontend-наборе. PostgreSQL physical-delete suite на этапе 6 не запускался; feature flag нигде не включён.
 
 ## 8. Этап 7 — PostgreSQL regression/concurrency tests и rollout
 
@@ -253,6 +253,18 @@ Execution нельзя включать, если не пройден хотя �
 
 Rollout не меняет их статус и не делает их исполнимыми. Production smoke/regression suite обязательно доказывает отказ v1/legacy до выдачи execution capability.
 
+### Результат этапа 7 — 2026-09-05
+
+**Engineering validation завершена; rollout остаётся закрытым.** Полный набор этапов 1–6 выполнен на PostgreSQL 16 в одноразовом Docker-контейнере `postgres:16-alpine`, опубликованном только на `127.0.0.1`. Контейнер не имел bind/named volumes (`Mounts=[]`), каталог данных был `tmpfs`. Единственный переданный тестам URL — отдельный process-level `TEST_DATABASE_URL` с test-именем; process-level `DATABASE_URL` удалён, `CORPSITE_SKIP_DOTENV=1`, workspace `.env` не читался. Admin DB создана через `template0`; каждый test clone также создавался harness-ом как пустая БД через `CREATE DATABASE … TEMPLATE template0`, затем получал только Alembic migrations и synthetic fixtures.
+
+PostgreSQL regression/concurrency/fault-injection suite: `84 passed` за `178.90s`; повтор всего execution-модуля: `42 passed` за `96.32s`. Она фактически покрыла Manifest v2 и старые manifests, tombstones, provenance, F-CATALOG/relationship fingerprint, permission/audit, успешный `APPLICANT_ONLY` DELETE, запрет Employee/User, approver/executor separation, expected snapshot, drift → `REAPPROVAL_REQUIRED`, неизвестный inbound `CASCADE`, BLOCK/PRESERVE/SET NULL, два execute, конкурирующие FK/logical writers, replay/conflict, rollback после `R0`, `D1`, `D2`, `TOMBSTONES`, `JOURNALS`, `D3`, `D4`, `D5` и `AUDIT`, durable INTENT/RESULT/FAILED, PII-free tombstones/audit, upgrade → downgrade → upgrade и единственную Alembic head `td005exec501`. DB isolation guard отдельно: `23 passed`. F-CATALOG smoke прошёл на той же одноразовой схеме. Репозиторный `docker-compose.yml` также фиксирует PostgreSQL major 16, совпадающий с тестовым major.
+
+Frontend regression выполнен только с mocked API: `5` файлов, `56 passed`, включая `38` тестов ADMIN execution-компонента. Production build Next.js 16.1.1 прошёл; ESLint четырёх непосредственно затронутых Stage 6 frontend/API-client файлов прошёл без замечаний. Отдельный file-level ESLint общего `lib/types.ts` остаётся красным на трёх существующих в `HEAD` `no-explicit-any` (`101`, `229`, `252`), не относящихся к добавленной capability; посторонний type cleanup в Stage 7 не выполнялся. Feature flag во время frontend/build/lint не задавался и в конфигурации не включён.
+
+Targeted adversarial review этапов 5–7 нашёл один **High** finding: отклонение по изменившемуся/истёкшему approval snapshot могло вернуть `TD_EXECUTION_FAILURE_AUDIT_FAILED`, потому что writer повторно требовал неистёкший approval для безопасной FAILED history row. Domain DELETE при этом не происходил, а durable attempt RESULT сохранялся. Исправлено узким режимом `allow_approval_drift` только для `TD_EXECUTION_FAILED` перехода `APPROVED → APPROVED`; успешный audit и state-changing переходы не ослаблены. Regression теперь проверяет исходный `TD_EXECUTION_SNAPSHOT_CHANGED`, сохранённую PII-free FAILED history row и сохранность Person/Application. Critical, Medium и Low findings после повторного review отсутствуют.
+
+Operational sign-off вынесен в `WP-TD-005-applicant-deletion-operational-sign-off-checklist.md`. Невыполненные rollout gates: независимое подтверждение production major/revision без подключения в рамках этого задания, read-only legacy-tombstone preflight, проверенный backup/restore drill, настройка monitoring безопасных кодов, проверка немедленного отзыва capability, зелёный file-level ESLint общего type-contract и отдельное утверждённое change window. До их закрытия `TEST_PERSONNEL_DELETION_EXECUTION_ENABLED` обязан оставаться выключенным; capability выдавать нельзя.
+
 ## 9. Готовность execution
 
-Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–5 добавляют revisions `td005m1v2a01`, `td005tomb201`, `td005fp3v101`, `td005audit401` и `td005exec501`; этап 6 добавляет server-owned readiness и UI подтверждения без новой revision. Applicant-only backend и кнопка существуют, но feature flag остаётся выключенным. Эксплуатационная готовность и право включить execution наступят только после отдельного закрытия этапа 7 и всех rollout gates WP-TD-004/WP-TD-005; Employee-процесс отсутствует.
+Baseline-схема `b1c2d3e4f5a6` не готова к execution. Этапы 1–5 добавляют revisions `td005m1v2a01`, `td005tomb201`, `td005fp3v101`, `td005audit401` и `td005exec501`; этап 6 добавляет server-owned readiness и UI подтверждения без новой revision; этап 7 завершил disposable engineering validation. Applicant-only backend и кнопка существуют, но feature flag остаётся выключенным. Эксплуатационная готовность и право включить execution наступят только после закрытия всех незавершённых operational sign-off gates; Employee-процесс отсутствует.
