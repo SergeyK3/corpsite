@@ -183,19 +183,19 @@ export default function TestSystemIdentityDeletionPanel({ me }: { me: MeInfo | n
         ))}
       </div>
 
-      <form className="flex flex-wrap items-start gap-2" onSubmit={(event) => { event.preventDefault(); void runSearch(); }}>
-        <label className="text-sm">
+      <form className="grid w-full grid-cols-1 items-start gap-2 lg:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)] xl:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)_auto]" onSubmit={(event) => { event.preventDefault(); void runSearch(); }}>
+        <label className="min-w-0 text-sm">
           Поле поиска
-          <select value={field} onChange={(event) => setField(event.target.value as SystemIdentitySearchField)} className="mt-1 block rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
+          <select value={field} onChange={(event) => setField(event.target.value as SystemIdentitySearchField)} className="mt-1 block w-full min-w-0 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
             {FIELDS[objectType].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <div className="min-w-72 flex-1 text-sm">
+        <div className="min-w-0 text-sm">
           <label htmlFor="system-identity-selector">Маска */? или точный технический ID</label>
-          <input id="system-identity-selector" value={selector} onChange={(event) => setSelector(event.target.value)} required aria-describedby="system-identity-mask-hint" className="mt-1 w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700" placeholder={objectType === "USER" ? "Например: test* или 104" : "Например: TEST_* или 27"} />
+          <input id="system-identity-selector" value={selector} onChange={(event) => setSelector(event.target.value)} required aria-describedby="system-identity-mask-hint" className="mt-1 w-full min-w-0 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700" placeholder={objectType === "USER" ? "Например: test* или 104" : "Например: TEST_* или 27"} />
           <span id="system-identity-mask-hint" className="mt-1 block text-xs text-zinc-600 dark:text-zinc-400">Введите от 3 до 100 символов. Поддерживаются маски * и ?</span>
         </div>
-        <button type="submit" className={`${BUTTON} mt-6`} disabled={!selector.trim() || busy !== null}>{busy === "search" ? "Поиск…" : "Найти"}</button>
+        <button type="submit" className={`${BUTTON} justify-self-start lg:col-span-2 xl:col-span-1 xl:mt-6`} disabled={!selector.trim() || busy !== null}>{busy === "search" ? "Поиск…" : "Найти"}</button>
       </form>
 
       {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">{error}</p> : null}
