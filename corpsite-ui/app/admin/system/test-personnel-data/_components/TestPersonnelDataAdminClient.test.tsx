@@ -8,6 +8,10 @@ import type { TestPersonnelRequest, TestPersonnelTarget } from "@/lib/testPerson
 let currentUser: MeInfo | null = null;
 
 vi.mock("@/lib/currentUser", () => ({ useCurrentUser: () => currentUser }));
+vi.mock("@/lib/testSystemIdentityDeletion", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/testSystemIdentityDeletion")>();
+  return { ...actual, probeSystemIdentityDeletionAccess: vi.fn().mockResolvedValue({}) };
+});
 vi.mock("@/lib/testPersonnelDeletion", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/testPersonnelDeletion")>();
   return {
@@ -103,7 +107,7 @@ afterEach(() => {
 });
 
 describe("TestPersonnelDataAdminClient", () => {
-  it("renders the personnel and applicants workflow under the general page heading", () => {
+  it("renders the personnel workflow and adds the separately gated system identity block", async () => {
     render(<TestPersonnelDataAdminClient />);
     expect(screen.getByRole("heading", { level: 1, name: "Управление тестовыми данными" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Персонал и претенденты" })).toBeInTheDocument();
@@ -112,7 +116,7 @@ describe("TestPersonnelDataAdminClient", () => {
     )).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Безопасный предварительный просмотр" })).toBeInTheDocument();
     expect(screen.queryByText(/preview/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("Системные пользователи и роли")).not.toBeInTheDocument();
+    expect(await screen.findByText("Системные пользователи и роли")).toBeInTheDocument();
   });
 
   it("is capability-gated and does not admit HR_HEAD approval-only capability", () => {

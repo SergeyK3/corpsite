@@ -25,6 +25,8 @@ export type MeInfo = {
   can_approve_test_personnel_deletion?: boolean;
   can_read_test_personnel_deletion_audit?: boolean;
   can_execute_test_personnel_deletion?: boolean;
+  /** WP-TD-006B — exact permission for read-only system User/Role search and preview. */
+  can_request_test_system_identity_deletion?: boolean;
   /** Sysadmin cabinet API (/admin/users, /admin/access/*, …) — not directory privileged roles. */
   has_sysadmin_api?: boolean;
   /** ADR-043 C4.2 — personnel lifecycle admin (ADMIN or HR_ENROLLMENT_MANAGER). */

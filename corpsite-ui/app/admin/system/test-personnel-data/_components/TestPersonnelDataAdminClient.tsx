@@ -34,6 +34,7 @@ import {
   type TestPersonnelTarget,
 } from "@/lib/testPersonnelDeletion";
 import { canSeeTestPersonnelAdmin } from "@/lib/testPersonnelDeletionNav";
+import TestSystemIdentityDeletionPanel from "./TestSystemIdentityDeletionPanel";
 
 const BUTTON = "rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON = "rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -550,6 +551,7 @@ export default function TestPersonnelDataAdminClient() {
       ) : null}
 
       </section>
+      <TestSystemIdentityDeletionPanel me={me} />
       </div>
 
       {executionDialogOpen && detail && readiness ? (
