@@ -94,6 +94,42 @@ export type CommitMigrationRunResponse = {
   event_ids: number[];
 };
 
+export type PersonLinkApplyPayload = {
+  employee_id: number;
+  normalized_record_ids: number[];
+  expected_precondition: string;
+  request_id: string;
+  confirm_name_correction?: boolean;
+};
+
+export type PersonLinkApplyResponse = {
+  request_id: string;
+  employee_id: number;
+  person_id: number;
+  decision: "CREATE" | "ADOPT" | "REPLAY";
+  employee_full_name: string;
+  canonical_full_name: string;
+  name_corrected: boolean;
+};
+
+export type PersonLinkPreflight = {
+  request_iin: { present: boolean; last4: string | null };
+  import_records: Array<{ batch_id: number; row_id: number; normalized_record_ids: number[] }>;
+  selected_import: { batch_id: number; row_id: number; normalized_record_ids: number[] } | null;
+  employees: Array<{ employee_id: number; person_id: number | null; operational_status: string | null; iin: { present: boolean; last4: string | null }; full_name?: string | null }>;
+  person_candidates: Array<{ person_id: number; person_status: string; compatible: boolean; incompatibility_reason: string | null; iin: { present: boolean; last4: string | null } }>;
+  classification: "P0_CREATE" | "P1_ADOPT" | null;
+  blockers: Array<{ code: string; detail: string }>;
+  preflight_complete: boolean;
+  expected_precondition: string | null;
+  employee_full_name: string | null;
+  control_list_full_name: string | null;
+};
+
+export async function runPersonLinkPreflight(iin: string, importSelection: { batch_id: number; row_id: number; normalized_record_ids: number[] }): Promise<PersonLinkPreflight> {
+  return apiPostJson<PersonLinkPreflight>("/directory/personnel/lk/control-list-repair/preflight", { iin, import_selection: importSelection });
+}
+
 function getDevUserId(): string | null {
   const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
   if (appEnv === "prod" || appEnv === "production") return null;
@@ -221,4 +257,8 @@ export async function commitMigrationRun(runId: number): Promise<CommitMigration
     `/personnel-migration/runs/${encodeURIComponent(String(runId))}/commit`,
     { confirm: true },
   );
+}
+
+export async function applyPersonLink(payload: PersonLinkApplyPayload): Promise<PersonLinkApplyResponse> {
+  return apiPostJson<PersonLinkApplyResponse>("/directory/personnel/lk/control-list-repair/apply", payload);
 }

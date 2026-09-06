@@ -21,6 +21,9 @@ from app.directory.personnel_lk_schemas import (
     registry_row_to_out,
 )
 from app.directory.rbac import require_personnel_admin_or_403
+from app.directory.rbac import compute_scope
+from app.services.adr065_person_link_service import PersonLinkError, link_person_tx
+from app.directory.personnel_lk_schemas import PersonLinkApplyIn, PersonLinkApplyOut
 from app.personnel_lk.application.control_list_repair_preflight_service import (
     control_list_repair_preflight,
 )
@@ -62,6 +65,31 @@ router = APIRouter(
     tags=["personnel-lk"],
     route_class=_ControlListRepairSafeValidationRoute,
 )
+
+
+@router.post("/control-list-repair/apply", response_model=PersonLinkApplyOut)
+def control_list_repair_apply_route(
+    body: PersonLinkApplyIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PersonLinkApplyOut:
+    require_personnel_admin_or_403(user)
+    scope = compute_scope(int(user["user_id"]), user)
+    scope_ids = None if scope.get("scope_unit_ids") is None else set(scope.get("scope_unit_ids") or [])
+    try:
+        with engine.begin() as conn:
+            result = link_person_tx(
+                conn,
+                employee_id=body.employee_id,
+                normalized_record_ids=body.normalized_record_ids,
+                expected_precondition=body.expected_precondition,
+                request_id=body.request_id,
+                actor_user_id=int(user["user_id"]),
+                confirm_name_correction=body.confirm_name_correction,
+                scope_unit_ids=scope_ids,
+            )
+        return PersonLinkApplyOut.model_validate(result)
+    except PersonLinkError as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from None
 
 
 @router.post(

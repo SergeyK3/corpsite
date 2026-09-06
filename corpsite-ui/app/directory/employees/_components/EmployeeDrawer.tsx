@@ -22,6 +22,9 @@ import {
 } from "../_lib/api.client";
 import { employeeStatusMeta } from "../_lib/employeeStatus";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
+import { listNormalizedRecords, type NormalizedRecord } from "../../personnel/_lib/importApi.client";
+import { runPersonLinkPreflight, type PersonLinkPreflight } from "../../personnel/_lib/personnelMigrationApi.client";
+import PersonLinkDialog from "../../personnel/_components/PersonLinkDialog";
 
 type Props = {
   employeeId: string | null;
@@ -77,6 +80,9 @@ export default function EmployeeDrawer({
   const [terminationOrderDate, setTerminationOrderDate] = useState("");
   const [terminationSaving, setTerminationSaving] = useState(false);
   const [terminationError, setTerminationError] = useState<string | null>(null);
+  const [personLink, setPersonLink] = useState<{ preflight: PersonLinkPreflight; records: NormalizedRecord[]; iin: string } | null>(null);
+  const [personLinkLoading, setPersonLinkLoading] = useState(false);
+  const [personLinkError, setPersonLinkError] = useState<string | null>(null);
 
   const loadDetails = useCallback(async () => {
     if (!employeeId) {
@@ -159,6 +165,22 @@ export default function EmployeeDrawer({
     }
   }
 
+  async function openPersonLink() {
+    if (!employeeId || !details) return;
+    setPersonLinkLoading(true); setPersonLinkError(null);
+    try {
+      const found = await listNormalizedRecords({ employee_id: Number(employeeId), limit: 200 });
+      const records = found.items;
+      const first = records.find((r) => r.iin && r.employee_id === Number(employeeId));
+      if (!first) throw new Error("Не найдены утверждённые записи контрольного списка для Employee.");
+      const same = records.filter((r) => r.employee_id === Number(employeeId) && r.iin === first.iin && r.review_status === "approved");
+      const selection = { batch_id: first.batch_id, row_id: first.row_id, normalized_record_ids: same.map(r => r.normalized_record_id) };
+      const preflight = await runPersonLinkPreflight(first.iin, selection);
+      setPersonLink({ preflight, records: same, iin: first.iin });
+    } catch (e) { setPersonLinkError(e instanceof Error ? e.message : "Не удалось выполнить preflight."); }
+    finally { setPersonLinkLoading(false); }
+  }
+
   if (!open) return null;
 
   const showHrCardLink = canSeeHrProcessesNav(me);
@@ -212,6 +234,12 @@ export default function EmployeeDrawer({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {details && details.person_id == null && employeeId ? (
+              <button type="button" onClick={() => void openPersonLink()} disabled={personLinkLoading} className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-50">
+                {personLinkLoading ? "Загрузка…" : "Создать рабочую личную карточку"}
+              </button>
+            ) : null}
+            {personLinkError ? <span className="text-xs text-red-700">{personLinkError}</span> : null}
             {employeeCardHref ? (
               <Link
                 href={employeeCardHref}
@@ -378,6 +406,7 @@ export default function EmployeeDrawer({
           ) : null}
         </div>
       </div>
+      {personLink && details && employeeId ? <PersonLinkDialog employeeId={Number(employeeId)} employeeName={String(displayFio)} iin={personLink.iin} records={personLink.records} preflight={personLink.preflight} onClose={() => setPersonLink(null)} /> : null}
     </div>
   );
 }

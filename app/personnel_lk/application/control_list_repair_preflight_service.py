@@ -13,6 +13,7 @@ from app.services.adr048_person_resolution_service import (
     Adr048PersonResolution,
     resolve_person_create_or_link_exact_iin_tx,
 )
+from app.services.adr065_person_link_service import build_precondition
 from app.personnel_lk.application.personnel_order_evidence_fingerprint import (
     EvidenceFingerprintError,
     EvidenceKeySnapshot,
@@ -199,7 +200,9 @@ def _load_import_selection(
     row = conn.execute(
         text(
             """
-            SELECT row_id, batch_id, employee_id, normalized_payload ->> 'iin' AS iin
+            SELECT row_id, batch_id, employee_id,
+                   normalized_payload ->> 'iin' AS iin,
+                   normalized_payload ->> 'full_name' AS full_name
               FROM public.hr_import_rows
              WHERE row_id=:row_id
             """
@@ -216,8 +219,11 @@ def _load_import_selection(
 
     statement = text(
         """
-        SELECT normalized_record_id, batch_id, row_id, employee_id
-          FROM public.hr_import_normalized_records
+        SELECT nr.normalized_record_id, nr.batch_id, nr.row_id, nr.employee_id,
+               nr.review_status, ir.normalized_payload
+          FROM public.hr_import_normalized_records nr
+          JOIN public.hr_import_rows ir
+            ON ir.row_id = nr.row_id AND ir.batch_id = nr.batch_id
          WHERE normalized_record_id IN :record_ids
          ORDER BY normalized_record_id
         """
@@ -245,9 +251,11 @@ def _load_import_selection(
         dict(record)
         for record in conn.execute(
             text(
-                "SELECT normalized_record_id, batch_id, row_id, employee_id "
-                "FROM public.hr_import_normalized_records "
-                "WHERE row_id=:row_id ORDER BY normalized_record_id"
+                "SELECT nr.normalized_record_id, nr.batch_id, nr.row_id, nr.employee_id, "
+                "nr.review_status, ir.normalized_payload "
+                "FROM public.hr_import_normalized_records nr "
+                "JOIN public.hr_import_rows ir ON ir.row_id=nr.row_id AND ir.batch_id=nr.batch_id "
+                "WHERE nr.row_id=:row_id ORDER BY nr.normalized_record_id"
             ),
             {"row_id": row_id},
         ).mappings()
@@ -269,6 +277,7 @@ def _load_import_selection(
         "batch_id": batch_id,
         "row_id": row_id,
         "employee_id": int(row["employee_id"]) if row["employee_id"] is not None else None,
+        "full_name": row.get("full_name"),
         "normalized_records": all_row_records,
         "normalized_record_ids": requested_ids,
     }
@@ -280,7 +289,7 @@ def _load_employees(conn: Connection, iin: str) -> list[dict[str, Any]]:
         for row in conn.execute(
             text(
                 """
-                SELECT e.employee_id, e.person_id, e.operational_status, ei.identity_value
+                SELECT e.employee_id, e.person_id, e.full_name, e.operational_status, ei.identity_value
                   FROM public.employee_identities ei
                   JOIN public.employees e ON e.employee_id = ei.employee_id
                  WHERE ei.identity_type = 'IIN'
@@ -657,6 +666,7 @@ def control_list_repair_preflight(
                 "employee_id": int(row["employee_id"]),
                 "person_id": int(row["person_id"]) if row["person_id"] is not None else None,
                 "operational_status": row["operational_status"],
+                "full_name": row.get("full_name"),
                 "iin": _safe_iin(row["identity_value"]),
             }
             for row in employees
@@ -694,4 +704,19 @@ def control_list_repair_preflight(
         "preflight_complete": classification is not None and not blockers,
         "apply_available": False,
         "observed_at": conn.execute(text("SELECT transaction_timestamp()")).scalar_one(),
+        "employee_full_name": (
+            str(target_employee.get("full_name")) if target_employee and target_employee.get("full_name") else None
+        ),
+        "control_list_full_name": (
+            str(selected_import.get("full_name")) if selected_import and selected_import.get("full_name") else None
+        ),
+        "expected_precondition": (
+            build_precondition(
+                int(target_employee["employee_id"]),
+                str(target_employee.get("full_name") or ""),
+                list(selected_import["normalized_records"]),
+            )
+            if target_employee is not None and selected_import is not None
+            else None
+        ),
     }

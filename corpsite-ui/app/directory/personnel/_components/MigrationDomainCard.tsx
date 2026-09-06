@@ -8,6 +8,7 @@ import {
   migrationHrDomainStatusHint,
   migrationHrDomainStatusLabel,
   migrationHrTransferItems,
+  migrationHrUnsupportedDomainLabel,
 } from "../_lib/personnelMigrationHrLabels";
 import MigrationDomainTechnicalDetails from "./MigrationDomainTechnicalDetails";
 
@@ -27,7 +28,7 @@ export default function MigrationDomainCard({ domain }: MigrationDomainCardProps
         <span
           className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${migrationHrDomainStatusBadgeClass(status)}`}
         >
-          {migrationHrDomainStatusLabel(status)}
+          {status === "coming_soon" ? migrationHrUnsupportedDomainLabel(domain.domain_code) : migrationHrDomainStatusLabel(status)}
         </span>
       </div>
 

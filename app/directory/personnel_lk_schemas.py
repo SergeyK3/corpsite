@@ -214,6 +214,7 @@ class ControlListRepairEmployeeOut(BaseModel):
     employee_id: int
     person_id: int | None
     operational_status: str | None
+    full_name: str | None = None
     iin: SafeIinOut
 
 
@@ -260,6 +261,36 @@ class ControlListRepairPreflightOut(BaseModel):
     preflight_complete: bool
     apply_available: Literal[False] = False
     observed_at: datetime
+    employee_full_name: str | None = None
+    control_list_full_name: str | None = None
+    expected_precondition: str | None = None
+
+
+class PersonLinkApplyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    employee_id: int = Field(ge=1)
+    normalized_record_ids: list[int] = Field(min_length=1)
+    expected_precondition: str = Field(min_length=1, max_length=128)
+    request_id: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{7,127}$")
+    confirm_name_correction: bool = False
+
+    @field_validator("normalized_record_ids")
+    @classmethod
+    def validate_record_ids(cls, value: list[int]) -> list[int]:
+        if any(item < 1 for item in value) or len(set(value)) != len(value):
+            raise ValueError("normalized_record_ids must be unique positive integers")
+        return value
+
+
+class PersonLinkApplyOut(BaseModel):
+    request_id: str
+    employee_id: int
+    person_id: int
+    decision: Literal["CREATE", "ADOPT", "REPLAY"]
+    employee_full_name: str
+    canonical_full_name: str
+    name_corrected: bool
 
 
 class PersonnelLkRegistryItemOut(BaseModel):

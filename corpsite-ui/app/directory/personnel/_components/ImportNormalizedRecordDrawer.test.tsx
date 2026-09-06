@@ -1,7 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ImportEnrollEmployeeWizard from "./ImportEnrollEmployeeWizard";
 import ImportNormalizedRecordDrawer from "./ImportNormalizedRecordDrawer";
 import { MIGRATION_COMMIT_CTA_LABEL } from "../_lib/personnelMigrationHrLabels";
 import { OPEN_HR_DOSSIER_CTA, OPEN_WORKING_EMPLOYEE_CARD_CTA } from "@/lib/personnelCardTerminology";
@@ -177,15 +176,19 @@ describe("ImportNormalizedRecordDrawer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows migration CTA for approved bound education/training records", () => {
-    renderDrawer(approvedBoundRecord);
+  it.each(["education", "training"] as const)(
+    "does not offer disabled migration CTA for approved bound %s records",
+    (recordKind) => {
+      renderDrawer({ ...approvedBoundRecord, record_kind: recordKind });
 
-    const link = screen.getByRole("link", { name: MIGRATION_COMMIT_CTA_LABEL });
-    expect(link).toHaveAttribute(
-      "href",
-      "/directory/personnel/migration/education/45?candidate_id=education%3Anormalized_record%3A42&source=review",
-    );
-  });
+      expect(screen.queryByRole("link", { name: MIGRATION_COMMIT_CTA_LABEL })).not.toBeInTheDocument();
+      expect(screen.getByText("Перенос образования ещё не включён. Сначала создайте рабочую личную карточку.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Создать или открыть рабочую личную карточку" })).toHaveAttribute(
+        "href",
+        "/directory/personnel/employees/45/card",
+      );
+    },
+  );
 
   it("hides migration CTA for pending records", () => {
     renderDrawer(baseRecord);

@@ -125,6 +125,10 @@ export function migrationHrDomainStatusHint(status: MigrationHrDomainStatus): st
   }
 }
 
+export function migrationHrUnsupportedDomainLabel(domainCode: string): string {
+  return domainCode === "category" ? "Перенос пока не реализован" : "Скоро";
+}
+
 export function migrationHrDomainStatusBadgeClass(status: MigrationHrDomainStatus): string {
   switch (status) {
     case "available":

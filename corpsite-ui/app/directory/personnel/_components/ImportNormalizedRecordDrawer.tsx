@@ -732,12 +732,18 @@ export default function ImportNormalizedRecordDrawer({
           ) : (
             <>
               {showMigrationCta && migrationHref ? (
-                <Link
-                  href={migrationHref}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  {MIGRATION_COMMIT_CTA_LABEL}
-                </Link>
+                <>
+                  <span className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-500">{MIGRATION_COMMIT_CTA_LABEL}</span>
+                  <p className="mt-2 text-xs text-amber-700">Перенос образования ещё не включён. Сначала создайте рабочую личную карточку.</p>
+                  {record.employee_id ? (
+                    <Link
+                      href={`/directory/personnel/employees/${encodeURIComponent(String(record.employee_id))}/card`}
+                      className="mt-2 inline-flex rounded-lg border border-amber-300 px-3 py-2 text-xs font-medium text-amber-800"
+                    >
+                      Создать или открыть рабочую личную карточку
+                    </Link>
+                  ) : null}
+                </>
               ) : null}
               {canApprove ? (
                 <button
