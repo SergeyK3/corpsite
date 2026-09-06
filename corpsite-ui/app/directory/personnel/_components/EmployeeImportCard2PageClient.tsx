@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { apiAuthMe } from "@/lib/api";
 
 import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
 import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
@@ -21,8 +22,12 @@ import { EmployeeImportCardSection, EmployeeImportCardSectionNav } from "./Emplo
 import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
 import {
   getEmployeeImportCard2Optional,
+  listNormalizedRecords,
+  type NormalizedRecord,
   type EmployeeImportCard2Detail,
 } from "../_lib/importApi.client";
+import { runPersonLinkPreflight, type PersonLinkPreflight } from "../_lib/personnelMigrationApi.client";
+import PersonLinkDialog from "./PersonLinkDialog";
 
 type Props = {
   employeeId: string;
@@ -45,6 +50,8 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   const [employee, setEmployee] = React.useState<EmployeeDetails | null>(null);
   const [importDetail, setImportDetail] = React.useState<EmployeeImportCard2Detail | null>(null);
   const [assignmentRefreshToken, setAssignmentRefreshToken] = React.useState(0);
+  const [canLinkPerson, setCanLinkPerson] = React.useState(false);
+  const [personLink, setPersonLink] = React.useState<{ preflight: PersonLinkPreflight; records: NormalizedRecord[]; iin: string } | null>(null);
   const scrolledSectionRef = React.useRef<EmployeeCardSectionId | null>(null);
 
   const loadShell = React.useCallback(async () => {
@@ -69,6 +76,17 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   React.useEffect(() => {
     void loadShell();
   }, [loadShell]);
+
+  React.useEffect(() => { void apiAuthMe().then((me) => setCanLinkPerson(me.has_hr_enrollment_manager === true)).catch(() => setCanLinkPerson(false)); }, []);
+
+  async function openPersonLink() {
+    const found = await listNormalizedRecords({ employee_id: Number(employeeId), limit: 200 });
+    const first = found.items.find((r) => r.iin && r.employee_id === Number(employeeId) && r.review_status === "approved");
+    if (!first) return;
+    const records = found.items.filter((r) => r.employee_id === Number(employeeId) && r.iin === first.iin && r.review_status === "approved");
+    const preflight = await runPersonLinkPreflight(first.iin, { batch_id: first.batch_id, row_id: first.row_id, normalized_record_ids: records.map((r) => r.normalized_record_id) });
+    setPersonLink({ preflight, records, iin: first.iin });
+  }
 
   React.useEffect(() => {
     if (shellLoading || shellError || !employee) return;
@@ -104,6 +122,11 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
           >
             Закрыть
           </button>
+          {employee && employee.person_id == null && canLinkPerson ? (
+            <button type="button" onClick={() => void openPersonLink()} className="rounded border border-amber-300 px-4 py-2 text-sm text-amber-800">
+              Создать рабочую личную карточку
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -204,6 +227,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
           </>
         ) : null}
       </div>
+      {personLink && employee ? <PersonLinkDialog employeeId={Number(employeeId)} employeeName={displayName} iin={personLink.iin} records={personLink.records} preflight={personLink.preflight} onClose={() => setPersonLink(null)} /> : null}
     </div>
   );
 }

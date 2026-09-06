@@ -6,6 +6,11 @@ import EmployeeImportCard2PageClient from "./EmployeeImportCard2PageClient";
 const getEmployeeMock = vi.fn();
 const getEmployeeImportCard2OptionalMock = vi.fn();
 const getPprByEmployeeIdMock = vi.fn();
+const apiAuthMeMock = vi.fn();
+const listNormalizedRecordsMock = vi.fn();
+const runPersonLinkPreflightMock = vi.fn();
+
+vi.mock("@/lib/api", () => ({ apiAuthMe: () => apiAuthMeMock() }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -19,7 +24,10 @@ vi.mock("../../employees/_lib/api.client", () => ({
 
 vi.mock("../_lib/importApi.client", () => ({
   getEmployeeImportCard2Optional: (...args: unknown[]) => getEmployeeImportCard2OptionalMock(...args),
+  listNormalizedRecords: (...args: unknown[]) => listNormalizedRecordsMock(...args),
 }));
+vi.mock("../_lib/personnelMigrationApi.client", () => ({ runPersonLinkPreflight: (...args: unknown[]) => runPersonLinkPreflightMock(...args) }));
+vi.mock("./PersonLinkDialog", () => ({ default: () => <div data-testid="person-link-dialog" /> }));
 
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByEmployeeId: (...args: unknown[]) => getPprByEmployeeIdMock(...args),
@@ -52,8 +60,25 @@ describe("EmployeeImportCard2PageClient", () => {
     getEmployeeMock.mockReset();
     getEmployeeImportCard2OptionalMock.mockReset();
     getPprByEmployeeIdMock.mockReset();
+    apiAuthMeMock.mockResolvedValue({ has_hr_enrollment_manager: true });
+    listNormalizedRecordsMock.mockResolvedValue({ items: [{ employee_id: 228, iin: "851101300451", review_status: "approved", batch_id: 1, row_id: 2, normalized_record_id: 3 }] });
+    runPersonLinkPreflightMock.mockResolvedValue({ blockers: [], expected_precondition: "x" });
     getEmployeeMock.mockResolvedValue({ employee_id: 228, fio: "Умерзакова Махаббат Тылеулесовна" });
     getEmployeeImportCard2OptionalMock.mockResolvedValue(null);
+  });
+
+  it("shows Person-link CTA only when person_id is null and opens the dialog", async () => {
+    render(<EmployeeImportCard2PageClient employeeId="228" />);
+    const button = await screen.findByRole("button", { name: "Создать рабочую личную карточку" });
+    fireEvent.click(button);
+    expect(await screen.findByTestId("person-link-dialog")).toBeInTheDocument();
+  });
+
+  it("hides Person-link CTA when employee already has person_id", async () => {
+    getEmployeeMock.mockResolvedValue({ employee_id: 228, fio: "Employee", person_id: 99 });
+    render(<EmployeeImportCard2PageClient employeeId="228" />);
+    await screen.findByRole("heading", { name: "Employee" });
+    expect(screen.queryByRole("button", { name: "Создать рабочую личную карточку" })).toBeNull();
   });
 
   afterEach(() => {
