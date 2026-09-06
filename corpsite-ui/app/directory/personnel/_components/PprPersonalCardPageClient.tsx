@@ -55,6 +55,7 @@ import PprCardAdditionalSection from "./PprCardAdditionalSection";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
+import PprPersonPhoto from "./PprPersonPhoto";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
@@ -294,24 +295,27 @@ export default function PprPersonalCardPageClient({
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            {isApplicant ? (
-              <p
-                className="text-xs font-bold uppercase tracking-[0.14em] text-amber-900 dark:text-amber-100"
-                data-testid="ppr-applicant-status-banner"
-              >
-                Заявитель
-              </p>
-            ) : null}
-            <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{PERSONAL_CARD_TITLE}</h1>
-            <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">{displayName}</p>
-            {ppr ? (
-              <p className="mt-1 text-xs text-zinc-500">
-                Статус: {hrRelationshipLabel(ppr.materialization.hr_relationship_context)}
-                {" · "}
-                {lifecycleStatusLabel(ppr.materialization.materialized, ppr.materialization.lifecycle_state)}
-              </p>
-            ) : null}
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <PprPersonPhoto personId={resolvedPersonId} fullName={displayName} />
+            <div className="min-w-0">
+              {isApplicant ? (
+                <p
+                  className="text-xs font-bold uppercase tracking-[0.14em] text-amber-900 dark:text-amber-100"
+                  data-testid="ppr-applicant-status-banner"
+                >
+                  Заявитель
+                </p>
+              ) : null}
+              <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{PERSONAL_CARD_TITLE}</h1>
+              <p className="mt-0.5 break-words text-sm text-zinc-700 dark:text-zinc-300">{displayName}</p>
+              {ppr ? (
+                <p className="mt-1 text-xs text-zinc-500">
+                  Статус: {hrRelationshipLabel(ppr.materialization.hr_relationship_context)}
+                  {" · "}
+                  {lifecycleStatusLabel(ppr.materialization.materialized, ppr.materialization.lifecycle_state)}
+                </p>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"

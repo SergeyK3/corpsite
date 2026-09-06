@@ -55,6 +55,24 @@ export async function getPprByPersonId(
   );
 }
 
+export async function getPprPersonPhoto(
+  personId: string | number,
+  opts?: { signal?: AbortSignal },
+): Promise<Blob> {
+  const path = `/api/ppr/persons/${encodeURIComponent(String(personId))}/photo`;
+  const res = await fetch(resolveApiUrl(path), {
+    method: "GET",
+    headers: { ...authHeaders(), Accept: "image/jpeg" },
+    cache: "no-store",
+    signal: opts?.signal,
+  });
+  if (!res.ok) {
+    const body = await readJsonSafe(res);
+    throw toApiError(res.status, body, { method: "GET", url: path });
+  }
+  return res.blob();
+}
+
 export async function getPprSummaryByPersonId(
   personId: string | number,
   opts?: { signal?: AbortSignal },

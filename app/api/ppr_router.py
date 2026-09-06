@@ -1,9 +1,11 @@
 """PPR composite read REST API (R7 — read-only)."""
 from __future__ import annotations
 
+import hmac
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi.responses import Response
 
 from app.api.ppr_errors import map_ppr_query_error
 from app.api.ppr_mappers import composite_to_response, summary_to_response
@@ -17,7 +19,15 @@ from app.api.ppr_schemas import (
     PprPersonnelApplicationItemResponse,
 )
 from app.auth import get_current_user
+from app.db.models.person_photos import MIME_TYPE_JPEG
 from app.directory.common import as_http500
+from app.person_photos.infrastructure.photo_storage import (
+    read_canonical_photo,
+    sha256_hex,
+    validate_canonical_photo_bytes,
+)
+from app.person_photos.infrastructure.repository import PersonPhotoRepository
+from app.personnel_intake.domain.errors import PersonnelIntakeValidationError
 from app.ppr.application.config import assert_ppr_read_path_activation_allowed
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
 from app.ppr.read.query_service import PprQueryApplicationService
@@ -33,6 +43,58 @@ from app.services.ppr_query_access_service import (
 router = APIRouter(prefix="/api/ppr", tags=["ppr"])
 
 _query_service = PprQueryApplicationService()
+
+
+@router.get("/persons/{person_id}/photo")
+def get_ppr_person_photo(
+    person_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    """Return the active canonical Person photo through the protected PPR read path."""
+    try:
+        assert_ppr_read_path_activation_allowed()
+        summary = _query_service.load_summary(person_id=person_id)
+        assert_ppr_read_allowed_for_person(
+            user,
+            summary.person_id,
+            resolved_employee_id=summary.employee_id,
+        )
+
+        from app.db.engine import engine
+
+        with engine.connect() as conn:
+            photo = PersonPhotoRepository(conn).get_active_photo(summary.person_id)
+        if photo is None or photo.mime_type != MIME_TYPE_JPEG:
+            raise HTTPException(status_code=404, detail="Person photo not found.")
+
+        try:
+            content = read_canonical_photo(photo.storage_rel_path)
+            if content is None:
+                raise FileNotFoundError
+            validate_canonical_photo_bytes(content)
+            if not hmac.compare_digest(
+                sha256_hex(content),
+                photo.checksum_sha256.strip().lower(),
+            ):
+                raise ValueError("Canonical photo checksum mismatch.")
+        except (OSError, ValueError, PersonnelIntakeValidationError):
+            raise HTTPException(status_code=404, detail="Person photo not found.")
+
+        return Response(
+            content=content,
+            media_type=MIME_TYPE_JPEG,
+            headers={
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mapped = map_ppr_query_error(exc)
+        if mapped is not None:
+            raise mapped
+        raise as_http500(exc)
 
 
 @router.get("/persons/{person_id}", response_model=PprCompositeReadResponse)

@@ -27,6 +27,16 @@ class CanonicalizeIntakePhotoRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class RegisterManualPersonPhotoRequest:
+    person_id: int
+    jpeg_content: bytes
+    actor_user_id: int
+    request_id: str
+    correlation_id: str | None = None
+    allow_replace: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class PersonPhotoRow:
     person_photo_id: int
     person_id: int

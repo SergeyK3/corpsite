@@ -4,6 +4,7 @@ import { toApiError } from "@/lib/api";
 import {
   getPprByEmployeeId,
   getPprByPersonId,
+  getPprPersonPhoto,
   getPprSummaryByPersonId,
 } from "./pprQueryApi.client";
 import type { PprCompositeReadResponse } from "./pprQueryTypes";
@@ -101,6 +102,23 @@ describe("pprQueryApi.client", () => {
 
     const [url] = fetchMock.mock.calls[0] as [string];
     expect(url).toContain(`/api/ppr/persons/${MOCK_RESOLVED_PERSON_ID}`);
+  });
+
+  it("loads Person photo as protected binary content", async () => {
+    const photo = new Blob(["jpeg"], { type: "image/jpeg" });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: async () => photo,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getPprPersonPhoto(MOCK_RESOLVED_PERSON_ID)).resolves.toBe(photo);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain(`/api/ppr/persons/${MOCK_RESOLVED_PERSON_ID}/photo`);
+    expect(init.headers).toMatchObject({ Accept: "image/jpeg" });
+    expect(init.cache).toBe("no-store");
   });
 
   it("getPprSummaryByPersonId calls summary endpoint", async () => {

@@ -31,9 +31,11 @@ vi.mock("next/navigation", () => ({
 
 const getPprByEmployeeIdMock = vi.fn();
 const getPprByPersonIdMock = vi.fn();
+const getPprPersonPhotoMock = vi.fn();
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByEmployeeId: (...args: unknown[]) => getPprByEmployeeIdMock(...args),
   getPprByPersonId: (...args: unknown[]) => getPprByPersonIdMock(...args),
+  getPprPersonPhoto: (...args: unknown[]) => getPprPersonPhotoMock(...args),
 }));
 
 const getEmployeeImportCard2OptionalMock = vi.fn();
@@ -356,6 +358,8 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
 beforeEach(() => {
   getPprByEmployeeIdMock.mockReset();
   getPprByPersonIdMock.mockReset();
+  getPprPersonPhotoMock.mockReset();
+  getPprPersonPhotoMock.mockRejectedValue({ status: 404 });
   getEmployeeImportCard2OptionalMock.mockReset();
   pushMock.mockReset();
   currentCardSearchParams = new URLSearchParams("");

@@ -38,6 +38,10 @@ class CanonicalFileIntegrityError(PersonPhotoError):
     """Canonical file failed replay validation (checksum or JPEG rules)."""
 
 
+class PhotoReplacementRequiresApprovalError(PersonPhotoError):
+    """A different active photo exists and replacement was not explicitly allowed."""
+
+
 class HirePhotoNotReadyError(PersonPhotoError):
     """HIRE apply blocked until intake photo is canonicalized."""
 

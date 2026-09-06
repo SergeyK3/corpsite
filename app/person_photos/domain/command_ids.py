@@ -4,3 +4,10 @@ from __future__ import annotations
 
 def intake_photo_command_id(application_id: int, intake_photo_file_id: str) -> str:
     return f"person-photo:canonicalize:intake:{application_id}:{intake_photo_file_id}"
+
+
+def manual_photo_command_id(request_id: str) -> str:
+    normalized = str(request_id or "").strip()
+    if not normalized:
+        raise ValueError("Manual photo request_id must not be empty.")
+    return f"person-photo:canonicalize:manual:{normalized}"

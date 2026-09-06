@@ -82,6 +82,7 @@ def build_provenance_link_event(
     canonicalization_mode: str,
     source_application_id: int | None,
     source_intake_photo_file_id: str | None,
+    source_kind: str = SOURCE_KIND_INTAKE,
 ) -> PprEventAppendRequest:
     return build_person_photo_ppr_event(
         person_id=person_id,
@@ -94,4 +95,5 @@ def build_provenance_link_event(
         canonicalization_mode=canonicalization_mode,
         source_application_id=source_application_id,
         source_intake_photo_file_id=source_intake_photo_file_id,
+        source_kind=source_kind,
     )
