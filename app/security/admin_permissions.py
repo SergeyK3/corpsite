@@ -16,6 +16,7 @@ TEST_PERSONNEL_DELETION_REQUEST = "TEST_PERSONNEL_DELETION_REQUEST"
 TEST_PERSONNEL_DELETION_APPROVE = "TEST_PERSONNEL_DELETION_APPROVE"
 TEST_PERSONNEL_DELETION_EXECUTE = "TEST_PERSONNEL_DELETION_EXECUTE"
 TEST_PERSONNEL_DELETION_AUDIT_READ = "TEST_PERSONNEL_DELETION_AUDIT_READ"
+TEST_SYSTEM_IDENTITY_DELETION_REQUEST = "TEST_SYSTEM_IDENTITY_DELETION_REQUEST"
 
 TEST_PERSONNEL_DELETION_CAPABILITY_BY_PERMISSION = {
     TEST_PERSONNEL_DELETION_REQUEST: "can_request_test_personnel_deletion",
@@ -33,6 +34,7 @@ PERMISSION_CODES: FrozenSet[str] = frozenset(
         TEST_PERSONNEL_DELETION_APPROVE,
         TEST_PERSONNEL_DELETION_EXECUTE,
         TEST_PERSONNEL_DELETION_AUDIT_READ,
+        TEST_SYSTEM_IDENTITY_DELETION_REQUEST,
         "ACCESS_MANAGER",
         "SECURITY_AUDITOR",
         "ACCESS_ADMIN",
@@ -149,6 +151,23 @@ def has_test_personnel_deletion_permission(user_id: int, permission_code: str) -
     if not capability:
         return False
     return get_test_personnel_deletion_capabilities(user_id)[capability]
+
+
+def has_test_system_identity_deletion_request_permission(user_id: int) -> bool:
+    """006B is ADMIN-only even if a grant is later added to another primary role."""
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return False
+    with engine.connect() as conn:
+        primary_role = conn.execute(text("""SELECT role.code FROM public.users users
+            JOIN public.roles role ON role.role_id=users.role_id
+            WHERE users.user_id=:user_id AND users.is_active=TRUE"""), {
+                "user_id": uid,
+            }).scalar_one_or_none()
+    return primary_role == "ADMIN" and has_admin_permission(
+        uid, TEST_SYSTEM_IDENTITY_DELETION_REQUEST,
+    )
 
 
 def has_any_admin_api_permission(user_id: int) -> bool:
