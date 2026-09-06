@@ -10,6 +10,9 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.testclient import TestClient
 
 from app.db.engine import engine
+from app.personnel_lk.application.control_list_repair_preflight_service import (
+    control_list_repair_preflight,
+)
 from app.services.adr065_person_link_service import (
     PersonLinkError,
     build_precondition,
@@ -107,6 +110,85 @@ def test_payload_change_after_preflight_is_stale_without_mutation(pg_case):
     with engine.begin() as conn:
         assert conn.execute(text("SELECT person_id FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() is None
         assert conn.execute(text("SELECT count(*) FROM personnel_identity_link_operations WHERE request_id='adr065-payload-stale'")).scalar_one() == 0
+
+
+def test_apply_rejects_superseded_record_without_mutation(pg_case):
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE hr_import_normalized_records SET review_status='superseded' WHERE normalized_record_id=:id"), {"id": pg_case["record"]})
+    with pytest.raises(PersonLinkError) as exc:
+        _apply(pg_case, request_id="adr065-superseded")
+    assert exc.value.code == "IMPORT_RECORD_NOT_APPROVED"
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT person_id FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() is None
+        assert conn.execute(text("SELECT count(*) FROM personnel_identity_link_operations WHERE request_id='adr065-superseded'")).scalar_one() == 0
+
+
+def test_preflight_rejects_superseded_record_without_mutation(pg_case):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "SELECT batch_id,row_id FROM hr_import_normalized_records "
+                "WHERE normalized_record_id=:record"
+            ),
+            {"record": pg_case["record"]},
+        ).mappings().one()
+        conn.execute(
+            text(
+                "UPDATE hr_import_normalized_records SET review_status='superseded' "
+                "WHERE normalized_record_id=:record"
+            ),
+            {"record": pg_case["record"]},
+        )
+        before = conn.execute(
+            text(
+                "SELECT e.person_id, nr.review_status, "
+                "(SELECT count(*) FROM persons) AS person_count, "
+                "(SELECT count(*) FROM personnel_identity_link_operations) AS operation_count "
+                "FROM employees e "
+                "JOIN hr_import_normalized_records nr "
+                "ON nr.normalized_record_id=:record "
+                "WHERE e.employee_id=:employee"
+            ),
+            {"employee": pg_case["employee"], "record": pg_case["record"]},
+        ).mappings().one()
+
+    with engine.connect() as conn:
+        transaction = conn.begin()
+        try:
+            conn.exec_driver_sql(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            result = control_list_repair_preflight(
+                conn,
+                iin=pg_case["iin"],
+                import_selection={
+                    "batch_id": int(row["batch_id"]),
+                    "row_id": int(row["row_id"]),
+                    "normalized_record_ids": [pg_case["record"]],
+                },
+                assignment_intent=None,
+            )
+        finally:
+            transaction.rollback()
+
+    assert result["preflight_complete"] is False
+    assert "IMPORT_RECORD_NOT_APPROVED" in {
+        blocker["code"] for blocker in result["blockers"]
+    }
+    with engine.begin() as conn:
+        after = conn.execute(
+            text(
+                "SELECT e.person_id, nr.review_status, "
+                "(SELECT count(*) FROM persons) AS person_count, "
+                "(SELECT count(*) FROM personnel_identity_link_operations) AS operation_count "
+                "FROM employees e "
+                "JOIN hr_import_normalized_records nr "
+                "ON nr.normalized_record_id=:record "
+                "WHERE e.employee_id=:employee"
+            ),
+            {"employee": pg_case["employee"], "record": pg_case["record"]},
+        ).mappings().one()
+    assert dict(after) == dict(before)
 
 
 def test_rollback_leaves_no_link(pg_case):

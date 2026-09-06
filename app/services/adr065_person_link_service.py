@@ -140,6 +140,8 @@ def link_person_tx(
     ).bindparams(bindparam("ids", expanding=True)), {"ids": sorted(normalized_record_ids)}).mappings())
     if len(records) != len(set(normalized_record_ids)):
         raise PersonLinkError("Selected normalized records are incomplete.", "IMPORT_RECORD_NOT_FOUND", 422)
+    if any(str(row["review_status"] or "").lower() != "approved" for row in records):
+        raise PersonLinkError("Selected normalized records must be approved before Person linking.", "IMPORT_RECORD_NOT_APPROVED")
     names = []
     for row in records:
         if row["employee_id"] not in (None, employee_id):

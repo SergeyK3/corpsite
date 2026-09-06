@@ -81,6 +81,13 @@ describe("EmployeeImportCard2PageClient", () => {
     expect(screen.queryByRole("button", { name: "Создать рабочую личную карточку" })).toBeNull();
   });
 
+  it("explains when no approved control-list record exists", async () => {
+    listNormalizedRecordsMock.mockResolvedValue({ items: [{ employee_id: 228, iin: "851101300451", review_status: "superseded" }] });
+    render(<EmployeeImportCard2PageClient employeeId="228" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Создать рабочую личную карточку" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Нет одобренной записи контрольного списка");
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();

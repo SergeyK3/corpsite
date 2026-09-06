@@ -52,6 +52,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   const [assignmentRefreshToken, setAssignmentRefreshToken] = React.useState(0);
   const [canLinkPerson, setCanLinkPerson] = React.useState(false);
   const [personLink, setPersonLink] = React.useState<{ preflight: PersonLinkPreflight; records: NormalizedRecord[]; iin: string } | null>(null);
+  const [personLinkError, setPersonLinkError] = React.useState<string | null>(null);
   const scrolledSectionRef = React.useRef<EmployeeCardSectionId | null>(null);
 
   const loadShell = React.useCallback(async () => {
@@ -80,12 +81,15 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   React.useEffect(() => { void apiAuthMe().then((me) => setCanLinkPerson(me.has_hr_enrollment_manager === true)).catch(() => setCanLinkPerson(false)); }, []);
 
   async function openPersonLink() {
-    const found = await listNormalizedRecords({ employee_id: Number(employeeId), limit: 200 });
-    const first = found.items.find((r) => r.iin && r.employee_id === Number(employeeId) && r.review_status === "approved");
-    if (!first) return;
-    const records = found.items.filter((r) => r.employee_id === Number(employeeId) && r.iin === first.iin && r.review_status === "approved");
-    const preflight = await runPersonLinkPreflight(first.iin, { batch_id: first.batch_id, row_id: first.row_id, normalized_record_ids: records.map((r) => r.normalized_record_id) });
-    setPersonLink({ preflight, records, iin: first.iin });
+    setPersonLinkError(null);
+    try {
+      const found = await listNormalizedRecords({ employee_id: Number(employeeId), limit: 200 });
+      const first = found.items.find((r) => r.iin && r.employee_id === Number(employeeId) && r.review_status === "approved");
+      if (!first) { setPersonLinkError("Нет одобренной записи контрольного списка. Сначала импортируйте и подтвердите актуальные данные сотрудника."); return; }
+      const records = found.items.filter((r) => r.employee_id === Number(employeeId) && r.iin === first.iin && r.review_status === "approved");
+      const preflight = await runPersonLinkPreflight(first.iin, { batch_id: first.batch_id, row_id: first.row_id, normalized_record_ids: records.map((r) => r.normalized_record_id) });
+      setPersonLink({ preflight, records, iin: first.iin });
+    } catch (error) { setPersonLinkError(error instanceof Error ? error.message : "Не удалось выполнить проверку данных контрольного списка."); }
   }
 
   React.useEffect(() => {
@@ -127,6 +131,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
               Создать рабочую личную карточку
             </button>
           ) : null}
+          {personLinkError ? <p role="status" className="text-sm text-red-700">{personLinkError}</p> : null}
         </div>
       </div>
 

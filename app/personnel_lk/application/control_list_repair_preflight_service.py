@@ -246,6 +246,11 @@ def _load_import_selection(
             "IMPORT_NORMALIZED_RECORD_SCOPE_MISMATCH",
             "A selected normalized record belongs to another batch or row.",
         )
+    if any(str(record.get("review_status") or "").lower() != "approved" for record in records):
+        block(
+            "IMPORT_RECORD_NOT_APPROVED",
+            "Selected normalized records must be approved before Person linking.",
+        )
 
     all_row_records = [
         dict(record)
