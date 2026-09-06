@@ -12,13 +12,16 @@ Type:
 Architecture Work Package
 
 Status:
-Draft
+Approved — Ready for Implementation
 
 Revision:
-3
+5
 
 Date:
-2026-07-15
+2026-09-06
+
+Approval date:
+2026-09-06
 
 Parent program:
 WP-HR-CARD (Employee Card UX unification)
@@ -27,15 +30,18 @@ Depends on:
 ARCH-002, ADR-054 (Accepted — normative priority), ADR-045, ADR-050
 
 Related (context only):
-ADR-055
+ADR-047, ADR-055, ADR-061, ADR-065
 
 Purpose:
-Align user-facing terminology and navigation with the accepted PPR model (ADR-054).
-Does not introduce new domain decisions or amend ADR-054.
+Fix the implemented baseline and define the target user-facing structure of the unified
+personnel record card, including photo, controlled corrections and an internal printable
+PDF representation.
 
 Normative priority:
-[ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md) (Accepted) takes precedence over this Draft document.
-On any conflict, ADR-054 and ARCH-002 normative sections govern.
+[ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md) (Accepted) takes
+precedence over this document. On any conflict, ADR-054 and ARCH-002 normative
+sections govern. Existing-card repair remains governed separately by
+[ADR-065](../adr/ADR-065-personnel-enrollment-orchestration-existing-card-repair.md).
 
 --------------------------------------------------
 
@@ -45,480 +51,382 @@ On any conflict, ADR-054 and ARCH-002 normative sections govern.
 
 | Topic | Decision |
 |-------|----------|
-| **Domain object (unchanged)** | **Personnel Personal Record (PPR)** = **Личный листок по учёту кадров** — самостоятельный предметный объект кадрового контура ([ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md) §Business Object vs Persistence Model). |
-| **Stable PPR identifier** | **`person_id`** — устойчивый идентификатор PPR (ADR-054 Phase 1 Person-root). **`employee_id` не является идентификатором PPR.** |
-| **Primary UI representation** | **Личная карточка по учёту кадров** — основное пользовательское представление PPR (Composite View; не master-storage). |
-| **Printed representation** | **Печатная форма личного листка** — производное document/export представление PPR; не domain object и не UI shell. |
-| **HR Dossier** | **Legacy пользовательский термин** и существующая transitional implementation (projection, services, route `/card`). Данный WP **не предусматривает** удаление сервисов, API или маршрутов — только замену user-facing terminology. |
-| **Employee Card** | **Technical/architecture term** (ARCH-002): Composite View implementation; converges under user label «Личная карточка». |
-| **Рабочая карточка (modal)** | Transitional preview UI; постепенно исключается из HR-сценариев. |
-| **Navigation rule (EMP-NAV-001)** | Элемент с известным `employee_id` → Личная карточка одним действием (transitional nav key); при невозможности — явная причина. |
-| **Stage 1** | Реализовано (implementation evidence §6.1): журнал «Персонал» — кнопка «Карточка». |
+| **Domain object (unchanged)** | **Personnel Personal Record (PPR)** = **Личный листок по учёту кадров** — самостоятельный предметный объект кадрового контура. |
+| **Stable PPR identifier** | **`person_id`** — устойчивый идентификатор PPR. **`employee_id` не является идентификатором PPR.** |
+| **Canonical UI route** | Каноническая карточка строится по Person и открывается по `/directory/personnel/persons/{personId}/card`. |
+| **Employee compatibility route** | `/directory/personnel/employees/{employeeId}/card` разрешает `employees.person_id` и перенаправляет на Person-карточку. Он не создаёт отдельную Employee-карточку. |
+| **Primary UI representation** | **Личная карточка по учёту кадров** — составное интерактивное представление PPR и связанных кадровых проекций; не master-storage. |
+| **Card layout** | В верхней части карточки фото располагается рядом с основными сведениями; рядом доступны действия **«Редактировать»** и **«Печать личной карточки»**. Ниже располагаются утверждённые самостоятельные разделы карточки. |
+| **Photo** | Используется существующая person-owned модель `person_photos` и person-scoped файловое хранилище. |
+| **Printed representation v1** | **Внутренняя печатная копия электронной личной карточки формата A4**, сформированная из той же Person/PPR-модели. Первая страница содержит фото и основные сведения. Полная государственная/унифицированная форма сейчас не заявляется. |
+| **Corrections** | Разделяются непосредственное HR-редактирование разрешённых полей и предложение сотрудником исправления с последующим HR-review/apply. |
+| **Existing-card repair** | `EXISTING_CARD_REPAIR` из ADR-065 не является обычным редактированием Person: он исправляет связи Person/Employee и назначения. |
 
-**Scope of this document:** presentation layer and terminology only. **No amendment to ADR-054 or new domain aggregates.**
+Этот документ не создаёт второй кадровый aggregate и не переносит authority из PPR,
+Employment, Personnel Orders, Documents или других исходных bounded contexts в UI-карточку.
 
 ---
 
-## Architectural Principle (PPR-REP-001)
+## 1. Architectural Principle (PPR-REP-001)
 
-The project **intentionally distinguishes**:
+Проект различает:
 
-1. the **domain object** — Personnel Personal Record (Личный листок по учёту кадров);
-2. its **primary interactive presentation** — Личная карточка по учёту кадров;
-3. its **derived documentary representations** — printed forms, exports, snapshots (e.g. печатная форма личного листка, control output).
-
-These are **different representations of the same кадровый объект** (one PPR, one `person_id` in Phase 1) and **must not be modelled as independent aggregates**.
+1. **domain object** — Personnel Personal Record / Личный листок по учёту кадров;
+2. **interactive representation** — Личная карточка по учёту кадров;
+3. **derived document representation** — печатная PDF-копия или другой экспорт.
 
 | Representation | Layer | Aggregate? |
 |----------------|-------|------------|
-| Personnel Personal Record | Domain | **Yes** — the single PPR aggregate ([ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md)) |
-| Личная карточка | UI / Composite View | **No** — projection and interaction shell (INV-5) |
-| Печатная форма / export / snapshot | Document | **No** — derived read-only or export artifact |
+| Personnel Personal Record | Domain | **Да** — единый PPR aggregate, Person-root в текущей фазе |
+| Личная карточка | UI / Composite View | **Нет** — projection и interaction shell |
+| PDF / export / snapshot | Document | **Нет** — производный артефакт |
 
-**Corollaries:**
+Следствия:
 
-- Renaming UI labels or adding navigation **does not** create a second domain object.
-- A printed form or monthly snapshot **derives from** PPR; it **does not own** master data.
-- Legacy terms (HR Dossier, Employee Card) name **representations or modes**, not separate aggregates.
-- Employment Relationship and Employee remain **adjacent bounded contexts**, not substitutes for PPR.
-
-*PPR-REP-001 aligns with ADR-054 and ARCH-002; it codifies presentation-layer discipline for WP-HR-CARD and downstream UI work.*
+- экран и PDF читают канонические данные, но не становятся их владельцами;
+- `person_id` остаётся идентичностью карточки независимо от кадровых эпизодов Employee;
+- Employment Relationship и Employee остаются соседними bounded contexts;
+- добавление UI, печати или workflow исправлений не создаёт параллельный реестр кадровых данных;
+- любой write должен использовать утверждённый writer соответствующего источника истины.
 
 ---
 
-## 1. Проблема текущей модели
+## 2. Текущее состояние (implemented baseline)
 
-### 1.1. Transitional presentation stack (as-is)
+### 2.1. Person-rooted card and navigation
 
-Пользователь видит цепочку UI-объектов, которые **маскируют** уже принятую domain-модель (PPR = Личный листок):
-
-```mermaid
-flowchart TB
-  subgraph domain [Domain — ADR-054]
-    PPR[Personnel Personal Record<br/>Личный листок по учёту кадров<br/>person_id]
-    ER[Employment Relationship]
-  end
-
-  subgraph ui_as_is [Presentation — transitional]
-    E[Employee<br/>employee_id]
-    WC[Рабочая карточка<br/>modal preview]
-    HD[HR Dossier / Кадровое досье<br/>legacy user term]
-    EC[Employee Card<br/>technical Composite View]
-  end
-
-  PPR --- EC
-  ER --- E
-  E --> WC --> HD --> EC
-```
-
-**As-is (упрощённо — пользовательский путь, не domain hierarchy):**
+Каноническая страница:
 
 ```text
-Employee (employee_id)
-  ↓
-Рабочая карточка (modal)
-  ↓
-Кадровое досье / HR Dossier (legacy label)
-  ↓
-Employee Card (technical) → projects PPR + Employment
+/directory/personnel/persons/{personId}/card
+    → PPR composite read by person_id
 ```
 
-Domain-центр (**Личный листок / PPR**) в UI часто **не назван явно**; пользователь проходит лишние шаги.
-
-### 1.2. Симптомы
-
-| Симптом | Проявление | Причина |
-|---------|------------|---------|
-| **Дублирование presentation labels** | «Открыть», «Кадровое досье», «Карточка», «Сотрудник» | Несколько user-facing имён одного Composite View |
-| **Лишний шаг навигации** | Журнал → modal → ссылка на `/card` | HR-сценарии через `EmployeeDrawer` вместо прямого входа |
-| **Смешение domain и UI** | «Личный листок» иногда трактуется как бумажная форма | Нарушение ADR-054: PPR = Личный листок = domain object |
-| **Путаница идентификаторов** | `employee_id` в URL воспринимается как ID листка | Transitional navigation; canonical ID — `person_id` (ADR-054) |
-| **Когнитивная нагрузка** | Непонятно, «где настоящая карточка» | INV-5: UI не storage, но термины не разведены |
-
-### 1.3. Триггер из Position Cabinet
-
-При обнаружении ошибки в журнале «Персонал» пользователь проходит ≥3 действия до редактирования PPR-сведений. Целевой путь — **один клик в Личную карточку** (представление PPR).
-
----
-
-## 2. Целевая модель
-
-### 2.1. Три слоя представления (PPR-REP-001, ADR-054)
-
-| Слой | Англ. | Русское название | Роль |
-|------|-------|------------------|------|
-| **Domain object** | Personnel Personal Record (PPR) | **Личный листок по учёту кадров** | Самостоятельный предметный объект; person-owned sections; **`person_id`** — устойчивый ID (ADR-054). |
-| **UI representation** | Employee Card (technical) → user label | **Личная карточка по учёту кадров** | Основное интерактивное представление PPR + employment/operational projections; **не** source of truth (INV-5). |
-| **Document / export representation** | Control Output / print view | **Печатная форма личного листка** | Производный вывод (PDF, печать, control list); **не** domain object и **не** главный UI shell. |
-
-```mermaid
-flowchart TB
-  subgraph domain [Domain]
-    PPR[PPR = Личный листок по учёту кадров<br/>person_id]
-  end
-
-  subgraph presentation [Presentation]
-    UPC[Личная карточка по учёту кадров<br/>primary UI]
-    PRINT[Печатная форма личного листка<br/>export / document]
-  end
-
-  subgraph employment [Employment — separate BC]
-    ER[Employment Relationship]
-    EMP[Employee — operational shell]
-  end
-
-  PPR --> UPC
-  PPR --> PRINT
-  UPC -->|Composite View| PPR
-  UPC --> ER
-  UPC --> EMP
-```
-
-**Target (domain vs presentation):**
+Совместимый Employee-маршрут:
 
 ```text
-Domain:     Personnel Personal Record = Личный листок (person_id)
-UI:         Личная карточка по учёту кадров
-Document:   Печатная форма личного листка
+/directory/personnel/employees/{employeeId}/card
+    → resolve employees.person_id
+    → redirect to /directory/personnel/persons/{personId}/card
 ```
 
-### 2.2. Target navigation stack
+Таким образом, Employee URL является только compatibility/navigation adapter. После
+разрешения идентичности пользователь работает с одной Person-карточкой. Redirect должен
+сохранять поддерживаемые deep-link и return-to параметры и не должен подменять
+`employee_id` значением `person_id`.
 
-```mermaid
-flowchart LR
-  J[Журнал / список]
-  EK[employee_id<br/>transitional nav key]
-  UPC[Личная карточка<br/>/card]
-  RES[resolve]
-  PID[person_id]
-  PPR[PPR sections]
-
-  J -->|1 action| EK
-  EK --> UPC
-  UPC --> RES --> PID --> PPR
-```
-
-### 2.3. Что меняется и что нет
-
-| Артефакт | Изменение в рамках WP-HR-CARD-002 |
-|----------|-----------------------------------|
-| **PPR aggregate / ADR-054** | **Без изменений** |
-| **`person_id` semantics** | **Без изменений** |
-| **Backend APIs, projection services** | **Без изменений** |
-| **Route `/directory/personnel/employees/{id}/card`** | **Сохраняется** |
-| **User-facing term «HR Dossier / Кадровое досье»** | Заменяется на «Личная карточка» (Stage 3) |
-| **Implementation behind `/card`** | **Сохраняется** (transitional composite projection) |
-
-### 2.4. Navigation identity
-
-#### Canonical identity (domain)
-
-| Identifier | Role |
-|------------|------|
-| **`person_id`** | Устойчивый идентификатор **Personnel Personal Record** (ADR-054: Person-root Phase 1). |
-| **`employee_id`** | Идентификатор **Employee** (operational / employment shell). **Не** идентификатор PPR. |
-
-#### Transitional navigation (presentation)
-
-В текущей transitional UI deep links и журналы используют **`employee_id`** как ключ навигации к странице `/card`, потому что:
-
-- журналы и списки historically employee-centric;
-- HIRE apply и visibility scope оперируют Employee ([ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md) Existing Repository Facts);
-- person-centric URL policy — отдельное решение (OQ-1).
-
-**`employee_id` — transitional navigation key**, не canonical PPR identity.
-
-```mermaid
-flowchart TB
-  NAV[UI navigation input<br/>employee_id]
-  RES[Identity resolution<br/>employees.person_id]
-  PID[person_id<br/>canonical PPR id]
-  PPR[PPR / Личный листок<br/>person-owned sections]
-  CARD[Личная карточка<br/>Composite View at /card]
-
-  NAV --> CARD
-  CARD --> RES
-  RES --> PID
-  PID --> PPR
-```
-
-Resolution path (logical, WP-PR-005 aligned):
+Карточка формируется составным PPR read API:
 
 ```text
-employee_id  →  resolve (Employee.person_id)  →  person_id  →  PPR
+GET /api/ppr/persons/{person_id}
+GET /api/ppr/persons/{person_id}/summary
+GET /api/ppr/employees/{employee_id}       # compatibility read
 ```
 
-Until person-centric navigation is adopted, EMP-NAV-001 **may** key off `employee_id` in journals; documentation and future APIs must treat **`person_id`** as the stable PPR reference.
+Доступ к чтению определяется кадровой visibility и организационным scope. Отдельный
+self-service доступ сотрудника только к собственной Person-карточке пока не реализован.
 
-### 2.5. Разделы Личной карточки (target catalog)
+### 2.2. Уже работающие разделы и режимы доступа
 
-Личная карточка — единая UI-точка входа; разделы — typed sections PPR и employment projections.
+| Раздел на текущем экране | Что отображается | Текущий режим |
+|--------------------------|------------------|---------------|
+| **Общие сведения** | ФИО, раздельные части имени, ИИН с учётом права доступа, дата рождения, статус карточки и кадровая связь | **Только чтение** |
+| **Образование** | Действующие, заменённые и аннулированные записи; организация, вид, специальность, квалификация, период | **Только чтение** |
+| **Обучение и повышение квалификации** | Название, вид, организация, период и сводные показатели | **Только чтение** |
+| **Родственники** | Степень родства, ФИО, дата/место рождения, организация, адрес и примечание | **Только чтение** |
+| **Дополнительные сведения** | Иностранные языки, награды, учёные степени и звания | **Только чтение** |
+| **Трудовая биография** | Внешние трудовые эпизоды и история версий | **Редактирование уполномоченным HR** через create/void/supersede PPR-команды; для остальных — чтение |
+| **Воинский учёт** | Статус и категория учёта, состав, звание, годность, ВУС, военкомат, даты и ограниченные реквизиты | **Редактирование уполномоченным HR** через create/void/supersede PPR-команды; чувствительные поля выдаются отдельно по праву |
+| **Предполагаемое трудоустройство** | Планируемые группа, подразделение, должность и ставка претендента | **Редактирование уполномоченным HR**, только в candidate-контексте |
+| **Текущее назначение** | Группа подразделений, подразделение, должность, operational enrollment status | **Кадровая корректировка доступна уполномоченному HR**; текущая реализация изменяет разрешённые поля существующего Employee и пишет событие `CORRECTION` |
+| **Кадровые приказы** | Связанные приказы сотрудника | **Только чтение в карточке**; команды приказа принадлежат отдельному workflow |
+| **Кадровые обращения** | История Personnel Application для Person | **Только чтение в карточке**; lifecycle обращения ведётся отдельно |
+| **Адаптация** | Связанный onboarding сотрудника | **Связанный operational workflow**, не редактирование PPR-полей карточки |
+| **История изменений** | Краткая хронология PPR/кадровых событий | **Только чтение** |
 
-| Раздел | Статус | Слой |
-|--------|--------|------|
-| Общие сведения | Implemented (partial) | PPR projection |
-| Назначения / текущее назначение | Implemented | Employment |
-| Кадровые приказы | Implemented | Employment / Orders |
-| Доступ | Implemented | Operational (Employee) |
-| История изменений | Implemented | Events projection |
-| Образование | Planned | PPR (`person_education`) |
-| Повышение квалификации | Planned | PPR (`person_training`) |
-| Воинский учёт | Future | PPR section catalog |
-| Родственники | Future | PPR section catalog |
-| Документы | Partial | Linked registry |
-| Контакты | Future | Linked registry |
-| **Печатная форма личного листка** | Future | **Document representation** — export/tab inside card |
-| Прочие разделы PPR | Future | WP-PR-003 catalog |
+Текущий экран не содержит фото/аватар, канонический раздел контактов, раздел документов
+или кнопку печати всей личной карточки.
 
----
+### 2.3. Граница существующего редактирования
 
-## 3. Терминология
+Текущая возможность «Исправить ошибку в назначении» не является универсальным editor
+личной карточки. Она ограничена разрешёнными полями существующего Employee: ФИО,
+подразделение, должность, ставка, даты и operational status. Операция требует причины и
+комментария и сохраняет before/after в кадровом событии.
 
-### 3.1. Normative three-layer glossary
-
-| Термин | Слой | Определение (согласовано с ADR-054) |
-|--------|------|-------------------------------------|
-| **Personnel Personal Record (PPR)** | Domain | Предметный объект; рус.: **Личный листок по учёту кадров**. |
-| **Личный листок по учёту кадров** | Domain | = PPR; **главный domain object** кадрового контура; не бумажная форма. |
-| **person_id** | Domain ID | Устойчивый идентификатор PPR (Phase 1). |
-| **Person** | Domain | Постоянная идентичность физлица; aggregate root Phase 1. |
-| **Employee** | Employment / ops | Операционная оболочка; **`employee_id`** — ID Employee, не PPR. |
-| **Employment Relationship** | Domain (adjacent BC) | Трудовые отношения, назначения, приказы — не хранилище биографии PPR. |
-| **Личная карточка по учёту кадров** | UI | **Основное пользовательское представление PPR** (+ projections). |
-| **Employee Card** | Architecture (technical) | Composite View implementation ([ARCH-002](./ARCH-002-personnel-personal-record-architecture.md)); user-facing name → Личная карточка. |
-| **HR Dossier / Кадровое досье** | Legacy UI term + transitional impl | Historical user label for HR-oriented Composite View mode; **implementation retained**; terminology retired in UI (Stage 3). |
-| **Рабочая карточка сотрудника** | UI (modal) | `EmployeeDrawer` — preview без обязательного перехода; не PPR editor. |
-| **Печатная форма личного листка** | Document / export | Производное представление PPR для печати/PDF/control output; **≠** domain object. |
-
-### 3.2. Сравнительная таблица (as-is → target)
-
-| Термин | As-is | Target |
-|--------|-------|--------|
-| **Личный листок по учёту кадров** | Domain (PPR) — иногда ошибочно «бумажная форма» | **Domain object** (без изменения ADR-054) |
-| **Личная карточка по учёту кадров** | Частично через «Кадровое досье» | **Primary UI** для работы с PPR |
-| **Печатная форма личного листка** | Не выделена | **Document layer** внутри/из карточки |
-| **HR Dossier** | User-facing label + `/card` impl | **Legacy term only**; impl **unchanged** |
-| **Employee Card** | Dev/architecture name | **Technical**; не отдельный продукт для пользователя |
-| **employee_id** | Ключ в URL и журналах | **Transitional nav key** → resolve → `person_id` |
-| **person_id** | Backend / PMF | **Canonical PPR identifier** |
-
-### 3.3. Обоснование «Личная карточка» (UI) vs «Личный листок» (domain)
-
-1. **ADR-054:** Личный листок = PPR = **domain object** — термин **не** передаётся пользователю как название экрана, чтобы не смешивать предметную модель с UI chrome.
-2. **Личная карточка** — привычный UI-объект для интерактивной работы с данными PPR.
-3. **Печатная форма личного листка** — отдельный document layer; соответствует бумажной форме Т-2 и control output, **не** заменяет PPR.
-4. **HR Dossier** снимается с UI как **legacy label**, не как удаление implementation.
-
-### 3.4. Terminology mapping (implementation — Stage 3)
-
-| Current constant / label | Target user-facing label |
-|---------------------------|--------------------------|
-| `HR_DOSSIER_TITLE` = «Кадровая карточка-досье» | «Личная карточка по учёту кадров» |
-| `OPEN_HR_DOSSIER_CTA` | «Открыть личную карточку» |
-| `HR_DOSSIER_JOURNAL_ACTION` = «Карточка» | «Карточка» (без изменения) |
-| `WORKING_EMPLOYEE_CARD_TITLE` | «Рабочая карточка» (preview-only) |
-
-*Код не меняется в рамках данного документа.*
-
-### 3.5. HR Dossier — уточнение статуса
-
-| Aspect | Status |
-|--------|--------|
-| **User-facing term «HR Dossier / Кадровое досье»** | **Deprecated** (Stage 3) — замена на «Личная карточка» |
-| **Route `/card`** | **Retained** |
-| **Composite projection / services** (`hr_import_employee_card_service`, etc.) | **Retained** — transitional implementation |
-| **Employee Card (technical)** | **Retained** — architecture name for Composite View |
-| **Removal of API / backend** | **Out of scope** — not proposed by this WP |
-
-Формулировка «HR Dossier больше не существует» **не используется**: существует **legacy terminology** и **continuing implementation** под unified user label.
+Общие сведения Person, образование, обучение, родственники и дополнительные сведения
+пока не имеют editor в канонической карточке. Наличие writer в intake/import контурах не
+означает автоматического разрешения прямого редактирования этих полей из карточки.
 
 ---
 
-## 4. Навигация
+## 3. Целевая структура Личной карточки
 
-### 4.1. As-is flow
+### 3.1. Верхняя часть карточки
 
-```mermaid
-sequenceDiagram
-  participant J as Журнал (Персонал)
-  participant W as Рабочая карточка (modal)
-  participant D as /card (legacy label: HR Dossier)
-  participant U as Пользователь
+В верхней части карточки формируется единый профильный блок:
 
-  U->>J: «Открыть»
-  J->>W: EmployeeDrawer
-  U->>W: «Открыть кадровое досье»
-  W->>D: navigate(employee_id)
-  U->>D: edit via Composite View
+- действующее фото сотрудника располагается рядом с основными сведениями Person/PPR;
+- при отсутствии фото на его месте отображается явное текстовое пустое состояние;
+- основные сведения содержат разрешённые вызывающему пользователю identity и профильные
+  поля;
+- рядом с фото и основными сведениями доступны действия **«Редактировать»** и
+  **«Печать личной карточки»**;
+- «Редактировать» открывает только действия и поля, разрешённые текущему пользователю, и
+  не означает наличие общего unrestricted editor;
+- «Печать личной карточки» формирует PDF по правилам §5.
+
+На узком экране блок может перестраиваться вертикально, но фото, основные сведения и оба
+действия должны оставаться однозначно связанными с одной Person-карточкой.
+
+### 3.2. Утверждённые самостоятельные разделы
+
+Ниже верхнего профильного блока располагаются утверждённые самостоятельные разделы
+карточки в следующем порядке:
+
+| Порядок | Раздел | Источник / назначение |
+|---------|--------|-----------------------|
+| 1 | **Контакты** | Канонически связанный contact projection; не копия данных в UI |
+| 2 | **Текущее назначение** | Employment/Employee projection |
+| 3 | **Образование и обучение** | `person_education`, `person_training` и относящиеся профессиональные сведения |
+| 4 | **Трудовая биография** | `person_external_employment` и история версий |
+| 5 | **Воинский учёт** | `person_military_service` с field-level ограничениями |
+| 6 | **Родственники** | `person_relatives` |
+| 7 | **Документы** | Связанный реестр документов и их реквизиты |
+| 8 | **Приказы, обращения и история** | Personnel Orders, Personnel Applications, onboarding и event projections |
+
+Существующие дополнительные сведения — языки, награды, учёные степени и звания — не
+теряются при переходе к целевой структуре и отображаются внутри самостоятельного раздела
+«Образование и обучение» как связанные профессиональные сведения, без изменения source
+of truth.
+
+Фото и основные сведения являются верхним профильным блоком, а не повторяются как
+самостоятельные разделы ниже. Каждый самостоятельный раздел должен явно обозначать:
+
+- источник данных и актуальность проекции;
+- доступность только для чтения либо конкретное разрешённое действие;
+- пустое состояние точным текстом **«Сведения отсутствуют»**, а не отсутствующим блоком;
+- историю версий/изменений, когда она предусмотрена доменной моделью;
+- field-level masking чувствительных данных.
+
+---
+
+## 4. Фото сотрудника
+
+### 4.1. Source of truth and storage
+
+Фото в личной карточке должно использовать существующие:
+
+- таблицу `person_photos` для person-owned версий и метаданных;
+- append-only provenance `person_photo_sources`;
+- person-scoped файловое хранилище;
+- существующие проверки JPEG, размера и SHA-256 checksum.
+
+Нельзя создавать вторую avatar/photo таблицу, хранить байты в Person/PPR JSON или
+использовать application-scoped intake-файл как постоянный URL карточки.
+
+### 4.2. Read contract
+
+- Карточка показывает не более одной действующей версии (`is_active=true`) для Person.
+- При отсутствии действующего фото отображается текстовое пустое состояние.
+- Байты выдаются только через авторизованный backend/API после проверки доступа к Person.
+- Публичный файловый URL, прямой путь к filesystem или бессрочная публичная ссылка
+  запрещены.
+- Ответ должен использовать private/no-store cache policy и безопасный content type.
+
+### 4.3. Upload and replacement
+
+- Загрузка и замена канонического фото разрешены только уполномоченному HR.
+- Замена создаёт новую версию и деактивирует/замещает прежнюю; историческая запись не
+  перезаписывается.
+- Для каждой версии сохраняются `person_id`, file ID/path, MIME type, byte size, checksum,
+  источник, автор, время создания и provenance операции.
+- Клиент не выбирает `person_id`, source или audit author в обход server-owned context.
+- Ошибка публикации файла или записи метаданных не должна оставлять новую версию
+  действующей без подтверждённого файла и checksum.
+
+---
+
+## 5. Печатная PDF-копия
+
+### 5.1. Product definition v1
+
+На карточке добавляется действие **«Печать личной карточки»**.
+
+PDF первой версии является **внутренней печатной копией электронной карточки** для
+кадровой работы формата **A4**. Полная государственная/унифицированная форма сейчас не
+заявляется: PDF не объявляется формой Т-2, официальным государственным бланком,
+юридически самостоятельным оригиналом или заменой документов кадрового дела.
+
+### 5.2. Data and layout contract
+
+- Формат страницы — **A4**.
+- PDF строится из той же канонической Person/PPR read-модели и тех же связанных кадровых
+  проекций, что используются экраном; отдельная PDF-база или параллельный snapshot
+  master-data запрещены.
+- Первая страница PDF содержит действующее фото при наличии и основные сведения Person/PPR.
+- В документе указываются дата/время формирования и версия PDF-шаблона.
+- Действующее фото включается только при наличии и разрешённом доступе.
+- Каждый пустой раздел сохраняет своё место и выводится с точным текстом
+  **«Сведения отсутствуют»**.
+- Порядок и названия разделов согласуются с целевой структурой §3.
+- Значения форматируются для печати без изменения исходной семантики и точности дат.
+
+### 5.3. Authorization and audit
+
+- Полный ИИН включается только если вызывающий пользователь имеет соответствующее право
+  на чувствительные identity fields. Иначе применяется та же маскировка, что и в
+  канонической экранной проекции.
+- Field-level ограничения, включая закрытые реквизиты воинского учёта, применяются до
+  рендеринга HTML.
+- Каждое успешное формирование PDF записывается в аудит как минимум с `person_id`, actor,
+  временем, версией шаблона и результатом; содержимое PDF и полные персональные данные в
+  audit payload не сохраняются.
+- Ошибка авторизации или формирования не должна возвращать частичный PDF.
+
+### 5.4. Rendering approach
+
+Следует переиспользовать существующий проектный подход:
+
+```text
+canonical Person/PPR ViewModel
+    → versioned HTML/CSS template
+    → headless Chromium / Playwright
+    → PDF A4
 ```
 
-### 4.2. Target flow
+Переиспользуются общая browser lifecycle infrastructure, безопасная загрузка шрифтов,
+настройки печатной страницы и обработка ошибок, уже применяемые для intake и Personnel
+Order PDF. Шаблон личной карточки остаётся отдельным versioned template.
 
-```mermaid
-sequenceDiagram
-  participant J as Журнал
-  participant C as Личная карточка (/card)
-  participant U as Пользователь
+---
 
-  U->>J: «Карточка»
-  J->>C: navigate(employee_id)
-  Note over C: resolve person_id → PPR
-  U->>C: просмотр / редактирование
+## 6. Режимы исправления данных
+
+### 6.1. Непосредственное HR-редактирование
+
+Уполномоченный HR может непосредственно изменить только поля из утверждённого allowlist.
+
+Обязательные свойства:
+
+- отдельное permission на действие и проверка организационного scope;
+- server-owned выбор writer/source of truth для каждого поля;
+- optimistic concurrency или эквивалентная stale-state защита;
+- обязательная причина для существенных кадровых исправлений;
+- неизменяемый audit с actor, временем, полем, старым и новым значением и результатом;
+- version/void/supersede вместо потери истории там, где раздел имеет версионную модель;
+- отсутствие создания второго Person или Employee при обычном исправлении поля.
+
+### 6.2. Предложение исправления сотрудником
+
+Сотрудник не редактирует официальную Person/PPR-запись напрямую. Он может предложить
+исправление только собственных данных после однозначного server-side разрешения:
+
+```text
+authenticated User → own Employee → own Person
 ```
 
-### 4.3. Stage 1 — implementation evidence
+Целевой workflow:
 
-Журнал **Персонал** (`/directory/staff`, [ADR-045](../adr/ADR-045-personnel-hr-processes-split.md)).
-
-| Кнопка | Поведение |
-|--------|-----------|
-| **Открыть** | `EmployeeDrawer` (preview) — legacy |
-| **Карточка** | `buildEmployeeCardHref(employeeId)` → `/card` |
-
-**Implementation evidence (Stage 1):**
-
-| File | Role |
-|------|------|
-| `corpsite-ui/app/directory/employees/_components/EmployeesTable.tsx` | `showHrDossierLink`, `HrDossierJournalAction` (link / disabled) |
-| `corpsite-ui/app/directory/employees/_components/EmployeesPageClient.tsx` | `showHrDossierLink={managementView && readOnly}` |
-| `corpsite-ui/lib/employeeCardNav.ts` | `buildEmployeeCardHref()` — canonical path builder |
-| `corpsite-ui/lib/personnelCardTerminology.ts` | Labels (legacy HR Dossier strings — Stage 3 rename) |
-| `corpsite-ui/app/directory/staff/page.tsx` | Entry: read-only «Персонал» |
-| `corpsite-ui/app/directory/employees/_components/EmployeesTable.test.tsx` | Unit tests |
-
-Backend **не изменялся**.
-
-При отсутствии `employee_id`: «Карточка» **disabled** + tooltip.
-
----
-
-## 5. Единый UX-прinciple (draft)
-
-> **EMP-NAV-001:** UI-элемент с известным **`employee_id`** (transitional nav key) **обязан** обеспечивать переход в **Личную карточку по учёту кадров** одним действием.
->
-> При невозможности перехода интерфейс **обязан** явно объяснить причину (disabled + tooltip, message, empty state).
->
-> Canonical PPR identity остаётся **`person_id`** (ADR-054); навигация через `employee_id` — transitional contract до person-centric URLs.
-
-### 5.1. Implementation contract
-
-- **Href builder:** `buildEmployeeCardHref()` — не дублировать path strings.
-- **Section deep links:** `?section=` (history, access, assignment, …).
-- **Terminology:** `personnelCardTerminology.ts` (Stage 3).
-
----
-
-## 6. Влияние на компоненты
-
-| Контур | Комponent | Target | Stage |
-|--------|-----------|--------|-------|
-| **Персонал** | `EmployeesTable` | Reference EMP-NAV-001 | **1 — Done** |
-| Personnel Journal | `PersonnelJournalPageClient` | Explicit «Карточка» CTA | 2 |
-| Personnel Orders | `PersonnelOrdersTable` | Per-employee card link | 2 |
-| HR Change Events | `HrChangeEventsTable` | Table «Карточка» | 2 |
-| Import | normalized review / drawers | «Карточка» when bound | 2 |
-| Professional Documents | `ProfessionalDocumentsPageClient` | CTA unify | 2–3 |
-| Org | `OrgPageClient` | «Карточка» + preview-only drawer | 2–4 |
-| Admin | linkage / assignments | Card link (lower priority) | 2 |
-| Card shell | `EmployeeImportCard2PageClient` | Title → «Личная карточка» | 3 |
-| Terminology | `personnelCardTerminology.ts` | Retire HR Dossier **labels** | 3 |
-| EmployeeDrawer | preview | HR: remove second hop | 4 |
-
----
-
-## 7. План миграции
-
-```mermaid
-flowchart LR
-  S1[Stage 1<br/>Персонал ✅]
-  S2[Stage 2<br/>All journals]
-  S3[Stage 3<br/>UI terminology]
-  S4[Stage 4<br/>Preview-only drawer]
-
-  S1 --> S2 --> S3 --> S4
+```text
+employee proposal
+    → HR review
+    → approve / reject / request information
+    → explicit HR apply through the canonical writer
 ```
 
-| Stage | Scope |
-|-------|-------|
-| **1 — Implemented** | `/directory/staff` — «Карточка» (§4.3) |
-| **2** | EMP-NAV-001 во всех журналах с `employee_id` |
-| **3** | Legacy HR Dossier **terminology** → «Личная карточка»; **impl retained** |
-| **4** | Рабочая карточка — только preview contexts |
+Предложение хранит field identity, исходное значение/версию, предлагаемое значение,
+комментарий и разрешённые доказательства. Решение HR и фактическое применение являются
+разными аудируемыми действиями. Одобрение не обходит повторную проверку current value,
+permission, scope и доменных инвариантов перед apply.
 
-**Non-goals:** PPR boundary change; `/card` removal; backend/projection removal.
+### 6.3. Граница ADR-065
 
----
+Обычное редактирование Person/PPR нельзя смешивать с `EXISTING_CARD_REPAIR` из ADR-065.
 
-## 8. Связь с архитектурой
+| Контур | Назначение |
+|--------|------------|
+| **Обычное редактирование карточки** | Изменение разрешённого значения существующей канонической записи через writer её bounded context |
+| **Предложение сотрудника** | Запрос на исправление собственных данных с HR review/apply |
+| **ADR-065 `EXISTING_CARD_REPAIR`** | Исправление разрывов и противоречий связей Person/Employee и lifecycle назначений, включая link/open/correct/replace assignment |
 
-### 8.1. Document map (PPR / Employee Card chain)
-
-```mermaid
-flowchart TB
-  subgraph normative [Normative — PPR / Card]
-    ARCH002[ARCH-002<br/>PPR architecture]
-    ADR054[ADR-054 Accepted<br/>PPR aggregate]
-    WPPR002[WP-PR-002<br/>Aggregate boundaries]
-    WPPR005[WP-PR-005 planned<br/>Read model / composite]
-    WP002[WP-HR-CARD-002 Draft<br/>UI terminology]
-  end
-
-  subgraph context [Related context — not PPR identity]
-    ADR045[ADR-045<br/>Персонал vs HR]
-    ADR050[ADR-050<br/>Position Cabinet]
-    ADR055[ADR-055<br/>Operational Role catalog]
-  end
-
-  ARCH002 --> ADR054 --> WPPR002 --> WPPR005
-  ADR054 --> WP002
-  ARCH002 --> WP002
-  ADR045 -.-> WP002
-  ADR050 -.-> WP002
-  ADR055 -.->|does not affect PPR identity| WP002
-```
-
-**ADR-055 (Operational Role):** global position **catalog** taxonomy only. **Не влияет** на идентичность Personnel Personal Record, `person_id`, или Composite View карточки. Упоминается только как **Related / Position Cabinet context** (allowed positions, catalog vs org-unique Position).
-
-### 8.2. Correspondence table
-
-| Document | Relationship |
-|----------|--------------|
-| **[ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md)** | **Normative (Accepted).** PPR = Личный листок; `person_id`; Person-root. WP-HR-CARD-002 **subordinate**. |
-| **[ARCH-002](./ARCH-002-personnel-personal-record-architecture.md)** | Master architecture; Employee Card = Composite View; HR Dossier = HR mode of Composite View. |
-| **[WP-PR-002](./WP-PR-002-aggregate-boundary-specification.md)** | PPR section boundaries. |
-| **[ADR-045](../adr/ADR-045-personnel-hr-processes-split.md)** | «Персонал» vs «Кадровые процессы»; Stage 1 route. |
-| **[ADR-050](../adr/ADR-050-organization-position-cabinet-model.md)** | Position Cabinet — journal discovery context. |
-| **[ADR-055](../adr/ADR-055-operational-role-architecture.md)** | **Related only.** Operational Role catalog; **no PPR identity impact.** |
-
-### 8.3. Invariant (unchanged)
-
-> **INV-5 (ARCH-002):** Личная карточка / Employee Card **не** становится source of truth — Composite View над PPR и Employment.
-
-WP-HR-CARD-002 **не создаёт новый aggregate** и **не amend ADR-054**.
+ADR-065 не должен использоваться как общий endpoint изменения ФИО, контакта, образования,
+документа, родственника, фотографии или другого Person-owned поля.
 
 ---
 
-## 9. Open Questions
+## 7. Навигация и терминология
 
-| ID | Question |
-|----|----------|
-| OQ-1 | Person-centric URL (`person_id` in path) vs retained `employee_id` nav |
-| OQ-2 | Candidate без Employee: deep link policy (OAD-2) |
-| OQ-3 | Shared `EmployeeCardNavAction` component |
-| OQ-4 | «Карточка» vs «Открыть карточку» in narrow columns |
-| OQ-5 | `import-card` route merge timeline |
-| OQ-6 | Печатная форма: tab vs export-only |
+### 7.1. Navigation rule (EMP-NAV-001)
+
+UI-элемент с известным `person_id` должен вести непосредственно в каноническую
+Person-карточку. Если вызывающий контекст имеет только `employee_id`, используется
+совместимый Employee-маршрут с server-backed identity resolution и redirect.
+
+При невозможности разрешить Person интерфейс обязан показать явную причину и не открывать
+похожую карточку по совпадению ФИО или другому неустойчивому признаку.
+
+### 7.2. Terminology
+
+| Термин | Значение |
+|--------|----------|
+| **Личный листок по учёту кадров / PPR** | Domain object |
+| **Личная карточка по учёту кадров** | Основное интерактивное UI-представление PPR |
+| **Внутренняя печатная копия личной карточки** | PDF v1, derived representation |
+| **Employee Card** | Техническое название Composite View, не отдельный aggregate |
+| **HR Dossier / Кадровое досье** | Legacy UI term; не отдельный источник данных |
+| **Рабочая карточка** | Preview UI, не канонический PPR editor |
 
 ---
 
-## 10. Risks
+## 8. Этапы реализации
 
-| Risk | Mitigation |
-|------|------------|
-| Confusing Личный листок (domain) with печатная форма | Three-layer glossary §3.1 |
-| Treating `employee_id` as PPR id | §2.4 Navigation identity |
-| Accidental backend removal with terminology change | §3.5 explicit retention |
-| Terminology churn | Stage 3 phased rename |
+Этапы выполняются последовательно; каждый использует существующие источники истины и не
+создаёт параллельного профиля сотрудника.
+
+| Этап | Результат | Основная граница |
+|------|-----------|------------------|
+| **1. Просмотр фото в карточке** | Авторизованный read API активной `person_photos` версии, placeholder и отображение в Person-карточке | Без manual upload в первом read slice; без публичного URL |
+| **2. Печатный PDF** | Кнопка «Печать личной карточки», A4 HTML/CSS → Playwright PDF, template version и аудит | Внутренняя копия, не государственная форма |
+| **3. Контакты и документы** | Канонические read-проекции и разделы с явными empty states | Сначала определить authority и устойчивую Person-связь; не копировать данные в card storage |
+| **4. HR-редактирование общих сведений** | Field allowlist, permissions, canonical writers, stale-state guard и audit | Не использовать legacy Employee correction как writer всех Person-полей |
+| **5. Предложения сотрудника и согласование HR** | Own-data self-view, proposal/evidence model, HR review и отдельный apply | Нет прямого self-edit; решение и применение разделены |
+
+Замена фото уполномоченным HR может быть реализована после read slice этапа 1 либо вместе
+с этапом 4, но обязана соблюдать §4.3.
+
+---
+
+## 9. Implementation details to close
+
+Утверждённая продуктовая структура не зависит от следующих технических деталей. Они
+закрываются в соответствующих implementation work packages до включения функции:
+
+| ID | Решение |
+|----|---------|
+| IMPL-1 | Точный состав и field-level visibility PDF v1, включая воинские реквизиты |
+| IMPL-2 | Canonical authority и Person-link для контактов и существующих Employee Documents |
+| IMPL-3 | Allowlist прямого HR-редактирования и writer для каждого поля общих сведений |
+| IMPL-4 | Allowlist полей, по которым сотрудник может предлагать исправления, и допустимые evidence types |
+| IMPL-5 | Retention generated PDF: stream-only в v1 или отдельный versioned artifact позднее |
+
+IMPL-5 не блокирует stream-only PDF первой версии: сформированный файл может возвращаться
+без постоянного хранения при обязательной audit-записи факта формирования.
+
+---
+
+## 10. Risks and controls
+
+| Risk | Control |
+|------|---------|
+| Появление второго профиля данных внутри карточки | Composite View only; canonical writer per field |
+| Ошибочная трактовка PDF как официальной формы | Явная маркировка v1 как внутренней печатной копии |
+| Утечка ИИН или закрытых воинских данных в PDF | Field-level authorization before ViewModel/rendering |
+| Публичный доступ к фото | Только авторизованный API; no public file URL; private/no-store |
+| Потеря истории при замене фото или записи | Новая версия + supersede/void, checksum и provenance |
+| Прямое self-edit официальных данных | Proposal workflow; HR review и отдельный guarded apply |
+| Использование ADR-065 для обычного Person edit | Явная граница §6.3 и разные application services |
+| Рассинхронизация экрана и PDF | Общая каноническая Person/PPR read-модель |
 
 ---
 
@@ -526,26 +434,33 @@ WP-HR-CARD-002 **не создаёт новый aggregate** и **не amend ADR-
 
 | Artifact | Policy |
 |----------|--------|
-| `/directory/personnel/employees/{employeeId}/card` | **Retained** |
-| HR Dossier projection / services | **Retained** |
-| `buildEmployeeCardHref()` | **Stable** |
-| `HR_DOSSIER_*` constants | Label deprecation Stage 3; aliases |
-| ADR-054 | **Not amended** |
+| `/directory/personnel/persons/{personId}/card` | **Canonical and retained** |
+| `/directory/personnel/employees/{employeeId}/card` | **Retained as compatibility redirect** |
+| `GET /api/ppr/employees/{employee_id}` | Transitional compatibility read; canonical identity remains Person |
+| Existing PPR section reads and commands | Retained; access rules remain server-owned |
+| Legacy import-card | Retained as a separate transitional/rollback route; not merged into canonical card implicitly |
+| ADR-054 | Not amended |
+| ADR-065 | Not amended and not reused for ordinary Person editing |
 
 ---
 
-## 12. References
+## 12. References and implementation evidence
 
-| Document | Path | Role |
-|----------|------|------|
-| ADR-054 | [ADR-054-personnel-personal-record-aggregate-model.md](../adr/ADR-054-personnel-personal-record-aggregate-model.md) | **Normative (Accepted)** |
-| ARCH-002 | [ARCH-002-personnel-personal-record-architecture.md](./ARCH-002-personnel-personal-record-architecture.md) | Master architecture |
-| WP-PR-002 | [WP-PR-002-aggregate-boundary-specification.md](./WP-PR-002-aggregate-boundary-specification.md) | Aggregate boundaries |
-| ADR-045 | [ADR-045-personnel-hr-processes-split.md](../adr/ADR-045-personnel-hr-processes-split.md) | Personnel split |
-| ADR-050 | [ADR-050-organization-position-cabinet-model.md](../adr/ADR-050-organization-position-cabinet-model.md) | Position Cabinet |
-| ADR-055 | [ADR-055-operational-role-architecture.md](../adr/ADR-055-operational-role-architecture.md) | **Related context only** |
-| Stage 1 evidence | §4.3 of this document | Implementation files |
-| Frontend (as-is) | `corpsite-ui/lib/personnelCardTerminology.ts`, `employeeCardNav.ts` | Current labels / nav |
+| Document / component | Role |
+|----------------------|------|
+| [ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md) | Normative PPR aggregate and Person-root identity |
+| [ARCH-002](./ARCH-002-personnel-personal-record-architecture.md) | Master architecture; card as Composite View |
+| [WP-PR-002](./WP-PR-002-aggregate-boundary-specification.md) | PPR section boundaries |
+| [ADR-047](../adr/ADR-047-appendix-service-record-and-pdf-export.md) | Earlier personal-file/PDF analysis; PDF v1 in this WP remains internal |
+| [ADR-061](../adr/ADR-061-canonical-person-photo-and-test-application-deletion-policy.md) | Canonical Person photo ownership and storage |
+| [ADR-065](../adr/ADR-065-personnel-enrollment-orchestration-existing-card-repair.md) | Separate Person/Employee link and assignment repair protocol |
+| `corpsite-ui/app/directory/personnel/persons/[personId]/card/page.tsx` | Canonical Person-card route |
+| `corpsite-ui/app/directory/personnel/employees/[employeeId]/card/page.tsx` | Employee compatibility route |
+| `corpsite-ui/app/directory/personnel/_components/PprPersonalCardPageClient.tsx` | Current composite card UI |
+| `app/api/ppr_router.py`, `app/api/ppr_command_router.py` | Current read and section-command API |
+| `app/db/models/person_photos.py`, `app/person_photos/` | Existing canonical photo model and storage |
+| `corpsite-ui/app/intake/_lib/intakePdfRenderer.ts` | Existing HTML/CSS → Playwright PDF approach |
+| `corpsite-ui/app/directory/personnel/_lib/personnelOrderPdfRenderer.ts` | Existing A4 Playwright PDF infrastructure |
 
 ---
 
@@ -554,5 +469,7 @@ WP-HR-CARD-002 **не создаёт новый aggregate** и **не amend ADR-
 | Rev | Date | Changes |
 |-----|------|---------|
 | 1 | 2026-07-15 | Initial draft |
-| 2 | 2026-07-15 | Terminology alignment with ADR-054: PPR = Личный листок (domain); Личная карточка (UI); печатная форма (document); person_id vs employee_id; HR Dossier legacy status; remove WP-HR-CARD-001 dependency; ADR-055 demoted to Related |
-| 3 | 2026-07-15 | Added normative Architectural Principle PPR-REP-001 (representations ≠ independent aggregates) |
+| 2 | 2026-07-15 | Terminology alignment with ADR-054: PPR = Личный листок (domain); Личная карточка (UI); печатная форма (document); person_id vs employee_id; HR Dossier legacy status; ADR-055 demoted to Related |
+| 3 | 2026-07-15 | Added normative Architectural Principle PPR-REP-001 (representations are not independent aggregates) |
+| 4 | 2026-09-06 | Recorded the implemented Person-rooted card and Employee redirect; classified current sections by editability; defined target card structure, canonical photo requirements, internal A4 PDF, direct HR edit versus employee proposal workflow, ADR-065 boundary and staged delivery plan. Status set to Draft — Ready for Product Review. |
+| 5 | 2026-09-06 | Product decisions approved: photo and main details form the upper card block with «Редактировать» and «Печать личной карточки» actions; standalone sections follow below; PDF v1 is an internal A4 copy whose first page contains photo and main details, with explicit empty-section text and no claim of a state/unified official form. Status set to Approved — Ready for Implementation. |
