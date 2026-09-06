@@ -4,6 +4,15 @@
 
 Alembic revision: `td006afnd601` поверх `td005exec501`.
 
+Совместимость с F-CATALOG WP-TD-005 зафиксирована точечно для
+`td006afnd601`: catalog version остаётся `WP-TD-CATALOG/v1`, reviewed
+fingerprint — `43c76b691b94533137d60c280a110a119c2cfc280830fd169e20566c96c5bdc0`.
+Снимок включает новые колонки `users`, полную таблицу
+`test_system_identity_provenance`, её FK и защитные triggers/functions.
+Следующая или неизвестная Alembic revision по-прежнему блокируется fail closed.
+Этот контракт не добавляет User, Role или их provenance в DELETE-правила
+Person/Application.
+
 ## Границы этапа
 
 Этап создаёт только provenance, защищённого технического автора и permissions. Он не создаёт preview/create/approval/execution API, не удаляет User/Role и не добавляет frontend.

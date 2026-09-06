@@ -7,6 +7,8 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.services import test_personnel_deletion_fingerprint_service as fingerprints
+from app.services import test_personnel_deletion_service as deletion_service
 from tests.test_wp_td_005_manifest_v2 import _alembic_config, _ephemeral_database
 
 
@@ -217,6 +219,82 @@ def test_provenance_uses_real_user_and_role_foreign_keys(foundation_engine):
                                 'missing-target',:digest,:actor)
                         """), {"object_type": object_type,
                                 "digest": "c" * 64, "actor": admin_user_id})
+        finally:
+            transaction.rollback()
+
+
+def test_f_catalog_exactly_supports_td006a_without_expanding_deletion_allowlist(
+    foundation_engine,
+):
+    with foundation_engine.connect() as connection:
+        snapshot = fingerprints.catalog_snapshot(
+            connection, deletion_service.RELATIONSHIP_MATRIX,
+        )
+        state = fingerprints.catalog_state(
+            connection, deletion_service.RELATIONSHIP_MATRIX,
+        )
+
+    assert state == {
+        "version": fingerprints.CATALOG_VERSION,
+        "fingerprint": "43c76b691b94533137d60c280a110a119c2cfc280830fd169e20566c96c5bdc0",
+        "compatible": True,
+        "revision_compatible": True,
+        "missing_tables": [],
+    }
+    assert state["fingerprint"] == fingerprints.EXPECTED_CATALOG_FINGERPRINTS[REVISION]
+    assert "test_system_identity_provenance" in snapshot["registered_tables"]
+    assert {"is_system_identity", "system_identity_purpose"} <= {
+        row["column_name"] for row in snapshot["columns"]
+        if row["table_name"] == "users"
+    }
+    assert {
+        row["column_name"] for row in snapshot["columns"]
+        if row["table_name"] == "test_system_identity_provenance"
+    } == {
+        "provenance_id", "object_type", "object_id", "user_id", "role_id",
+        "source", "artifact_hash", "created_at", "created_by_user_id",
+    }
+    assert {
+        (row["constraint_name"], row["target_table"], row["on_delete"])
+        for row in snapshot["foreign_keys"]
+        if row["source_table"] == "test_system_identity_provenance"
+    } == {
+        ("fk_tsip_created_by", "users", "RESTRICT"),
+        ("fk_tsip_role", "roles", "RESTRICT"),
+        ("fk_tsip_user", "users", "RESTRICT"),
+    }
+    assert {
+        row["trigger_name"] for row in snapshot["protective_triggers"]
+        if row["table_name"] == "test_system_identity_provenance"
+    } == {"trg_tsip_append_only", "trg_tsip_insert_guard", "trg_tsip_truncate_guard"}
+    assert {
+        row["trigger_name"] for row in snapshot["protective_triggers"]
+        if row["table_name"] == "users" and row["trigger_name"].startswith("trg_users_protect")
+    } == {"trg_users_protect_system_identity", "trg_users_protect_system_identity_truncate"}
+    assert not any(
+        item["action"] == "DELETE"
+        and item["table"] in {"users", "roles", "test_system_identity_provenance"}
+        for item in snapshot["relationship_registry"]
+    )
+
+
+def test_f_catalog_rejects_revision_after_td006a(foundation_engine):
+    with foundation_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            connection.execute(text(
+                "UPDATE public.alembic_version SET version_num='td006a_future'"
+            ))
+            state = fingerprints.catalog_state(
+                connection, deletion_service.RELATIONSHIP_MATRIX, enforce=False,
+            )
+            assert state["revision_compatible"] is False
+            assert state["compatible"] is False
+            with pytest.raises(fingerprints.FingerprintGateError) as error:
+                fingerprints.catalog_state(
+                    connection, deletion_service.RELATIONSHIP_MATRIX,
+                )
+            assert error.value.code == "TD_CATALOG_MISMATCH"
         finally:
             transaction.rollback()
 

@@ -20,7 +20,9 @@ from sqlalchemy.engine import Connection
 FINGERPRINT_VERSION = "WP-TD-RELATIONSHIP/v2"
 POLICY_VERSION = "WP-TD-005-APPLICANT/v1"
 CATALOG_VERSION = "WP-TD-CATALOG/v1"
-COMPATIBLE_ALEMBIC_REVISIONS = frozenset({"td005fp3v101", "td005audit401", "td005exec501"})
+COMPATIBLE_ALEMBIC_REVISIONS = frozenset({
+    "td005fp3v101", "td005audit401", "td005exec501", "td006afnd601",
+})
 
 # Filled from reviewed schemas.  Values are deliberately static: calculating
 # an "expected" value from a drifted runtime catalog would turn the safety
@@ -30,6 +32,15 @@ EXPECTED_CATALOG_FINGERPRINTS = {
     "td005fp3v101": EXPECTED_CATALOG_FINGERPRINT,
     "td005audit401": "eabb56e613485f5fd72a789821b32403e323235b5437a28e90fb73824b18d1e9",
     "td005exec501": "23a1eee9fbdb2b2aa2a2412f083ed97cc96c004abcdd2c25d4cead3be96e9495",
+    "td006afnd601": "43c76b691b94533137d60c280a110a119c2cfc280830fd169e20566c96c5bdc0",
+}
+
+REVISION_CATALOG_TABLES = {
+    "td005exec501": frozenset({"test_personnel_deletion_execution_attempts"}),
+    "td006afnd601": frozenset({
+        "test_personnel_deletion_execution_attempts",
+        "test_system_identity_provenance",
+    }),
 }
 
 # Every relation from which stage 5 can issue DELETE.  All inbound foreign
@@ -219,8 +230,8 @@ def catalog_snapshot(conn: Connection, rules: Sequence[Any]) -> dict[str, Any]:
         "SELECT version_num FROM public.alembic_version ORDER BY version_num"
     )).scalars().all()
     revision_tables = (
-        {"test_personnel_deletion_execution_attempts"}
-        if revision_rows == ["td005exec501"] else set()
+        REVISION_CATALOG_TABLES.get(str(revision_rows[0]), frozenset())
+        if len(revision_rows) == 1 else frozenset()
     )
     registered_tables = sorted(
         STRUCTURAL_TABLES | revision_tables | ADDITIONAL_CATALOG_TABLES
