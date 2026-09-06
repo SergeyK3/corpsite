@@ -145,6 +145,7 @@ docs/personnel-intake/demo.zip
 # Temporary imports
 # -----------------------
 tmp/
+/photo/
 
 chk_utf8.txt
 regular_tasks.csv
