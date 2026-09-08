@@ -5,8 +5,9 @@
 | Field | Value |
 |---|---|
 | Type | Narrow implementation plan |
-| Status | **Draft — Ready for Simplified Architecture Re-Review** |
+| Status | **Approved — Ready for Simplified Implementation** |
 | Date | 2026-09-08 |
+| Simplified Architecture Re-Review | 2026-09-08 — Approved: existing PPR command idempotency and the PPR event journal are sufficient with the ordinary additive event-catalog implementation change described in §6 |
 | Authorities | [ADR-048](../adr/ADR-048-person-ownership-identity-creation-policy.md), [ADR-065](../adr/ADR-065-personnel-enrollment-orchestration-existing-card-repair.md), [ADR-PMF-001](../adr/ADR-PMF-001-personnel-migration-framework.md), [ADR-054](../adr/ADR-054-personnel-personal-record-aggregate-model.md) |
 
 ## 1. Decision and boundary
@@ -106,15 +107,25 @@ identity, PPR lifecycle and event together.
 
 ## 6. Provenance, event and retry
 
-Success writes existing `PERSON_IDENTITY_BACKFILLED` personnel-record event in the participating
-transaction. It has only technical Person/Employee/batch/row references, policy/parser/source
-snapshot fingerprints and result code: never full IIN, FIO, DOB, raw payload or SQL bind values.
+`PERSON_IDENTITY_BACKFILLED` is a planned canonical PPR event type, not an already registered
+catalog value. The implementation adds its constant/builder through the ordinary event-catalog
+implementation change; no audit table is required. `personnel_record_events.event_type` is TEXT
+and its repository already accepts JSONB event payloads. The event uses `record_table_name='persons'`,
+`record_id=person_id`, `employee_context_id=employee_id`, and a safe payload containing only
+`batch_id`, `row_id`, parser/policy versions, source snapshot fingerprint and result code. It never
+contains full IIN, FIO, DOB, raw payload or SQL bind values. If event-catalog governance requires
+DDL, that is one ordinary additive implementation migration, not an immutable-audit migration.
 
-Retry first uses the existing request-id/idempotency mechanism. Same `request_id` and exact
-request/snapshot fingerprint returns stored result without a new write; different fingerprint is
-code-only `REQUEST_ID_REUSE_CONFLICT`. If existing mechanism cannot provide this atomically,
-implementation may add only one minimal service table keyed by request ID and safe fingerprint
-with a technical replay projection. It must not add a second audit or failure table.
+Reuse the existing PPR command idempotency mechanism: `ppr_command_executions.command_id` is the
+global primary key; `begin_idempotent_command()` and `complete_idempotent_command()` in
+`app/ppr/application/idempotency.py`, backed by
+`SqlAlchemyCommandIdempotencyRepository`, reserve and complete it inside the caller-owned UoW.
+Backfill maps API `request_id` to `command_id`, uses command type
+`PERSON_IDENTITY_BACKFILL`, and fingerprints only the actor, Person/Employee IDs, preview/source
+snapshot hashes, parser/policy versions and safe proposal/IIN fingerprint. Same command ID and
+fingerprint returns the stored completion as exact replay; a different fingerprint or command type
+raises `PprCommandIdConflictError`, mapped at the API boundary to code-only
+`REQUEST_ID_REUSE_CONFLICT`. No new table is needed.
 
 ## 7. Tests and rollout
 
@@ -155,7 +166,11 @@ incompatibility is a separate test-environment migration issue, not an identity-
 | Access | `HR_HEAD` + `PPR_IDENTITY_BACKFILL` + organization scope; no extra sensitive-IIN gate here |
 | Confirmation | One preview and `confirmed=true`; no groups |
 | Safety | Exact source, blank target, FIO consistency, IIN checks, stale checks and Gate 2 lock remain mandatory |
-| Audit | Existing safe `PERSON_IDENTITY_BACKFILLED` event only |
-| Retry | Existing request-id mechanism first; at most one minimal table if proven necessary |
+| Event | Ordinary canonical-event catalog addition; existing JSONB journal stores only safe source references |
+| Retry | Reuse `ppr_command_executions.command_id` and its fingerprinted command-id protocol; no new table |
 | PPR | Existing lifecycle port materializes `CREATED` then `COLLECTING` atomically |
 | Environment | h5/i6 bootstrap blocker is explicitly outside identity backfill |
+
+**Simplified Architecture Re-Review — 2026-09-08: Approved.** This approval authorizes
+simplified implementation planning only. It does not waive the Gate 1/2 evidence, source-removal
+mapping, request-id tests, or separate production change authority.
