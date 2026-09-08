@@ -21,11 +21,15 @@ from app.services.hr_import_employee_binding_service import (
     repair_batch_employee_bindings,
     resolve_employee_binding,
 )
-from app.services.hr_import_normalized_record_service import normalized_records_available
+from app.services.hr_import_normalized_record_service import (
+    normalized_records_available,
+    populate_normalized_records,
+)
 from app.services.hr_import_promotion_service import BLOCKER_EMPLOYEE_REQUIRED, promote_normalized_records
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, insert_returning_id, table_exists
 from tests.test_employee_documents_routes import _create_employee, _create_position, _phase_1a_available
+from tests.hr_import_fixtures import cleanup_baseline_for_batch
 from tests.test_import_hr_control_list import _build_doctors_sheet
 
 
@@ -54,10 +58,20 @@ def _test_iin(seed: str) -> str:
 
 
 def _delete_batch(conn, batch_id: int) -> None:
+    source_file_ids = conn.execute(
+        text("SELECT source_file_id FROM public.hr_import_batches WHERE batch_id=:batch_id"),
+        {"batch_id": batch_id},
+    ).scalars().all()
+    cleanup_baseline_for_batch(conn, batch_id)
     conn.execute(
         text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
         {"batch_id": batch_id},
     )
+    if source_file_ids:
+        conn.execute(
+            text("DELETE FROM public.hr_source_files WHERE source_file_id = ANY(:ids)"),
+            {"ids": [int(value) for value in source_file_ids if value is not None]},
+        )
 
 
 def _build_workbook(path: Path, *, full_name: str, iin: str, column_m: str = "КазНМУ, 1982") -> None:
@@ -111,7 +125,7 @@ def _import_batch(
     iin: str,
     column_m: str = "КазНМУ, 1982",
 ) -> int:
-    source = tmp_path / f"phase3g_{uuid4().hex[:8]}.xlsx"
+    source = tmp_path / "контрольный2606.xlsx"
     _build_workbook(source, full_name=full_name, iin=iin, column_m=column_m)
     with engine.begin() as conn:
         batch_id, _, _ = import_control_list(
@@ -119,6 +133,28 @@ def _import_batch(
             file_path=source,
             imported_by=int(seed["initiator_user_id"]),
         )
+        conn.execute(
+            text(
+                """
+                UPDATE public.hr_import_rows
+                SET normalized_payload = jsonb_set(
+                    normalized_payload,
+                    '{metadata}',
+                    COALESCE(normalized_payload->'metadata', '{}'::jsonb)
+                        || jsonb_build_object(
+                            'row_type', 'EMPLOYEE',
+                            'is_employee_roster', TRUE,
+                            'classification', 'NORMAL',
+                            'sheet_type', 'doctors'
+                        ),
+                    true
+                )
+                WHERE batch_id = :batch_id
+                """
+            ),
+            {"batch_id": batch_id},
+        )
+        populate_normalized_records(conn, batch_id)
     return int(batch_id)
 
 

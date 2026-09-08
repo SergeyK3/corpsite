@@ -49,9 +49,9 @@ def _optional_org_unit_id(conn) -> int | None:
 
 
 @pytest.fixture
-def pa_env(pa_db_available):
+def pa_env(pa_db_available, seed):
     require_personnel_applications_schema()
-    yield
+    return int(seed["unit_id"])
 
 
 def test_new_person_registration_creates_application_and_projects(pa_env) -> None:
@@ -59,7 +59,7 @@ def test_new_person_registration_creates_application_and_projects(pa_env) -> Non
     person_ids: list[int] = []
     with engine.begin() as conn:
         user_id = _seed_user_id(conn)
-        org_unit_id = _optional_org_unit_id(conn)
+        org_unit_id = int(pa_env)
         result = register_personnel_application(
             conn,
             iin_raw=iin,
@@ -108,7 +108,7 @@ def test_existing_person_reuse_without_new_person_row(pa_env) -> None:
     person_ids: list[int] = []
     with engine.begin() as conn:
         user_id = _seed_user_id(conn)
-        org_unit_id = _optional_org_unit_id(conn)
+        org_unit_id = int(pa_env)
         person_id = insert_person_with_iin(conn, full_name="Существующий Person", iin=iin)
         person_ids.append(person_id)
         materialize_envelope(conn, person_id, hr_context=HR_RELATIONSHIP_CANDIDATE)
@@ -150,7 +150,7 @@ def test_former_employee_reuse_does_not_switch_context(pa_env) -> None:
     employee_ids: list[int] = []
     with engine.begin() as conn:
         user_id = _seed_user_id(conn)
-        org_unit_id = _optional_org_unit_id(conn)
+        org_unit_id = int(pa_env)
         person_id = insert_person_with_iin(conn, full_name="Бывший сотрудник", iin=iin)
         person_ids.append(person_id)
         employee_ids.append(

@@ -99,12 +99,13 @@ def _payload_iin(payload: Any) -> Optional[str]:
 
 
 def _resolve_snapshot_id(conn: Connection, snapshot_id: Optional[int]) -> int:
-    if snapshot_id is not None:
-        return int(snapshot_id)
     active = get_active_snapshot(conn, source_type=SOURCE_TYPE_HR_CONTROL_LIST)
     if not active:
         raise IdentityReconciliationError("no active canonical snapshot (G5)")
-    return int(active["snapshot_id"])
+    active_snapshot_id = int(active["snapshot_id"])
+    if snapshot_id is not None and int(snapshot_id) != active_snapshot_id:
+        raise IdentityReconciliationError("requested canonical snapshot is not current (G5)")
+    return active_snapshot_id
 
 
 def _load_linked_employees(conn: Connection, person_id: int) -> list[dict[str, Any]]:

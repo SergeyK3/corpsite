@@ -25,6 +25,7 @@ from app.services.identity_reconciliation_service import (
     run_r1a_execute,
 )
 from tests.conftest import auth_headers, table_exists
+from tests.hr_import_fixtures import cleanup_baseline_for_batch
 from tests.test_adr044_phase_b1_identity_reconciliation import (
     B1_TABLES,
     _db_available,
@@ -93,8 +94,8 @@ def _committed_execute_fixture(seed, *, iin: str | None = None):
         batch_id = conn.execute(
             text(
                 """
-                SELECT source_batch_id FROM public.hr_canonical_snapshots
-                WHERE snapshot_id = :sid
+                SELECT source_batch_id FROM public.hr_control_list_baselines
+                WHERE baseline_id = :sid
                 """
             ),
             {"sid": snapshot_id},
@@ -126,20 +127,8 @@ def _committed_execute_fixture(seed, *, iin: str | None = None):
                 ),
                 {"sid": snapshot_id},
             )
-            conn.execute(
-                text(
-                    """
-                    DELETE FROM public.hr_canonical_snapshot_entries
-                    WHERE snapshot_id = :sid
-                    """
-                ),
-                {"sid": snapshot_id},
-            )
-            conn.execute(
-                text("DELETE FROM public.hr_canonical_snapshots WHERE snapshot_id = :sid"),
-                {"sid": snapshot_id},
-            )
             if batch_id is not None:
+                cleanup_baseline_for_batch(conn, int(batch_id))
                 conn.execute(
                     text("DELETE FROM public.hr_import_batches WHERE batch_id = :bid"),
                     {"bid": batch_id},
@@ -467,9 +456,9 @@ def test_g5_blocks_batch_execute(seed):
         conn.execute(
             text(
                 """
-                UPDATE public.hr_canonical_snapshots
-                SET status = 'superseded', superseded_at = NOW()
-                WHERE status = 'active' AND source_type = 'HR_CONTROL_LIST'
+                UPDATE public.hr_control_list_baselines
+                SET deleted_at = NOW(), deletion_reason = 'ADR-044 test G5'
+                WHERE deleted_at IS NULL AND source_type = 'HR_CONTROL_LIST'
                 """
             )
         )

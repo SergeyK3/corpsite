@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -72,14 +73,18 @@ def _insert_batch(conn, user_id: int) -> int:
         text(
             """
             INSERT INTO public.hr_import_batches (
-                source_type, file_name, imported_by, status,
+                source_type, import_code, file_name, imported_by, status,
                 total_rows, valid_rows, error_rows
             )
-            VALUES ('HR_CONTROL_LIST', :file_name, :uid, 'PARSED', 1, 1, 0)
+            VALUES ('HR_CONTROL_LIST', :import_code, :file_name, :uid, 'PARSED', 1, 1, 0)
             RETURNING batch_id
             """
         ),
-        {"file_name": f"b1_{uuid4().hex[:8]}.xlsx", "uid": user_id},
+        {
+            "file_name": "контрольный9912.xlsx",
+            "import_code": f"ADR044-{uuid4().hex[:8]}",
+            "uid": user_id,
+        },
     ).scalar_one()
 
 
@@ -90,28 +95,59 @@ def _insert_active_snapshot(
     entries: dict[str, dict],
     employee_ids: dict[str, int] | None = None,
 ) -> int:
-    conn.execute(
+    """Create the current baseline through the post-ADR-045 lifecycle schema.
+
+    A non-deleted baseline is current for its report period; the latest report
+    period is the canonical snapshot selected by ``get_active_snapshot``.
+    ``9999-12`` isolates this fixture from ordinary control-list test data.
+    """
+    source_batch_id = _insert_batch(conn, user_id)
+    report_period = date(9999, 12, 1)
+    origin_id = conn.execute(
         text(
             """
-            UPDATE public.hr_canonical_snapshots
-            SET status = 'superseded', superseded_at = NOW()
-            WHERE status = 'active' AND source_type = 'HR_CONTROL_LIST'
+            INSERT INTO public.hr_publication_origins (
+                report_period, published_at, published_by, source_import_code,
+                batch_id, entry_count
+            )
+            VALUES (:report_period, NOW(), :user_id, :import_code, :batch_id, :entry_count)
+            RETURNING publication_origin_id
             """
-        )
-    )
-    version = 944_000 + int(uuid4().hex[:3], 16)
-    snapshot_id = insert_returning_id(
-        conn,
-        table="hr_canonical_snapshots",
-        id_col="snapshot_id",
-        values={
-            "source_batch_id": _insert_batch(conn, user_id),
-            "source_type": "HR_CONTROL_LIST",
-            "version": version,
-            "status": "active",
+        ),
+        {
+            "report_period": report_period,
+            "user_id": user_id,
+            "import_code": f"ADR044-{uuid4().hex[:8]}",
+            "batch_id": source_batch_id,
             "entry_count": len(entries),
-            "promoted_by": user_id,
         },
+    ).scalar_one()
+    snapshot_id = conn.execute(
+        text(
+            """
+            INSERT INTO public.hr_control_list_baselines (
+                publication_origin_id, source_batch_id, source_type, report_period,
+                entry_count, published_by, published_at
+            )
+            VALUES (:origin_id, :batch_id, 'HR_CONTROL_LIST', :report_period,
+                    :entry_count, :user_id, NOW())
+            RETURNING baseline_id
+            """
+        ),
+        {
+            "origin_id": int(origin_id),
+            "batch_id": source_batch_id,
+            "report_period": report_period,
+            "entry_count": len(entries),
+            "user_id": user_id,
+        },
+    ).scalar_one()
+    conn.execute(
+        text(
+            "UPDATE public.hr_publication_origins SET baseline_id=:snapshot_id "
+            "WHERE publication_origin_id=:origin_id"
+        ),
+        {"snapshot_id": int(snapshot_id), "origin_id": int(origin_id)},
     )
     employee_ids = employee_ids or {}
     for match_key, payload in entries.items():
@@ -119,15 +155,15 @@ def _insert_active_snapshot(
         emp_id = employee_ids.get(match_key)
         insert_returning_id(
             conn,
-            table="hr_canonical_snapshot_entries",
+            table="hr_baseline_entries",
             id_col="entry_id",
             values={
-                "snapshot_id": snapshot_id,
+                "baseline_id": snapshot_id,
                 "entity_scope": match_key,
                 "record_kind": "roster",
                 "match_key": match_key,
                 "canonical_hash": "b1" + uuid4().hex,
-                "payload": json.dumps(payload),
+                "effective_payload": json.dumps(payload),
                 "iin": iin,
                 "employee_id": emp_id,
             },
@@ -176,8 +212,8 @@ def _get_entry_id(conn, snapshot_id: int, match_key: str) -> int:
         conn.execute(
             text(
                 """
-                SELECT entry_id FROM public.hr_canonical_snapshot_entries
-                WHERE snapshot_id = :sid AND match_key = :mk
+                SELECT entry_id FROM public.hr_baseline_entries
+                WHERE baseline_id = :sid AND match_key = :mk
                 """
             ),
             {"sid": snapshot_id, "mk": match_key},

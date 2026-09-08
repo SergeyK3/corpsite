@@ -13,6 +13,11 @@ from app.db.engine import engine
 from app.main import app
 from app.services.department_recoding_service import seed_department_recoding
 from app.services.hr_import_employee_binding_service import repair_batch_employee_bindings
+from app.services.hr_import_diff_removal_decision_service import (
+    DECISION_RESTORE,
+    list_pending_diff_removals,
+    record_diff_removal_decision,
+)
 from app.services.hr_import_normalized_record_service import populate_normalized_records
 from app.services.hr_import_promotion_service import BLOCKER_EMPLOYEE_REQUIRED, promote_normalized_records
 from app.services.hr_import_roster_promotion_service import (
@@ -25,6 +30,7 @@ from app.services.hr_import_roster_promotion_service import (
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, insert_returning_id, table_exists
 from tests.test_employee_documents_routes import _create_employee, _create_position, _phase_1a_available
+from tests.hr_import_fixtures import cleanup_baseline_for_batch
 from tests.test_import_hr_control_list import _build_doctors_sheet
 
 
@@ -44,10 +50,20 @@ def _require_phase_3h() -> None:
 
 
 def _delete_batch(conn, batch_id: int) -> None:
+    source_file_ids = conn.execute(
+        text("SELECT source_file_id FROM public.hr_import_batches WHERE batch_id=:batch_id"),
+        {"batch_id": batch_id},
+    ).scalars().all()
+    cleanup_baseline_for_batch(conn, batch_id)
     conn.execute(
         text("DELETE FROM public.hr_import_batches WHERE batch_id = :batch_id"),
         {"batch_id": batch_id},
     )
+    if source_file_ids:
+        conn.execute(
+            text("DELETE FROM public.hr_source_files WHERE source_file_id = ANY(:ids)"),
+            {"ids": [int(value) for value in source_file_ids if value is not None]},
+        )
 
 
 def _build_workbook(path: Path, *, full_name: str, iin: str) -> None:
@@ -162,6 +178,7 @@ def _prepare_roster_row(
     iin: str,
     department: str,
     org_unit_id: int,
+    decided_by: int,
 ) -> None:
     _ensure_department_mapping(conn, department=department, org_unit_id=org_unit_id)
     conn.execute(
@@ -192,6 +209,28 @@ def _prepare_roster_row(
     )
     _ensure_roster_employee_metadata(conn, batch_id=batch_id, row_id=row_id)
     populate_normalized_records(conn, batch_id)
+    conn.execute(
+        text(
+            "UPDATE public.hr_import_normalized_records "
+            "SET review_status='approved', reviewed_at=NOW() WHERE batch_id=:batch_id"
+        ),
+        {"batch_id": batch_id},
+    )
+    conn.execute(
+        text("UPDATE public.hr_import_batches SET status='APPLY_PENDING' WHERE batch_id=:batch_id"),
+        {"batch_id": batch_id},
+    )
+    # The workbook is a focused roster delta, not a replacement for the shared
+    # baseline. Retain unrelated canonical entries through the production
+    # removal-decision workflow so promotion can publish its refreshed baseline.
+    for removal in list_pending_diff_removals(conn, batch_id):
+        record_diff_removal_decision(
+            conn,
+            int(removal["removal_id"]),
+            decision=DECISION_RESTORE,
+            decided_by=decided_by,
+            expected_batch_id=batch_id,
+        )
 
 
 def _first_roster_row_id(conn, batch_id: int) -> int:
@@ -227,7 +266,7 @@ def test_roster_promotion_creates_employee_and_identity(seed, tmp_path: Path):
     emp_id = None
 
     try:
-        source = tmp_path / f"roster_create_{suffix}.xlsx"
+        source = tmp_path / "контрольный2606.xlsx"
         _build_workbook(source, full_name=full_name, iin=iin)
         with engine.begin() as conn:
             batch_id, _, _ = import_control_list(
@@ -244,6 +283,7 @@ def test_roster_promotion_creates_employee_and_identity(seed, tmp_path: Path):
                 iin=iin,
                 department=department,
                 org_unit_id=int(seed["unit_id"]),
+                decided_by=int(seed["initiator_user_id"]),
             )
             preview = evaluate_roster_promotion(conn, batch_id)
             assert preview["items"][0]["outcome"] == OUTCOME_WOULD_CREATE
@@ -315,7 +355,7 @@ def test_roster_promotion_updates_existing_employee_by_iin(seed, tmp_path: Path)
                 },
             )
 
-        source = tmp_path / f"roster_update_{suffix}.xlsx"
+        source = tmp_path / "контрольный2606.xlsx"
         _build_workbook(source, full_name=full_name, iin=iin)
         with engine.begin() as conn:
             batch_id, _, _ = import_control_list(
@@ -332,6 +372,7 @@ def test_roster_promotion_updates_existing_employee_by_iin(seed, tmp_path: Path)
                 iin=iin,
                 department=department,
                 org_unit_id=int(seed["unit_id"]),
+                decided_by=int(seed["initiator_user_id"]),
             )
             conn.execute(
                 text(
@@ -371,7 +412,7 @@ def test_roster_promotion_updates_existing_employee_by_iin(seed, tmp_path: Path)
 def test_roster_promotion_blocks_invalid_iin(seed, tmp_path: Path):
     _require_phase_3h()
     suffix = uuid4().hex[:8]
-    source = tmp_path / f"roster_block_{suffix}.xlsx"
+    source = tmp_path / "контрольный2606.xlsx"
     blocked_name = _cyrillic_full_name("Блокировка")
     _build_workbook(source, full_name=blocked_name, iin="123")
     batch_id = None
@@ -424,7 +465,7 @@ def test_roster_promotion_propagates_employee_id_to_normalized_records(seed, tmp
     emp_id = None
 
     try:
-        source = tmp_path / f"roster_prop_{suffix}.xlsx"
+        source = tmp_path / "контрольный2606.xlsx"
         _build_workbook(source, full_name=full_name, iin=iin)
         with engine.begin() as conn:
             batch_id, _, _ = import_control_list(
@@ -441,6 +482,7 @@ def test_roster_promotion_propagates_employee_id_to_normalized_records(seed, tmp
                 iin=iin,
                 department=department,
                 org_unit_id=int(seed["unit_id"]),
+                decided_by=int(seed["initiator_user_id"]),
             )
             promote_roster_batch(
                 conn,
@@ -488,7 +530,7 @@ def test_document_dry_run_passes_after_roster_promotion(seed, tmp_path: Path, pr
     emp_id = None
 
     try:
-        source = tmp_path / f"roster_doc_{suffix}.xlsx"
+        source = tmp_path / "контрольный2606.xlsx"
         _build_workbook(source, full_name=full_name, iin=iin)
         with engine.begin() as conn:
             batch_id, _, _ = import_control_list(
@@ -505,6 +547,7 @@ def test_document_dry_run_passes_after_roster_promotion(seed, tmp_path: Path, pr
                 iin=iin,
                 department=department,
                 org_unit_id=int(seed["unit_id"]),
+                decided_by=int(seed["initiator_user_id"]),
             )
             promote_roster_batch(
                 conn,
