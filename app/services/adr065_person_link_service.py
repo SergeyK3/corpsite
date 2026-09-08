@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Connection
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
 
 
 class PersonLinkError(RuntimeError):
@@ -121,6 +122,9 @@ def link_person_tx(
     if len(identities) != 1:
         raise PersonLinkError("Employee must have exactly one active IIN.", "EMPLOYEE_IIN_CONFLICT")
     iin = _norm_iin(identities[0])
+    # The identity read above establishes the single target IIN; all subsequent conflict checks
+    # and the possible Person create are serialized by the shared transaction lock.
+    lock_and_recheck_iin_tx(conn, iin=iin)
     other_employees = list(conn.execute(text(
         "SELECT employee_id FROM public.employee_identities "
         "WHERE identity_type='IIN' AND identity_value=:iin AND valid_to IS NULL "

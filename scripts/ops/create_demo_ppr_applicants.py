@@ -43,6 +43,9 @@ REPO_ROOT = __file__.replace("\\", "/").rsplit("/", 3)[0]
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from app.domain.iin import normalize_and_validate_iin
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
+
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
     EDUCATION_KIND_BASIC,
@@ -411,6 +414,8 @@ def _insert_demo_person(
     birth_date: date,
     demo_key: str,
 ) -> int:
+    iin = normalize_and_validate_iin(iin)
+    lock_and_recheck_iin_tx(conn, iin=iin)
     row = conn.execute(
         text(
             """

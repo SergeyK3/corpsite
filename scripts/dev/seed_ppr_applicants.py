@@ -26,6 +26,9 @@ REPO_ROOT = __file__.replace("\\", "/").rsplit("/", 3)[0]
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from app.domain.iin import normalize_and_validate_iin
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
+
 from app.db.engine import engine
 from app.db.models.personnel_migration import (
     EDUCATION_KIND_BASIC,
@@ -185,6 +188,8 @@ def _pick_placement(conn) -> tuple[int, int, int]:
 
 
 def _upsert_person(conn, *, full_name: str, iin: str, birth_date: date) -> int:
+    iin = normalize_and_validate_iin(iin)
+    lock_and_recheck_iin_tx(conn, iin=iin)
     existing = conn.execute(
         text("SELECT person_id FROM public.persons WHERE iin = :iin LIMIT 1"),
         {"iin": iin},

@@ -22,6 +22,7 @@ from app.services.hr_import_employee_binding_service import (
     propagate_employee_id_to_normalized_records,
     repair_batch_employee_bindings,
 )
+from app.services.iin_writer_protocol import ensure_employee_iin_identity_tx
 
 OUTCOME_WOULD_CREATE = "would_create"
 OUTCOME_WOULD_UPDATE = "would_update"
@@ -295,35 +296,8 @@ def _evaluate_single_row(conn: Connection, row: dict[str, Any]) -> RosterPromoti
 
 
 def _insert_employee_identity(conn: Connection, *, employee_id: int, iin: str, created_by: int) -> None:
-    existing = conn.execute(
-        text(
-            """
-            SELECT identity_id
-            FROM public.employee_identities
-            WHERE employee_id = :employee_id
-              AND identity_type = 'IIN'
-              AND valid_to IS NULL
-            LIMIT 1
-            """
-        ),
-        {"employee_id": employee_id},
-    ).first()
-    if existing:
-        return
-    conn.execute(
-        text(
-            """
-            INSERT INTO public.employee_identities (
-                employee_id,
-                identity_type,
-                identity_value,
-                is_primary,
-                created_by
-            )
-            VALUES (:employee_id, 'IIN', :iin, TRUE, :created_by)
-            """
-        ),
-        {"employee_id": employee_id, "iin": iin, "created_by": created_by},
+    ensure_employee_iin_identity_tx(
+        conn, employee_id=employee_id, iin=iin, created_by=created_by
     )
 
 

@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from app.db.engine import engine as default_engine
 from app.domain.iin import IinValidationError, normalize_and_validate_iin
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
 from app.personnel_applications.application.envelope_projection import sync_envelope_intended_projection
 from app.personnel_applications.domain.errors import (
     ActiveEmployeeBlocksRegistrationError,
@@ -289,6 +290,9 @@ def register_personnel_application(
 
     if vacancy_check_status != VACANCY_CHECK_CONFIRMED_VISUALLY:
         raise VacancyCheckGateError()
+
+    # Serialize all canonical Person-IIN decisions before the first conflict reread/write.
+    lock_and_recheck_iin_tx(conn, iin=iin)
 
     app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
 

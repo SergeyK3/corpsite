@@ -9,6 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.engine import engine
+from app.services.iin_writer_protocol import acquire_iin_advisory_locks_tx, lock_and_recheck_iin_tx
 from app.services.security_audit_service import write_security_event
 
 BULK_HARD_DELETE_MAX = 200
@@ -347,6 +348,21 @@ def _delete_user_account(conn: Connection, employee_id: int) -> Optional[int]:
 
 
 def _delete_employee_scoped_journals(conn: Connection, employee_id: int) -> None:
+    # Hard deletion closes the Employee-IIN lifecycle by deleting its rows. Lock every active
+    # IIN first (sorted inside the shared port) so it cannot race an assign/adopt writer.
+    if _table_exists(conn, "employee_identities"):
+        iins = conn.execute(
+            text(
+                "SELECT identity_value FROM public.employee_identities "
+                "WHERE employee_id=:employee_id AND identity_type='IIN' AND valid_to IS NULL "
+                "ORDER BY identity_id"
+            ),
+            {"employee_id": int(employee_id)},
+        ).scalars().all()
+        if iins:
+            acquire_iin_advisory_locks_tx(conn, (str(value) for value in iins))
+            for iin in sorted({str(value) for value in iins}):
+                lock_and_recheck_iin_tx(conn, iin=iin)
     for table in (
         "employee_events",
         "employee_identities",

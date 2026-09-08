@@ -31,6 +31,7 @@ from app.services.hr_import_normalized_record_service import (
     _serialize_normalized_record,
 )
 from app.services.hr_import_roster_promotion_service import _insert_employee_identity
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
 from app.services.hr_event_registry import get_event_class
 from app.services.operational_contact_service import ensure_operational_contact_for_employee
 from app.services.security_audit_service import write_security_event
@@ -539,6 +540,9 @@ def enroll_employee_from_normalized_record(
     )
     if request.full_name and request.full_name.strip():
         full_name = " ".join(request.full_name.strip().split())
+
+    if not request.dry_run:
+        lock_and_recheck_iin_tx(conn, iin=iin_digits)
 
     conflict = _check_iin_conflicts(conn, iin_digits)
     if conflict is not None:

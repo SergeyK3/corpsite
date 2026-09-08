@@ -18,6 +18,7 @@ from app.services.hr_import_employee_binding_service import (
     persist_row_employee_binding,
 )
 from app.services.hr_import_roster_promotion_service import _insert_employee_identity
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
 
 
 UNVERIFIED = "UNVERIFIED"
@@ -142,6 +143,7 @@ def _assert_no_active_assignment(conn: Connection, *, person_id: int) -> None:
 def _get_or_create_person(
     conn: Connection, *, full_name: str, iin: str, birth_date: date | None, batch_id: int, row_id: int
 ) -> tuple[int, bool]:
+    lock_and_recheck_iin_tx(conn, iin=iin)
     people = conn.execute(
         text(
             """

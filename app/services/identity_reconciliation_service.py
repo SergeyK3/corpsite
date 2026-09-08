@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from app.services.iin_writer_protocol import ensure_employee_iin_identity_tx, lock_and_recheck_iin_tx
 
 from app.services.hr_canonical_snapshot_service import (
     SOURCE_TYPE_HR_CONTROL_LIST,
@@ -1093,39 +1094,11 @@ def _insert_employee_identity_iin(
     iin: str,
     created_by: int,
 ) -> Optional[int]:
-    """Insert active IIN row if missing. Returns identity_id or None if already exists."""
-    existing = conn.execute(
-        text(
-            """
-            SELECT identity_id
-            FROM public.employee_identities
-            WHERE employee_id = :employee_id
-              AND identity_type = 'IIN'
-              AND valid_to IS NULL
-            LIMIT 1
-            """
-        ),
-        {"employee_id": int(employee_id)},
-    ).mappings().first()
-    if existing:
-        return None
-    row = conn.execute(
-        text(
-            """
-            INSERT INTO public.employee_identities (
-                employee_id,
-                identity_type,
-                identity_value,
-                is_primary,
-                created_by
-            )
-            VALUES (:employee_id, 'IIN', :iin, TRUE, :created_by)
-            RETURNING identity_id
-            """
-        ),
-        {"employee_id": int(employee_id), "iin": iin, "created_by": int(created_by)},
-    ).mappings().first()
-    return int(row["identity_id"]) if row else None
+    """Use the shared writer port; retain None-on-adopt caller contract."""
+    identity_id, inserted = ensure_employee_iin_identity_tx(
+        conn, employee_id=employee_id, iin=iin, created_by=created_by
+    )
+    return identity_id if inserted else None
 
 
 def _reclassify_person_candidate(
@@ -1376,6 +1349,7 @@ def apply_candidate(
         }
 
     resolved_iin = str(classified["resolved_iin"])
+    lock_and_recheck_iin_tx(conn, iin=resolved_iin)
     employee_id = classified.get("employee_id")
     source = classified.get("source")
     would_insert_ei = bool(classified.get("would_insert_employee_identity"))

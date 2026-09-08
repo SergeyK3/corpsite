@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from app.domain.iin import IinValidationError, normalize_and_validate_iin
+from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
 
 from app.db.engine import engine
 from app.services.department_recoding_service import lookup_recoding
@@ -581,12 +583,15 @@ def _create_person(
     full_name = str(payload.get("full_name") or person_key).strip() or person_key
     iin = payload.get("iin")
     if iin is not None:
-        iin = str(iin).strip() or None
-        if iin and len(iin) != 12:
+        try:
+            iin = normalize_and_validate_iin(str(iin))
+        except IinValidationError:
             iin = None
 
     if dry_run:
         return -1
+    if iin:
+        lock_and_recheck_iin_tx(conn, iin=iin)
 
     row = conn.execute(
         text(
@@ -653,9 +658,12 @@ def _update_person_fields(
     if "iin" in updates:
         iin = updates["iin"]
         if iin is not None:
-            iin = str(iin).strip() or None
-            if iin and len(iin) != 12:
+            try:
+                iin = normalize_and_validate_iin(str(iin))
+            except IinValidationError:
                 iin = None
+        if iin:
+            lock_and_recheck_iin_tx(conn, iin=iin)
         set_parts.append("iin = :iin")
         params["iin"] = iin
     if "birth_date" in updates:
