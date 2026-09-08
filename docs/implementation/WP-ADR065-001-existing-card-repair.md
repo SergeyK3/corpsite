@@ -5,12 +5,12 @@
 | Field | Value |
 |---|---|
 | Type | Implementation Work Package |
-| Status | **Draft — Ready for Implementation Review** |
-| Revision | 4 |
-| Date | 2026-08-09 |
+| Status | **Implemented — Production Validated (Employee → Person repair scope)** |
+| Revision | 5 |
+| Date | 2026-09-08 |
 | Normative authority | [ADR-065](../adr/ADR-065-personnel-enrollment-orchestration-existing-card-repair.md) |
 | Parent authorities | [ADR-048](../adr/ADR-048-person-ownership-identity-creation-policy.md), [ADR-043/C2](../adr/ADR-043-phase-c2-person-assignment-sync.md) |
-| Architecture verdict | **APPROVED — Ready for Implementation Preparation**; findings absent; AR065-R1–AR065-R4 remain closed |
+| Architecture verdict | **IMPLEMENTED AND PRODUCTION-VALIDATED** for the Employee → Person repair scope |
 | Initial activation target | `EXISTING_CARD_REPAIR / LINK_AND_OPEN_MISSING_ASSIGNMENT`, composite P0 |
 | Stable success | `EMPLOYEE_PERSON_AND_ASSIGNMENT_REPAIRED` |
 
@@ -2114,7 +2114,42 @@ No new architecture decision is introduced. “Closed” records the WP remediat
 only; the document remains `Draft — Ready for Implementation Review` until the next
 formal Implementation Review.
 
-## 16. Revision history
+## 16. Completion and production validation
+
+This WP's completion record is limited to the deployed Employee → Person repair flow. The
+large forward-looking implementation decomposition above remains historical planning; this
+closure does not represent an assertion that every broader enrollment or assignment item
+was delivered.
+
+### Delivered implementation
+
+| Area | Commit / result |
+|---|---|
+| Person-link repair backend | `b51511f feat(personnel): implement ADR-065 person link repair flow` |
+| Staff-card CTA and Person-card redirect | `95f50f6 fix(personnel): expose person link repair on staff card` |
+| Approved-record eligibility | `1c3f501 fix(personnel): require approved records for ADR-065 repair` |
+| Backend and isolated PostgreSQL suite | 2026-09-08: `147 passed, 2 skipped` on `corpsite_test`; create/link, replay, stale/fingerprint/payload hash, non-approved rejection, write-free refusal, authorization and server constraints. |
+| Frontend suite | 2026-09-08: `5` files and `19 passed`; correct CTA visibility, explicit no-approved-record blocker, no apply when blocked, API wiring and Person-card redirect. |
+| Deployment | Backend and frontend deployment of `1c3f501` completed successfully before production validation. |
+
+### Production outcome
+
+On 2026-09-08, the deployed commit `1c3f501` repaired Оразбеков Бактыбай
+Сейхадирович: `employee_id=440` changed from `person_id=NULL` using approved
+`normalized_record_id=4258` (batch `39`, `EDUCATION_GRADUATION`, `education_raw`) to a
+linked Person `person_id=777`; control SQL returned `person_exists=true`. The working
+card, its assignment and personnel-event history are available.
+
+The negative Нурбеков check was fail-closed: its sole record was `superseded`, therefore
+ADR-065 did not create a Person card. Neither case transfers education data. Correcting
+Нурбеков's name through a supporting document and personnel order remains deferred work;
+it is not an Excel correction. This record deliberately excludes a full IIN.
+
+The R5 closure also contains a locally regression-proven cross-batch provenance
+hardening. It is pending the ordinary backend deployment and does not alter the completed
+positive production validation above.
+
+## 17. Revision history
 
 | Revision | Date | Change |
 |---|---|---|
@@ -2122,3 +2157,4 @@ formal Implementation Review.
 | 2 | 2026-08-09 | Closed IR065-001-R1–R4: exact preview wire/digest/key ring; full boundary-run and delivery/ACK runtime outputs; closed writer inventory including Contact and one UI client; executable readiness/observability stop protocol. Status remains `Draft — Ready for Implementation Review`. |
 | 3 | 2026-08-09 | Reclosed reopened IR065-001-R1, R3 and R4: exact two-step read-only confirmation/token wire flow and four isolated crypto providers; 604-row ADR/repository callable inventory; PostgreSQL-backed global multi-worker stop FSM. IR065-001-R2 remains closed. Status remains `Draft — Ready for Implementation Review`. |
 | 4 | 2026-08-10 | Reclosed third-review R1, R3 and R4: assignment-intent digest is part of exact prepare/confirm echo; four key-ring file schemas are closed; inventory is rebuilt as W001–W594 with lexical ownership, unique identities, separate guarded downgrade and singular dispositions; global stop uses short durable admission/lease records and a trip that never waits for the business transaction, with four explicit latency bounds. R2 remains closed. Status remains `Draft — Ready for Implementation Review`. |
+| 5 | 2026-09-08 | Closes the implemented Employee → Person repair scope after isolated PostgreSQL/backend and frontend regression, successful backend/frontend deployment, and production validation of the Orazbekov positive and superseded-record negative scenarios. Education transfer and the document-and-order name-correction task remain outside this delivery. |

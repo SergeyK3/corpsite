@@ -58,12 +58,17 @@ def _current_precondition(conn, employee_id, full_name, record_ids):
 def test_create_replay_and_audit_without_iin(pg_case):
     with engine.begin() as conn:
         original_precondition = build_precondition(pg_case["employee"], "Нурбеков Бахдат Байтлевич", list(conn.execute(text("SELECT nr.normalized_record_id,nr.row_id,nr.batch_id,nr.employee_id,nr.review_status,ir.normalized_payload FROM hr_import_normalized_records nr JOIN hr_import_rows ir ON ir.row_id=nr.row_id AND ir.batch_id=nr.batch_id WHERE nr.normalized_record_id=:id"), {"id": pg_case["record"]}).mappings()))
-    result = _apply(pg_case, request_id="adr065-create-replay", expected_precondition=original_precondition)
+    request_id = f"adr065-create-replay-{uuid4()}"
+    result = _apply(pg_case, request_id=request_id, expected_precondition=original_precondition)
     assert result["decision"] == "CREATE"
-    replay = _apply(pg_case, request_id="adr065-create-replay", expected_precondition=original_precondition)
+    replay = _apply(pg_case, request_id=request_id, expected_precondition=original_precondition)
     assert replay["decision"] == "REPLAY" and replay["person_id"] == result["person_id"]
     with engine.begin() as conn:
-        audit = conn.execute(text("SELECT old_full_name,new_full_name,normalized_record_ids::text FROM personnel_identity_link_operations WHERE request_id='adr065-create-replay'" )).one()
+        audit = conn.execute(
+            text("SELECT old_full_name,new_full_name,normalized_record_ids::text "
+                 "FROM personnel_identity_link_operations WHERE request_id=:request_id"),
+            {"request_id": request_id},
+        ).one()
         assert pg_case["iin"] not in "|".join(map(str, audit))
 
 
@@ -71,7 +76,7 @@ def test_create_replay_and_audit_without_iin(pg_case):
 def test_request_id_reuse_with_changed_payload_is_conflict(pg_case, change):
     with engine.begin() as conn:
         original_precondition = build_precondition(pg_case["employee"], "Нурбеков Бахдат Байтлевич", list(conn.execute(text("SELECT nr.normalized_record_id,nr.row_id,nr.batch_id,nr.employee_id,nr.review_status,ir.normalized_payload FROM hr_import_normalized_records nr JOIN hr_import_rows ir ON ir.row_id=nr.row_id AND ir.batch_id=nr.batch_id WHERE nr.normalized_record_id=:id"), {"id": pg_case["record"]}).mappings()))
-    request_id = f"adr065-fingerprint-{change}"
+    request_id = f"adr065-fingerprint-{change}-{uuid4()}"
     first = _apply(pg_case, request_id=request_id, expected_precondition=original_precondition)
     with engine.begin() as conn:
         before_audit = conn.execute(text("SELECT count(*) FROM personnel_identity_link_operations")).scalar_one()
@@ -205,11 +210,16 @@ def test_rollback_leaves_no_link(pg_case):
 def test_adopt_existing_person(pg_case):
     with engine.begin() as conn:
         person_id = insert_person_with_iin(conn, full_name="Нурбеков Багдат Байтлевич", iin=pg_case["iin"], prefix="adr065-adopt")
-    result = _apply(pg_case, request_id="adr065-adopt")
+    request_id = f"adr065-adopt-{uuid4()}"
+    result = _apply(pg_case, request_id=request_id)
     assert result["decision"] == "ADOPT" and result["person_id"] == person_id
     with engine.begin() as conn:
         assert conn.execute(text("SELECT person_id FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() == person_id
-        assert conn.execute(text("SELECT decision,person_id FROM personnel_identity_link_operations WHERE request_id='adr065-adopt'" )).one() == ("ADOPT", person_id)
+        assert conn.execute(
+            text("SELECT decision,person_id FROM personnel_identity_link_operations "
+                 "WHERE request_id=:request_id"),
+            {"request_id": request_id},
+        ).one() == ("ADOPT", person_id)
         assert conn.execute(text("SELECT count(*) FROM persons WHERE iin=:i"), {"i": pg_case["iin"]}).scalar_one() == 1
 
 
@@ -236,15 +246,35 @@ def test_multiple_employee_iin_conflict_is_rejected_by_schema(pg_case):
 
 
 def test_apply_api_denies_user_without_permission(pg_case):
-    response = TestClient(app).post(
-        "/directory/personnel/lk/control-list-repair/apply",
-        headers=auth_headers(pg_case["actor"]),
-        json={"employee_id": pg_case["employee"], "normalized_record_ids": [pg_case["record"]], "expected_precondition": "x", "request_id": "adr065-api-deny"},
-    )
-    assert response.status_code == 403
     with engine.begin() as conn:
-        assert conn.execute(text("SELECT person_id FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() is None
-        assert conn.execute(text("SELECT count(*) FROM personnel_identity_link_operations WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() == 0
+        role_id = conn.execute(
+            text("SELECT role_id FROM public.users WHERE user_id=:user_id"),
+            {"user_id": pg_case["actor"]},
+        ).scalar_one()
+        denied_actor = conn.execute(
+            text(
+                "INSERT INTO public.users (full_name, role_id, is_active, login) "
+                "VALUES (:full_name, :role_id, TRUE, :login) RETURNING user_id"
+            ),
+            {
+                "full_name": "ADR-065 denied test operator",
+                "role_id": role_id,
+                "login": f"adr065-denied-{uuid4()}",
+            },
+        ).scalar_one()
+    try:
+        response = TestClient(app).post(
+            "/directory/personnel/lk/control-list-repair/apply",
+            headers=auth_headers(int(denied_actor)),
+            json={"employee_id": pg_case["employee"], "normalized_record_ids": [pg_case["record"]], "expected_precondition": "x", "request_id": f"adr065-api-deny-{uuid4()}"},
+        )
+        assert response.status_code == 403
+        with engine.begin() as conn:
+            assert conn.execute(text("SELECT person_id FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() is None
+            assert conn.execute(text("SELECT count(*) FROM personnel_identity_link_operations WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() == 0
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM public.users WHERE user_id=:user_id"), {"user_id": denied_actor})
 
 
 def test_apply_api_hr_enrollment_manager_has_organization_wide_access(pg_case):
@@ -255,14 +285,18 @@ def test_apply_api_hr_enrollment_manager_has_organization_wide_access(pg_case):
         conn.execute(text("UPDATE employees SET org_unit_id=:u WHERE employee_id=:e"), {"u": other_unit, "e": pg_case["employee"]})
         name = conn.execute(text("SELECT full_name FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one()
         expected_precondition = _current_precondition(conn, pg_case["employee"], name, [pg_case["record"]])
+    request_id = f"adr065-api-org-wide-{uuid4()}"
     response = TestClient(app).post(
         "/directory/personnel/lk/control-list-repair/apply",
         headers=auth_headers(pg_case["actor"]),
-        json={"employee_id": pg_case["employee"], "normalized_record_ids": [pg_case["record"]], "expected_precondition": expected_precondition, "request_id": "adr065-api-org-wide", "confirm_name_correction": True},
+        json={"employee_id": pg_case["employee"], "normalized_record_ids": [pg_case["record"]], "expected_precondition": expected_precondition, "request_id": request_id, "confirm_name_correction": True},
     )
     assert response.status_code == 200
     payload = response.json()
     assert payload["decision"] in {"CREATE", "ADOPT"}
     with engine.begin() as conn:
         assert conn.execute(text("SELECT person_id FROM employees WHERE employee_id=:e"), {"e": pg_case["employee"]}).scalar_one() == payload["person_id"]
-        assert conn.execute(text("SELECT count(*) FROM personnel_identity_link_operations WHERE request_id='adr065-api-org-wide'" )).scalar_one() == 1
+        assert conn.execute(
+            text("SELECT count(*) FROM personnel_identity_link_operations WHERE request_id=:request_id"),
+            {"request_id": request_id},
+        ).scalar_one() == 1

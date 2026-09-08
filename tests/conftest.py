@@ -200,7 +200,7 @@ def _detect_user_role_table(conn, schema: str = "public") -> Optional[str]:
     """
     Detect a membership table (user<->role) by:
     1) common names
-    2) fallback: any table that has BOTH columns user_id and role_id
+    2) fallback: any table that has writable user_id and role_id columns
     """
     common = [
         "user_roles",
@@ -227,6 +227,7 @@ def _detect_user_role_table(conn, schema: str = "public") -> Optional[str]:
             FROM information_schema.columns
             WHERE table_schema = :schema
               AND column_name IN ('user_id','role_id')
+              AND is_generated = 'NEVER'
             GROUP BY table_name
             HAVING COUNT(DISTINCT column_name) = 2
             ORDER BY table_name
@@ -555,16 +556,19 @@ def _ensure_seed_user_id_above_env_allowlists(conn) -> None:
     if reserved:
         floor = max(floor, max(int(uid) for uid in reserved) + 1)
     sync_owned_sequence(conn, "users", "user_id")
-    max_pk = int(
-        conn.execute(text("SELECT COALESCE(MAX(user_id), 0) FROM public.users")).scalar_one()
-    )
-    target = max(max_pk + 1, floor)
     seq_name = get_owned_sequence(conn, "users", "user_id")
     if seq_name:
-        conn.execute(
-            text("SELECT setval(CAST(:seq_name AS regclass), :target, false)"),
-            {"seq_name": seq_name, "target": target},
+        sequence_state = conn.execute(
+            text(f"SELECT last_value, is_called FROM {seq_name}")
+        ).mappings().one()
+        next_value = int(sequence_state["last_value"]) + (
+            1 if sequence_state["is_called"] else 0
         )
+        if next_value < floor:
+            conn.execute(
+                text("SELECT setval(CAST(:seq_name AS regclass), :floor, false)"),
+                {"seq_name": seq_name, "floor": floor},
+            )
 
 
 def create_user(conn, *, full_name: str, role_id: int, unit_id: Optional[int] = None) -> int:

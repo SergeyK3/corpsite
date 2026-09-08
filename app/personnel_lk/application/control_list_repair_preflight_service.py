@@ -222,7 +222,7 @@ def _load_import_selection(
         SELECT nr.normalized_record_id, nr.batch_id, nr.row_id, nr.employee_id,
                nr.review_status, ir.normalized_payload
           FROM public.hr_import_normalized_records nr
-          JOIN public.hr_import_rows ir
+          LEFT JOIN public.hr_import_rows ir
             ON ir.row_id = nr.row_id AND ir.batch_id = nr.batch_id
          WHERE normalized_record_id IN :record_ids
          ORDER BY normalized_record_id
@@ -259,7 +259,7 @@ def _load_import_selection(
                 "SELECT nr.normalized_record_id, nr.batch_id, nr.row_id, nr.employee_id, "
                 "nr.review_status, ir.normalized_payload "
                 "FROM public.hr_import_normalized_records nr "
-                "JOIN public.hr_import_rows ir ON ir.row_id=nr.row_id AND ir.batch_id=nr.batch_id "
+                "LEFT JOIN public.hr_import_rows ir ON ir.row_id=nr.row_id AND ir.batch_id=nr.batch_id "
                 "WHERE nr.row_id=:row_id ORDER BY nr.normalized_record_id"
             ),
             {"row_id": row_id},

@@ -363,7 +363,7 @@ def _scenario(*, person_status: str | None = None, linked: bool = False):
                         "source_record_key": f"adr065:{token}:{index}",
                         "record_kind": "training",
                         "parse_method": "regex_v1",
-                        "review_status": "pending",
+                        "review_status": "approved",
                     },
                 )
             )
@@ -986,7 +986,7 @@ def test_same_row_cross_batch_sibling_is_detected_even_when_omitted(
                         'source_record_key': f'adr065:cross:{uuid4().hex}',
                         'record_kind': 'training',
                         'parse_method': 'regex_v1',
-                        'review_status': 'pending',
+                        'review_status': 'approved',
                     },
                 )
             payload = _request(scenario)
@@ -2210,7 +2210,7 @@ def test_cross_batch_provenance_blocker_is_write_free(
                         'source_record_key': f'adr065:wf:{uuid4().hex}',
                         'record_kind': 'training',
                         'parse_method': 'regex_v1',
-                        'review_status': 'pending',
+                        'review_status': 'approved',
                     },
                 )
             response = _post_write_free(

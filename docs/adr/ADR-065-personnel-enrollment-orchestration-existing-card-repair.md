@@ -2,17 +2,17 @@
 
 ## Status
 
-**Approved — Ready for Implementation**
+**Implemented — Production Validated (Employee → Person existing-card repair)**
 
-**READY FOR IMPLEMENTATION: YES**
+**IMPLEMENTATION STATUS: COMPLETE FOR THE EMPLOYEE → PERSON REPAIR SCOPE**
 
 | Field | Value |
 |---|---|
-| Date | 2026-08-07 |
-| Revision | R14 — Architecture Review approved the R13 contracts for implementation |
+| Date | 2026-09-08 |
+| Revision | R15 — Employee → Person repair implemented and production-validated |
 | Extends | [ADR-043 Phase C2](./ADR-043-phase-c2-person-assignment-sync.md), [ADR-048](./ADR-048-person-ownership-identity-creation-policy.md) |
 | Does not supersede | ADR-042, ADR-043, ADR-048 |
-| Scope | Application orchestration for complete Phase 3I enrollment and existing-card repair |
+| Scope | Production-validated Employee → Person existing-card repair; education transfer is excluded |
 
 ---
 
@@ -5023,7 +5023,49 @@ modes for Makibaeva/Oserova; model absence/acting duty; authorize rehire/Person 
 create migrations/code/tests/production commands/data; or make orchestration/reconciliation
 a second personnel-history authority.
 
-## 18. History
+## 18. Implementation and production-validation closure
+
+This closure records the implemented **Employee → Person link-repair** slice. It does not
+claim completion of every broader future orchestration item described in earlier planning
+revisions. In particular, it does not migrate education data.
+
+### 18.1. Implementation provenance and regression evidence
+
+| Item | Evidence |
+|---|---|
+| Backend implementation | `b51511f feat(personnel): implement ADR-065 person link repair flow` |
+| Staff-card UI | `95f50f6 fix(personnel): expose person link repair on staff card` |
+| Approved-record gate | `1c3f501 fix(personnel): require approved records for ADR-065 repair` |
+| Backend/PostgreSQL regression | 2026-09-08: `147 passed, 2 skipped` in the ADR-065 backend suite on isolated `corpsite_test`; covers create/link, replay/idempotency, stale precondition/fingerprint/payload hash, superseded and other non-approved rejection, write-free rejection, authorization and database constraints. |
+| Frontend regression | 2026-09-08: `5` Vitest files, `19 passed`; covers staff-card CTA visibility, explicit approval-blocker text, blocked apply, API contract and redirect to the created Person card. |
+| Deployment validation | Backend and frontend deployment of `1c3f501` completed successfully before the production checks recorded below. |
+
+The implementation fails closed when a selected normalized record is not `approved`.
+Cross-batch or otherwise inconsistent normalized-record provenance is also surfaced as a
+blocker rather than being silently excluded by the preflight lookup.
+
+The cross-batch hardening recorded in this R15 closure was discovered by the isolated
+regression and is locally committed after the production check. It needs the ordinary
+backend deployment before that additional fail-closed guard is present in production; it
+does not change the already validated positive repair result.
+
+### 18.2. Production validation, 2026-09-08
+
+The production validation was performed using the deployed commit `1c3f501`.
+
+| Check | Result |
+|---|---|
+| Positive repair | Оразбеков Бактыбай Сейхадирович: `employee_id=440` was initially unlinked (`person_id=NULL`); approved `education_raw` record `normalized_record_id=4258` from batch `39`, type `EDUCATION_GRADUATION`, was used. |
+| Resulting link | Person `person_id=777` was created and linked; control SQL confirmed `person_exists=true`. |
+| Usability | The working personnel card opens and shows the assignment and personnel-event history. |
+| Negative repair | Нурбеков was correctly blocked: the only eligible-looking source record had `review_status=superseded`, so no Person card was created. |
+| Explicit non-goal | Education information was **not** transferred by ADR-065 and remains a separate function. |
+| Deferred work | Correction of Нурбеков's name is not performed through Excel. It requires a supporting document and personnel order, and remains a separate deferred task. |
+
+No full IIN is recorded in this document. No manual production SQL repair is part of this
+closure.
+
+## 19. History
 
 | Revision | Date | Change |
 |---|---|---|
@@ -5042,3 +5084,4 @@ a second personnel-history authority.
 | R12 | 2026-08-09 | Resolved composite re-review AR065-R5–R10: aligned §5.4/§11.1 event DDL and P0/P1 mode checks; replaced the conditional composite fixture with two static predicates/records; removed generated `operation_id` from digest inputs and bound correlation; completed §7 expected state and §6 request completeness; mapped PG-337 to all composite FI boundaries; added PG-345–348. Fixture is 2 operations × 19 modes × 22 states = 836 tuples, with 21 non-unsupported predicates, 22 physical/23 expanded allowed records and counts 396/20/23/397. Status remains `Draft — Ready for Architecture Re-Review`; `READY FOR IMPLEMENTATION: NO`. |
 | R13 | 2026-08-09 | Compact architecture-blocker closure: defined byte-level `adr065-po-evidence` v1 HMAC profile and rotation/error contract; added closed operator `reason_code` vocabulary; made only `effective_date=D` current and future watermark fail-closed; recorded the absent watermark migration as a mandatory deployment dependency; added PG-349–356 and retained the Architecture Review gate. Status remains `Draft — Ready for Architecture Re-Review`; `READY FOR IMPLEMENTATION: NO`. |
 | R14 | 2026-08-09 | Final scoped Architecture Review approved the PERSONNEL_ORDER fingerprint, controlled reason vocabulary, current watermark/business-date rule, and schema/deployment prerequisite without normative changes. Status is `Approved — Ready for Implementation`; `READY FOR IMPLEMENTATION: YES`. |
+| R15 | 2026-09-08 | Implemented and production-validated the scoped Employee → Person existing-card repair. Records the implementation commits, isolated PostgreSQL/backend and frontend regression results, positive Orazbekov validation, superseded-record negative validation, education non-transfer and the deferred document-and-order name-correction task. |
