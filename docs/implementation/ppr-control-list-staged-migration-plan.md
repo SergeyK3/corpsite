@@ -1,6 +1,6 @@
 # Программа поэтапной миграции личных карточек из контрольного списка
 
-**Статус:** Draft — Ready for Final Architecture Review
+**Статус:** Approved — Ready for Stage 0 Preparation
 **Тип:** program-level implementation plan
 **Назначение:** верхнеуровневый план последовательного переноса данных уже импортированного контрольного списка в личные карточки PPR.
 
