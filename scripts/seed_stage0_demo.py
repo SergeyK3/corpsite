@@ -48,9 +48,14 @@ def main() -> int:
         """), {"file": f"stage0-demo-{marker}.xlsx", "code": f"stage0-demo-{marker}", "actor": actor}).scalar_one()
         conn.execute(text("""
             INSERT INTO public.hr_import_rows(batch_id,source_sheet,source_row_number,raw_payload,normalized_payload,employee_id)
-            VALUES(:batch_id,'Synthetic',1,'{}'::jsonb,'{}'::jsonb,:employee_id),
-                  (:batch_id,'Synthetic',2,'{}'::jsonb,'{}'::jsonb,NULL)
-        """), {"batch_id": batch_id, "employee_id": employee_id})
+            VALUES(:batch_id,'Synthetic',1,'{}'::jsonb,CAST(:eligible_payload AS JSONB),:employee_id),
+                  (:batch_id,'Synthetic',2,'{}'::jsonb,CAST(:blocked_payload AS JSONB),NULL)
+        """), {
+            "batch_id": batch_id,
+            "employee_id": employee_id,
+            "eligible_payload": '{"full_name":"Тестовый допущенный сотрудник"}',
+            "blocked_payload": '{"full_name":"Тестовый сотрудник без связи"}',
+        })
     print(f"Created synthetic Stage 0 scenario in corpsite_test: batch_id={batch_id}; eligible_employee_id={employee_id}")
     return 0
 

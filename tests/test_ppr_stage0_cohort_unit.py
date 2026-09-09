@@ -31,6 +31,8 @@ def test_stage0_batch_policy_and_categories_are_fail_closed() -> None:
     assert BLOCKED_SOURCE_DELETION_OR_REBINDING.startswith("BLOCKED_")
 
 
-def test_safe_api_contracts_do_not_expose_iin_or_name_fields() -> None:
+def test_safe_api_contracts_expose_only_authorized_display_name_not_raw_identity_payload() -> None:
     fields = set(Stage0ParticipantOut.model_fields) | set(Stage0BlockerOut.model_fields)
     assert not fields.intersection({"iin", "full_iin", "full_name", "first_name", "last_name", "raw_payload"})
+    assert "display_name" in fields
+    assert "source_row_number" in fields

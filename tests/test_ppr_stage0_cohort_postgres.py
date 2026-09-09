@@ -31,8 +31,14 @@ def _seed_synthetic_candidate(conn):
     """), {"file": f"stage0-{marker}.xlsx", "code": f"stage0-{marker}", "actor": actor}).scalar_one()
     conn.execute(text("""
         INSERT INTO public.hr_import_rows(batch_id,source_sheet,source_row_number,raw_payload,normalized_payload,employee_id)
-        VALUES(:batch_id,'Synthetic',1,'{}'::jsonb,'{}'::jsonb,:employee_id)
-    """), {"batch_id": batch_id, "employee_id": employee_id})
+        VALUES(:batch_id,'Synthetic',1,'{}'::jsonb,CAST(:eligible_payload AS JSONB),:employee_id),
+              (:batch_id,'Synthetic',2,'{}'::jsonb,CAST(:blocked_payload AS JSONB),NULL)
+    """), {
+        "batch_id": batch_id,
+        "employee_id": employee_id,
+        "eligible_payload": '{"full_name":"Stage Zero Eligible"}',
+        "blocked_payload": '{"full_name":"Stage Zero Blocked"}',
+    })
     return int(actor), int(batch_id), int(employee_id)
 
 
@@ -43,8 +49,14 @@ def test_preview_is_read_only_and_freeze_is_replayable_on_corpsite_test():
             assert conn.execute(text("SELECT current_database()")).scalar_one() == "corpsite_test"
             actor, batch_id, _ = _seed_synthetic_candidate(conn)
             ppr_before = conn.execute(text("SELECT count(*) FROM public.personnel_record_metadata")).scalar_one()
-            preview = preview_stage0_cohort(conn, source_batch_id=batch_id)
+            preview = preview_stage0_cohort(conn, source_batch_id=batch_id, include_correction_details=True)
+            safe_preview = preview_stage0_cohort(conn, source_batch_id=batch_id)
+            assert preview["preview_fingerprint"] == safe_preview["preview_fingerprint"]
             assert len(preview["eligible"]) == 1
+            assert preview["eligible"][0]["display_name"] == "Stage Zero Eligible"
+            assert preview["eligible"][0]["source_row_number"] == 1
+            assert preview["blockers"][0]["display_name"] == "Stage Zero Blocked"
+            assert preview["blockers"][0]["source_row_number"] == 2
             assert conn.execute(text("SELECT count(*) FROM public.ppr_stage0_cohort_runs WHERE source_batch_id=:batch"), {"batch": batch_id}).scalar_one() == 0
             frozen = freeze_stage0_cohort(conn, source_batch_id=batch_id, preview_fingerprint=preview["preview_fingerprint"], actor_user_id=actor)
             replay = freeze_stage0_cohort(conn, source_batch_id=batch_id, preview_fingerprint=preview["preview_fingerprint"], actor_user_id=actor)

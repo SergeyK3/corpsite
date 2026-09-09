@@ -1,4 +1,9 @@
-"""Safe Stage 0 PREVIEW/FREEZE API contracts: no IIN, FIO, or raw source payload."""
+"""Safe Stage 0 PREVIEW/FREEZE API contracts: no IIN or raw source payload.
+
+``display_name`` is deliberately limited correction context for an authorized
+HR_HEAD view.  It is populated only on requests that explicitly ask for
+correction details and never contains an IIN.
+"""
 from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -18,6 +23,7 @@ class Stage0ParticipantOut(BaseModel):
     person_id: int
     source_batch_id: int
     source_row_id: int
+    source_row_number: Optional[int] = None
     safe_fingerprint: str
     display_name: Optional[str] = None
 
@@ -26,6 +32,7 @@ class Stage0BlockerOut(BaseModel):
     person_id: Optional[int] = None
     source_batch_id: Optional[int] = None
     source_row_id: Optional[int] = None
+    source_row_number: Optional[int] = None
     category: str
     reason_code: str
     safe_detail: str

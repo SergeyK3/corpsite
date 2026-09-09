@@ -90,10 +90,11 @@ def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int
              WHERE r.batch_id=:batch_id ORDER BY p.person_id FOR SHARE
         """), {"batch_id": source_batch_id})
     rows = conn.execute(text(f"""
-        SELECT r.row_id, r.employee_id AS source_employee_id,
+        SELECT r.row_id, r.source_row_number, r.employee_id AS source_employee_id,
                e.employee_id, e.person_id, e.org_unit_id, e.is_active, e.operational_status, e.updated_at AS employee_updated_at,
                p.person_status, p.merged_into_person_id, p.updated_at AS person_updated_at,
-               p.full_name AS correction_display_name,
+               r.normalized_payload ->> 'full_name' AS source_display_name,
+               p.full_name AS person_display_name,
                prm.ppr_lifecycle_state, prm.version AS ppr_version,
                (SELECT min(n.normalized_record_id) FROM public.hr_import_normalized_records n
                  WHERE n.batch_id=r.batch_id AND n.row_id=r.row_id AND n.employee_id=r.employee_id) AS identity_provenance_record_id,
@@ -134,15 +135,19 @@ def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int
             category, reason = BLOCKED_MATERIALIZATION_PATH, "STAGE0_PPR_LIFECYCLE_NOT_MATERIALIZABLE"
         snapshot = {
             "employee_id": employee_id, "person_id": item.get("person_id"), "source_batch_id": source_batch_id,
-            "source_row_id": item["row_id"], "identity_provenance_record_id": item.get("identity_provenance_record_id"),
+            "source_row_id": item["row_id"], "source_row_number": item.get("source_row_number"),
+            "identity_provenance_record_id": item.get("identity_provenance_record_id"),
             "employee_updated_at": item.get("employee_updated_at"), "person_updated_at": item.get("person_updated_at"),
             "ppr_lifecycle_state": item.get("ppr_lifecycle_state") or "NOT_MATERIALIZED", "ppr_lifecycle_version": item.get("ppr_version"),
             "category": category, "reason_code": reason,
         }
         outcome = {**snapshot, "safe_detail": reason, "safe_fingerprint": _hash(snapshot), "candidate_key": _safe_candidate_key(employee_id, item["row_id"])}
-        if include_correction_details and item.get("correction_display_name"):
-            # Protected HR_HEAD view: minimum correction context only, never IIN or raw source.
-            outcome["display_name"] = str(item["correction_display_name"])
+        if include_correction_details:
+            # Protected HR_HEAD view: source-list FIO plus a row number is the
+            # minimum correction context.  Never return IIN or raw payload.
+            name = item.get("source_display_name") or item.get("person_display_name")
+            if name:
+                outcome["display_name"] = str(name)
         outcomes.append(outcome)
     eligible = [outcome for outcome in outcomes if outcome["category"] == ELIGIBLE]
     for position, outcome in enumerate(eligible, 1):
@@ -150,7 +155,11 @@ def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int
     fingerprint_payload = {
         "policy_version": POLICY_VERSION, "source_batch_id": source_batch_id, "source_type": batch["source_type"],
         "source_batch_status": batch["status"], "pending_removal_count": pending_removals,
-        "supplemental_of_run_id": supplemental_of_run_id, "outcomes": outcomes,
+        # Correction-only display data must never affect a persisted cohort
+        # identity.  Otherwise a harmless request projection would make a
+        # freshly viewed preview look stale during FREEZE.
+        "supplemental_of_run_id": supplemental_of_run_id,
+        "outcomes": [{key: value for key, value in outcome.items() if key != "display_name"} for outcome in outcomes],
     }
     return {
         "source_batch_id": source_batch_id, "source_type": batch["source_type"], "source_batch_status": batch["status"],
@@ -207,14 +216,26 @@ def freeze_stage0_cohort(conn: Connection, *, source_batch_id: int, preview_fing
 def get_stage0_run(conn: Connection, *, run_id: int, scope: dict[str, Any] | None = None, include_correction_details: bool = False) -> dict[str, Any]:
     run = conn.execute(text("SELECT stage0_cohort_run_id,run_kind,supplemental_of_run_id,source_batch_id,source_batch_status,preview_fingerprint,policy_version,frozen_at FROM public.ppr_stage0_cohort_runs WHERE stage0_cohort_run_id=:run_id"), {"run_id": run_id}).mappings().one_or_none()
     if run is None: raise Stage0NotFoundError("STAGE0_RUN_NOT_FOUND")
-    participants = [dict(row) for row in conn.execute(text("""SELECT p.position,p.employee_id,p.person_id,p.source_batch_id,p.source_row_id,p.safe_fingerprint,e.org_unit_id,person.full_name AS correction_display_name FROM public.ppr_stage0_cohort_participants p JOIN public.employees e ON e.employee_id=p.employee_id JOIN public.persons person ON person.person_id=p.person_id WHERE p.stage0_cohort_run_id=:run_id ORDER BY p.position"""), {"run_id": run_id}).mappings()]
+    participants = [dict(row) for row in conn.execute(text("""
+        SELECT p.position,p.employee_id,p.person_id,p.source_batch_id,p.source_row_id,
+               p.safe_fingerprint,e.org_unit_id,r.source_row_number,
+               r.normalized_payload ->> 'full_name' AS source_display_name,
+               person.full_name AS person_display_name
+        FROM public.ppr_stage0_cohort_participants p
+        JOIN public.employees e ON e.employee_id=p.employee_id
+        JOIN public.persons person ON person.person_id=p.person_id
+        JOIN public.hr_import_rows r ON r.row_id=p.source_row_id
+        WHERE p.stage0_cohort_run_id=:run_id
+        ORDER BY p.position
+    """), {"run_id": run_id}).mappings()]
     # A changed scope is fail-closed; no partial historical cohort disclosure.
     if any(not _scope_allows(scope, p.pop("org_unit_id", None)) for p in participants):
         raise Stage0ConflictError("STAGE0_RUN_OUT_OF_SCOPE")
     for participant in participants:
-        name = participant.pop("correction_display_name", None)
-        if include_correction_details and name:
-            participant["display_name"] = str(name)
+        source_name = participant.pop("source_display_name", None)
+        person_name = participant.pop("person_display_name", None)
+        if include_correction_details and (source_name or person_name):
+            participant["display_name"] = str(source_name or person_name)
     return {"run": dict(run), "participants": participants}
 
 
