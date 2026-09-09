@@ -93,6 +93,11 @@ from app.db.models.personnel_record_metadata import (
     PPR_LIFECYCLE_STATES,
     PersonnelRecordMetadata,
 )
+from app.db.models.ppr_stage0_cohort import (
+    PprStage0CohortBlocker,
+    PprStage0CohortParticipant,
+    PprStage0CohortRun,
+)
 from app.db.models.personnel_migration import (
     DOMAIN_CODE_EDUCATION,
     EDUCATION_KINDS,

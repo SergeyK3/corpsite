@@ -1,6 +1,6 @@
 # WP-PPR-MIG-000A — Stage 0 PREVIEW/FREEZE implementation plan
 
-**Статус:** Draft — Ready for Implementation Review
+**Статус:** Implemented — Ready for Review
 
 **Основание:** [program plan](ppr-control-list-staged-migration-plan.md) и
 [WP-PPR-MIG-000](WP-PPR-MIG-000-stage-0-cohort-preflight.md). Этот WP определяет
