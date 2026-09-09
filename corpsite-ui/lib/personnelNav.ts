@@ -27,6 +27,7 @@ export function canSeePersonnelDirectoryNav(me: MeInfo | null | undefined): bool
 export function canSeeHrProcessesNav(me: MeInfo | null | undefined): boolean {
   if (isSystemAdminRole(me)) return true;
   if (me?.is_privileged === true) return true;
+  if (String(me?.role_code ?? "").toUpperCase() === "HR_HEAD") return true;
   return me?.has_personnel_admin === true;
 }
 
@@ -85,6 +86,16 @@ export const HR_PROCESSES_NAV_ITEM: PersonnelNavItem = {
   matchPrefixes: ["/directory/personnel"],
 };
 
+export function canSeePprMigrationNav(me: MeInfo | null | undefined): boolean {
+  return String(me?.role_code ?? "").toUpperCase() === "HR_HEAD";
+}
+
+export const PPR_MIGRATION_NAV_ITEM: PersonnelNavItem = {
+  href: "/directory/personnel/ppr-migration",
+  title: "Миграция личных карточек",
+  matchPrefixes: ["/directory/personnel/ppr-migration"],
+};
+
 export function isPersonnelDirectoryNavItem(item: Pick<PersonnelNavItem, "href" | "title">): boolean {
   return item.href === PERSONNEL_DIRECTORY_NAV_HREF || item.title === PERSONNEL_DIRECTORY_NAV_ITEM.title;
 }
@@ -102,6 +113,7 @@ export function buildPersonnelSidebarNavItems(me: MeInfo | null | undefined): Pe
   const items: PersonnelNavItem[] = [];
   if (canSeePersonnelDirectoryNav(me)) items.push(PERSONNEL_DIRECTORY_NAV_ITEM);
   if (canSeeHrProcessesNav(me)) items.push(HR_PROCESSES_NAV_ITEM);
+  if (canSeePprMigrationNav(me)) items.push(PPR_MIGRATION_NAV_ITEM);
   return items;
 }
 

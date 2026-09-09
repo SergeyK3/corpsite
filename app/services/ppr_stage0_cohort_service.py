@@ -73,13 +73,27 @@ def _scope_allows(scope: dict[str, Any] | None, org_unit_id: int | None) -> bool
     return org_unit_id is not None and int(org_unit_id) in {int(v) for v in scope.get("scope_unit_ids", [])}
 
 
-def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int | None, scope: dict[str, Any] | None, lock: bool = False) -> dict[str, Any]:
+def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int | None, scope: dict[str, Any] | None, lock: bool = False, include_correction_details: bool = False) -> dict[str, Any]:
     batch = _check_batch(conn, source_batch_id)
-    suffix = " FOR SHARE" if lock else ""
+    if lock:
+        # Lock simple relations separately. PostgreSQL rejects FOR SHARE on the nullable
+        # side of the LEFT JOIN used by the classification query below.
+        conn.execute(text("SELECT batch_id FROM public.hr_import_batches WHERE batch_id=:batch_id FOR SHARE"), {"batch_id": source_batch_id})
+        conn.execute(text("SELECT row_id FROM public.hr_import_rows WHERE batch_id=:batch_id ORDER BY row_id FOR SHARE"), {"batch_id": source_batch_id})
+        conn.execute(text("""
+            SELECT e.employee_id FROM public.employees e JOIN public.hr_import_rows r ON r.employee_id=e.employee_id
+             WHERE r.batch_id=:batch_id ORDER BY e.employee_id FOR SHARE
+        """), {"batch_id": source_batch_id})
+        conn.execute(text("""
+            SELECT p.person_id FROM public.persons p JOIN public.employees e ON e.person_id=p.person_id
+              JOIN public.hr_import_rows r ON r.employee_id=e.employee_id
+             WHERE r.batch_id=:batch_id ORDER BY p.person_id FOR SHARE
+        """), {"batch_id": source_batch_id})
     rows = conn.execute(text(f"""
         SELECT r.row_id, r.employee_id AS source_employee_id,
                e.employee_id, e.person_id, e.org_unit_id, e.is_active, e.operational_status, e.updated_at AS employee_updated_at,
                p.person_status, p.merged_into_person_id, p.updated_at AS person_updated_at,
+               p.full_name AS correction_display_name,
                prm.ppr_lifecycle_state, prm.version AS ppr_version,
                (SELECT min(n.normalized_record_id) FROM public.hr_import_normalized_records n
                  WHERE n.batch_id=r.batch_id AND n.row_id=r.row_id AND n.employee_id=r.employee_id) AS identity_provenance_record_id,
@@ -92,7 +106,7 @@ def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int
           LEFT JOIN public.persons p ON p.person_id=e.person_id
           LEFT JOIN public.personnel_record_metadata prm ON prm.person_id=e.person_id
          WHERE r.batch_id=:batch_id
-         ORDER BY e.employee_id NULLS LAST, e.person_id NULLS LAST, r.row_id{suffix}
+         ORDER BY e.employee_id NULLS LAST, e.person_id NULLS LAST, r.row_id
     """), {"batch_id": source_batch_id}).mappings().all()
     pending_removals = count_pending_diff_removals(conn, source_batch_id)
     outcomes: list[dict[str, Any]] = []
@@ -125,7 +139,11 @@ def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int
             "ppr_lifecycle_state": item.get("ppr_lifecycle_state") or "NOT_MATERIALIZED", "ppr_lifecycle_version": item.get("ppr_version"),
             "category": category, "reason_code": reason,
         }
-        outcomes.append({**snapshot, "safe_detail": reason, "safe_fingerprint": _hash(snapshot), "candidate_key": _safe_candidate_key(employee_id, item["row_id"])})
+        outcome = {**snapshot, "safe_detail": reason, "safe_fingerprint": _hash(snapshot), "candidate_key": _safe_candidate_key(employee_id, item["row_id"])}
+        if include_correction_details and item.get("correction_display_name"):
+            # Protected HR_HEAD view: minimum correction context only, never IIN or raw source.
+            outcome["display_name"] = str(item["correction_display_name"])
+        outcomes.append(outcome)
     eligible = [outcome for outcome in outcomes if outcome["category"] == ELIGIBLE]
     for position, outcome in enumerate(eligible, 1):
         outcome["position"] = position
@@ -143,9 +161,9 @@ def _scan(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int
     }
 
 
-def preview_stage0_cohort(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int | None = None, scope: dict[str, Any] | None = None) -> dict[str, Any]:
+def preview_stage0_cohort(conn: Connection, *, source_batch_id: int, supplemental_of_run_id: int | None = None, scope: dict[str, Any] | None = None, include_correction_details: bool = False) -> dict[str, Any]:
     """Scan without DML; caller owns a READ ONLY transaction when required."""
-    return _scan(conn, source_batch_id=source_batch_id, supplemental_of_run_id=supplemental_of_run_id, scope=scope)
+    return _scan(conn, source_batch_id=source_batch_id, supplemental_of_run_id=supplemental_of_run_id, scope=scope, include_correction_details=include_correction_details)
 
 
 def freeze_stage0_cohort(conn: Connection, *, source_batch_id: int, preview_fingerprint: str, actor_user_id: int, supplemental_of_run_id: int | None = None, scope: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -157,6 +175,8 @@ def freeze_stage0_cohort(conn: Connection, *, source_batch_id: int, preview_fing
     preview = _scan(conn, source_batch_id=source_batch_id, supplemental_of_run_id=supplemental_of_run_id, scope=scope, lock=True)
     if preview["preview_fingerprint"] != preview_fingerprint:
         raise Stage0ConflictError("STAGE0_PREVIEW_STALE")
+    if preview["pending_removal_count"]:
+        raise Stage0ValidationError("STAGE0_BATCH_PENDING_REMOVALS")
     existing = conn.execute(text("SELECT stage0_cohort_run_id FROM public.ppr_stage0_cohort_runs WHERE preview_fingerprint=:fingerprint"), {"fingerprint": preview_fingerprint}).scalar_one_or_none()
     if existing is not None:
         return {"stage0_cohort_run_id": int(existing), "replay": True, "counts": preview["counts"]}
@@ -184,15 +204,32 @@ def freeze_stage0_cohort(conn: Connection, *, source_batch_id: int, preview_fing
     return {"stage0_cohort_run_id": int(run_id), "replay": False, "counts": preview["counts"]}
 
 
-def get_stage0_run(conn: Connection, *, run_id: int, scope: dict[str, Any] | None = None) -> dict[str, Any]:
+def get_stage0_run(conn: Connection, *, run_id: int, scope: dict[str, Any] | None = None, include_correction_details: bool = False) -> dict[str, Any]:
     run = conn.execute(text("SELECT stage0_cohort_run_id,run_kind,supplemental_of_run_id,source_batch_id,source_batch_status,preview_fingerprint,policy_version,frozen_at FROM public.ppr_stage0_cohort_runs WHERE stage0_cohort_run_id=:run_id"), {"run_id": run_id}).mappings().one_or_none()
     if run is None: raise Stage0NotFoundError("STAGE0_RUN_NOT_FOUND")
-    participants = [dict(row) for row in conn.execute(text("""SELECT p.position,p.employee_id,p.person_id,p.source_batch_id,p.source_row_id,p.safe_fingerprint FROM public.ppr_stage0_cohort_participants p JOIN public.employees e ON e.employee_id=p.employee_id WHERE p.stage0_cohort_run_id=:run_id ORDER BY p.position"""), {"run_id": run_id}).mappings()]
+    participants = [dict(row) for row in conn.execute(text("""SELECT p.position,p.employee_id,p.person_id,p.source_batch_id,p.source_row_id,p.safe_fingerprint,e.org_unit_id,person.full_name AS correction_display_name FROM public.ppr_stage0_cohort_participants p JOIN public.employees e ON e.employee_id=p.employee_id JOIN public.persons person ON person.person_id=p.person_id WHERE p.stage0_cohort_run_id=:run_id ORDER BY p.position"""), {"run_id": run_id}).mappings()]
     # A changed scope is fail-closed; no partial historical cohort disclosure.
-    if any(not _scope_allows(scope, conn.execute(text("SELECT org_unit_id FROM public.employees WHERE employee_id=:id"), {"id": p["employee_id"]}).scalar_one_or_none()) for p in participants):
+    if any(not _scope_allows(scope, p.pop("org_unit_id", None)) for p in participants):
         raise Stage0ConflictError("STAGE0_RUN_OUT_OF_SCOPE")
+    for participant in participants:
+        name = participant.pop("correction_display_name", None)
+        if include_correction_details and name:
+            participant["display_name"] = str(name)
     return {"run": dict(run), "participants": participants}
 
 
 def get_stage0_blockers(conn: Connection, *, run_id: int) -> list[dict[str, Any]]:
     return [dict(row) for row in conn.execute(text("""SELECT employee_id,person_id,source_batch_id,source_row_id,category,reason_code,safe_detail,candidate_key FROM public.ppr_stage0_cohort_blockers WHERE stage0_cohort_run_id=:run_id ORDER BY category, employee_id NULLS LAST, source_row_id NULLS LAST"""), {"run_id": run_id}).mappings()]
+
+
+def list_stage0_source_batches(conn: Connection) -> list[dict[str, Any]]:
+    """Safe batch picker data; it intentionally contains neither names nor raw input."""
+    return [dict(row) for row in conn.execute(text("""
+        SELECT b.batch_id, b.status, b.imported_at, count(r.row_id)::integer AS source_row_count
+          FROM public.hr_import_batches b
+          LEFT JOIN public.hr_import_rows r ON r.batch_id=b.batch_id
+         WHERE b.source_type='HR_CONTROL_LIST'
+           AND b.status IN ('APPLY_PENDING','APPLIED','PARTIALLY_APPLIED')
+         GROUP BY b.batch_id, b.status, b.imported_at
+         ORDER BY b.imported_at DESC, b.batch_id DESC
+    """)).mappings()]
