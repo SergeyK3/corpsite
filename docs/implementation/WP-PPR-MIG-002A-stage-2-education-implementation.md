@@ -1,6 +1,6 @@
 # WP-PPR-MIG-002A — Stage 2 Education: implementation plan
 
-| Статус | **Implemented — Ready for Visual Review** |
+| Статус | **Implemented — Accepted after Visual Review** |
 |---|---|
 | Основание | [WP-PPR-MIG-002](WP-PPR-MIG-002-stage-2-education.md), Stage 0 frozen cohort, ADR-PMF-001 и `EducationMigrationPlugin` |
 | Граница | Только Stage 2 «Образование»; не Stage 3 и не иной section. |
@@ -9,7 +9,11 @@
 
 ## Visual-review preparation — 2026-09-09
 
-**Implemented — Ready for Visual Review.** Local pilot only:
+**Implemented — Accepted after Visual Review.** Visual Review was accepted by
+the user on 2026-09-09. The final visual observation was addressed: a blocked
+Stage 2 approval retains its native `disabled` attribute, has the explicit
+label «Утверждение недоступно», readable neutral disabled styling, and a
+textual explanation independent of color. Local pilot only:
 `127.0.0.1:5432/corpsite_test`, backend bridge flag
 `PPR_PMF_BRIDGE_ENABLED=true`, UI `http://127.0.0.1:3000/directory/personnel/ppr-migration`,
 API `http://127.0.0.1:8011`, login `local_stage2_visual_hr_head`.
@@ -21,7 +25,7 @@ acceptance pause `22`; original stale history `23`; replacement stale smoke
 or PPR event, and require a new PREVIEW. API/UI safe responses contain no
 full IIN. Tests: Stage 2 backend 15 passed; Stage 2 frontend 4 passed;
 previous combined Stage 0/1/2 backend 26 passed; Stage 0/1 frontend 8 passed.
-Visual Review has not been accepted on the user's behalf.
+No deployment was performed.
 
 `s2e1d2u3c4a5` remains the Stage 2 envelope migration. The separate,
 source-controlled `s2e2f3g4h5i6_enable_pmf_education_domain.py` activates the

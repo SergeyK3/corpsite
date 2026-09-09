@@ -79,7 +79,9 @@ describe("Stage2EducationPanel", () => {
     api.mockResolvedValueOnce(blocked as never);
     render(<Stage2EducationPanel cohortRunId={9} />);
     fireEvent.click(screen.getByRole("button", { name: "Проверить образование" }));
-    expect(await screen.findByRole("button", { name: "Утвердить запуск" })).toBeDisabled();
+    const button = await screen.findByRole("button", { name: "Утверждение недоступно" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveClass("cursor-not-allowed", "bg-zinc-100", "border-zinc-300", "text-zinc-700");
     expect(screen.getByRole("status")).toHaveTextContent("Утверждение недоступно");
   });
 
