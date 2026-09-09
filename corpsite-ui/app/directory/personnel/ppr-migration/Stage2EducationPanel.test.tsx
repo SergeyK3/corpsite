@@ -54,18 +54,33 @@ describe("Stage2EducationPanel", () => {
 
   it("shows the correct resume action for each pause and stale guidance", async () => {
     const stale = baseRun("PAUSED_ON_ERROR", "PARTICIPANT_EXECUTION");
+    stale.run.stage0_cohort_run_id = 9;
     stale.participants[0].error_code = "STAGE2_RESUME_STALE";
     api.mockResolvedValueOnce(stale as never);
     render(<Stage2EducationPanel cohortRunId={9} />);
     fireEvent.click(screen.getByRole("button", { name: "Проверить образование" }));
-    expect(await screen.findByRole("button", { name: "Продолжить обработку" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Требуется новый PREVIEW");
+    expect(await screen.findByRole("button", { name: "Создать новый PREVIEW" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Продолжить обработку" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("Требуется новый PREVIEW");
+    expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain("Текущий прогон продолжить нельзя");
+    fireEvent.click(screen.getByRole("button", { name: "Создать новый PREVIEW" }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/personnel/ppr-migration/stage-2/education/preview", { method: "POST", body: { stage0_cohort_run_id: 9 } }));
     api.mockClear(); api.mockResolvedValueOnce(baseRun("PAUSED_ON_ERROR", "ACCEPTANCE") as never).mockResolvedValueOnce({ stage_run_id: 44, employee_count: 2, records_by_kind: { basic: 1 }, skipped_count: 1, acceptance_fingerprint: "a".repeat(64) } as never);
     fireEvent.change(screen.getByLabelText("ID прогона"), { target: { value: "44" } });
     fireEvent.click(screen.getByRole("button", { name: "Открыть прогон" }));
     expect(await screen.findByRole("button", { name: "Повторить принятие" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Повторить принятие" }));
     expect(await screen.findByRole("dialog")).toHaveTextContent("Будет записано");
+  });
+
+  it("disables approval while a review-required or conflict fragment remains", async () => {
+    const blocked = baseRun();
+    blocked.participants[0].fragments[0].outcome = "REVIEW_REQUIRED";
+    api.mockResolvedValueOnce(blocked as never);
+    render(<Stage2EducationPanel cohortRunId={9} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить образование" }));
+    expect(await screen.findByRole("button", { name: "Утвердить запуск" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Утверждение недоступно");
   });
 
   it("uses server acceptance summary and shows accepted replay", async () => {
