@@ -13,7 +13,7 @@ def _scope_run(c,cohort_id:int,scope:dict)->None:
     if scope.get('privileged') or scope.get('scope_unit_ids') is None:return
     allowed={int(v) for v in scope.get('scope_unit_ids',[])}
     units=c.execute(text("SELECT e.org_unit_id FROM public.ppr_stage0_cohort_participants p JOIN public.employees e ON e.employee_id=p.employee_id WHERE p.stage0_cohort_run_id=:id"),{'id':cohort_id}).scalars().all()
-    if not units or any(u is None or int(u) not in allowed for u in units):raise HTTPException(404,detail={'code':'STAGE1_RUN_OUT_OF_SCOPE','message':'Stage 1 cohort is outside organization scope.'})
+    if not units or any(u is None or int(u) not in allowed for u in units):raise HTTPException(404,detail={'code':'STAGE1_RUN_OUT_OF_SCOPE','message':'Данные этого этапа находятся вне разрешённого для вас подразделения.'})
 def _scope_stage1(c,run_id:int,scope:dict)->None:
     cohort=c.execute(text('SELECT stage0_cohort_run_id FROM public.ppr_stage1_general_runs WHERE stage1_run_id=:id'),{'id':run_id}).scalar_one_or_none()
     if cohort is None:raise HTTPException(404,detail={'code':'STAGE1_RUN_NOT_FOUND','message':'Stage 1 run not found.'})

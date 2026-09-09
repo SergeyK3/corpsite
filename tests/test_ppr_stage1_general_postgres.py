@@ -5,16 +5,18 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.services.ppr_stage0_cohort_service import preview_stage0_cohort, freeze_stage0_cohort
 from app.services.ppr_stage1_general_service import preview_stage1, approve_stage1, execute_next_stage1, accept_stage1_run, Stage1ConflictError
+from app.api.ppr_stage1_general_router import _scope_run
+from fastapi import HTTPException
 
 
-def _seed(conn):
+def _seed(conn, *, org_unit_id=None):
     marker=uuid4().hex[:10]; actor=int(conn.execute(text("SELECT min(user_id) FROM public.users WHERE is_active")).scalar_one())
     batch=int(conn.execute(text("INSERT INTO public.hr_import_batches(source_type,file_name,import_code,imported_by,status) VALUES('HR_CONTROL_LIST',:f,:c,:a,'APPLY_PENDING') RETURNING batch_id"),{'f':f'stage1-{marker}.xlsx','c':f'stage1-{marker}','a':actor}).scalar_one())
     employees=[]
     for position in (1,2):
         name=f'Stage One {marker}{position}'
         person=int(conn.execute(text("INSERT INTO public.persons(full_name,match_key,person_status,source) VALUES(:n,:k,'active','migration') RETURNING person_id"),{'n':name,'k':f's1-{marker}-{position}'}).scalar_one())
-        employee=int(conn.execute(text("INSERT INTO public.employees(full_name,person_id,is_active,operational_status) VALUES(:n,:p,true,'active') RETURNING employee_id"),{'n':name,'p':person}).scalar_one())
+        employee=int(conn.execute(text("INSERT INTO public.employees(full_name,person_id,org_unit_id,is_active,operational_status) VALUES(:n,:p,:unit,true,'active') RETURNING employee_id"),{'n':name,'p':person,'unit':org_unit_id}).scalar_one())
         conn.execute(text("INSERT INTO public.hr_import_rows(batch_id,source_sheet,source_row_number,raw_payload,normalized_payload,employee_id) VALUES(:b,'Synthetic',:pos,'{}'::jsonb,CAST(:payload AS jsonb),:e)"),{'b':batch,'pos':position,'e':employee,'payload':'{"full_name":"'+name+'","iin":"90010100000'+str(position)+'","birth_date":"1990-01-0'+str(position)+'"}'})
         employees.append((employee,person))
     p=preview_stage0_cohort(conn,source_batch_id=batch); frozen=freeze_stage0_cohort(conn,source_batch_id=batch,preview_fingerprint=p['preview_fingerprint'],actor_user_id=actor)
@@ -62,4 +64,21 @@ def test_stage1_acceptance_rejects_stale_canonical_values_without_writes():
             except Stage1ConflictError as exc: assert str(exc)=='STAGE1_ACCEPTANCE_STALE_OR_CONFLICT'
             else: raise AssertionError('acceptance must fail closed')
             assert conn.execute(text('SELECT iin FROM public.persons WHERE person_id=:p'),{'p':employees[1][1]}).scalar_one() is None
+        finally: tx.rollback()
+
+
+def test_stage1_scope_is_fail_closed_and_uses_russian_message():
+    with engine.connect() as conn:
+        tx=conn.begin()
+        try:
+            unit=conn.execute(text('SELECT min(unit_id) FROM public.org_units WHERE COALESCE(is_active,true)')).scalar_one()
+            assert unit is not None
+            _,cohort,_=_seed(conn,org_unit_id=int(unit))
+            _scope_run(conn,cohort,{'privileged':False,'scope_unit_ids':[int(unit)]})
+            try:
+                _scope_run(conn,cohort,{'privileged':False,'scope_unit_ids':[]})
+            except HTTPException as exc:
+                assert exc.status_code==404
+                assert exc.detail=={'code':'STAGE1_RUN_OUT_OF_SCOPE','message':'Данные этого этапа находятся вне разрешённого для вас подразделения.'}
+            else: raise AssertionError('out-of-scope Stage 1 run must fail closed')
         finally: tx.rollback()
