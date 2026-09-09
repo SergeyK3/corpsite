@@ -1,236 +1,366 @@
 # WP-PPR-MIG-002A — Stage 2 Education: implementation plan
 
-| Статус | **Draft — Ready for Implementation Review** |
+| Статус | **Draft — Ready for Implementation Re-Review** |
 |---|---|
-| Основание | [WP-PPR-MIG-002](WP-PPR-MIG-002-stage-2-education.md), Stage 0 frozen cohort, PMF / `EducationMigrationPlugin` |
+| Основание | [WP-PPR-MIG-002](WP-PPR-MIG-002-stage-2-education.md), Stage 0 frozen cohort, ADR-PMF-001 и `EducationMigrationPlugin` |
 | Граница | Только Stage 2 «Образование»; не Stage 3 и не иной section. |
 
-## 1. Architecture and migration
+## 1. Архитектура и migration
 
-Stage 2 creates a thin common PPR stage-run envelope. Envelope owns the frozen section
-cohort, participant cursor, execution/acceptance state and safe snapshots. Existing PMF
-remains the sole owner of `personnel_migration_runs/items`, education source/draft
-payload, provenance, `EducationMigrationPlugin` and canonical PPR commands. Envelope
-tables must never contain raw source text, full IIN, FIO or education payload JSON.
+Stage 2 добавляет тонкий общий envelope этапного прогона. Он владеет frozen section
+cohort, курсором, pause/resume, решением об исключении и итоговым принятием. PMF
+остаётся единственным владельцем education draft payload, `personnel_migration_runs`,
+`personnel_migration_items`, provenance, `EducationMigrationPlugin` и canonical PPR
+commands. Envelope никогда не хранит полный ИИН, ФИО, сырой текст контрольного списка
+или payload образования.
 
-Stage 1 `ppr_stage1_general_*` is scalar-Person storage and is neither reused nor
-extended. Stage 0 cohort is immutable prerequisite; Stage 2 freezes its own section
-snapshot from it.
+Stage 1 `ppr_stage1_general_*` — scalar-Person storage; его расширять или
+переиспользовать запрещено. Stage 0 cohort неизменяем; Stage 2 замораживает свой
+section snapshot поверх него.
 
-One future migration is exact: `alembic/versions/s2e1d2u3c4a5_ppr_stage2_education_envelope.py`,
-with `down_revision = 's1g0e1n2r3a4'` (current head). It adds the tables/permission
-below; it does not alter historical migrations, Stage 0/1 tables or canonical education.
+Плановая migration: `s2e1d2u3c4a5_ppr_stage2_education_envelope.py`,
+`down_revision = 's1g0e1n2r3a4'`. Это подтверждённый актуальный локальный Alembic
+head. Migration добавляет только перечисленные ниже envelope-таблицы, индексы и
+permission; она не меняет исторические migrations, Stage 0/1, PMF schema или
+canonical education.
 
 ### 1.1 `ppr_stage_runs`
 
-| Field | Type and constraint |
+| Поле | Тип, FK и ограничение |
 |---|---|
 | `stage_run_id` | `BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`. |
-| `stage_code` | `TEXT NOT NULL CHECK (stage_code='education')`; another stage requires an approved expansion. |
-| `stage0_cohort_run_id` | `BIGINT NOT NULL REFERENCES ppr_stage0_cohort_runs ON DELETE RESTRICT`. |
-| `status` | `TEXT NOT NULL CHECK` over `DRAFT`, `DRY_RUN_COMPLETED`, `APPROVED`, `RUNNING`, `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW`, `ACCEPTED`, `CANCELLED`. |
-| `preview_fingerprint` | lowercase SHA-256 `CHAR(64) NOT NULL`. |
-| `policy_version` | `TEXT NOT NULL DEFAULT 'EDU-KIND-ALLOWLIST-v1'`. |
-| `current_position` | `INTEGER NOT NULL DEFAULT 1 CHECK (current_position>=1)`. |
-| actor/times | restrictive `created_by_user_id`, nullable `approved_by_user_id`, `accepted_by_user_id`; `created_at`, nullable approved/accepted/paused/cancelled timestamps. |
-| safe state | `safe_snapshot JSONB NOT NULL DEFAULT '{}'`, nullable `last_error_code`, `last_error_reference`; no PII/raw data. |
+| `stage_code` | `TEXT NOT NULL CHECK (stage_code = 'education')`. |
+| `stage0_cohort_run_id` | `BIGINT NOT NULL REFERENCES ppr_stage0_cohort_runs(stage0_cohort_run_id) ON DELETE RESTRICT`. |
+| `status` | `TEXT NOT NULL` с check: `DRAFT`, `DRY_RUN_COMPLETED`, `APPROVED`, `RUNNING`, `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW`, `ACCEPTED`, `CANCELLED`. |
+| `preview_fingerprint` | `CHAR(64) NOT NULL CHECK (preview_fingerprint ~ '^[0-9a-f]{64}$')`. |
+| `policy_version` | `TEXT NOT NULL CHECK (policy_version = 'EDU-KIND-ALLOWLIST-v1')`. |
+| `current_position` | `INTEGER NOT NULL DEFAULT 0 CHECK (current_position >= 0)`. При пустом cohort — `0`; при обработке — следующая позиция `1..N`; после последнего — `N+1`. |
+| `safe_snapshot` | `JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(safe_snapshot) = 'object')`; только IDs, версии, hashes, counts и safe codes. |
+| actors | `created_by_user_id BIGINT NOT NULL`, nullable `approved_by_user_id`, `accepted_by_user_id`, `cancelled_by_user_id`; каждый `REFERENCES users(user_id) ON DELETE RESTRICT`. |
+| времена | `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, nullable `approved_at`, `accepted_at`, `paused_at`, `cancelled_at`. |
+| pause | nullable `stopped_participant_id BIGINT REFERENCES ppr_stage_run_participants(stage_run_participant_id) ON DELETE RESTRICT`, `last_error_code TEXT`, `last_error_reference TEXT`. FK добавляется после participant table. |
+| cancel | nullable `cancel_reason TEXT`. |
+| acceptance replay | nullable `accepted_precondition_fingerprint CHAR(64) CHECK (... SHA-256 ...)`, `acceptance_outcome JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(acceptance_outcome)='object')`. |
 
-`UNIQUE(stage_code, stage0_cohort_run_id, preview_fingerprint)` is replay fence.
-Indexes: `(stage0_cohort_run_id,stage_code,created_at DESC)` and `(status,created_at)`.
-Checks require accepted actor/time iff `ACCEPTED`, and approval actor/time for states
-after `APPROVED`. Transition service is the sole status writer; no trigger.
+`acceptance_outcome` хранит только server-derived `participant_count`,
+`completed_count`, `skipped_count`, `already_applied_count`,
+`created_record_count`, `committed_item_count`, `event_count` и safe acceptance
+fingerprint.
+
+Полные row-local check-инварианты:
+
+- В `DRAFT` и `DRY_RUN_COMPLETED` пара `approved_by_user_id`/`approved_at` null; в
+  `APPROVED`, `RUNNING`, `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW`, `ACCEPTED` она
+  вся non-null; в `CANCELLED` она либо вся null (отмена до approval), либо вся non-null
+  (отмена утверждённого run). Частично заполненная пара запрещена.
+- `accepted_by_user_id IS NOT NULL`, `accepted_at IS NOT NULL`,
+  `accepted_precondition_fingerprint IS NOT NULL` и
+  `acceptance_outcome <> '{}'::jsonb` **iff** `status='ACCEPTED'`; иначе null/`{}`.
+- `cancelled_by_user_id`, `cancelled_at` и непустой `cancel_reason` **iff**
+  `status='CANCELLED'`; иначе null.
+- `stopped_participant_id`, `paused_at`, непустые `last_error_code` и
+  `last_error_reference` **iff** `status='PAUSED_ON_ERROR'`. При resume envelope
+  поля очищаются; исторический error остаётся у participant.
+
+`DRAFT` — только кратковременное внутреннее состояние transaction создания и не
+возвращается как сохранённый PREVIEW result. Единственный transition writer — service;
+trigger не нужен.
+
+Ограничения и индексы: `UNIQUE(stage_code, stage0_cohort_run_id,
+preview_fingerprint)`, `INDEX(stage0_cohort_run_id, stage_code, created_at DESC)`,
+`INDEX(status, created_at DESC)`, `INDEX(stopped_participant_id)` и обычные индексы
+всех FK, если не покрыты указанными composite indexes.
 
 ### 1.2 `ppr_stage_run_participants`
 
-One row is one Employee/Person, never one fragment.
+Одна строка — один Employee/Person, а не один education fragment.
 
-| Field | Type and constraint |
+| Поле | Тип, FK и ограничение |
 |---|---|
-| `stage_run_participant_id` | identity `BIGINT` PK. |
-| `stage_run_id`, `stage0_participant_id` | restrictive FKs to envelope and Stage 0 participant. |
-| `position` | `INTEGER NOT NULL CHECK(position>=1)`. |
-| `employee_id`, `person_id` | restrictive FKs; copied technical anchors only. |
-| `participant_snapshot_version`, `safe_fingerprint` | `INTEGER NOT NULL DEFAULT 1 CHECK(>=1)`, required SHA-256. |
-| `status` | check `PENDING`, `COMPLETED`, `ERROR`, `SKIPPED_BY_DECISION`; completed means drafts ready, not canonical. |
-| `pmf_run_id` | nullable unique restrictive FK to `personnel_migration_runs`; one PMF education run per participant. |
-| execution state | nullable completion/error safe fields; skip reason/actor/time all required iff skipped. |
+| `stage_run_participant_id` | `BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`. |
+| `stage_run_id` | `BIGINT NOT NULL REFERENCES ppr_stage_runs(stage_run_id) ON DELETE RESTRICT`. |
+| `stage0_participant_id` | `BIGINT NOT NULL REFERENCES ppr_stage0_cohort_participants(stage0_participant_id) ON DELETE RESTRICT`. |
+| `position` | `INTEGER NOT NULL CHECK (position >= 1)`. |
+| `employee_id`, `person_id` | `BIGINT NOT NULL REFERENCES employees(employee_id) ON DELETE RESTRICT` и `BIGINT NOT NULL REFERENCES persons(person_id) ON DELETE RESTRICT`. |
+| snapshot | `participant_snapshot_version INTEGER NOT NULL DEFAULT 1 CHECK (participant_snapshot_version >= 1)`, `safe_fingerprint CHAR(64) NOT NULL CHECK (... SHA-256 ...)`. |
+| `status` | `TEXT NOT NULL CHECK (status IN ('PENDING','COMPLETED','ERROR','SKIPPED_BY_DECISION'))`. `COMPLETED` означает drafts готовы либо exact already-applied подтверждён, а не canonical write. |
+| `pmf_run_id` | nullable unique `BIGINT REFERENCES personnel_migration_runs(run_id) ON DELETE RESTRICT`; null допустим для `PENDING`, exact ALREADY_APPLIED или skip; completed participant с хотя бы одним новым fragment обязан иметь PMF run. |
+| completion/error | nullable `completed_at`; nullable `error_code`, `error_reference`, `errored_at`. Error триада вся non-null при `ERROR`, иначе вся null. |
+| skip audit | nullable `skipped_by_user_id BIGINT REFERENCES users(user_id) ON DELETE RESTRICT`, `skipped_at TIMESTAMPTZ`, `skip_reason TEXT`; триада с непустой причиной **iff** `SKIPPED_BY_DECISION`. |
 
-Constraints: unique `(stage_run_id,position)`, `(stage_run_id,stage0_participant_id)`,
-`(stage_run_id,employee_id)`, and `(pmf_run_id)`. Indexes: `(stage_run_id,status,position)`,
-`(employee_id)`, `(person_id)`. Repository verifies copied Employee/Person match Stage 0.
+`completed_at IS NOT NULL` iff `status='COMPLETED'`; для иных статусов он null.
+`ERROR` не имеет `completed_at`; `SKIPPED_BY_DECISION` не может иметь PMF committed
+item. Service additionally проверяет точное соответствие Employee/Person Stage 0
+participant.
 
-### 1.3 PMF links without payload duplication
+Ограничения: `UNIQUE(stage_run_id, position)`,
+`UNIQUE(stage_run_id, stage0_participant_id)`, `UNIQUE(stage_run_id, employee_id)`,
+`UNIQUE(pmf_run_id)`. Индексы: `(stage_run_id, status, position)`,
+`(stage_run_id, position)`, `(employee_id)`, `(person_id)`,
+`(stage0_participant_id)`.
 
-The participant's PMF run has `domain_code='education'`, matching `person_id` and
-`employee_context_id`. Its existing PMF items represent every fragment. Only metadata
-is added to PMF run/item provenance:
+Позиции непрерывны только для frozen eligible cohort; service проверяет `count=N`,
+`min=1`, `max=N` перед approval и acceptance. При `N=0` participants нет,
+`current_position=0`, и после explicit approval run становится
+`COMPLETED_PENDING_REVIEW`: это допустимый пустой результат, явно показанный HR_HEAD.
+
+### 1.3 PMF links и фактические provenance paths
+
+PMF schema уже содержит `personnel_migration_runs.metadata`, а item — только
+`source_payload`, `draft_payload`, `validation_errors` (отдельного item metadata
+нет). Используются ровно эти paths:
 
 ```text
-stage_run_id, stage_run_participant_id, participant_snapshot_version,
-education_kind_policy_version, classification_outcome, source_record_key, fragment_index
+personnel_migration_runs.metadata.stage2 = {
+  envelope_run_id, participant_id, participant_snapshot_version,
+  policy_version, deterministic_run_key
+}
+personnel_migration_items.source_payload.stage2 = {
+  source_record_key, fragment_index, item_key, classification_outcome,
+  policy_version, source_snapshot_fingerprint
+}
+personnel_migration_items.draft_payload.metadata.stage2 = {
+  envelope_run_id, participant_id, participant_snapshot_version,
+  source_record_key, fragment_index, policy_version, item_key
+}
+person_education.metadata.stage2 = same immutable provenance after commit
 ```
 
-`source_payload`/`draft_payload` remain exclusively in PMF. A link/payload fourth table
-is prohibited.
+`draft_payload`/`source_payload` остаются PMF-only education data; envelope хранит
+лишь safe IDs/counts/fingerprints. `person_education` также получает существующие
+`import_batch_id`, `import_row_id`, `source_field`, `source_text`,
+`parse_method`, `confidence`, `migrated_at`, `migrated_by` через существующий
+plugin.
+
+Deterministic keys:
+
+- `deterministic_run_key = sha256('stage2-pmf-run:v1:' + stage_run_id + ':' +
+  participant_id + ':' + participant_snapshot_version)`; хранится в
+  `runs.metadata.stage2.deterministic_run_key`. Migration добавляет partial unique
+  expression index `UNIQUE ((metadata #>> '{stage2,deterministic_run_key}')) WHERE
+  metadata ? 'stage2'`.
+- `item_key = sha256('stage2-pmf-item:v1:' + deterministic_run_key + ':' +
+  source_record_key + ':' + fragment_index + ':' + source_snapshot_fingerprint)`; это
+  `source_record_id`, и migration добавляет
+  `UNIQUE(run_id, source_record_id) WHERE source_kind='stage2_control_list_fragment'`.
+- PPR command id — фактический helper
+  `build_pmf_commit_command_id(migration_run_id, migration_item_id)`: SHA-256 от
+  `pmf-bridge-v1:commit:{run_id}:{item_id}` с префиксом `ppr-cmd-`.
+
+Только fragment, требующий новой записи, создаёт PMF draft item. Exact
+ALREADY_APPLIED item не создаёт: это participant-safe disposition, а не фиктивный
+no-op payload. Нормальный Stage 2 переход — PMF run `draft → committed` и созданные
+items `draft → committed` в одной acceptance transaction. При rollback они остаются
+`draft`; Stage 2 не использует PMF `failed`, `voided`, `superseded` как pause.
+
+ALREADY_APPLIED допускается только если ровно одна active `person_education` имеет:
+совпадающие mapped canonical semantic fields, тот же `import_batch_id/import_row_id`
+и точные `metadata.stage2.source_record_key`, `fragment_index`, `policy_version`,
+`item_key`. Отсутствие/расхождение provenance, более одного match либо семантическое
+отличие — `REVIEW_REQUIRED`/conflict, не ALREADY_APPLIED.
 
 ## 2. EDU-KIND-ALLOWLIST-v1
 
-Create pure `app/ppr_migration/education_kind_policy.py` returning immutable
+`app/ppr_migration/education_kind_policy.py` — pure classifier, возвращающий immutable
 `EducationKindClassification(kind, outcome, reason_code, policy_version,
-specific_markers)`. It implements exactly WP-PPR-MIG-002 §2.4 per parser fragment:
-specific marker priority, conflicting markers → `REVIEW_REQUIRED`, no default and no
-automatic `other`. It uses Unicode/casefold matching and emits safe codes, not marker
-text.
+specific_markers)`. Он реализует WP-PPR-MIG-002 §2.4: приоритет specific marker,
+conflicting markers → `REVIEW_REQUIRED`, никакого default и никакого автоматического
+`other`.
 
-`EDU-KIND-ALLOWLIST-v1` is written into envelope `policy_version`, participant safe
-fingerprint, PMF provenance and protected preview response. A changed policy version
-makes prior preview stale and requires new PREVIEW/APPROVED. `other` can arise only
-from a separately audited explicit HR action; `execute-next` has no branch for it.
+Stage 2 v1 намеренно не предоставляет HR override для `other`. Fragment, которому
+потребовался бы `other`, остаётся `REVIEW_REQUIRED`; HR исправляет authoritative
+source и запускает новый PREVIEW либо явно исключает participant. Не добавляются
+override persistence/API/UI/fingerprint branch. Policy version входит в envelope и
+participant fingerprint, PMF provenance и protected PREVIEW response; его изменение
+всегда требует нового PREVIEW и approval.
 
-## 3. Operations and state transitions
+## 3. Operations и state machine
 
-### PREVIEW
+### 3.1 Точный двухфазный PREVIEW
 
-`POST /api/personnel/ppr-migration/stage-2/education/preview` accepts only
-`{stage0_cohort_run_id}`. Under `REPEATABLE READ READ ONLY`, it loads Stage 0
-participants in position order, rechecks source/Employee/Person/lifecycle eligibility,
-selects education normalized records, splits fragments, classifies policy, loads active
-canonical education and forms source/current/proposal/match comparisons. It has no DML.
+`POST /api/personnel/ppr-migration/stage-2/education/preview` принимает только
+`{stage0_cohort_run_id}`.
 
-After the read scan, a short write transaction rechecks fingerprint and persists envelope
-and participants as `DRY_RUN_COMPLETED`. Exact unique fingerprint returns existing run.
-Blocking errors/conflicts remain visible and prohibit approval; they do not prohibit
-preview. Protected HR_HEAD detail may show name and Excel row for correction; safe
-reports/logs never contain full IIN/raw payload.
+1. **Compute phase:** одна `REPEATABLE READ READ ONLY` transaction сканирует Stage 0
+   participants в frozen position order; rechecks source/Employee/Person/lifecycle
+   eligibility, loads normalized education, splits fragments, применяет policy, читает
+   active canonical education и строит source/current/proposal/match comparison и safe
+   fingerprint. Она не выполняет DML вообще.
+2. **Persist phase:** отдельная короткая `SERIALIZABLE` write transaction берёт
+   transaction advisory lock по `(stage_code, stage0_cohort_run_id)`, затем locks
+   selected Stage 0 cohort/participants по position. Она повторно вычисляет тот же safe
+   fingerprint и stale preconditions перед атомарным созданием envelope и eligible
+   participants. Exact unique replay возвращает существующий run; иной recomputed
+   fingerprint возвращает `409 STAGE2_PREVIEW_STALE`, не создавая второй run.
+   Serialization failure повторяется только полным новым compute phase.
 
-### Approval and sequential draft execution
+Persist phase может писать **только** Stage 2 envelope, participant и safe
+blocker/count snapshot. Она не пишет canonical education и не создаёт PMF run/item.
+Blocking errors/conflicts остаются видимыми и запрещают approval, но не PREVIEW.
+Protected HR detail может показывать ФИО и Excel row для исправления; safe reports/logs
+не содержат полного ИИН или raw payload.
 
-`approve_stage2_run` locks envelope+participants and permits only
-`DRY_RUN_COMPLETED`; all blockers must be corrected or explicitly
-`SKIPPED_BY_DECISION`. It rechecks fingerprint/policy then records `APPROVED` actor/time.
-Cohort/order/mapping/policy/field-set changes return `409 STAGE2_APPROVAL_STALE`.
+### 3.2 Transition table и idempotency
 
-`execute_next_stage2_run` permits `APPROVED`/`RUNNING`, processes only cursor position,
-creates or verifies its PMF run and one PMF draft item per fragment, then marks the
-participant `COMPLETED`, increments cursor and moves to `RUNNING` or
-`COMPLETED_PENDING_REVIEW`. Writes are draft-only.
+| Operation | Allowed source state | Success / replay | Rejection |
+|---|---|---|---|
+| `approve` | `DRY_RUN_COMPLETED` | → `APPROVED`; replay в `APPROVED` возвращает run без нового audit row. | blockers `409 STAGE2_APPROVAL_BLOCKED`; stale `409 STAGE2_APPROVAL_STALE`; terminal/cancelled `409 STAGE2_INVALID_STATE`. |
+| `execute-next` | `APPROVED`, `RUNNING` | один cursor participant; → `RUNNING` или `COMPLETED_PENDING_REVIEW`. Retry возвращает stored participant result и не создаёт второй PMF key/item. | paused `409 STAGE2_RUN_PAUSED`; completed `409 STAGE2_EXECUTION_COMPLETE`; terminal `409 STAGE2_INVALID_STATE`. |
+| `resume` | `PAUSED_ON_ERROR` | retry только stopped `ERROR` participant; после успеха продолжает с этой позиции. | non-paused `409 STAGE2_RUN_NOT_PAUSED`; stale `409 STAGE2_RESUME_STALE`; terminal `409 STAGE2_INVALID_STATE`. |
+| `skip` | `DRY_RUN_COMPLETED`: `PENDING` blocking participant; `PAUSED_ON_ERROR`: только stopped `ERROR` participant | audited → `SKIPPED_BY_DECISION`; pre-approval skip позволяет approval без blockers; paused skip advances cursor и возвращает `APPROVED` для explicit next execution. | `409 STAGE2_SKIP_NOT_ALLOWED` для `RUNNING`, completed, accepted, cancelled, уже `COMPLETED`/skipped participant или любого PMF-committed item. |
+| `cancel` | `DRAFT`, `DRY_RUN_COMPLETED`, `APPROVED`, `RUNNING`, `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW` | → `CANCELLED` с actor/time/reason; тот же cancel replay возвращает saved state. PMF drafts не меняются. | accepted `409 STAGE2_RUN_ALREADY_ACCEPTED`; иной cancel reason `409 STAGE2_CANCEL_REPLAY_MISMATCH`. |
+| `accept` | `COMPLETED_PENDING_REVIEW` | atomically → `ACCEPTED`; later replay возвращает stored `acceptance_outcome`. | pending/error/conflict `409 STAGE2_ACCEPTANCE_NOT_READY`; stale `409 STAGE2_ACCEPTANCE_STALE`; cancelled `409 STAGE2_INVALID_STATE`. |
 
-Failure rolls back that participant transaction. A separate short transaction locks
-only envelope/failed participant and records `ERROR`, `PAUSED_ON_ERROR`, cursor and safe
-reason. `resume_stage2_run` permits only `PAUSED_ON_ERROR`, re-evaluates the same
-position and continues only after its success. Earlier drafts stay unchanged.
-`skip_stage2_participant` is explicit HR_HEAD action with reason/actor/time and appears
-in report/acceptance dialog; it is never automatic.
+Все operations дополнительно возвращают
+`403 PPR_STAGE2_EDUCATION_PERMISSION_DENIED` при отсутствии permission/HR_HEAD role и
+`403 STAGE2_COHORT_OUT_OF_SCOPE` при server-side scope failure. Frontend не принимает
+authorization решение.
 
-### Acceptance
+Approval locks envelope/participants и rechecks fingerprint/policy. Cohort, порядок,
+mapping, policy или field set меняются только через новый PREVIEW/APPROVED. Для
+recoverable source/canonical stale error resume заново строит snapshot stopped
+participant и требует его точного равенства frozen fingerprint; иначе
+`STAGE2_RESUME_STALE` и нужен новый PREVIEW.
 
-`accept_stage2_run` permits only `COMPLETED_PENDING_REVIEW`. In one `SERIALIZABLE`
-transaction it locks envelope/full cohort, rechecks source/canonical fingerprints and
-duplicate/match preconditions, then commits ready PMF items through existing education
-plugin/PPR gateway. Equal canonical record is replay/no write. Conflict, stale or PPR
-error rolls back canonical records, events and PMF item-status changes together; items
-remain `draft`.
+### 3.3 Sequential draft execution, rollback и acceptance
 
-After rollback a distinct service transaction writes only `PAUSED_ON_ERROR`, safe error
-code/reference and stopped participant. It must not claim a failed PMF item was stored
-inside the rolled-back transaction. Accepted replay returns stored outcome without new
-commands/events.
+`execute-next` создаёт/проверяет один deterministic PMF run для cursor participant и
+PMF drafts только для новых education records, потом отмечает participant
+`COMPLETED`. Canonical education не меняется. У каждого participant своя transaction;
+ранние drafts сохраняются.
 
-## 4. Locks and stale protection
+Если worker/resume/acceptance canonical work терпит ошибку, исходная transaction
+откатывается. Затем отдельная service transaction locks envelope, потом relevant
+participant, и conditionally меняет run на `PAUSED_ON_ERROR` только если он всё ещё
+captured expected non-terminal state (`APPROVED`, `RUNNING` или
+`COMPLETED_PENDING_REVIEW`). Она записывает `ERROR` и safe details только этому
+participant. Она не перезаписывает `CANCELLED`/ `ACCEPTED`: concurrent
+retry/cancel/accept, изменивший expected state, выигрывает и перечитывается. Если сама
+service transaction не удалась, service делает safe structured operational log и
+возвращает `500 STAGE2_PAUSE_RECORDING_FAILED`; он не утверждает, что pause сохранён.
 
-Worker, resume and acceptance follow one exact order:
+`accept` выполняется одной `SERIALIZABLE` transaction: locks full cohort, повторно
+вычисляет server-derived counts и acceptance fingerprint, сравнивает UI-provided
+fingerprint, rechecks source/canonical snapshots и PMF drafts, затем вызывает existing
+education plugin/PPR gateway. Canonical records, PMF item/run statuses и PPR events
+commit together. Conflict/stale/PPR error откатывает всё, оставляя items `draft`.
+Double submit и ACCEPTED HTTP replay возвращают stored outcome, не создавая record/event.
+
+## 4. Locks и stale protection
+
+Единый lock order не инвертируется:
 
 ```text
-envelope run → participant → source rows / normalized records → Employee → Person
-→ active canonical education → PMF runs/items → existing PPR locks
+envelope run → participants → source rows / normalized records → Employee → Person
+→ canonical education → PMF runs/items → existing PPR locks
 ```
 
-Collections sort technical IDs ascending; participants sort position ascending.
-Acceptance is `SERIALIZABLE`; preview is read-only; worker/resume use existing PPR
-write transaction isolation, always with the order above.
+Collections сортируются по technical ID (participants — по position). Применимые
+подмножества:
 
-Fingerprint canonical JSON has no raw source/name/full IIN and includes Stage 0/source
-fingerprint; Employee/Person/PPR versions; batch/row/normalized IDs/status/update
-tokens; source record key/index; active education identity/`updated_at`; parser/mapping
-versions; policy version and classification outcome. Changed source ownership/removal/
-rebinding, canonical token, lifecycle or policy is stale and pauses without canonical
-write. A changed cohort/order/mapping/policy requires new PREVIEW and APPROVED.
+| Operation | Locks в global order |
+|---|---|
+| compute PREVIEW | нет; `REPEATABLE READ READ ONLY`. |
+| persist PREVIEW | advisory cohort key, затем Stage 0 selected rows/source rows → Employee → Person; pre-existing envelope/participant нет. |
+| approve | envelope → all participants → source/normalized rows → Employee → Person → canonical education. |
+| execute-next/resume | envelope → cursor participant → source/normalized rows → Employee → Person → canonical education → PMF run/items → PPR locks. |
+| skip | envelope → selected participant. |
+| cancel | envelope. |
+| accept | envelope → all participants → source/normalized rows → Employee → Person → canonical education → PMF runs/items → PPR locks. |
+| post-rollback pause | envelope → stopped participant. |
 
-## 5. RBAC and exact APIs
+Fingerprint canonical JSON не содержит raw source/name/full IIN: Stage 0/source
+fingerprints; Employee/Person/PPR versions; batch/row/normalized IDs/status/update
+tokens; source key/fragment index; active education identity/`updated_at`;
+parser/mapping versions; policy version и classification outcome. Source
+ownership/removal/rebinding, canonical token, lifecycle или policy drift — stale.
+Cohort/order/mapping/policy change всегда требует нового PREVIEW/approval.
 
-Migration creates `PPR_STAGE2_EDUCATION_MANAGE` and grants it only to `HR_HEAD`.
-Every endpoint additionally verifies active primary role `HR_HEAD` and server-computed
-org scope over every selected Employee; frontend checks are non-authoritative.
-Out-of-scope returns `403 STAGE2_COHORT_OUT_OF_SCOPE`, shown as «Прогон недоступен в
-вашем подразделении».
+## 5. RBAC и API
 
-| Endpoint | Request | Result |
-|---|---|---|
-| `POST /api/personnel/ppr-migration/stage-2/education/preview` | `{stage0_cohort_run_id}` | run, counts, ordered protected comparisons; stale `409`. |
-| `GET /api/personnel/ppr-migration/stage-2/education/runs/{run_id}` | — | envelope, participants, PMF fragment comparisons, progress, policy/acceptance summary. |
-| `POST .../runs/{run_id}/approve` | `{}` | approved run; blockers/stale `409`. |
-| `POST .../runs/{run_id}/execute-next` | `{}` | one processed position/progress. |
-| `POST .../runs/{run_id}/resume` | `{}` | retry stopped position. |
-| `POST .../runs/{run_id}/participants/{id}/skip` | `{reason}` | audited skip. |
-| `POST .../runs/{run_id}/accept` | `{}` | accepted outcome or replay. |
+Migration создаёт `PPR_STAGE2_EDUCATION_MANAGE`, grant только `HR_HEAD`. Каждый
+endpoint дополнительно проверяет active primary role `HR_HEAD` и server-computed org
+scope каждого Employee. Scope failure показывается как «Прогон недоступен в вашем
+подразделении», с safe code `STAGE2_COHORT_OUT_OF_SCOPE`.
 
-Pydantic safe reports are separate from protected HR comparison responses. Errors use
-Russian safe messages/codes; neither contain full IIN/raw source.
+| Endpoint | Request / response contract |
+|---|---|
+| `POST /api/personnel/ppr-migration/stage-2/education/preview` | `{stage0_cohort_run_id}` → protected comparisons, safe counts, run и `preview_fingerprint`; two-phase contract выше. |
+| `GET .../runs/{run_id}` | envelope, progress, participants, PMF fragment comparisons, safe errors и stored acceptance outcome. |
+| `POST .../runs/{run_id}/approve` | `{}` → transition/replay из table. |
+| `POST .../runs/{run_id}/execute-next` | `{}` → ровно один stored/replayed cursor result. |
+| `POST .../runs/{run_id}/resume` | `{}` → retry stopped position. |
+| `POST .../runs/{run_id}/participants/{participant_id}/skip` | `{reason}` → только допустимый audited skip. |
+| `POST .../runs/{run_id}/cancel` | `{reason}` → audited cancellation/replay. |
+| `GET .../runs/{run_id}/acceptance-summary` | server-recomputed employee/record/kind counts, skipped/conflict counts и short-lived `acceptance_fingerprint`; без write. |
+| `POST .../runs/{run_id}/accept` | `{acceptance_fingerprint}` → atomic accepted outcome или stored ACCEPTED replay. |
 
-## 6. HR_HEAD UI and visibility
+Pydantic safe reports отделены от protected HR comparisons. Ни один response не содержит
+full IIN/raw source. UI не может подменить permission скрытием кнопки.
 
-Extend existing `/directory/personnel/ppr-migration` with `Stage2EducationPanel`.
-Russian textual statuses include «Проверка завершена», «Утверждён к запуску»,
-«Выполняется», «Остановлен из-за ошибки», «Готов к принятию», «Этап принят»,
-«Черновик подготовлен», «Данные записаны», «Требуется проверка».
+## 6. HR_HEAD UI и visibility
 
-Protected table groups fragment cards by one employee and Excel source row. Each card
-shows fragment index, «В контрольном списке», «Сейчас в карточке», «Будет записано»,
-policy outcome/reason. Full IIN is never rendered. Soft-line-break fragments display
-under the same source row, never as another employee.
+Extend existing `/directory/personnel/ppr-migration` with
+`Stage2EducationPanel`. Russian textual statuses: «Проверка завершена»,
+«Утверждён к запуску», «Выполняется», «Остановлен из-за ошибки», «Готов к принятию»,
+«Этап принят», «Черновик подготовлен», «Данные записаны», «Требуется проверка»,
+«Исключён по решению». Цвет — только дополнительный сигнал.
 
-Before `ACCEPTED`, employee paths read only active canonical `person_education`; HR_HEAD
-sees PMF drafts under permission/scope. After acceptance, normal card/employee rules
-expose canonical records. Confirmation uses accessible custom dialog: stage, employee
-count, ready records by kind, skipped/conflict count, no-overwrite and atomicity text,
-no IIN; buttons «Отмена»/«Принять этап» and in-flight double-submit guard.
+Protected table groups fragment cards по employee и Excel source row. Карточка показывает
+fragment index, «В контрольном списке», «Сейчас в карточке», «Будет записано», policy
+outcome/reason и раскрываемые safe technical details. Soft line break fragments остаются
+под той же source row и никогда не образуют другого employee. Full IIN не отображается.
 
-## 7. Test matrix and visual pilot
+До `ACCEPTED` employee paths читают только active canonical `person_education`;
+HR_HEAD видит PMF drafts только при permission/scope. После acceptance normal employee
+card rules показывают canonical records. Accessible custom confirmation dialog загружает
+только server-derived acceptance summary и явно называет stage, employee count, records
+by kind, skipped/conflict counts, отсутствие перезаписи непустых canonical values,
+atomicity и отсутствие full IIN. Кнопки «Отмена»/«Принять этап»; in-flight guard
+исключает второй submit.
+
+## 7. Test matrix и visual pilot
 
 | Level | Required coverage |
 |---|---|
-| Unit | every allowlist branch, priority/conflict, no `other`, split/fingerprint/dedup. |
-| Service | no canonical write in preview/execute; approval blockers; same-position resume; skip audit; rollback then separate pause; acceptance replay. |
-| PostgreSQL | migration constraints/FKs/indexes, Stage0/PMF links, SERIALIZABLE stale/concurrency, lock-order characterization, only `corpsite_test`. |
-| API/RBAC | permission/primary role/org scope, protected/safe redaction, Russian errors, invalid transitions. |
-| Frontend | Russian states/reasons, grouped fragments, no IIN, progress/pause/resume/dialog/accepted screen. |
-| Security | no raw payload/full IIN in reports/logs; employee cannot read drafts. |
+| Unit | every allowlist branch, priority/conflict, no `other`, split/fingerprint/dedup и exact provenance match. |
+| Service | two-phase read/write PREVIEW, no PMF/canonical write in PREVIEW, approval blockers, keys/replays, cursor rules, skip/cancel guards, rollback then conditional pause. |
+| PostgreSQL | all FKs/checks/unique/indexes, PMF JSON paths/keys, Stage0 links, SERIALIZABLE stale/concurrency, lock-order characterization и acceptance rollback/replay; only `corpsite_test`. |
+| API/RBAC | permission/primary role/org scope, protected/safe redaction, Russian errors, every transition и listed 403/409 code. |
+| Frontend | Russian states/reasons, grouped fragments, no IIN, progress/pause/resume, accept dialog/counts и accepted screen. |
+| Security | no raw payload/full IIN в reports/logs; employee cannot read drafts. |
 
-Local synthetic pilot in one permitted org scope must contain: (1) two fragments in one
-soft-line-break cell with distinct indices; (2) already-applied equal canonical record;
-(3) visible conflict; (4) ambiguous marker causing pause; (5) correction/resume,
-atomic acceptance and replay. It uses only synthetic data in `corpsite_test`.
+Synthetic visual pilot в одном permitted org scope включает: (1) одного employee с двумя
+fragments в одной soft-line-break cell, разными indices и одной Excel row; (2) exact
+already-applied canonical/provenance match; (3) visible canonical conflict; (4)
+ambiguous marker, уже `REVIEW_REQUIRED` в PREVIEW и блокирующий approval до
+authoritative-source correction либо explicit skip; (5) **отдельного** approved clean
+participant, получающего controlled post-approval stale/worker error, pause и resume
+только после восстановления исходного frozen participant fingerprint; (6) atomic
+acceptance/replay. Conflict также исправляется или skipped до acceptance. Любое изменение
+cohort/order/mapping/policy использует новый PREVIEW/approval, не простой resume. Только
+synthetic `corpsite_test` data.
 
-## 8. Exact future file map and visual-review readiness
+## 8. Exact future file map и visual-review readiness
 
 | Path | Responsibility |
 |---|---|
-| `alembic/versions/s2e1d2u3c4a5_ppr_stage2_education_envelope.py` | schema/indexes/permission grant. |
-| `app/db/models/ppr_stage_run.py` | ORM and status vocabulary. |
+| `alembic/versions/s2e1d2u3c4a5_ppr_stage2_education_envelope.py` | schema, constraints, expression/partial indexes и permission grant. |
+| `app/db/models/ppr_stage_run.py` | ORM и status vocabulary. |
 | `app/ppr_migration/education_kind_policy.py` | pure v1 classifier. |
-| `app/services/ppr_stage2_education_service.py` | all Stage 2 state/acceptance operations. |
-| `app/api/ppr_stage2_education_router.py`, `app/api/ppr_stage2_education_schemas.py` | contracts/RBAC/scope. |
-| `app/security/ppr_stage2_permissions.py`, `app/security/admin_permissions.py`, `app/main.py` | permission and router registration. |
+| `app/services/ppr_stage2_education_service.py` | Stage 2 state, locks, PMF и acceptance operations. |
+| `app/api/ppr_stage2_education_router.py`, `app/api/ppr_stage2_education_schemas.py` | contracts, RBAC и scope. |
+| `app/security/ppr_stage2_permissions.py`, `app/security/admin_permissions.py`, `app/main.py` | permission и router registration. |
 | `corpsite-ui/app/directory/personnel/ppr-migration/Stage2EducationPanel.tsx` | HR_HEAD UI/dialog. |
-| `tests/test_ppr_stage2_education_{unit,postgres,api}.py` and `Stage2EducationPanel.test.tsx` | test matrix. |
+| `tests/test_ppr_stage2_education_{unit,postgres,api}.py`, `Stage2EducationPanel.test.tsx` | test matrix. |
 | `scripts/dev/seed_stage2_education_visual_pilot.py` | synthetic test-only fixture. |
 
-Local readiness sequence: verify exactly `127.0.0.1:5432/corpsite_test`; upgrade test
-DB; run PG/unit/API/frontend tests; seed only synthetic pilot; start backend with test
-DSN and frontend API base `http://127.0.0.1:8011`; check `/health`, `/openapi.json`,
-HR_HEAD login and `/directory/personnel/ppr-migration`. Visual Review is ready only
-when the complete pilot is visible in correct org scope, drafts remain employee-hidden,
-acceptance is atomic/replay-safe and all reports mask full IIN.
+Local readiness: проверить только `127.0.0.1:5432/corpsite_test`; upgrade test DB;
+run PG/unit/API/frontend tests; seed only synthetic pilot; start backend с test DSN и
+frontend API base `http://127.0.0.1:8011`; проверить `/health`, `/openapi.json`,
+HR_HEAD login и `/directory/personnel/ppr-migration`. Visual Review готов лишь когда
+pilot виден в правильном org scope, drafts скрыты от employee, acceptance atomic/replay
+safe и все reports mask full IIN.
 
-Out of scope: implementation, migration/DML, production connection, Stage 3 or changes
-to approved Stage 0/1/2 documents.
+Out of scope: implementation, migration/DML, production connection, Stage 3 и изменения
+approved Stage 0/1/2 documents.
