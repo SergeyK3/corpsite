@@ -5,6 +5,17 @@
 | Основание | [WP-PPR-MIG-002](WP-PPR-MIG-002-stage-2-education.md), Stage 0 frozen cohort, ADR-PMF-001 и `EducationMigrationPlugin` |
 | Граница | Только Stage 2 «Образование»; не Stage 3 и не иной section. |
 
+## Approved Architecture Amendment — 2026-09-09
+
+`s2e1d2u3c4a5` remains the Stage 2 envelope migration. The separate,
+source-controlled `s2e2f3g4h5i6_enable_pmf_education_domain.py` activates the
+already registered `education` PMF domain only after fail-closed verification
+of its EducationMigrationPlugin configuration and `is_enabled=false`. It does
+not create PMF runs/items, canonical education, or envelope rows. Its downgrade
+refuses whenever Stage 2 envelope, PMF, item, or canonical provenance exists;
+otherwise it returns only that domain flag to false. The expected sole Alembic
+head is `s2e2f3g4h5i6`.
+
 ## Final Implementation Review
 
 | Дата | Решение | Основание |
