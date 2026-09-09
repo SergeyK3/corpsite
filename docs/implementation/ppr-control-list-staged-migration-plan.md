@@ -285,6 +285,8 @@ materialization включаются в preflight report, но не в migration
 
 Один Person может иметь несколько education records. Existing `EducationNormalizationService` и `EducationCandidate` дают source decomposition/provenance, а existing promotion/PMF and reconciliation education contours — техническую основу для последующего canonical apply. Approval education не является approval общих сведений: section имеет свой lifecycle и отчёт.
 
+> Примечание для будущего Stage 2: одна ячейка Excel контрольного списка об образовании может содержать несколько записей, разделённых мягкими переносами. Такие записи принадлежат одному Employee и одной исходной строке контрольного списка; их нельзя интерпретировать как новые строки списка или новых участников cohort.
+
 ### Этап 3. Обучение и повышение квалификации
 
 Один Person может иметь несколько records: courses, certificates, qualifications and other actually present training types. `TrainingNormalizationService` сохраняет fragment-level context; canonical target — `person_training`. Dedup key и граница между одинаковой повторной записью и разными курсами одного Person должны быть зафиксированы в stage WP до pilot.
