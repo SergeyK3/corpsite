@@ -1,6 +1,6 @@
 # WP-PPR-MIG-002A — Stage 2 Education: implementation plan
 
-| Статус | **Draft — Ready for Implementation Re-Review** |
+| Статус | **Draft — Ready for Final Implementation Review** |
 |---|---|
 | Основание | [WP-PPR-MIG-002](WP-PPR-MIG-002-stage-2-education.md), Stage 0 frozen cohort, ADR-PMF-001 и `EducationMigrationPlugin` |
 | Граница | Только Stage 2 «Образование»; не Stage 3 и не иной section. |
@@ -20,9 +20,13 @@ section snapshot поверх него.
 
 Плановая migration: `s2e1d2u3c4a5_ppr_stage2_education_envelope.py`,
 `down_revision = 's1g0e1n2r3a4'`. Это подтверждённый актуальный локальный Alembic
-head. Migration добавляет только перечисленные ниже envelope-таблицы, индексы и
-permission; она не меняет исторические migrations, Stage 0/1, PMF schema или
-canonical education.
+head. Она создаёт ровно две envelope-таблицы (`ppr_stage_runs`,
+`ppr_stage_run_participants`), permission с его HR_HEAD grant и два
+Stage-2-specific unique index на существующих PMF-таблицах. PMF columns и education
+payload schema она не меняет; исторические migrations, Stage 0/1 и canonical education
+также не меняются. Downgrade в безопасном порядке удаляет сначала оба новых PMF index,
+затем Stage 2 grant/permission, FK от envelope run к participant, participant table и
+run table; он не затрагивает PMF rows, columns или payload.
 
 ### 1.1 `ppr_stage_runs`
 
@@ -38,7 +42,7 @@ canonical education.
 | `safe_snapshot` | `JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(safe_snapshot) = 'object')`; только IDs, версии, hashes, counts и safe codes. |
 | actors | `created_by_user_id BIGINT NOT NULL`, nullable `approved_by_user_id`, `accepted_by_user_id`, `cancelled_by_user_id`; каждый `REFERENCES users(user_id) ON DELETE RESTRICT`. |
 | времена | `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, nullable `approved_at`, `accepted_at`, `paused_at`, `cancelled_at`. |
-| pause | nullable `stopped_participant_id BIGINT REFERENCES ppr_stage_run_participants(stage_run_participant_id) ON DELETE RESTRICT`, `last_error_code TEXT`, `last_error_reference TEXT`. FK добавляется после participant table. |
+| pause | nullable `paused_operation TEXT CHECK (paused_operation IN ('PARTICIPANT_EXECUTION','ACCEPTANCE'))`, `stopped_participant_id BIGINT REFERENCES ppr_stage_run_participants(stage_run_participant_id) ON DELETE RESTRICT`, `last_error_code TEXT`, `last_error_reference TEXT`. FK добавляется после participant table. |
 | cancel | nullable `cancel_reason TEXT`. |
 | acceptance replay | nullable `accepted_precondition_fingerprint CHAR(64) CHECK (... SHA-256 ...)`, `acceptance_outcome JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(acceptance_outcome)='object')`. |
 
@@ -58,13 +62,17 @@ fingerprint.
   `acceptance_outcome <> '{}'::jsonb` **iff** `status='ACCEPTED'`; иначе null/`{}`.
 - `cancelled_by_user_id`, `cancelled_at` и непустой `cancel_reason` **iff**
   `status='CANCELLED'`; иначе null.
-- `stopped_participant_id`, `paused_at`, непустые `last_error_code` и
-  `last_error_reference` **iff** `status='PAUSED_ON_ERROR'`. При resume envelope
-  поля очищаются; исторический error остаётся у participant.
+- В `PAUSED_ON_ERROR` обязательны `paused_at`, `paused_operation`, непустые
+  `last_error_code` и `last_error_reference`; вне него все пять pause-полей,
+  включая `stopped_participant_id`, null. При
+  `paused_operation='PARTICIPANT_EXECUTION'` `stopped_participant_id` обязателен;
+  при `paused_operation='ACCEPTANCE'` он обязательно null. Это выражается одним
+  status/operation/stopped-participant CHECK.
 
 `DRAFT` — только кратковременное внутреннее состояние transaction создания и не
-возвращается как сохранённый PREVIEW result. Единственный transition writer — service;
-trigger не нужен.
+возвращается как сохранённый PREVIEW result; следовательно, публичный cancel endpoint
+адресует только сохранённые состояния, начиная с `DRY_RUN_COMPLETED`. Единственный
+transition writer — service; trigger не нужен.
 
 Ограничения и индексы: `UNIQUE(stage_code, stage0_cohort_run_id,
 preview_fingerprint)`, `INDEX(stage0_cohort_run_id, stage_code, created_at DESC)`,
@@ -85,12 +93,16 @@ preview_fingerprint)`, `INDEX(stage0_cohort_run_id, stage_code, created_at DESC)
 | snapshot | `participant_snapshot_version INTEGER NOT NULL DEFAULT 1 CHECK (participant_snapshot_version >= 1)`, `safe_fingerprint CHAR(64) NOT NULL CHECK (... SHA-256 ...)`. |
 | `status` | `TEXT NOT NULL CHECK (status IN ('PENDING','COMPLETED','ERROR','SKIPPED_BY_DECISION'))`. `COMPLETED` означает drafts готовы либо exact already-applied подтверждён, а не canonical write. |
 | `pmf_run_id` | nullable unique `BIGINT REFERENCES personnel_migration_runs(run_id) ON DELETE RESTRICT`; null допустим для `PENDING`, exact ALREADY_APPLIED или skip; completed participant с хотя бы одним новым fragment обязан иметь PMF run. |
-| completion/error | nullable `completed_at`; nullable `error_code`, `error_reference`, `errored_at`. Error триада вся non-null при `ERROR`, иначе вся null. |
+| completion/error | nullable `completed_at`; nullable `error_code`, `error_reference`, `errored_at`. Error триада вся non-null **iff** `ERROR`; иначе вся null. |
 | skip audit | nullable `skipped_by_user_id BIGINT REFERENCES users(user_id) ON DELETE RESTRICT`, `skipped_at TIMESTAMPTZ`, `skip_reason TEXT`; триада с непустой причиной **iff** `SKIPPED_BY_DECISION`. |
 
 `completed_at IS NOT NULL` iff `status='COMPLETED'`; для иных статусов он null.
-`ERROR` не имеет `completed_at`; `SKIPPED_BY_DECISION` не может иметь PMF committed
-item. Service additionally проверяет точное соответствие Employee/Person Stage 0
+`ERROR` не имеет `completed_at`; успешный participant resume переводит строку в
+`COMPLETED` и очищает всю error-триаду. `SKIPPED_BY_DECISION` не может иметь PMF
+committed item. Подходящего неизменяемого participant-error audit/event контракта в
+имеющейся PMF/PPR схеме для этого envelope не найден: история очищенной error-триады
+остаётся только safe operational log history, а не заявляется сохранённой в participant
+row. Service additionally проверяет точное соответствие Employee/Person Stage 0
 participant.
 
 Ограничения: `UNIQUE(stage_run_id, position)`,
@@ -206,9 +218,10 @@ Protected HR detail может показывать ФИО и Excel row для �
 |---|---|---|---|
 | `approve` | `DRY_RUN_COMPLETED` | → `APPROVED`; replay в `APPROVED` возвращает run без нового audit row. | blockers `409 STAGE2_APPROVAL_BLOCKED`; stale `409 STAGE2_APPROVAL_STALE`; terminal/cancelled `409 STAGE2_INVALID_STATE`. |
 | `execute-next` | `APPROVED`, `RUNNING` | один cursor participant; → `RUNNING` или `COMPLETED_PENDING_REVIEW`. Retry возвращает stored participant result и не создаёт второй PMF key/item. | paused `409 STAGE2_RUN_PAUSED`; completed `409 STAGE2_EXECUTION_COMPLETE`; terminal `409 STAGE2_INVALID_STATE`. |
-| `resume` | `PAUSED_ON_ERROR` | retry только stopped `ERROR` participant; после успеха продолжает с этой позиции. | non-paused `409 STAGE2_RUN_NOT_PAUSED`; stale `409 STAGE2_RESUME_STALE`; terminal `409 STAGE2_INVALID_STATE`. |
-| `skip` | `DRY_RUN_COMPLETED`: `PENDING` blocking participant; `PAUSED_ON_ERROR`: только stopped `ERROR` participant | audited → `SKIPPED_BY_DECISION`; pre-approval skip позволяет approval без blockers; paused skip advances cursor и возвращает `APPROVED` для explicit next execution. | `409 STAGE2_SKIP_NOT_ALLOWED` для `RUNNING`, completed, accepted, cancelled, уже `COMPLETED`/skipped participant или любого PMF-committed item. |
-| `cancel` | `DRAFT`, `DRY_RUN_COMPLETED`, `APPROVED`, `RUNNING`, `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW` | → `CANCELLED` с actor/time/reason; тот же cancel replay возвращает saved state. PMF drafts не меняются. | accepted `409 STAGE2_RUN_ALREADY_ACCEPTED`; иной cancel reason `409 STAGE2_CANCEL_REPLAY_MISMATCH`. |
+| `resume` | только `PAUSED_ON_ERROR` с `paused_operation='PARTICIPANT_EXECUTION'` | locks stopped `ERROR` participant, очищает pause fields, переводит run в `RUNNING` и retry только этой позиции; после успеха продолжает с неё. | иной pause/не-paused `409 STAGE2_RUN_NOT_RESUMABLE`; stale `409 STAGE2_RESUME_STALE`; terminal `409 STAGE2_INVALID_STATE`. |
+| `retry-accept` | только `PAUSED_ON_ERROR` с `paused_operation='ACCEPTANCE'` | повторяет всю atomic acceptance непосредственно из paused state; при успехе → `ACCEPTED`, без participant retry. | stale/conflict `409 STAGE2_ACCEPTANCE_STALE` и требуется новый PREVIEW; иной pause/не-paused `409 STAGE2_ACCEPTANCE_NOT_RETRYABLE`. |
+| `skip` | `DRY_RUN_COMPLETED`: `PENDING` blocking participant; `PAUSED_ON_ERROR/PARTICIPANT_EXECUTION`: только stopped `ERROR` participant | audited → `SKIPPED_BY_DECISION`; pre-approval skip позволяет approval без blockers; paused execution skip advances cursor и возвращает `APPROVED` для explicit next execution. | `409 STAGE2_SKIP_NOT_ALLOWED` для acceptance-pause, `RUNNING`, completed, accepted, cancelled, уже `COMPLETED`/skipped participant или любого PMF-committed item. |
+| `cancel` | сохранённые `DRY_RUN_COMPLETED`, `APPROVED`, `RUNNING`, `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW` | → `CANCELLED` с actor/time/reason; тот же cancel replay возвращает saved state. PMF drafts не меняются. | accepted `409 STAGE2_RUN_ALREADY_ACCEPTED`; иной cancel reason `409 STAGE2_CANCEL_REPLAY_MISMATCH`. |
 | `accept` | `COMPLETED_PENDING_REVIEW` | atomically → `ACCEPTED`; later replay возвращает stored `acceptance_outcome`. | pending/error/conflict `409 STAGE2_ACCEPTANCE_NOT_READY`; stale `409 STAGE2_ACCEPTANCE_STALE`; cancelled `409 STAGE2_INVALID_STATE`. |
 
 Все operations дополнительно возвращают
@@ -218,9 +231,11 @@ authorization решение.
 
 Approval locks envelope/participants и rechecks fingerprint/policy. Cohort, порядок,
 mapping, policy или field set меняются только через новый PREVIEW/APPROVED. Для
-recoverable source/canonical stale error resume заново строит snapshot stopped
+recoverable participant-execution error resume заново строит snapshot stopped
 participant и требует его точного равенства frozen fingerprint; иначе
-`STAGE2_RESUME_STALE` и нужен новый PREVIEW.
+`STAGE2_RESUME_STALE` и нужен новый PREVIEW. Acceptance stale/conflict не образует
+resumable pause: run остаётся `COMPLETED_PENDING_REVIEW`, response требует нового
+PREVIEW, а не `retry-accept`.
 
 ### 3.3 Sequential draft execution, rollback и acceptance
 
@@ -229,22 +244,31 @@ PMF drafts только для новых education records, потом отме
 `COMPLETED`. Canonical education не меняется. У каждого participant своя transaction;
 ранние drafts сохраняются.
 
-Если worker/resume/acceptance canonical work терпит ошибку, исходная transaction
-откатывается. Затем отдельная service transaction locks envelope, потом relevant
-participant, и conditionally меняет run на `PAUSED_ON_ERROR` только если он всё ещё
-captured expected non-terminal state (`APPROVED`, `RUNNING` или
-`COMPLETED_PENDING_REVIEW`). Она записывает `ERROR` и safe details только этому
-participant. Она не перезаписывает `CANCELLED`/ `ACCEPTED`: concurrent
-retry/cancel/accept, изменивший expected state, выигрывает и перечитывается. Если сама
-service transaction не удалась, service делает safe structured operational log и
-возвращает `500 STAGE2_PAUSE_RECORDING_FAILED`; он не утверждает, что pause сохранён.
+Worker/resume error откатывает исходную participant transaction. Затем отдельная
+service transaction locks envelope, потом stopped participant, и conditionally меняет
+run на `PAUSED_ON_ERROR/PARTICIPANT_EXECUTION` только если он всё ещё captured expected
+`APPROVED` или `RUNNING`. Она ставит participant в `ERROR` и записывает safe details.
 
-`accept` выполняется одной `SERIALIZABLE` transaction: locks full cohort, повторно
-вычисляет server-derived counts и acceptance fingerprint, сравнивает UI-provided
-fingerprint, rechecks source/canonical snapshots и PMF drafts, затем вызывает existing
-education plugin/PPR gateway. Canonical records, PMF item/run statuses и PPR events
-commit together. Conflict/stale/PPR error откатывает всё, оставляя items `draft`.
-Double submit и ACCEPTED HTTP replay возвращают stored outcome, не создавая record/event.
+Transient acceptance failure откатывает исходную atomic acceptance transaction. Отдельная
+service transaction locks только envelope и conditionally меняет
+`COMPLETED_PENDING_REVIEW` на `PAUSED_ON_ERROR/ACCEPTANCE`; конкретный participant не
+назначается. Stale/conflict acceptance не является resumable: после rollback run
+остаётся `COMPLETED_PENDING_REVIEW`, а caller получает `409 STAGE2_ACCEPTANCE_STALE` и
+должен создать новый PREVIEW. Обе служебные transactions не перезаписывают
+`CANCELLED`/`ACCEPTED`: concurrent retry/cancel/accept, изменивший expected state,
+выигрывает и перечитывается. Если сама служебная transaction не удалась, service делает
+safe structured operational log и возвращает `500 STAGE2_PAUSE_RECORDING_FAILED`; он не
+утверждает, что pause сохранён.
+
+`accept` сначала locks envelope и проверяет `status='ACCEPTED'` **до** проверки нового
+short-lived acceptance fingerprint. Для ACCEPTED replay он немедленно возвращает
+сохранённый `acceptance_outcome`, даже после истечения исходного fingerprint, и не
+запускает PMF/PPR command либо event. Для неповторного accept это одна `SERIALIZABLE`
+transaction: locks full cohort, повторно вычисляет server-derived counts и acceptance
+fingerprint, сравнивает UI-provided fingerprint, rechecks source/canonical snapshots и
+PMF drafts, затем вызывает existing education plugin/PPR gateway. Canonical records,
+PMF item/run statuses и PPR events commit together. Conflict/stale/PPR error откатывает
+всё, оставляя items `draft`. Double submit cannot create a second record/event.
 
 ## 4. Locks и stale protection
 
@@ -263,11 +287,13 @@ Collections сортируются по technical ID (participants — по posi
 | compute PREVIEW | нет; `REPEATABLE READ READ ONLY`. |
 | persist PREVIEW | advisory cohort key, затем Stage 0 selected rows/source rows → Employee → Person; pre-existing envelope/participant нет. |
 | approve | envelope → all participants → source/normalized rows → Employee → Person → canonical education. |
-| execute-next/resume | envelope → cursor participant → source/normalized rows → Employee → Person → canonical education → PMF run/items → PPR locks. |
+| execute-next/resume | envelope → cursor/stopped participant → source/normalized rows → Employee → Person → canonical education → PMF run/items → PPR locks. |
 | skip | envelope → selected participant. |
 | cancel | envelope. |
 | accept | envelope → all participants → source/normalized rows → Employee → Person → canonical education → PMF runs/items → PPR locks. |
-| post-rollback pause | envelope → stopped participant. |
+| retry-accept | envelope → all participants → source/normalized rows → Employee → Person → canonical education → PMF runs/items → PPR locks. |
+| post-rollback pause: participant execution | envelope → stopped participant. |
+| post-rollback pause: acceptance | envelope only. |
 
 Fingerprint canonical JSON не содержит raw source/name/full IIN: Stage 0/source
 fingerprints; Employee/Person/PPR versions; batch/row/normalized IDs/status/update
@@ -289,7 +315,8 @@ scope каждого Employee. Scope failure показывается как «�
 | `GET .../runs/{run_id}` | envelope, progress, participants, PMF fragment comparisons, safe errors и stored acceptance outcome. |
 | `POST .../runs/{run_id}/approve` | `{}` → transition/replay из table. |
 | `POST .../runs/{run_id}/execute-next` | `{}` → ровно один stored/replayed cursor result. |
-| `POST .../runs/{run_id}/resume` | `{}` → retry stopped position. |
+| `POST .../runs/{run_id}/resume` | `{}` → «Продолжить обработку»: retry только stopped participant-execution position. |
+| `POST .../runs/{run_id}/retry-accept` | `{}` → «Повторить принятие»: повторить всю atomic acceptance только после transient acceptance pause. |
 | `POST .../runs/{run_id}/participants/{participant_id}/skip` | `{reason}` → только допустимый audited skip. |
 | `POST .../runs/{run_id}/cancel` | `{reason}` → audited cancellation/replay. |
 | `GET .../runs/{run_id}/acceptance-summary` | server-recomputed employee/record/kind counts, skipped/conflict counts и short-lived `acceptance_fingerprint`; без write. |
@@ -313,7 +340,11 @@ outcome/reason и раскрываемые safe technical details. Soft line bre
 
 До `ACCEPTED` employee paths читают только active canonical `person_education`;
 HR_HEAD видит PMF drafts только при permission/scope. После acceptance normal employee
-card rules показывают canonical records. Accessible custom confirmation dialog загружает
+card rules показывают canonical records. При participant-execution pause UI показывает
+текстовую кнопку «Продолжить обработку» и position; при acceptance pause — отдельную
+кнопку «Повторить принятие», без ложного указания employee. Stale/conflict acceptance
+показывает «Требуется новая проверка» и не показывает ни одну из этих кнопок. Accessible
+custom confirmation dialog загружает
 только server-derived acceptance summary и явно называет stage, employee count, records
 by kind, skipped/conflict counts, отсутствие перезаписи непустых canonical values,
 atomicity и отсутствие full IIN. Кнопки «Отмена»/«Принять этап»; in-flight guard
@@ -324,10 +355,10 @@ atomicity и отсутствие full IIN. Кнопки «Отмена»/«Пр
 | Level | Required coverage |
 |---|---|
 | Unit | every allowlist branch, priority/conflict, no `other`, split/fingerprint/dedup и exact provenance match. |
-| Service | two-phase read/write PREVIEW, no PMF/canonical write in PREVIEW, approval blockers, keys/replays, cursor rules, skip/cancel guards, rollback then conditional pause. |
-| PostgreSQL | all FKs/checks/unique/indexes, PMF JSON paths/keys, Stage0 links, SERIALIZABLE stale/concurrency, lock-order characterization и acceptance rollback/replay; only `corpsite_test`. |
-| API/RBAC | permission/primary role/org scope, protected/safe redaction, Russian errors, every transition и listed 403/409 code. |
-| Frontend | Russian states/reasons, grouped fragments, no IIN, progress/pause/resume, accept dialog/counts и accepted screen. |
+| Service | two-phase read/write PREVIEW, no PMF/canonical write in PREVIEW, approval blockers, keys/replays, cursor rules, skip/cancel guards, participant-vs-acceptance pause и conditional post-rollback recording. |
+| PostgreSQL | all FKs/checks/unique/indexes including pause discriminator/error clearing, PMF JSON paths/keys, Stage0 links, SERIALIZABLE stale/concurrency, lock-order characterization и acceptance rollback/replay; only `corpsite_test`. |
+| API/RBAC | permission/primary role/org scope, protected/safe redaction, Russian errors, every transition/listed 403/409 code, ACCEPTED replay after fingerprint expiry. |
+| Frontend | Russian states/reasons, grouped fragments, no IIN, progress, «Продолжить обработку» versus «Повторить принятие», accept dialog/counts и accepted screen. |
 | Security | no raw payload/full IIN в reports/logs; employee cannot read drafts. |
 
 Synthetic visual pilot в одном permitted org scope включает: (1) одного employee с двумя
@@ -335,9 +366,12 @@ fragments в одной soft-line-break cell, разными indices и одно
 already-applied canonical/provenance match; (3) visible canonical conflict; (4)
 ambiguous marker, уже `REVIEW_REQUIRED` в PREVIEW и блокирующий approval до
 authoritative-source correction либо explicit skip; (5) **отдельного** approved clean
-participant, получающего controlled post-approval stale/worker error, pause и resume
-только после восстановления исходного frozen participant fingerprint; (6) atomic
-acceptance/replay. Conflict также исправляется или skipped до acceptance. Любое изменение
+participant, получающего controlled post-approval worker error,
+`PAUSED_ON_ERROR/PARTICIPANT_EXECUTION` и resume только после восстановления исходного
+frozen participant fingerprint; (6) отдельную transient acceptance failure с
+`PAUSED_ON_ERROR/ACCEPTANCE` и полной atomic retry; (7) acceptance stale/conflict,
+требующий нового PREVIEW, а не retry. Conflict также исправляется или skipped до
+acceptance. Любое изменение
 cohort/order/mapping/policy использует новый PREVIEW/approval, не простой resume. Только
 synthetic `corpsite_test` data.
 
