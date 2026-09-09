@@ -38,6 +38,9 @@ def test_stage1_drafts_pause_resume_and_accept_atomically_on_corpsite_test():
             # Drift only the second employee after approval: it stops at that same position.
             conn.execute(text("UPDATE public.persons SET last_name='Conflicting' WHERE person_id=:p"),{'p':employees[1][1]})
             run=execute_next_stage1(conn,run_id=run['run']['stage1_run_id']); assert run['run']['status']=='PAUSED_ON_ERROR'; assert run['participants'][1]['status']=='ERROR'
+            conflict=run['participants'][1]
+            assert conflict['conflicts']==[{'field':'last_name','code':'STAGE1_CANONICAL_VALUE_CONFLICT'}]
+            assert conflict['source']['last_name']=='Stage' and conflict['current']['last_name']=='Conflicting'
             conn.execute(text('UPDATE public.persons SET last_name=NULL WHERE person_id=:p'),{'p':employees[1][1]})
             run=execute_next_stage1(conn,run_id=run['run']['stage1_run_id']); assert run['participants'][1]['status']=='COMPLETED'
             run=execute_next_stage1(conn,run_id=run['run']['stage1_run_id']); assert run['run']['status']=='COMPLETED_PENDING_REVIEW'

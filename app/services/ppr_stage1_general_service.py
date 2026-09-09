@@ -78,13 +78,17 @@ def execute_next_stage1(conn:Connection,*,run_id:int)->dict[str,Any]:
     if run['status'] not in {'APPROVED','RUNNING','PAUSED_ON_ERROR'}: raise Stage1ConflictError('STAGE1_RUN_NOT_EXECUTABLE')
     p=conn.execute(text("SELECT stage1_participant_id,position,employee_id,person_id,source_row_id FROM public.ppr_stage1_general_participants WHERE stage1_run_id=:id AND position>=:pos AND status IN ('PENDING','ERROR') ORDER BY position LIMIT 1 FOR UPDATE"),{'id':run_id,'pos':run['current_position']}).mappings().one_or_none()
     if p is None: conn.execute(text("UPDATE public.ppr_stage1_general_runs SET status='COMPLETED_PENDING_REVIEW' WHERE stage1_run_id=:id"),{'id':run_id}); return get_stage1_run(conn,run_id=run_id)
+    derived=None
     try:
-        d=_derive(conn,{**dict(p),'stage0_cohort_run_id':run['stage0_cohort_run_id']},lock=True)
-        if d['conflicts']: raise Stage1ConflictError('STAGE1_CANONICAL_VALUE_CONFLICT')
-        conn.execute(text("UPDATE public.ppr_stage1_general_participants SET source_fingerprint=:f,person_updated_at=:u,proposed_values=CAST(:v AS jsonb),conflicts='[]'::jsonb,status='COMPLETED',error_code=NULL,error_detail=NULL,completed_at=now() WHERE stage1_participant_id=:id"),{'id':p['stage1_participant_id'],'f':d['fingerprint'],'u':d['person_updated_at'],'v':json.dumps({'source':d['source'],'current':d['current'],'proposal':d['proposal']},ensure_ascii=False)})
+        derived=_derive(conn,{**dict(p),'stage0_cohort_run_id':run['stage0_cohort_run_id']},lock=True)
+        if derived['conflicts']: raise Stage1ConflictError('STAGE1_CANONICAL_VALUE_CONFLICT')
+        conn.execute(text("UPDATE public.ppr_stage1_general_participants SET source_fingerprint=:f,person_updated_at=:u,proposed_values=CAST(:v AS jsonb),conflicts='[]'::jsonb,status='COMPLETED',error_code=NULL,error_detail=NULL,completed_at=now() WHERE stage1_participant_id=:id"),{'id':p['stage1_participant_id'],'f':derived['fingerprint'],'u':derived['person_updated_at'],'v':json.dumps({'source':derived['source'],'current':derived['current'],'proposal':derived['proposal']},ensure_ascii=False)})
         conn.execute(text("UPDATE public.ppr_stage1_general_runs SET status='RUNNING',current_position=:pos WHERE stage1_run_id=:id"),{'id':run_id,'pos':int(p['position'])+1})
     except Stage1Error as e:
-        conn.execute(text("UPDATE public.ppr_stage1_general_participants SET status='ERROR',error_code=:code,error_detail=:detail WHERE stage1_participant_id=:id"),{'id':p['stage1_participant_id'],'code':e.code,'detail':str(e)})
+        if derived is None:
+            conn.execute(text("UPDATE public.ppr_stage1_general_participants SET status='ERROR',error_code=:code,error_detail=:detail WHERE stage1_participant_id=:id"),{'id':p['stage1_participant_id'],'code':e.code,'detail':str(e)})
+        else:
+            conn.execute(text("UPDATE public.ppr_stage1_general_participants SET source_fingerprint=:f,person_updated_at=:u,proposed_values=CAST(:v AS jsonb),conflicts=CAST(:conflicts AS jsonb),status='ERROR',error_code=:code,error_detail=:detail WHERE stage1_participant_id=:id"),{'id':p['stage1_participant_id'],'f':derived['fingerprint'],'u':derived['person_updated_at'],'v':json.dumps({'source':derived['source'],'current':derived['current'],'proposal':derived['proposal']},ensure_ascii=False),'conflicts':json.dumps(derived['conflicts']),'code':e.code,'detail':str(e)})
         conn.execute(text("UPDATE public.ppr_stage1_general_runs SET status='PAUSED_ON_ERROR',current_position=:pos WHERE stage1_run_id=:id"),{'id':run_id,'pos':p['position']})
     return get_stage1_run(conn,run_id=run_id)
 
