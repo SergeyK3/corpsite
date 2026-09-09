@@ -1,16 +1,23 @@
 # WP-PPR-MIG-000 — Stage 0: cohort preflight
 
-**Статус:** Draft — Ready for Architecture Review
+**Статус:** Draft — Ready for Architecture Re-Review
 
 **Связанная программа:** [поэтапная миграция личных карточек из контрольного списка](ppr-control-list-staged-migration-plan.md).
 
 ## 1. Цель и границы
 
-Stage 0 формирует точный frozen cohort сотрудников, допускаемых к последующей
-поэтапной миграции PPR. Это read-only preflight: он классифицирует состояние,
-фиксирует безопасный snapshot и возвращает технический отчёт. Он не переносит
-никакие section data, не изменяет общие сведения, образование или послужной список,
-не создаёт собственный путь materialization PPR и не заменяет ADR-065.
+Stage 0 формирует базовый program cohort сотрудников, допускаемых к последующей
+поэтапной миграции PPR. Он состоит из двух явно разделённых операций.
+
+| Операция | Граница |
+|---|---|
+| `PREVIEW` | Полностью read-only: сканирует и классифицирует кандидатов, возвращает технический отчёт и ничего не сохраняет в БД. |
+| `FREEZE` | Явное действие только после проверки preview. В короткой транзакции сохраняет только metadata будущего program cohort, participant snapshots, порядок, fingerprints и blockers. |
+
+`FREEZE` не изменяет `Employee`, `Person`, import source или PPR; не выполняет
+materialization либо repair. Обе операции не переносят section data и не изменяют
+общие сведения, образование или послужной список; Stage 0 не создаёт собственный
+путь materialization PPR и не заменяет ADR-065.
 
 Если связь `Employee → Person` отсутствует или требует исправления, допустимый путь
 только один: существующий ADR-065 existing-card repair contour. Stage 0 не вызывает
@@ -46,15 +53,14 @@ source provenance set. Пара получает `ELIGIBLE` только есл�
    `is_active = true` и дата действия не исключает сотрудника).
 2. Существует ровно одна текущая связь `employees.person_id` с одним `Person`.
 3. `Person` имеет `person_status = 'active'` и `merged_into_person_id IS NULL`.
-4. Выбран ровно один допустимый `HR_CONTROL_LIST` provenance set: один `batch_id`,
-   один `row_id` и полный набор его выбранных `normalized_record_id`; row и каждый
-   normalized record принадлежат тому же `employee_id`.
-5. Все выбранные normalized records имеют `review_status = 'approved'`.
-6. Нет unresolved source deletion/removal или rebinding/ownership marker, относящегося
-   к выбранному source scope: нет `superseded` record в выбранном наборе, нет
-   ownership conflict, binding `unbound`/`conflict`, и нет применимого pending
-   `hr_import_diff_removals` без decision.
-7. Для Person существует разрешённый existing PPR path: envelope уже materialized
+4. Подтверждён ровно один source anchor типа `HR_CONTROL_LIST`: `batch_id`, `row_id`,
+   source-row Employee ownership и минимальная identity/link provenance, достаточная
+   для однозначного сопоставления anchor с этой Employee/Person pair. Это не выбор
+   полного набора normalized records будущих sections.
+5. Нет unresolved source deletion/removal или rebinding/ownership marker, относящегося
+   к anchor: нет ownership conflict, binding `unbound`/`conflict`, и нет применимого
+   pending `hr_import_diff_removals` без decision.
+6. Для Person существует разрешённый existing PPR path: envelope уже materialized
    либо Stage-specific authorization может применить существующий
    `PprLifecycleApplicationService.materialize_ppr`/`start_collection`. Stage 0 не
    materializes PPR и не делает это предположение молча.
@@ -62,28 +68,37 @@ source provenance set. Пара получает `ELIGIBLE` только есл�
 Любая неоднозначность, отсутствующий evidence или нераспознанный status — fail-closed:
 участник не входит в frozen cohort.
 
-### Source-status boundary
+### Граница source eligibility и section status
 
-Подтверждённая per-record норма существующего ADR-065 preflight — только
-`hr_import_normalized_records.review_status = 'approved'`. В коде существуют также
-`pending`, `rejected`, `promoted`, `superseded`; они не допустимы для новой source
-selection Stage 0 без отдельного policy decision. `hr_import_batches` имеет статусы
-`UPLOADED`, `PARSED`, `IN_REVIEW`, `APPLY_PENDING`, `APPLIED`, `PARTIALLY_APPLIED`,
-`FAILED`, `CANCELLED`, но текущий per-IIN preflight не задаёт cohort-wide allowable
-batch status. Выбор допустимого batch-status — открытое архитектурное решение ниже.
+Stage 0 подтверждает только устойчивость source anchor и минимальной identity/link
+provenance. Он не требует, чтобы normalized records образования, обучения, биографии
+или иных будущих разделов уже были `approved`. Каждый section run выполняет свежую
+eligibility-проверку только относящихся к нему record kinds. Поэтому неподготовленная
+training record не исключает участника из program cohort или из будущего Stage 1
+общих сведений.
+
+В существующем per-IIN ADR-065 preflight все специально выбранные normalized records
+должны иметь `review_status = 'approved'`; это правило repair selection, а не
+универсальный фильтр Stage 0. В normalized record service существуют `pending`,
+`approved`, `rejected`, `promoted`, `superseded`. `promoted` не является общей
+ошибкой: promotion service выставляет его одновременно с `promoted_document_id` и
+классифицирует повторную promotion как skip/already-promoted. Соответствующий section
+run должен решать `approved`/`promoted`/other status по своему record kind: уже
+перенесённая подтверждённая запись — `already applied` или replay, если это
+подтверждает его existing contract.
 
 ## 4. Матрица результатов
 
 | Категория | Fail-closed условие | Подтверждённые technical reason codes / evidence |
 |---|---|---|
-| `ELIGIBLE` | Выполнены все правила §3. | Exact Employee/Person/source IDs и approved complete provenance set. |
+| `ELIGIBLE` | Выполнены все правила §3. | Exact Employee/Person/source anchor IDs и minimal identity/link provenance. |
 | `BLOCKED_NO_PERSON` | `employees.person_id` отсутствует либо Person по ссылке не найден. | `EMPLOYEE_NOT_FOUND`, `S_LINK_MISSING_PERSON`, `S_LINK_MISSING_PERSON_ABSENT` — только как repair diagnostics, не eligibility. |
 | `BLOCKED_AMBIGUOUS_PERSON` | Exact identity resolution возвращает больше одного candidate Person. | `AMBIGUOUS_PERSON`, `PERSON_IIN_AMBIGUOUS`. |
 | `BLOCKED_PERSON_MERGED_OR_DELETED` | Person не active или имеет `merged_into_person_id`. | `INCOMPATIBLE_PERSON`, `PERSON_INCOMPATIBLE`; merged marker подтверждён. |
-| `BLOCKED_SOURCE_MISSING` | Нет HR control-list row/selected normalized record. | `CONTROL_LIST_RECORD_NOT_FOUND`, `IMPORT_ROW_NOT_FOUND`, `IMPORT_NORMALIZED_RECORD_NOT_FOUND`. |
-| `BLOCKED_SOURCE_AMBIGUOUS` | Нельзя выбрать ровно один provenance set или полный набор records. | `IMPORT_SELECTION_REQUIRED`, `IMPORT_SELECTION_INCOMPLETE`. |
-| `BLOCKED_SOURCE_STATUS` | Record не approved либо selected batch/source type не допустимы. | `IMPORT_RECORD_NOT_APPROVED`, `IMPORT_BATCH_SOURCE_MISMATCH`; statuses перечислены в §3. |
-| `BLOCKED_SOURCE_DELETION_OR_REBINDING` | Superseded/removal/binding/ownership evidence не позволяет подтвердить stable source ownership. | `IMPORT_ROW_OWNERSHIP_CONFLICT`, `IMPORT_NORMALIZED_RECORD_OWNERSHIP_CONFLICT`, `IMPORT_NORMALIZED_RECORD_SCOPE_MISMATCH`, `IMPORT_NORMALIZED_RECORD_BATCH_MISMATCH`; binding states `unbound`/`conflict`; pending diff removal. |
+| `BLOCKED_SOURCE_MISSING` | Нет HR control-list source anchor или его минимальной identity/link provenance. | `CONTROL_LIST_RECORD_NOT_FOUND`, `IMPORT_ROW_NOT_FOUND`, `IMPORT_NORMALIZED_RECORD_NOT_FOUND`. |
+| `BLOCKED_SOURCE_AMBIGUOUS` | Нельзя выбрать ровно один source anchor или identity/link provenance. | `IMPORT_SELECTION_REQUIRED`, `IMPORT_SELECTION_INCOMPLETE`. |
+| `BLOCKED_SOURCE_STATUS` | Batch/source-anchor status не отвечает принятой policy; section-record statuses сюда не входят. | `IMPORT_BATCH_SOURCE_MISMATCH`; допустимая batch policy — §9. |
+| `BLOCKED_SOURCE_DELETION_OR_REBINDING` | Removal/binding/ownership evidence не позволяет подтвердить stable anchor ownership. | `IMPORT_ROW_OWNERSHIP_CONFLICT`, `IMPORT_NORMALIZED_RECORD_OWNERSHIP_CONFLICT`, `IMPORT_NORMALIZED_RECORD_SCOPE_MISMATCH`, `IMPORT_NORMALIZED_RECORD_BATCH_MISMATCH`; binding states `unbound`/`conflict`; pending diff removal. |
 | `BLOCKED_MATERIALIZATION_PATH` | Нет envelope и Stage-specific policy не подтверждает existing lifecycle path. | Новая safe code family требуется; готового batch-preflight code в коде нет. |
 | `BLOCKED_PERSON_EMPLOYEE_CONFLICT` | Один Person уже связан с другим operational Employee в conflict scope. | `PERSON_EMPLOYEE_CONFLICT`, `PERSON_ALREADY_LINKED`. |
 | `BLOCKED_EMPLOYEE_NOT_ACTIVE` | Employee не `active` или IIN state конфликтен. | `EMPLOYEE_STATE_NOT_ELIGIBLE`, `EMPLOYEE_IIN_CONFLICT`. |
@@ -108,15 +123,18 @@ Employee → Person. Поэтому Stage 0 не выбирает «основн
 - стабильный порядок должен быть задан явно и детерминированно: сначала
   `employee_id ASC`, затем `person_id ASC`, затем `batch_id ASC`, `row_id ASC`.
 
-## 6. Frozen cohort contract
+## 6. PREVIEW, FREEZE и frozen cohort contract
 
-После полного read-only preflight создаётся snapshot будущего `stage_run_id`. Для
-каждого `ELIGIBLE` participant сохраняются только технические данные:
+`PREVIEW` вычисляет следующий contract полностью read-only и может быть повторён без
+сохранения результатов. Только после review оператор запускает `FREEZE`: короткая
+транзакция сохраняет результат уже проверенного preview. Она не пересчитывает и не
+меняет business data; при stale input должна fail-closed завершиться без frozen cohort.
+Для каждого `ELIGIBLE` participant `FREEZE` сохраняет только технические данные:
 
 | Поле | Контракт |
 |---|---|
-| `stage_run_id` | Идентификатор будущего section run; Stage 0 не выполняет section apply. |
-| IDs | `employee_id`, `person_id`, `batch_id`, `row_id`, полный selected set `normalized_record_id`. |
+| `stage_run_id` | Идентификатор базового program-cohort run; Stage 0 не выполняет section apply. |
+| IDs | `employee_id`, `person_id`, `batch_id`, `row_id` и только IDs minimal identity/link provenance anchor; не полный набор normalized records будущих sections. |
 | `position` | Непрерывная позиция согласно детерминированному порядку. |
 | `participant_snapshot_version` | Начальная версия `1`; последующие изменения участника создают новую версию, не меняя cohort/order. |
 | `safe_fingerprint` | SHA-256 canonical JSON из technical IDs, record review status, source-record keys, relevant Person/Employee/PPR versions and policy/version identifiers; без полного ИИН, ФИО и raw payload. |
@@ -126,6 +144,14 @@ Employee → Person. Поэтому Stage 0 не выбирает «основн
 `stage_run_id`, persistency snapshot и batch execution не существуют как готовый
 Stage 0 implementation в текущем коде. Этот раздел — обязательный contract для
 следующего implementation WP, а не утверждение о существующей таблице.
+
+Перед каждым subsequent section run выполняется новая stage-specific eligibility
+проверка и формируется отдельный frozen cohort этого section run на основе базового
+Stage 0 cohort. Изменение Employee, Person, source ownership, removal/rebinding или
+lifecycle между этапами блокирует участника только текущего section run; оно не
+отменяет ранее `ACCEPTED` этапы и не меняет задним числом исходный Stage 0 snapshot.
+Новые сотрудники добавляются только отдельным supplemental Stage 0 run, не в
+существующий frozen program cohort.
 
 ## 7. Preflight result
 
@@ -141,7 +167,10 @@ Stage 0 implementation в текущем коде. Этот раздел — о�
 
 Существующий per-IIN API уже redacts input IIN to presence/last four in its response и
 исполняется в `REPEATABLE READ READ ONLY`; batch API/report с этим exact output пока
-не реализован.
+не реализован. Технический отчёт не содержит полного ИИН или лишних ПДн. В защищённом
+HR_HEAD interface разрешены ФИО и минимально необходимые сведения для фактического
+исправления участника — только по existing RBAC и organisation scope; это не означает
+их включение в технический report/export.
 
 ## 8. Acceptance criteria
 
@@ -151,8 +180,9 @@ Stage 0 готов к использованию только когда impleme
    classification всех candidate Employees;
 2. fail-closed применение всех строк §4;
 3. неизменяемый frozen cohort snapshot с contract §6 и stable ordering;
-4. отсутствие PPR section writes, materialization, Person/Employee repair и DML во
-   время preflight;
+4. `PREVIEW` не выполняет DML, а `FREEZE` записывает только contract metadata §6;
+   ни одна операция не выполняет PPR section writes, materialization или
+   Person/Employee repair;
 5. отдельный safe report и accurate counts без полного ИИН/лишних PII;
 6. повторяемый результат на неизменном source snapshot;
 7. направляемые repair cases используют ADR-065, а не альтернативный mechanism.
@@ -161,8 +191,14 @@ Stage 0 готов к использованию только когда impleme
 
 1. Не существует готового batch cohort preflight service/API/CLI, `stage_run_id` store
    или participant snapshot store. Нужен отдельный implementation WP.
-2. Нужно утвердить допустимые `hr_import_batches.status` для Stage 0. Существующий
-   код подтверждает per-record `approved`, но не cohort-wide batch-status rule.
+2. **Decision point — batch policy для source anchor.** Код не содержит Stage 0
+   predicate. Рекомендуемый точный вариант: принимать только `APPLY_PENDING`,
+   `APPLIED` или `PARTIALLY_APPLIED`, при `source_type='HR_CONTROL_LIST'` и при
+   отсутствии текущих unresolved diff removals; отклонять `UPLOADED`, `PARSED`,
+   `IN_REVIEW`, `FAILED`, `CANCELLED`. Обоснование: complete-review service считает
+   первые три statuses review-completed, а переход `IN_REVIEW → APPLY_PENDING`
+   допускается только после cleared review blockers. Решение должно быть утверждено
+   до implementation, потому что это recommendation, а не текущий Stage 0 code.
 3. Нужно формально определить, как связать pending `hr_import_diff_removals` с exact
    selected provenance set; текущая проверка pending removals работает на уровне batch.
 4. Нужно утвердить policy для historical/inactive Employee links одного Person; current
