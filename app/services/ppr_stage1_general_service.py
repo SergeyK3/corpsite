@@ -47,7 +47,7 @@ def _derive(conn: Connection, participant: dict[str,Any], lock=False) -> dict[st
     return {'source':source,'current':current,'proposal':proposal,'conflicts':conflicts,'fingerprint':fingerprint,'person_updated_at':d['updated_at']}
 
 def get_stage1_run(conn:Connection,*,run_id:int)->dict[str,Any]:
-    run=conn.execute(text('SELECT stage1_run_id,stage0_cohort_run_id,status,current_position,created_at,accepted_at FROM public.ppr_stage1_general_runs WHERE stage1_run_id=:id'),{'id':run_id}).mappings().one_or_none()
+    run=conn.execute(text('SELECT r.stage1_run_id,r.stage0_cohort_run_id,r.status,r.current_position,r.created_at,r.accepted_at,r.accepted_by_user_id,u.full_name accepted_by_display_name FROM public.ppr_stage1_general_runs r LEFT JOIN public.users u ON u.user_id=r.accepted_by_user_id WHERE r.stage1_run_id=:id'),{'id':run_id}).mappings().one_or_none()
     if run is None: raise Stage1NotFoundError('STAGE1_RUN_NOT_FOUND')
     rows=[dict(x) for x in conn.execute(text("""SELECT x.position,x.employee_id,x.person_id,x.source_row_id,x.proposed_values,x.conflicts,x.status,x.error_code,x.error_detail,x.completed_at,r.source_row_number,r.normalized_payload->>'full_name' display_name FROM public.ppr_stage1_general_participants x JOIN public.hr_import_rows r ON r.row_id=x.source_row_id WHERE x.stage1_run_id=:id ORDER BY x.position"""),{'id':run_id}).mappings()]
     for x in rows:

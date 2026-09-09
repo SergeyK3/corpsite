@@ -1,5 +1,6 @@
 from fastapi import APIRouter,Depends,HTTPException
 from app.auth import get_current_user
+from app.control_list_projection.service import organization_timezone
 from app.db.engine import engine
 from sqlalchemy import text
 from app.directory.rbac import compute_scope,require_personnel_visibility_or_403
@@ -7,6 +8,9 @@ from app.security.ppr_stage1_permissions import require_ppr_stage1_general_manag
 from app.api.ppr_stage1_general_schemas import Stage1PreviewRequest,Stage1RunRequest,Stage1RunOut
 from app.services.ppr_stage1_general_service import Stage1Error,Stage1NotFoundError,Stage1ConflictError,preview_stage1,get_stage1_run,approve_stage1,execute_next_stage1,accept_stage1_run
 router=APIRouter(prefix='/personnel/ppr-migration/stage-1',tags=['ppr-stage-1'])
+def _out(result:dict)->dict:
+    timezone_name,_=organization_timezone()
+    return {**result,'organization_timezone':timezone_name}
 def _actor(user:dict)->tuple[int,dict]:
     actor=require_ppr_stage1_general_manage(user); scope=compute_scope(actor,user,include_inactive=False); require_personnel_visibility_or_403(user,scope); return actor,scope
 def _scope_run(c,cohort_id:int,scope:dict)->None:
@@ -24,30 +28,30 @@ def preview(payload:Stage1PreviewRequest,user:dict=Depends(get_current_user)):
     try:
         actor,scope=_actor(user)
         with engine.begin() as c:
-            _scope_run(c,payload.stage0_cohort_run_id,scope); return preview_stage1(c,stage0_cohort_run_id=payload.stage0_cohort_run_id,actor_user_id=actor)
+            _scope_run(c,payload.stage0_cohort_run_id,scope); return _out(preview_stage1(c,stage0_cohort_run_id=payload.stage0_cohort_run_id,actor_user_id=actor))
     except Stage1Error as e: raise _error(e)
 @router.get('/runs/{run_id}',response_model=Stage1RunOut)
 def get_run(run_id:int,user:dict=Depends(get_current_user)):
     _,scope=_actor(user)
     try:
-        with engine.connect() as c:_scope_stage1(c,run_id,scope); return get_stage1_run(c,run_id=run_id)
+        with engine.connect() as c:_scope_stage1(c,run_id,scope); return _out(get_stage1_run(c,run_id=run_id))
     except Stage1Error as e: raise _error(e)
 @router.post('/approve',response_model=Stage1RunOut)
 def approve(payload:Stage1RunRequest,user:dict=Depends(get_current_user)):
     _,scope=_actor(user)
     try:
-        with engine.begin() as c:_scope_stage1(c,payload.stage1_run_id,scope); return approve_stage1(c,run_id=payload.stage1_run_id)
+        with engine.begin() as c:_scope_stage1(c,payload.stage1_run_id,scope); return _out(approve_stage1(c,run_id=payload.stage1_run_id))
     except Stage1Error as e: raise _error(e)
 @router.post('/execute-next',response_model=Stage1RunOut)
 def execute_next(payload:Stage1RunRequest,user:dict=Depends(get_current_user)):
     _,scope=_actor(user)
     try:
-        with engine.begin() as c:_scope_stage1(c,payload.stage1_run_id,scope); return execute_next_stage1(c,run_id=payload.stage1_run_id)
+        with engine.begin() as c:_scope_stage1(c,payload.stage1_run_id,scope); return _out(execute_next_stage1(c,run_id=payload.stage1_run_id))
     except Stage1Error as e: raise _error(e)
 @router.post('/accept',response_model=Stage1RunOut)
 def accept(payload:Stage1RunRequest,user:dict=Depends(get_current_user)):
     actor,scope=_actor(user)
     try:
         with engine.connect().execution_options(isolation_level='SERIALIZABLE') as c:
-            with c.begin():_scope_stage1(c,payload.stage1_run_id,scope); return accept_stage1_run(c,run_id=payload.stage1_run_id,actor_user_id=actor)
+            with c.begin():_scope_stage1(c,payload.stage1_run_id,scope); return _out(accept_stage1_run(c,run_id=payload.stage1_run_id,actor_user_id=actor))
     except Stage1Error as e: raise _error(e)

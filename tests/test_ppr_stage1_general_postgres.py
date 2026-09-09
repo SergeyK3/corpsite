@@ -47,6 +47,11 @@ def test_stage1_drafts_pause_resume_and_accept_atomically_on_corpsite_test():
             run=execute_next_stage1(conn,run_id=run['run']['stage1_run_id']); assert run['participants'][1]['status']=='COMPLETED'
             run=execute_next_stage1(conn,run_id=run['run']['stage1_run_id']); assert run['run']['status']=='COMPLETED_PENDING_REVIEW'
             run=accept_stage1_run(conn,run_id=run['run']['stage1_run_id'],actor_user_id=actor); assert run['run']['status']=='ACCEPTED'
+            events_before=conn.execute(text("SELECT count(*) FROM public.personnel_record_events WHERE event_type='PPR_STAGE1_GENERAL_ACCEPTED' AND event_payload->>'stage1_run_id'=:run"),{'run':str(run['run']['stage1_run_id'])}).scalar_one()
+            try: accept_stage1_run(conn,run_id=run['run']['stage1_run_id'],actor_user_id=actor)
+            except Stage1ConflictError as exc: assert str(exc)=='STAGE1_RUN_NOT_READY_FOR_ACCEPTANCE'
+            else: raise AssertionError('accepted Stage 1 run must not be accepted twice')
+            assert conn.execute(text("SELECT count(*) FROM public.personnel_record_events WHERE event_type='PPR_STAGE1_GENERAL_ACCEPTED' AND event_payload->>'stage1_run_id'=:run"),{'run':str(run['run']['stage1_run_id'])}).scalar_one()==events_before
             values=conn.execute(text('SELECT iin,birth_date,last_name,first_name FROM public.persons WHERE person_id=:p'),{'p':employees[0][1]}).mappings().one()
             assert values['iin']=='900101000001' and str(values['birth_date'])=='1990-01-01' and values['last_name']=='Stage' and values['first_name']=='One'
             assert conn.execute(text('SELECT ppr_lifecycle_state FROM public.personnel_record_metadata WHERE person_id=:p'),{'p':employees[0][1]}).scalar_one()=='COLLECTING'
