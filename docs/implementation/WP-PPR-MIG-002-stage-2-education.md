@@ -43,21 +43,50 @@ Shared specialty/qualification tail может быть распространё
 fragments и помечается `shared_context_ambiguous`. Такой marker не даёт права молча
 принять или перезаписать canonical значение.
 
-### 2.2 Enum и фактический `education_level`
+### 2.2 Read-only inventory локального control-list workbook
+
+Read-only inspected file: `контрольный июнь.xlsx` в корне локальной рабочей области
+(дата файла 2026-06-16). Анализировал только education columns с заголовком варианта
+«ВУЗ / учебное заведение, год окончания» на шести roster sheets. Ни ФИО, ни ИИН, ни
+полный source text не сохранялись в документе, логах repository или fixture.
+
+| Обезличенный класс формулировки / структуры | Количество source cells | Предлагаемый результат Stage 2 |
+|---|---:|---|
+| Непустые education cells в проверенном scope | 729 | Scope inventory, не cohort count. |
+| Явный marker интернатуры | 104 | Candidate `internship` только для конкретного отделённого fragment; до утверждения allowlist — `REVIEW_REQUIRED`. |
+| Явный marker резидентуры или ординатуры | 77 | Candidate `residency` только для конкретного отделённого fragment; до утверждения allowlist — `REVIEW_REQUIRED`. |
+| Явный marker магистратуры / магистра | 3 | Candidate `masters` только для конкретного отделённого fragment; до утверждения allowlist — `REVIEW_REQUIRED`. |
+| Явный marker PhD / доктор наук / к.м.н. | 0 | Локального evidence для `phd` нет; automatic mapping отсутствует. |
+| Лексема «высш…» | 113 | Не является достаточным видом образования: может быть частью названия учреждения. `REVIEW_REQUIRED`. |
+| Лексема «средн…» | 1 | Не является достаточным видом образования. `REVIEW_REQUIRED`. |
+| Marker колледжа | 264 | Указывает на тип/название учреждения, не на `education_kind`. `REVIEW_REQUIRED`. |
+| Marker университета / академии / института | 266 | Указывает на учреждение, не на `education_kind`. `REVIEW_REQUIRED`. |
+| Обычная или не классифицированная дипломная формулировка без advanced marker | 602 | `REVIEW_REQUIRED`; default запрещён. |
+| Несколько explicit advanced markers в одной ячейке | 57 | Сначала fragment-level split; неразделимые или конфликтующие markers — `REVIEW_REQUIRED`. |
+| Ячейки с мягким переносом | 37 | Все остаются одной source row/Employee. |
+| Мягкий перенос с явно нумерованными несколькими records | 1 | Обязательный visual-pilot class: несколько fragments одной source row, не новые сотрудники. |
+| Мягкий перенос без надёжной нумерованной границы | 36 | Сохранить fragment indices; не объединять и не трактовать как новые rows; `REVIEW_REQUIRED`, если parser не отделил records. |
+
+Это inventory marker classes, а не утверждённый mapping. В частности, 57 cells с
+несколькими markers могут содержать несколько корректных education fragments, а не
+одну конфликтную запись: решение принимается только после fragment-level parsing.
+
+### 2.3 Enum и фактический `education_level`
 
 Canonical enum `EDUCATION_KINDS` содержит только `basic`, `internship`, `residency`,
 `masters`, `phd`, `other`. `EducationNormalizationService` извлекает из текста
 `education_level` только лексемы `высшее`, `среднее`, `послевузовское`, `базовое`.
 Этот parser не содержит mapping этих лексем в canonical enum.
 
-Read-only inventory локальной `corpsite_test` на 2026-09-09: строк с непустым
-`education_raw` — 0, normalized records с `record_kind=education` — 0, persisted key
-`education_level` — 0. Следовательно, локальный источник не даёт доказуемого
-allowlist. Legacy profile service выводит отдельные `record_type` по keywords
-internship/residency/masters/phd и иначе default-ит в `basic`; этот default не является
-доказательством source mapping и **запрещён** для Stage 2.
+`education_level` не persisted в Excel как отдельный controlled field и отсутствует в
+локальной `corpsite_test` (строк с `education_raw` и normalized
+`record_kind=education` там также 0). Workbook inventory выше доказывает наличие
+отдельных markers, но не утверждённый allowlist. Legacy profile service выводит
+отдельные `record_type` по keywords internship/residency/masters/phd и иначе default-ит
+в `basic`; этот default не является доказательством source mapping и **запрещён** для
+Stage 2.
 
-### 2.3 Existing canonical contour
+### 2.4 Existing canonical contour
 
 Canonical target — `person_education`, owner `person_id`; `employee_context_id` —
 контекст входа, а не владелец диплома. Вкладка карточки уже читает active,
@@ -165,10 +194,10 @@ fields и не расширяется и не используется Stage 2.
 ### Единственный владелец статусов и переходы
 
 Envelope владеет aggregate status и participant execution status. PMF run/item status
-не дублирует stage lifecycle: до acceptance item остаётся `draft`; после успешной
-атомарной acceptance он становится `committed` (либо `failed` при rollback/error по
-existing PMF contract). Canonical command status принадлежит existing PPR idempotency
-store, а не envelope.
+не дублирует stage lifecycle: до acceptance item остаётся `draft`; только после
+успешного commit атомарной acceptance он становится `committed`. При rollback canonical
+acceptance PMF items остаются `draft`. Canonical command status принадлежит existing
+PPR idempotency store, а не envelope.
 
 | Envelope status | Допустимый переход | Значение |
 |---|---|---|
@@ -203,12 +232,11 @@ PPR lifecycle version, policy/parser/mapping versions, а также active cano
 education identity и `updated_at` tokens. PMF item payload хранится только в PMF и
 связан с envelope через IDs.
 
-Draft transaction берёт envelope participant lock, затем его source/normalized rows,
-Employee, Person и PMF run/items в возрастающем technical ID order. Acceptance в
-`SERIALIZABLE` повторяет тот же глобальный order: envelope run → participants by
-position → batches/rows/normalized records by ID → Employees → Persons → active
-`person_education` by `education_id` → PMF runs/items. Это устраняет инверсию lock
-order между worker и acceptance.
+Worker, resume и acceptance используют единственный lock order: envelope run →
+participant → source rows (включая selected normalized records, по technical ID) →
+Employee → Person → active canonical `person_education` (по `education_id`) → PMF
+runs/items → existing PPR locks. Acceptance использует `SERIALIZABLE`; worker/resume
+использует тот же порядок в scope одной position. Это устраняет инверсию lock order.
 
 Если source, ownership, policy fingerprint, Person/Employee/PPR version или canonical
 identity меняются, preview/final check возвращает text safe stale/conflict reason.
@@ -225,7 +253,13 @@ canonical identity/preconditions и idempotency. Затем он добавля�
 `READY_TO_ADD` records через PPR/PMF gateway, сохраняет provenance и
 `EDUCATION_MIGRATED` events, а `ALREADY_APPLIED` оставляет без write. Любой stale
 source, duplicate, conflict или command failure откатывает всю acceptance transaction:
-ни canonical `person_education`, ни events не остаются частично записанными.
+ни canonical `person_education`, ни events, ни изменения PMF item status не остаются
+частично записанными; PMF items остаются `draft`.
+
+После rollback отдельная короткая служебная transaction блокирует только envelope
+run/остановленного participant и фиксирует `PAUSED_ON_ERROR` с safe reason code и
+technical diagnostic reference. Она не записывает failed PMF item внутри уже
+откаченной acceptance transaction и не меняет canonical/source data.
 
 Детерминированный command ID должен включать `stage_run_id`, `stage=education`,
 `employee_id`, `person_id`, participant snapshot version и fragment source key/index.
