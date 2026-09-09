@@ -10,7 +10,7 @@ type Candidate = { position?: number; employee_id: number | null; person_id: num
 type Blocker = { employee_id?: number | null; person_id?: number | null; source_batch_id?: number | null; source_row_id?: number | null; source_row_number?: number | null; category: string; reason_code: string; safe_detail: string; candidate_key: string; display_name?: string | null };
 type Preview = { source_batch_id: number; source_batch_status: string; preview_fingerprint: string; counts: Record<string, number>; eligible: Candidate[]; blockers: Blocker[] };
 type Frozen = { stage0_cohort_run_id: number; replay: boolean; counts: Record<string, number> };
-type Cohort = { run: { stage0_cohort_run_id: number; run_kind: string; source_batch_id: number; source_batch_status: string; frozen_at: string; preview_fingerprint: string }; participants: Candidate[] };
+type Cohort = { run: { stage0_cohort_run_id: number; run_kind: string; source_batch_id: number; source_batch_status: string; frozen_at: string; preview_fingerprint: string }; participants: Candidate[]; organization_timezone: string };
 
 const reasonLabels: Record<string, string> = {
   STAGE0_SOURCE_EMPLOYEE_MISSING: "Строка контрольного списка пока не связана с сотрудником.",
@@ -46,6 +46,16 @@ function apiMessage(error: any): string { return String(error?.details?.message 
 function personLabel(row: { display_name?: string | null; employee_id?: number | null }): string { return String(row.display_name ?? "").trim() || `Сотрудник #${row.employee_id ?? "—"}`; }
 function technicalIdentity(row: { employee_id?: number | null; person_id?: number | null }): string { return `ID сотрудника: ${row.employee_id ?? "—"}; ID личности: ${row.person_id ?? "—"}`; }
 function technicalCode(code: string): ReactNode { return <details className="mt-1 text-xs text-zinc-500"><summary className="cursor-pointer">Технические сведения</summary><span className="font-mono">{code}</span></details>; }
+export function formatStage0FrozenAt(value: string, timezone: string): string {
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return value;
+  try {
+    return new Intl.DateTimeFormat("ru-RU", {
+      timeZone: timezone,
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }).format(instant);
+  } catch { return new Intl.DateTimeFormat("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(instant); }
+}
 
 export default function PprMigrationPageClient() {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -105,11 +115,11 @@ export default function PprMigrationPageClient() {
         <span className="text-sm text-zinc-500">Полный ИИН не отображается.</span></div>
     </section>
     {message ? <div role="status" className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-950">{message}</div> : null}
-    {preview ? <section className="space-y-4"><div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Результат проверки</h2><p className="text-sm text-zinc-600 dark:text-zinc-400">Контрольный список №{preview.source_batch_id}; статус: {batchStatusLabel(preview.source_batch_status)}.</p><details className="mt-1 text-xs text-zinc-500"><summary className="cursor-pointer">Технические сведения проверки</summary><span className="font-mono">Контрольный отпечаток: {preview.preview_fingerprint}</span></details></div><button type="button" onClick={() => setFreezeConfirmationOpen(true)} disabled={busy} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Зафиксировать список допущенных сотрудников</button></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(preview.counts).map(([status, count]) => <div key={status} className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700"><div className="font-medium">{categoryLabels[status] ?? "Требуется проверка"}</div><div className="text-2xl font-semibold">{count}</div>{technicalCode(status)}</div>)}</div></div>
+    {preview ? <section className="space-y-4"><div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Результат проверки</h2><p className="text-sm text-zinc-600 dark:text-zinc-400">Контрольный список №{preview.source_batch_id}; статус: {batchStatusLabel(preview.source_batch_status)}.</p><details className="mt-1 text-xs text-zinc-500"><summary className="cursor-pointer">Технические сведения проверки</summary><span className="font-mono">Контрольный отпечаток: {preview.preview_fingerprint}</span></details></div>{cohort ? <span className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-100">Список уже зафиксирован</span> : <button type="button" onClick={() => setFreezeConfirmationOpen(true)} disabled={busy} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Зафиксировать список допущенных сотрудников</button>}</div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(preview.counts).map(([status, count]) => <div key={status} className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700"><div className="font-medium">{categoryLabels[status] ?? "Требуется проверка"}</div><div className="text-2xl font-semibold">{count}</div>{technicalCode(status)}</div>)}</div></div>
       <CandidateTable title="Допущенные сотрудники" items={preview.eligible} />
       <BlockerTable items={preview.blockers} />
     </section> : null}
-    {cohort ? <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/25"><h2 className="text-lg font-semibold">Список допущенных сотрудников зафиксирован</h2><p className="text-sm">Статус: список зафиксирован · контрольный список №{cohort.run.source_batch_id} · сохранён: {new Date(cohort.run.frozen_at).toLocaleString("ru-RU")}</p><details className="mt-1 text-xs text-zinc-600"><summary className="cursor-pointer">Технические сведения</summary><span className="font-mono">Код статуса: FROZEN; ID списка: {cohort.run.stage0_cohort_run_id}</span></details><CandidateTable title="Участники зафиксированного списка" items={cohort.participants} /></section> : null}
+    {cohort ? <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/25"><h2 className="text-lg font-semibold">Список допущенных сотрудников зафиксирован</h2><p className="text-sm">Статус: список зафиксирован · контрольный список №{cohort.run.source_batch_id} · сохранён: {formatStage0FrozenAt(cohort.run.frozen_at, cohort.organization_timezone)} ({cohort.organization_timezone})</p><details className="mt-1 text-xs text-zinc-600"><summary className="cursor-pointer">Технические сведения</summary><span className="font-mono">Код статуса: FROZEN; ID списка: {cohort.run.stage0_cohort_run_id}</span></details><CandidateTable title="Участники зафиксированного списка" items={cohort.participants} /></section> : null}
     {freezeConfirmationOpen && preview ? <FreezeConfirmationDialog eligibleCount={eligibleCount} blockedCount={blockedCount} busy={busy} onCancel={() => setFreezeConfirmationOpen(false)} onConfirm={() => void freeze()} /> : null}
   </main>;
 }

@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from app.api.ppr_stage0_cohort_schemas import Stage0BlockerListOut, Stage0FreezeOut, Stage0FreezeRequest, Stage0PreviewOut, Stage0PreviewRequest, Stage0RunOut, Stage0SourceBatchListOut
 from app.auth import get_current_user
+from app.control_list_projection.service import organization_timezone
 from app.db.engine import engine
 from app.directory.rbac import compute_scope, require_personnel_visibility_or_403
 from app.security.ppr_stage0_permissions import require_ppr_stage0_cohort_manage
@@ -52,7 +53,12 @@ def freeze(payload: Stage0FreezeRequest, user: dict[str, Any] = Depends(get_curr
 def get_run(run_id: int = Path(ge=1), correction_details: bool = Query(default=False), user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     actor = require_ppr_stage0_cohort_manage(user); scope = _scope(user, actor)
     try:
-        with engine.connect() as conn: return get_stage0_run(conn, run_id=run_id, scope=scope, include_correction_details=correction_details)
+        timezone_name, _ = organization_timezone()
+        with engine.connect() as conn:
+            return {
+                **get_stage0_run(conn, run_id=run_id, scope=scope, include_correction_details=correction_details),
+                "organization_timezone": timezone_name,
+            }
     except Stage0Error as exc: raise _error(exc)
 
 @router.get("/runs/{run_id}/blockers", response_model=Stage0BlockerListOut)

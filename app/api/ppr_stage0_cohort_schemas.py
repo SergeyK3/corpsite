@@ -55,6 +55,7 @@ class Stage0FreezeOut(BaseModel):
 class Stage0RunOut(BaseModel):
     run: dict
     participants: List[Stage0ParticipantOut]
+    organization_timezone: str
 
 class Stage0BlockerListOut(BaseModel):
     items: List[Stage0BlockerOut]

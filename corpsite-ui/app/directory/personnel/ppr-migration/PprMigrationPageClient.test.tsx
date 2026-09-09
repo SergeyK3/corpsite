@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import PprMigrationPageClient from "./PprMigrationPageClient";
+import PprMigrationPageClient, { formatStage0FrozenAt } from "./PprMigrationPageClient";
 
 const apiAuthMe = vi.fn();
 const apiFetchJson = vi.fn();
@@ -29,7 +29,7 @@ describe("PprMigrationPageClient", () => {
       if (path.endsWith("/source-batches")) return Promise.resolve({ items: [{ batch_id: 3, status: "APPLY_PENDING", source_row_count: 2 }] });
       if (path.endsWith("/preview")) return Promise.resolve(preview);
       if (path.endsWith("/freeze")) return Promise.resolve({ stage0_cohort_run_id: 4, replay: false, counts: preview.counts });
-      if (path.includes("/runs/4")) return Promise.resolve({ run: { stage0_cohort_run_id: 4, run_kind: "BASE", source_batch_id: 3, source_batch_status: "APPLY_PENDING", frozen_at: "2026-09-09T10:00:00Z", preview_fingerprint: preview.preview_fingerprint }, participants: preview.eligible });
+      if (path.includes("/runs/4")) return Promise.resolve({ run: { stage0_cohort_run_id: 4, run_kind: "BASE", source_batch_id: 3, source_batch_status: "APPLY_PENDING", frozen_at: "2026-09-09T10:00:00Z", preview_fingerprint: preview.preview_fingerprint }, participants: preview.eligible, organization_timezone: "Asia/Almaty" });
       throw new Error(`Unexpected request ${path}`);
     });
 
@@ -50,5 +50,11 @@ describe("PprMigrationPageClient", () => {
     fireEvent.click(screen.getByRole("button", { name: "Зафиксировать список" }));
     await waitFor(() => expect(screen.getByText(/Список допущенных сотрудников зафиксирован: 1; заблокировано: 1/)).toBeInTheDocument());
     expect(screen.getByText("Список допущенных сотрудников зафиксирован", { selector: "h2" })).toBeInTheDocument();
+    expect(screen.getByText("Список уже зафиксирован")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Зафиксировать список допущенных сотрудников" })).not.toBeInTheDocument();
+  });
+
+  it("formats frozen time in the supplied organization timezone", () => {
+    expect(formatStage0FrozenAt("2026-09-09T10:00:00Z", "Asia/Almaty")).toMatch(/15:00/);
   });
 });
