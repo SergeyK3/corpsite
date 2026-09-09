@@ -91,6 +91,37 @@ def test_stage2_preview_fails_closed_when_fingerprint_is_stale():
             tx.rollback()
 
 
+def test_resume_stale_keeps_specific_safe_code_and_creates_no_side_effects():
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            actor, cohort, person = _seed(conn)
+            preview = compute_preview_stage2(conn, stage0_cohort_run_id=cohort)
+            run = persist_preview_stage2(conn, stage0_cohort_run_id=cohort, actor_user_id=actor, expected_preview_fingerprint=preview["preview_fingerprint"])
+            run_id = int(run["run"]["stage_run_id"])
+            approve_stage2(conn, run_id=run_id, actor_user_id=actor)
+            # Real fingerprinted source change after the frozen preview.
+            conn.execute(text("UPDATE public.hr_import_normalized_records SET title='Диплом changed',source_text='changed',updated_at=clock_timestamp() WHERE batch_id=(SELECT source_batch_id FROM public.ppr_stage0_cohort_runs WHERE stage0_cohort_run_id=:cohort)"), {"cohort": cohort})
+            before = (
+                conn.execute(text("SELECT count(*) FROM public.personnel_migration_runs WHERE metadata #>> '{stage2,envelope_run_id}'=:run"), {"run": str(run_id)}).scalar_one(),
+                conn.execute(text("SELECT count(*) FROM public.person_education WHERE person_id=:person"), {"person": person}).scalar_one(),
+                conn.execute(text("SELECT count(*) FROM public.personnel_record_events WHERE person_id=:person"), {"person": person}).scalar_one(),
+            )
+            first = execute_next_stage2(conn, run_id=run_id, actor_user_id=actor)
+            assert first["run"]["status"] == "PAUSED_ON_ERROR"
+            assert first["run"]["last_error_code"] == "STAGE2_RESUME_STALE"
+            replay = execute_next_stage2(conn, run_id=run_id, actor_user_id=actor, resume=True)
+            assert replay["run"]["last_error_code"] == "STAGE2_RESUME_STALE"
+            after = (
+                conn.execute(text("SELECT count(*) FROM public.personnel_migration_runs WHERE metadata #>> '{stage2,envelope_run_id}'=:run"), {"run": str(run_id)}).scalar_one(),
+                conn.execute(text("SELECT count(*) FROM public.person_education WHERE person_id=:person"), {"person": person}).scalar_one(),
+                conn.execute(text("SELECT count(*) FROM public.personnel_record_events WHERE person_id=:person"), {"person": person}).scalar_one(),
+            )
+            assert after == before == (0, 0, 0)
+        finally:
+            tx.rollback()
+
+
 def test_acceptance_pause_is_conditional_and_never_overwrites_cancelled():
     with engine.connect() as conn:
         tx = conn.begin()

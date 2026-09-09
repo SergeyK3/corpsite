@@ -18,6 +18,12 @@ from app.ppr.application.config import ppr_pmf_bridge_enabled
 from app.services.personnel_migration_commit_service import add_draft_item, commit_run, create_draft_run
 
 
+SAFE_OPERATION_ERROR_CODES = frozenset({
+    "STAGE2_RESUME_STALE", "STAGE2_FRAGMENT_REVIEW_REQUIRED",
+    "STAGE2_EMPLOYEE_PERSON_LINK_STALE", "STAGE2_EXECUTION_ERROR",
+})
+
+
 class Stage2Error(RuntimeError):
     code = "STAGE2_ERROR"
 class Stage2NotFoundError(Stage2Error):
@@ -37,8 +43,13 @@ def _key(value: str) -> str:
 
 
 def _safe_error(exc: Exception) -> tuple[str, str]:
-    code = getattr(exc, "code", "STAGE2_EXECUTION_ERROR")
-    return str(code)[:120], _hash({"code": str(code), "type": type(exc).__name__})
+    # A message is never promoted blindly to a public/error code.  Stage2
+    # operations may carry a precise instance code, but only this finite
+    # allowlist can cross the rollback boundary; all other failures collapse
+    # to the generic safe code while their text is represented only by a hash.
+    candidate = str(exc.args[0]) if isinstance(exc, Stage2Error) and exc.args else ""
+    code = candidate if candidate in SAFE_OPERATION_ERROR_CODES else "STAGE2_EXECUTION_ERROR"
+    return code, _hash({"code": code, "type": type(exc).__name__})
 
 
 def _normalize(value: Any) -> str | None:

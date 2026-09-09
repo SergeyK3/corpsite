@@ -53,10 +53,13 @@ describe("Stage2EducationPanel", () => {
   });
 
   it("shows the correct resume action for each pause and stale guidance", async () => {
-    api.mockResolvedValueOnce(baseRun("PAUSED_ON_ERROR", "PARTICIPANT_EXECUTION") as never);
+    const stale = baseRun("PAUSED_ON_ERROR", "PARTICIPANT_EXECUTION");
+    stale.participants[0].error_code = "STAGE2_RESUME_STALE";
+    api.mockResolvedValueOnce(stale as never);
     render(<Stage2EducationPanel cohortRunId={9} />);
     fireEvent.click(screen.getByRole("button", { name: "Проверить образование" }));
     expect(await screen.findByRole("button", { name: "Продолжить обработку" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Требуется новый PREVIEW");
     api.mockClear(); api.mockResolvedValueOnce(baseRun("PAUSED_ON_ERROR", "ACCEPTANCE") as never).mockResolvedValueOnce({ stage_run_id: 44, employee_count: 2, records_by_kind: { basic: 1 }, skipped_count: 1, acceptance_fingerprint: "a".repeat(64) } as never);
     fireEvent.change(screen.getByLabelText("ID прогона"), { target: { value: "44" } });
     fireEvent.click(screen.getByRole("button", { name: "Открыть прогон" }));
