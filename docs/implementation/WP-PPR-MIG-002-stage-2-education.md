@@ -1,6 +1,6 @@
 # WP-PPR-MIG-002 — Этап 2: образование из контрольного списка
 
-| Статус | **Draft — Ready for Architecture Re-Review** |
+| Статус | **Approved — Ready for Stage 2 Implementation Planning** |
 |---|---|
 | Программа | [Поэтапная миграция личных карточек](ppr-control-list-staged-migration-plan.md) |
 | Предпосылки | Accepted Stage 1; frozen Stage 0 cohort; [ADR-PMF-001](../adr/ADR-PMF-001-personnel-migration-framework.md); [ADR-EDU-001](../adr/ADR-EDU-001-employee-education-migration-architecture.md); [WP-CL-008](WP-CL-008-education-normalization.md) |
@@ -53,10 +53,10 @@ Read-only inspected file: `контрольный июнь.xlsx` в корне �
 | Обезличенный класс формулировки / структуры | Количество source cells | Предлагаемый результат Stage 2 |
 |---|---:|---|
 | Непустые education cells в проверенном scope | 729 | Scope inventory, не cohort count. |
-| Явный marker интернатуры | 104 | Candidate `internship` только для конкретного отделённого fragment; до утверждения allowlist — `REVIEW_REQUIRED`. |
-| Явный marker резидентуры или ординатуры | 77 | Candidate `residency` только для конкретного отделённого fragment; до утверждения allowlist — `REVIEW_REQUIRED`. |
-| Явный marker магистратуры / магистра | 3 | Candidate `masters` только для конкретного отделённого fragment; до утверждения allowlist — `REVIEW_REQUIRED`. |
-| Явный marker PhD / доктор наук / к.м.н. | 0 | Локального evidence для `phd` нет; automatic mapping отсутствует. |
+| Явный marker интернатуры | 104 | Пример класса для `internship` policy branch. |
+| Явный marker резидентуры или ординатуры | 77 | Пример класса для `residency` policy branch. |
+| Явный marker магистратуры / магистра | 3 | Пример класса для `masters` policy branch. |
+| Явный marker PhD / доктор наук / к.м.н. | 0 | В локальном файле нет примера; ветка `phd` обязана иметь synthetic test. |
 | Лексема «высш…» | 113 | Не является достаточным видом образования: может быть частью названия учреждения. `REVIEW_REQUIRED`. |
 | Лексема «средн…» | 1 | Не является достаточным видом образования. `REVIEW_REQUIRED`. |
 | Marker колледжа | 264 | Указывает на тип/название учреждения, не на `education_kind`. `REVIEW_REQUIRED`. |
@@ -67,9 +67,9 @@ Read-only inspected file: `контрольный июнь.xlsx` в корне �
 | Мягкий перенос с явно нумерованными несколькими records | 1 | Обязательный visual-pilot class: несколько fragments одной source row, не новые сотрудники. |
 | Мягкий перенос без надёжной нумерованной границы | 36 | Сохранить fragment indices; не объединять и не трактовать как новые rows; `REVIEW_REQUIRED`, если parser не отделил records. |
 
-Это inventory marker classes, а не утверждённый mapping. В частности, 57 cells с
-несколькими markers могут содержать несколько корректных education fragments, а не
-одну конфликтную запись: решение принимается только после fragment-level parsing.
+57 cells с несколькими markers могут содержать несколько корректных education
+fragments, а не одну конфликтную запись: решение принимается только после
+fragment-level parsing и применения policy к каждому fragment.
 
 ### 2.3 Enum и фактический `education_level`
 
@@ -80,13 +80,34 @@ Canonical enum `EDUCATION_KINDS` содержит только `basic`, `interns
 
 `education_level` не persisted в Excel как отдельный controlled field и отсутствует в
 локальной `corpsite_test` (строк с `education_raw` и normalized
-`record_kind=education` там также 0). Workbook inventory выше доказывает наличие
-отдельных markers, но не утверждённый allowlist. Legacy profile service выводит
-отдельные `record_type` по keywords internship/residency/masters/phd и иначе default-ит
-в `basic`; этот default не является доказательством source mapping и **запрещён** для
-Stage 2.
+`record_kind=education` там также 0). Legacy profile service выводит отдельные
+`record_type` по keywords internship/residency/masters/phd и иначе default-ит в
+`basic`; этот legacy default не используется Stage 2: применяется только policy ниже.
 
-### 2.4 Existing canonical contour
+### 2.4 Утверждённая versioned policy `EDU-KIND-ALLOWLIST-v1`
+
+Классификация выполняется для каждого уже отделённого fragment, а не для всей Excel
+ячейки. Более конкретный marker имеет приоритет над общим уровнем. Два или больше
+противоречивых конкретных markers в одном неразделимом fragment блокируют automatic
+classification.
+
+| Fragment marker / condition | `education_kind` result |
+|---|---|
+| `интернатура` или `врач-интерн` | `internship` |
+| `резидентура` или `ординатура` | `residency` |
+| `магистратура` или `магистр` | `masters` |
+| `PhD`, `докторантура` или `доктор философии` | `phd` |
+| Явная формулировка уровня `высшее`, `среднее специальное`, `техническое и профессиональное`, `базовое образование`; либо обычный дипломный fragment без явного marker последипломного уровня | `basic` |
+| `послевузовское` без уточнения; неразделимые конфликтующие конкретные markers; иная неоднозначная формулировка | `REVIEW_REQUIRED` |
+| Candidate `other` | Никогда не назначается автоматически; только явным решением HR с reason и audit. |
+
+Лексемы, являющиеся частью имени учреждения (например, «высший … колледж»), не
+считаются явной формулировкой уровня без контекста. If fragment contains `ординатура`
+и общий marker `послевузовское`, применяется более конкретный `residency`; если
+одновременно присутствуют неразделимые `интернатура` и `резидентура`, результат —
+`REVIEW_REQUIRED`.
+
+### 2.5 Existing canonical contour
 
 Canonical target — `person_education`, owner `person_id`; `employee_context_id` —
 контекст входа, а не владелец диплома. Вкладка карточки уже читает active,
@@ -116,7 +137,7 @@ fail-closed для active `(education_kind, institution_name)`.
 | parsed full `start_date` | `started_at` | Только полная календарная дата. Год сам по себе не конвертируется в `YYYY-01-01`. | Подтверждено с условием |
 | parsed full `end_date` / `issue_date` | `completed_at` | Только полная календарная дата; year-only сохраняется в provenance без canonical date. | Подтверждено с условием |
 | parsed `document_number` | `diploma_number` | Только если реально извлечён для education fragment. Текущий normalizer обычно не формирует его из пустого source. | Подтверждено с условием |
-| exact allowlist `education_level` / подтверждённый fragment marker | `education_kind` | В текущем source allowlist пуст: любое значение до product decision — `REVIEW_REQUIRED`; нельзя выводить из одного `record_kind=education` и нельзя silently default to `basic`. | Подтверждённая fail-closed policy |
+| `EDU-KIND-ALLOWLIST-v1` marker classification | `education_kind` | Классифицировать только per-fragment по §2.4; сохранять policy version и outcome. | Утверждено |
 | — | `institution_type`, `document_date` | Нет подтверждённого source mapping. | Не включать |
 | `education_level` | `education_kind` | Возможная будущая таблица классификации; до её утверждения automatic mapping отсутствует. | Не включать |
 
@@ -135,8 +156,8 @@ ownership, отсутствие removal/rebinding и допустимый lifecy
 2. допустимый Stage 0 batch policy и отсутствие unresolved batch removal;
 3. `approved` normalized record допускается при выполнении остальных проверок;
    `pending`, `rejected`, `superseded` и неизвестный status не add-ready;
-4. fragment имеет source row, source key и index, непустое institution value и все
-   поля, обязательные для утверждённого `education_kind` mapping;
+4. fragment имеет source row, source key и index, непустое institution value и
+   `education_kind` из `EDU-KIND-ALLOWLIST-v1`;
 5. shared-context ambiguity, parse issue, person/source mismatch и stale source
    классифицируются отдельно, без записи canonical данных.
 
@@ -149,8 +170,8 @@ PREVIEW полностью read-only. Для HR_HEAD в разрешённом o
 
 - сотрудника и номер исходной Excel-строки, batch/row technical IDs и fragment №;
 - «В контрольном списке», «Сейчас в карточке», «Будет записано» для каждого fragment;
-- исходный текст fragment только в защищённом кадровом view, status текстом и safe
-  reason code в раскрываемых сведениях;
+- исходный текст fragment только в защищённом кадровом view, text status, policy
+  version/classification outcome и safe reason code в раскрываемых сведениях;
 - counts `готово к добавлению`, `уже существует`, `конфликт`, `нужна проверка`,
   `ошибка source`; без полного ИИН и без лишних ПДн в техническом отчёте.
 
@@ -228,8 +249,9 @@ items при неизменном participant snapshot/fingerprint.
 source payload: `stage_run_id`, Stage 0 participant/source fingerprint,
 Employee/Person IDs и versions, batch/row IDs, selected normalized-record IDs,
 `source_record_key` и `fragment_index`, review status, source/normalized update tokens,
-PPR lifecycle version, policy/parser/mapping versions, а также active canonical
-education identity и `updated_at` tokens. PMF item payload хранится только в PMF и
+PPR lifecycle version, `education_kind_policy_version=EDU-KIND-ALLOWLIST-v1`,
+classification outcome, parser/mapping versions, а также active canonical education
+identity и `updated_at` tokens. PMF item payload хранится только в PMF и
 связан с envelope через IDs.
 
 Worker, resume и acceptance используют единственный lock order: envelope run →
@@ -277,6 +299,10 @@ canonical `person_education`. После `ACCEPTED` новые canonical records
 из-за `DRAFT`, `RUNNING` или `PAUSED_ON_ERROR` этого Stage 2 envelope. UI показывает
 status и visibility текстом, а не только цветом.
 
+PMF provenance для каждого draft/committed item дополнительно содержит
+`education_kind_policy_version`, classifier outcome, selected canonical kind и safe
+reason code (если есть); raw marker text не дублируется в envelope.
+
 ## 7. Visual pilot и критерии приёмки
 
 До full run HR_HEAD проводит visual pilot минимум на:
@@ -295,11 +321,30 @@ Visual pilot должен также проверить Russian text statuses, o
 HR_HEAD source view, final report и отображение нескольких записей одного Employee.
 Только после feedback HR_HEAD и принятия pilot допускается массовый Stage 2 run.
 
-## 8. Единственное открытое продуктовое решение
+### Policy test criteria
 
-Утвердить versioned allowlist `education_level` / explicit fragment markers →
-`education_kind` на representative control-list samples. Сейчас доказуемый allowlist
-пуст, поэтому все такие values остаются `REVIEW_REQUIRED`; молчаливый default запрещён.
+Implementation tests обязаны покрыть каждый результат `EDU-KIND-ALLOWLIST-v1`:
+
+1. `интернатура` и `врач-интерн` → `internship`;
+2. `резидентура` и `ординатура` → `residency`;
+3. `магистратура` и `магистр` → `masters`;
+4. `PhD`, `докторантура`, `доктор философии` → `phd` (synthetic, поскольку в
+   локальной inventory count равен нулю);
+5. каждый basic branch: явный общий уровень и ordinary diploma fragment;
+6. `послевузовское` без уточнения, каждый conflict of specific markers и ambiguous
+   wording → `REVIEW_REQUIRED`;
+7. `other` нельзя получить без explicit HR decision;
+8. specific marker побеждает общий level marker;
+9. soft-line-break pilot из inventory: два fragments одной Excel row имеют разные
+   indices, один Employee/Person и не становятся двумя control-list rows;
+10. fingerprint/provenance/preview содержат `EDU-KIND-ALLOWLIST-v1`, а изменение
+    policy version делает approved preview stale и требует нового preview/approval.
+
+## 8. Architecture Review record
+
+2026-09-09 Architecture Review утвердил `EDU-KIND-ALLOWLIST-v1`, thin common stage-run
+envelope over PMF и правила rollback/служебной pause transaction. WP переведён в
+`Approved — Ready for Stage 2 Implementation Planning`.
 
 Отсутствие полной даты само по себе не блокирует Stage 2 record: canonical
 `person_education.started_at` и `completed_at` nullable, а PPR add handler требует
@@ -308,9 +353,8 @@ HR_HEAD source view, final report и отображение нескольких
 missing dates); implementation planning должно привести его execution path в
 соответствие с этой утверждённой Stage 2 policy, не меняя canonical дату.
 
-Все прочие пункты этого WP являются implementation gaps, а не новыми продуктовыми
-решениями: thin envelope schema/API/RBAC/tests, exact provenance comparator для
-`promoted`, и deterministic parser/profile version capture.
+Остаются только implementation gaps: thin envelope schema/API/RBAC/tests, exact
+provenance comparator для `promoted`, и deterministic parser/profile version capture.
 
 ## 9. Вне scope
 
