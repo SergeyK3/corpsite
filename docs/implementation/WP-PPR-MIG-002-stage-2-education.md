@@ -1,6 +1,6 @@
 # WP-PPR-MIG-002 — Этап 2: образование из контрольного списка
 
-| Статус | **Draft — Ready for Architecture Review** |
+| Статус | **Draft — Ready for Architecture Re-Review** |
 |---|---|
 | Программа | [Поэтапная миграция личных карточек](ppr-control-list-staged-migration-plan.md) |
 | Предпосылки | Accepted Stage 1; frozen Stage 0 cohort; [ADR-PMF-001](../adr/ADR-PMF-001-personnel-migration-framework.md); [ADR-EDU-001](../adr/ADR-EDU-001-employee-education-migration-architecture.md); [WP-CL-008](WP-CL-008-education-normalization.md) |
@@ -43,7 +43,21 @@ Shared specialty/qualification tail может быть распространё
 fragments и помечается `shared_context_ambiguous`. Такой marker не даёт права молча
 принять или перезаписать canonical значение.
 
-### 2.2 Existing canonical contour
+### 2.2 Enum и фактический `education_level`
+
+Canonical enum `EDUCATION_KINDS` содержит только `basic`, `internship`, `residency`,
+`masters`, `phd`, `other`. `EducationNormalizationService` извлекает из текста
+`education_level` только лексемы `высшее`, `среднее`, `послевузовское`, `базовое`.
+Этот parser не содержит mapping этих лексем в canonical enum.
+
+Read-only inventory локальной `corpsite_test` на 2026-09-09: строк с непустым
+`education_raw` — 0, normalized records с `record_kind=education` — 0, persisted key
+`education_level` — 0. Следовательно, локальный источник не даёт доказуемого
+allowlist. Legacy profile service выводит отдельные `record_type` по keywords
+internship/residency/masters/phd и иначе default-ит в `basic`; этот default не является
+доказательством source mapping и **запрещён** для Stage 2.
+
+### 2.3 Existing canonical contour
 
 Canonical target — `person_education`, owner `person_id`; `employee_context_id` —
 контекст входа, а не владелец диплома. Вкладка карточки уже читает active,
@@ -71,11 +85,11 @@ fail-closed для active `(education_kind, institution_name)`.
 | `specialty_text` / parsed specialty, включая контекст `diploma_specialty_raw` | `specialty` | Только для этого fragment; shared/ambiguous context требует review, пока не утверждена отдельная policy. | Подтверждено с условием |
 | parsed qualification / `qualification_raw` | `qualification` | Только непустое, не-ambiguous значение конкретного fragment. | Подтверждено с условием |
 | parsed full `start_date` | `started_at` | Только полная календарная дата. Год сам по себе не конвертируется в `YYYY-01-01`. | Подтверждено с условием |
-| parsed full `end_date` / `issue_date` | `completed_at` | Только полная календарная дата; year-only остаётся source/provenance, пока не принято правило его canonical representation. | Подтверждено с условием |
+| parsed full `end_date` / `issue_date` | `completed_at` | Только полная календарная дата; year-only сохраняется в provenance без canonical date. | Подтверждено с условием |
 | parsed `document_number` | `diploma_number` | Только если реально извлечён для education fragment. Текущий normalizer обычно не формирует его из пустого source. | Подтверждено с условием |
-| — | `education_kind` | Нельзя выводить из одного `record_kind=education` и нельзя silently default to `basic`. | Открытое решение |
+| exact allowlist `education_level` / подтверждённый fragment marker | `education_kind` | В текущем source allowlist пуст: любое значение до product decision — `REVIEW_REQUIRED`; нельзя выводить из одного `record_kind=education` и нельзя silently default to `basic`. | Подтверждённая fail-closed policy |
 | — | `institution_type`, `document_date` | Нет подтверждённого source mapping. | Не включать |
-| `education_level` | `education_kind` | Возможная будущая таблица классификации, но её нет в существующем code contract. | Открытое решение |
+| `education_level` | `education_kind` | Возможная будущая таблица классификации; до её утверждения automatic mapping отсутствует. | Не включать |
 
 Следовательно, Stage 2 preview обязан исключать из proposal все неподтверждённые
 поля, а не подставлять default. Если для fragment нельзя получить допустимый
@@ -90,17 +104,17 @@ ownership, отсутствие removal/rebinding и допустимый lifecy
 
 1. ровно один source anchor того же Employee/Person и `record_kind=education`;
 2. допустимый Stage 0 batch policy и отсутствие unresolved batch removal;
-3. normalized record имеет status, выбранный для Stage 2 policy; `pending`,
-   `rejected`, `superseded` и неизвестный status не add-ready;
+3. `approved` normalized record допускается при выполнении остальных проверок;
+   `pending`, `rejected`, `superseded` и неизвестный status не add-ready;
 4. fragment имеет source row, source key и index, непустое institution value и все
    поля, обязательные для утверждённого `education_kind` mapping;
 5. shared-context ambiguity, parse issue, person/source mismatch и stale source
    классифицируются отдельно, без записи canonical данных.
 
-`promoted` нельзя автоматически называть «уже применено»: существующая promotion
-служба ставит этот статус вместе с `promoted_document_id` в document contour, а не
-доказывает наличие идентичной `person_education`. Until explicit provenance matching
-is implemented, `promoted` требует отдельной classification policy, а не silent replay.
+`promoted` считается `ALREADY_APPLIED` только при точном match active canonical record
+и его import provenance с тем же source batch/row/key/fragment. Existing promotion
+service сама по себе такого PPR match не доказывает: при отсутствии точного evidence
+`promoted` классифицируется `REVIEW_REQUIRED`, а не silent replay.
 
 PREVIEW полностью read-only. Для HR_HEAD в разрешённом org scope он показывает:
 
@@ -124,8 +138,8 @@ duplicate guard.
 | Ровно один semantic-equal match | Canonical запись не менять; сохранить provenance decision. | `ALREADY_APPLIED` / replay |
 | Ровно один identity match, но есть различия | Не перезаписывать; показать source/current field differences. | `CANONICAL_CONFLICT` — blocking |
 | Более одного identity match | Не выбирать запись эвристически. | `AMBIGUOUS_CANONICAL_MATCH` — blocking |
-| Дубликаты внутри одной source cell / row | Deduplicate только одинаковые fragment identity после нормализации; разные fragments остаются отдельными. | duplicate source issue либо один candidate по детерминированному policy |
-| Неполный/неразобранный fragment, year-only date при required date, shared ambiguous context | Не создавать canonical запись. | `REVIEW_REQUIRED` — blocking до решения/исправления |
+| Точные повторы fragments внутри одной source row | Не объединять и не удалять похожие fragments автоматически; сохранить все source fragment indices. | `DUPLICATE_SOURCE_FRAGMENT` — blocking review для HR |
+| Неполный/неразобранный fragment или shared ambiguous context | Не создавать canonical запись. | `REVIEW_REQUIRED` — blocking до решения/исправления |
 
 Stage 2 не выполняет auto-update, supersede или void existing education record в
 массовом прогоне. Они имеют отдельные reconciliation actions и не являются
@@ -138,18 +152,38 @@ Stage 2 не выполняет auto-update, supersede или void existing educ
 HR_HEAD-only draft visibility, final review и atomic acceptance. Сотрудник до
 acceptance читает только canonical education tab.
 
-Однако persistence Stage 1 (`ppr_stage1_general_*`) специализирована под scalar
-Person fields и не должна копироваться или использоваться для education records.
-PMF `personnel_migration_runs/items` уже предоставляет per-person draft item,
-provenance, commit audit и event pattern, но его текущие run statuses не представляют
-frozen section-wide cohort, pause/resume и единый stage-wide acceptance. Поэтому
-следующий implementation WP должен выбрать один явный orchestration owner:
+Оркестрация создаёт тонкий общий PPR stage-run envelope поверх existing PMF
+`personnel_migration_runs/items`. Envelope — единственный владелец frozen cohort,
+участников, position cursor, pause/resume, итоговой проверки и stage acceptance.
+PMF остаётся единственным владельцем education draft items, their source/draft payload,
+provenance и canonical commands. Envelope хранит только IDs, status/cursor, snapshot
+versions и safe fingerprints; он не дублирует education payload.
 
-- расширить общий stage-run contract поверх PMF items; либо
-- создать минимальный Stage 2 run/participant/draft layer, который использует PMF
-  items и PPR commands как единственный canonical write gateway.
+Persistence Stage 1 (`ppr_stage1_general_*`) специализирована под scalar Person
+fields и не расширяется и не используется Stage 2.
 
-Нельзя объявлять готовые Stage 1 tables generic implementation.
+### Единственный владелец статусов и переходы
+
+Envelope владеет aggregate status и participant execution status. PMF run/item status
+не дублирует stage lifecycle: до acceptance item остаётся `draft`; после успешной
+атомарной acceptance он становится `committed` (либо `failed` при rollback/error по
+existing PMF contract). Canonical command status принадлежит existing PPR idempotency
+store, а не envelope.
+
+| Envelope status | Допустимый переход | Значение |
+|---|---|---|
+| `DRAFT` | → `DRY_RUN_COMPLETED`, `CANCELLED` | Создано намерение run; canonical write нет. |
+| `DRY_RUN_COMPLETED` | → `APPROVED`, `CANCELLED` | Read-only preview завершён для всего frozen cohort. Blocking errors/conflicts запрещают `APPROVED`, кроме явного `SKIPPED_BY_DECISION`. |
+| `APPROVED` | → `RUNNING`, `CANCELLED` | HR_HEAD разрешил draft execution по неизменным cohort/policy/mapping snapshot. |
+| `RUNNING` | → `PAUSED_ON_ERROR`, `COMPLETED_PENDING_REVIEW`, `CANCELLED` | Последовательная подготовка draft items. |
+| `PAUSED_ON_ERROR` | → `RUNNING`, `CANCELLED` | После исправления повторяется та же position. |
+| `COMPLETED_PENDING_REVIEW` | → `ACCEPTED`, `PAUSED_ON_ERROR`, `CANCELLED` | Все participants завершены или осознанно исключены; HR_HEAD проверяет итог. |
+| `ACCEPTED` / `CANCELLED` | terminal | `ACCEPTED` не запускает commands повторно; `CANCELLED` не удаляет PMF drafts автоматически. |
+
+Participant statuses принадлежат только envelope: `PENDING`, `COMPLETED` (его PMF
+draft items подготовлены, но ещё не canonical), `ERROR`, `SKIPPED_BY_DECISION`.
+Последний требует причины, actor, времени и technical Employee ID и остаётся видимым
+HR_HEAD в итоговом отчёте.
 
 ### Stop/resume
 
@@ -158,6 +192,30 @@ frozen section-wide cohort, pause/resume и единый stage-wide acceptance. 
 `PAUSED_ON_ERROR`; ранее подготовленные drafts сохраняются. Resume повторяет
 остановленную позицию, не меняет предыдущие successful drafts и не добавляет duplicate
 items при неизменном participant snapshot/fingerprint.
+
+### Snapshot, stale protection и locks
+
+У participant snapshot fingerprint входит canonical JSON без ФИО, полного ИИН и raw
+source payload: `stage_run_id`, Stage 0 participant/source fingerprint,
+Employee/Person IDs и versions, batch/row IDs, selected normalized-record IDs,
+`source_record_key` и `fragment_index`, review status, source/normalized update tokens,
+PPR lifecycle version, policy/parser/mapping versions, а также active canonical
+education identity и `updated_at` tokens. PMF item payload хранится только в PMF и
+связан с envelope через IDs.
+
+Draft transaction берёт envelope participant lock, затем его source/normalized rows,
+Employee, Person и PMF run/items в возрастающем technical ID order. Acceptance в
+`SERIALIZABLE` повторяет тот же глобальный order: envelope run → participants by
+position → batches/rows/normalized records by ID → Employees → Persons → active
+`person_education` by `education_id` → PMF runs/items. Это устраняет инверсию lock
+order между worker и acceptance.
+
+Если source, ownership, policy fingerprint, Person/Employee/PPR version или canonical
+identity меняются, preview/final check возвращает text safe stale/conflict reason.
+Drafts сохраняются, но envelope переходит в `PAUSED_ON_ERROR`; canonical writes не
+выполняются. Resume возможен только после новой проверки той же позиции. Изменение
+cohort, order, mapping/policy или field set требует нового preview и нового
+`APPROVED`, а не resume старого run.
 
 ### Atomic acceptance
 
@@ -171,14 +229,27 @@ source, duplicate, conflict или command failure откатывает всю a
 
 Детерминированный command ID должен включать `stage_run_id`, `stage=education`,
 `employee_id`, `person_id`, participant snapshot version и fragment source key/index.
-Повтор принятия accepted run — replay без новых records/events.
+Повторный acceptance сначала блокирует envelope. Для `ACCEPTED` он возвращает уже
+зафиксированный outcome без PMF/PPR command. Для любой иной stale/conflict проверки
+вся transaction откатывается; deterministic PPR command IDs дополнительно делают
+повтор того же accepted command replay без новых records/events.
+
+### Видимость
+
+До `ACCEPTED` PMF education drafts и source/current/proposal comparison доступны только
+HR_HEAD с нужным permission и org scope; employee read paths используют только active
+canonical `person_education`. После `ACCEPTED` новые canonical records отображаются
+сотруднику по обычным правилам доступа к карточке. Ранее принятые sections не скрываются
+из-за `DRAFT`, `RUNNING` или `PAUSED_ON_ERROR` этого Stage 2 envelope. UI показывает
+status и visibility текстом, а не только цветом.
 
 ## 7. Visual pilot и критерии приёмки
 
 До full run HR_HEAD проводит visual pilot минимум на:
 
 1. сотруднике с двумя valid education fragments в одной Excel-ячейке, разделёнными
-   мягким переносом: обе записи видны как два records того же сотрудника/source row;
+   мягким переносом: обе записи видны как два records того же сотрудника и остаются
+   связанными с одной исходной Excel-строкой (различаются только fragment index);
 2. сотруднике, у которого уже есть semantic-equal canonical record: нет duplicate;
 3. сотруднике с visible canonical conflict или ambiguous/shared context: run
    останавливается, UI объясняет требуемую проверку и не раскрывает полный ИИН;
@@ -190,21 +261,22 @@ Visual pilot должен также проверить Russian text statuses, o
 HR_HEAD source view, final report и отображение нескольких записей одного Employee.
 Только после feedback HR_HEAD и принятия pilot допускается массовый Stage 2 run.
 
-## 8. Открытые решения для implementation planning
+## 8. Единственное открытое продуктовое решение
 
-1. Утвердить mapping `education_level → education_kind` либо явную HR review policy;
-   без него Stage 2 не может add canonical record.
-2. Утвердить, допускаются ли year-only source dates в canonical education и, если да,
-   их модель без фиктивного дня; текущий reconciliation contour их fail-closed.
-3. Утвердить policy для shared `specialty`/`qualification` context, который parser
-   копирует на несколько fragments с `shared_context_ambiguous`.
-4. Утвердить status/provenance policy для `approved` и `promoted` normalized records:
-   document promotion не должен ошибочно считаться PPR replay.
-5. Выбрать минимальную section-wide orchestration persistence для frozen cohort,
-   pause/resume и atomic acceptance поверх existing PMF items; не использовать Stage 1
-   scalar tables как generic storage.
-6. Подтвердить, какие raw header variants фактически входят в выбранный production
-   profile; WP не предполагает mapping для отсутствующих или неизвестных headers.
+Утвердить versioned allowlist `education_level` / explicit fragment markers →
+`education_kind` на representative control-list samples. Сейчас доказуемый allowlist
+пуст, поэтому все такие values остаются `REVIEW_REQUIRED`; молчаливый default запрещён.
+
+Отсутствие полной даты само по себе не блокирует Stage 2 record: canonical
+`person_education.started_at` и `completed_at` nullable, а PPR add handler требует
+только valid `education_kind`. Год сохраняется в provenance и не превращается в
+`01.01`. Existing reconciliation add gate сейчас stricter (блокирует incomplete/both
+missing dates); implementation planning должно привести его execution path в
+соответствие с этой утверждённой Stage 2 policy, не меняя canonical дату.
+
+Все прочие пункты этого WP являются implementation gaps, а не новыми продуктовыми
+решениями: thin envelope schema/API/RBAC/tests, exact provenance comparator для
+`promoted`, и deterministic parser/profile version capture.
 
 ## 9. Вне scope
 
