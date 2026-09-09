@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { apiAuthMe, apiFetchJson } from "@/lib/api";
 import type { MeInfo } from "@/lib/types";
+import Stage1GeneralPanel from "./Stage1GeneralPanel";
 
 type Batch = { batch_id: number; status: string; imported_at?: string | null; source_row_count: number };
 type Candidate = { position?: number; employee_id: number | null; person_id: number | null; source_batch_id: number; source_row_id: number; source_row_number?: number | null; safe_fingerprint: string; display_name?: string | null };
@@ -121,6 +122,7 @@ export default function PprMigrationPageClient() {
     </section> : null}
     {cohort ? <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/25"><h2 className="text-lg font-semibold">Список допущенных сотрудников зафиксирован</h2><p className="text-sm">Статус: список зафиксирован · контрольный список №{cohort.run.source_batch_id} · сохранён: {formatStage0FrozenAt(cohort.run.frozen_at, cohort.organization_timezone)} ({cohort.organization_timezone})</p><details className="mt-1 text-xs text-zinc-600"><summary className="cursor-pointer">Технические сведения</summary><span className="font-mono">Код статуса: FROZEN; ID списка: {cohort.run.stage0_cohort_run_id}</span></details><CandidateTable title="Участники зафиксированного списка" items={cohort.participants} /></section> : null}
     {freezeConfirmationOpen && preview ? <FreezeConfirmationDialog eligibleCount={eligibleCount} blockedCount={blockedCount} busy={busy} onCancel={() => setFreezeConfirmationOpen(false)} onConfirm={() => void freeze()} /> : null}
+    <Stage1GeneralPanel cohortRunId={cohort?.run.stage0_cohort_run_id} />
   </main>;
 }
 

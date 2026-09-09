@@ -40,6 +40,7 @@ from app.api.admin_router import router as admin_router
 from app.api.personnel_admin_router import router as personnel_admin_router
 from app.api.personnel_migration_router import router as personnel_migration_router
 from app.api.ppr_stage0_cohort_router import router as ppr_stage0_cohort_router
+from app.api.ppr_stage1_general_router import router as ppr_stage1_general_router
 from app.api.ppr_router import router as ppr_router
 from app.api.ppr_command_router import router as ppr_command_router
 from app.api.personnel_verification_router import router as personnel_verification_router
@@ -129,6 +130,7 @@ app.include_router(personnel_admin_router)
 # PMF-3A — personnel migration draft API
 app.include_router(personnel_migration_router)
 app.include_router(ppr_stage0_cohort_router)
+app.include_router(ppr_stage1_general_router)
 app.include_router(ppr_router)
 app.include_router(ppr_command_router)
 app.include_router(personnel_verification_router)
