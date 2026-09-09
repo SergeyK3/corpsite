@@ -12,7 +12,8 @@ from app.services import ppr_stage2_education_service as service
 router=APIRouter(prefix="/personnel/ppr-migration/stage-2/education",tags=["ppr-stage-2"])
 
 def _error(exc:service.Stage2Error)->HTTPException:
-    return HTTPException(404 if isinstance(exc,service.Stage2NotFoundError) else 409,detail={"code":exc.code,"message":str(exc)})
+    code = str(exc).strip() or exc.code
+    return HTTPException(404 if isinstance(exc,service.Stage2NotFoundError) else 409,detail={"code":code,"message":code})
 def _actor(user:dict)->tuple[int,dict]:
     actor=require_ppr_stage2_education_manage(user)
     scope=compute_scope(actor,user,include_inactive=False)
