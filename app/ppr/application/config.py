@@ -27,6 +27,18 @@ def ppr_pmf_bridge_enabled() -> bool:
     return _truthy(os.environ.get("PPR_PMF_BRIDGE_ENABLED", ""))
 
 
+def ppr_stage3_training_preview_enabled() -> bool:
+    return _truthy(os.environ.get("PPR_STAGE3_TRAINING_PREVIEW_ENABLED", ""))
+
+
+def ppr_stage3_training_execution_enabled() -> bool:
+    return _truthy(os.environ.get("PPR_STAGE3_TRAINING_EXECUTION_ENABLED", ""))
+
+
+def ppr_stage3_training_accept_enabled() -> bool:
+    return _truthy(os.environ.get("PPR_STAGE3_TRAINING_ACCEPT_ENABLED", ""))
+
+
 def assert_ppr_pmf_bridge_activation_allowed() -> None:
     """Prevent accidental production enable without explicit opt-in."""
     if not ppr_pmf_bridge_enabled():
