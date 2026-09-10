@@ -633,6 +633,37 @@ def test_correct_assignment_api_returns_refreshed_position(client, seed, monkeyp
     assert response.status_code == 200, response.text
     assert response.json()["item"]["position"] == {"id": 502, "name": "Референт"}
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_order_free_status_correction_updates_employee_and_writes_audit(client, seed, privileged_headers, monkeypatch):
+    employee_id, _from_unit_id, _to, _position_id, _alt, _name, emp_ids, pos_ids, unit_ids = _make_fixture(seed)
+    monkeypatch.setattr(employees_routes, "svc_get_employee", lambda **_kwargs: {"employee_id": employee_id, "status": "inactive"})
+    try:
+        response = client.post(
+            f"/directory/employees/{employee_id}/correct-status",
+            json={"status": "not_working"},
+            headers=privileged_headers,
+        )
+        assert response.status_code == 200, response.text
+        event = response.json()["event"]
+        assert event["event_type"] == "CORRECTION"
+        assert event["order_ref"] is None
+        assert event["created_by"] == int(seed["initiator_user_id"])
+        assert event["created_at"]
+        assert event["metadata"]["without_personnel_order"] is True
+        assert event["metadata"]["changes"]["employment_status"] == {"from": "working", "to": "not_working"}
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT is_active, operational_status
+                FROM public.employees WHERE employee_id=:employee_id
+            """), {"employee_id": employee_id}).mappings().one()
+            assert row["is_active"] is False
+            assert row["operational_status"] == "suspended"
+    finally:
+        _cleanup_employees(emp_ids)
+        _cleanup_positions(pos_ids)
+        _cleanup_units(unit_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_correct_assignment_updates_status_without_termination_record(client, seed, privileged_headers, monkeypatch):
     employee_id, from_unit_id, _to, position_id, _alt, _name, emp_ids, pos_ids, unit_ids = _make_fixture(seed)
     monkeypatch.setattr(

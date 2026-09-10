@@ -24,6 +24,23 @@ describe("EmployeesTable actions", () => {
     onChangePage: vi.fn(),
   };
 
+  it("shows status correction next to the staff card action when permitted", () => {
+    const onCorrectEmployeeStatus = vi.fn();
+    render(
+      <EmployeesTable
+        {...baseProps}
+        managementView
+        directPersonalCardNav
+        onCorrectEmployeeStatus={onCorrectEmployeeStatus}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("employee-status-correction-open-42"));
+    expect(screen.getByTestId("employee-status-correction-open-42")).toHaveClass("bg-blue-600");
+    expect(onCorrectEmployeeStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ employee_id: 42 }),
+    );
+  });
+
   it("staff «Персонал»: single «Открыть» link to canonical PPR card when person_id known", () => {
     const onOpenEmployee = vi.fn();
     render(

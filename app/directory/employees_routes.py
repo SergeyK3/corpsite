@@ -167,6 +167,16 @@ class EmployeeCorrectCombinedIn(BaseModel):
 EmployeeCorrectIn = Union[EmployeeCorrectGeneralIn, EmployeeCorrectAssignmentIn, EmployeeCorrectCombinedIn]
 
 
+class EmployeeStatusCorrectionIn(BaseModel):
+    """Administrative employment-status correction; intentionally order-free."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["working", "not_working"]
+    reason: Optional[str] = Field(default=None, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
 class PersonnelEventCreateIn(BaseModel):
     event_type: str = Field(..., min_length=1, max_length=50)
     to_org_unit_id: Optional[int] = Field(default=None, ge=1)
@@ -840,6 +850,49 @@ def correct_employee(
         raise
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Unable to correct employee.")
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/employees/{employee_id}/correct-status")
+def correct_employee_status(
+    employee_id: str = Path(..., min_length=1),
+    body: EmployeeStatusCorrectionIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Correct operational employment status without creating a personnel order."""
+    try:
+        actor_user_id = int(user["user_id"])
+        role_code = str(user.get("role_code") or "").strip().upper()
+        allowed = (
+            _is_privileged(user)
+            or role_code in {"ADMIN", "HR_HEAD"}
+            or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
+        )
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Employee status correction access required.")
+
+        from app.services.directory_service import correct_employee_status as svc_correct_employee_status
+
+        event = call_service(
+            svc_correct_employee_status,
+            employee_id=employee_id,
+            status=body.status,
+            reason=body.reason,
+            comment=body.comment,
+            created_by=actor_user_id,
+        )
+        item = call_service(
+            svc_get_employee,
+            scope_unit_id=None,
+            scope_unit_ids=None,
+            employee_id=employee_id,
+        )
+        return {"item": item, "event": event}
+    except HTTPException:
+        raise
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Unable to correct employee status.")
     except Exception as e:
         raise as_http500(e)
 

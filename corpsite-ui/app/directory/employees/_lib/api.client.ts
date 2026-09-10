@@ -9,6 +9,7 @@ import type {
   EmployeeTransferResponse,
   EmployeeCorrectPayload,
   EmployeeCorrectResponse,
+  EmployeeStatusCorrectionPayload,
   EmployeeEventsResponse,
   EmployeeTerminationVerifyPayload,
   UserDTO,
@@ -417,6 +418,28 @@ export async function correctEmployee(
   return apiPostJson<EmployeeCorrectResponse>(
     `/directory/employees/${encodeURIComponent(id)}/correct`,
     payload
+  );
+}
+
+/** Administrative work-status correction; it does not create a personnel order. */
+export async function correctEmployeeStatus(
+  employeeId: string,
+  body: EmployeeStatusCorrectionPayload,
+): Promise<EmployeeCorrectResponse> {
+  const id = String(employeeId).trim();
+  if (!id) throw new Error("Employee id is empty");
+  const status = String(body.status ?? "").trim();
+  if (status !== "working" && status !== "not_working") {
+    throw new Error("status must be working or not_working");
+  }
+  const payload: Record<string, unknown> = { status };
+  const reason = String(body.reason ?? "").trim();
+  const comment = String(body.comment ?? "").trim();
+  if (reason) payload.reason = reason;
+  if (comment) payload.comment = comment;
+  return apiPostJson<EmployeeCorrectResponse>(
+    `/directory/employees/${encodeURIComponent(id)}/correct-status`,
+    payload,
   );
 }
 

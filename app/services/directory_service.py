@@ -2082,6 +2082,95 @@ def correct_employee(
     )
 
 
+def correct_employee_status(
+    *,
+    employee_id: str,
+    status: str,
+    reason: Optional[str],
+    comment: Optional[str],
+    created_by: int,
+) -> Dict[str, Any]:
+    """Apply an order-free administrative correction to operational status.
+
+    ``suspended`` is deliberately used for ``not_working``: it is not a legal
+    termination and therefore must not create a termination record or order.
+    """
+    target_id_text = _normalize_employee_id_text(employee_id)
+    if not target_id_text:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+    normalized_status = (status or "").strip().lower()
+    targets = {
+        "working": (True, "active"),
+        "not_working": (False, "suspended"),
+    }
+    if normalized_status not in targets:
+        raise HTTPException(status_code=422, detail="Invalid employee status.")
+    target_is_active, target_operational_status = targets[normalized_status]
+    normalized_reason = (reason or "").strip() or None
+    normalized_comment = (comment or "").strip() or None
+
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT employee_id, org_unit_id, position_id, employment_rate,
+                   is_active, operational_status
+            FROM public.employees
+            WHERE CAST(employee_id AS TEXT) = :id_text
+            FOR UPDATE
+        """), {"id_text": target_id_text}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        before_is_active = bool(row["is_active"])
+        before_operational_status = str(row.get("operational_status") or "")
+        if before_is_active == target_is_active and before_operational_status == target_operational_status:
+            raise HTTPException(status_code=422, detail="No status change detected.")
+
+        conn.execute(text("""
+            UPDATE public.employees
+            SET is_active=:is_active, operational_status=:operational_status, updated_at=NOW()
+            WHERE employee_id=:employee_id
+        """), {
+            "employee_id": int(row["employee_id"]),
+            "is_active": target_is_active,
+            "operational_status": target_operational_status,
+        })
+        metadata = {
+            "domain": "employment_status",
+            "without_personnel_order": True,
+            "reason": normalized_reason,
+            "changes": {
+                "employment_status": {
+                    "from": "working" if before_is_active else "not_working",
+                    "to": normalized_status,
+                },
+                "operational_status": {
+                    "from": before_operational_status or None,
+                    "to": target_operational_status,
+                },
+            },
+        }
+        position_id = row.get("position_id")
+        rate = row.get("employment_rate")
+        return _insert_employee_event(
+            conn,
+            employee_id=int(row["employee_id"]),
+            event_type="CORRECTION",
+            event_class=get_event_class("CORRECTION"),
+            lifecycle_status="APPROVED",
+            metadata=metadata,
+            effective_date=date.today(),
+            from_org_unit_id=int(row["org_unit_id"]) if row.get("org_unit_id") is not None else None,
+            from_position_id=int(position_id) if position_id is not None else None,
+            from_rate=float(rate) if rate is not None else None,
+            to_org_unit_id=int(row["org_unit_id"]) if row.get("org_unit_id") is not None else None,
+            to_position_id=int(position_id) if position_id is not None else None,
+            to_rate=float(rate) if rate is not None else None,
+            order_ref=None,
+            comment=normalized_comment,
+            created_by=int(created_by),
+        )
+
+
 def list_employee_events(
     *,
     employee_id: str,

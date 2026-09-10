@@ -6,6 +6,8 @@ export type CorrectionLabelMaps = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  employment_status: "Статус работы",
+  operational_status: "Операционный статус",
   full_name: "ФИО",
   org_unit_id: "Подразделение",
   position_id: "Должность",
@@ -95,5 +97,6 @@ export function correctionDomainLabel(event: EmployeeEventDTO): string | null {
   const domain = String(event.metadata?.domain ?? "").trim().toLowerCase();
   if (domain === "general") return "Исправление общих сведений";
   if (domain === "assignment") return "Исправление назначения";
+  if (domain === "employment_status") return "Исправление статуса";
   return null;
 }

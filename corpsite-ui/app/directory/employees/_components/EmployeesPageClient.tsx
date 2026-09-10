@@ -12,6 +12,9 @@ import EmployeesTable from "./EmployeesTable";
 import EmployeeDrawer from "./EmployeeDrawer";
 import EmployeeCreateDrawer from "./EmployeeCreateDrawer";
 import ControlListEntryDialog from "./ControlListEntryDialog";
+import EmployeeStatusCorrectionDrawer, {
+  type EmployeeStatusCorrectionFormValues,
+} from "../../personnel/_components/EmployeeStatusCorrectionDrawer";
 import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 
 import {
@@ -20,6 +23,7 @@ import {
   getDepartments,
   mapApiErrorToMessage,
   createEmployee,
+  correctEmployeeStatus,
   deleteEmployee,
 } from "../_lib/api.client";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -203,8 +207,15 @@ export default function EmployeesPageClient(props: Props) {
   const [employeeRefreshToken, setEmployeeRefreshToken] = React.useState(0);
   const me = useCurrentUser();
   const [deletingEmployeeId, setDeletingEmployeeId] = React.useState<string | null>(null);
+  const [statusCorrectionEmployee, setStatusCorrectionEmployee] = React.useState<EmployeeListItem | null>(null);
+  const [statusCorrectionSaving, setStatusCorrectionSaving] = React.useState(false);
+  const [statusCorrectionError, setStatusCorrectionError] = React.useState<string | null>(null);
 
   const showStaffAdminDelete = isStaffRoute && canHardDeleteEmployee(me);
+  const roleCode = String(me?.role_code ?? "").trim().toUpperCase();
+  const canCorrectStaffStatus = isStaffRoute && (
+    me?.has_hr_enrollment_manager === true || roleCode === "ADMIN" || roleCode === "HR_HEAD"
+  );
 
   const prevOrgUnitRef = React.useRef<string>(orgUnitId);
   const prevOrgGroupRef = React.useRef<number | undefined>(orgGroupId);
@@ -457,6 +468,31 @@ export default function EmployeesPageClient(props: Props) {
     }
   }
 
+  function handleOpenStatusCorrection(item: EmployeeListItem) {
+    setStatusCorrectionError(null);
+    setStatusCorrectionEmployee(item);
+  }
+
+  async function handleStatusCorrection(values: EmployeeStatusCorrectionFormValues) {
+    const employeeId = String(statusCorrectionEmployee?.id ?? "").trim();
+    if (!employeeId) return;
+    setStatusCorrectionSaving(true);
+    setStatusCorrectionError(null);
+    try {
+      const result = await correctEmployeeStatus(employeeId, values);
+      setData((prev) => ({
+        ...prev,
+        items: prev.items.map((row) => String(row.id ?? "") === employeeId ? result.item : row),
+      }));
+      setStatusCorrectionEmployee(null);
+      void loadItems();
+    } catch (e) {
+      setStatusCorrectionError(mapApiErrorToMessage(e));
+    } finally {
+      setStatusCorrectionSaving(false);
+    }
+  }
+
   async function handleCreateEmployee(values: EmployeeCreateFormValues) {
     setCreateSaving(true);
     setCreateError(null);
@@ -655,6 +691,7 @@ export default function EmployeesPageClient(props: Props) {
               showAdminDelete={showStaffAdminDelete}
               deletingEmployeeId={deletingEmployeeId}
               onDeleteEmployee={showStaffAdminDelete ? handleDeleteEmployee : undefined}
+              onCorrectEmployeeStatus={canCorrectStaffStatus ? handleOpenStatusCorrection : undefined}
               sortable={false}
             />
           </div>
@@ -710,6 +747,20 @@ export default function EmployeesPageClient(props: Props) {
           onEnrolled={() => void loadItems()}
         />
       ) : null}
+      <EmployeeStatusCorrectionDrawer
+        open={statusCorrectionEmployee != null}
+        fullName={String(statusCorrectionEmployee?.fio ?? "").trim()}
+        currentStatus={String(statusCorrectionEmployee?.status ?? "active").toLowerCase() === "inactive" ? "not_working" : "working"}
+        saving={statusCorrectionSaving}
+        error={statusCorrectionError}
+        onClose={() => {
+          if (!statusCorrectionSaving) {
+            setStatusCorrectionEmployee(null);
+            setStatusCorrectionError(null);
+          }
+        }}
+        onSubmit={handleStatusCorrection}
+      />
     </>
   );
 }

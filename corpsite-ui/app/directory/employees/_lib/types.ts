@@ -164,6 +164,12 @@ export type EmployeeCorrectResponse = {
   event: EmployeeEventDTO;
 };
 
+export type EmployeeStatusCorrectionPayload = {
+  status: "working" | "not_working";
+  reason?: string;
+  comment?: string;
+};
+
 export type LinkedUserDTO = {
   user_id: number;
   login: string | null;
