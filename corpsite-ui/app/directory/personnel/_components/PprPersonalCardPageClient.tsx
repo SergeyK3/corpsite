@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
+import { useCurrentUser } from "@/lib/currentUser";
 import { parseReturnToFromSearchParams } from "@/lib/taskNav";
 import {
   isPersonnelApplicationsJournalReturnHref,
@@ -92,6 +93,7 @@ export default function PprPersonalCardPageClient({
   canEditPprSections = true,
 }: Props) {
   const router = useRouter();
+  const currentUser = useCurrentUser();
   const searchParams = useSearchParams();
   const initialSection = parsePprCardSection(searchParams.get("section"));
   const returnToHref = React.useMemo(
@@ -270,6 +272,7 @@ export default function PprPersonalCardPageClient({
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
   const employmentBiographyEditable = !notMaterialized && canEditPprSections;
   const militaryEditable = !notMaterialized && canEditPprSections;
+  const canManagePhoto = Boolean(currentUser?.is_privileged || currentUser?.has_personnel_admin);
 
   const employmentBiographyRoute: PprEmploymentBiographyRoute | null =
     personId != null
@@ -296,7 +299,11 @@ export default function PprPersonalCardPageClient({
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-3">
-            <PprPersonPhoto personId={resolvedPersonId} fullName={displayName} />
+            <PprPersonPhoto
+              personId={resolvedPersonId}
+              fullName={displayName}
+              canManagePhoto={canManagePhoto}
+            />
             <div className="min-w-0">
               {isApplicant ? (
                 <p

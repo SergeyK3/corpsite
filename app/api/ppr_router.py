@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import hmac
+from uuid import uuid4
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile
 from fastapi.responses import Response
 
 from app.api.ppr_errors import map_ppr_query_error
@@ -19,8 +20,11 @@ from app.api.ppr_schemas import (
     PprPersonnelApplicationItemResponse,
 )
 from app.auth import get_current_user
-from app.db.models.person_photos import MIME_TYPE_JPEG
+from app.db.models.person_photos import MAX_PHOTO_BYTE_SIZE, MIME_TYPE_JPEG
+from app.directory.rbac import require_personnel_admin_or_403
 from app.directory.common import as_http500
+from app.person_photos.application.manual_upload_service import register_manual_person_photo
+from app.person_photos.domain.models import RegisterManualPersonPhotoRequest
 from app.person_photos.infrastructure.photo_storage import (
     read_canonical_photo,
     sha256_hex,
@@ -88,6 +92,56 @@ def get_ppr_person_photo(
                 "X-Content-Type-Options": "nosniff",
             },
         )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mapped = map_ppr_query_error(exc)
+        if mapped is not None:
+            raise mapped
+        raise as_http500(exc)
+
+
+@router.post("/persons/{person_id}/photo")
+async def post_ppr_person_photo(
+    person_id: int = Path(..., ge=1),
+    file: UploadFile = File(...),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Upload a canonical JPEG for this exact Person card.
+
+    The target is intentionally taken only from the route's ``person_id``;
+    neither an employee identifier nor the client filename participates in
+    identity resolution.
+    """
+    try:
+        assert_ppr_read_path_activation_allowed()
+        require_personnel_admin_or_403(user)
+        summary = _query_service.load_summary(person_id=person_id)
+        require_ppr_write_for_person(user, summary.person_id)
+
+        if (file.content_type or "").strip().lower() != MIME_TYPE_JPEG:
+            raise HTTPException(status_code=422, detail="Only JPEG photos are accepted.")
+        content = await file.read(MAX_PHOTO_BYTE_SIZE + 1)
+        if len(content) > MAX_PHOTO_BYTE_SIZE:
+            raise HTTPException(status_code=422, detail="Photo exceeds 500 KB limit.")
+
+        result = register_manual_person_photo(
+            RegisterManualPersonPhotoRequest(
+                person_id=summary.person_id,
+                jpeg_content=content,
+                actor_user_id=int(user["user_id"]),
+                request_id=uuid4().hex,
+                correlation_id=f"ppr-person-photo-upload:{summary.person_id}",
+                allow_replace=True,
+            )
+        )
+        return {
+            "person_id": summary.person_id,
+            "person_photo_id": result.person_photo_id,
+            "status": result.status,
+        }
+    except PersonnelIntakeValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except HTTPException:
         raise
     except Exception as exc:

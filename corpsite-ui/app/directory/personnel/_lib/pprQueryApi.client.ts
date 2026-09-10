@@ -73,6 +73,33 @@ export async function getPprPersonPhoto(
   return res.blob();
 }
 
+export type PprPersonPhotoUploadResponse = {
+  person_id: number;
+  person_photo_id: number;
+  status: string;
+};
+
+export async function uploadPprPersonPhoto(
+  personId: string | number,
+  file: File,
+): Promise<PprPersonPhotoUploadResponse> {
+  const path = `/api/ppr/persons/${encodeURIComponent(String(personId))}/photo`;
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(resolveApiUrl(path), {
+    method: "POST",
+    // Do not set Content-Type: the browser supplies the multipart boundary.
+    headers: authHeaders(),
+    body: formData,
+    cache: "no-store",
+  });
+  const body = await readJsonSafe(res);
+  if (!res.ok) {
+    throw toApiError(res.status, body, { method: "POST", url: path });
+  }
+  return body as PprPersonPhotoUploadResponse;
+}
+
 export async function getPprSummaryByPersonId(
   personId: string | number,
   opts?: { signal?: AbortSignal },
