@@ -7,6 +7,7 @@ import { apiAuthMe } from "@/lib/api";
 import { HR_PROCESSES_NAV_HREF } from "@/lib/personnelNav";
 import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
 import {
+  buildPersonCardHrefFromLegacySearchParams,
   EMPLOYEE_CARD_DEFAULT_SECTION,
   parseEmployeeCardSection,
   type EmployeeCardSectionId,
@@ -54,6 +55,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   const [personLink, setPersonLink] = React.useState<{ preflight: PersonLinkPreflight; records: NormalizedRecord[]; iin: string } | null>(null);
   const [personLinkError, setPersonLinkError] = React.useState<string | null>(null);
   const scrolledSectionRef = React.useRef<EmployeeCardSectionId | null>(null);
+  const personRedirectRef = React.useRef<string | null>(null);
 
   const loadShell = React.useCallback(async () => {
     setShellLoading(true);
@@ -63,6 +65,15 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
         getEmployee(employeeId),
         getEmployeeImportCard2Optional(employeeId),
       ]);
+      const personId = Number(employeeData.person_id);
+      if (Number.isFinite(personId) && personId > 0 && Number.isInteger(personId)) {
+        const redirectKey = `${employeeId}:${personId}:${searchParams.toString()}`;
+        if (personRedirectRef.current !== redirectKey) {
+          personRedirectRef.current = redirectKey;
+          router.replace(buildPersonCardHrefFromLegacySearchParams(personId, searchParams));
+        }
+        return;
+      }
       setEmployee(employeeData);
       setImportDetail(importData);
     } catch (e) {
@@ -72,7 +83,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
     } finally {
       setShellLoading(false);
     }
-  }, [employeeId]);
+  }, [employeeId, router, searchParams]);
 
   React.useEffect(() => {
     void loadShell();

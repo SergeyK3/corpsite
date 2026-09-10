@@ -9,12 +9,16 @@ const getPprByEmployeeIdMock = vi.fn();
 const apiAuthMeMock = vi.fn();
 const listNormalizedRecordsMock = vi.fn();
 const runPersonLinkPreflightMock = vi.fn();
+const routerPushMock = vi.fn();
+const routerReplaceMock = vi.fn();
+const routerMock = { push: routerPushMock, replace: routerReplaceMock };
+let currentSearchParams = new URLSearchParams();
 
 vi.mock("@/lib/api", () => ({ apiAuthMe: () => apiAuthMeMock() }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => routerMock,
+  useSearchParams: () => currentSearchParams,
 }));
 
 vi.mock("../../employees/_lib/api.client", () => ({
@@ -63,6 +67,9 @@ describe("EmployeeImportCard2PageClient", () => {
     apiAuthMeMock.mockResolvedValue({ has_hr_enrollment_manager: true });
     listNormalizedRecordsMock.mockResolvedValue({ items: [{ employee_id: 228, iin: "851101300451", review_status: "approved", batch_id: 1, row_id: 2, normalized_record_id: 3 }] });
     runPersonLinkPreflightMock.mockResolvedValue({ blockers: [], expected_precondition: "x" });
+    routerPushMock.mockReset();
+    routerReplaceMock.mockReset();
+    currentSearchParams = new URLSearchParams();
     getEmployeeMock.mockResolvedValue({ employee_id: 228, fio: "Умерзакова Махаббат Тылеулесовна" });
     getEmployeeImportCard2OptionalMock.mockResolvedValue(null);
   });
@@ -74,11 +81,45 @@ describe("EmployeeImportCard2PageClient", () => {
     expect(await screen.findByTestId("person-link-dialog")).toBeInTheDocument();
   });
 
-  it("hides Person-link CTA when employee already has person_id", async () => {
+  it("redirects instead of showing the import card when employee already has person_id", async () => {
     getEmployeeMock.mockResolvedValue({ employee_id: 228, fio: "Employee", person_id: 99 });
     render(<EmployeeImportCard2PageClient employeeId="228" />);
-    await screen.findByRole("heading", { name: "Employee" });
+    await waitFor(() => {
+      expect(routerReplaceMock).toHaveBeenCalledWith("/directory/personnel/persons/99/card");
+    });
     expect(screen.queryByRole("button", { name: "Создать рабочую личную карточку" })).toBeNull();
+  });
+
+  it("redirects an employee with person_id to the full Person card and preserves supported navigation", async () => {
+    currentSearchParams = new URLSearchParams("section=history&provisionAccount=1&return_to=%2Fdirectory%2Fstaff");
+    getEmployeeMock.mockResolvedValue({ employee_id: 45, fio: "Козгамбаева", person_id: 428 });
+
+    render(<EmployeeImportCard2PageClient employeeId="45" />);
+
+    await waitFor(() => {
+      expect(routerReplaceMock).toHaveBeenCalledWith(
+        "/directory/personnel/persons/428/card?section=history&provisionAccount=1&return_to=%2Fdirectory%2Fstaff",
+      );
+    });
+  });
+
+  it("keeps the import card when employee has no person_id", async () => {
+    getEmployeeMock.mockResolvedValue({ employee_id: 228, fio: "Без Person", person_id: null });
+
+    render(<EmployeeImportCard2PageClient employeeId="228" />);
+
+    expect(await screen.findByRole("heading", { name: "Без Person" })).toBeInTheDocument();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+  });
+
+  it("does not repeat the Person-card redirect after a rerender", async () => {
+    getEmployeeMock.mockResolvedValue({ employee_id: 45, fio: "Козгамбаева", person_id: 428 });
+
+    const view = render(<EmployeeImportCard2PageClient employeeId="45" />);
+    await waitFor(() => expect(routerReplaceMock).toHaveBeenCalledTimes(1));
+    view.rerender(<EmployeeImportCard2PageClient employeeId="45" />);
+
+    await waitFor(() => expect(routerReplaceMock).toHaveBeenCalledTimes(1));
   });
 
   it("explains when no approved control-list record exists", async () => {
