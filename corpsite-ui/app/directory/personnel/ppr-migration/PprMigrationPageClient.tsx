@@ -6,6 +6,7 @@ import { apiAuthMe, apiFetchJson } from "@/lib/api";
 import type { MeInfo } from "@/lib/types";
 import Stage1GeneralPanel from "./Stage1GeneralPanel";
 import Stage2EducationPanel from "./Stage2EducationPanel";
+import Stage3TrainingPanel from "./Stage3TrainingPanel";
 
 type Batch = { batch_id: number; status: string; imported_at?: string | null; source_row_count: number };
 type Candidate = { position?: number; employee_id: number | null; person_id: number | null; source_batch_id: number; source_row_id: number; source_row_number?: number | null; safe_fingerprint: string; display_name?: string | null };
@@ -127,6 +128,7 @@ export default function PprMigrationPageClient() {
     {freezeConfirmationOpen && preview ? <FreezeConfirmationDialog eligibleCount={eligibleCount} blockedCount={blockedCount} busy={busy} onCancel={() => setFreezeConfirmationOpen(false)} onConfirm={() => void freeze()} /> : null}
     <Stage1GeneralPanel cohortRunId={cohort?.run.stage0_cohort_run_id} />
     {isHrHead ? <Stage2EducationPanel cohortRunId={cohort?.run.stage0_cohort_run_id} /> : null}
+    {isHrHead ? <Stage3TrainingPanel cohortRunId={cohort?.run.stage0_cohort_run_id} /> : null}
   </main>;
 }
 
