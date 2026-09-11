@@ -55,7 +55,16 @@ export function buildPersonCardHref(
 export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions;
 
 /** PPR section identifiers are intentionally separate from legacy employee tabs. */
-export type PprMigrationCardSection = "general" | "education" | "training";
+/** Existing personal-card anchors used by the migration matrix. */
+export type PprMigrationCardSection =
+  | "general"
+  | "education"
+  | "training"
+  | "family"
+  | "military"
+  | "employment_biography"
+  | "assignment"
+  | "additional";
 
 export function buildPprMigrationCardHref(
   personId: string | number,

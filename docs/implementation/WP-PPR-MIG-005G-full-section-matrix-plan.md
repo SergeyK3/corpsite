@@ -2,7 +2,7 @@
 
 | Параметр | Значение |
 |---|---|
-| Статус | **WP-005G-B completed — frontend expansion pending** |
+| Статус | **Completed — десятиколоночная projection, API и matrix UI готовы** |
 | Родительский контур | [WP-PPR-MIG-005](WP-PPR-MIG-005-migration-status-matrix-plan.md) |
 | Зависимости | [WP-005A — semantics](WP-PPR-MIG-005A-status-semantics.md), [WP-005B — projection](WP-PPR-MIG-005B-status-projection-read-model.md), [WP-005C — report API](WP-PPR-MIG-005C-report-api-and-authorization.md) |
 | Цель | Показать полный утверждённый набор миграционных разделов личной карточки в одной matrix, не выдавая неподключённые обработчики за выполненную миграцию. |
@@ -26,8 +26,10 @@
 
 WP-005G-A расширил persisted projection/rebuild до всех десяти codes.
 [WP-005G-B](WP-PPR-MIG-005G-B-full-section-report-api.md) расширил read-only
-matrix и person-status API до тех же десяти persisted cells. Frontend намеренно
-остаётся трёхсекционным до отдельного пакета.
+matrix и person-status API до тех же десяти persisted cells.
+[WP-005G-C](WP-PPR-MIG-005G-C-full-section-matrix-ui.md) расширил существующую
+страницу матрицы до десяти колонок с горизонтальной прокруткой и sticky-колонкой
+сотрудника; API labels и существующие безопасные переходы в карточку сохранены.
 
 ## 2. Утверждённый каталог из десяти колонок
 
@@ -122,8 +124,8 @@ D:\Temp\wp-ppr-mig-005g-full-section-matrix-mockup.png
    точечную invalidation contract для будущих section handlers.
 3. Завершено WP-005G-B: scoped report API, aggregation и filters используют
    десять persisted cells без N+1.
-4. Расширить matrix UI: dynamic десять колонок, sticky employee column,
-   horizontal scroll, accessible textual status/reason и указанный card mapping.
+4. Завершено WP-005G-C: matrix UI показывает десять колонок, sticky employee
+   column, horizontal scroll, доступные текстовые status/reason и указанный card mapping.
 5. Подключать stage/source processors по одному section, заменяя только его
    `NOT_STARTED` на фактический результат согласно WP-005A.
 

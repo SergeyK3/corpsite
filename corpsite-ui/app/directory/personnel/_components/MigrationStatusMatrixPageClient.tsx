@@ -8,10 +8,17 @@ import { buildPprMigrationCardHref, type PprMigrationCardSection } from "@/lib/e
 import type { APIError } from "@/lib/types";
 import { getMigrationStatusMatrix, listMigrationStatusUniverses, type MigrationMatrix, type MigrationSection, type MigrationUniverse } from "../_lib/migrationStatusApi.client";
 
-const COLUMNS: Array<{ section: MigrationSection; title: string }> = [
-  { section: "general", title: "Общие сведения" },
-  { section: "education", title: "Образование" },
-  { section: "training", title: "Обучение и повышение квалификации" },
+const COLUMNS: Array<{ section: MigrationSection; title: string; cardSection: PprMigrationCardSection }> = [
+  { section: "general", title: "Общие сведения", cardSection: "general" },
+  { section: "education", title: "Образование", cardSection: "education" },
+  { section: "training", title: "Обучение и повышение квалификации", cardSection: "training" },
+  { section: "relatives", title: "Родственники", cardSection: "family" },
+  { section: "military", title: "Воинский учёт", cardSection: "military" },
+  { section: "employment_biography", title: "Трудовая биография", cardSection: "employment_biography" },
+  { section: "employment_history", title: "Трудовая деятельность / послужной список", cardSection: "assignment" },
+  { section: "foreign_languages", title: "Знание иностранных языков", cardSection: "additional" },
+  { section: "awards", title: "Награды", cardSection: "additional" },
+  { section: "academic_degrees_titles", title: "Учёные степени и звания", cardSection: "additional" },
 ];
 
 const STATUS_FILTER_OPTIONS = [
@@ -52,6 +59,9 @@ export default function MigrationStatusMatrixPageClient() {
   const [matrix, setMatrix] = React.useState<MigrationMatrix | null>(null);
   const [loading, setLoading] = React.useState(true); const [error, setError] = React.useState<number | null>(null);
   const [reload, setReload] = React.useState(0);
+  const tableScrollRef = React.useRef<HTMLDivElement>(null);
+  const [tableScrollMax, setTableScrollMax] = React.useState(0);
+  const [tableScrollLeft, setTableScrollLeft] = React.useState(0);
   const returnTo = React.useMemo(() => `${pathname}${key ? `?${key}` : ""}`, [pathname, key]);
 
   const replace = React.useCallback((changes: Record<string, string | number | undefined>, resetPage = true) => {
@@ -80,6 +90,13 @@ export default function MigrationStatusMatrixPageClient() {
     return () => { active = false; };
   }, [universeId, page, key, params, reload]);
 
+  React.useEffect(() => {
+    const node = tableScrollRef.current;
+    if (!node) { setTableScrollMax(0); setTableScrollLeft(0); return; }
+    setTableScrollMax(Math.max(0, node.scrollWidth - node.clientWidth));
+    setTableScrollLeft(node.scrollLeft);
+  }, [matrix]);
+
   const selectedUniverse = universes.find((value) => value.universe_id === universeId);
   const pageCount = Math.max(1, Math.ceil((matrix?.total ?? 0) / (matrix?.page_size ?? 50)));
   if (error === 403) return <main className="p-4" data-testid="migration-status-forbidden"><h1 className="text-xl font-semibold">Сводка миграции личных карточек</h1><p className="mt-3">Недостаточно прав для просмотра сводки.</p></main>;
@@ -90,7 +107,12 @@ export default function MigrationStatusMatrixPageClient() {
     {error && error !== 403 ? <p role="alert" data-testid="migration-status-error">Не удалось загрузить сводку. Повторите попытку.</p> : null}
     {loading ? <p role="status" data-testid="migration-status-loading">Загрузка…</p> : null}
     {universeId ? <><div className="flex flex-wrap gap-2"><input aria-label="Поиск по ФИО" placeholder="Поиск по ФИО" defaultValue={params.get("q") ?? ""} onBlur={(event) => replace({ q: event.target.value })} className="rounded border p-2 text-sm" data-testid="migration-status-search"/><select aria-label="Раздел" value={params.get("section") ?? ""} onChange={(event) => replace({ section: event.target.value })} className="rounded border p-2 text-sm"><option value="">Все разделы</option>{COLUMNS.map((column) => <option key={column.section} value={column.section}>{column.title}</option>)}</select><select aria-label="Статус" value={params.get("status") ?? ""} onChange={(event) => replace({ status: event.target.value })} className="rounded border p-2 text-sm"><option value="">Все статусы</option>{STATUS_FILTER_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select><select aria-label="Причина" value={params.get("reason") ?? ""} onChange={(event) => replace({ reason: event.target.value })} className="rounded border p-2 text-sm"><option value="">Все причины</option>{REASON_FILTER_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select><input aria-label="Подразделение" type="number" placeholder="Подразделение" defaultValue={params.get("org_unit_id") ?? ""} onBlur={(event) => replace({ org_unit_id: positive(event.target.value) })} className="rounded border p-2 text-sm"/></div>
-      {matrix && !loading ? matrix.items.length === 0 ? <p data-testid="migration-status-matrix-empty">По выбранным фильтрам данных нет.</p> : <div className="overflow-x-auto"><table className="min-w-full border-collapse" data-testid="migration-status-matrix"><thead><tr><th className="border p-2 text-left">Сотрудник</th>{COLUMNS.map((column) => <th key={column.section} className="border p-2 text-left">{column.title}</th>)}</tr></thead><tbody>{matrix.items.map((row) => <tr key={row.person_id}><th className="border p-2 text-left font-medium">{row.full_name}</th>{COLUMNS.map((column) => { const cell = row.cells[column.section]; return <td key={column.section} className="border p-2">{cell ? <Link href={buildPprMigrationCardHref(row.person_id, column.section as PprMigrationCardSection, returnTo, universeId)} aria-label={`${column.title}: ${cell.status_label}. ${cell.reason_label}`} title={`${cell.status_label}. ${cell.reason_label}`} className="block"><strong>{cell.status_label}</strong><span className="block text-sm">{cell.reason_label}</span></Link> : <span>Нет данных</span>}</td>; })}</tr>)}</tbody></table></div> : null}
+      {matrix && !loading ? matrix.items.length === 0 ? <p data-testid="migration-status-matrix-empty">По выбранным фильтрам данных нет.</p> : <>
+        <div ref={tableScrollRef} className="w-full max-w-full overflow-x-scroll overflow-y-hidden pb-3" style={{ scrollbarGutter: "stable" }} data-testid="migration-status-table-scroll" onScroll={(event) => setTableScrollLeft(event.currentTarget.scrollLeft)}>
+          <table className="w-[2200px] min-w-[2200px] table-fixed border-collapse" data-testid="migration-status-matrix"><thead><tr><th className="sticky left-0 z-20 w-56 border bg-white p-2 text-left dark:bg-zinc-950" data-testid="migration-status-employee-header">Сотрудник</th>{COLUMNS.map((column) => <th key={column.section} className="w-48 border p-2 text-left">{column.title}</th>)}</tr></thead><tbody>{matrix.items.map((row) => <tr key={row.person_id}><th className="sticky left-0 z-10 w-56 border bg-white p-2 text-left font-medium dark:bg-zinc-950" data-testid="migration-status-employee-cell">{row.full_name}</th>{COLUMNS.map((column) => { const cell = row.cells[column.section]; return <td key={column.section} className="w-48 border p-2">{cell ? <Link href={buildPprMigrationCardHref(row.person_id, column.cardSection, returnTo, universeId)} aria-label={`${column.title}: ${cell.status_label}. ${cell.reason_label}`} title={`${cell.status_label}. ${cell.reason_label}`} className="block"><strong>{cell.status_label}</strong><span className="block text-sm">{cell.reason_label}</span></Link> : <span>Нет данных</span>}</td>; })}</tr>)}</tbody></table>
+        </div>
+        {tableScrollMax > 0 ? <input aria-label="Горизонтальная прокрутка разделов" className="mb-3 block h-3 w-full cursor-ew-resize accent-zinc-400" data-testid="migration-status-scrollbar-control" type="range" min={0} max={tableScrollMax} value={tableScrollLeft} onChange={(event) => { const next = Number(event.target.value); const node = tableScrollRef.current; if (node) node.scrollLeft = next; setTableScrollLeft(next); }} /> : null}
+      </> : null}
       {matrix && !loading ? <div className="flex items-center justify-between"><span>Страница {page} из {pageCount}</span><div className="flex gap-2"><button type="button" disabled={page <= 1} onClick={() => replace({ page: page - 1 }, false)} data-testid="migration-status-prev">Назад</button><button type="button" disabled={page >= pageCount} onClick={() => replace({ page: page + 1 }, false)} data-testid="migration-status-next">Вперёд</button></div></div> : null}</> : universes.length > 1 && !loading ? <p data-testid="migration-status-choose-universe">Выберите universe для просмотра матрицы.</p> : null}
   </main>;
 }
